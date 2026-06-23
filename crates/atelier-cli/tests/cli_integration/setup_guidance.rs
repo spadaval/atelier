@@ -925,6 +925,10 @@ fn test_top_level_help_only_shows_core_commands() {
         assert!(stdout.contains(command), "missing core command {command}");
     }
     assert!(
+        stdout.contains("Search issues, relationships, and activity"),
+        "{stdout}"
+    );
+    assert!(
         !stdout
             .lines()
             .any(|line| line.trim_start().starts_with("prime ")),
@@ -1418,8 +1422,9 @@ fn test_issue_status_renders_objective_work_health() {
         "ready {blocker_id} - Blocking child | no open blockers; parent {objective_id}; proof checked by workflow validators"
     )));
     assert!(stdout.contains("Blocked Work"));
+    assert!(stdout.contains(&format!("blocked {blocked_id} - Blocked child | 1 blocker")));
     assert!(stdout.contains(&format!(
-        "blocked {blocked_id} - Blocked child | 1 blocker; details: atelier issue blocked {blocked_id}"
+        "Inspect blockers: atelier issue blocked {blocked_id}"
     )));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
@@ -2749,11 +2754,62 @@ fn test_issue_status_orders_children_by_visible_blockers() {
     );
     assert!(
         full_out.contains(&format!(
-            "blocked {implementation_id} - Implementation node | 1 blocker; details: atelier issue blocked {implementation_id}"
+            "blocked {implementation_id} - Implementation node | 1 blocker"
         )),
         "{full_out}"
     );
+    assert!(full_out.contains(&format!(
+        "Inspect blockers: atelier issue blocked {implementation_id}"
+    )));
     assert!(!full_out.contains("todo/todo"), "{full_out}");
+}
+
+#[test]
+fn test_issue_status_reports_omitted_blocked_rows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Large objective", "--issue-type", "epic"],
+    );
+    let objective_id = issue_id_by_title(dir.path(), "Large objective");
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Shared blocker",
+            "--parent",
+            &objective_id,
+        ],
+    );
+    let blocker_id = issue_id_by_title(dir.path(), "Shared blocker");
+    for index in 0..6 {
+        run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                &format!("Blocked child {index}"),
+                "--parent",
+                &objective_id,
+            ],
+        );
+        let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked child {index}"));
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", &objective_id]);
+    assert!(success, "issue status failed: {stderr}");
+    assert!(
+        stdout.contains("1 more blocked work item(s) omitted"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Inspect blockers: atelier issue blocked"),
+        "{stdout}"
+    );
 }
 
 #[test]

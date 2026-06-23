@@ -194,6 +194,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 crate::commands::objective_status::proof_context(db, &issue.id)?
             );
         }
+        if summary.selectable_work.len() > 5 {
+            println!(
+                "  {} more ready work item(s) omitted",
+                summary.selectable_work.len() - 5
+            );
+        }
     }
 
     print_mission_heading("Blocked Work");
@@ -202,14 +208,25 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     } else {
         for blocked in summary.blocked_work.iter().take(5) {
             println!(
-                "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}; {}; {}",
+                "  blocked {} - {} | {} blocker{}; {}; {}",
                 blocked.issue.id,
                 blocked.issue.title,
                 blocked.blockers.len(),
                 plural_suffix(blocked.blockers.len()),
-                blocked.issue.id,
                 crate::commands::objective_status::parent_context(&blocked.issue),
                 crate::commands::objective_status::proof_context(db, &blocked.issue.id)?
+            );
+        }
+        if summary.blocked_work.len() > 5 {
+            println!(
+                "  {} more blocked work item(s) omitted",
+                summary.blocked_work.len() - 5
+            );
+        }
+        if let Some(blocked) = summary.blocked_work.first() {
+            println!(
+                "  Inspect blockers: atelier issue blocked {}",
+                blocked.issue.id
             );
         }
     }

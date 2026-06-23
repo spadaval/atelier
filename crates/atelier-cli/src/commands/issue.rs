@@ -9,7 +9,7 @@ use crate::commands::issue_workflow::{
     load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
-use crate::human_output::{self, DisplayRole, StylePolicy};
+use crate::human_output::{self, DisplayRole, FooterAction, StylePolicy};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
@@ -1328,7 +1328,7 @@ pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
                 queue_row(db, workflow_policy.as_ref(), item)
             })
             .collect::<Result<Vec<_>>>()?;
-        render_issue_queue_human(db, &format!("Search Results: {query}"), rows, true)
+        render_issue_queue_human(db, &format!("Issue Search Results: {query}"), rows, true)
     }
 }
 
@@ -1436,8 +1436,19 @@ fn render_issue_queue_human(
             .then(a.id.cmp(&b.id))
             .then(a.title.cmp(&b.title))
     });
+    let (footer_actions, omitted_footer_actions) = queue_footer_actions(&groups, 5);
     for group in groups {
         print_queue_group(group, show_status);
+    }
+    if !footer_actions.is_empty() {
+        println!();
+        println!(
+            "{}",
+            human_output::render_footer("Next Commands", footer_actions)
+        );
+        if omitted_footer_actions > 0 {
+            println!("  {omitted_footer_actions} more blocker drill-downs omitted");
+        }
     }
 
     Ok(())
@@ -1647,13 +1658,24 @@ fn queue_summary(rows: &[QueueRow]) -> String {
         }
     }
     format!(
-        "{} total | Category: {} | Status: {} | Priority: {} | Blocked: {}",
+        "{} total | Categories: {} | Statuses: {} | Priorities: {} | Blocked: {}",
         rows.len(),
-        joined_counts(categories),
-        joined_counts(statuses),
-        joined_counts(priorities),
+        joined_count_phrases(categories),
+        joined_count_phrases(statuses),
+        joined_count_phrases(priorities),
         blocked
     )
+}
+
+fn joined_count_phrases(counts: BTreeMap<String, usize>) -> String {
+    if counts.is_empty() {
+        return "none".to_string();
+    }
+    counts
+        .into_iter()
+        .map(|(name, count)| format!("{count} {name}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn print_queue_group(group: QueueGroup, show_status: bool) {
@@ -1673,9 +1695,8 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
     println!("\n{}", human_output::section_heading(&heading));
     if !group.external_blockers.is_empty() {
-        let group_id = group.id.as_deref().unwrap_or("<id>");
         println!(
-            "  blocked by {} external blocker{}; details: atelier issue blocked {group_id}",
+            "  blocked by {} external blocker{}",
             group.external_blockers.len(),
             plural_suffix(group.external_blockers.len())
         );
@@ -1711,16 +1732,42 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
 }
 
-fn blocker_suffix(issue_id: &str, blockers: &[String]) -> String {
+fn blocker_suffix(_issue_id: &str, blockers: &[String]) -> String {
     if blockers.is_empty() {
         String::new()
     } else {
         format!(
-            " ({} blocker{}; details: atelier issue blocked {issue_id})",
+            " ({} blocker{})",
             blockers.len(),
-            plural_suffix(blockers.len())
+            plural_suffix(blockers.len()),
         )
     }
+}
+
+fn queue_footer_actions(groups: &[QueueGroup], limit: usize) -> (Vec<FooterAction>, usize) {
+    let mut actions = Vec::new();
+    for group in groups {
+        if let Some(group_id) = &group.id {
+            if !group.external_blockers.is_empty() {
+                actions.push(FooterAction::new(
+                    format!("Inspect blockers for {group_id}"),
+                    format!("atelier issue blocked {group_id}"),
+                ));
+            }
+        }
+        for row in &group.rows {
+            if !row.open_blockers.is_empty() {
+                actions.push(FooterAction::new(
+                    format!("Inspect blockers for {}", row.id),
+                    format!("atelier issue blocked {}", row.id),
+                ));
+            }
+        }
+    }
+    let total = actions.len();
+    let (actions, omitted) = human_output::bounded_items(&actions, limit);
+    debug_assert_eq!(omitted, total.saturating_sub(actions.len()));
+    (actions, omitted)
 }
 
 fn plural_suffix(count: usize) -> &'static str {

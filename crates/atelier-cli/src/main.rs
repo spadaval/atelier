@@ -26,7 +26,7 @@ Orientation:
 
 Issues:
   issue         Create, list, show, update, close, and manage blockers
-  search        Search issue text
+  search        Search issues, relationships, and activity
 
 Missions:
   mission       Read-only mission reports and discovery
@@ -137,7 +137,7 @@ enum Commands {
         action: MissionCommands,
     },
 
-    /// Search issue text
+    /// Search issues, relationships, and activity
     Search {
         /// Search query
         query: String,

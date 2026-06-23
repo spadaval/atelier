@@ -455,7 +455,9 @@ fn test_issue_list_orders_visible_blockers_before_blocked_rows() {
     assert!(stdout.contains("ready [task]"), "{stdout}");
     assert!(stdout.contains("blocked [task]"), "{stdout}");
     assert!(!stdout.contains("todo/todo"), "{stdout}");
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains(&format!(
+        "Inspect blockers for {blocked_id}: atelier issue blocked {blocked_id}"
+    )));
 }
 
 #[test]
@@ -572,7 +574,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     );
     assert!(
         stdout.contains(&format!(
-            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker; details: atelier issue blocked {external_child_id})"
+            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker)"
         )),
         "{stdout}"
     );
@@ -2460,7 +2462,7 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
     assert!(stdout.contains("Blocked issue"));
     assert!(stdout.contains("blocked"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains("Drill down: atelier issue blocked <id>"));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
 
     let (success, quiet, stderr) =
@@ -2701,7 +2703,9 @@ fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
         "{ready_out}"
     );
     assert!(ready_out.contains("blocked by 1 external blocker"));
-    assert!(ready_out.contains(&format!("details: atelier issue blocked {parent_id}")));
+    assert!(ready_out.contains(&format!(
+        "Inspect blockers for {parent_id}: atelier issue blocked {parent_id}"
+    )));
     assert!(!ready_out.contains(&format!("blocked by {blocker_id}")));
     assert!(ready_out.contains(&format!("{child_id} - Ready child")));
 
@@ -2734,9 +2738,44 @@ fn test_issue_list_marks_external_epic_blockers_by_id() {
     assert!(success, "issue list failed: {stderr}");
     assert!(stdout.contains("Parent epic"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains("details: atelier issue blocked"));
+    assert!(stdout.contains("Inspect blockers for"));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
     assert!(!stdout.contains("open blocker"));
+}
+
+#[test]
+fn test_issue_list_bounds_blocker_footer_actions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Shared blocker"]);
+    let blocker_id = issue_ref(dir.path(), 1);
+    for index in 0..7 {
+        run_atelier(
+            dir.path(),
+            &["issue", "create", &format!("Blocked row {index}")],
+        );
+        let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked row {index}"));
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+
+    assert!(success, "issue list --blocked failed: {stderr}");
+    assert_eq!(stdout.matches("Blocked row").count(), 5, "{stdout}");
+    assert_eq!(
+        stdout.matches("atelier issue blocked ").count(),
+        1,
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("2 more blocked issue(s) omitted"),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains("details: atelier issue blocked"),
+        "{stdout}"
+    );
 }
 
 #[test]

@@ -80,6 +80,12 @@ fn print_ready_work(
             commands::objective_status::proof_context(db, &issue.id)?
         );
     }
+    if snapshot.ready_issues.len() > 5 {
+        println!(
+            "  {} more ready work item(s) omitted",
+            snapshot.ready_issues.len() - 5
+        );
+    }
     Ok(())
 }
 
@@ -97,12 +103,17 @@ fn print_blocked_work(
     for issue in snapshot.blocked_issues.iter().take(5) {
         let blockers = commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?;
         println!(
-            "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}",
+            "  blocked {} - {} | {} blocker{}",
             issue.id,
             issue.title,
             blockers.len(),
             plural_suffix(blockers.len()),
-            issue.id
+        );
+    }
+    if snapshot.blocked_issues.len() > 5 {
+        println!(
+            "  {} more blocked work item(s) omitted",
+            snapshot.blocked_issues.len() - 5
         );
     }
     Ok(())
@@ -121,6 +132,9 @@ fn print_blockers(snapshot: &commands::objective_status::ObjectiveStatusSnapshot
             compact_strings(&snapshot.open_blockers)
         );
         println!("  Next: close or unblock listed blockers");
+        if let Some(issue) = snapshot.blocked_issues.first() {
+            println!("  Inspect blockers: atelier issue blocked {}", issue.id);
+        }
     }
 }
 

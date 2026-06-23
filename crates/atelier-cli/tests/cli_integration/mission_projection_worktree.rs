@@ -70,8 +70,8 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let (success, todo_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
     assert!(success, "todo filter failed: {stderr}");
-    assert!(todo_out.contains("Category: todo=1"), "{todo_out}");
-    assert!(todo_out.contains("Status: todo=1"), "{todo_out}");
+    assert!(todo_out.contains("Categories: 1 todo"), "{todo_out}");
+    assert!(todo_out.contains("Statuses: 1 todo"), "{todo_out}");
     assert!(todo_out.contains(&todo_id), "{todo_out}");
     assert!(!todo_out.contains(&active_id), "{todo_out}");
     assert!(!todo_out.contains(&done_id), "{todo_out}");
@@ -79,8 +79,11 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let (success, active_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "in_progress"]);
     assert!(success, "in_progress filter failed: {stderr}");
-    assert!(active_out.contains("Category: active=1"), "{active_out}");
-    assert!(active_out.contains("Status: in_progress=1"), "{active_out}");
+    assert!(active_out.contains("Categories: 1 active"), "{active_out}");
+    assert!(
+        active_out.contains("Statuses: 1 in_progress"),
+        "{active_out}"
+    );
     assert!(active_out.contains("active [task]"), "{active_out}");
     assert!(active_out.contains(&active_id), "{active_out}");
     assert!(!active_out.contains(&todo_id), "{active_out}");
@@ -89,11 +92,11 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
         run_atelier(dir.path(), &["issue", "list", "--category", "active"]);
     assert!(success, "active category filter failed: {stderr}");
     assert!(
-        active_category_out.contains("Category: active=1"),
+        active_category_out.contains("Categories: 1 active"),
         "{active_category_out}"
     );
     assert!(
-        active_category_out.contains("Status: in_progress=1"),
+        active_category_out.contains("Statuses: 1 in_progress"),
         "{active_category_out}"
     );
     assert!(
@@ -127,8 +130,8 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let (success, done_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
     assert!(success, "done filter failed: {stderr}");
-    assert!(done_out.contains("Category: done=1"), "{done_out}");
-    assert!(done_out.contains("Status: done=1"), "{done_out}");
+    assert!(done_out.contains("Categories: 1 done"), "{done_out}");
+    assert!(done_out.contains("Statuses: 1 done"), "{done_out}");
     assert!(done_out.contains("done [task]"), "{done_out}");
     assert!(done_out.contains(&done_id), "{done_out}");
 
@@ -1653,7 +1656,10 @@ fn test_mission_status_cli_reports_control_state() {
     )));
     assert!(status_out.contains("Blocked Work"));
     assert!(status_out.contains(&format!(
-        "blocked {blocked_id} - Blocked status work | 1 blocker; details: atelier issue blocked {blocked_id}; parent {epic_id}; proof checked by workflow validators"
+        "blocked {blocked_id} - Blocked status work | 1 blocker; parent {epic_id}; proof checked by workflow validators"
+    )));
+    assert!(status_out.contains(&format!(
+        "Inspect blockers: atelier issue blocked {blocked_id}"
     )));
     assert!(!status_out.contains(&format!("blocked by {blocker_id}")));
     assert!(status_out.contains("Blockers"));
