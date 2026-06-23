@@ -269,8 +269,6 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         }
     }
 
-    print_mission_branch_lifecycle(db, &summary, &active_work)?;
-
     print_mission_heading("Active Work");
     if active_work.is_empty() {
         println!("(none)");
@@ -281,107 +279,6 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     }
 
     print_status_next_commands(&mission, &summary, &terminal);
-    Ok(())
-}
-
-fn print_mission_branch_lifecycle(
-    db: &Database,
-    summary: &MissionListSummary,
-    active_work: &[Issue],
-) -> Result<()> {
-    print_mission_heading("Branch Policy");
-    let current_branch = crate::commands::workflow::current_git_branch()?;
-    println!(
-        "Current branch: {}",
-        current_branch.as_deref().unwrap_or("(detached)")
-    );
-    println!(
-        "Base branch:    {}",
-        crate::commands::workflow::configured_base_branch()?
-    );
-
-    let mut owner_branches = BTreeMap::new();
-    for epic in &summary.epics {
-        if let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, &epic.issue.id)
-        {
-            owner_branches.insert(context.resolution.owner_id.clone(), context);
-        }
-    }
-    for issue in active_work {
-        if let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, &issue.id) {
-            owner_branches.insert(context.resolution.owner_id.clone(), context);
-        }
-    }
-
-    if owner_branches.is_empty() {
-        println!("Owner branches: none");
-    } else {
-        println!("Owner branches:");
-        for context in owner_branches.values() {
-            let ahead = crate::commands::workflow::branch_ahead_count(
-                &context.resolution.expected_branch,
-                &context.resolution.base_branch,
-            )?
-            .map(|count| {
-                if count == 0 {
-                    "merged".to_string()
-                } else {
-                    format!("unmerged ({count} commit(s) ahead of base)")
-                }
-            })
-            .unwrap_or_else(|| "missing".to_string());
-            let current =
-                if current_branch.as_deref() == Some(context.resolution.expected_branch.as_str()) {
-                    "current"
-                } else {
-                    "not current"
-                };
-            println!(
-                "  {} {} ({}) -> {} | {current} | {ahead}",
-                crate::commands::workflow::branch_owner_label(&context.resolution.owner_kind),
-                context.resolution.owner_id,
-                context.resolution.owner_issue_type,
-                context.resolution.expected_branch
-            );
-        }
-    }
-
-    let dirty_entries = active_work
-        .iter()
-        .find_map(|issue| {
-            crate::commands::workflow::branch_lifecycle_context(db, &issue.id)
-                .ok()
-                .map(|context| context.dirty_entries)
-        })
-        .unwrap_or_default();
-    if dirty_entries.is_empty() {
-        println!("Dirty state: clean");
-    } else {
-        println!("Dirty state: dirty ({} entries)", dirty_entries.len());
-    }
-
-    let mismatches = active_work
-        .iter()
-        .filter_map(|issue| {
-            let context =
-                crate::commands::workflow::branch_lifecycle_context(db, &issue.id).ok()?;
-            (context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str()))
-                .then(|| {
-                    format!(
-                        "{} expected {}; inspect `atelier issue transition {} --options` and `atelier status`",
-                        issue.id, context.resolution.expected_branch, issue.id
-                    )
-                })
-        })
-        .collect::<Vec<_>>();
-    if mismatches.is_empty() {
-        println!("Branch mismatches: none");
-    } else {
-        println!("Branch mismatches:");
-        for mismatch in mismatches {
-            println!("  {mismatch}");
-        }
-    }
     Ok(())
 }
 

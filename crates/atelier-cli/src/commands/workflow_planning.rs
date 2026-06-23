@@ -238,23 +238,6 @@ pub(crate) fn branch_lifecycle_context(
     })
 }
 
-pub(crate) fn known_branch_owner(
-    db: &Database,
-    branch: &str,
-) -> Result<Option<BranchLifecycleResolution>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let mut owner_ids = std::collections::BTreeSet::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let resolution =
-            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-        if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
-            return Ok(Some(resolution));
-        }
-    }
-    Ok(None)
-}
-
 pub(crate) fn configured_base_branch() -> Result<String> {
     let repo_root = crate::commands::workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -271,22 +254,6 @@ pub(crate) fn current_git_branch() -> Result<Option<String>> {
     .ok()
     .map(|value| value.trim().to_string())
     .filter(|value| !value.is_empty()))
-}
-
-pub(crate) fn branch_ahead_count(branch: &str, base_branch: &str) -> Result<Option<usize>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    if !crate::commands::workflow::branch_exists_at(&repo_root, branch)?
-        || !crate::commands::workflow::branch_exists_at(&repo_root, base_branch)?
-    {
-        return Ok(None);
-    }
-    let range = format!("{base_branch}..{branch}");
-    let count = crate::commands::workflow::git_stdout(
-        &repo_root,
-        &["rev-list", "--count", &range],
-        "count branch commits",
-    )?;
-    Ok(count.trim().parse::<usize>().ok())
 }
 
 pub(crate) fn branch_owner_label(
@@ -321,14 +288,6 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             context.resolution.expected_branch, context.resolution.base_branch
         ),
         None => "detached HEAD; inspect git status".to_string(),
-    }
-}
-
-pub(crate) fn branch_lifecycle_scope_line(context: &BranchLifecycleContext) -> &'static str {
-    if context.resolution.merge_owned {
-        "owns its merge branch"
-    } else {
-        "nested under epic; merge is deferred to epic close"
     }
 }
 

@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove ambient expected-branch UX from normal status"
-updated_at: "2026-06-23T20:17:15.737614196+00:00"
+updated_at: "2026-06-23T21:46:37.530758621+00:00"
 ---
 
 ## Description

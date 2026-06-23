@@ -22,10 +22,9 @@ use serde_json::Value;
 
 pub(crate) use crate::commands::workflow_actions::action_preflight_blockers;
 pub(crate) use crate::commands::workflow_planning::{
-    branch_ahead_count, branch_lifecycle_context, branch_lifecycle_scope_line,
-    branch_lifecycle_state_line, branch_owner_label, configured_base_branch, current_git_branch,
-    issue_transition_options, known_branch_owner, plan_transition_actions, IssueTransitionOption,
-    PlannedAction,
+    branch_lifecycle_context, branch_lifecycle_state_line, branch_owner_label,
+    configured_base_branch, current_git_branch, issue_transition_options, plan_transition_actions,
+    IssueTransitionOption, PlannedAction,
 };
 
 #[derive(Debug, Clone, Serialize)]
