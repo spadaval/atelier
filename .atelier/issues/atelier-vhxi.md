@@ -33,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Epic: Make mission and epic explicit domain types"
-updated_at: "2026-06-23T21:35:12.669805470+00:00"
+updated_at: "2026-06-23T22:32:31.716299269+00:00"
 ---
 
 ## Description
