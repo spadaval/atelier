@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-23T21:52:22.481376293+00:00"
+status: "done"
 title: "Remove ambient expected-branch UX from normal status"
-updated_at: "2026-06-23T21:46:37.530758621+00:00"
+updated_at: "2026-06-23T21:52:22.481376293+00:00"
 ---
 
 ## Description
