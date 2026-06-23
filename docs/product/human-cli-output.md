@@ -44,6 +44,84 @@ identity line, metadata rows, section headings, hierarchy, blockers, subissues,
 recent activity, and next commands. New surfaces should reuse that shape instead
 of inventing command-specific tables.
 
+## Workflow Vocabulary
+
+Human output must distinguish four concepts that are easy to flatten in code but
+different to operators:
+
+- Workflow state is the durable issue status, such as `todo`, `in_progress`,
+  `review`, `validation`, `blocked`, or `done`.
+- Blocker state explains whether the row can move now, is blocked directly, or
+  is blocked because an owning parent is blocked.
+- Display role explains why the row is visible in this command output.
+- Next action names the command that can usefully change or inspect the state.
+
+Use these display roles consistently:
+
+| Role | Meaning | Row behavior |
+| --- | --- | --- |
+| `executable` | The row is the current work or an action can be taken immediately. | Put it in the primary section and include the next lifecycle command nearby. |
+| `selectable` | The row can be started or selected by an operator, but it is not yet active. | Put it in ready/selectable sections and show blocker count as zero. |
+| `blocked` | The row itself has open blockers. | Put it in blocked sections and summarize the most important blocker titles or counts. |
+| `blocked-through-parent` | The row may be otherwise ready, but a parent or owning objective blocks it. | Keep it out of selectable work; show the parent blocker once and route drill-down to the parent. |
+| `context-only` | The row explains surrounding state but is not next work. | Use quieter row styling and clear text such as `shown for context`. |
+| `omitted` | Matching rows exist but are hidden by list budgets. | Print the omitted count and the focused command that reveals them. |
+
+Rows may use shorter text than the role token, but the meaning must remain
+visible in colorless output. Do not use implementation labels such as
+`context; parent blocked`, `projection`, or `derived` as normal operator
+language.
+
+## Summaries, Budgets, And Footers
+
+Default human output should be bounded. Commands that may return many records
+must choose a budget, state when it was applied, and provide one focused
+drill-down command. Repeated per-row commands are not allowed in the normal
+view.
+
+Preferred list budget behavior:
+
+- show the most actionable rows first, then the most severe blockers, then
+  context rows;
+- keep short fields such as ID, type, status, priority, and blocker count in
+  columns or row prefixes;
+- make title and free-form text the final field so it can wrap;
+- state omitted counts with the reason, for example `12 more blocked issues
+  omitted`;
+- put the command for the full list in `Next Commands` or `Drill-downs`, not on
+  every row.
+
+Footers are intent-labeled. Use labels such as `Start ready work`,
+`Inspect blocker`, `Repair tracker state`, `Show full history`, or `Validate
+record`, followed by the exact command. Command code chooses the available
+actions; shared formatters only render and deduplicate them.
+
+## Responsibility Boundary
+
+The shared formatter owns presentation mechanics:
+
+- section headings, identity lines, aligned metadata, row prefixes, indentation,
+  bounded-list rendering, omitted-count messages, footer rendering, style tokens,
+  color enablement, and colorless fallbacks;
+- reusable labels for workflow state, blocker state, display role, evidence
+  state, and public recovery callouts;
+- dirty-path summaries and path samples once command/app code supplies the
+  classified state.
+
+Command and app logic own state correctness:
+
+- deciding whether an issue is executable, selectable, blocked,
+  blocked-through-parent, context-only, or omitted;
+- refreshing or rejecting stale projections before a status-like view claims
+  current state;
+- checking Git state, workflow validators, configured policy, permissions, and
+  provider review state;
+- choosing the exact next commands and public recovery path.
+
+Command-specific renderers may still own domain-specific body text, prose order,
+and specialized sections. They must not create one-off color policy, duplicate
+footer ranking rules, or private workflow vocabulary.
+
 ## Detail Views
 
 Use a detail view when the command focuses on one record, such as
@@ -81,6 +159,12 @@ Required sections for mission detail views:
 - configured validator failures, including evidence validators when workflow
   policy requires them;
 - next commands for likely coordination steps.
+
+Mission-shaped reports belong on the read-only mission report surface once it
+exists. Issue/workflow commands continue to own creation, linking, mutation,
+transitions, and closeout. Root `atelier status` remains checkout/work
+orientation and may signpost a mission report, but it should not become the full
+mission health report.
 
 Do not hide empty sections when their absence is operationally meaningful.
 For example, `Mission blockers: 0` and failed configured validator messages are
@@ -136,6 +220,12 @@ Rows should include at least ID, priority, type, status when not implied by the
 group, title, and compact blocker or parent cues when available. Use fixed-width
 columns only for short fields. Titles and other free text should be the final
 column so they can wrap or truncate consistently.
+
+Queue and objective-status views must not imply that all visible rows are next
+work. Ready/selectable rows, blocked rows, blocked-through-parent rows,
+context-only parent rows, and omitted rows need distinct text. Parent rows shown
+only to explain child work are context-only unless the parent itself is the
+action target.
 
 Empty queue output should say what was searched and what to try next. For
 example, `issue list --ready` may include the blocked count, while
@@ -237,6 +327,25 @@ Color is optional hierarchy, never the only carrier of meaning.
 Until shared color helpers exist, output changes should focus on layout and text
 structure. Downstream implementation may add color behind a single formatter
 boundary.
+
+## Zen Alignment
+
+This output contract exists to make the product principles visible:
+
+- The repository remains the source of truth: human output summarizes committed
+  record state and points to the canonical record or recovery command when state
+  is stale.
+- Proof stands on its own: validation and evidence sections name attached proof
+  and the command that inspects it instead of relying on chat context.
+- Output models the domain instead of flattening it: missions, epics, issues,
+  blockers, evidence, and review artifacts keep distinct labels and sections.
+- Coordination is visible: blockers, owners, parent context, and next commands
+  are first-class output, not implied by row order or color.
+- Every formatting feature must justify its cost: add shared helpers only when
+  they remove duplicated policy or make repeated operator decisions clearer.
+- Obsolete output paths are removed once replaced: retired, hidden, admin, and
+  replacement commands are described as such and are not polished back into
+  normal workflow.
 
 ## Width And Wrapping
 
