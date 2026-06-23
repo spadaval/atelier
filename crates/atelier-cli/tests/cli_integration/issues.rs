@@ -1673,8 +1673,10 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     assert!(stdout.contains("Scope:          repository"));
     assert!(stdout.contains("Source:         canonical .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
+    assert!(stdout.contains("Filters:        event kind evidence_attached"));
     assert!(stdout.contains("Showing:        1 of 1 matching events"));
-    assert!(stdout.contains("Evidence attached"));
+    assert!(stdout.contains("Second issue: Evidence attached"));
+    assert!(stdout.contains(&format!("evidence_attached | tester | issue/{second}")));
     assert!(!stdout.contains("First comment"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue show <id>"));
@@ -1693,6 +1695,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
         ],
     );
     assert!(success, "filtered history failed: {stderr}");
+    assert!(stdout.contains("Filters:        event kind comment, since 2026-06-10T00:00:00+00:00"));
     assert!(stdout.contains("First comment"));
     assert!(!stdout.contains("Evidence attached"));
 

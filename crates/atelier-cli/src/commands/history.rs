@@ -494,15 +494,14 @@ fn render_history(
     println!("\nEvents");
     println!("------");
     for row in rows.iter().take(options.limit) {
+        println!("  {}", event_sentence(row));
         println!(
-            "  {} | {} | {} | {}/{} | {} | {}",
+            "    {} | {} | {} | {}/{}",
             format_timestamp(row.timestamp),
             row.event_kind,
             row.actor.as_deref().unwrap_or("(system)"),
             row.target_kind,
-            row.target_id,
-            compact_text(&row.title),
-            compact_text(&row.summary)
+            row.target_id
         );
     }
     if rows.len() > options.limit {
@@ -519,18 +518,28 @@ fn render_history(
 fn filter_summary(options: &HistoryOptions, since: Option<DateTime<Utc>>) -> String {
     let mut filters = Vec::new();
     if let Some(event_kind) = options.event_kind.as_deref() {
-        filters.push(format!("event_kind={event_kind}"));
+        filters.push(format!("event kind {event_kind}"));
     }
     if let Some(actor) = options.actor.as_deref() {
-        filters.push(format!("actor={actor}"));
+        filters.push(format!("actor {actor}"));
     }
     if let Some(since) = since {
-        filters.push(format!("since={}", since.to_rfc3339()));
+        filters.push(format!("since {}", since.to_rfc3339()));
     }
     if filters.is_empty() {
         "(none)".to_string()
     } else {
         filters.join(", ")
+    }
+}
+
+fn event_sentence(row: &HistoryRow) -> String {
+    let title = compact_text(&row.title);
+    let summary = compact_text(&row.summary);
+    if summary.is_empty() || summary == title {
+        title
+    } else {
+        format!("{title}: {summary}")
     }
 }
 
