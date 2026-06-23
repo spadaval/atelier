@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate explicit mission/epic domain and branch workflow"
-updated_at: "2026-06-23T22:27:32.756716570+00:00"
+updated_at: "2026-06-23T22:29:22.113434188+00:00"
 ---
 
 ## Description

@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "domain-model"
 - "workflow"
+review:
+  kind: pull_request
+  number: 23
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
