@@ -30,3 +30,10 @@ Enforce the fixed hierarchy model in issue creation, issue parent updates, bundl
 - Invalid mission/epic hierarchy shapes are rejected with clear fix commands, existing invalid canonical records are reported by lint/rebuild, and ordinary standalone issues remain valid.
 - `atelier bundle preview` and `atelier bundle apply` reject bundle issue parents that would create mission-owned children, task-owned children, epic parents, or nested epics.
 - Bundle-created mission scope uses `advances` links only; bundle input cannot express mission work through `parent`.
+
+## Evidence
+
+- Focused tests cover rejected mission parents, mission children, epic parents, nested epics, children under non-epic issue types, and valid standalone or epic-child ordinary issues.
+- Focused tests cover `atelier bundle preview` and `atelier bundle apply` rejection for invalid hierarchy input and acceptance of mission scope expressed through `advances` links.
+- Lint or rebuild validation output reports invalid canonical hierarchy records with public recovery guidance.
+- `target/debug/atelier lint`, focused CLI tests, and `git diff --check` pass.

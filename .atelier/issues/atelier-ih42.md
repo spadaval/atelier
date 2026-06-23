@@ -26,3 +26,9 @@ Validate the fixed mission/epic domain model and explicit branch workflow end to
 ## Outcome
 
 Focused tests and command transcripts prove invalid hierarchy shapes are rejected across issue commands, canonical lint/rebuild paths, and bundle preview/apply; valid standalone and epic-child work remains usable; bundle mission scope uses `advances` rather than parent hierarchy; branch.prepare is explicit and not injected; and normal status/issue output no longer exposes branch owner internals as routine workflow guidance.
+
+## Evidence
+
+- First-class evidence attaches the domain/workflow validation matrix to `atelier-c0qc` and references the child evidence for `atelier-59vp`, `atelier-ht4k`, `atelier-krt8`, and `atelier-pguu`.
+- Transcript evidence covers invalid hierarchy rejection, mission `advances` scope, valid standalone branches, valid epic-child branches, explicit `branch.prepare` execution, custom context-only links, bundle preview/apply behavior, and cleaned branch-state output.
+- `cargo fmt -- --check`, `git diff --check`, `target/debug/atelier lint`, and focused CLI tests pass.

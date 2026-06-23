@@ -42,3 +42,10 @@ Also document the workflow system as layered operator guidance instead of relyin
 - `docs/product/work-model.md` explains why mission, epic, issue, evidence, workflow validator, and transition action are separate concepts without requiring readers to parse every workflow YAML field.
 - Bundle documentation matches the fixed domain model: missions are issue records with `issue_type: mission`, mission scope is authored as `advances`, and bundle hierarchy validation follows the same mission/epic/ordinary-issue rules as `issue create` and `issue update`.
 - Product docs distinguish canonical reference docs from role-specific man pages and live command surfaces: docs explain the system, `atelier man <role>` routes the role, `issue transition --options` explains the current issue, and `atelier lint` checks correctness.
+
+## Evidence
+
+- File changes in `docs/product/work-model.md`, `docs/product/workflow-configuration.md`, and bundle documentation describe the fixed mission/epic domain model, allowed hierarchy shapes, `advances` links, workflow actions, workflow validators, and custom context-only links.
+- The docs identify which guidance belongs in canonical docs, role-specific `atelier man <role>` output, live `atelier issue transition <id> --options` output, and `atelier lint`.
+- `git diff --check -- docs` passes.
+- `target/debug/atelier lint atelier-c0qc` passes.
