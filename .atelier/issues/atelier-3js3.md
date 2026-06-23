@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-23T23:41:10.176603666+00:00"
+status: "done"
 title: "Validate human CLI output refresh end to end"
-updated_at: "2026-06-23T23:40:37.057007685+00:00"
+updated_at: "2026-06-23T23:41:10.176603666+00:00"
 ---
 
 ## Description
