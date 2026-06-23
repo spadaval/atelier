@@ -1616,8 +1616,7 @@ pub fn print_issue_transition_options(
     issue: &Issue,
     options: &[IssueTransitionOption],
 ) {
-    println!("Issue Transitions {} - {}", issue.id, issue.title);
-    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
+    human_output::print_heading(&format!("Issue Transitions {} - {}", issue.id, issue.title));
     print_heading("State");
     println!("Status:   {}", issue.status);
     println!("Type:     {}", issue.issue_type);
@@ -1657,9 +1656,9 @@ pub fn print_issue_transition_options(
             option.name,
             decision.render(StylePolicy::plain())
         );
+        println!("  Decision: {}", decision.render(StylePolicy::plain()));
         println!("  From: {}", option.from.join(", "));
         println!("  To:   {}", option.to);
-        println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
         print_text_list("Blockers", &option.blockers);
         print_text_list(
@@ -1667,6 +1666,7 @@ pub fn print_issue_transition_options(
             &planned_action_lines(&option.planned_actions),
         );
         print_text_list("Description", &option.descriptions);
+        print_text_list("Commands", &[option.command.clone()]);
     }
 }
 

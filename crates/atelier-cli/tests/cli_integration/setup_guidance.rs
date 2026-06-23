@@ -1792,6 +1792,10 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
+        transition_out.contains("  Decision: allowed"),
+        "{transition_out}"
+    );
+    assert!(
         transition_out.contains("block [allowed]"),
         "{transition_out}"
     );
@@ -1803,6 +1807,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         !transition_out.contains("Planned Effects"),
         "{transition_out}"
     );
+    assert!(transition_out.contains("Commands"), "{transition_out}");
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
     let git_after = git_status_short(dir.path());
     assert_eq!(
@@ -2572,6 +2577,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
+    assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
         options_out.contains(

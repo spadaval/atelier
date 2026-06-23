@@ -528,6 +528,7 @@ fn render_issue_show_human(
 
     render_parent_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
+    render_checkout_summary(db, canonical_id)?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -627,6 +628,38 @@ fn render_transition_readiness(
         "  options: atelier issue transition {} --options",
         object.id
     );
+    Ok(())
+}
+
+fn render_checkout_summary(db: &Database, canonical_id: &str) -> Result<()> {
+    let Ok(options) = crate::commands::workflow::issue_transition_options(db, canonical_id) else {
+        return Ok(());
+    };
+    let needs_branch_context = options.iter().any(|option| {
+        crate::commands::workflow_planning::planned_actions_need_branch_context(
+            &option.planned_actions,
+        )
+    });
+    if !needs_branch_context {
+        return Ok(());
+    }
+    let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, canonical_id) else {
+        return Ok(());
+    };
+    println!("\nCheckout");
+    println!("--------");
+    println!(
+        "Current:  {}",
+        context.current_branch.as_deref().unwrap_or("(detached)")
+    );
+    if context.dirty_entries.is_empty() {
+        println!("State:    clean");
+    } else {
+        println!(
+            "State:    dirty checkout: {}",
+            human_output::path_summary(&context.dirty_entries, 3)
+        );
+    }
     Ok(())
 }
 
@@ -1715,14 +1748,32 @@ fn human_activity_body(body: &str) -> String {
     let mut field = None;
     let mut old = None;
     let mut new = None;
+    let mut transition = None;
+    let mut from = None;
+    let mut to = None;
+    let mut reason = None;
+    let mut evidence_id = None;
+    let mut result = None;
     let mut all_structured = true;
     for line in body.lines().filter(|line| !line.trim().is_empty()) {
-        if let Some(value) = scalar_line_value(line, "field") {
+        if let Some(value) = activity_scalar_line_value(line, "field").flatten() {
             field = Some(value);
-        } else if let Some(value) = scalar_line_value(line, "old") {
+        } else if let Some(value) = activity_scalar_line_value(line, "old").flatten() {
             old = Some(value);
-        } else if let Some(value) = scalar_line_value(line, "new") {
+        } else if let Some(value) = activity_scalar_line_value(line, "new").flatten() {
             new = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "transition").flatten() {
+            transition = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "from").flatten() {
+            from = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "to").flatten() {
+            to = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "reason") {
+            reason = value;
+        } else if let Some(value) = activity_scalar_line_value(line, "evidence_id").flatten() {
+            evidence_id = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "result").flatten() {
+            result = Some(value);
         } else {
             all_structured = false;
         }
@@ -1733,8 +1784,35 @@ fn human_activity_body(body: &str) -> String {
             let new = new.unwrap_or_else(|| "(none)".to_string());
             return format!("Changed {field}: {old} -> {new}");
         }
+        if let Some(transition) = transition {
+            let from = from.unwrap_or_else(|| "(unknown)".to_string());
+            let to = to.unwrap_or_else(|| "(unknown)".to_string());
+            if let Some(reason) = reason {
+                return format!("Transition {transition}: {from} -> {to}; blocked by {reason}");
+            }
+            return format!("Transition {transition}: {from} -> {to}");
+        }
+        if let Some(evidence_id) = evidence_id {
+            let result = result.unwrap_or_else(|| "(unknown result)".to_string());
+            return format!("Evidence {evidence_id} attached; result {result}");
+        }
     }
     body.to_string()
+}
+
+fn activity_scalar_line_value(line: &str, key: &str) -> Option<Option<String>> {
+    let value = line.strip_prefix(&format!("{key}: "))?.trim();
+    if value == "null" {
+        return Some(None);
+    }
+    if let Ok(parsed) = serde_json::from_str::<String>(value) {
+        return Some(Some(parsed));
+    }
+    if value.is_empty() {
+        Some(None)
+    } else {
+        Some(Some(value.to_string()))
+    }
 }
 
 pub struct LifecycleCreateInput<'a> {

@@ -1297,6 +1297,58 @@ fn test_show_issue_rich_human_output() {
 }
 
 #[test]
+fn test_issue_show_recent_activity_humanizes_structured_bodies() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Recent Activity"), "{stdout}");
+    assert!(
+        stdout.contains("Transition start: todo -> in_progress"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("transition: \"start\""), "{stdout}");
+}
+
+#[test]
+fn test_issue_show_summarizes_dirty_checkout_state() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Dirty checkout issue",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    let issue_id = issue_id_by_title(dir.path(), "Dirty checkout issue");
+    std::fs::write(dir.path().join("tracked.txt"), "clean").unwrap();
+    commit_all(dir.path(), "baseline");
+    std::fs::write(dir.path().join("tracked.txt"), "dirty").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Checkout"), "{stdout}");
+    assert!(
+        stdout.contains("State:    dirty checkout: 1 path:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("tracked.txt"), "{stdout}");
+}
+
+#[test]
 fn test_issue_show_human_shape_exposes_actionable_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
