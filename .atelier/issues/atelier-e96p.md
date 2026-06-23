@@ -24,9 +24,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-23T21:38:06.010653247+00:00"
+status: "done"
 title: "Document fixed mission/epic domain contract"
-updated_at: "2026-06-23T21:35:23.283422144+00:00"
+updated_at: "2026-06-23T21:38:06.010653247+00:00"
 ---
 
 ## Description
