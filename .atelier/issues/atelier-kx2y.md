@@ -37,9 +37,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Epic: Refresh human CLI output surfaces"
-updated_at: "2026-06-23T22:34:43.008486946+00:00"
+updated_at: "2026-06-23T23:43:15.221135922+00:00"
 ---
 
 ## Description
