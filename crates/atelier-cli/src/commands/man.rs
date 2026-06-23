@@ -209,16 +209,16 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             );
         }
         Role::Manager => {
+            println!("  1. atelier mission list - Choose a mission to inspect explicitly.");
             println!(
-                "  1. atelier issue table --kind mission - Choose a mission to inspect explicitly."
+                "  2. atelier mission status <mission-id> - Review mission readiness and blockers."
             );
-            println!("  2. atelier issue status <id> - Review objective readiness and blockers.");
             println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
         }
         Role::Admin => {
-            println!("  1. atelier init - Create tracker scaffolding when missing.");
+            println!("  1. atelier lint - Validate committed tracker state and workflow policy.");
             println!("  2. atelier doctor - Inspect runtime and projection health.");
-            println!("  3. atelier doctor --fix - Repair ignored local state when safe.");
+            println!("  3. atelier issue transition <id> --options - Inspect live validators and planned actions.");
         }
     }
 }
@@ -253,8 +253,8 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
-            println!("  atelier issue table --kind mission");
-            println!("  atelier issue status <id>");
+            println!("  atelier mission list");
+            println!("  atelier mission status <mission-id>");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
@@ -268,6 +268,11 @@ fn print_normal_loop(role: Role) {
             println!("  atelier doctor");
             println!("  atelier doctor --fix");
             println!("  atelier branch status");
+            println!("  atelier workflow check");
+            println!("  atelier prune --dry-run");
+            println!("  atelier maintenance delete <kind> <id> --force");
+            println!("  docs/product/workflow-configuration.md");
+            println!("  docs/product/work-model.md");
         }
     }
 }
@@ -292,6 +297,9 @@ fn print_not_usually(role: Role) {
         }
         Role::Admin => {
             println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");
+            println!(
+                "  validator/action encyclopedia detail; use workflow docs and `atelier issue transition <id> --options` instead"
+            );
         }
     }
 }

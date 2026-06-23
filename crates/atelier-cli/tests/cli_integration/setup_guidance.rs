@@ -1697,8 +1697,8 @@ fn test_man_manager_routes_to_mission_inventory_without_focus() {
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
     assert!(!stdout.contains("Active mission:"), "{stdout}");
-    assert!(stdout.contains("atelier issue table --kind mission"));
-    assert!(stdout.contains("atelier issue status <id>"));
+    assert!(stdout.contains("atelier mission list"));
+    assert!(stdout.contains("atelier mission status <mission-id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));
     assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier issue link <mission-id> <issue-id> --role advances"));
@@ -1750,6 +1750,9 @@ fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
     assert!(stdout.contains("Tracker: unavailable"));
     assert!(stdout.contains("Not an Atelier repository"));
     assert!(stdout.contains("atelier init"));
+    assert!(stdout.contains("docs/product/workflow-configuration.md"));
+    assert!(stdout.contains("atelier issue transition <id> --options"));
+    assert!(stdout.contains("atelier prune --dry-run"));
 }
 
 #[test]
