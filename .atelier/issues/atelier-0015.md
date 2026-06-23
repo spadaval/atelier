@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-08T19:40:03+00:00"
 id: "atelier-0015"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "agent-factory"
 - "dogfood"

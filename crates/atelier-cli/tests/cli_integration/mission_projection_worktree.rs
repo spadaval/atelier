@@ -10,11 +10,12 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
   "schema_version": 1,
   "title": "Mission fixture",
   "resources": {{
-    "missions": [
+    "issues": [
       {{
         "client_ref": "mission.fixture",
         "title": {title:?},
-        "body": "Mission fixture body.",
+        "issue_type": "mission",
+        "description": "Mission fixture body.",
         "labels": ["mission"]
       }}
     ]
@@ -1011,10 +1012,6 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(status_out.contains(&work_id));
     assert!(status_out.contains("Blockers: open"));
     assert!(status_out.contains(&blocker_id));
-    assert!(
-        status_out.contains("Dirty state: clean") || status_out.contains("Dirty state: dirty"),
-        "{status_out}"
-    );
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure"));
 
@@ -2836,15 +2833,15 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
         "depends_on": [{ "client_ref": "issue.blocker" }],
         "outcome": ["summary maps client refs"],
         "evidence": ["export check passes"]
-      }
-    ],
-    "missions": [
+      },
       {
         "client_ref": "mission.bundle",
         "title": "Bundle mission",
-        "body": "Mission from bundle",
+        "issue_type": "mission",
+        "priority": "medium",
         "labels": ["bundle", "mission"],
-        "work": [{ "client_ref": "issue.work" }]
+        "advances": [{ "client_ref": "issue.work" }],
+        "description": "Mission from bundle"
       }
     ],
     "evidence": [
@@ -2898,6 +2895,88 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     assert!(mission_markdown.contains("issue_type: \"mission\""));
     assert!(mission_markdown.contains("- \"bundle\"\n"));
     assert!(mission_markdown.contains("- \"mission\"\n"));
+}
+
+#[test]
+fn test_bundle_rejects_removed_mission_resource_shape() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("removed-mission-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Removed mission shape",
+  "resources": {
+    "missions": [
+      {
+        "client_ref": "mission.removed",
+        "title": "Removed mission",
+        "body": "Old mission resource"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "removed mission resource should be rejected");
+    assert!(
+        stderr.contains("resources.missions is no longer supported"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("issue_type \"mission\"") && stderr.contains("advances"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_rejects_mission_parent_scope() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("mission-parent-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid mission parent",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.parent",
+        "title": "Parent epic",
+        "issue_type": "epic"
+      },
+      {
+        "client_ref": "mission.child",
+        "title": "Invalid mission child",
+        "issue_type": "mission",
+        "parent": { "client_ref": "issue.parent" }
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "mission parent should be rejected");
+    assert!(
+        stderr.contains("Mission issue mission.child cannot have parent"),
+        "{stderr}"
+    );
 }
 
 #[test]

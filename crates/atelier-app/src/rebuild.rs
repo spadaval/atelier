@@ -249,6 +249,7 @@ impl<'a> ProjectionLoader<'a> {
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
         let record_links = self.collect_record_links()?;
+        validate_issue_hierarchy_shapes(&self.issues, &child_edges)?;
         self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
@@ -1005,6 +1006,59 @@ fn validate_issue_child_cycles(edges: &[(String, String)]) -> Result<()> {
         }
     }
     validate_directed_acyclic(edges, "children")
+}
+
+fn validate_issue_hierarchy_shapes(
+    issues: &[CanonicalIssue],
+    edges: &[(String, String)],
+) -> Result<()> {
+    let issue_types = issues
+        .iter()
+        .map(|issue| (issue.issue.id.as_str(), issue.issue.issue_type.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let mut children_by_parent = BTreeMap::<&str, Vec<&str>>::new();
+    for (child_id, parent_id) in edges {
+        let child_type = issue_types
+            .get(child_id.as_str())
+            .copied()
+            .unwrap_or("unknown");
+        let parent_type = issue_types
+            .get(parent_id.as_str())
+            .copied()
+            .unwrap_or("unknown");
+        if child_type == "mission" {
+            bail!(
+                "workflow_issue_hierarchy_invalid: mission issue {child_id} cannot have parent {parent_id}; link mission work with advances relationships"
+            );
+        }
+        if child_type == "epic" {
+            bail!(
+                "workflow_issue_hierarchy_invalid: epic issue {child_id} cannot have parent {parent_id}; epics are root work packages"
+            );
+        }
+        if parent_type != "epic" {
+            bail!(
+                "workflow_issue_hierarchy_invalid: issue {child_id} cannot be child of {parent_type} {parent_id}; only epics can own child work"
+            );
+        }
+        children_by_parent
+            .entry(parent_id.as_str())
+            .or_default()
+            .push(child_id.as_str());
+    }
+    for issue in issues {
+        if issue.issue.issue_type != "epic" {
+            if let Some(children) = children_by_parent.get(issue.issue.id.as_str()) {
+                bail!(
+                    "workflow_issue_hierarchy_invalid: {} issue {} cannot own child work {}; only epics can own child work",
+                    issue.issue.issue_type,
+                    issue.issue.id,
+                    children.join(", ")
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_dependency_cycles(edges: &[(String, String)]) -> Result<()> {

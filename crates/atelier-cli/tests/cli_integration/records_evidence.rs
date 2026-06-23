@@ -344,28 +344,27 @@ fn test_stress_many_issues() {
     assert!(stdout.contains("50"));
 }
 
-/// Test deeply nested subissues
+/// Test a broad epic child set
 #[test]
-fn test_stress_deep_nesting() {
+fn test_stress_many_epic_children() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    // Create root issue
-    run_atelier(dir.path(), &["issue", "create", "Level 0"]);
-    let mut parent_id = issue_ref(dir.path(), 1);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Level 0", "--issue-type", "epic"],
+    );
+    let parent_id = issue_ref(dir.path(), 1);
 
-    // Create 20 levels of nesting
     for i in 1..=20 {
         let title = format!("Level {}", i);
         let (success, _, _) = run_atelier(
             dir.path(),
             &["issue", "create", &title, "--parent", &parent_id],
         );
-        assert!(success, "Failed to create subissue at level {}", i);
-        parent_id = issue_ref(dir.path(), i + 1);
+        assert!(success, "Failed to create epic child {}", i);
     }
 
-    // Verify objective status handles deep nesting.
     let root_id = issue_ref(dir.path(), 1);
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "status", &root_id]);
     assert!(success);

@@ -1704,7 +1704,6 @@ pub fn create_lifecycle(
         .parent
         .map(|parent| resolve_id(&db, parent))
         .transpose()?;
-    drop(db);
 
     let store = RecordStore::new(state_dir);
     let now = Utc::now();
@@ -1729,6 +1728,12 @@ pub fn create_lifecycle(
         sections: IssueSections::unchecked_from_body(description.as_deref()),
         relationships: Relationships::default(),
     };
+    atelier_app::workflow_policy::validate_issue_hierarchy(
+        &db,
+        &record.issue,
+        parent_id.as_deref(),
+    )?;
+    drop(db);
     store.write_issue_atomic(&record)?;
     if let Some(parent_id) = &parent_id {
         store.add_issue_child(parent_id, &id)?;
@@ -1887,16 +1892,25 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     let db = Database::open(db_path)?;
     let id = resolve_id(&db, input.issue_ref)?;
     let previous = db.require_issue(&id)?;
-    let parent_id = input
+    let requested_parent_id = input
         .parent
         .map(|parent| parent.map(|parent| resolve_id(&db, parent)).transpose())
         .transpose()?
         .flatten();
-    drop(db);
+    let parent_id = if input.parent.is_some() {
+        requested_parent_id
+    } else {
+        previous.parent_id.clone()
+    };
 
     let mut changed_fields = Vec::new();
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(&id)?;
+    let old_parent_for_update = if input.parent.is_some() {
+        Some(store.find_issue_parent(&id)?)
+    } else {
+        None
+    };
     let now = Utc::now();
 
     if let Some(title) = input.title {
@@ -1942,22 +1956,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
     }
     if input.parent.is_some() {
-        let old_parent = store.find_issue_parent(&id)?;
-        if old_parent.as_deref() != parent_id.as_deref() {
-            if let Some(old_parent) = old_parent {
-                store.remove_issue_child(&old_parent, &id)?;
-            }
-            if let Some(parent_id) = &parent_id {
-                store.add_issue_child(parent_id, &id)?;
-            }
-        }
         changed_fields.push("parent");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "parent",
-            previous.parent_id.as_deref(),
-            parent_id.as_deref(),
-        )?;
     }
     if let Some(note) = input.append_notes {
         changed_fields.push("notes");
@@ -1968,6 +1967,28 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;
+    atelier_app::workflow_policy::validate_issue_hierarchy(
+        &db,
+        &record.issue,
+        parent_id.as_deref(),
+    )?;
+    drop(db);
+    if let Some(old_parent) = old_parent_for_update {
+        if old_parent.as_deref() != parent_id.as_deref() {
+            if let Some(old_parent) = old_parent {
+                store.remove_issue_child(&old_parent, &id)?;
+            }
+            if let Some(parent_id) = &parent_id {
+                store.add_issue_child(parent_id, &id)?;
+            }
+            crate::commands::activity_log::record_field_changed(
+                &id,
+                "parent",
+                previous.parent_id.as_deref(),
+                parent_id.as_deref(),
+            )?;
+        }
+    }
     store.write_issue_atomic(&record)?;
 
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;

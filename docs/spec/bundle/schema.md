@@ -191,7 +191,7 @@ Evidence resources describe proof:
 ## Relationships
 
 Bundles do not accept a top-level generic `links` array. Relationship intent is
-authored through domain fields: issue `blocks`/`depends_on`, mission `work`, and
+authored through domain fields: issue `blocks`/`depends_on`/`advances` and
 evidence `validates`. Apply normalizes those fields into canonical `.atelier/`
 relationship buckets.
 

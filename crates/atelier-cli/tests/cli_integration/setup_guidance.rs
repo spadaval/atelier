@@ -2638,7 +2638,16 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Source graph item"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Source graph item",
+            "--issue-type",
+            "epic",
+        ],
+    );
     let source_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),

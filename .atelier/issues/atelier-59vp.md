@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T22:12:20.909039194+00:00"
+status: "done"
 title: "Enforce mission and epic hierarchy rules"
-updated_at: "2026-06-23T20:16:52.831565225+00:00"
+updated_at: "2026-06-23T22:12:20.909039194+00:00"
 ---
 
 ## Description
