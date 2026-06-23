@@ -57,7 +57,8 @@ the canonical issue `status`.
 
 ## Scope
 
-Workflow policy applies to issues. The contract defines:
+Workflow policy applies to issue records, including mission-shaped objectives
+whose front matter declares `issue_type: mission`. The contract defines:
 
 - a required branch policy for owner branch names, base branch, and merge
   strategy;
@@ -72,8 +73,9 @@ Workflow policy applies to issues. The contract defines:
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
-Mission, evidence, activity, and future durable record lifecycles stay outside
-`.atelier/workflow.yaml`.
+Evidence, activity, and future durable record lifecycles stay outside
+`.atelier/workflow.yaml`. Mission lifecycle is workflow-owned because missions
+are issue records in v3, not a separate record kind or command namespace.
 
 Status `role` is allowed only when `category: active`. Valid role values are
 `worker`, `reviewer`, `validator`, and `manager`. Mutating review commands use
@@ -99,19 +101,47 @@ issue_types:
   bug: { label: Bug }
   epic: { label: Epic }
   feature: { label: Feature }
+  mission: { label: Mission }
   spike: { label: Spike }
   task: { label: Task }
   validation: { label: Validation }
 
 statuses:
+  ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active, role: worker }
   blocked: { category: blocked }
   review: { category: active, role: reviewer }
   validation: { category: active, role: validator }
   done: { category: done }
+  closed: { category: done }
+  superseded: { category: done }
 
 workflows:
+  mission_delivery:
+    applies_to: [mission]
+    initial_status: ready
+    done_statuses: [closed, superseded]
+    transitions:
+      close:
+        from: [ready, in_progress, validation]
+        to: closed
+        required_fields: [close_reason]
+        description: "Closing requires configured objective validators to pass."
+        validators:
+          - objective.work_present
+          - objective.work_terminal
+          - objective.blockers_none_open
+          - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
+          - validation.criteria_satisfied
+          - lint.none_blocking
+          - command_surface_current
+          - ignored_tests_reviewed
+          - tracker.current
+          - git.on_base_branch
+          - git.worktree_clean
+
   task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
@@ -333,6 +363,7 @@ Starter workflow names are:
 
 | Workflow | Applies to |
 | --- | --- |
+| `mission_delivery` | `mission` |
 | `task_delivery` | `bug`, `feature`, `task` |
 | `epic_delivery` | `epic` |
 | `validation_delivery` | `validation` |
@@ -475,6 +506,12 @@ Supported built-ins include:
 | `evidence.attached` | Required evidence is attached; supports `min_count`. |
 | `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
 | `children.proof_complete` | Child work is closed with validating proof. |
+| `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
+| `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
+| `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
+| `validation.criteria_satisfied` | Mission `Validation` criteria are satisfied by linked work and evidence according to the configured objective closeout check. |
+| `command_surface_current` | Public command-surface guidance has been checked against current help and docs for closeout. |
+| `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for closeout risk. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
 | `git.on_base_branch` | Current checkout is the configured `branch_policy.base_branch`. |
