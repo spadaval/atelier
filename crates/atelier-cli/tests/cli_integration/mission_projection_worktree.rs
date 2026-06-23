@@ -1637,7 +1637,7 @@ fn test_mission_status_cli_reports_control_state() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, epic_id]);
     assert!(success, "mission add work failed: {stderr}");
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", mission_id]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains(&format!(
         "Mission Status {mission_id} [ready] - Autonomy status"
@@ -1666,14 +1666,14 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(!status_out.contains("Missing Evidence Sections:"));
     assert!(!status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
-    assert!(status_out.contains(&format!("atelier issue status {mission_id} --verbose")));
+    assert!(status_out.contains(&format!("atelier mission status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
     assert!(!status_out.contains("atelier doctor"));
     assert!(status_out.contains("Terminal Checks"));
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure detected."));
     let (success, verbose_status_out, stderr) =
-        run_atelier(dir.path(), &["issue", "status", "--verbose", mission_id]);
+        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_status_out.contains("Advanced Validator Detail"));
     assert!(verbose_status_out.contains("advanced terminal validator failure detected."));
@@ -1682,7 +1682,7 @@ fn test_mission_status_cli_reports_control_state() {
         "Inspect mission record (durable intent and linked work): atelier issue show {mission_id}"
     )));
     assert!(status_out.contains(&format!(
-        "Refresh mission status (current blockers and terminal checks): atelier issue status {mission_id}"
+        "Refresh mission status (current blockers and terminal checks): atelier mission status {mission_id}"
     )));
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));

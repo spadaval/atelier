@@ -99,7 +99,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     print_mission_heading("Next Commands");
     if let Some(row) = rows.first() {
-        println!("  atelier issue status {}", row.record.id);
+        println!("  atelier mission status {}", row.record.id);
     }
     println!("  atelier issue list --status all");
     println!("  atelier issue list --ready");
@@ -309,7 +309,7 @@ fn print_status_next_commands(
         }
         _ => {
             println!(
-                "  Refresh mission status (current blockers and terminal checks): atelier issue status {}",
+            "  Refresh mission status (current blockers and terminal checks): atelier mission status {}",
                 mission.id
             );
         }
@@ -321,7 +321,7 @@ fn print_status_next_commands(
         );
     } else {
         println!(
-            "  Inspect terminal check detail: atelier issue status {} --verbose",
+            "  Inspect terminal check detail: atelier mission status {} --verbose",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -537,7 +537,7 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier issue status {} --verbose", mission.id);
+    println!("  atelier mission status {} --verbose", mission.id);
     println!("  atelier lint");
     Ok(())
 }
@@ -695,7 +695,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
         "objective.work_present" => Some((
             "Linked Work",
@@ -707,7 +707,7 @@ fn terminal_validator_user_text(
             "Linked Work Terminal",
             "closed",
             "open",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
         "objective.blockers_none_open" => Some((
             "Direct Objective Blockers",
@@ -726,7 +726,7 @@ fn terminal_validator_user_text(
             "Additional Terminal Check",
             "passed",
             "failed",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
     }
 }

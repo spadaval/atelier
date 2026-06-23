@@ -989,9 +989,10 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
+        "atelier mission list",
+        "atelier mission status <mission-id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
-        "atelier issue table --kind mission",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
         "atelier history --mission <id>",
@@ -1190,17 +1191,18 @@ fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
 }
 
 #[test]
-fn test_mission_namespace_is_removed() {
+fn test_mission_namespace_is_read_only() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "--help"]);
-    assert!(!success, "mission help should fail after removal: {stdout}");
+    assert!(success, "mission help failed: {stderr}");
 
-    assert!(
-        stderr.contains("unrecognized subcommand 'mission'"),
-        "{stderr}"
-    );
+    assert!(stdout.contains("Read-only mission reports and discovery"));
+    assert!(stdout.contains("status"));
+    assert!(stdout.contains("list"));
     assert!(!stderr.contains("mission show"), "{stderr}");
-    assert!(!stderr.contains("mission status"), "{stderr}");
+    assert!(!stdout.contains("create"));
+    assert!(!stdout.contains("close"));
+    assert!(!stdout.contains("start"));
 }
 
 #[test]
@@ -1233,11 +1235,11 @@ fn test_mission_create_help_names_generated_sections() {
 #[test]
 fn test_mission_status_help_exposes_verbose_terminal_detail() {
     let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["issue", "status", "--help"]);
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);
     assert!(success, "mission status help failed: {stderr}");
 
     assert!(stdout.contains("--verbose"));
-    assert!(stdout.contains("Show verbose validator detail for mission objective records"));
+    assert!(stdout.contains("Show verbose validator detail"));
     assert!(!stdout.contains("--closeout"));
     assert!(!stdout.contains("closeout audit"));
 }
@@ -1548,7 +1550,7 @@ fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     assert!(start_out.contains("Next Commands"));
     assert!(start_out.contains("Inspect checkout status: atelier status"));
     assert!(start_out.contains(&format!(
-        "Inspect mission selection and blockers: atelier issue status {mission_id}"
+        "Inspect mission selection and blockers: atelier mission status {mission_id}"
     )));
     assert!(start_out.contains(&format!(
         "Inspect work transitions: atelier issue transition {issue_id} --options"

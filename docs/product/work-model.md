@@ -454,8 +454,8 @@ because each checkout carries its own tracked `.atelier/` record copy on its
 branch. Reconciliation happens through normal Git review and merge of the
 canonical Markdown records, not by sharing runtime work-association rows across
 checkouts. When more than one issue is `in_progress` in the same checkout,
-`atelier status` and `atelier issue status <mission-id>` should render that set directly
-rather than nominate one hidden active issue.
+`atelier status` and `atelier mission status <mission-id>` should render that
+set directly rather than nominate one hidden active issue.
 
 The visible worktree command surface is removed pending redesign. Explicit
 branch helpers such as `atelier branch for-epic <epic-id>` create or locate

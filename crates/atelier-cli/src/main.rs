@@ -28,6 +28,9 @@ Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
 
+Missions:
+  mission       Read-only mission reports and discovery
+
 Planning:
   bundle        Preview and apply one-shot graph bundle files
 
@@ -54,6 +57,8 @@ Common commands:
   atelier man manager
   atelier man admin
   atelier status
+  atelier mission list
+  atelier mission status <mission-id>
   atelier issue list
   atelier issue list --ready
   atelier issue list --blocked
@@ -63,7 +68,6 @@ Common commands:
   atelier issue blocked [<id>]
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
-  atelier issue table --kind mission
   atelier issue transition <mission-id> close --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
@@ -125,6 +129,12 @@ enum Commands {
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
+    },
+
+    /// Read-only mission reports and discovery
+    Mission {
+        #[command(subcommand)]
+        action: MissionCommands,
     },
 
     /// Search issue text
@@ -540,6 +550,20 @@ another target.")]
 }
 
 #[derive(Subcommand)]
+enum MissionCommands {
+    /// List current mission health summaries
+    List,
+    /// Show one mission health report
+    Status {
+        /// Mission issue ID
+        id: String,
+        /// Show verbose validator detail
+        #[arg(long)]
+        verbose: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum ReviewCommands {
     /// Open or confirm the active review artifact for an issue owner
     Open {
@@ -773,6 +797,19 @@ fn run() -> Result<()> {
         }
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
+
+        Commands::Mission { action } => {
+            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+            let db = storage.db();
+            match action {
+                MissionCommands::List => {
+                    commands::mission::status(db, &storage.state_dir(), None, quiet, false)
+                }
+                MissionCommands::Status { id, verbose } => {
+                    commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
+                }
+            }
+        }
 
         Commands::Search { query } => {
             let db = degraded_projection_query_db()?;
@@ -1240,6 +1277,10 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",
+        },
+        Commands::Mission { action } => match action {
+            MissionCommands::List => "mission list",
+            MissionCommands::Status { .. } => "mission status",
         },
         Commands::Search { .. } => "search",
         Commands::Export { check, .. } => {
