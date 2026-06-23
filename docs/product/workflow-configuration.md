@@ -151,6 +151,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -176,6 +178,8 @@ workflows:
         description: "Start active work on this item."
         validators:
           - git.on_base_branch
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -219,6 +223,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -255,6 +261,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -396,7 +404,7 @@ Built-in actions are:
 
 | Action | Purpose |
 | --- | --- |
-| `branch_prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
+| `branch.prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
 | `tracker.commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
 | `branch.push` | Push the workflow-derived owner branch to the configured review provider remote. |
 | `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |

@@ -359,7 +359,7 @@ fn execute_pre_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
-            "branch_prepare" => {
+            "branch.prepare" => {
                 let detail = prepare_branch_action(repo_root, issue, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
@@ -717,7 +717,7 @@ fn ensure_expected_branch_checked_out(
     }
     ensure_branch_exists(repo_root, &action.expected_branch).with_context(|| {
         format!(
-            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `branch_prepare` first, then retry the transition for {}.",
+            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `branch.prepare` first, then retry the transition for {}.",
             action.name, action.expected_branch, issue.id
         )
     })?;
@@ -1620,21 +1620,28 @@ pub fn print_issue_transition_options(
     println!("Status:   {}", issue.status);
     println!("Type:     {}", issue.issue_type);
     println!("Options:  {}", options.len());
-    if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
-        print_heading("Branch Context");
-        println!(
-            "Owner:    {} {} ({})",
-            branch_owner_label(&context.resolution.owner_kind),
-            context.resolution.owner_id,
-            context.resolution.owner_issue_type
-        );
-        println!("Expected: {}", context.resolution.expected_branch);
-        println!("Base:     {}", context.resolution.base_branch);
-        println!(
-            "Current:  {}",
-            context.current_branch.as_deref().unwrap_or("(detached)")
-        );
-        println!("State:    {}", branch_lifecycle_state_line(&context));
+    let needs_branch_context = options.iter().any(|option| {
+        crate::commands::workflow_planning::planned_actions_need_branch_context(
+            &option.planned_actions,
+        )
+    });
+    if needs_branch_context {
+        if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
+            print_heading("Branch Context");
+            println!(
+                "Owner:    {} {} ({})",
+                branch_owner_label(&context.resolution.owner_kind),
+                context.resolution.owner_id,
+                context.resolution.owner_issue_type
+            );
+            println!("Expected: {}", context.resolution.expected_branch);
+            println!("Base:     {}", context.resolution.base_branch);
+            println!(
+                "Current:  {}",
+                context.current_branch.as_deref().unwrap_or("(detached)")
+            );
+            println!("State:    {}", branch_lifecycle_state_line(&context));
+        }
     }
     for option in options {
         println!();

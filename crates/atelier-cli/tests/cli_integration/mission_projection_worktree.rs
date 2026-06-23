@@ -3475,7 +3475,7 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
         "checkout-failure start unexpectedly succeeded:\n{stdout}"
     );
     assert!(
-        stderr.contains("action branch_prepare failed while switching")
+        stderr.contains("action branch.prepare failed while switching")
             && stderr.contains("retry `atelier issue transition")
             && stderr.contains("start`"),
         "{stderr}"
@@ -3517,7 +3517,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     assert!(success, "epic action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch_prepare"),
+        start_out.contains("Action:   branch.prepare"),
         "{start_out}"
     );
 
@@ -3593,7 +3593,7 @@ fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
     assert!(success, "child action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch_prepare"),
+        start_out.contains("Action:   branch.prepare"),
         "{start_out}"
     );
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);

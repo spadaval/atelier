@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Make branch.prepare explicit in workflow configuration"
-updated_at: "2026-06-23T20:47:12.409050494+00:00"
+updated_at: "2026-06-23T21:39:25.654179527+00:00"
 ---
 
 ## Description
@@ -32,7 +32,7 @@ activity.
 
 Choose and document one public workflow action spelling for branch preparation
 before broad docs/tests are written. The command, workflow YAML, product docs,
-and diagnostics should not split between `branch_prepare` and `branch.prepare`.
+and diagnostics should not split between two spellings for branch preparation.
 
 ## Outcome
 

@@ -877,18 +877,7 @@ fn write_provider_review_action_workflow(dir: &Path) {
 }
 
 fn write_branch_action_workflow(dir: &Path) {
-    let task_start_without_actions =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n";
-    let task_start_with_prepare =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        actions:\n          - branch_prepare\n";
-    let epic_start_without_actions = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n";
-    let epic_start_with_prepare = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n        actions:\n          - branch_prepare\n";
-    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
-        task_start_without_actions,
-        task_start_with_prepare,
-        1,
-    );
-    workflow = workflow.replace(epic_start_without_actions, epic_start_with_prepare);
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
         "          - tracker.current\n\n  epic_delivery:",
         "          - tracker.current\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",
