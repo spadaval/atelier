@@ -41,7 +41,7 @@ Advanced work:
   branch        Inspect and repair epic review branches
 
 Maintenance:
-  prune         Prune accumulated local artifacts safely
+  prune         Prune accumulated artifacts safely
   maintenance   Run explicit destructive maintenance commands
   lint          Validate tracker records
   doctor        Check runtime and derived-state health; use --fix for local repair
@@ -240,7 +240,7 @@ enum Commands {
         action: MaintenanceCommands,
     },
 
-    /// Prune accumulated local artifacts safely
+    /// Prune accumulated artifacts safely
     Prune {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
@@ -1154,7 +1154,30 @@ fn run() -> Result<()> {
         Commands::Prune {
             apply,
             retention_days,
-        } => commands::prune::run(apply, retention_days),
+        } => {
+            let tracker = match command_storage(CommandStorageAccess::CanonicalMutation) {
+                Ok(storage) => {
+                    let repo_root = storage.repo_root().to_path_buf();
+                    let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
+                    let state_dir = storage.state_dir();
+                    let db_path = storage.db_path();
+                    Some(commands::prune::TrackerContext {
+                        db: storage.into_db(),
+                        repo_root,
+                        state_dir,
+                        db_path,
+                        canonical_retention_days: config.prune.canonical_retention_days,
+                    })
+                }
+                Err(error) => {
+                    if atelier_app::command_storage::find_atelier_dir().is_ok() {
+                        return Err(error);
+                    }
+                    None
+                }
+            };
+            commands::prune::run(tracker, apply, retention_days)
+        }
 
         Commands::Lint { id } => {
             let db = lint_db()?;

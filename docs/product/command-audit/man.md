@@ -29,3 +29,15 @@ Primary question: "Which existing Atelier commands matter for my current role?"
 
 `manager` is the broad CLI role class for work coordination. `orchestrator` is a
 specific Agent Factory agent type within that class, not a `man` role alias.
+
+## Human Output Debt
+
+Role guides are readable, but they should participate in the same refresh:
+
+- replace stale placeholders such as `<mission-id>` with `<objective-id>` where
+  the command is really an issue objective command;
+- color or de-emphasize role headings and current-state health only when the
+  output is interactive;
+- keep command lists short and ranked; and
+- avoid teaching broad diagnostics or destructive commands unless the role or
+  current state explicitly needs them.

@@ -1,16 +1,15 @@
-# `atelier mission`
+# Retired `atelier mission`
 
-Primary role: Manager/orchestrator during the migration; target state is a
-typed objective issue surface.
+Primary role: Retired; current objective coordination uses mission-typed issue
+records.
 
 Primary question: "How do I create, focus, inspect, coordinate, and close a
 durable mission?"
 
-## Target Contract
+## Current Contract
 
-Missions are no longer a parallel command namespace in the target product
-model. A mission becomes an issue record whose `type` is an objective-like
-coordination type, with typed sections for intent, constraints, risks,
+Missions are no longer a parallel command namespace. A mission is an issue
+record whose `type` is `mission`, with typed sections for intent, constraints, risks,
 validation, linked work, mission blockers, and closeout notes. Operators use
 the general issue surfaces to create, inspect, link, transition, note, and close
 that record.
@@ -53,13 +52,15 @@ compatibility guidance. There is no staged deprecation, no `mission` alias to
 `issue`, and no fallback reader for old mission-only command shapes unless a
 human explicitly asks for a compatibility window.
 
+Current verification: `target/debug/atelier mission --help` exits with
+unrecognized subcommand.
+
 ## Assessment
 
 - Name: Retire. Mission is a durable purpose boundary, but command choice
   should start from the accountable record kind rather than a parallel root
   namespace.
-- Documentation: Needs migration cleanup. Existing docs may describe current
-  mission commands for removal sequencing, but target guidance should teach the
+- Documentation: Retired. Any remaining operator guidance should teach the
   typed issue objective surface.
 - Design: Consolidate. Useful mission reads move into type-aware issue detail
   and issue status views. Mission relationship mutations move into issue link
@@ -72,15 +73,15 @@ human explicitly asks for a compatibility window.
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Remove. Replacement: `issue create --issue-type mission`. |
-| `mission show` | Manager/orchestrator | Inspect rich mission state, linked records, hierarchy, and relationship context. | Remove after `issue show <objective-id>` owns typed objective sections and relationship context. |
-| `mission start --switch` | Manager/orchestrator | Set active mission focus. | Remove. Root status and canonical in-progress issue records own checkout orientation. |
-| `mission status` | Manager/orchestrator | See current mission health and next actions. | Remove after `issue status <objective-id>` owns objective health and terminal readiness. |
-| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Remove after type-aware issue status exposes terminal-check detail. |
-| `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Remove. Replacement: `issue transition <objective-id> close --reason`. |
-| `mission list` | Manager/orchestrator | Select current or historical missions. | Remove. Replacement: `issue list --type objective` plus status/category filters. |
-| `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Remove. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
-| `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Remove. Replacement: `issue note <objective-id>`. |
-| `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Remove. Replacement: `issue link <objective-id> <issue-id> --role advances`. |
-| `mission unlink` | Manager/orchestrator | Remove issue work from mission scope. | Remove. Replacement: `issue unlink <objective-id> <issue-id> --role advances`. |
-| `mission add-blocker` | Manager/orchestrator | Mark an issue as a mission blocker. | Remove. Replacement: `issue block <objective-id> <blocker-id>`. |
+| `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Removed. Replacement: `issue create --issue-type mission`. |
+| `mission show` | Manager/orchestrator | Inspect rich mission state, linked records, hierarchy, and relationship context. | Removed. Replacement: `issue show <objective-id>`. |
+| `mission start --switch` | Manager/orchestrator | Set active mission focus. | Removed. Root status and canonical in-progress issue records own checkout orientation. |
+| `mission status` | Manager/orchestrator | See current mission health and next actions. | Removed. Replacement: `issue status <objective-id>`. |
+| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue status <objective-id> --verbose`. |
+| `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Removed. Replacement: `issue transition <objective-id> close --reason`. |
+| `mission list` | Manager/orchestrator | Select current or historical missions. | Removed. Replacement: `issue table --kind mission`; use `--status` or `--issue-type` filters when needed. |
+| `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Removed. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
+| `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
+| `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |
+| `mission unlink` | Manager/orchestrator | Remove issue work from mission scope. | Removed. Replacement: `issue unlink <objective-id> <issue-id> --role advances`. |
+| `mission add-blocker` | Manager/orchestrator | Mark an issue as a mission blocker. | Removed. Replacement: `issue block <objective-id> <blocker-id>`. |

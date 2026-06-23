@@ -685,6 +685,192 @@ fn test_prune_apply_removes_only_expired_diagnostics_logs() {
 }
 
 #[test]
+fn test_prune_dry_run_reports_terminal_canonical_issue_without_removing_it() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Old terminal work"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "old terminal issue fixture");
+
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("eligible issue"), "{stdout}");
+    assert!(stdout.contains(&issue_id), "{stdout}");
+    assert!(
+        stdout.contains(&format!("git log --all -- .atelier/issues/{issue_id}.md")),
+        "{stdout}"
+    );
+    assert!(issue_path.exists(), "dry-run removed canonical issue");
+}
+
+#[test]
+fn test_prune_uses_configured_canonical_retention_days_by_default() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    set_prune_canonical_retention_days(dir.path(), 7);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Configured retention target"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 10);
+    commit_all(dir.path(), "configured prune retention fixture");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("eligible issue"), "{stdout}");
+    assert!(stdout.contains(&issue_id), "{stdout}");
+}
+
+#[test]
+fn test_prune_retention_flag_overrides_project_config_for_canonical_records() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    set_prune_canonical_retention_days(dir.path(), 30);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Override retention target"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 10);
+    commit_all(dir.path(), "override prune retention fixture");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("Retention: 30 day(s)"), "{stdout}");
+    assert!(stdout.contains("Candidates: none"), "{stdout}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "7"]);
+    assert!(success, "prune override dry-run failed: {stderr}");
+    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("eligible issue"), "{stdout}");
+    assert!(stdout.contains(&issue_id), "{stdout}");
+}
+
+#[test]
+fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Old terminal apply"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "old terminal issue fixture");
+
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("removed issue"), "{stdout}");
+    assert!(stdout.contains(&issue_id), "{stdout}");
+    assert!(
+        stdout.contains(&format!("git show <commit>:.atelier/issues/{issue_id}.md")),
+        "{stdout}"
+    );
+    assert!(
+        !issue_path.exists(),
+        "apply left pruned issue in active tree"
+    );
+
+    let output = Command::new("git")
+        .current_dir(dir.path())
+        .args(["show", &format!("HEAD:.atelier/issues/{issue_id}.md")])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "Git history should recover pruned issue: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Old terminal apply"),
+        "Git recovery output should contain the old record"
+    );
+}
+
+#[test]
+fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Dirty prune target"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "old terminal issue fixture");
+    fs::write(dir.path().join("tracked.txt"), "dirty tracked file\n").unwrap();
+    commit_all(dir.path(), "tracked file fixture");
+    fs::write(
+        dir.path().join("tracked.txt"),
+        "dirty tracked file changed\n",
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(!success, "dirty canonical prune unexpectedly succeeded");
+    assert!(
+        stderr.contains("canonical prune requires a clean tracked checkout")
+            && stderr.contains("git status --short --branch"),
+        "{stderr}"
+    );
+    assert!(
+        canonical_issue_path(dir.path(), &issue_id).exists(),
+        "dirty apply removed canonical issue"
+    );
+}
+
+#[test]
+fn test_prune_protects_old_evidence_attached_to_retained_issue() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Active evidence owner"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    let evidence_id = attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &issue_id,
+        "old evidence remains required by active work",
+    );
+    make_record_before_retention(dir.path(), "evidence", &evidence_id, 45);
+    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(
+        success,
+        "doctor --fix failed after evidence fixture edit: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("protected evidence-record"), "{stdout}");
+    assert!(stdout.contains(&evidence_id), "{stdout}");
+    assert!(stdout.contains("attached to retained issue"), "{stdout}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("protected evidence-record"), "{stdout}");
+    assert!(
+        canonical_record_path(dir.path(), "evidence", &evidence_id).exists(),
+        "apply removed protected evidence"
+    );
+}
+
+#[test]
 fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
     let dir = tempdir().unwrap();
 

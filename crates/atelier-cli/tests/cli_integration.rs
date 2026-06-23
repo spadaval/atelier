@@ -397,6 +397,64 @@ fn edit_canonical_issue(dir: &Path, issue_id: &str, edit: impl FnOnce(String) ->
     edit_canonical_record(dir, "issues", issue_id, edit);
 }
 
+fn make_issue_terminal_before_retention(dir: &Path, issue_id: &str, days_old: u64) {
+    let timestamp = chrono::Utc::now()
+        .checked_sub_days(chrono::Days::new(days_old))
+        .unwrap()
+        .to_rfc3339();
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        let markdown = replace_front_matter_scalar(&markdown, "status", "done");
+        let markdown = replace_front_matter_scalar(&markdown, "updated_at", &timestamp);
+        if markdown.lines().any(|line| line.starts_with("closed_at: ")) {
+            replace_front_matter_scalar(&markdown, "closed_at", &timestamp)
+        } else {
+            markdown.replace(
+                &format!("updated_at: {timestamp:?}"),
+                &format!("updated_at: {timestamp:?}\nclosed_at: {timestamp:?}"),
+            )
+        }
+    });
+}
+
+fn make_record_before_retention(dir: &Path, directory: &str, record_id: &str, days_old: u64) {
+    let timestamp = chrono::Utc::now()
+        .checked_sub_days(chrono::Days::new(days_old))
+        .unwrap()
+        .to_rfc3339();
+    edit_canonical_record(dir, directory, record_id, |markdown| {
+        let markdown = replace_front_matter_scalar(&markdown, "created_at", &timestamp);
+        let markdown = replace_front_matter_scalar(&markdown, "updated_at", &timestamp);
+        replace_front_matter_scalar(&markdown, "captured_at", &timestamp)
+    });
+}
+
+fn set_prune_canonical_retention_days(dir: &Path, days: u64) {
+    let path = dir.join(".atelier/config.toml");
+    let config = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    let updated = if config.contains("[prune]") {
+        config
+            .lines()
+            .map(|line| {
+                if line.starts_with("canonical_retention_days = ") {
+                    format!("canonical_retention_days = {days}")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    } else {
+        config.replace(
+            "[review]",
+            &format!("[prune]\ncanonical_retention_days = {days}\n\n[review]"),
+        )
+    };
+    fs::write(&path, updated)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
 fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
     if description.trim().is_empty() {
         return;

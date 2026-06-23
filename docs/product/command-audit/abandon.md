@@ -1,4 +1,4 @@
-# `atelier abandon`
+# Retired `atelier abandon`
 
 Primary role: Worker.
 
@@ -10,18 +10,16 @@ the issue is done?"
 - Name: No longer matches the target work model. Stopping work is either no
   durable change at all or a normal issue workflow change, not hidden active
   pointer cleanup.
-- Documentation: Should classify this as a removal or replacement candidate,
-  not normal worker guidance.
-- Design: Remove or replace. When the durable state changed, use `issue note`
+- Documentation: Removed. It should not appear in normal worker guidance.
+- Design: Removed. When the durable state changed, use `issue note`
   plus `atelier issue transition <id> --options` to move the canonical issue
   record out of `in_progress`; when the durable state did not change, no extra
   cleanup command is required.
-- Output hierarchy: If kept temporarily, the output should say it is legacy and
-  point operators back to `status`, `issue status <objective-id>`, and
-  `issue transition`.
+- Output hierarchy: Invoking `atelier abandon` rejects as an unrecognized
+  subcommand.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `atelier abandon [issue-id] --reason "..."` | Worker | Legacy cleanup for hidden active-pointer state. | Remove or replace. |
+| `atelier abandon [issue-id] --reason "..."` | Worker | Legacy cleanup for hidden active-pointer state. | Removed; use `issue note` plus configured issue transitions only when durable state needs to change. |

@@ -5,6 +5,9 @@ project_slug = "atelier"
 [paths]
 state_root = ".atelier"
 
+[prune]
+canonical_retention_days = 7
+
 # Review provider integration uses an environment variable for the admin token;
 # the token value must not be committed.
 [review]

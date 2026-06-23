@@ -15,6 +15,9 @@ project_slug = "atelier"
 [paths]
 state_root = ".atelier"
 
+[prune]
+canonical_retention_days = 7
+
 # Native room mode stores review rooms under .atelier/reviews. Provider mode
 # currently supports Forgejo.
 [review]

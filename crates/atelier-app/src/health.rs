@@ -339,13 +339,18 @@ fn optional_dir_status(path: &Path) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project_config::{ForgejoRoleAuthors, ProjectPaths};
+    use crate::project_config::{
+        ForgejoRoleAuthors, ProjectPaths, PruneConfig, DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS,
+    };
 
     fn room_config() -> ProjectConfig {
         ProjectConfig {
             project_slug: "atelier".to_string(),
             paths: ProjectPaths {
                 state_root: ".atelier".to_string(),
+            },
+            prune: PruneConfig {
+                canonical_retention_days: DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS,
             },
             review: ReviewConfig::Room,
         }

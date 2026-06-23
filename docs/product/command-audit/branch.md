@@ -14,7 +14,7 @@ start or close lifecycle commands cannot complete automatically?"
   `atelier issue transition <id> start` for branch preparation and close
   lifecycle commands for integration; branch commands remain explicit recovery
   and diagnostic surfaces.
-- Output hierarchy: Epic ID, branch name, mission workspace, review/merge state,
+- Output hierarchy: Epic ID, branch name, owner context, review/merge state,
   next status or merge command.
 
 ## Subcommands
@@ -24,3 +24,10 @@ start or close lifecycle commands cannot complete automatically?"
 | `branch for-epic <id>` | Advanced manager/orchestrator recovery | Manually create or switch to an epic review branch when lifecycle-owned start cannot prepare it. | Advanced repair. |
 | `branch status` | Advanced manager/orchestrator recovery | Inspect local epic review branches. | Advanced diagnostic. |
 | `branch merge <id>` | Advanced manager/orchestrator recovery | Manually merge an epic review branch when close lifecycle integration requires recovery. | Advanced repair. |
+
+## Human Output Debt
+
+Branch output should follow the same dirty-state and footer rules as issue
+transition output. Branch names, base branch, owner, and merge state are useful;
+full dirty path lists and repeated recovery commands should be bounded or moved
+behind focused drill-down commands.

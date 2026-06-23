@@ -161,9 +161,10 @@ not delete them. Cleanup failure must not corrupt diagnostics state or fail
 unrelated user-facing commands; prune output reports any file-specific removal
 failure because cleanup is that command's primary surface.
 
-The retention policy applies only to local diagnostics logs. It does not govern
-evidence artifact retention, committed `.atelier/` records, or future
-exported run/session records.
+This diagnostics retention policy applies only to local diagnostics logs. Broader
+cleanup rules for committed records, branches, and worktrees live in
+[Retention And Prune Policy](../product/retention-and-prune.md). It does not
+govern future exported run/session records.
 
 ## Local-Only Versus Exported Data
 
