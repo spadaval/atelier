@@ -600,6 +600,8 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier issue link <objective-id> <issue-id> --role advances`
 - `atelier issue block <objective-id> <issue-id>`
 - `atelier search <query>`
+- `atelier mission list`
+- `atelier mission status <mission-id>`
 - `atelier issue note`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
