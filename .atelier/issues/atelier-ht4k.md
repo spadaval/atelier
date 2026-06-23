@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T22:26:52.456342674+00:00"
+status: "done"
 title: "Define context-only custom issue links"
-updated_at: "2026-06-23T20:17:28.792727344+00:00"
+updated_at: "2026-06-23T22:26:52.456342674+00:00"
 ---
 
 ## Description

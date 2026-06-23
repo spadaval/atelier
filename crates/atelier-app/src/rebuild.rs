@@ -11,7 +11,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use atelier_core::{Issue, Record, RecordLink};
 use atelier_records as record_store;
 use atelier_records::activity::IssueActivity;
-use atelier_records::{IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS};
+use atelier_records::{
+    IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS, WELL_KNOWN_LINK_TYPES,
+    WELL_KNOWN_RELATION_TYPES,
+};
 use atelier_sqlite::projection_index;
 use atelier_sqlite::Database;
 
@@ -345,6 +348,7 @@ impl<'a> ProjectionLoader<'a> {
         Vec<(String, String)>,
         Vec<(String, String, String)>,
     )> {
+        let custom_issue_link_types = self.custom_issue_link_types()?;
         let mut graph = IssueRelationshipProjection::default();
         for subject_id in &self.activity_issue_subject_ids {
             ensure_issue_exists(subject_id, &self.issue_ids, "activity", subject_id)?;
@@ -355,9 +359,31 @@ impl<'a> ProjectionLoader<'a> {
             }
         }
         for issue in &self.issues {
-            graph.collect_issue(issue, &self.issue_ids, &self.record_refs)?;
+            graph.collect_issue(
+                issue,
+                &self.issue_ids,
+                &self.record_refs,
+                &custom_issue_link_types,
+            )?;
         }
         Ok((graph.child_edges, graph.dependency_edges, graph.relations))
+    }
+
+    fn custom_issue_link_types(&self) -> Result<BTreeSet<String>> {
+        let repo_root = self.state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "Cannot determine repository root for {}",
+                self.state_dir.display()
+            )
+        })?;
+        if !self.state_dir.join("config.toml").exists() {
+            return Ok(BTreeSet::new());
+        }
+        Ok(crate::project_config::ProjectConfig::load(repo_root)?
+            .issue_links
+            .custom_context_types
+            .into_iter()
+            .collect())
     }
 
     fn collect_record_links(&self) -> Result<Vec<(String, String, String, String, String)>> {
@@ -452,10 +478,11 @@ impl IssueRelationshipProjection {
         issue: &CanonicalIssue,
         issue_ids: &BTreeSet<String>,
         record_refs: &BTreeSet<(String, String)>,
+        custom_issue_link_types: &BTreeSet<String>,
     ) -> Result<()> {
         self.collect_blocks(issue, issue_ids)?;
         self.collect_children(issue, issue_ids)?;
-        self.collect_relations(issue, issue_ids, record_refs)
+        self.collect_relations(issue, issue_ids, record_refs, custom_issue_link_types)
     }
 
     fn collect_blocks(
@@ -511,8 +538,14 @@ impl IssueRelationshipProjection {
         issue: &CanonicalIssue,
         issue_ids: &BTreeSet<String>,
         record_refs: &BTreeSet<(String, String)>,
+        custom_issue_link_types: &BTreeSet<String>,
     ) -> Result<()> {
         for relation in &issue.relationships.relates {
+            validate_issue_link_type(
+                &issue.issue.id,
+                &relation.relation_type,
+                custom_issue_link_types,
+            )?;
             ensure_record_exists(
                 &relation.kind,
                 &relation.id,
@@ -536,6 +569,43 @@ impl IssueRelationshipProjection {
         }
         Ok(())
     }
+}
+
+fn validate_issue_link_type(
+    issue_id: &str,
+    relation_type: &str,
+    custom_issue_link_types: &BTreeSet<String>,
+) -> Result<()> {
+    if WELL_KNOWN_LINK_TYPES.contains(&relation_type)
+        || WELL_KNOWN_RELATION_TYPES.contains(&relation_type)
+        || custom_issue_link_types.contains(relation_type)
+    {
+        return Ok(());
+    }
+    let configured = if custom_issue_link_types.is_empty() {
+        "(none)".to_string()
+    } else {
+        custom_issue_link_types
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    bail!(
+        "workflow_issue_link_type_invalid: issue {} has unconfigured context link type '{}'; built-in workflow link types are {}; configured custom context-only link types are {}; configure custom issue links in .atelier/config.toml [issue_links].custom_context_types",
+        issue_id,
+        relation_type,
+        built_in_issue_link_types().join(", "),
+        configured
+    )
+}
+
+fn built_in_issue_link_types() -> Vec<&'static str> {
+    let mut types = WELL_KNOWN_LINK_TYPES.to_vec();
+    types.extend(WELL_KNOWN_RELATION_TYPES.iter().copied());
+    types.sort();
+    types.dedup();
+    types
 }
 
 fn discover_record_paths(
@@ -1149,7 +1219,7 @@ mod tests {
     fn rebuild_round_trips_canonical_issue_state() {
         let (db, dir) = setup_test_db();
         let parent = db
-            .create_issue("Parent", Some("Parent body"), "high")
+            .create_issue_with_type("Parent", Some("Parent body"), "high", "epic")
             .unwrap();
         let child = db
             .create_subissue(&parent, "Child", Some("Child body"), "low")
@@ -1276,7 +1346,7 @@ mod tests {
         let (db, dir) = setup_test_db();
         let child = db.create_issue("Child", Some("Child body"), "low").unwrap();
         let parent = db
-            .create_issue("Parent", Some("Parent body"), "high")
+            .create_issue_with_type("Parent", Some("Parent body"), "high", "epic")
             .unwrap();
         db.update_parent(&child, Some(&parent)).unwrap();
 

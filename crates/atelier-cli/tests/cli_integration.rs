@@ -455,6 +455,21 @@ fn set_prune_canonical_retention_days(dir: &Path, days: u64) {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
+fn append_custom_issue_links(dir: &Path, roles: &[&str]) {
+    let path = dir.join(".atelier/config.toml");
+    let values = roles
+        .iter()
+        .map(|role| format!("\"{role}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|error| panic!("failed to open {}: {error}", path.display()));
+    writeln!(file, "\n[issue_links]\ncustom_context_types = [{values}]")
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
 fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
     if description.trim().is_empty() {
         return;

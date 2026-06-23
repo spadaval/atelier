@@ -138,6 +138,28 @@ pub fn validate_relation_type(relation_type: &str) -> Result<()> {
     if relation_type.is_empty() {
         bail!("Relation type cannot be empty");
     }
+    validate_relation_type_syntax(relation_type)
+}
+
+fn validate_relation_type_syntax(relation_type: &str) -> Result<()> {
+    let mut chars = relation_type.chars();
+    let Some(first) = chars.next() else {
+        bail!("Relation type cannot be empty");
+    };
+    if !first.is_ascii_lowercase() {
+        bail!(
+            "Invalid relation type '{}'. Values must start with a lowercase ASCII letter",
+            relation_type
+        );
+    }
+    if !chars
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-' | '.'))
+    {
+        bail!(
+            "Invalid relation type '{}'. Values may contain only lowercase ASCII letters, digits, '_', '-', or '.'",
+            relation_type
+        );
+    }
     Ok(())
 }
 
@@ -148,11 +170,7 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
         Ok(())
     } else {
-        bail!(
-            "Invalid link type '{}'. Valid values: {}",
-            relation_type,
-            WELL_KNOWN_LINK_TYPES.join(", ")
-        )
+        validate_relation_type_syntax(relation_type)
     }
 }
 

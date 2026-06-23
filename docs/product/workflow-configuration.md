@@ -20,7 +20,7 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
 | `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
@@ -32,10 +32,27 @@ transition opens or links the branch owner's review artifact through explicit
 actions such as `review.open`. Provider
 review actions declare the workflow role and any provider role-author mapping
 they use; provider secrets remain environment-only through the token variable
-named in `.atelier/config.toml`. Provider
-approval rules, branch protection, and merge authorization remain with the
-provider or native room implementation; workflow validators only read enough
-review state to decide whether an Atelier transition may proceed.
+named in `.atelier/config.toml`. Provider approval rules, branch protection,
+and merge authorization remain with the provider or native room implementation;
+workflow validators only read enough review state to decide whether an Atelier
+transition may proceed.
+
+Custom issue links belong to `.atelier/config.toml` because they are project
+vocabulary, not workflow behavior:
+
+```toml
+[issue_links]
+custom_context_types = ["references", "informs"]
+```
+
+Configured custom link types are accepted by `atelier issue link --role <type>`
+and stored in issue `relationships.relates[]`. They are context-only: commands
+may display, search, preserve, and unlink them, but they do not affect mission
+progress, readiness, blockers, branch ownership, review ownership, or workflow
+transition validators. Built-in workflow-driving roles such as `advances`,
+`blocked_by`, and evidence `validates` remain hard-coded semantics. Unknown
+custom link roles are rejected until listed in
+`issue_links.custom_context_types`.
 
 ## Operator Surface
 

@@ -16,6 +16,7 @@ pub const DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS: u64 = 7;
 pub struct ProjectConfig {
     pub project_slug: String,
     pub paths: ProjectPaths,
+    pub issue_links: IssueLinkConfig,
     pub prune: PruneConfig,
     pub review: ReviewConfig,
 }
@@ -23,6 +24,11 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectPaths {
     pub state_root: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IssueLinkConfig {
+    pub custom_context_types: Vec<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -168,6 +174,8 @@ struct RawProjectConfig {
     project_slug: String,
     paths: RawProjectPaths,
     #[serde(default)]
+    issue_links: Option<RawIssueLinkConfig>,
+    #[serde(default)]
     prune: Option<RawPruneConfig>,
     #[serde(default)]
     review: Option<RawReviewConfig>,
@@ -179,6 +187,13 @@ struct RawProjectConfig {
 #[serde(deny_unknown_fields)]
 struct RawProjectPaths {
     state_root: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawIssueLinkConfig {
+    #[serde(default)]
+    custom_context_types: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -226,11 +241,13 @@ fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig>
     let paths = ProjectPaths {
         state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
     };
+    let issue_links = parse_issue_link_config(raw.issue_links, config_path)?;
     let prune = parse_prune_config(raw.prune, config_path)?;
     let review = parse_review_config(raw.review, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
         paths,
+        issue_links,
         prune,
         review,
     })
@@ -287,6 +304,53 @@ fn parse_prune_config(raw: Option<RawPruneConfig>, config_path: &Path) -> Result
     Ok(PruneConfig {
         canonical_retention_days,
     })
+}
+
+fn parse_issue_link_config(
+    raw: Option<RawIssueLinkConfig>,
+    config_path: &Path,
+) -> Result<IssueLinkConfig> {
+    let Some(raw) = raw else {
+        return Ok(IssueLinkConfig {
+            custom_context_types: Vec::new(),
+        });
+    };
+    let mut custom_context_types = raw.custom_context_types;
+    custom_context_types.sort();
+    custom_context_types.dedup();
+    for relation_type in &custom_context_types {
+        validate_custom_issue_link_type(relation_type, config_path)?;
+    }
+    Ok(IssueLinkConfig {
+        custom_context_types,
+    })
+}
+
+fn validate_custom_issue_link_type(relation_type: &str, config_path: &Path) -> Result<()> {
+    let mut chars = relation_type.chars();
+    let Some(first) = chars.next() else {
+        bail!(
+            "project_config_invalid: {} issue_links.custom_context_types entries cannot be empty",
+            config_path.display()
+        );
+    };
+    if !first.is_ascii_lowercase() {
+        bail!(
+            "project_config_invalid: {} issue link type '{}' must start with a lowercase ASCII letter",
+            config_path.display(),
+            relation_type
+        );
+    }
+    if !chars
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-' | '.'))
+    {
+        bail!(
+            "project_config_invalid: {} issue link type '{}' may contain only lowercase ASCII letters, digits, '_', '-', or '.'",
+            config_path.display(),
+            relation_type
+        );
+    }
+    Ok(())
 }
 
 fn parse_review_config(raw: Option<RawReviewConfig>, config_path: &Path) -> Result<ReviewConfig> {

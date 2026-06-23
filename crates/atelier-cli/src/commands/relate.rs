@@ -2,9 +2,12 @@ use anyhow::{anyhow, bail, Result};
 use std::path::Path;
 
 use crate::utils::format_issue_id;
+use atelier_app::project_config::ProjectConfig;
 use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
-use atelier_sqlite::{validate_link_type, validate_relation_type, Database};
+use atelier_sqlite::{
+    validate_relation_type, Database, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
+};
 
 const BLOCKED_BY_ROLE: &str = "blocked_by";
 
@@ -80,7 +83,13 @@ pub fn link_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_link_type(role)?;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "Cannot determine repository root for {}",
+            state_dir.display()
+        )
+    })?;
+    validate_issue_link_role(repo_root, role)?;
     let db = Database::open(db_path)?;
     let source = resolve_link_endpoint(&db, issue_ref)?;
     let target = resolve_link_endpoint(&db, target_ref)?;
@@ -171,7 +180,13 @@ pub fn unlink_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_link_type(role)?;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "Cannot determine repository root for {}",
+            state_dir.display()
+        )
+    })?;
+    validate_issue_link_role(repo_root, role)?;
     let db = Database::open(db_path)?;
     let source = resolve_link_endpoint(&db, issue_ref)?;
     let target = resolve_link_endpoint(&db, target_ref)?;
@@ -192,6 +207,41 @@ pub fn unlink_issue(
     }
     print_link_next_commands(&source.id, &target.id);
     Ok(())
+}
+
+fn validate_issue_link_role(repo_root: &Path, role: &str) -> Result<()> {
+    if WELL_KNOWN_LINK_TYPES.contains(&role) || WELL_KNOWN_RELATION_TYPES.contains(&role) {
+        return Ok(());
+    }
+    validate_relation_type(role)?;
+    let config = ProjectConfig::load(repo_root)?;
+    if config
+        .issue_links
+        .custom_context_types
+        .iter()
+        .any(|configured| configured == role)
+    {
+        return Ok(());
+    }
+    let configured = if config.issue_links.custom_context_types.is_empty() {
+        "(none)".to_string()
+    } else {
+        config.issue_links.custom_context_types.join(", ")
+    };
+    bail!(
+        "Invalid issue link role '{}'. Built-in workflow roles: {}. Configured custom context-only roles: {}. Configure custom issue links in .atelier/config.toml [issue_links].custom_context_types.",
+        role,
+        built_in_issue_link_types().join(", "),
+        configured
+    )
+}
+
+fn built_in_issue_link_types() -> Vec<&'static str> {
+    let mut types = WELL_KNOWN_LINK_TYPES.to_vec();
+    types.extend(WELL_KNOWN_RELATION_TYPES.iter().copied());
+    types.sort();
+    types.dedup();
+    types
 }
 
 fn resolve_link_endpoint(db: &Database, reference: &str) -> Result<LinkEndpoint> {

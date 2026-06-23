@@ -198,6 +198,7 @@ pub struct IssueObject {
     pub title: String,
     pub description: Option<String>,
     pub sections: Option<IssueSections>,
+    pub relationships: Relationships,
     pub status: String,
     pub issue_type: String,
     pub priority: String,
@@ -355,7 +356,7 @@ fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
 
 pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
     let labels = db.get_labels(&issue.id)?;
-    issue_object_from_parts(db, issue, labels, None)
+    issue_object_from_parts(db, issue, labels, None, Relationships::default())
 }
 
 fn issue_object_from_canonical(
@@ -366,7 +367,13 @@ fn issue_object_from_canonical(
     let mut issue = record.issue;
     issue.parent_id = projection_issue.parent_id;
     issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
-    issue_object_from_parts(db, issue, record.labels, Some(record.sections))
+    issue_object_from_parts(
+        db,
+        issue,
+        record.labels,
+        Some(record.sections),
+        record.relationships,
+    )
 }
 
 fn issue_object_from_parts(
@@ -374,6 +381,7 @@ fn issue_object_from_parts(
     issue: Issue,
     labels: Vec<String>,
     sections: Option<IssueSections>,
+    relationships: Relationships,
 ) -> Result<IssueObject> {
     let parent = match &issue.parent_id {
         Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
@@ -397,6 +405,7 @@ fn issue_object_from_parts(
         title: issue.title,
         description: issue.description,
         sections,
+        relationships,
         status: issue.status,
         issue_type: issue.issue_type,
         priority: issue.priority,
@@ -531,10 +540,49 @@ fn render_issue_show_human(
 
     render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
     render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
+    render_issue_link_section(db, canonical_id, &object.relationships)?;
     render_subissue_section(db, canonical_id)?;
     render_impact_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
+    Ok(())
+}
+
+fn render_issue_link_section(
+    db: &Database,
+    issue_id: &str,
+    relationships: &Relationships,
+) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    let mut rows = Vec::new();
+    for relation in &relationships.relates {
+        if relation.kind != "issue" || relation.id == issue_id {
+            continue;
+        }
+        let key = (relation.relation_type.clone(), relation.id.clone());
+        if !seen.insert(key) {
+            continue;
+        }
+        let other = db.require_issue(&relation.id)?;
+        rows.push(format!(
+            "{} {} [{}] {} - {}",
+            relation.relation_type,
+            format_issue_id(&other.id),
+            other.status,
+            other.priority,
+            other.title
+        ));
+    }
+    rows.sort();
+    println!("\nLinked Issues");
+    println!("-------------");
+    if rows.is_empty() {
+        println!("(none)");
+    } else {
+        for row in rows {
+            println!("  {row}");
+        }
+    }
     Ok(())
 }
 
@@ -1302,10 +1350,23 @@ fn projection_issue_matches(issue: &Issue, lowercase_query: &str) -> bool {
 }
 
 fn canonical_issue_matches(record: &CanonicalIssueRecord, lowercase_query: &str) -> bool {
+    let relationship_text = record
+        .relationships
+        .relates
+        .iter()
+        .map(|relation| {
+            format!(
+                "{} {} {}",
+                relation.relation_type, relation.kind, relation.id
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let haystack = format!(
-        "{}\n{}",
+        "{}\n{}\n{}",
         record.issue.title,
-        record.sections.searchable_text()
+        record.sections.searchable_text(),
+        relationship_text
     )
     .to_lowercase();
     haystack.contains(lowercase_query)

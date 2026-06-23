@@ -266,6 +266,113 @@ fn test_create_issue_rejects_work_flag() {
     assert!(stderr.contains("unexpected argument '--work'"));
 }
 
+#[test]
+fn test_configured_custom_issue_link_is_context_only() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    append_custom_issue_links(dir.path(), &["informs"]);
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Context mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Context mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mission work"]);
+    assert!(success, "work create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Mission work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Context note"]);
+    assert!(success, "context create failed: {stderr}");
+    let context_id = issue_id_by_title(dir.path(), "Context note");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &work_id, "--role", "advances"],
+    );
+    assert!(success, "advances link failed: {stderr}");
+    let (success, link_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom link failed: {stderr}");
+    assert!(link_out.contains("Linked"));
+
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(mission_markdown.contains("type: \"advances\""));
+    assert!(mission_markdown.contains("type: \"informs\""));
+
+    let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "informs"]);
+    assert!(success, "search failed: {stderr}");
+    assert!(search_out.contains("Context mission"), "{search_out}");
+    assert!(search_out.contains("Context note"), "{search_out}");
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    assert!(success, "show failed: {stderr}");
+    assert!(show_out.contains("informs"), "{show_out}");
+    assert!(show_out.contains("Context note"), "{show_out}");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Total: 1"), "{status_out}");
+    assert!(status_out.contains("Mission work"), "{status_out}");
+    assert!(
+        !status_out.contains("Context note"),
+        "custom context links must not count as mission work:\n{status_out}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom unlink failed: {stderr}");
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(!mission_markdown.contains("type: \"informs\""));
+}
+
+#[test]
+fn test_unconfigured_custom_issue_link_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Target issue"]);
+    let source_id = issue_id_by_title(dir.path(), "Source issue");
+    let target_id = issue_id_by_title(dir.path(), "Target issue");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &source_id, &target_id, "--role", "informs"],
+    );
+
+    assert!(!success, "unconfigured custom role should be rejected");
+    assert!(
+        stderr.contains("Invalid issue link role 'informs'")
+            && stderr.contains("Configured custom context-only roles: (none)")
+            && stderr.contains("[issue_links].custom_context_types"),
+        "{stderr}"
+    );
+}
+
 // ==================== Issue Listing Tests ====================
 
 #[test]

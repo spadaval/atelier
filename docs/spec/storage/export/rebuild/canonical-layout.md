@@ -401,12 +401,16 @@ Mission relationship semantics are explicit:
 | Checkpoints | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 milestone relationship table exists. |
 | Plans | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 plan relationship table exists. |
 | Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission issue with a `relationships.attachments[]` entry using `kind: issue`, the mission ID, and `role: validates`. Objective status derives incoming evidence links instead of storing evidence summaries in the mission body. |
-| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission issue `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
+| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission issue `relationships.relates[]` entries with a precise built-in or configured custom context `type` such as `related`, `derived_from`, `supersedes`, or a project-specific context role; they are not counted as linked work by default. |
 | Terminal notes | Workflow transition activity and optional issue notes; terminal proof remains evidence records plus workflow validation output. |
 
 Mission work is not issue hierarchy. `relationships.blocks` keeps its common
 meaning: the source record blocks the target. It is not the mission's
 `blocked_by` list.
+Configured custom issue link types are display/search context only. Rebuild and
+lint preserve them when listed in `.atelier/config.toml`
+`issue_links.custom_context_types`, and reject unconfigured custom types with
+public recovery guidance.
 
 Rejected escaped-JSON mission authoring:
 
