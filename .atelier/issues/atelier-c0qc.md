@@ -20,9 +20,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+closed_at: "2026-06-23T23:49:19.609204915+00:00"
+status: "closed"
 title: "Refresh human CLI output ergonomics"
-updated_at: "2026-06-23T20:49:29.751789580+00:00"
+updated_at: "2026-06-23T23:49:19.609204915+00:00"
 ---
 
 ## Description
