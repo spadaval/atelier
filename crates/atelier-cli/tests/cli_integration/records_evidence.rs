@@ -1341,16 +1341,73 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
     assert!(evidence_list.contains(&issue_evidence_id));
-    assert!(evidence_list.contains("exit=0"));
-    assert!(evidence_list.contains(&format!("target=issue/{issue_id}")));
-    assert!(evidence_list.contains("command=sh -c"));
+    assert!(evidence_list.contains("Showing:"));
+    assert!(evidence_list.contains("exit 0"));
+    assert!(evidence_list.contains(&format!("target issue/{issue_id}")));
+    assert!(evidence_list.contains("command sh -c"));
     assert!(evidence_list.contains(&epic_evidence_id));
-    assert!(evidence_list.contains("exit=7"));
-    assert!(evidence_list.contains(&format!("target=epic/{epic_id}")));
+    assert!(evidence_list.contains("exit 7"));
+    assert!(evidence_list.contains(&format!("target epic/{epic_id}")));
     assert!(evidence_list.contains(&manual_epic_evidence_id));
     assert!(evidence_list.contains(&mission_evidence_id));
-    assert!(evidence_list.contains("exit=2"));
-    assert!(evidence_list.contains(&format!("target=issue/{mission_id}")));
+    assert!(evidence_list.contains("exit 2"));
+    assert!(evidence_list.contains(&format!("target issue/{mission_id}")));
+    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+}
+
+#[test]
+fn test_evidence_list_elides_command_transcripts() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--summary",
+            "long command proof",
+            "--",
+            "sh",
+            "-c",
+            "printf 'proof transcript line one\\n'; printf 'proof transcript line two\\n'",
+        ],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains("long command proof"));
+    assert!(evidence_list.contains("command sh -c 'printf ..."));
+    assert!(!evidence_list.contains("proof transcript line one"));
+    assert!(!evidence_list.contains("proof transcript line two"));
+    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+}
+
+#[test]
+fn test_evidence_list_bounds_default_output() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for index in 0..21 {
+        let summary = format!("bounded evidence proof {index:02}");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["evidence", "record", "--kind", "validation", &summary],
+        );
+        assert!(success, "evidence record {index} failed: {stderr}");
+    }
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains("21 total"));
+    assert!(evidence_list.contains("Showing: 20 of 21"));
+    assert!(
+        evidence_list.contains("Omitted: 1 older evidence record(s) hidden by default limit 20")
+    );
+    assert!(evidence_list.contains("Filter by status: atelier evidence list --status <status>"));
 }
 
 #[test]
@@ -1512,7 +1569,7 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
     assert!(evidence_list.contains("recorded"));
-    assert!(evidence_list.contains("exit=3"));
+    assert!(evidence_list.contains("exit 3"));
     assert!(evidence_list.contains("invalid input is rejected"));
 }
 

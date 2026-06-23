@@ -99,7 +99,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     print_mission_heading("Next Commands");
     if let Some(row) = rows.first() {
-        println!("  atelier issue status {}", row.record.id);
+        println!("  atelier mission status {}", row.record.id);
     }
     println!("  atelier issue list --status all");
     println!("  atelier issue list --ready");
@@ -194,6 +194,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 crate::commands::objective_status::proof_context(db, &issue.id)?
             );
         }
+        if summary.selectable_work.len() > 5 {
+            println!(
+                "  {} more ready work item(s) omitted",
+                summary.selectable_work.len() - 5
+            );
+        }
     }
 
     print_mission_heading("Blocked Work");
@@ -202,14 +208,25 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     } else {
         for blocked in summary.blocked_work.iter().take(5) {
             println!(
-                "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}; {}; {}",
+                "  blocked {} - {} | {} blocker{}; {}; {}",
                 blocked.issue.id,
                 blocked.issue.title,
                 blocked.blockers.len(),
                 plural_suffix(blocked.blockers.len()),
-                blocked.issue.id,
                 crate::commands::objective_status::parent_context(&blocked.issue),
                 crate::commands::objective_status::proof_context(db, &blocked.issue.id)?
+            );
+        }
+        if summary.blocked_work.len() > 5 {
+            println!(
+                "  {} more blocked work item(s) omitted",
+                summary.blocked_work.len() - 5
+            );
+        }
+        if let Some(blocked) = summary.blocked_work.first() {
+            println!(
+                "  Inspect blockers: atelier issue blocked {}",
+                blocked.issue.id
             );
         }
     }
@@ -309,7 +326,7 @@ fn print_status_next_commands(
         }
         _ => {
             println!(
-                "  Refresh mission status (current blockers and terminal checks): atelier issue status {}",
+            "  Refresh mission status (current blockers and terminal checks): atelier mission status {}",
                 mission.id
             );
         }
@@ -321,7 +338,7 @@ fn print_status_next_commands(
         );
     } else {
         println!(
-            "  Inspect terminal check detail: atelier issue status {} --verbose",
+            "  Inspect terminal check detail: atelier mission status {} --verbose",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -537,7 +554,7 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier issue status {} --verbose", mission.id);
+    println!("  atelier mission status {} --verbose", mission.id);
     println!("  atelier lint");
     Ok(())
 }
@@ -695,7 +712,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
         "objective.work_present" => Some((
             "Linked Work",
@@ -707,7 +724,7 @@ fn terminal_validator_user_text(
             "Linked Work Terminal",
             "closed",
             "open",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
         "objective.blockers_none_open" => Some((
             "Direct Objective Blockers",
@@ -726,7 +743,7 @@ fn terminal_validator_user_text(
             "Additional Terminal Check",
             "passed",
             "failed",
-            "atelier issue status {mission}",
+            "atelier mission status {mission}",
         )),
     }
 }

@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T23:11:45.383766243+00:00"
+status: "done"
 title: "Refresh issue queue, search, blocker, and objective-status output"
-updated_at: "2026-06-23T20:24:32.904984858+00:00"
+updated_at: "2026-06-23T23:11:45.383766243+00:00"
 ---
 
 ## Description

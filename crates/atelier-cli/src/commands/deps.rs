@@ -48,7 +48,8 @@ pub fn list_blocked(db: &Database, quiet: bool) -> Result<()> {
     println!("==============");
     println!("{} total", rows.len());
     println!("Drill down: atelier issue blocked <id>");
-    for row in rows {
+    let total = rows.len();
+    for row in rows.into_iter().take(5) {
         let blocker_count = row.blockers.len();
         let blocker_text = if blocker_count == 1 {
             "1 blocker".to_string()
@@ -56,11 +57,13 @@ pub fn list_blocked(db: &Database, quiet: bool) -> Result<()> {
             format!("{blocker_count} blockers")
         };
         println!(
-            "  blocked {:<12} {} ({blocker_text}; details: atelier issue blocked {})",
+            "  blocked {:<12} {} ({blocker_text})",
             row.display_id,
             truncate(&row.issue.title, 40),
-            row.display_id
         );
+    }
+    if total > 5 {
+        println!("  {} more blocked issue(s) omitted", total - 5);
     }
 
     Ok(())

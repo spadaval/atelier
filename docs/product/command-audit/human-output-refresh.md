@@ -74,6 +74,42 @@ The UX refresh should converge on a shared formatter boundary.
 - Detail views optimize for diagnosis: identity, state, blockers, evidence,
   recent human-readable activity, then next actions.
 
+## Shared Vocabulary
+
+The implementation work should use the vocabulary from
+[Human CLI Output](../human-cli-output.md):
+
+- workflow state: the durable status stored on the issue;
+- blocker state: whether the issue is blocked directly, blocked through a
+  parent, or unblocked;
+- display role: why the row is visible in this command output;
+- next action: the exact command that can inspect or change the current state.
+
+Default output should name display roles in operator language:
+`ready`, `active`, `blocked`, `blocked through parent`, `shown for context`, and
+`omitted`. Formatter helpers may expose enum-like role names internally, but
+normal human output should not leak implementation labels.
+
+## Ownership Map
+
+The audit themes are intentionally split across the child issues under
+`atelier-kx2y`:
+
+| Theme | Owner |
+| --- | --- |
+| Shared headings, rows, footers, bounded lists, color policy, recovery callouts, and display-role rendering | `atelier-5sgx` |
+| Read-only mission report namespace and root-status mission signposting | `atelier-t8ew` |
+| Issue detail, transition-option layout, dirty checkout summaries, recent activity sentences, and blocked-transition recovery | `atelier-wxox` |
+| Queue/search/blocker/objective-status grouping, hidden ready work, parent-blocker ambiguity, omitted rows, and footer deduplication | `atelier-4wmp` |
+| Evidence and history browsing budgets, grouping, and transcript elision | `atelier-7fof` |
+| Role guides, review/provider/admin command output, help wording, and retired-command language | `atelier-ycj9` |
+| End-to-end transcript and regression proof across refreshed surfaces | `atelier-3js3` |
+
+Command code remains responsible for current state and correct workflow
+decisions. Formatter helpers should not decide that a row is ready, blocked,
+context-only, or stale; they render those decisions consistently once command or
+app logic supplies them.
+
 ## Command-Specific Debt
 
 | Surface | Complaint | Target behavior |

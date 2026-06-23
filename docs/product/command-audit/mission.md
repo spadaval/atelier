@@ -47,24 +47,25 @@ current in-progress issue set and can show objective context when the checkout
 is carrying objective work. Static mission focus state should not be kept as a
 second workflow pointer.
 
-Removed forms should fail as unknown commands or invalid subcommands without
-compatibility guidance. There is no staged deprecation, no `mission` alias to
-`issue`, and no fallback reader for old mission-only command shapes unless a
-human explicitly asks for a compatibility window.
+Removed lifecycle and mutation forms should fail as unknown commands or invalid
+subcommands without compatibility guidance. There is no staged deprecation, no
+`mission` alias to issue mutation, and no fallback for old mission-only
+mutation shapes unless a human explicitly asks for a compatibility window.
 
-Current verification: `target/debug/atelier mission --help` exits with
-unrecognized subcommand.
+Current verification: `target/debug/atelier mission --help` exposes only
+read-only report and discovery commands.
 
 ## Assessment
 
-- Name: Retire. Mission is a durable purpose boundary, but command choice
-  should start from the accountable record kind rather than a parallel root
-  namespace.
-- Documentation: Retired. Any remaining operator guidance should teach the
-  typed issue objective surface.
-- Design: Consolidate. Useful mission reads move into type-aware issue detail
-  and issue status views. Mission relationship mutations move into issue link
-  and issue blocker commands.
+- Name: Keep narrowly for reads. Mission is a durable purpose boundary, and a
+  mission-shaped report can be a root namespace as long as it does not own
+  lifecycle or mutation.
+- Documentation: Read-only. Operator guidance should teach `mission status` and
+  `mission list` for reports, while creation, mutation, linking, and closeout
+  remain on issue/workflow commands.
+- Design: Consolidate mutation. Useful mission reads live in type-aware issue
+  detail and read-only mission report views. Mission relationship mutations
+  move into issue link and issue blocker commands.
 - Output hierarchy: Objective identity and lifecycle first, current
   work/blockers next, linked hierarchy and affected records next,
   proof/health/terminal readiness next, then specific next actions.
@@ -74,12 +75,12 @@ unrecognized subcommand.
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Removed. Replacement: `issue create --issue-type mission`. |
-| `mission show` | Manager/orchestrator | Inspect rich mission state, linked records, hierarchy, and relationship context. | Removed. Replacement: `issue show <objective-id>`. |
+| `mission show` | Manager/orchestrator | Inspect rich mission prose and relationship context. | Removed. Replacement: `issue show <objective-id>`. |
 | `mission start --switch` | Manager/orchestrator | Set active mission focus. | Removed. Root status and canonical in-progress issue records own checkout orientation. |
-| `mission status` | Manager/orchestrator | See current mission health and next actions. | Removed. Replacement: `issue status <objective-id>`. |
-| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue status <objective-id> --verbose`. |
+| `mission status` | Manager/orchestrator | See current mission health and next actions. | Keep as read-only report surface. |
+| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Keep as read-only report drill-down. |
 | `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Removed. Replacement: `issue transition <objective-id> close --reason`. |
-| `mission list` | Manager/orchestrator | Select current or historical missions. | Removed. Replacement: `issue table --kind mission`; use `--status` or `--issue-type` filters when needed. |
+| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Keep as read-only discovery surface; historical inventory can still use `issue table --kind mission --status all`. |
 | `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Removed. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
 | `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
 | `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |

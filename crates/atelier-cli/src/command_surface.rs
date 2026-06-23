@@ -20,6 +20,7 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "branch",
     "bundle",
     "maintenance",
+    "mission",
     "note",
     "workflow",
     "worktree",
@@ -395,6 +396,7 @@ fn parse_root_help_commands(help: &str) -> BTreeSet<String> {
         "Setup",
         "Orientation",
         "Issues",
+        "Missions",
         "Missions and planning",
         "Planning",
         "Records",
@@ -848,6 +850,28 @@ mod tests {
         assert!(displays.contains(&"atelier issue show".to_string()));
         assert!(displays.contains(&"atelier issue status".to_string()));
         assert!(displays.contains(&"atelier issue update".to_string()));
+    }
+
+    #[test]
+    fn mission_status_verbose_reference_targets_subcommand_help() {
+        let uses = expand_command_reference("atelier mission status <mission-id> --verbose");
+
+        assert_eq!(
+            uses,
+            vec![CommandUse {
+                display: "atelier mission status --verbose".to_string(),
+                path: vec!["mission".to_string(), "status".to_string()],
+                options: vec!["--verbose".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn root_help_parser_includes_missions_section() {
+        let help = "Missions:\n  mission       Read-only mission reports and discovery\n";
+        let roots = parse_root_help_commands(help);
+
+        assert!(roots.contains("mission"));
     }
 
     #[test]

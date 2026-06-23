@@ -9,6 +9,7 @@ use crate::commands::issue_workflow::{
     load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
+use crate::human_output::{self, DisplayRole, FooterAction, StylePolicy};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
@@ -527,6 +528,7 @@ fn render_issue_show_human(
 
     render_parent_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
+    render_checkout_summary(db, canonical_id)?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -626,6 +628,38 @@ fn render_transition_readiness(
         "  options: atelier issue transition {} --options",
         object.id
     );
+    Ok(())
+}
+
+fn render_checkout_summary(db: &Database, canonical_id: &str) -> Result<()> {
+    let Ok(options) = crate::commands::workflow::issue_transition_options(db, canonical_id) else {
+        return Ok(());
+    };
+    let needs_branch_context = options.iter().any(|option| {
+        crate::commands::workflow_planning::planned_actions_need_branch_context(
+            &option.planned_actions,
+        )
+    });
+    if !needs_branch_context {
+        return Ok(());
+    }
+    let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, canonical_id) else {
+        return Ok(());
+    };
+    println!("\nCheckout");
+    println!("--------");
+    println!(
+        "Current:  {}",
+        context.current_branch.as_deref().unwrap_or("(detached)")
+    );
+    if context.dirty_entries.is_empty() {
+        println!("State:    clean");
+    } else {
+        println!(
+            "State:    dirty checkout: {}",
+            human_output::path_summary(&context.dirty_entries, 3)
+        );
+    }
     Ok(())
 }
 
@@ -1294,7 +1328,7 @@ pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
                 queue_row(db, workflow_policy.as_ref(), item)
             })
             .collect::<Result<Vec<_>>>()?;
-        render_issue_queue_human(db, &format!("Search Results: {query}"), rows, true)
+        render_issue_queue_human(db, &format!("Issue Search Results: {query}"), rows, true)
     }
 }
 
@@ -1392,8 +1426,7 @@ fn render_issue_queue_human(
 ) -> Result<()> {
     let rows = order_queue_rows(items);
 
-    println!("{title}");
-    println!("{}", "=".repeat(title.len()));
+    human_output::print_heading(title);
     println!("{}", queue_summary(&rows));
 
     let mut groups = queue_groups(db, rows)?;
@@ -1403,8 +1436,19 @@ fn render_issue_queue_human(
             .then(a.id.cmp(&b.id))
             .then(a.title.cmp(&b.title))
     });
+    let (footer_actions, omitted_footer_actions) = queue_footer_actions(&groups, 5);
     for group in groups {
         print_queue_group(group, show_status);
+    }
+    if !footer_actions.is_empty() {
+        println!();
+        println!(
+            "{}",
+            human_output::render_footer("Next Commands", footer_actions)
+        );
+        if omitted_footer_actions > 0 {
+            println!("  {omitted_footer_actions} more blocker drill-downs omitted");
+        }
     }
 
     Ok(())
@@ -1614,13 +1658,24 @@ fn queue_summary(rows: &[QueueRow]) -> String {
         }
     }
     format!(
-        "{} total | Category: {} | Status: {} | Priority: {} | Blocked: {}",
+        "{} total | Categories: {} | Statuses: {} | Priorities: {} | Blocked: {}",
         rows.len(),
-        joined_counts(categories),
-        joined_counts(statuses),
-        joined_counts(priorities),
+        joined_count_phrases(categories),
+        joined_count_phrases(statuses),
+        joined_count_phrases(priorities),
         blocked
     )
+}
+
+fn joined_count_phrases(counts: BTreeMap<String, usize>) -> String {
+    if counts.is_empty() {
+        return "none".to_string();
+    }
+    counts
+        .into_iter()
+        .map(|(name, count)| format!("{count} {name}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn print_queue_group(group: QueueGroup, show_status: bool) {
@@ -1631,14 +1686,17 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
         _ => group.title,
     };
     if group.id.is_some() && !group.external_blockers.is_empty() {
-        heading.push_str(" (context; parent blocked)");
+        let policy = StylePolicy::plain();
+        heading.push_str(&format!(
+            " ({}; {})",
+            DisplayRole::ContextOnly.render(policy),
+            DisplayRole::BlockedThroughParent.render(policy)
+        ));
     }
-    println!("\n{heading}");
-    println!("{}", "-".repeat(heading.len()));
+    println!("\n{}", human_output::section_heading(&heading));
     if !group.external_blockers.is_empty() {
-        let group_id = group.id.as_deref().unwrap_or("<id>");
         println!(
-            "  blocked by {} external blocker{}; details: atelier issue blocked {group_id}",
+            "  blocked by {} external blocker{}",
             group.external_blockers.len(),
             plural_suffix(group.external_blockers.len())
         );
@@ -1674,16 +1732,42 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
 }
 
-fn blocker_suffix(issue_id: &str, blockers: &[String]) -> String {
+fn blocker_suffix(_issue_id: &str, blockers: &[String]) -> String {
     if blockers.is_empty() {
         String::new()
     } else {
         format!(
-            " ({} blocker{}; details: atelier issue blocked {issue_id})",
+            " ({} blocker{})",
             blockers.len(),
-            plural_suffix(blockers.len())
+            plural_suffix(blockers.len()),
         )
     }
+}
+
+fn queue_footer_actions(groups: &[QueueGroup], limit: usize) -> (Vec<FooterAction>, usize) {
+    let mut actions = Vec::new();
+    for group in groups {
+        if let Some(group_id) = &group.id {
+            if !group.external_blockers.is_empty() {
+                actions.push(FooterAction::new(
+                    format!("Inspect blockers for {group_id}"),
+                    format!("atelier issue blocked {group_id}"),
+                ));
+            }
+        }
+        for row in &group.rows {
+            if !row.open_blockers.is_empty() {
+                actions.push(FooterAction::new(
+                    format!("Inspect blockers for {}", row.id),
+                    format!("atelier issue blocked {}", row.id),
+                ));
+            }
+        }
+    }
+    let total = actions.len();
+    let (actions, omitted) = human_output::bounded_items(&actions, limit);
+    debug_assert_eq!(omitted, total.saturating_sub(actions.len()));
+    (actions, omitted)
 }
 
 fn plural_suffix(count: usize) -> &'static str {
@@ -1711,14 +1795,32 @@ fn human_activity_body(body: &str) -> String {
     let mut field = None;
     let mut old = None;
     let mut new = None;
+    let mut transition = None;
+    let mut from = None;
+    let mut to = None;
+    let mut reason = None;
+    let mut evidence_id = None;
+    let mut result = None;
     let mut all_structured = true;
     for line in body.lines().filter(|line| !line.trim().is_empty()) {
-        if let Some(value) = scalar_line_value(line, "field") {
+        if let Some(value) = activity_scalar_line_value(line, "field").flatten() {
             field = Some(value);
-        } else if let Some(value) = scalar_line_value(line, "old") {
+        } else if let Some(value) = activity_scalar_line_value(line, "old").flatten() {
             old = Some(value);
-        } else if let Some(value) = scalar_line_value(line, "new") {
+        } else if let Some(value) = activity_scalar_line_value(line, "new").flatten() {
             new = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "transition").flatten() {
+            transition = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "from").flatten() {
+            from = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "to").flatten() {
+            to = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "reason") {
+            reason = value;
+        } else if let Some(value) = activity_scalar_line_value(line, "evidence_id").flatten() {
+            evidence_id = Some(value);
+        } else if let Some(value) = activity_scalar_line_value(line, "result").flatten() {
+            result = Some(value);
         } else {
             all_structured = false;
         }
@@ -1729,8 +1831,35 @@ fn human_activity_body(body: &str) -> String {
             let new = new.unwrap_or_else(|| "(none)".to_string());
             return format!("Changed {field}: {old} -> {new}");
         }
+        if let Some(transition) = transition {
+            let from = from.unwrap_or_else(|| "(unknown)".to_string());
+            let to = to.unwrap_or_else(|| "(unknown)".to_string());
+            if let Some(reason) = reason {
+                return format!("Transition {transition}: {from} -> {to}; blocked by {reason}");
+            }
+            return format!("Transition {transition}: {from} -> {to}");
+        }
+        if let Some(evidence_id) = evidence_id {
+            let result = result.unwrap_or_else(|| "(unknown result)".to_string());
+            return format!("Evidence {evidence_id} attached; result {result}");
+        }
     }
     body.to_string()
+}
+
+fn activity_scalar_line_value(line: &str, key: &str) -> Option<Option<String>> {
+    let value = line.strip_prefix(&format!("{key}: "))?.trim();
+    if value == "null" {
+        return Some(None);
+    }
+    if let Ok(parsed) = serde_json::from_str::<String>(value) {
+        return Some(Some(parsed));
+    }
+    if value.is_empty() {
+        Some(None)
+    } else {
+        Some(Some(value.to_string()))
+    }
 }
 
 pub struct LifecycleCreateInput<'a> {

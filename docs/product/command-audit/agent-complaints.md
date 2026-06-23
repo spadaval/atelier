@@ -51,6 +51,41 @@ create a shared language for rows, blockers, display roles, summaries, and
 drill-down commands, while command-specific code remains responsible for
 correct state, current data, and valid recovery guidance.
 
+## Vocabulary Contract
+
+The shared output contract now uses four separate terms:
+
+- Workflow state: the issue's durable lifecycle status.
+- Blocker state: direct blockers, inherited parent blockers, or no blockers.
+- Display role: executable, selectable, blocked, blocked-through-parent,
+  context-only, or omitted.
+- Next action: the exact command the operator can run next.
+
+These terms address the complaint themes directly. Status/detail commands must
+refresh or reject stale state before they claim a workflow state. Queue and
+objective views must not present context-only or blocked-through-parent rows as
+selectable work. Help and footer text must lead with one current action rather
+than listing removed lifecycle paths or implementation-shaped alternatives.
+
+## Implementation Owners
+
+The complaint themes map to the output-refresh issues as follows:
+
+| Complaint theme | Implementation owner |
+| --- | --- |
+| Incorrect or stale status-like output, public recovery guidance, and dirty checkout summaries | `atelier-wxox` for detail/transition surfaces; `atelier-4wmp` for queue/objective surfaces |
+| Hidden ready work, parent-blocker ambiguity, context-only rows, and row actionability labels | `atelier-4wmp` with shared role labels from `atelier-5sgx` |
+| Duplicate lifecycle paths, removed command wording, role-guide clarity, and provider/admin help | `atelier-ycj9` |
+| Mission-shaped reports versus issue/workflow mutation commands | `atelier-t8ew` |
+| Command transcripts, history browsing, and evidence output budgets | `atelier-7fof` |
+| Shared formatter boundary, color behavior, bounded lists, footers, and public recovery callouts | `atelier-5sgx` |
+| End-to-end proof that the refreshed surfaces solve the observed complaints | `atelier-3js3` |
+
+Do not resolve a correctness complaint by changing labels alone. If a command can
+still disagree with Git, use stale projection data, hide ready work, or accept a
+removed workflow path, the owning implementation issue must fix that behavior
+and add proof for it.
+
 ## Out Of Scope
 
 Performance complaints were intentionally set aside. The logs contain repeated

@@ -313,7 +313,7 @@ State-specific next actions are part of the command contract:
 - `closed`: show the close reason, completion evidence or validation issue, and
   history/audit drill-down commands without suggesting new implementation work.
 
-`atelier issue status <id> --verbose` is the mission terminal-check
+`atelier mission status <id> --verbose` is the mission terminal-check
 drill-down. It remains advisory orientation unless a workflow explicitly
 requires linked validation work; parent judgment that can block completion
 belongs to linked validation work with attached evidence and workflow approval.
@@ -321,7 +321,7 @@ Raw workflow validator names are diagnostic detail; normal completion output
 names the operator-facing blocker class and the next domain command.
 `atelier lint` owns committed
 workflow/config validity, `issue transition --options` owns issue-level
-readiness inspection, and `issue status <objective-id>` owns mission completion inspection;
+readiness inspection, and `mission status <objective-id>` owns mission completion inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier lint` or an explicitly
@@ -554,13 +554,13 @@ generic relationship verb.
 
 | Need | Record kinds accepted | Supported command path | Boundary |
 | --- | --- | --- | --- |
-| Show mission intent, linked work, blockers, evidence, and completion state | mission ID | `atelier issue show <mission-id>` or `atelier issue status <mission-id>` | Mission reads own mission coordination. It does not replace issue detail or proof records. |
+| Show mission intent, linked work, blockers, evidence, and completion state | mission ID | `atelier issue show <mission-id>` or `atelier mission status <mission-id>` | Mission reads own mission coordination through a read-only report namespace. It does not replace issue detail, lifecycle transitions, or proof records. |
 | Show issue accountability, status, blockers, notes, and completion status | issue ID | `atelier issue show <issue-id>` or `atelier issue transition <issue-id> --options` | Issue commands accept issue IDs. Passing a mission or evidence ID should produce wrong-kind guidance to the matching show surface. Historical plan or milestone IDs are deferred records and should not be accepted as v1 issue targets. |
 | Add or remove mission work | mission ID plus issue or epic ID | `atelier issue link <mission-id> <issue-id> --role advances` and `atelier issue unlink <mission-id> <issue-id>` | Mission work links use the `advances` relation. Do not use a generic link command. |
 | Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier issue block <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
 | Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation "summary"` or `atelier evidence record --target issue/<id> --kind test -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit completion mirroring. |
 | Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
-| Inspect issue impact or objective hierarchy | issue ID or objective issue ID | `atelier issue show <issue-id>` and `atelier issue status <objective-id>` | Issue views inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
+| Inspect issue impact or objective hierarchy | issue ID or objective issue ID | `atelier issue show <issue-id>`, `atelier issue status <objective-id>`, and `atelier mission status <mission-id>` for mission reports | Issue views inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
 | Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier issue note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
 | Reference execution plans | repository Markdown path or prose inside a mission, epic, issue, or evidence record | edit the accountable Markdown record or attach evidence that names the plan path | Plans are ordinary Markdown artifacts in v1. They are not `.atelier/plans/` records and do not replace issue blockers or mission work links. |
 | Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file>` | Bundle apply requires its explicit confirmation flag. Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |

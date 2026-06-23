@@ -455,7 +455,9 @@ fn test_issue_list_orders_visible_blockers_before_blocked_rows() {
     assert!(stdout.contains("ready [task]"), "{stdout}");
     assert!(stdout.contains("blocked [task]"), "{stdout}");
     assert!(!stdout.contains("todo/todo"), "{stdout}");
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains(&format!(
+        "Inspect blockers for {blocked_id}: atelier issue blocked {blocked_id}"
+    )));
 }
 
 #[test]
@@ -572,7 +574,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     );
     assert!(
         stdout.contains(&format!(
-            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker; details: atelier issue blocked {external_child_id})"
+            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker)"
         )),
         "{stdout}"
     );
@@ -1297,6 +1299,58 @@ fn test_show_issue_rich_human_output() {
 }
 
 #[test]
+fn test_issue_show_recent_activity_humanizes_structured_bodies() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Recent Activity"), "{stdout}");
+    assert!(
+        stdout.contains("Transition start: todo -> in_progress"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("transition: \"start\""), "{stdout}");
+}
+
+#[test]
+fn test_issue_show_summarizes_dirty_checkout_state() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Dirty checkout issue",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    let issue_id = issue_id_by_title(dir.path(), "Dirty checkout issue");
+    std::fs::write(dir.path().join("tracked.txt"), "clean").unwrap();
+    commit_all(dir.path(), "baseline");
+    std::fs::write(dir.path().join("tracked.txt"), "dirty").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Checkout"), "{stdout}");
+    assert!(
+        stdout.contains("State:    dirty checkout: 1 path:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("tracked.txt"), "{stdout}");
+}
+
+#[test]
 fn test_issue_show_human_shape_exposes_actionable_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1619,8 +1673,10 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     assert!(stdout.contains("Scope:          repository"));
     assert!(stdout.contains("Source:         canonical .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
+    assert!(stdout.contains("Filters:        event kind evidence_attached"));
     assert!(stdout.contains("Showing:        1 of 1 matching events"));
-    assert!(stdout.contains("Evidence attached"));
+    assert!(stdout.contains("Second issue: Evidence attached"));
+    assert!(stdout.contains(&format!("evidence_attached | tester | issue/{second}")));
     assert!(!stdout.contains("First comment"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue show <id>"));
@@ -1639,6 +1695,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
         ],
     );
     assert!(success, "filtered history failed: {stderr}");
+    assert!(stdout.contains("Filters:        event kind comment, since 2026-06-10T00:00:00+00:00"));
     assert!(stdout.contains("First comment"));
     assert!(!stdout.contains("Evidence attached"));
 
@@ -2408,7 +2465,7 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
     assert!(stdout.contains("Blocked issue"));
     assert!(stdout.contains("blocked"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains("Drill down: atelier issue blocked <id>"));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
 
     let (success, quiet, stderr) =
@@ -2645,11 +2702,13 @@ fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(
-        ready_out.contains("Blocked parent epic (context; parent blocked)"),
+        ready_out.contains("Blocked parent epic (shown for context; blocked through parent)"),
         "{ready_out}"
     );
     assert!(ready_out.contains("blocked by 1 external blocker"));
-    assert!(ready_out.contains(&format!("details: atelier issue blocked {parent_id}")));
+    assert!(ready_out.contains(&format!(
+        "Inspect blockers for {parent_id}: atelier issue blocked {parent_id}"
+    )));
     assert!(!ready_out.contains(&format!("blocked by {blocker_id}")));
     assert!(ready_out.contains(&format!("{child_id} - Ready child")));
 
@@ -2682,9 +2741,44 @@ fn test_issue_list_marks_external_epic_blockers_by_id() {
     assert!(success, "issue list failed: {stderr}");
     assert!(stdout.contains("Parent epic"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains("details: atelier issue blocked"));
+    assert!(stdout.contains("Inspect blockers for"));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
     assert!(!stdout.contains("open blocker"));
+}
+
+#[test]
+fn test_issue_list_bounds_blocker_footer_actions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Shared blocker"]);
+    let blocker_id = issue_ref(dir.path(), 1);
+    for index in 0..7 {
+        run_atelier(
+            dir.path(),
+            &["issue", "create", &format!("Blocked row {index}")],
+        );
+        let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked row {index}"));
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+
+    assert!(success, "issue list --blocked failed: {stderr}");
+    assert_eq!(stdout.matches("Blocked row").count(), 5, "{stdout}");
+    assert_eq!(
+        stdout.matches("atelier issue blocked ").count(),
+        1,
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("2 more blocked issue(s) omitted"),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains("details: atelier issue blocked"),
+        "{stdout}"
+    );
 }
 
 #[test]

@@ -165,6 +165,11 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             let db = storage.db();
             if is_mission_objective(db, &id)? {
+                if !quiet {
+                    println!(
+                        "Mission report: use `atelier mission status {id}` for the read-only mission surface.\n"
+                    );
+                }
                 commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
             } else {
                 if verbose {

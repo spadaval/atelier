@@ -7,6 +7,7 @@ use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 use crate::commands::workflow::ValidatorResult;
+use crate::human_output;
 
 #[derive(Debug, Clone)]
 pub struct IssueTransitionOption {
@@ -267,7 +268,10 @@ pub(crate) fn branch_owner_label(
 
 pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> String {
     if !context.dirty_entries.is_empty() {
-        return format!("dirty checkout: {}", context.dirty_entries.join("; "));
+        return format!(
+            "dirty checkout: {}",
+            human_output::path_summary(&context.dirty_entries, 3)
+        );
     }
     match context.current_branch.as_deref() {
         Some(current) if current == context.resolution.expected_branch => {
@@ -516,6 +520,40 @@ mod tests {
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].name, "branch.prepare");
         assert!(planned_actions_need_branch_context(&plan));
+    }
+
+    #[test]
+    fn branch_lifecycle_state_bounds_dirty_path_summary() {
+        let context = BranchLifecycleContext {
+            resolution: BranchLifecycleResolution {
+                issue_id: "atelier-epic1".to_string(),
+                owner_id: "atelier-epic1".to_string(),
+                owner_issue_type: "epic".to_string(),
+                owner_kind: BranchOwnerKind::Epic,
+                expected_branch: "epic/atelier-epic1".to_string(),
+                base_branch: "master".to_string(),
+                merge_strategy: MergeStrategy::Squash,
+                merge_owned: true,
+                nested_under_epic: false,
+            },
+            current_branch: Some("master".to_string()),
+            expected_branch_exists: false,
+            base_branch_exists: true,
+            dirty_entries: vec![
+                "M first.txt".to_string(),
+                "M second.txt".to_string(),
+                "M third.txt".to_string(),
+                "M fourth.txt".to_string(),
+                "M fifth.txt".to_string(),
+            ],
+        };
+
+        let summary = branch_lifecycle_state_line(&context);
+
+        assert!(summary.contains("dirty checkout: 5 paths:"));
+        assert!(summary.contains("M first.txt"));
+        assert!(summary.contains("2 more omitted"));
+        assert!(!summary.contains("M fifth.txt"));
     }
 
     #[test]

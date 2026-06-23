@@ -137,14 +137,9 @@ pub fn status(
                 issue_ref,
             },
         )?;
-        println!("Review Status");
-        println!("=============");
-        println!("Issue:                {}", outcome.issue_id);
-        println!("Room:                 {}", outcome.review_id);
-        println!("State:                {}", outcome.status);
-        println!("Current Approvals:    {}", outcome.approvals);
-        println!("Unresolved Blocking:  {}", outcome.unresolved_blocking);
-        println!("Unresolved Findings:  {}", outcome.unresolved_nonblocking);
+        for line in room_review_status_lines(&outcome) {
+            println!("{line}");
+        }
         return Ok(());
     }
     let outcome = app_pr::status(
@@ -155,12 +150,9 @@ pub fn status(
             issue_ref,
         },
     )?;
-    println!("Review Status");
-    println!("=============");
-    println!("Issue:  {}", outcome.issue_id);
-    println!("URL:    {}", outcome.url);
-    println!("Number: {}", outcome.number);
-    println!("Repo:   {}", outcome.repo);
+    for line in provider_review_status_lines(&outcome) {
+        println!("{line}");
+    }
     Ok(())
 }
 
@@ -590,6 +582,33 @@ fn validate_review_role(role: &str) -> Result<()> {
     }
 }
 
+fn room_review_status_lines(outcome: &review_room::RoomStatusOutcome) -> Vec<String> {
+    vec![
+        "Review Status".to_string(),
+        "=============".to_string(),
+        "Authority:            native review room".to_string(),
+        format!("State:                {}", outcome.status),
+        format!("Issue:                {}", outcome.issue_id),
+        format!("Room:                 {}", outcome.review_id),
+        format!("Current Approvals:    {}", outcome.approvals),
+        format!("Unresolved Blocking:  {}", outcome.unresolved_blocking),
+        format!("Unresolved Findings:  {}", outcome.unresolved_nonblocking),
+    ]
+}
+
+fn provider_review_status_lines(outcome: &app_pr::PrStatusOutcome) -> Vec<String> {
+    vec![
+        "Review Status".to_string(),
+        "=============".to_string(),
+        "Authority: configured provider review".to_string(),
+        "State:     provider-linked".to_string(),
+        format!("Issue:     {}", outcome.issue_id),
+        format!("URL:       {}", outcome.url),
+        format!("Number:    {}", outcome.number),
+        format!("Repo:      {}", outcome.repo),
+    ]
+}
+
 fn render_event_suffix(event: &review_room::RoomEventView) -> String {
     let mut parts = Vec::new();
     if let Some(actor) = &event.actor {
@@ -733,6 +752,33 @@ mod tests {
 
         assert!(error.contains("review_role_missing"));
         assert!(error.contains("statuses.todo.role"));
+    }
+
+    #[test]
+    fn review_status_lines_lead_with_authority_and_state() {
+        let room = review_room::RoomStatusOutcome {
+            issue_id: "atelier-role".to_string(),
+            review_id: "room-1".to_string(),
+            status: "open".to_string(),
+            approvals: 1,
+            unresolved_blocking: 2,
+            unresolved_nonblocking: 3,
+        };
+        let room_lines = room_review_status_lines(&room);
+
+        assert_eq!(room_lines[2], "Authority:            native review room");
+        assert_eq!(room_lines[3], "State:                open");
+
+        let provider = app_pr::PrStatusOutcome {
+            issue_id: "atelier-role".to_string(),
+            number: 42,
+            url: "https://forgejo.local/pulls/42".to_string(),
+            repo: "owner/repo".to_string(),
+        };
+        let provider_lines = provider_review_status_lines(&provider);
+
+        assert_eq!(provider_lines[2], "Authority: configured provider review");
+        assert_eq!(provider_lines[3], "State:     provider-linked");
     }
 
     #[test]

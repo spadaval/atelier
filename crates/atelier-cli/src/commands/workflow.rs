@@ -9,6 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::issue::issue_evidence_gate_status;
+use crate::human_output::{self, DecisionState, StylePolicy};
 use atelier_app::forgejo::{ForgejoClient, UreqForgejoTransport};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
@@ -159,7 +160,9 @@ pub fn transition_issue(
     if transition_name == "start" {
         println!("  Inspect checkout status: atelier status");
         if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
-            println!("  Inspect mission selection and blockers: atelier issue status {mission_id}");
+            println!(
+                "  Inspect mission selection and blockers: atelier mission status {mission_id}"
+            );
         }
         println!(
             "  Inspect work transitions: atelier issue transition {} --options",
@@ -1613,8 +1616,7 @@ pub fn print_issue_transition_options(
     issue: &Issue,
     options: &[IssueTransitionOption],
 ) {
-    println!("Issue Transitions {} - {}", issue.id, issue.title);
-    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
+    human_output::print_heading(&format!("Issue Transitions {} - {}", issue.id, issue.title));
     print_heading("State");
     println!("Status:   {}", issue.status);
     println!("Type:     {}", issue.issue_type);
@@ -1643,15 +1645,20 @@ pub fn print_issue_transition_options(
         }
     }
     for option in options {
+        let decision = if option.allowed {
+            DecisionState::Allowed
+        } else {
+            DecisionState::Blocked
+        };
         println!();
         println!(
             "{} [{}]",
             option.name,
-            if option.allowed { "allowed" } else { "blocked" }
+            decision.render(StylePolicy::plain())
         );
+        println!("  Decision: {}", decision.render(StylePolicy::plain()));
         println!("  From: {}", option.from.join(", "));
         println!("  To:   {}", option.to);
-        println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
         print_text_list("Blockers", &option.blockers);
         print_text_list(
@@ -1659,6 +1666,7 @@ pub fn print_issue_transition_options(
             &planned_action_lines(&option.planned_actions),
         );
         print_text_list("Description", &option.descriptions);
+        print_text_list("Commands", &[option.command.clone()]);
     }
 }
 
@@ -1877,9 +1885,14 @@ fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
         return;
     }
     for result in results {
+        let decision = if result.passed {
+            DecisionState::Pass
+        } else {
+            DecisionState::Fail
+        };
         println!(
             "  {}  {}",
-            if result.passed { "pass" } else { "fail" },
+            decision.render(StylePolicy::plain()),
             result.validator
         );
         println!("      {}", result.reason);
@@ -1948,8 +1961,7 @@ pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
 }
 
 fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
+    human_output::print_section_heading(title);
 }
 
 pub(crate) fn ensure_transitionable_status(

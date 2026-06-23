@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T22:37:18.744519500+00:00"
+status: "done"
 title: "Define shared human CLI output grammar and formatter contract"
-updated_at: "2026-06-23T20:24:13.584982692+00:00"
+updated_at: "2026-06-23T22:37:18.744519500+00:00"
 ---
 
 ## Description

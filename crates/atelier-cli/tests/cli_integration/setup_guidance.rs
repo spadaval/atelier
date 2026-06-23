@@ -925,6 +925,10 @@ fn test_top_level_help_only_shows_core_commands() {
         assert!(stdout.contains(command), "missing core command {command}");
     }
     assert!(
+        stdout.contains("Search issues, relationships, and activity"),
+        "{stdout}"
+    );
+    assert!(
         !stdout
             .lines()
             .any(|line| line.trim_start().starts_with("prime ")),
@@ -989,9 +993,10 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
+        "atelier mission list",
+        "atelier mission status <mission-id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
-        "atelier issue table --kind mission",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
         "atelier history --mission <id>",
@@ -1190,17 +1195,18 @@ fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
 }
 
 #[test]
-fn test_mission_namespace_is_removed() {
+fn test_mission_namespace_is_read_only() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "--help"]);
-    assert!(!success, "mission help should fail after removal: {stdout}");
+    assert!(success, "mission help failed: {stderr}");
 
-    assert!(
-        stderr.contains("unrecognized subcommand 'mission'"),
-        "{stderr}"
-    );
+    assert!(stdout.contains("Read-only mission reports and discovery"));
+    assert!(stdout.contains("status"));
+    assert!(stdout.contains("list"));
     assert!(!stderr.contains("mission show"), "{stderr}");
-    assert!(!stderr.contains("mission status"), "{stderr}");
+    assert!(!stdout.contains("create"));
+    assert!(!stdout.contains("close"));
+    assert!(!stdout.contains("start"));
 }
 
 #[test]
@@ -1233,11 +1239,11 @@ fn test_mission_create_help_names_generated_sections() {
 #[test]
 fn test_mission_status_help_exposes_verbose_terminal_detail() {
     let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["issue", "status", "--help"]);
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);
     assert!(success, "mission status help failed: {stderr}");
 
     assert!(stdout.contains("--verbose"));
-    assert!(stdout.contains("Show verbose validator detail for mission objective records"));
+    assert!(stdout.contains("Show verbose validator detail"));
     assert!(!stdout.contains("--closeout"));
     assert!(!stdout.contains("closeout audit"));
 }
@@ -1416,8 +1422,9 @@ fn test_issue_status_renders_objective_work_health() {
         "ready {blocker_id} - Blocking child | no open blockers; parent {objective_id}; proof checked by workflow validators"
     )));
     assert!(stdout.contains("Blocked Work"));
+    assert!(stdout.contains(&format!("blocked {blocked_id} - Blocked child | 1 blocker")));
     assert!(stdout.contains(&format!(
-        "blocked {blocked_id} - Blocked child | 1 blocker; details: atelier issue blocked {blocked_id}"
+        "Inspect blockers: atelier issue blocked {blocked_id}"
     )));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
@@ -1548,7 +1555,7 @@ fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     assert!(start_out.contains("Next Commands"));
     assert!(start_out.contains("Inspect checkout status: atelier status"));
     assert!(start_out.contains(&format!(
-        "Inspect mission selection and blockers: atelier issue status {mission_id}"
+        "Inspect mission selection and blockers: atelier mission status {mission_id}"
     )));
     assert!(start_out.contains(&format!(
         "Inspect work transitions: atelier issue transition {issue_id} --options"
@@ -1690,8 +1697,8 @@ fn test_man_manager_routes_to_mission_inventory_without_focus() {
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
     assert!(!stdout.contains("Active mission:"), "{stdout}");
-    assert!(stdout.contains("atelier issue table --kind mission"));
-    assert!(stdout.contains("atelier issue status <id>"));
+    assert!(stdout.contains("atelier mission list"));
+    assert!(stdout.contains("atelier mission status <mission-id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));
     assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier issue link <mission-id> <issue-id> --role advances"));
@@ -1743,6 +1750,9 @@ fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
     assert!(stdout.contains("Tracker: unavailable"));
     assert!(stdout.contains("Not an Atelier repository"));
     assert!(stdout.contains("atelier init"));
+    assert!(stdout.contains("docs/product/workflow-configuration.md"));
+    assert!(stdout.contains("atelier issue transition <id> --options"));
+    assert!(stdout.contains("atelier prune --dry-run"));
 }
 
 #[test]
@@ -1790,6 +1800,10 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
+        transition_out.contains("  Decision: allowed"),
+        "{transition_out}"
+    );
+    assert!(
         transition_out.contains("block [allowed]"),
         "{transition_out}"
     );
@@ -1801,6 +1815,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         !transition_out.contains("Planned Effects"),
         "{transition_out}"
     );
+    assert!(transition_out.contains("Commands"), "{transition_out}");
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
     let git_after = git_status_short(dir.path());
     assert_eq!(
@@ -2570,6 +2585,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
+    assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
         options_out.contains(
@@ -2741,11 +2757,62 @@ fn test_issue_status_orders_children_by_visible_blockers() {
     );
     assert!(
         full_out.contains(&format!(
-            "blocked {implementation_id} - Implementation node | 1 blocker; details: atelier issue blocked {implementation_id}"
+            "blocked {implementation_id} - Implementation node | 1 blocker"
         )),
         "{full_out}"
     );
+    assert!(full_out.contains(&format!(
+        "Inspect blockers: atelier issue blocked {implementation_id}"
+    )));
     assert!(!full_out.contains("todo/todo"), "{full_out}");
+}
+
+#[test]
+fn test_issue_status_reports_omitted_blocked_rows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Large objective", "--issue-type", "epic"],
+    );
+    let objective_id = issue_id_by_title(dir.path(), "Large objective");
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Shared blocker",
+            "--parent",
+            &objective_id,
+        ],
+    );
+    let blocker_id = issue_id_by_title(dir.path(), "Shared blocker");
+    for index in 0..6 {
+        run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                &format!("Blocked child {index}"),
+                "--parent",
+                &objective_id,
+            ],
+        );
+        let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked child {index}"));
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", &objective_id]);
+    assert!(success, "issue status failed: {stderr}");
+    assert!(
+        stdout.contains("1 more blocked work item(s) omitted"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Inspect blockers: atelier issue blocked"),
+        "{stdout}"
+    );
 }
 
 #[test]
