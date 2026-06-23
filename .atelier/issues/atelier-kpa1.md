@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define retention classes and prune safety contract"
-updated_at: "2026-06-19T19:39:18.753462512+00:00"
+updated_at: "2026-06-22T14:59:46.645950697+00:00"
 ---
 
 ## Description

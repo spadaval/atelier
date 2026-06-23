@@ -2,8 +2,8 @@
 
 Primary role: Admin.
 
-Category: Hidden debug diagnostic or admin repair primitive. It is not normal
-workflow.
+Category: Hidden advanced diagnostic or admin repair primitive. It is not
+normal workflow and is intentionally omitted from root help.
 
 Primary question: "How do I rebuild local SQLite runtime/projection state from
 canonical records?"
@@ -11,8 +11,9 @@ canonical records?"
 ## Assessment
 
 - Name: Correct for a low-level repair verb.
-- Documentation: Should be admin-only. Normal operators should use `doctor
-  --fix` unless a diagnostic explicitly names `rebuild`.
+- Documentation: Should be hidden from root normal workflow help. Normal
+  operators should use `doctor --fix` unless a diagnostic explicitly names
+  `rebuild`.
 - Design: Acceptable as a maintenance primitive, but too implementation-shaped
   for routine workflow. If retained, it should sit behind targeted diagnostics
   or `doctor --fix` ownership rather than ordinary handoff guidance.
@@ -23,7 +24,7 @@ canonical records?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| hidden/admin `atelier rebuild` | Admin/debug | Recreate ignored projection/runtime state from canonical Markdown during targeted repair or testing. | Should stay out of normal role guides except admin recovery; `doctor --fix` owns the operator repair path. |
+| hidden advanced `atelier rebuild` | Admin/debug | Recreate ignored projection/runtime state from canonical Markdown during targeted repair or testing. | Should stay out of normal role guides except admin recovery; `doctor --fix` owns the operator repair path. |
 
 ## Boundary
 

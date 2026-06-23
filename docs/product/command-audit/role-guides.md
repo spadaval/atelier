@@ -3,9 +3,9 @@
 Atelier should keep product-oriented commands, but provide role-specific guide
 pages that filter the command surface for the operator's current job.
 
-## Proposed Surface
+## Current Surface
 
-Add a guide command such as:
+Use the guide command:
 
 ```text
 atelier man worker
@@ -15,7 +15,7 @@ atelier man manager
 atelier man admin
 ```
 
-`man` is intentionally a guide layer, not a new command namespace. It should not
+`man` is intentionally a guide layer, not a new command namespace. It must not
 create commands such as `atelier worker start` or `atelier orchestrator issue
 create`. Role guides answer "which existing commands matter to me right now?"
 
@@ -120,15 +120,15 @@ atelier issue status <id>
 atelier bundle preview <file>
 atelier bundle apply <file> --yes
 atelier issue create "..."
-atelier issue link <mission-id> <issue-id> --role advances
+atelier issue link <objective-id> <issue-id> --role advances
 atelier issue block <blocked-id> <blocker-id>
-atelier issue show <mission-id>
+atelier issue show <objective-id>
 atelier status
 ```
 
 Manager guidance should make `bundle preview <file>` and
 `bundle apply <file> --yes` the expected path for bulk record creation, such as a
-mission with many epics, issues, blockers, mission links, or evidence links.
+mission with many epics, issues, blockers, objective links, or evidence links.
 Manual `issue create`, `issue link <objective-id> <issue-id> --role advances`,
 and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
@@ -157,8 +157,8 @@ atelier maintenance delete <kind> <id> --force
 
 Admin guide is the only role guide that should teach local tracker machinery.
 It should name hidden diagnostics only when they are explicitly useful:
-`workflow check`, `diagnostics slow`, `import-beads`, hidden/admin `export`,
-and hidden/admin `rebuild`.
+`workflow check`, `diagnostics slow`, `import-beads`, hidden advanced `export`,
+and hidden advanced `rebuild`.
 
 ## Resolved Design
 

@@ -38,6 +38,9 @@ rebuildable SQLite indexes, and local-only diagnostics/cache data.
 See [Local Command Diagnostics](local-command-diagnostics.md) for the global
 local diagnostics store, command telemetry fields, redaction defaults, opt-out
 controls, retention behavior, and Mission Control export boundary.
+See [Retention And Prune Policy](../product/retention-and-prune.md) for
+user-visible cleanup classes, protection rules, Git-history recovery, and
+explicit apply semantics.
 See [Product](../product/index.md) for the work model, milestone contract,
 public CLI surface, human output, workflow policy, and Mission Control
 experience that the architecture supports.

@@ -1,4 +1,4 @@
-# `atelier repair`
+# Retired `atelier repair`
 
 Primary role: Worker.
 
@@ -10,16 +10,15 @@ or cleanup was interrupted?"
 - Name: Misleading for the target workflow. Root `repair` overlaps with
   `doctor --fix`, and the active-pointer cleanup concept itself is no longer
   part of the product model.
-- Documentation: Should classify this as a removal candidate, not normal worker
-  guidance.
-- Design: Remove or replace. Missing-checkout recovery should inspect checkout
+- Documentation: Removed. It should not appear in normal worker guidance.
+- Design: Removed. Missing-checkout recovery should inspect checkout
   state, then reconcile canonical issue status through normal issue transitions
   or record edits rather than clearing hidden runtime state.
-- Output hierarchy: If it remains temporarily for compatibility, stale
-  issue/path first and an explicit statement that the command is legacy.
+- Output hierarchy: Invoking `atelier repair` rejects as an unrecognized
+  subcommand.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `atelier repair [issue-id]` | Worker | Legacy cleanup for hidden active-pointer state. | Remove or replace. |
+| `atelier repair [issue-id]` | Worker | Legacy cleanup for hidden active-pointer state. | Removed; use `doctor --fix` for ignored local state or issue transitions for durable workflow state. |

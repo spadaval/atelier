@@ -10,17 +10,24 @@ use crate::workflow_policy::{self, ActionParams, WorkflowForgejoRoleAuthors};
 const PROJECT_CONFIG_SCHEMA: &str = "atelier.project_config";
 const PROJECT_CONFIG_SCHEMA_VERSION: i64 = 1;
 pub const FORGEJO_ROLES: &[&str] = &["worker", "reviewer", "validator", "manager"];
+pub const DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS: u64 = 7;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectConfig {
     pub project_slug: String,
     pub paths: ProjectPaths,
+    pub prune: PruneConfig,
     pub review: ReviewConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectPaths {
     pub state_root: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PruneConfig {
+    pub canonical_retention_days: u64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -161,6 +168,8 @@ struct RawProjectConfig {
     project_slug: String,
     paths: RawProjectPaths,
     #[serde(default)]
+    prune: Option<RawPruneConfig>,
+    #[serde(default)]
     review: Option<RawReviewConfig>,
     #[serde(default)]
     forgejo: Option<toml::Value>,
@@ -170,6 +179,12 @@ struct RawProjectConfig {
 #[serde(deny_unknown_fields)]
 struct RawProjectPaths {
     state_root: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawPruneConfig {
+    canonical_retention_days: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -211,10 +226,12 @@ fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig>
     let paths = ProjectPaths {
         state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
     };
+    let prune = parse_prune_config(raw.prune, config_path)?;
     let review = parse_review_config(raw.review, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
         paths,
+        prune,
         review,
     })
 }
@@ -255,6 +272,21 @@ fn reject_legacy_forgejo(raw: &RawProjectConfig, config_path: &Path) -> Result<(
         ));
     }
     Ok(())
+}
+
+fn parse_prune_config(raw: Option<RawPruneConfig>, config_path: &Path) -> Result<PruneConfig> {
+    let canonical_retention_days = raw
+        .and_then(|prune| prune.canonical_retention_days)
+        .unwrap_or(DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS);
+    if canonical_retention_days > 3650 {
+        bail!(
+            "project_config_invalid: {} field 'prune.canonical_retention_days' must be at most 3650",
+            config_path.display()
+        );
+    }
+    Ok(PruneConfig {
+        canonical_retention_days,
+    })
 }
 
 fn parse_review_config(raw: Option<RawReviewConfig>, config_path: &Path) -> Result<ReviewConfig> {
@@ -490,6 +522,10 @@ workflows:
         let config = parse_project_config(valid_config(), &path()).unwrap();
         let forgejo = config.require_forgejo(&path()).unwrap();
 
+        assert_eq!(
+            config.prune.canonical_retention_days,
+            DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS
+        );
         assert_eq!(forgejo.host, "forge.example.test");
         assert_eq!(forgejo.owner, "tools");
         assert_eq!(forgejo.repo, "atelier");
@@ -501,6 +537,34 @@ workflows:
             .to_string()
             .contains("workflow action params"));
         assert!(forgejo.role_author_for_role("admin").is_err());
+    }
+
+    #[test]
+    fn parses_prune_canonical_retention_days() {
+        let config = parse_project_config(
+            &valid_config().replace(
+                "[review]",
+                "[prune]\ncanonical_retention_days = 14\n\n[review]",
+            ),
+            &path(),
+        )
+        .unwrap();
+
+        assert_eq!(config.prune.canonical_retention_days, 14);
+    }
+
+    #[test]
+    fn rejects_unreasonable_prune_retention_days() {
+        let config = valid_config().replace(
+            "[review]",
+            "[prune]\ncanonical_retention_days = 3651\n\n[review]",
+        );
+        let error = parse_project_config(&config, &path())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("prune.canonical_retention_days"));
+        assert!(error.contains("at most 3650"));
     }
 
     #[test]

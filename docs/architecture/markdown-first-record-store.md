@@ -208,7 +208,7 @@ records that share the common `title`/`status` contract.
 
 | Surface | Ownership |
 | --- | --- |
-| Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`. |
+| Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`; optional `[prune]` fields own project cleanup defaults. |
 | Compatibility-only config | No compatibility-state path is tracked in project config. |
 | Local projection/cache state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, and UI caches are ignored machine-local artifacts. SQLite tables under `state.db` must be rebuildable projection state, not non-Markdown tracker facts. |
 | Projection provenance | `projection_sources` rows, record identity, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
@@ -225,7 +225,7 @@ current committed records against the target contract above.
 | `.atelier/issues/atelier-man9.md` | Mission objective | Pass | Uses `schema: "atelier.issue"` with `issue_type: "mission"` and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
 | `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (forbidden payload residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
 | `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |
-| `.atelier/config.toml` | Project config/runtime boundary | Pass | Tracks canonical path ownership without committed runtime/cache or compatibility-state path settings. |
+| `.atelier/config.toml` | Project config/runtime boundary | Pass | Tracks canonical path ownership and prune defaults without committed runtime/cache or compatibility-state path settings. |
 | `.atelier/plans/` | Plan | Deferred | No active v1 plan record table exists; planning intent is ordinary Markdown or prose referenced from accountable records. |
 | `.atelier/milestones/` | Milestone | Deferred | No active v1 milestone record table exists; checkpoint intent is ordinary Markdown or prose referenced from accountable records. |
 

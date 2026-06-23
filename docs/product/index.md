@@ -29,6 +29,8 @@ that can be implemented and validated.
   transition actions, strict errors, and starter workflow examples.
 - [Work View Ordering](work-view-ordering.md): blocker-aware ordering and row
   state vocabulary for issue-like work queues.
+- [Retention And Prune Policy](retention-and-prune.md): cleanup classes,
+  protection rules, Git-history recovery, and explicit apply semantics.
 
 ## Interfaces
 

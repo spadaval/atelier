@@ -133,7 +133,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `branch` | Inspect, repair, or manually recover owner branches when workflow-owned lifecycle steps cannot complete automatically. | `status`, advanced repair, and manual branch-preparation forms name the owner record, branch, base branch, merge strategy, checkout, and recovery state. | Record IDs, branch names, paths, and branch-state tokens. | `status`, `issue show <id>`, `issue status <objective-id>`. |
-| `prune` | Explicitly prune accumulated local artifacts and report cleanup classes whose retention contracts are not implemented yet. | `atelier prune` is dry-run by default; reports diagnostics log candidates, retention cutoff, protected/deferred classes, and the apply command. `atelier prune --apply` removes only eligible local diagnostics logs in the initial slice. | Candidate counts, removed paths, and failure tokens only. | `diagnostics slow`, local diagnostics directory, future retention contract issues for records, branches, and worktrees. |
+| `prune` | Explicitly prune accumulated local, canonical, branch, and worktree artifacts according to [Retention And Prune Policy](retention-and-prune.md). | `atelier prune` is dry-run by default; reports candidates, retention cutoffs, protected records, deferred cleanup classes, the apply command, and Git-history recovery shape for canonical records. `atelier prune --apply` removes only eligible classes with implemented retention contracts. | Candidate counts, removed paths or IDs, protected/deferred counts, and failure tokens only. | `diagnostics slow`, local diagnostics directory, Git history for removed canonical paths, `doctor --fix`, and `lint` when tracked state blocks cleanup. |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config and rerun `lint`; use admin repair only when local state is implicated. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
@@ -147,7 +147,8 @@ in the command audit:
   `issue transition --options`, `lint`, and `issue status <objective-id>`.
 - `diagnostics slow`: hidden local telemetry; not an automation contract.
 - `prune`: visible admin maintenance; dry-run by default and applies only
-  explicitly supported cleanup classes.
+  explicitly supported cleanup classes from
+  [Retention And Prune Policy](retention-and-prune.md).
 - `import-beads`: temporary migration surface; normal setup uses
   `init --import-beads`.
 - `maintenance`: visible admin danger zone; never a routine next action.

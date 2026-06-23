@@ -7,14 +7,8 @@ documented, and shaped for that role.
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
-Last refreshed: 2026-06-20 from `cargo run -q -p atelier-cli -- --help`.
-
-Current checkout caveat: `atelier status` and `atelier issue status <id>` fail in
-this checkout because `.atelier/workflow.yaml` contains
-`statuses.in_progress.role`, while the current workflow parser expects
-`category`. That makes the command surface available for audit, but the
-role/live-state guides cannot be validated from this worktree until the tracked
-workflow configuration and binary agree.
+Last refreshed: 2026-06-23 from `target/debug/atelier --help`, focused
+subcommand help, removed-command rejection checks, and human-output samples.
 
 ## Category Contract
 
@@ -51,33 +45,45 @@ data model instead of the work object the operator is trying to understand.
 - Admin: configures, repairs, migrates, and performs explicit maintenance on
   Atelier itself.
 
-## Current Root Command Files
+## Current Help-Visible Root Command Files
 
 - [branch](branch.md)
 - [bundle](bundle.md)
-- [category review](category-review.md)
-- [diagnostics](diagnostics.md)
 - [doctor](doctor.md)
 - [evidence](evidence.md)
-- [export](export.md)
-- [export check reference classification](export-check-reference-classification.md)
 - [forgejo](forgejo.md)
-- [graph](graph.md)
 - [history](history.md)
-- [import-beads](import-beads.md)
 - [init](init.md)
 - [issue](issue.md)
 - [lint](lint.md)
 - [maintenance](maintenance.md)
 - [man](man.md)
-- [mission](mission.md)
 - [prune](prune.md)
 - [review](review.md)
-- [rebuild](rebuild.md)
-- [role guides](role-guides.md)
 - [search](search.md)
 - [status](status.md)
-- [workflow](workflow.md)
+
+## Hidden Advanced Or Migration Command Notes
+
+These files document callable commands that are hidden from root help and must
+not be taught as ordinary workflow:
+
+- [diagnostics](diagnostics.md): hidden local command telemetry.
+- [export](export.md): hidden deterministic-renderer diagnostic or migration
+  helper.
+- [import-beads](import-beads.md): hidden explicit predecessor import escape
+  hatch; normal setup uses `init --import-beads`.
+- [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
+  from `doctor --fix`.
+- [workflow](workflow.md): hidden raw workflow-policy diagnostics.
+
+## Cross-Cutting Audit Artifacts
+
+- [actual agent complaints](agent-complaints.md)
+- [category review](category-review.md)
+- [export check reference classification](export-check-reference-classification.md)
+- [human output refresh](human-output-refresh.md)
+- [role guides](role-guides.md)
 
 ## Retired Or Deferred Notes
 
@@ -85,8 +91,11 @@ These files record surfaces that should not be treated as current root command
 documentation:
 
 - [abandon](abandon.md): removed legacy active-pointer cleanup.
-- [note](note.md): removed generic note surface; use `issue note` and
-  `mission note`.
+- [graph](graph.md): removed abstract relationship namespace; use issue detail,
+  issue status, and blocker views.
+- [mission](mission.md): removed parallel objective namespace; use mission-typed
+  issue records.
+- [note](note.md): removed generic note surface; use `issue note`.
 - [plan](plan.md): deferred plan CRUD; current one-shot batch creation is
   `bundle`.
 - [repair](repair.md): removed root repair surface; use `doctor --fix` for
@@ -109,19 +118,23 @@ The main product risk is not that all roles share commands. The risk is that
 general help presents too many commands without answering which role should
 care. Role-specific guide pages should present a smaller command path, while
 root help continues to expose the product nouns. Current-work orientation should
-come from canonical `in_progress` issue records rendered by `status`, `mission
-status`, and issue workflow surfaces, not from separate runtime active-pointer
-helpers.
+come from canonical in-progress issue records rendered by `status`, type-aware
+`issue status <objective-id>`, and issue workflow surfaces, not from separate
+runtime active-pointer helpers.
 
 ## Cutting Findings
 
 | Finding | Evidence | Next step |
 | --- | --- | --- |
-| Audit docs had fallen behind the visible root surface. | Root help lists `bundle`, `review`, `forgejo`, and `prune`; the audit index did not have command pages for them. | Keep the new pages current with help-visible root commands. |
-| Retired command notes were listed as current command files. | `abandon`, `note`, `plan`, and `repair` do not appear in root help, but were peers in the command file list. | Leave them only as retired/deferred audit notes or delete them after any remaining references are gone. |
-| `graph` was an abstract helper namespace compensating for underpowered record views. | `graph impact` asked operators to leave `issue` or `mission` to answer blast-radius questions, while `graph tree` overlapped with mission/issue hierarchy views and hard-coded predecessor `todo/done/all` filter language. | Removed. Use `issue show` for downstream impact and `issue status <objective-id>` for objective hierarchy and work health. |
+| The visible root surface is now the reduced operator set. | Root help lists `init`, `man`, `status`, `issue`, `search`, `bundle`, `evidence`, `review`, `forgejo`, `history`, `branch`, `prune`, `maintenance`, `lint`, and `doctor`. | Keep current command files limited to help-visible roots; classify hidden and retired files separately. |
+| Hidden advanced commands remain callable but are not root-help surfaces. | `workflow`, `diagnostics`, `export`, `rebuild`, and `import-beads` respond to focused help, while root help omits them. | Keep them in hidden advanced or migration notes; do not cite them as routine worker/reviewer paths. |
+| Retired command notes were still mixed with current command files. | `mission`, `graph`, `plan`, `start`, `worktree`, `repair`, `note`, and `abandon` are rejected as unrecognized root commands. | Leave them only as retired/deferred audit notes or delete them after remaining references are gone. |
+| `graph` was an abstract helper namespace compensating for underpowered record views. | `graph` is now rejected; prior `graph impact` and `graph tree` behavior belongs in issue detail/status and blocker views. | Removed. Use `issue show` for downstream impact and `issue status <objective-id>` for objective hierarchy and work health. |
+| `mission` was a parallel objective namespace. | `mission` is now rejected; root help teaches `issue create "..." --issue-type mission`, `issue table --kind mission`, `issue show <mission-id>`, and `issue transition <mission-id> close --reason`. | Keep mission guidance under typed issue records rather than aliases. |
+| Issue help still has a summary-wording mismatch. | `atelier issue --help` lists concrete subcommands but its description says "close" even though closure is executed through `issue transition <id> close --reason`. | Align the help description with the transition-owned lifecycle surface. |
 | `review open` exposes provider plumbing as required operator input. | `atelier review open --help` requires `--title`, `--body`, `--source-branch`, and `--target-branch`; the product contract says lifecycle/status output should route review artifacts. | Refine `review open` toward issue-derived defaults or move the fully manual form to admin/advanced guidance. |
-| Forgejo review validation is split across layers. | `crates/atelier-app/src/pr.rs` parses and validates linked pull-request state for merge confirmation, while `crates/atelier-cli/src/commands/workflow.rs` separately parses the same review field shape for transition validation. | Move the shared review-link contract into the app layer so CLI transition checks call one canonical helper. |
+| Human output has recurring scanability debt. | Sampled queue, detail, transition, history, evidence, and role-guide outputs repeat inline commands, overuse `key=value`, print raw activity fields, and lack interactive color. | Use the [human output refresh](human-output-refresh.md) audit to drive the formatter pass before changing command behavior. |
+| Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale status/projection signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
 | Retired implementation owners have been removed. | Bundle behavior is owned by `commands::bundle`; stale `label`, `plan`, and `tested` command modules are no longer compiled. | Keep new implementation modules aligned with visible product surfaces. |
 | Test infrastructure no longer preserves removed command shapes. | Integration and smoke harnesses execute the arguments supplied by each test directly; old-shape coverage lives in explicit rejection tests. | Keep new tests on the current command surface and avoid ignored compatibility suites. |
-| CLI command dispatch is becoming a module-boundary bottleneck. | `crates/atelier-cli/src/main.rs` still owns the root enum and subcommand enums, but issue subcommand dispatch now lives in the current-surface `issue_cli` adapter; `commands/workflow.rs` and `commands/mission.rs` remain broad follow-up seams. | Continue splitting by product surface or use-case boundary before adding new command families. |
+| CLI command dispatch is becoming a module-boundary bottleneck. | `crates/atelier-cli/src/main.rs` still owns the root enum and subcommand enums, but issue subcommand dispatch now lives in the current-surface `issue_cli` adapter. | Continue splitting by product surface or use-case boundary before adding new command families. |

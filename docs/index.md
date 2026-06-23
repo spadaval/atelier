@@ -60,6 +60,9 @@
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   review field and review room records, strict errors, and starter workflow
   examples.
+- [docs/product/retention-and-prune.md](product/retention-and-prune.md):
+  cleanup classes, protection rules, Git-history recovery, and explicit apply
+  semantics.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
   RecordStore and ProjectionIndex boundaries for Markdown-first durable writes,
   issue activity sidecars, rebuildable SQLite indexes, and local cache data.

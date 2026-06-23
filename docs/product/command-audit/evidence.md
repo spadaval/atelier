@@ -21,3 +21,18 @@ Primary question: "How do I record, inspect, and reuse proof?"
 | `evidence show <id>` | Reviewer | Inspect one proof record. | Good. |
 | `evidence list` | Reviewer | Find proof records. | Good. |
 | `evidence attach <id> ...` | Reviewer | Reuse existing proof on another target. | Good as secondary surface. |
+
+## Human Output Debt
+
+`evidence list` currently has the clearest default-budget problem: this checkout
+prints hundreds of records and includes command transcripts inline. That is
+technically complete but not usable as a human browse surface.
+
+Refresh target:
+
+- bound the default list and state the omitted count;
+- group by result, kind, target, or recency when useful;
+- elide command transcripts to one human sentence with `evidence show <id>` as
+  the drill-down;
+- keep evidence IDs visible but secondary after the summary; and
+- preserve quiet output as the composition path for IDs and status tokens.

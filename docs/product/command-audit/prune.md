@@ -2,8 +2,8 @@
 
 Primary role: Admin.
 
-Primary question: "How do I inspect and explicitly remove accumulated local
-artifacts?"
+Primary question: "How do I inspect and explicitly remove accumulated local,
+canonical, branch, and worktree artifacts?"
 
 ## Assessment
 
@@ -11,20 +11,22 @@ artifacts?"
 - Documentation: Visible in root help as admin maintenance. It should not be
   cited as proof for normal workflow completion.
 - Design: Correct if dry-run stays the default and `--apply` only removes
-  cleanup classes with implemented retention contracts.
+  cleanup classes with implemented retention contracts from
+  [Retention And Prune Policy](../retention-and-prune.md).
 - Output hierarchy: Candidate class, retention window, protected/deferred
-  classes, removed paths for `--apply`, failures.
+  classes, removed paths or IDs for `--apply`, Git-history recovery shape for
+  canonical cleanup, failures.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `prune` | Admin | Preview eligible local cleanup. | Good. |
-| `prune --apply` | Admin | Remove eligible local cleanup candidates. | Good with explicit confirmation. |
-| `prune --retention-days <days>` | Admin | Adjust diagnostics retention for the cleanup pass. | Good. |
+| `prune` | Admin | Preview eligible cleanup across implemented retention classes. | Good. |
+| `prune --apply` | Admin | Remove eligible cleanup candidates and report skipped protected state. | Good with explicit confirmation and Git recovery guidance for canonical records. |
+| `prune --retention-days <days>` | Admin | Override diagnostics and canonical retention for the cleanup pass. | Good. |
 
 ## Cutting Note
 
-Keep the initial scope narrow. If future pruning grows to records, worktrees, or
-branches, those classes need explicit retention contracts before `prune --apply`
-removes anything beyond supported local artifacts.
+Canonical records, branches, and worktrees may be pruned only after their
+retention contracts are implemented. Until then, `prune` must keep those classes
+visible as deferred or protected instead of deleting them.

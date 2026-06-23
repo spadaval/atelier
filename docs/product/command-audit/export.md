@@ -2,8 +2,8 @@
 
 Primary role: Admin.
 
-Category: Hidden debug diagnostic or temporary migration. It is not normal
-workflow.
+Category: Hidden advanced diagnostic or temporary migration. It is not normal
+workflow and is intentionally omitted from root help.
 
 Primary question: "How do I inspect or check canonical export state during
 storage migration or repair?"
@@ -13,8 +13,9 @@ storage migration or repair?"
 - Name: Potentially misleading if visible. Product docs say export/rebuild are
   low-level mechanics, not normal handoff, health, validation, or terminal
   commands.
-- Documentation: Should be hidden/admin-only, absent from root normal workflow
-  help, and absent from worker/reviewer handoff recipes.
+- Documentation: Should be hidden from root normal workflow help and absent
+  from worker/reviewer handoff recipes. Focused help may describe it as an
+  advanced deterministic-renderer diagnostic.
 - Design: Acceptable only as a deterministic-renderer test, projection
   diagnostic, or temporary migration surface. It should not be an automation
   contract for agents selecting work, proving validation, or deciding terminal readiness.
@@ -25,8 +26,8 @@ storage migration or repair?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| hidden/admin `atelier export` | Admin/migration | Materialize deterministic renderer output during migration or debugging. | Temporary migration or test-only. |
-| hidden/admin `atelier export --check` | Admin/debug | Check deterministic renderer/projection freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `lint`; use admin repair only when local state is degraded. |
+| hidden advanced `atelier export` | Admin/migration | Materialize deterministic renderer output during migration or debugging. | Temporary migration or test-only. |
+| hidden advanced `atelier export --check` | Admin/debug | Check deterministic renderer/projection freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `lint`; use admin repair only when local state is degraded. |
 
 ## Boundary
 
