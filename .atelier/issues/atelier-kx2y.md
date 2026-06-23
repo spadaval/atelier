@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "human-output"
 - "ux"
+review:
+  kind: pull_request
+  number: 24
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
