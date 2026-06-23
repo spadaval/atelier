@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-23T21:46:03.295617283+00:00"
+status: "done"
 title: "Make branch.prepare explicit in workflow configuration"
-updated_at: "2026-06-23T21:39:25.654179527+00:00"
+updated_at: "2026-06-23T21:46:03.295617283+00:00"
 ---
 
 ## Description
