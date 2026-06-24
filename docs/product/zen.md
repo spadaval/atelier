@@ -21,6 +21,17 @@ Model the domain, don't flatten it.
 Missions, epics, issues, and evidence are different shapes because they
 answer different questions.
 
+Domain truth is not UI.
+Domain services say what is true, allowed, blocked, or required.
+Renderers decide wording, layout, emphasis, and command spelling.
+Do not smuggle UI annotations into domain code, and do not reimplement domain
+rules in renderers.
+
+One truth can have many views.
+Status, work queues, issue detail, transitions, history, and checks may show
+different slices of the same facts.
+They must not maintain parallel interpretations of those facts.
+
 Coordination must be visible.
 Blockers, ownership, and agreements live in records and policy, not in
 someone's head or chat history.
@@ -28,6 +39,17 @@ someone's head or chat history.
 Agents make mistakes. The system must detect errors and guide recovery.
 Workflow catches what agents forget.
 Status surfaces make uncertainty visible and explain how to move forward.
+
+Show the right layer first.
+Default output should name the state, the cause, and the next useful step.
+Do not dump implementation machinery by default.
+Do not hide it behind vague failure messages.
+
+Commands answer operator questions.
+Do not print data just because it exists.
+Do not invent generic next actions.
+Every visible line should help the operator understand state, choose work, or
+recover from a problem.
 
 Workflow enforces the minimum. Agents handle the rest.
 Add checks only where agents skip evidence or close too early.

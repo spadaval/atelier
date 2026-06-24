@@ -23,7 +23,7 @@ updated_at: "2026-06-08T19:47:39+00:00"
 
 ## Description
 
-Resolve the SPEC.md open question: should the binary be `atelier`, a shorter alias such as `atl`, or both? This choice blocks broad rename work because command names, tests, docs, package metadata, and install expectations depend on it.
+Resolve the PRODUCT_INTENT.md open question: should the binary be `atelier`, a shorter alias such as `atl`, or both? This choice blocks broad rename work because command names, tests, docs, package metadata, and install expectations depend on it.
 Outcome was not specified in the legacy issue record.
 Evidence was not specified in the legacy issue record.
 ### Resolution

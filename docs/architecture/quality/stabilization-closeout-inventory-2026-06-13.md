@@ -65,7 +65,7 @@ Observed transcript: `target/debug/atelier evidence --help`.
 Command used:
 
 ```bash
-rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md CONTEXT.md SPEC.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
+rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md CONTEXT.md PRODUCT_INTENT.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
 ```
 
 Classification:
@@ -77,7 +77,7 @@ Classification:
 | `evidence add` / `evidence capture` | Product docs classify removal; hidden implementation strings remain. Normal evidence help exposes `record`. | `atelier-10qm` or explicit hidden-command removal follow-up if required. |
 | `data:` | Canonical mission/evidence records are clean; tests and docs retain legacy fixtures/examples. Plan/generic record plumbing remains. | `atelier-ihz0`; `docs/product/work-model.md` stale example should be handled there or by docs freshness work. |
 | `state.db` | `.atelier/runtime/state.db` is the runtime path. Root `.atelier/state.db` is local rebuildable residue and is ignored by this audit patch. Some docs still mention legacy root state in compatibility/history contexts. | `atelier-fyrm` closed; stale docs can be swept by `atelier-c9ej` if not intentionally historical. |
-| `beads` / `chainlink` | `import-beads` is the explicit predecessor import bridge; `SPEC.md` and context mention repository provenance. | `atelier-10qm` for inherited residue cleanup where not product intent. |
+| `beads` / `chainlink` | `import-beads` is the explicit predecessor import bridge; `PRODUCT_INTENT.md` and context mention repository provenance. | `atelier-10qm` for inherited residue cleanup where not product intent. |
 | `Claude` | Historical residue from the previous optional integration surface. Superseded by `atelier-vau5`, which removes Claude hook/MCP assets and keeps only explicitly historical mentions. | `atelier-vau5` |
 
 ## Current Open Owner Map

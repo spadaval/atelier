@@ -122,6 +122,38 @@ Command-specific renderers may still own domain-specific body text, prose order,
 and specialized sections. They must not create one-off color policy, duplicate
 footer ranking rules, or private workflow vocabulary.
 
+### Domain Facts Versus Rendered Explanations
+
+Domain and workflow services should not return UI annotations, section plans,
+or command strings. They return typed facts and rule evaluations: current
+workflow status, available transitions, unsatisfied requirements, observed
+evidence counts, open blockers, review state, projection health, and checkout
+facts.
+
+Application/read-model code assembles those facts for a particular command.
+For example, the status read model may combine checkout changes, active work,
+transition evaluations, review state, and health checks. It should preserve the
+typed facts rather than flattening them into prewritten display messages.
+
+Renderers translate typed facts into human output. If a transition evaluation
+says `close` is blocked by an unsatisfied evidence requirement with zero
+matching validation records, the renderer may print:
+
+```text
+  in progress  atelier-1234  Simplify status output
+      -> close blocked: needs linked validation evidence
+```
+
+That wording belongs to the renderer. The fact that the `close` transition is
+blocked by an unsatisfied evidence requirement belongs to the domain/app
+services. Renderers must not rediscover that fact by directly scanning evidence
+records or duplicating workflow validators.
+
+The same split applies to footer commands. Domain/app services may return an
+actionable state such as an unsatisfied evidence requirement for an issue
+target. The CLI adapter owns the exact command spelling, such as
+`atelier evidence record --target issue/<id> --kind validation "..."`.
+
 ## Detail Views
 
 Use a detail view when the command focuses on one record, such as

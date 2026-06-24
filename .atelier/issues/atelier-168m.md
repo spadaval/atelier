@@ -47,7 +47,7 @@ Define the product and configuration contract before implementation changes bran
 
 ## Evidence
 
-- Documentation file diff covers `SPEC.md`, `CONTEXT.md`, `docs/product/work-model.md`, `docs/product/cli-surface.md`, `docs/adr/0007-mission-workspaces-and-epic-review-branches.md`, and Agent Factory routing where relevant.
+- Documentation file diff covers `PRODUCT_INTENT.md`, `CONTEXT.md`, `docs/product/work-model.md`, `docs/product/cli-surface.md`, `docs/adr/0007-mission-workspaces-and-epic-review-branches.md`, and Agent Factory routing where relevant.
 - Search transcript shows no target-state doc tells routine workers to run `atelier branch for-epic` before starting issue work.
 - Review note or evidence record maps the contract to the parent epic Outcome bullets.
 - `atelier lint atelier-168m`, `atelier export --check`, and `git diff --check` pass.

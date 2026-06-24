@@ -74,6 +74,47 @@ rendering only. Commands such as `atelier issue transition <id> --options`,
 app/workflow outcomes they receive. CLI code may contain formatting labels such
 as section headings, but not workflow policy decisions.
 
+### Domain, Read Model, And Renderer Boundary
+
+Domain and workflow crates return rule evaluations and observed state, not UI
+annotations, human-facing prose, or command strings. For example, a workflow
+service may report that the `close` transition is blocked because an
+`EvidenceAttached { min_count: 1, kind: validation }` requirement observed zero
+matching evidence records. It must not report a display annotation such as
+`needs linked evidence`, choose a panel, assign a visual severity, or construct
+`atelier evidence record ...`.
+
+`atelier-app` assembles command-specific read models from those evaluations. A
+read model may decide that status output should consider active issues,
+checkout state, review state, and transition evaluations together, but it still
+keeps domain facts typed: current status, available transitions, unsatisfied
+requirements, observed counts, open blockers, review state, changed-file
+classes, and stale health checks.
+
+`atelier-cli` translates read models into operator language. It owns section
+names, row wording, indentation, truncation, colors, footer labels, and command
+spelling. Rendering code may say `close blocked: needs linked validation
+evidence` because it is translating a typed unsatisfied requirement. It must
+not rediscover that requirement by scanning evidence records or re-running
+workflow checks outside the domain/app service that produced the read model.
+
+The intended direction is:
+
+```text
+domain/workflow services
+  -> typed state, requirements, observations, and rule evaluations
+
+app/read services
+  -> command-specific view models assembled from those typed facts
+
+cli/renderers
+  -> human wording, panels, layout, command suggestions, and exit mapping
+```
+
+This boundary avoids both failure modes: domain code pretending to be
+presentation-neutral while emitting UI annotations, and CLI code duplicating
+workflow or evidence logic just to render helpful output.
+
 `atelier-records` owns durable issue status storage as canonical Markdown data.
 When it validates or defaults a status during record creation or bundle apply,
 it should ask `atelier-workflow` for the configured initial status and status

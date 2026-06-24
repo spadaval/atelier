@@ -6,7 +6,8 @@
 - `AGENTS.md`: concise entry point and repository reference map for agents
   working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
-- [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
+- [PRODUCT_INTENT.md](../PRODUCT_INTENT.md): product direction, principles, and
+  target-state constraints for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
   canonical `.atelier/` record file, ignored projection/cache, compatibility, and
   rebuild layout.

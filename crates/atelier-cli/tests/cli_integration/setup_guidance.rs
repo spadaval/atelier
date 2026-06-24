@@ -1632,18 +1632,21 @@ fn test_diagnostics_json_docs_define_local_operator_boundary() {
 }
 
 #[test]
-fn test_spec_representative_commands_match_signpost_surfaces() {
-    let spec = std::fs::read_to_string(workspace_root().join("SPEC.md")).unwrap();
+fn test_product_intent_representative_commands_match_signpost_surfaces() {
+    let product_intent =
+        std::fs::read_to_string(workspace_root().join("PRODUCT_INTENT.md")).unwrap();
 
-    assert!(!spec.contains("atelier work start"));
-    assert!(!spec.contains("atelier work finish"));
-    assert!(!spec.contains("atelier workflow validate"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 start"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 close --reason \"done\""));
-    assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
-    assert!(spec.contains("atelier status"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
-    assert!(spec
+    assert!(!product_intent.contains("atelier work start"));
+    assert!(!product_intent.contains("atelier work finish"));
+    assert!(!product_intent.contains("atelier workflow validate"));
+    assert!(product_intent.contains("atelier issue transition atelier-z1p8 start"));
+    assert!(
+        product_intent.contains("atelier issue transition atelier-z1p8 close --reason \"done\"")
+    );
+    assert!(!product_intent.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
+    assert!(product_intent.contains("atelier status"));
+    assert!(product_intent.contains("atelier issue transition atelier-z1p8 --options"));
+    assert!(product_intent
         .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
 }
 

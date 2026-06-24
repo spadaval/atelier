@@ -2,8 +2,9 @@
 
 Atelier begins as a fork of `dollspace-gay/chainlink`. This provenance is part
 of the inherited architecture baseline, not the target product definition.
-Target behavior is defined by [SPEC.md](../../SPEC.md), and target terminology
-is defined by [CONTEXT.md](../../CONTEXT.md).
+Target direction is described by
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), and target terminology is defined
+by [CONTEXT.md](../../CONTEXT.md).
 
 ## Inherited Baseline
 
@@ -34,9 +35,9 @@ Atelier target state.
 
 ## Target Atelier Direction
 
-Atelier is not a thin rename. The target architecture in [SPEC.md](../../SPEC.md)
-keeps useful Chainlink runtime machinery while changing the durable product
-model:
+Atelier is not a thin rename. The product direction in
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md) keeps useful Chainlink runtime
+machinery while changing the durable product model:
 
 - Markdown records under `.atelier/` become the deterministic, mergeable
   repository record store that can rebuild local SQLite projections.

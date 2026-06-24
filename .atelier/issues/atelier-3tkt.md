@@ -40,7 +40,7 @@ updated_at: "2026-06-11T23:13:05.117383453+00:00"
 ## Description
 
 Document the Markdown-first storage contract before implementation. This epic owns the product and architecture language for the single .atelier/ layout, direct edit workflow, deterministic Markdown shape, activity/notes model, migration/backcompat window, merge-conflict guidance, and validation responsibilities.
-- SPEC.md, CONTEXT.md, AGENTFACTORY.md, storage docs, and ADR language describe .atelier/ as the committed canonical root with ignored runtime/cache subpaths.
+- PRODUCT_INTENT.md, CONTEXT.md, AGENTFACTORY.md, storage docs, and ADR language describe .atelier/ as the committed canonical root with ignored runtime/cache subpaths.
 - The direct-edit contract defines deterministic front matter ordering, required fields, relationship buckets, activity sidecar rules, and examples for creating/modifying records by hand.
 - The compatibility window for .atelier-state is explicit: discover/read/migrate only, write only the new layout after migration.
 - Merge-conflict and hand-edit recovery guidance is documented for operators and agents.
