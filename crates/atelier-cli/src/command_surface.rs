@@ -13,19 +13,6 @@ const GUIDANCE_FILES: &[&str] = &[
 
 const CLI_SURFACE_DOC: &str = "docs/product/cli-surface.md";
 
-const COMMAND_GROUP_ROOTS: &[&str] = &[
-    "diagnostics",
-    "evidence",
-    "issue",
-    "branch",
-    "bundle",
-    "maintenance",
-    "mission",
-    "note",
-    "workflow",
-    "worktree",
-];
-
 const REMOVED_ROOTS: &[&str] = &[
     "agent",
     "archive",
@@ -125,6 +112,8 @@ struct HelpCatalog {
     exe: PathBuf,
     cache: BTreeMap<Vec<String>, Option<String>>,
     visible_roots: BTreeSet<String>,
+    visible_paths: BTreeSet<Vec<String>>,
+    grouped_paths: BTreeSet<Vec<String>>,
 }
 
 impl HelpCatalog {
@@ -132,13 +121,22 @@ impl HelpCatalog {
         let exe = std::env::current_exe().context("failed to locate current atelier binary")?;
         let root_help = run_help(&exe, &[]).context("failed to run `atelier --help`")?;
         let visible_roots = parse_root_help_commands(&root_help);
+        let visible_paths = visible_roots
+            .iter()
+            .map(|root| vec![root.clone()])
+            .collect::<BTreeSet<_>>();
+        let grouped_paths = BTreeSet::from([Vec::new()]);
         let mut cache = BTreeMap::new();
         cache.insert(Vec::new(), Some(root_help));
-        Ok(Self {
+        let mut catalog = Self {
             exe,
             cache,
             visible_roots,
-        })
+            visible_paths,
+            grouped_paths,
+        };
+        catalog.discover_visible_command_tree()?;
+        Ok(catalog)
     }
 
     fn help_for(&mut self, path: &[String]) -> Result<Option<String>> {
@@ -165,6 +163,41 @@ impl HelpCatalog {
         Ok(self
             .help_for(path)?
             .is_some_and(|help| help.contains(option)))
+    }
+
+    fn discover_visible_command_tree(&mut self) -> Result<()> {
+        let roots = self
+            .visible_roots
+            .iter()
+            .map(|root| vec![root.clone()])
+            .collect::<Vec<_>>();
+        for root in roots {
+            self.discover_visible_subcommands(root)?;
+        }
+        Ok(())
+    }
+
+    fn discover_visible_subcommands(&mut self, path: Vec<String>) -> Result<()> {
+        let Some(help) = self.help_for(&path)? else {
+            return Ok(());
+        };
+        let subcommands = parse_subcommand_help_commands(&help);
+        if subcommands.is_empty() {
+            return Ok(());
+        }
+
+        self.grouped_paths.insert(path.clone());
+        for subcommand in subcommands {
+            if subcommand == "help" {
+                continue;
+            }
+            let mut subcommand_path = path.clone();
+            subcommand_path.push(subcommand);
+            if self.visible_paths.insert(subcommand_path.clone()) {
+                self.discover_visible_subcommands(subcommand_path)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -212,7 +245,7 @@ fn scan_guidance_file(
             if matches!(visibility, ReferenceVisibility::RemovalHistory) {
                 continue;
             }
-            for command in expand_command_reference(&raw) {
+            for command in expand_command_reference(&raw, &catalog.grouped_paths) {
                 report.checked_command_refs += 1;
                 if !catalog.command_exists(&command.path)? {
                     report.findings.push(DriftFinding {
@@ -365,7 +398,7 @@ fn documented_visible_roots(content: &str) -> BTreeMap<String, usize> {
             continue;
         }
         for raw in command_spans(line) {
-            for command in expand_command_reference(&raw) {
+            for command in expand_command_reference(&raw, &BTreeSet::from([Vec::new()])) {
                 let Some(root) = command.path.first() else {
                     continue;
                 };
@@ -426,6 +459,28 @@ fn parse_root_help_commands(help: &str) -> BTreeSet<String> {
     commands
 }
 
+fn parse_subcommand_help_commands(help: &str) -> BTreeSet<String> {
+    let mut in_commands = false;
+    let mut commands = BTreeSet::new();
+    for line in help.lines() {
+        if !line.starts_with(' ') && line.ends_with(':') {
+            in_commands = line.trim_end_matches(':') == "Commands";
+            continue;
+        }
+        if !in_commands {
+            continue;
+        }
+        let trimmed = line.trim_start();
+        let Some(command) = trimmed.split_whitespace().next() else {
+            continue;
+        };
+        if is_command_word(command) {
+            commands.insert(command.to_string());
+        }
+    }
+    commands
+}
+
 fn markdown_heading(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
     if !trimmed.starts_with('#') {
@@ -451,7 +506,7 @@ fn command_spans(line: &str) -> Vec<String> {
     spans
 }
 
-fn expand_command_reference(raw: &str) -> Vec<CommandUse> {
+fn expand_command_reference(raw: &str, grouped_paths: &BTreeSet<Vec<String>>) -> Vec<CommandUse> {
     let Some((_, after_atelier)) = raw.split_once("atelier") else {
         return Vec::new();
     };
@@ -468,7 +523,7 @@ fn expand_command_reference(raw: &str) -> Vec<CommandUse> {
 
     let mut uses = BTreeSet::new();
     for expanded in expand_slash_tokens(&tokens) {
-        let path_len = intended_command_path_len(&expanded);
+        let path_len = intended_command_path_len(&expanded, grouped_paths);
         if path_len == 0 {
             continue;
         }
@@ -542,19 +597,18 @@ fn slash_alternatives(token: &str) -> Vec<String> {
     }
 }
 
-fn intended_command_path_len(tokens: &[String]) -> usize {
-    let Some(root) = tokens.first() else {
-        return 0;
-    };
-    if root == "help" {
-        return 1;
+fn intended_command_path_len(tokens: &[String], grouped_paths: &BTreeSet<Vec<String>>) -> usize {
+    let mut path = Vec::new();
+    for token in tokens {
+        if !is_command_word(token) {
+            break;
+        }
+        if !grouped_paths.contains(&path) {
+            break;
+        }
+        path.push(token.clone());
     }
-    if COMMAND_GROUP_ROOTS.contains(&root.as_str())
-        && tokens.get(1).is_some_and(|token| is_command_word(token))
-    {
-        return 2;
-    }
-    1
+    path.len()
 }
 
 fn option_name(token: &str) -> Option<String> {
@@ -839,9 +893,17 @@ fn relative_path(repo_root: &Path, path: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    fn grouped_paths(paths: &[&[&str]]) -> BTreeSet<Vec<String>> {
+        paths
+            .iter()
+            .map(|path| path.iter().map(|part| (*part).to_string()).collect())
+            .collect()
+    }
+
     #[test]
     fn expands_slash_command_references() {
-        let uses = expand_command_reference("atelier issue show/status/update");
+        let groups = grouped_paths(&[&[], &["issue"]]);
+        let uses = expand_command_reference("atelier issue show/status/update", &groups);
         let displays = uses
             .into_iter()
             .map(|command| command.display)
@@ -854,7 +916,9 @@ mod tests {
 
     #[test]
     fn mission_status_verbose_reference_targets_subcommand_help() {
-        let uses = expand_command_reference("atelier mission status <mission-id> --verbose");
+        let groups = grouped_paths(&[&[], &["mission"]]);
+        let uses =
+            expand_command_reference("atelier mission status <mission-id> --verbose", &groups);
 
         assert_eq!(
             uses,
@@ -867,11 +931,56 @@ mod tests {
     }
 
     #[test]
+    fn visible_grouped_review_references_target_subcommand_help() {
+        let groups = grouped_paths(&[&[], &["review"]]);
+        let uses = expand_command_reference("atelier review approve --body", &groups);
+
+        assert_eq!(
+            uses,
+            vec![CommandUse {
+                display: "atelier review approve --body".to_string(),
+                path: vec!["review".to_string(), "approve".to_string(),],
+                options: vec!["--body".to_string()],
+            }]
+        );
+    }
+
+    #[test]
+    fn nested_visible_group_references_target_nested_subcommand_help() {
+        let groups = grouped_paths(&[&[], &["forgejo"], &["forgejo", "roles"]]);
+        let uses = expand_command_reference("atelier forgejo roles check", &groups);
+
+        assert_eq!(
+            uses,
+            vec![CommandUse {
+                display: "atelier forgejo roles check".to_string(),
+                path: vec![
+                    "forgejo".to_string(),
+                    "roles".to_string(),
+                    "check".to_string(),
+                ],
+                options: Vec::new(),
+            }]
+        );
+    }
+
+    #[test]
     fn root_help_parser_includes_missions_section() {
         let help = "Missions:\n  mission       Read-only mission reports and discovery\n";
         let roots = parse_root_help_commands(help);
 
         assert!(roots.contains("mission"));
+    }
+
+    #[test]
+    fn subcommand_help_parser_extracts_commands_section() {
+        let help = "Configured review artifacts\n\nUsage: atelier review [OPTIONS] <COMMAND>\n\nCommands:\n  approve          Approve a review artifact\n  request-changes  Request changes on a review artifact\n  help             Print this message\n\nOptions:\n  -h, --help       Print help\n";
+        let commands = parse_subcommand_help_commands(help);
+
+        assert!(commands.contains("approve"));
+        assert!(commands.contains("request-changes"));
+        assert!(commands.contains("help"));
+        assert!(!commands.contains("--help"));
     }
 
     #[test]

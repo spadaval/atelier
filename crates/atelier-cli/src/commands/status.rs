@@ -6,107 +6,81 @@ use std::process::Command;
 
 use crate::commands;
 use crate::utils::format_issue_id;
+use atelier_app::read_pipeline::{StatusNextAction, StatusView, WorkRow};
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
-use atelier_sqlite::{Database, RecordSummary};
+use atelier_sqlite::Database;
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let active_issues = current_work_issues(db, workflow_policy.as_ref())?;
-    let active_issue_ids = active_issues
-        .iter()
-        .map(|issue| issue.id.as_str())
-        .collect::<BTreeSet<_>>();
-    let active_role_counts = active_role_counts(&active_issues, workflow_policy.as_ref());
-    let current_missions = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| issue.issue_type == "mission")
-        .map(mission_summary_from_issue)
-        .filter(|mission| mission.status != "closed")
-        .filter(|mission| mission.status != "superseded")
-        .collect::<Vec<_>>();
-    let ready = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| !active_issue_ids.contains(issue.id.as_str()))
-        .filter_map(|issue| {
-            match commands::objective_status::issue_state(db, workflow_policy.as_ref(), &issue) {
-                Ok("ready") => Some(Ok(issue)),
-                Ok(_) => None,
-                Err(error) => Some(Err(error)),
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let ready =
-        commands::objective_status::order_issues_by_work(db, workflow_policy.as_ref(), ready)?;
-    let export_stale = atelier_app::export::canonical_stale_entries(db, state_dir)?;
-    let tracker_state = if export_stale.is_empty() {
-        "current"
-    } else {
-        "stale"
-    };
+    let view = atelier_app::read_pipeline::status_view(db, state_dir, workflow_policy.as_ref())?;
 
     if quiet {
         println!(
             "work={} current_missions={} ready={} tracker={}",
-            if active_issues.is_empty() {
+            if view.work.active.is_empty() {
                 "none".to_string()
             } else {
-                active_issues.len().to_string()
+                view.work.active.len().to_string()
             },
-            current_missions.len(),
-            ready.len(),
-            tracker_state
+            view.current_missions.len(),
+            view.work.ready.len(),
+            view.tracker_state
         );
         return Ok(());
     }
 
+    print_status_view(db, &view)
+}
+
+fn print_status_view(db: &Database, view: &StatusView) -> Result<()> {
     println!("Atelier Status");
     println!("==============");
-    println!("Tracker:       {tracker_state}");
-    println!("Ready work:    {}", ready.len());
+    println!("Tracker:       {}", view.tracker_state);
+    println!("Ready work:    {}", view.work.ready.len());
 
-    if active_issues.is_empty() {
+    if view.work.active.is_empty() {
         println!("Current work:  none");
     } else {
-        println!("Current work:  {} issue(s)", active_issues.len());
-        for issue in &active_issues {
-            let state =
-                commands::objective_status::issue_state(db, workflow_policy.as_ref(), issue)?;
+        println!("Current work:  {} issue(s)", view.work.active.len());
+        for issue in &view.work.active {
             println!(
-                "  {state} {} - {} [{}]",
+                "  {} {} - {} [{}]",
+                issue.state_label(),
                 issue.id,
                 issue.title,
-                issue_status_role(issue, workflow_policy.as_ref()).unwrap_or("role:unconfigured")
+                issue
+                    .status_category
+                    .as_deref()
+                    .unwrap_or("category:unconfigured")
             );
         }
     }
 
-    println!("Current missions: {}", current_missions.len());
-    if active_role_counts.is_empty() {
+    println!("Current missions: {}", view.current_missions.len());
+    if view.active_role_counts.is_empty() {
         println!("Active roles:   none");
     } else {
         println!(
             "Active roles:   {}",
-            render_role_counts(&active_role_counts)
+            render_role_counts(&view.active_role_counts)
         );
     }
 
-    if !export_stale.is_empty() {
-        println!("Local state issues: {}", export_stale.len());
+    if view.stale_records > 0 {
+        println!("Local state issues: {}", view.stale_records);
     }
 
     println!();
     println!("Local State");
     println!("-----------");
     print_git_state();
-    println!("Tracker:  {tracker_state}");
+    println!("Tracker:  {}", view.tracker_state);
 
     println!();
     println!("Evidence Status");
     println!("---------------");
-    print_evidence_status(db, &active_issues, None, None, &ready)?;
+    print_evidence_status_from_rows(db, &view.work.active, &view.work.ready)?;
 
     println!();
     println!("Recent Activity");
@@ -116,48 +90,25 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!();
     println!("Next Actions");
     println!("------------");
-    if current_missions.is_empty() {
-        println!("  Inspect objective readiness: atelier issue status <id>");
-    } else {
-        println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier issue table --kind mission",
-            current_missions.len()
-        );
-    }
-    if ready.is_empty() {
-        println!(
-            "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
-        );
-    } else {
-        println!(
-            "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
-            ready.len()
-        );
-        println!(
-            "  Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
-        );
-    }
-    if !export_stale.is_empty() {
-        println!(
-            "  Repair local Atelier state ({} stale record(s)): atelier doctor --fix",
-            export_stale.len()
-        );
-        println!("  Check committed tracker records after repair: atelier lint");
+    match view.next_action {
+        StatusNextAction::InspectReadyWork { count } => {
+            println!("  Choose ready work ({count} ready issue(s) available): atelier work ready");
+            println!("  Inspect selected work transitions: atelier issue transition <issue-id>");
+        }
+        StatusNextAction::InspectBlockedWork => {
+            println!("  Inspect blocked work (no ready work is available): atelier work blocked");
+        }
+        StatusNextAction::InspectHealth { stale_records } => {
+            println!(
+                "  Repair local Atelier state ({stale_records} stale record(s)): atelier check --fix"
+            );
+            println!("  Check committed tracker records after repair: atelier check");
+        }
+        StatusNextAction::NoSpecificAction => {
+            println!("  No specific next action is available from checkout state.");
+        }
     }
     Ok(())
-}
-
-fn mission_summary_from_issue(issue: Issue) -> RecordSummary {
-    let id = issue.id.clone();
-    RecordSummary {
-        kind: "issue".to_string(),
-        id: id.clone(),
-        title: issue.title,
-        status: issue.status,
-        created_at: issue.created_at,
-        updated_at: issue.updated_at,
-        source_path: format!("issues/{id}.md"),
-    }
 }
 
 pub(crate) fn current_work_issues(
@@ -183,20 +134,6 @@ pub(crate) fn issue_status_role<'a>(
     workflow_policy.and_then(|policy| policy.status_role(&issue.status))
 }
 
-fn active_role_counts(
-    issues: &[Issue],
-    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for issue in issues {
-        let role = issue_status_role(issue, workflow_policy)
-            .unwrap_or("unconfigured")
-            .to_string();
-        *counts.entry(role).or_insert(0) += 1;
-    }
-    counts
-}
-
 fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
     counts
         .iter()
@@ -205,33 +142,19 @@ fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn print_evidence_status(
+fn print_evidence_status_from_rows(
     db: &Database,
-    active_issues: &[Issue],
-    active_mission: Option<&RecordSummary>,
-    mission_snapshot: Option<&commands::objective_status::ObjectiveStatusSnapshot>,
-    ready: &[Issue],
+    active: &[WorkRow],
+    ready: &[WorkRow],
 ) -> Result<()> {
-    let proof_issue_ids = if let Some(snapshot) = mission_snapshot {
-        active_issues
-            .iter()
-            .chain(snapshot.selectable_issues.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    } else {
-        active_issues
-            .iter()
-            .chain(ready.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    };
+    let proof_issue_ids = active
+        .iter()
+        .chain(ready.iter())
+        .map(|issue| issue.id.as_str())
+        .collect::<BTreeSet<_>>();
 
     if proof_issue_ids.is_empty() {
-        if active_mission.is_some() {
-            println!("Attached Proof: irrelevant - no current or selectable mission work");
-        } else {
-            println!("Attached Proof: irrelevant - no current or ready work");
-        }
+        println!("Attached Proof: irrelevant - no current or ready work");
         return Ok(());
     }
 
