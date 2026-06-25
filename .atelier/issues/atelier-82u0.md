@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Consolidate health, relationships, review, and admin escape hatches"
-updated_at: "2026-06-24T19:26:22.591395612+00:00"
+updated_at: "2026-06-25T01:32:52.597337069+00:00"
 ---
 
 ## Description
