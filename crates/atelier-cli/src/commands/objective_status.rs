@@ -396,18 +396,6 @@ pub(crate) fn proof_context(_db: &Database, _issue_id: &str) -> Result<&'static 
     Ok("proof checked by workflow validators")
 }
 
-pub(crate) fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
-    for link in db.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        if link.source_kind == "evidence" || link.target_kind == "evidence" {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 fn collect_issue_and_descendants(
     db: &Database,
     issue_id: &str,

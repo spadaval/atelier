@@ -1,12 +1,12 @@
 use anyhow::Result;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
 use crate::commands;
 use crate::utils::format_issue_id;
-use atelier_app::read_pipeline::{StatusNextAction, StatusView, WorkRow};
+use atelier_app::read_pipeline::{StatusNextAction, StatusView};
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
 use atelier_sqlite::Database;
@@ -33,7 +33,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     print_status_view(db, &view)
 }
 
-fn print_status_view(db: &Database, view: &StatusView) -> Result<()> {
+fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
     println!("Atelier Status");
     println!("==============");
     println!("Tracker:       {}", view.tracker_state);
@@ -76,16 +76,6 @@ fn print_status_view(db: &Database, view: &StatusView) -> Result<()> {
     println!("-----------");
     print_git_state();
     println!("Tracker:  {}", view.tracker_state);
-
-    println!();
-    println!("Evidence Status");
-    println!("---------------");
-    print_evidence_status_from_rows(db, &view.work.active, &view.work.ready)?;
-
-    println!();
-    println!("Recent Activity");
-    println!("---------------");
-    println!("(no active mission focus)");
 
     println!();
     println!("Next Actions");
@@ -140,52 +130,6 @@ fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
         .map(|(role, count)| format!("{role}={count}"))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn print_evidence_status_from_rows(
-    db: &Database,
-    active: &[WorkRow],
-    ready: &[WorkRow],
-) -> Result<()> {
-    let proof_issue_ids = active
-        .iter()
-        .chain(ready.iter())
-        .map(|issue| issue.id.as_str())
-        .collect::<BTreeSet<_>>();
-
-    if proof_issue_ids.is_empty() {
-        println!("Attached Proof: irrelevant - no current or ready work");
-        return Ok(());
-    }
-
-    let mut attached = 0usize;
-    let mut missing = Vec::new();
-    for issue_id in &proof_issue_ids {
-        if commands::objective_status::has_validating_evidence(db, issue_id)? {
-            attached += 1;
-        } else {
-            missing.push((*issue_id).to_string());
-        }
-    }
-
-    if missing.is_empty() {
-        println!("Attached Proof: attached - {attached} issue(s) have validating evidence");
-    } else {
-        println!(
-            "Attached Proof: missing - {} issue(s) without validating evidence; {attached} attached",
-            missing.len()
-        );
-        for issue_id in missing.iter().take(3) {
-            println!("  Missing: {issue_id}");
-        }
-        if missing.len() > 3 {
-            println!("  Missing: {} more issue(s)", missing.len() - 3);
-        }
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
-    }
-
-    Ok(())
 }
 
 fn print_git_state() {

@@ -1304,15 +1304,18 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout.contains("Choose ready work (1 ready issue(s) available): atelier work ready"));
-    assert!(
-        stdout.contains("Inspect selected work transitions: atelier issue transition <issue-id>")
-    );
+    assert!(stdout.contains("No specific next action is available from checkout state."));
+    assert!(!stdout.contains("Choose ready work"));
+    assert!(!stdout.contains("Inspect selected work transitions"));
     assert!(!stdout.contains(
         "Start selected work (ready work exists): atelier issue transition <issue-id> start"
     ));
     assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof:"));
+    assert!(!stdout.contains("Recent Activity"));
+    assert!(!stdout.contains("no active mission focus"));
     let removed_ready_command = ["atelier", "issue", "next"].join(" ");
     assert!(!stdout.contains(&removed_ready_command));
     assert!(stdout.contains("Active roles:   none"));
@@ -1359,8 +1362,18 @@ fn test_root_status_reports_active_mission_contract_fields() {
             run_atelier(dir.path(), &["issue", "link", mission_id, issue_id]);
         assert!(success, "mission add work failed for {issue_id}: {stderr}");
     }
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
-    assert!(success, "block issue failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            blocked_id,
+            blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "blocker link failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "note", ready_id, "Recent focus note"],
@@ -1377,10 +1390,13 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Branch:"));
     assert!(stdout.contains("Current missions: 1"));
     assert!(!stdout.contains("Active Mission"));
-    let (success, mission_status, stderr) =
-        run_atelier(dir.path(), &["issue", "status", mission_id]);
-    assert!(success, "mission status failed: {stderr}");
-    assert!(mission_status.contains("Health:   blocked"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof:"));
+    assert!(!stdout.contains("Recent Activity"));
+    assert!(!stdout.contains("no active mission focus"));
+    let (success, mission_status, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    assert!(success, "mission show failed: {stderr}");
+    assert!(mission_status.contains("Health: blocked"));
     assert!(mission_status.contains(ready_id));
     assert!(mission_status.contains(blocker_id));
     assert!(mission_status.contains("Blocked Work"));
