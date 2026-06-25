@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T00:58:47.184734426+00:00"
+status: "done"
 title: "Make evidence list ordering and omitted wording truthful"
-updated_at: "2026-06-24T20:37:07.897614288+00:00"
+updated_at: "2026-06-25T00:58:47.184734426+00:00"
 ---
 
 ## Description
