@@ -38,5 +38,5 @@ Secondary command families are collapsed into clearer owners: health and repair 
 ## Evidence
 
 - Focused tests or transcripts prove health/check, relationship mutation, review lifecycle, branch/workflow guidance, bundle preview/apply, and man guidance route through the new owners.
-- `rg` proof over help/man/docs sources shows provider setup, branch repair, and destructive maintenance are not taught as normal workflow.
+- Manual check: `rg -n 'forgejo|branch|maintenance|lint|doctor' AGENTS.md docs/product/cli-surface.md crates/atelier-cli/src/commands/man.rs` shows provider setup, branch repair, destructive maintenance, and old health commands are not taught as normal workflow.
 - Domain/app tests prove relationship, review, bundle, health, and branch/workflow decisions are evaluated outside CLI renderers.

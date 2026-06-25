@@ -11,10 +11,10 @@ fn test_init_creates_atelier_directory() {
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
     assert!(stdout.contains("Created"));
     assert!(stdout.contains(".atelier/workflow.yaml"));
-    assert!(stdout.contains("atelier lint"));
+    assert!(stdout.contains("atelier check"));
     assert!(stdout.contains("atelier issue create \"Task\""));
     assert!(stdout.contains("atelier man admin"));
-    let lint_pos = stdout.find("atelier lint").unwrap();
+    let lint_pos = stdout.find("atelier check").unwrap();
     let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
     assert!(
         lint_pos < issue_pos,
@@ -236,7 +236,7 @@ fn test_doctor_fix_refuses_to_modify_malformed_canonical_records() {
     );
     assert!(
         stderr.contains("doctor --fix refused to edit tracked `.atelier/` canonical records")
-            && stderr.contains("atelier lint")
+            && stderr.contains("atelier check")
             && stderr.contains("Invalid YAML front matter")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected doctor --fix refusal: {stderr}"
@@ -253,7 +253,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nDoctor boundary body.\n\n## Outcome\n\nDoctor continues reporting runtime health when canonical Markdown is malformed.\n\n## Evidence\n\n- `atelier doctor` reports runtime health while `atelier lint` reports invalid YAML.";
+    let body = "## Description\n\nDoctor boundary body.\n\n## Outcome\n\nDoctor continues reporting runtime health when canonical Markdown is malformed.\n\n## Evidence\n\n- `atelier doctor` reports runtime health while `atelier check` reports invalid YAML.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -910,7 +910,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "Issues:",
         "Planning:",
         "Records:",
-        "Advanced work:",
         "Maintenance:",
         "Common commands:",
         "Options:",
@@ -919,7 +918,7 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "work", "issue", "bundle", "evidence", "history", "lint", "doctor",
+        "init", "man", "status", "work", "issue", "bundle", "evidence", "history", "check",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -978,6 +977,15 @@ fn test_top_level_help_only_shows_core_commands() {
             .any(|line| line.trim_start().starts_with("diagnostics ")),
         "root help should not present diagnostics as a normal operator command:\n{stdout}"
     );
+    for hidden in ["forgejo", "branch", "maintenance", "lint", "doctor"] {
+        assert!(
+            !stdout.lines().any(|line| {
+                let command = line.trim_start();
+                command == hidden || command.starts_with(&format!("{hidden} "))
+            }),
+            "root help should not expose hidden admin command {hidden}:\n{stdout}"
+        );
+    }
 
     for common in [
         "atelier man",
@@ -999,18 +1007,15 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue transition <issue-id> start",
         "atelier issue transition <issue-id>",
         "atelier issue transition <mission-id> close --reason",
+        "atelier check",
+        "atelier check <issue-id>",
+        "atelier check --fix",
     ] {
         assert!(
             stdout.contains(common),
             "missing common command example {common}"
         );
     }
-    assert!(
-        stdout.contains(
-            "  doctor        Check runtime and derived-state health; use --fix for local repair"
-        ),
-        "maintenance section should still expose doctor:\n{stdout}"
-    );
     let common_commands = stdout
         .split("Common commands:")
         .nth(1)
@@ -1019,6 +1024,10 @@ fn test_top_level_help_only_shows_core_commands() {
     assert!(
         !common_commands.contains("atelier doctor"),
         "common commands should not teach doctor as routine work:\n{stdout}"
+    );
+    assert!(
+        !common_commands.contains("atelier lint"),
+        "common commands should not teach lint as routine work:\n{stdout}"
     );
     assert!(!stdout.contains("workflow validate"));
 

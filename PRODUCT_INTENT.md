@@ -512,7 +512,7 @@ Failure semantics are explicit:
 - Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
   `atelier issue transition <id>`, `atelier review status <id>`, or
-  `atelier lint <id>`.
+  `atelier check <id>`.
 
 This contract blocks implementation work that adds workflow schema support,
 transition execution, review-open/link integration, or docs/help parity until
@@ -689,7 +689,7 @@ atelier issue show atelier-k7mq
 atelier issue link atelier-k7mq atelier-z1p8 --role advances
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
-atelier lint
+atelier check
 atelier doctor
 ```
 

@@ -35,7 +35,7 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  atelier lint                     # Verify tracker records and workflow setup");
+    println!("  atelier check                     # Verify tracker records and workflow setup");
     println!("  atelier issue create \"Task\"     # Create the first tracked issue");
     println!("  atelier man admin                # Review setup and repair guidance");
 
