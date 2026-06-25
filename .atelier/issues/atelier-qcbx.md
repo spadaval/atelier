@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T00:59:16.982967435+00:00"
+status: "done"
 title: "Fix objective status open-work reporting for done children"
-updated_at: "2026-06-24T20:37:04.736836459+00:00"
+updated_at: "2026-06-25T00:59:16.982967435+00:00"
 ---
 
 ## Description
