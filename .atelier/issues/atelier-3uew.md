@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T01:10:56.313576904+00:00"
+status: "done"
 title: "Expand command-surface drift checks across visible grouped commands"
-updated_at: "2026-06-24T20:37:10.879967751+00:00"
+updated_at: "2026-06-25T01:10:56.313576904+00:00"
 ---
 
 ## Description
