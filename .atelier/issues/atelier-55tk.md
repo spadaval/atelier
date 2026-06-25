@@ -24,9 +24,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-25T01:01:17.155413322+00:00"
+status: "done"
 title: "Define command surface and work-view product contract"
-updated_at: "2026-06-25T01:01:00.100564342+00:00"
+updated_at: "2026-06-25T01:01:17.155413322+00:00"
 ---
 
 ## Description
