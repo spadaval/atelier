@@ -35,7 +35,7 @@ transitions and why review commands remain review-artifact operations.
 
 ## Outcome
 
-- `SPEC.md`, `CONTEXT.md`, product docs, and a new or amended ADR define
+- `PRODUCT_INTENT.md`, `CONTEXT.md`, product docs, and a new or amended ADR define
   transition effects as configured, previewable work performed by successful
   issue transitions.
 - The docs distinguish validators from effects: validators gate a transition;

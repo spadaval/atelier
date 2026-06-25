@@ -29,9 +29,9 @@ validation rerun. The product intent should describe the implemented normal
 workflow surfaces instead of presenting old `atelier work start` /
 `atelier work finish` commands or raw `atelier workflow validate` as normal
 representative commands.
-- `SPEC.md` uses root `atelier start <issue-id>` and
+- `PRODUCT_INTENT.md` uses root `atelier start <issue-id>` and
   `atelier finish [issue-id]` for normal tracked work examples.
-- `SPEC.md` representative command examples include current signpost/domain
+- `PRODUCT_INTENT.md` representative command examples include current signpost/domain
   surfaces such as `atelier status`, `atelier prime`, mission status/show,
   issue transition options, evidence capture, lint/export/doctor, and exclude
   raw `atelier workflow validate` as a normal user command.
@@ -39,7 +39,7 @@ representative commands.
   without contradicting the hidden advanced/internal diagnostic boundary.
 - Focused docs drift checks prove SPEC, product docs, help, tests, and Agent
   Factory guidance no longer disagree on the normal signpost surfaces.
-- Focused residue search for stale normal command examples in `SPEC.md`,
+- Focused residue search for stale normal command examples in `PRODUCT_INTENT.md`,
   product docs, Agent Factory guidance, and tracker signpost issues.
 - Focused docs/help parity tests for workflow diagnostics and raw validator
   absence from normal guidance.

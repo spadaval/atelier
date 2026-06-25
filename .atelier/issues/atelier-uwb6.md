@@ -33,7 +33,7 @@ epics, missions, and evidence.
 
 ## Outcome
 
-- `SPEC.md`, `CONTEXT.md`, product docs, architecture docs, and docs index no
+- `PRODUCT_INTENT.md`, `CONTEXT.md`, product docs, architecture docs, and docs index no
   longer describe first-class plan or milestone records as active v1 behavior.
 - The docs explain how to reference plan Markdown from issue/mission/evidence
   bodies without a plan record table.

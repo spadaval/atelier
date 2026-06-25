@@ -199,27 +199,8 @@ fn open_work_ids(snapshot: &commands::objective_status::ObjectiveStatusSnapshot)
         .iter()
         .chain(snapshot.ready_issues.iter())
         .chain(snapshot.blocked_issues.iter())
+        .chain(snapshot.backlog_issues.iter())
         .map(|issue| issue.id.clone())
-        .chain(
-            snapshot
-                .issue_ids
-                .iter()
-                .filter(|id| {
-                    !snapshot
-                        .active_issues
-                        .iter()
-                        .any(|issue| issue.id.as_str() == id.as_str())
-                        && !snapshot
-                            .ready_issues
-                            .iter()
-                            .any(|issue| issue.id.as_str() == id.as_str())
-                        && !snapshot
-                            .blocked_issues
-                            .iter()
-                            .any(|issue| issue.id.as_str() == id.as_str())
-                })
-                .cloned(),
-        )
         .collect()
 }
 

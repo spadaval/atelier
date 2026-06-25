@@ -1448,6 +1448,69 @@ fn test_issue_status_renders_objective_work_health() {
 }
 
 #[test]
+fn test_issue_status_does_not_report_done_children_as_open_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Terminal objective",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "objective issue create failed: {stderr}");
+    let objective_id = issue_id_by_title(dir.path(), "Terminal objective");
+    let objective_id = objective_id.as_str();
+
+    for title in ["Done child one", "Done child two"] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", title, "--parent", objective_id],
+        );
+        assert!(success, "child issue create failed for {title}: {stderr}");
+        let child_id = issue_id_by_title(dir.path(), title);
+        let child_id = child_id.as_str();
+
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "transition", child_id, "start"]);
+        assert!(success, "child start failed for {child_id}: {stderr}");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{child_id}"),
+                "--kind",
+                "validation",
+                "done child proof",
+            ],
+        );
+        assert!(
+            success,
+            "child evidence record failed for {child_id}: {stderr}"
+        );
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "transition", child_id, "close", "--reason", "done"],
+        );
+        assert!(success, "child close failed for {child_id}: {stderr}");
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
+    assert!(success, "issue status failed: {stderr}");
+    assert!(stdout.contains("Health:   terminal"), "{stdout}");
+    assert!(stdout.contains("Total: ready 0, blocked 0, done 2, backlog 0"));
+    assert!(stdout.contains("Work: closed"), "{stdout}");
+    assert!(!stdout.contains("Work: open"), "{stdout}");
+    assert!(!stdout.contains("Close or defer open work"), "{stdout}");
+}
+
+#[test]
 fn test_issue_link_replaces_objective_relationship_mutations() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1632,18 +1695,21 @@ fn test_diagnostics_json_docs_define_local_operator_boundary() {
 }
 
 #[test]
-fn test_spec_representative_commands_match_signpost_surfaces() {
-    let spec = std::fs::read_to_string(workspace_root().join("SPEC.md")).unwrap();
+fn test_product_intent_representative_commands_match_signpost_surfaces() {
+    let product_intent =
+        std::fs::read_to_string(workspace_root().join("PRODUCT_INTENT.md")).unwrap();
 
-    assert!(!spec.contains("atelier work start"));
-    assert!(!spec.contains("atelier work finish"));
-    assert!(!spec.contains("atelier workflow validate"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 start"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 close --reason \"done\""));
-    assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
-    assert!(spec.contains("atelier status"));
-    assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
-    assert!(spec
+    assert!(!product_intent.contains("atelier work start"));
+    assert!(!product_intent.contains("atelier work finish"));
+    assert!(!product_intent.contains("atelier workflow validate"));
+    assert!(product_intent.contains("atelier issue transition atelier-z1p8 start"));
+    assert!(
+        product_intent.contains("atelier issue transition atelier-z1p8 close --reason \"done\"")
+    );
+    assert!(!product_intent.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
+    assert!(product_intent.contains("atelier status"));
+    assert!(product_intent.contains("atelier issue transition atelier-z1p8 --options"));
+    assert!(product_intent
         .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
 }
 

@@ -1,4 +1,11 @@
-# Atelier Specification
+# Atelier Product Intent
+
+This document defines Atelier's product direction, principles, domain model,
+and target-state constraints. It is not the complete current behavior manual.
+Current behavior lives in `docs/product/`, architecture contracts live in
+`docs/architecture/`, workflow mechanics live in `.atelier/workflow.yaml` and
+Atelier command output, and agent process lives in
+`.agents/skills/agent-factory/`.
 
 Atelier is a local-first, agent-native work tracker for complex software missions.
 It starts from the Chainlink codebase, but the intended product is not a thin

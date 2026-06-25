@@ -19,7 +19,7 @@ updated_at: "2026-06-11T03:50:58.378727872+00:00"
 
 ## Description
 
-Reconcile SPEC.md, CONTEXT.md, architecture docs, and human CLI output guidance with the resolved removal of command-result JSON mode. Acceptance: docs no longer state that stable JSON command output is the automation contract; they describe human output, quiet output, canonical Markdown records, and projections accurately.
+Reconcile PRODUCT_INTENT.md, CONTEXT.md, architecture docs, and human CLI output guidance with the resolved removal of command-result JSON mode. Acceptance: docs no longer state that stable JSON command output is the automation contract; they describe human output, quiet output, canonical Markdown records, and projections accurately.
 Outcome was not specified in the legacy issue record.
 Evidence was not specified in the legacy issue record.
 

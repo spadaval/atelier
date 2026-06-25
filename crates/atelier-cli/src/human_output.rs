@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeSet;
+use std::io::IsTerminal;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ColorChoice {
@@ -28,6 +29,14 @@ impl StylePolicy {
             ColorChoice::Never => false,
         };
         Self { color }
+    }
+
+    pub(crate) fn for_stdout() -> Self {
+        Self::from_context(
+            ColorChoice::Auto,
+            std::io::stdout().is_terminal(),
+            std::env::var_os("NO_COLOR").is_some(),
+        )
     }
 
     pub(crate) fn paint(self, style: TextStyle, text: impl AsRef<str>) -> String {

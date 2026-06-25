@@ -5,9 +5,9 @@ surface, human output, policy semantics, and Mission Control experience.
 Implementation ownership, persistence boundaries, and local runtime mechanics
 live in [Architecture](../architecture/index.md).
 
-Product intent starts in [SPEC.md](../../SPEC.md), and domain language lives in
-[CONTEXT.md](../../CONTEXT.md). Product docs refine those targets into contracts
-that can be implemented and validated.
+Product direction starts in [PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), and
+domain language lives in [CONTEXT.md](../../CONTEXT.md). Product docs refine
+that direction into contracts that can be implemented and validated.
 
 ## Doctrine
 

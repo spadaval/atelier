@@ -1616,11 +1616,25 @@ pub fn print_issue_transition_options(
     issue: &Issue,
     options: &[IssueTransitionOption],
 ) {
-    human_output::print_heading(&format!("Issue Transitions {} - {}", issue.id, issue.title));
-    print_heading("State");
-    println!("Status:   {}", issue.status);
-    println!("Type:     {}", issue.issue_type);
-    println!("Options:  {}", options.len());
+    println!(
+        "{}",
+        render_issue_transition_options(db, issue, options, StylePolicy::for_stdout())
+    );
+}
+
+fn render_issue_transition_options(
+    db: &Database,
+    issue: &Issue,
+    options: &[IssueTransitionOption],
+    style_policy: StylePolicy,
+) -> String {
+    let mut lines = vec![
+        human_output::heading(&format!("Issue Transitions {} - {}", issue.id, issue.title)),
+        human_output::section_heading("State"),
+        format!("Status:   {}", issue.status),
+        format!("Type:     {}", issue.issue_type),
+        format!("Options:  {}", options.len()),
+    ];
     let needs_branch_context = options.iter().any(|option| {
         crate::commands::workflow_planning::planned_actions_need_branch_context(
             &option.planned_actions,
@@ -1628,20 +1642,23 @@ pub fn print_issue_transition_options(
     });
     if needs_branch_context {
         if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
-            print_heading("Branch Context");
-            println!(
+            lines.push(human_output::section_heading("Branch Context"));
+            lines.push(format!(
                 "Owner:    {} {} ({})",
                 branch_owner_label(&context.resolution.owner_kind),
                 context.resolution.owner_id,
                 context.resolution.owner_issue_type
-            );
-            println!("Expected: {}", context.resolution.expected_branch);
-            println!("Base:     {}", context.resolution.base_branch);
-            println!(
+            ));
+            lines.push(format!("Expected: {}", context.resolution.expected_branch));
+            lines.push(format!("Base:     {}", context.resolution.base_branch));
+            lines.push(format!(
                 "Current:  {}",
                 context.current_branch.as_deref().unwrap_or("(detached)")
-            );
-            println!("State:    {}", branch_lifecycle_state_line(&context));
+            ));
+            lines.push(format!(
+                "State:    {}",
+                branch_lifecycle_state_line(&context)
+            ));
         }
     }
     for option in options {
@@ -1650,24 +1667,29 @@ pub fn print_issue_transition_options(
         } else {
             DecisionState::Blocked
         };
-        println!();
-        println!(
+        lines.push(String::new());
+        lines.push(format!(
             "{} [{}]",
             option.name,
-            decision.render(StylePolicy::plain())
-        );
-        println!("  Decision: {}", decision.render(StylePolicy::plain()));
-        println!("  From: {}", option.from.join(", "));
-        println!("  To:   {}", option.to);
-        print_transition_detail("Validators", &option.validator_results);
-        print_text_list("Blockers", &option.blockers);
-        print_text_list(
+            decision.render(style_policy)
+        ));
+        lines.push(format!("  Decision: {}", decision.render(style_policy)));
+        lines.push(format!("  From: {}", option.from.join(", ")));
+        lines.push(format!("  To:   {}", option.to));
+        lines.extend(render_transition_detail(
+            "Validators",
+            &option.validator_results,
+            style_policy,
+        ));
+        lines.extend(render_text_list("Blockers", &option.blockers));
+        lines.extend(render_text_list(
             "Planned Actions",
             &planned_action_lines(&option.planned_actions),
-        );
-        print_text_list("Description", &option.descriptions);
-        print_text_list("Commands", &[option.command.clone()]);
+        ));
+        lines.extend(render_text_list("Description", &option.descriptions));
+        lines.extend(render_text_list("Commands", &[option.command.clone()]));
     }
+    lines.join("\n")
 }
 
 pub fn evaluate(
@@ -1879,10 +1901,20 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
-    print_heading(title);
+    for line in render_transition_detail(title, results, StylePolicy::for_stdout()) {
+        println!("{line}");
+    }
+}
+
+fn render_transition_detail(
+    title: &str,
+    results: &[ValidatorResult],
+    style_policy: StylePolicy,
+) -> Vec<String> {
+    let mut lines = vec![human_output::section_heading(title)];
     if results.is_empty() {
-        println!("(none)");
-        return;
+        lines.push("(none)".to_string());
+        return lines;
     }
     for result in results {
         let decision = if result.passed {
@@ -1890,27 +1922,35 @@ fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
         } else {
             DecisionState::Fail
         };
-        println!(
+        lines.push(format!(
             "  {}  {}",
-            decision.render(StylePolicy::plain()),
+            decision.render(style_policy),
             result.validator
-        );
-        println!("      {}", result.reason);
+        ));
+        lines.push(format!("      {}", result.reason));
         if let Some(help) = &result.help {
-            println!("      Hint: {help}");
+            lines.push(format!("      Hint: {help}"));
         }
     }
+    lines
 }
 
 fn print_text_list(title: &str, values: &[String]) {
-    print_heading(title);
+    for line in render_text_list(title, values) {
+        println!("{line}");
+    }
+}
+
+fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
+    let mut lines = vec![human_output::section_heading(title)];
     if values.is_empty() {
-        println!("(none)");
-        return;
+        lines.push("(none)".to_string());
+        return lines;
     }
     for value in values {
-        println!("  {value}");
+        lines.push(format!("  {value}"));
     }
+    lines
 }
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
@@ -2965,6 +3005,7 @@ pub(crate) fn repo_root() -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::commands::workflow_planning::plan_actions_for_resolution;
+    use crate::human_output::ColorChoice;
     use atelier_app::workflow_policy::{
         ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
     };
@@ -2987,6 +3028,83 @@ mod tests {
             updated_at: Utc::now(),
             closed_at: None,
         }
+    }
+
+    fn setup_test_db() -> (Database, TempDir) {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("test.db")).unwrap();
+        (db, dir)
+    }
+
+    fn transition_option(allowed: bool, passed: bool) -> IssueTransitionOption {
+        IssueTransitionOption {
+            name: "start".to_string(),
+            from: vec!["todo".to_string()],
+            to: "in_progress".to_string(),
+            allowed,
+            blockers: Vec::new(),
+            validator_results: vec![ValidatorResult {
+                target_kind: "issue".to_string(),
+                target_id: "atelier-test".to_string(),
+                transition: "start".to_string(),
+                validator: "tracker.current".to_string(),
+                passed,
+                reason: "tracker is current".to_string(),
+                help: None,
+                elapsed_ms: 1,
+            }],
+            planned_actions: Vec::new(),
+            descriptions: vec!["Begin work.".to_string()],
+            command: "atelier issue transition atelier-test start".to_string(),
+        }
+    }
+
+    #[test]
+    fn transition_options_use_color_when_interactive_context_allows_it() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, true, false);
+
+        let output =
+            render_issue_transition_options(&db, &issue, &[transition_option(true, true)], policy);
+
+        assert!(output.contains("\u{1b}[32mallowed\u{1b}[0m"));
+        assert!(output.contains("Decision: \u{1b}[32mallowed\u{1b}[0m"));
+        assert!(output.contains("tracker.current"));
+    }
+
+    #[test]
+    fn transition_options_stay_plain_when_no_color_is_set() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, true, true);
+
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(false, false)],
+            policy,
+        );
+
+        assert!(!output.contains("\u{1b}["));
+        assert!(output.contains("start [blocked]"));
+        assert!(output.contains("Decision: blocked"));
+        assert!(output.contains("fail  tracker.current"));
+    }
+
+    #[test]
+    fn transition_options_stay_plain_when_stdout_is_not_interactive() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, false, false);
+
+        let output =
+            render_issue_transition_options(&db, &issue, &[transition_option(true, true)], policy);
+
+        assert!(!output.contains("\u{1b}["));
+        assert!(output.contains("start [allowed]"));
+        assert!(output.contains("Decision: allowed"));
+        assert!(output.contains("pass  tracker.current"));
     }
 
     fn action(name: &str) -> atelier_app::workflow_policy::ActionDefinition {

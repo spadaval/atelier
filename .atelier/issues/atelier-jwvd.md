@@ -37,5 +37,5 @@ Update product and domain documentation for the new workflow policy language. Co
 ## Evidence
 
 - docs/product/workflow-configuration.md contains the new schema and examples.
-- SPEC.md and CONTEXT.md use the new vocabulary consistently.
+- PRODUCT_INTENT.md and CONTEXT.md use the new vocabulary consistently.
 - No docs present `review` or `validation` as required global categories.

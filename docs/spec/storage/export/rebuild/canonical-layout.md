@@ -619,6 +619,6 @@ individual command handlers.
 
 ## Deferred Or Future Paths
 
-All paths listed in `SPEC.md` are covered above. `mission-control.json` is
+All paths listed in `PRODUCT_INTENT.md` are covered above. `mission-control.json` is
 explicitly deferred as a derived projection until Milestone 6; its presence must
 not be required to rebuild SQLite during Milestone 2.

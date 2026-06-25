@@ -17,38 +17,43 @@ doc surfaces instead of duplicating that contract.
 
 Static docs describe the command surface and ownership boundaries. They do not
 decide the next lifecycle action for a specific work item. Operators and agents
-use `atelier status`, record detail, issue status <objective-id>, and transition option
-output to decide what to do next in the current checkout.
+use `atelier status`, `atelier work`, `atelier issue show <id>`, and
+`atelier issue transition <id>` output to decide what to do next in the current
+checkout.
 
-The command audit may document target replacement forms before they are
-implemented. The workflow-first list below names only command paths that exist
-in the current CLI surface.
+The command audit records the target replacement forms before every old command
+path has been removed. This file names the product contract the CLI is moving
+toward; implementation remnants must either be hidden/admin-only or deleted
+without compatibility aliases once their replacement owner is in place.
 
 ## Workflow-First Core
 
-Workflow-first commands are stable enough to appear in `atelier --help` and are
-the repo-owned surfaces Agent Factory may route operators toward. The command
-output, not this static list, decides the next process step for a concrete
-issue or mission:
+Workflow-first commands are stable enough to appear in normal help and are the
+repo-owned surfaces Agent Factory may route operators toward. The command
+output, not this static list, decides the next process step for a concrete issue
+or mission:
 
 - `atelier init`
 - `atelier man [worker|reviewer|validator|manager|admin]`
 - `atelier status`
+- `atelier work ...`
 - `atelier issue ...`
-- `atelier issue create "..." --issue-type mission`
+- `atelier issue create "..." --type mission`
 - `atelier issue show <objective-id>`
-- `atelier issue status <objective-id>`
 - `atelier issue link/unlink <objective-id> <issue-id> --role advances`
-- `atelier issue block/unblock <objective-id> <issue-id>`
-- `atelier search <query>`
 - `atelier bundle preview/apply`
-- `atelier evidence record/show/attach/list`
-- `atelier review open/link/status/show/merge/comments/comment/approve/request-changes/resolve`
-- `atelier forgejo roles check/provision`
+- `atelier evidence record/show/list`
+- `atelier review open/show/submit/resolve/merge`
 - `atelier history`
 - `atelier issue note <id> "..."`
-- `atelier maintenance ...`
-- `atelier lint`
+- `atelier check`
+- `atelier prune`
+
+The target normal surface deliberately excludes `mission`, `issue status`,
+`issue blocked`, `issue table`, `issue block`, `issue unblock`, root `search`,
+scoped history variants, provider roots such as `forgejo`, normal branch repair,
+destructive maintenance, and separate `lint`/`doctor` health commands. Those
+names are implementation debt during the migration, not compatibility contracts.
 
 ## Command Categories
 
@@ -58,9 +63,9 @@ may be cited as ordinary workflow proof.
 
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
-| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, issue status <objective-id>, and Agent Factory workflow guidance. | `status`, `issue show`, `issue transition --options`, `issue status <objective-id>`, `evidence record`, `lint`, plus lifecycle or review primitives when command output routes there | `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
-| Admin maintenance | Visible but specialized commands for setup, explicit local-state repair, explicit pruning, destructive record surgery, or manual owner-branch recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor`, `doctor --fix`, `prune`, `prune --apply`, `maintenance delete ... --force`, `branch status`, `branch merge` | `issue status <objective-id>`, hidden `workflow check`, hidden `diagnostics slow` |
-| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `issue status <objective-id>`, `issue transition --options` |
+| Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, manage review artifacts, inspect high-level history, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `review show`, `history`, `bundle preview`, `check` | `mission`, `issue status`, `issue blocked`, `issue table`, root `search`, `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, destructive `maintenance delete` |
+| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply`; hidden/manual branch or provider repair only when a transition cannot own it safely | `issue status <objective-id>`, `mission status`, hidden `workflow check`, hidden `diagnostics slow` |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `check`, `issue show`, `issue transition <id>` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
 
 Tracked Markdown under `.atelier/` is authoritative. Local SQLite projection
