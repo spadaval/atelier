@@ -325,12 +325,12 @@ mod tests {
             [
                 FooterAction::new("Inspect", "atelier issue show atelier-1234"),
                 FooterAction::new("Inspect", "atelier issue show atelier-1234"),
-                FooterAction::new("Validate", "atelier lint atelier-1234"),
+                FooterAction::new("Validate", "atelier check atelier-1234"),
             ],
         );
         assert_eq!(
             footer,
-            "Next Commands\n-------------\n  Inspect: atelier issue show atelier-1234\n  Validate: atelier lint atelier-1234"
+            "Next Commands\n-------------\n  Inspect: atelier issue show atelier-1234\n  Validate: atelier check atelier-1234"
         );
     }
 
@@ -339,14 +339,14 @@ mod tests {
         let callout = RecoveryCallout::new(
             "Recovery",
             [
-                "run `atelier lint`",
+                "run `atelier check`",
                 "fix the named canonical record",
                 "rerun the blocked command",
             ],
         );
         assert_eq!(
             callout.render(),
-            "Recovery\n--------\n  1. run `atelier lint`\n  2. fix the named canonical record\n  3. rerun the blocked command"
+            "Recovery\n--------\n  1. run `atelier check`\n  2. fix the named canonical record\n  3. rerun the blocked command"
         );
     }
 

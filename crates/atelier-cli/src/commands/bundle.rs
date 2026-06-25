@@ -933,12 +933,12 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         println!("Next Commands");
         println!("-------------");
         println!("  atelier issue show {id}");
-        println!("  atelier lint");
+        println!("  atelier check");
     } else if !preview {
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier lint");
+        println!("  atelier check");
     }
     Ok(())
 }

@@ -34,17 +34,11 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
-Advanced work:
-  branch        Inspect and repair epic review branches
-
 Maintenance:
+  check         Validate tracker health; use --fix for local repair
   prune         Prune accumulated artifacts safely
-  maintenance   Run explicit destructive maintenance commands
-  lint          Validate tracker records
-  doctor        Check runtime and derived-state health; use --fix for local repair
 
 Common commands:
   atelier man
@@ -71,6 +65,9 @@ Common commands:
   atelier issue transition <issue-id>
   atelier issue transition <issue-id> start
   atelier issue transition <issue-id> close --reason \"...\"
+  atelier check
+  atelier check <issue-id>
+  atelier check --fix
   atelier prune
   atelier prune --apply
   atelier help <command>
@@ -179,6 +176,7 @@ enum Commands {
     },
 
     /// Configure and verify Forgejo integration
+    #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]
         action: ForgejoCommands,
@@ -220,6 +218,7 @@ enum Commands {
     },
 
     /// Git branch helpers for epic review branches
+    #[command(hide = true)]
     Branch {
         #[command(subcommand)]
         action: BranchCommands,
@@ -233,6 +232,7 @@ enum Commands {
     },
 
     /// Destructive maintenance commands
+    #[command(hide = true)]
     Maintenance {
         #[command(subcommand)]
         action: MaintenanceCommands,
@@ -248,13 +248,24 @@ enum Commands {
         retention_days: Option<u64>,
     },
 
+    /// Validate tracker health; repair ignored local runtime state with --fix
+    Check {
+        /// Optional issue ID or imported source ID
+        id: Option<String>,
+        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        #[arg(long)]
+        fix: bool,
+    },
+
     /// Validate tracker records
+    #[command(hide = true)]
     Lint {
         /// Optional issue ID or imported source ID
         id: Option<String>,
     },
 
     /// Check tracker runtime and derived-state health
+    #[command(hide = true)]
     Doctor {
         /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
         #[arg(long)]
@@ -1147,6 +1158,26 @@ fn run() -> Result<()> {
             commands::prune::run(tracker, apply, retention_days)
         }
 
+        Commands::Check { id, fix } => {
+            if fix {
+                if id.is_some() {
+                    bail!("atelier check --fix cannot be scoped to one issue");
+                }
+                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+                commands::issue::doctor(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    storage.projection_db_existed,
+                    true,
+                )
+            } else {
+                let db = lint_db()?;
+                commands::issue::lint(&db, id.as_deref())
+            }
+        }
+
         Commands::Lint { id } => {
             let db = lint_db()?;
             commands::issue::lint(&db, id.as_deref())
@@ -1267,6 +1298,13 @@ fn command_identity(command: &Commands) -> &'static str {
                 "prune --apply"
             } else {
                 "prune"
+            }
+        }
+        Commands::Check { fix, .. } => {
+            if *fix {
+                "check --fix"
+            } else {
+                "check"
             }
         }
         Commands::Lint { .. } => "lint",

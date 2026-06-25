@@ -178,13 +178,13 @@ fn print_workflow_read_guidance(context: WorkflowReadContext) {
     if context.missing_policy {
         println!();
         println!(
-            "Workflow policy missing: run `atelier lint` to inspect tracker setup and restore the committed policy."
+            "Workflow policy missing: run `atelier check` to inspect tracker setup and restore the committed policy."
         );
     }
     if context.unmigrated_filter {
         println!();
         println!(
-            "Issue statuses outside the configured workflow are present; fix the records, then rerun `atelier lint`."
+            "Issue statuses outside the configured workflow are present; fix the records, then rerun `atelier check`."
         );
     }
 }
@@ -526,7 +526,7 @@ fn render_issue_show_human(
         println!("----------------");
         println!("{degraded}");
         println!("Fallback: showing the last valid local projection for orientation only.");
-        println!("Next: atelier lint {}", object.id);
+        println!("Next: atelier check {}", object.id);
     }
 
     render_parent_context(db, canonical_id)?;
@@ -1105,7 +1105,7 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
     if let Some(path) = canonical_issue_path(canonical_id)? {
         println!("  Edit issue Markdown: {}", path.display());
     }
-    println!("  Validate this issue: atelier lint {}", object.id);
+    println!("  Validate this issue: atelier check {}", object.id);
     println!("  Add a note: atelier issue note {} \"...\"", object.id);
     println!(
         "  Show full activity: atelier history --issue {}",
@@ -2063,7 +2063,7 @@ pub fn create_lifecycle(
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier lint {}", object.id);
+        println!("  Validate this issue: atelier check {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
@@ -2082,7 +2082,7 @@ pub fn create_lifecycle(
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier lint {}", object.id);
+        println!("  Validate this issue: atelier check {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
@@ -2177,7 +2177,7 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
     })?;
     atelier_app::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
         anyhow!(
-            "workflow policy file is required at {}; run `atelier lint` to inspect setup and restore the committed policy before creating issues",
+            "workflow policy file is required at {}; run `atelier check` to inspect setup and restore the committed policy before creating issues",
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
         )
     })
@@ -2628,7 +2628,7 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier lint");
+        println!("  atelier check");
         Ok(())
     }
 }
@@ -2642,7 +2642,7 @@ pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
     println!("Next Commands");
     println!("-------------");
     println!("  atelier doctor");
-    println!("  atelier lint");
+    println!("  atelier check");
     Ok(())
 }
 

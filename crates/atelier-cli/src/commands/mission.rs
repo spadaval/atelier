@@ -518,7 +518,7 @@ fn print_reliability_summary(
                 compact_strings(&section_gaps.malformed)
             };
             println!("Malformed Work: found - {reason}");
-            println!("  Next: atelier lint");
+            println!("  Next: atelier check");
         }
     }
 
@@ -555,7 +555,7 @@ fn print_reliability_summary(
 
     println!("Drill-downs:");
     println!("  atelier mission status {} --verbose", mission.id);
-    println!("  atelier lint");
+    println!("  atelier check");
     Ok(())
 }
 
@@ -585,7 +585,7 @@ fn print_section_gap_signal(label: &str, ids: &[String]) {
         println!("{label}: none");
     } else {
         println!("{label}: {} issue(s) - {}", ids.len(), compact_strings(ids));
-        println!("  Next: atelier lint");
+        println!("  Next: atelier check");
     }
 }
 
@@ -693,9 +693,9 @@ fn terminal_validator_user_text(
             "Linked Issue Records",
             "parseable",
             "malformed",
-            "atelier lint",
+            "atelier check",
         )),
-        "lint.none_blocking" => Some(("Blocking Lints", "clear", "failing", "atelier lint")),
+        "lint.none_blocking" => Some(("Blocking Lints", "clear", "failing", "atelier check")),
         "command_surface_current" => Some((
             "Docs/Help Drift",
             "clear",
@@ -921,7 +921,7 @@ fn mission_terminal_status(
             transition: MISSION_TERMINAL_TRANSITION.to_string(),
             validator: "workflow_policy".to_string(),
             passed: false,
-            reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
+            reason: format!("{error:#}; run `atelier check` for workflow/config diagnostics"),
             help: None,
             elapsed_ms: 0,
         }],

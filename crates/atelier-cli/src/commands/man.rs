@@ -216,8 +216,8 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
         }
         Role::Admin => {
-            println!("  1. atelier lint - Validate committed tracker state and workflow policy.");
-            println!("  2. atelier doctor - Inspect runtime and projection health.");
+            println!("  1. atelier check - Validate committed tracker state and workflow policy.");
+            println!("  2. atelier check --fix - Repair ignored runtime and projection health.");
             println!(
                 "  3. atelier issue transition <id> - Inspect live validators and planned actions."
             );
@@ -266,13 +266,10 @@ fn print_normal_loop(role: Role) {
         }
         Role::Admin => {
             println!("  atelier init");
-            println!("  atelier lint");
-            println!("  atelier doctor");
-            println!("  atelier doctor --fix");
-            println!("  atelier branch status");
+            println!("  atelier check");
+            println!("  atelier check --fix");
             println!("  atelier workflow check");
             println!("  atelier prune --dry-run");
-            println!("  atelier maintenance delete <kind> <id> --force");
             println!("  docs/product/workflow-configuration.md");
             println!("  docs/product/work-model.md");
         }

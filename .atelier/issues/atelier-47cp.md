@@ -20,9 +20,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-25T01:31:32.257722279+00:00"
+status: "done"
 title: "Remove redundant status, mission, blocker, table, and search surfaces"
-updated_at: "2026-06-25T01:30:19.796547482+00:00"
+updated_at: "2026-06-25T01:31:32.257722279+00:00"
 ---
 
 ## Description

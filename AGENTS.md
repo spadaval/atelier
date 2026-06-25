@@ -33,4 +33,4 @@ product policy in the linked sources instead of duplicating it here.
 - Rust tests: `cargo nextest run`
 - Extended ignored tests: `cargo nextest run --profile extended --run-ignored=only`
 - Whitespace check: `git diff --check`
-- Tracker lint: `atelier lint`
+- Tracker check: `atelier check`

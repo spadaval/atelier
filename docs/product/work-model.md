@@ -125,7 +125,7 @@ Choose the proof surface by the claim being closed:
 | --- | --- | --- | --- |
 | Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier issue note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
 | Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
-| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
+| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier check <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
 | Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent completion should map the parent claim to the independent validation issue and its evidence ID. |
 | Epic or mission completion | Validation issue that maps parent claims to child proof | Record evidence on the validation issue. | Mission completion comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
@@ -141,7 +141,7 @@ atelier issue transition atelier-isd5 request_validation
 Example for command-backed validation:
 
 ```text
-atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/atelier lint atelier-zrqa
+atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/atelier check atelier-zrqa
 ```
 
 Example for independent completion proof:
@@ -457,9 +457,9 @@ checkouts. When more than one issue is `in_progress` in the same checkout,
 `atelier status` and `atelier work ready`/`atelier work blocked` should render that
 set directly rather than nominate one hidden active issue.
 
-The visible worktree command surface is removed pending redesign. Explicit
-branch helpers such as `atelier branch for-epic <epic-id>` create or locate
-reviewable branches for diagnostics, advanced repair, or manual recovery.
+The visible worktree command surface is removed pending redesign. Hidden branch
+helpers may create or locate reviewable branches for diagnostics, advanced
+repair, or manual recovery.
 Routine worker guidance should come from `atelier status`, issue detail,
 transition output, and any recovery text they print. Workflow-defined general
 hooks are deferred in v1; transition actions are the narrow configured
