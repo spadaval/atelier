@@ -302,7 +302,7 @@ sections chosen by the record contract:
 optional. Linked work, blockers, evidence, and other supporting records are
 typed links, not prose-only lists. Checkpoint or plan references are prose or
 repository paths inside those sections, not v1 relationship tables.
-`atelier issue show <objective-id>` and `atelier issue status <objective-id>`
+`atelier issue show <objective-id>` and `atelier issue transition <objective-id>`
 render objective work, blockers, and evidence from canonical relationships.
 They count only configured work relationships such as `advances` issue links as
 objective work and only direct blocker links as objective blockers; other
@@ -444,7 +444,7 @@ Action failure handling must be explicit:
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
 required. If the work state changed, the operator should record a note when
-useful, inspect `atelier issue transition <id> --options`, and move the issue
+useful, inspect `atelier issue transition <id>`, and move the issue
 to the next canonical workflow status instead of clearing hidden runtime state.
 The former root abandon and repair cleanup flows have therefore been removed
 rather than kept as target-state workflow guidance.
@@ -454,14 +454,14 @@ because each checkout carries its own tracked `.atelier/` record copy on its
 branch. Reconciliation happens through normal Git review and merge of the
 canonical Markdown records, not by sharing runtime work-association rows across
 checkouts. When more than one issue is `in_progress` in the same checkout,
-`atelier status` and `atelier mission status <mission-id>` should render that
+`atelier status` and `atelier work ready`/`atelier work blocked` should render that
 set directly rather than nominate one hidden active issue.
 
 The visible worktree command surface is removed pending redesign. Explicit
 branch helpers such as `atelier branch for-epic <epic-id>` create or locate
 reviewable branches for diagnostics, advanced repair, or manual recovery.
 Routine worker guidance should come from `atelier status`, issue detail,
-transition options, and any recovery text they print. Workflow-defined general
+transition output, and any recovery text they print. Workflow-defined general
 hooks are deferred in v1; transition actions are the narrow configured
 integration points described by workflow policy.
 

@@ -214,7 +214,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     );
 
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &ready_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &ready_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
     assert!(options_out.contains("evidence.attached"), "{options_out}");
@@ -519,10 +519,8 @@ fn test_mission_terminal_status_and_options_use_configured_objective_validators(
     assert!(status_out.contains("Work: open"), "{status_out}");
     assert!(status_out.contains(&work_id), "{status_out}");
 
-    let (success, options_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--options"],
-    );
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
         options_out.contains("objective.work_present"),
@@ -564,10 +562,8 @@ fn test_mission_close_uses_configured_objective_validators() {
     );
     commit_all(dir.path(), "configured validator close ready");
 
-    let (success, options_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--options"],
-    );
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
         options_out.contains("pass  objective.work_present"),
@@ -3344,8 +3340,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         );
         assert!(!show_out.contains("branch for-epic"), "{show_out}");
 
-        let (success, options_out, stderr) =
-            run_atelier(dir.path(), &["issue", "transition", id, "--options"]);
+        let (success, options_out, stderr) = run_atelier(dir.path(), &["issue", "transition", id]);
         assert!(success, "transition options failed for {id}: {stderr}");
         assert!(options_out.contains("Branch Context"), "{options_out}");
         assert!(options_out.contains(&owner), "{options_out}");

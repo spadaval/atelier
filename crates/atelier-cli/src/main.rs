@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
-    lint_db, state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
+    CommandStorageAccess,
 };
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
@@ -23,13 +23,10 @@ mod issue_cli;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
+  work          Show operational multi-issue work views
 
 Issues:
-  issue         Create, list, show, update, close, and manage blockers
-  search        Search issues, relationships, and activity
-
-Missions:
-  mission       Read-only mission reports and discovery
+  issue         Create, list, show, update, transition, note, and manage links
 
 Planning:
   bundle        Preview and apply one-shot graph bundle files
@@ -57,24 +54,21 @@ Common commands:
   atelier man manager
   atelier man admin
   atelier status
-  atelier mission list
-  atelier mission status <mission-id>
+  atelier work ready
+  atelier work blocked
   atelier issue list
   atelier issue list --ready
   atelier issue list --blocked
   atelier issue show <id>
-  atelier issue block <blocked-id> <blocker-id>
-  atelier issue unblock <blocked-id> <blocker-id>
-  atelier issue blocked [<id>]
+  atelier issue link <blocked-id> <blocker-id> --role blocked_by
+  atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
   atelier issue transition <mission-id> close --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
-  atelier forgejo roles check
-  atelier history --mission <id>
-  atelier history --issue <id>
-  atelier issue transition <issue-id> --options
+  atelier history
+  atelier issue transition <issue-id>
   atelier issue transition <issue-id> start
   atelier issue transition <issue-id> close --reason \"...\"
   atelier prune
@@ -125,22 +119,16 @@ enum Commands {
     /// Show checkout, mission, work, and tracker signposts
     Status,
 
+    /// Operational multi-issue work views
+    Work {
+        #[command(subcommand)]
+        action: WorkCommands,
+    },
+
     /// Issue lifecycle commands (create, show, list, transition, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
-    },
-
-    /// Read-only mission reports and discovery
-    Mission {
-        #[command(subcommand)]
-        action: MissionCommands,
-    },
-
-    /// Search issues, relationships, and activity
-    Search {
-        /// Search query
-        query: String,
     },
 
     /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
@@ -279,6 +267,18 @@ enum Commands {
 // ============================================================================
 
 #[derive(Subcommand)]
+enum WorkCommands {
+    /// Show ready work
+    Ready,
+    /// Show blocked work
+    Blocked,
+    /// Show active work
+    Active,
+    /// Show all operational work buckets
+    All,
+}
+
+#[derive(Subcommand)]
 enum IssueCommands {
     /// Create a new issue
     Create {
@@ -338,43 +338,18 @@ enum IssueCommands {
         blocked: bool,
     },
 
-    /// Show a homogeneous objective inventory table
-    Table {
-        /// Record kind to inventory: mission or issue
-        #[arg(long, default_value = "mission")]
-        kind: String,
-        /// Filter by exact record/workflow status, or all
-        #[arg(long, default_value = "current")]
-        status: String,
-        /// Filter issue rows by issue type, such as epic
-        #[arg(long)]
-        issue_type: Option<String>,
-    },
-
     /// Show issue details
     Show {
         /// Issue ID
         id: String,
     },
 
-    /// Show type-aware issue status for objective records
-    Status {
-        /// Issue ID
-        id: String,
-        /// Show verbose validator detail for mission objective records
-        #[arg(long)]
-        verbose: bool,
-    },
-
-    /// Show issue transition options and blockers
+    /// Show or execute issue transitions
     Transition {
         /// Issue ID
         id: String,
-        /// Transition name to execute
+        /// Transition name to execute; omit to inspect options and blockers
         transition: Option<String>,
-        /// Show the full option list
-        #[arg(long)]
-        options: bool,
         /// Close reason used by transitions that require it
         #[arg(long = "reason")]
         close_reason: Option<String>,
@@ -454,28 +429,6 @@ enum IssueCommands {
         #[arg(long, default_value = "advances")]
         role: String,
     },
-
-    /// Mark an issue as blocked by another
-    Block {
-        /// Issue ID that is blocked
-        id: String,
-        /// Issue ID that is blocking
-        blocker: String,
-    },
-
-    /// Remove a blocking relationship
-    Unblock {
-        /// Issue ID that was blocked
-        id: String,
-        /// Issue ID that was blocking
-        blocker: String,
-    },
-
-    /// List blocked issues, or show blockers for one issue
-    Blocked {
-        /// Issue ID to inspect instead of the blocked-work queue
-        id: Option<String>,
-    },
 }
 
 #[derive(Subcommand)]
@@ -546,20 +499,6 @@ another target.")]
     List {
         #[arg(long)]
         status: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
-enum MissionCommands {
-    /// List current mission health summaries
-    List,
-    /// Show one mission health report
-    Status {
-        /// Mission issue ID
-        id: String,
-        /// Show verbose validator detail
-        #[arg(long)]
-        verbose: bool,
     },
 }
 
@@ -796,25 +735,17 @@ fn run() -> Result<()> {
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
-        Commands::Issue { action } => issue_cli::dispatch(action, quiet),
-
-        Commands::Mission { action } => {
-            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-            let db = storage.db();
+        Commands::Work { action } => {
+            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
             match action {
-                MissionCommands::List => {
-                    commands::mission::status(db, &storage.state_dir(), None, quiet, false)
-                }
-                MissionCommands::Status { id, verbose } => {
-                    commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
-                }
+                WorkCommands::Ready => commands::work::list(storage.db(), "ready", quiet),
+                WorkCommands::Blocked => commands::work::list(storage.db(), "blocked", quiet),
+                WorkCommands::Active => commands::work::list(storage.db(), "active", quiet),
+                WorkCommands::All => commands::work::list(storage.db(), "all", quiet),
             }
         }
 
-        Commands::Search { query } => {
-            let db = degraded_projection_query_db()?;
-            commands::issue::search(&db, &query, quiet)
-        }
+        Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
@@ -1263,26 +1194,22 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Init { .. } => "init",
         Commands::Man { .. } => "man",
         Commands::Status => "status",
+        Commands::Work { action } => match action {
+            WorkCommands::Ready => "work ready",
+            WorkCommands::Blocked => "work blocked",
+            WorkCommands::Active => "work active",
+            WorkCommands::All => "work all",
+        },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
-            IssueCommands::Table { .. } => "issue table",
             IssueCommands::Show { .. } => "issue show",
-            IssueCommands::Status { .. } => "issue status",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Link { .. } => "issue link",
             IssueCommands::Unlink { .. } => "issue unlink",
-            IssueCommands::Block { .. } => "issue block",
-            IssueCommands::Unblock { .. } => "issue unblock",
-            IssueCommands::Blocked { .. } => "issue blocked",
         },
-        Commands::Mission { action } => match action {
-            MissionCommands::List => "mission list",
-            MissionCommands::Status { .. } => "mission status",
-        },
-        Commands::Search { .. } => "search",
         Commands::Export { check, .. } => {
             if *check {
                 "export --check"

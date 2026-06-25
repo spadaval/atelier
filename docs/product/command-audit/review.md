@@ -16,7 +16,7 @@ epic work?"
   low-level review plumbing that should usually be derived from the issue,
   branch policy, and configured provider.
 - Output hierarchy: Issue/owner, review artifact identifier or URL, provider
-  mode, role source, action result, then `issue transition --options`.
+  mode, role source, action result, then `issue transition`.
 
 ## Subcommands
 

@@ -745,10 +745,7 @@ fn render_transition_readiness(
             println!("  options: blocked - {error}");
         }
     }
-    println!(
-        "  options: atelier issue transition {} --options",
-        object.id
-    );
+    println!("  options: atelier issue transition {}", object.id);
     Ok(())
 }
 
@@ -1115,7 +1112,7 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         object.id
     );
     println!(
-        "  Show transition options: atelier issue transition {} --options",
+        "  Show transition options: atelier issue transition {}",
         object.id
     );
     println!(
@@ -1279,7 +1276,6 @@ fn mission_table(db: &Database, status: &str, quiet: bool) -> Result<()> {
     println!();
     println!("Next Commands");
     println!("-------------");
-    println!("  Inspect one objective: atelier issue status <id>");
     println!("  Open one objective record: atelier issue show <id>");
     println!("  Browse grouped work: atelier issue list");
     Ok(())
@@ -1347,7 +1343,6 @@ fn issue_table(db: &Database, status: &str, issue_type: Option<&str>, quiet: boo
     println!();
     println!("Next Commands");
     println!("-------------");
-    println!("  Inspect one objective: atelier issue status <id>");
     println!("  Open one objective record: atelier issue show <id>");
     println!("  Browse grouped work: atelier issue list");
     Ok(())
@@ -1872,7 +1867,7 @@ fn queue_footer_actions(groups: &[QueueGroup], limit: usize) -> (Vec<FooterActio
             if !group.external_blockers.is_empty() {
                 actions.push(FooterAction::new(
                     format!("Inspect blockers for {group_id}"),
-                    format!("atelier issue blocked {group_id}"),
+                    format!("atelier issue show {group_id}"),
                 ));
             }
         }
@@ -1880,7 +1875,7 @@ fn queue_footer_actions(groups: &[QueueGroup], limit: usize) -> (Vec<FooterActio
             if !row.open_blockers.is_empty() {
                 actions.push(FooterAction::new(
                     format!("Inspect blockers for {}", row.id),
-                    format!("atelier issue blocked {}", row.id),
+                    format!("atelier issue show {}", row.id),
                 ));
             }
         }
@@ -2071,7 +2066,7 @@ pub fn create_lifecycle(
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
         println!(
-            "  Inspect tracked work transitions: atelier issue transition {} --options",
+            "  Inspect tracked work transitions: atelier issue transition {}",
             object.id
         );
     } else {
@@ -2090,7 +2085,7 @@ pub fn create_lifecycle(
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
         println!(
-            "  Inspect tracked work transitions: atelier issue transition {} --options",
+            "  Inspect tracked work transitions: atelier issue transition {}",
             object.id
         );
     }

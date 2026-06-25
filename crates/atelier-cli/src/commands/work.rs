@@ -4,8 +4,82 @@ use std::env;
 use std::path::Path;
 use std::process::Command;
 
+use atelier_app::read_pipeline::{WorkBuckets, WorkRow};
 use atelier_core::Issue;
 use atelier_sqlite::Database;
+
+pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let buckets = atelier_app::read_pipeline::work_buckets(db, policy.as_ref())?;
+    if quiet {
+        print_quiet(bucket, &buckets);
+        return Ok(());
+    }
+
+    println!("Atelier Work");
+    println!("============");
+    match bucket {
+        "ready" => print_bucket("Ready Work", &buckets.ready),
+        "blocked" => print_bucket("Blocked Work", &buckets.blocked),
+        "active" => print_bucket("Active Work", &buckets.active),
+        "all" => {
+            print_bucket("Active Work", &buckets.active);
+            print_bucket("Ready Work", &buckets.ready);
+            print_bucket("Blocked Work", &buckets.blocked);
+            print_bucket("Backlog Work", &buckets.backlog);
+        }
+        other => bail!("unknown work bucket '{other}'"),
+    }
+    Ok(())
+}
+
+fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
+    let rows = match bucket {
+        "ready" => &buckets.ready,
+        "blocked" => &buckets.blocked,
+        "active" => &buckets.active,
+        "all" => &buckets.ready,
+        _ => &buckets.ready,
+    };
+    for row in rows {
+        println!("{}", row.id);
+    }
+}
+
+fn print_bucket(title: &str, rows: &[WorkRow]) {
+    println!();
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
+    if rows.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for row in rows.iter().take(20) {
+        if row.open_blockers.is_empty() {
+            println!(
+                "  {} {} [{}] {} - {}",
+                row.state_label(),
+                row.id,
+                row.status,
+                row.priority,
+                row.title
+            );
+        } else {
+            println!(
+                "  {} {} [{}] {} - {} | {} blocker(s)",
+                row.state_label(),
+                row.id,
+                row.status,
+                row.priority,
+                row.title,
+                row.open_blockers.len()
+            );
+        }
+    }
+    if rows.len() > 20 {
+        println!("  {} more work item(s) omitted", rows.len() - 20);
+    }
+}
 
 fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
     for mission in db.list_issues(Some("all"), None, None)? {

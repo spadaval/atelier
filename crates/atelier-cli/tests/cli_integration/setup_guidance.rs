@@ -919,15 +919,11 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "start", "issue", "bundle", "evidence", "history", "lint",
-        "doctor",
+        "init", "man", "status", "work", "issue", "bundle", "evidence", "history", "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
-    assert!(
-        stdout.contains("Search issues, relationships, and activity"),
-        "{stdout}"
-    );
+    assert!(!stdout.contains("Search issues, relationships, and activity"));
     assert!(
         !stdout
             .lines()
@@ -990,19 +986,18 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier man validator",
         "atelier man manager",
         "atelier man admin",
+        "atelier work ready",
+        "atelier work blocked",
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
-        "atelier mission list",
-        "atelier mission status <mission-id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
-        "atelier history --mission <id>",
-        "atelier history --issue <id>",
+        "atelier history",
         "atelier issue transition <issue-id> start",
-        "atelier issue transition <issue-id> --options",
+        "atelier issue transition <issue-id>",
         "atelier issue transition <mission-id> close --reason",
     ] {
         assert!(
@@ -1045,8 +1040,9 @@ fn test_top_level_help_only_shows_core_commands() {
         "agent",
         "locks",
         "sync",
-        "work",
         "workflow",
+        "mission",
+        "search",
     ] {
         assert!(
             !stdout.lines().any(|line| {
@@ -1054,6 +1050,30 @@ fn test_top_level_help_only_shows_core_commands() {
                 command == removed || command.starts_with(&format!("{removed} "))
             }),
             "removed command {removed} is still visible in help:\n{stdout}"
+        );
+    }
+}
+
+#[test]
+fn test_obsolete_command_surfaces_are_removed_without_aliases() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for args in [
+        vec!["mission", "list"],
+        vec!["mission", "status", "atelier-test"],
+        vec!["search", "needle"],
+        vec!["issue", "status", "atelier-test"],
+        vec!["issue", "table"],
+        vec!["issue", "blocked"],
+        vec!["issue", "block", "atelier-a", "atelier-b"],
+        vec!["issue", "unblock", "atelier-a", "atelier-b"],
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(!success, "{args:?} should be removed:\n{stdout}");
+        assert!(
+            stderr.contains("unrecognized subcommand"),
+            "{args:?} should fail as an unrecognized command, got:\n{stderr}"
         );
     }
 }
@@ -1435,7 +1455,7 @@ fn test_issue_status_renders_objective_work_health() {
         "Open objective record: atelier issue show {objective_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Inspect ready work transitions: atelier issue transition {blocker_id} --options"
+        "Inspect ready work transitions: atelier issue transition {blocker_id}"
     )));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", objective_id]);
@@ -1627,10 +1647,10 @@ fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     assert!(start_out.contains("Next Commands"));
     assert!(start_out.contains("Inspect checkout status: atelier status"));
     assert!(start_out.contains(&format!(
-        "Inspect mission selection and blockers: atelier mission status {mission_id}"
+        "Inspect objective selection and blockers: atelier issue show {mission_id}"
     )));
     assert!(start_out.contains(&format!(
-        "Inspect work transitions: atelier issue transition {issue_id} --options"
+        "Inspect work transitions: atelier issue transition {issue_id}"
     )));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
@@ -1717,7 +1737,7 @@ fn test_product_intent_representative_commands_match_signpost_surfaces() {
     );
     assert!(!product_intent.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(product_intent.contains("atelier status"));
-    assert!(product_intent.contains("atelier issue transition atelier-z1p8 --options"));
+    assert!(product_intent.contains("atelier issue transition atelier-z1p8"));
     assert!(product_intent
         .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
 }
@@ -1751,7 +1771,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
     assert!(stdout.contains("atelier issue list --ready"));
-    assert!(stdout.contains("atelier issue transition <id> --options"));
+    assert!(stdout.contains("atelier issue transition <id>"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
     assert!(!stdout.contains("etc."));
@@ -1826,7 +1846,7 @@ fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
     assert!(stdout.contains("Not an Atelier repository"));
     assert!(stdout.contains("atelier init"));
     assert!(stdout.contains("docs/product/workflow-configuration.md"));
-    assert!(stdout.contains("atelier issue transition <id> --options"));
+    assert!(stdout.contains("atelier issue transition <id>"));
     assert!(stdout.contains("atelier prune --dry-run"));
 }
 
@@ -1867,7 +1887,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
     let git_before = git_status_short(dir.path());
 
     let (success, transition_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition failed: {stderr}");
     assert!(transition_out.contains("Issue Transitions"));
     assert!(
@@ -1895,7 +1915,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
     let git_after = git_status_short(dir.path());
     assert_eq!(
         git_before, git_after,
-        "--options should not dirty the worktree:\nbefore:\n{git_before}\nafter:\n{git_after}"
+        "no-argument transition should not dirty the worktree:\nbefore:\n{git_before}\nafter:\n{git_after}"
     );
 
     let (success, start_out, stderr) =
@@ -1949,13 +1969,13 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
 
     let git_before = git_status_short(dir.path());
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("Issue Transitions"), "{options_out}");
     let git_after = git_status_short(dir.path());
     assert_eq!(
         git_before, git_after,
-        "--options should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
+        "no-argument transition should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
     );
 
     let (success, _, stderr) =
@@ -2202,7 +2222,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     commit_all(dir.path(), "validator-gated start policy");
 
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
     assert!(
@@ -2584,8 +2604,7 @@ fn test_issue_transition_requires_workflow_policy_file() {
 
     std::fs::remove_file(dir.path().join(".atelier").join("workflow.yaml")).unwrap();
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(
         !success,
         "transition options should fail without workflow policy"
@@ -2657,7 +2676,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     }
 
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");

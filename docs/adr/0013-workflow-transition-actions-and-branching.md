@@ -15,7 +15,7 @@ easy to split into a separate lifecycle system, such as `epic.branch.owner:
 self` fields, mission-only branch rules, or command-specific branch recipes.
 
 The workflow policy now needs one durable model that operators can preview from
-`atelier issue transition <id> --options`: the transition's validators explain
+`atelier issue transition <id>`: the transition's validators explain
 readiness, its actions explain the bounded work that will happen, and branch
 context is computed from the work graph plus repository branch policy.
 

@@ -133,7 +133,7 @@ fn print_blockers(snapshot: &commands::objective_status::ObjectiveStatusSnapshot
         );
         println!("  Next: close or unblock listed blockers");
         if let Some(issue) = snapshot.blocked_issues.first() {
-            println!("  Inspect blockers: atelier issue blocked {}", issue.id);
+            println!("  Inspect blockers: atelier issue show {}", issue.id);
         }
     }
 }
@@ -176,20 +176,18 @@ fn print_next_commands(
     println!("  Open objective record: atelier issue show {issue_id}");
     if let Some(issue) = snapshot.active_issues.first() {
         println!(
-            "  Inspect current work transitions: atelier issue transition {} --options",
+            "  Inspect current work transitions: atelier issue transition {}",
             issue.id
         );
     } else if let Some(issue) = snapshot.selectable_issues.first() {
         println!(
-            "  Inspect ready work transitions: atelier issue transition {} --options",
+            "  Inspect ready work transitions: atelier issue transition {}",
             issue.id
         );
     } else if let Some(issue_id) = open_work.first() {
-        println!("  Close or defer open work: atelier issue transition {issue_id} --options");
+        println!("  Close or defer open work: atelier issue transition {issue_id}");
     } else {
-        println!(
-            "  Inspect objective close readiness: atelier issue transition {issue_id} --options"
-        );
+        println!("  Inspect objective close readiness: atelier issue transition {issue_id}");
     }
 }
 

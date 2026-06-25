@@ -47,7 +47,7 @@ pub fn list_blocked(db: &Database, quiet: bool) -> Result<()> {
     println!("Blocked issues");
     println!("==============");
     println!("{} total", rows.len());
-    println!("Drill down: atelier issue blocked <id>");
+    println!("Drill down: atelier issue show <id>");
     let total = rows.len();
     for row in rows.into_iter().take(5) {
         let blocker_count = row.blockers.len();

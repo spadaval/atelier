@@ -1737,10 +1737,8 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
         "independent approval evidence recorded for workflow closeout",
     );
 
-    let (success, transitions, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "--options"],
-    );
+    let (success, transitions, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &validation_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
     assert!(transitions.contains("pass  evidence.attached"));
@@ -1793,7 +1791,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     );
 
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
     assert!(transitions.contains("expected at least 1 passing evidence record"));
@@ -2245,8 +2243,7 @@ fn test_issue_create_after_workflow_init_uses_configured_initial_status() {
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
 
-    let (success, options, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    let (success, options, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options.contains("Status:   todo"), "{options}");
     assert!(options.contains("start [allowed]"), "{options}");

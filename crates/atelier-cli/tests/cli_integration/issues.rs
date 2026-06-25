@@ -678,7 +678,7 @@ fn test_issue_show_surfaces_evidence_status() {
 
     move_issue_to_validation(dir.path(), &issue_id);
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(
         success,
         "transition options without evidence failed: {stderr}"
@@ -712,7 +712,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(!stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options with evidence failed: {stderr}");
     assert!(transitions.contains("pass  evidence.attached"));
 }
@@ -774,10 +774,7 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     assert!(stdout.contains(&related_id));
 
     migrate_default_issue_workflow(dir.path());
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", parent_key, "--options"],
-    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "transition", parent_key]);
     assert!(
         success,
         "transition options by partial key failed: {stderr}"

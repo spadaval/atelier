@@ -48,7 +48,7 @@ atelier issue list --ready
 atelier issue show <id>
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
-atelier issue transition <id> --options
+atelier issue transition <id>
 ```
 
 After that, the worker follows the transition command and recovery guidance
@@ -68,7 +68,7 @@ Orientation loop:
 
 ```text
 atelier issue show <id>
-atelier issue transition <id> --options
+atelier issue transition <id>
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
@@ -77,7 +77,7 @@ atelier issue status <id> --verbose
 ```
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
-normal readiness inspection uses `issue transition --options`, `lint`, and
+normal readiness inspection uses `issue transition`, `lint`, and
 `issue status <objective-id>`. Any review-artifact action should come from
 Atelier's current workflow or recovery guidance, not from static reviewer
 policy.
@@ -92,7 +92,7 @@ Orientation loop:
 
 ```text
 atelier issue show <id>
-atelier issue transition <id> --options
+atelier issue transition <id>
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 ```

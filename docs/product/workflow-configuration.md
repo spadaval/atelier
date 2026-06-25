@@ -60,10 +60,10 @@ Issue workflow execution is explicit:
 
 ```text
 atelier issue transition <id> <transition>
-atelier issue transition <id> --options
+atelier issue transition <id>
 ```
 
-`atelier issue transition <id> --options` renders transitions available from
+`atelier issue transition <id>` renders transitions available from
 the issue's current status. Each option reports whether the transition is
 currently allowed, configured read-only validator results, configured
 transition actions, static transition descriptions, branch context, and the
@@ -496,7 +496,7 @@ Failure behavior is part of the action contract:
   owner-branch tracker commit.
 - Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
-  --options`, `atelier review status --issue <id>`, or `atelier lint <id>`.
+  transition options`, `atelier review status --issue <id>`, or `atelier lint <id>`.
 
 ## Validators
 
