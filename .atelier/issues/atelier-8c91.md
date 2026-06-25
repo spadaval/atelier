@@ -3,6 +3,10 @@ created_at: "2026-06-24T19:26:31.661899720+00:00"
 id: "atelier-8c91"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 29
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Validate command-surface rework and update agent guidance"
-updated_at: "2026-06-24T19:26:31.661899720+00:00"
+updated_at: "2026-06-25T01:51:21.865683691+00:00"
 ---
 
 ## Description
@@ -37,4 +41,4 @@ Documentation, help output, tracker guidance, Agent Factory instructions, and fo
 
 - Root help, focused help, man guidance, AGENTS.md, Agent Factory guidance, and product docs agree on the surviving command model and no longer teach deleted surfaces.
 - Focused tests or recorded transcripts cover `status`, `work`, `issue show`, `issue transition`, `evidence`, `review`, `history`, `bundle`, `man`, and `check`, plus rejected removed commands.
-- `atelier lint`, `cargo fmt -- --check`, `cargo nextest run`, and `git diff --check` pass or have recorded, issue-linked exceptions.
+- `atelier check`, `cargo fmt -- --check`, `cargo nextest run`, and `git diff --check` pass or have recorded, issue-linked exceptions.

@@ -16,7 +16,7 @@ Before editing, classify the assigned work:
 
 Use repository-owned command and validation surfaces for exact checks. In
 Atelier repositories, `atelier man admin`, `atelier man worker`, focused
-`atelier issue status <objective-id>`, issue transition options, lint, and
+`atelier issue show <objective-id>`, issue transition, `atelier check`, and
 mapped validation docs own current tactical details. Use local-state repair
 commands only when Atelier reports degraded local state or the migration
 explicitly owns repair.
