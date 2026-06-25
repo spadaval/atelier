@@ -3,6 +3,10 @@ created_at: "2026-06-24T19:26:03.410099146+00:00"
 id: "atelier-fasv"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 26
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -16,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Implement centralized issue read and work view pipeline"
-updated_at: "2026-06-25T01:03:29.106735391+00:00"
+updated_at: "2026-06-25T01:11:24.730475061+00:00"
 ---
 
 ## Description
