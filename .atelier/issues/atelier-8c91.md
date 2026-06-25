@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate command-surface rework and update agent guidance"
-updated_at: "2026-06-25T01:51:21.865683691+00:00"
+updated_at: "2026-06-25T01:52:00.639594244+00:00"
 ---
 
 ## Description
