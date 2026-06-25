@@ -9,7 +9,7 @@ blocks it. It is not the implementation procedure for a named code item.
 - Start from repository instructions, the tracker's current status surfaces, and
   the relevant product, architecture, ADR, and validation docs.
 - In Atelier repositories, use `atelier man manager` for current command
-  routing and focused `atelier issue status <objective-id>` or focused
+  routing and focused `atelier issue show <objective-id>` or focused
   `show`/`list` commands for drill-down.
 - Write work around desired finished state and observable proof. Avoid scripting
   private implementation steps unless that exact path is the decision being
