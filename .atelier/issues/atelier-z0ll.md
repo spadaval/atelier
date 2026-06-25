@@ -38,9 +38,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+closed_at: "2026-06-25T01:54:42.695532638+00:00"
+status: "closed"
 title: "Rebuild command surface around work views and centralized read pipeline"
-updated_at: "2026-06-24T19:25:36.629954615+00:00"
+updated_at: "2026-06-25T01:54:42.695532638+00:00"
 ---
 
 ## Description
