@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Implement centralized issue read and work view pipeline"
-updated_at: "2026-06-25T01:11:24.730475061+00:00"
+updated_at: "2026-06-25T01:11:39.269788942+00:00"
 ---
 
 ## Description
