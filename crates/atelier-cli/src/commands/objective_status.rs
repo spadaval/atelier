@@ -23,6 +23,7 @@ pub(crate) struct ObjectiveStatusSnapshot {
     pub(crate) ready_issues: Vec<Issue>,
     pub(crate) selectable_issues: Vec<Issue>,
     pub(crate) blocked_issues: Vec<Issue>,
+    pub(crate) backlog_issues: Vec<Issue>,
     pub(crate) open_blockers: Vec<String>,
     pub(crate) active: usize,
     pub(crate) ready: usize,
@@ -80,7 +81,10 @@ pub(crate) fn snapshot_for_issue_objective(
                 snapshot.blocked_issues.push(issue);
             }
             ObjectiveIssueBucket::Done => snapshot.done += 1,
-            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
+            ObjectiveIssueBucket::Backlog => {
+                snapshot.backlog += 1;
+                snapshot.backlog_issues.push(issue);
+            }
         }
     }
 
@@ -92,6 +96,8 @@ pub(crate) fn snapshot_for_issue_objective(
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
     snapshot.blocked_issues =
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
+    snapshot.backlog_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.backlog_issues)?;
     Ok(snapshot)
 }
 
@@ -129,7 +135,10 @@ pub(crate) fn snapshot_for_mission(
                 snapshot.blocked_issues.push(issue);
             }
             ObjectiveIssueBucket::Done => snapshot.done += 1,
-            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
+            ObjectiveIssueBucket::Backlog => {
+                snapshot.backlog += 1;
+                snapshot.backlog_issues.push(issue);
+            }
         }
     }
 
@@ -141,6 +150,8 @@ pub(crate) fn snapshot_for_mission(
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
     snapshot.blocked_issues =
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
+    snapshot.backlog_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.backlog_issues)?;
     Ok(snapshot)
 }
 

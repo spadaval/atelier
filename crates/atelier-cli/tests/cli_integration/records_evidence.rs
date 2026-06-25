@@ -1391,6 +1391,7 @@ fn test_evidence_list_bounds_default_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
+    let mut evidence_ids = Vec::new();
     for index in 0..21 {
         let summary = format!("bounded evidence proof {index:02}");
         let (success, _, stderr) = run_atelier(
@@ -1398,12 +1399,38 @@ fn test_evidence_list_bounds_default_output() {
             &["evidence", "record", "--kind", "validation", &summary],
         );
         assert!(success, "evidence record {index} failed: {stderr}");
+        let evidence_id = record_id_by_title(dir.path(), "evidence", &summary);
+        evidence_ids.push((index, evidence_id));
     }
+    evidence_ids.sort_by(|(_, left), (_, right)| left.cmp(right));
+
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    for (rank, (_, evidence_id)) in evidence_ids.iter().enumerate() {
+        let timestamp = format!("2024-01-{:02}T00:00:00+00:00", rank + 1);
+        conn.execute(
+            "UPDATE records SET created_at = ?1, updated_at = ?1 WHERE kind = 'evidence' AND id = ?2",
+            rusqlite::params![timestamp, evidence_id],
+        )
+        .unwrap();
+    }
+    let oldest_by_timestamp = format!("bounded evidence proof {:02}", evidence_ids[0].0);
+    let newest_by_timestamp = format!(
+        "bounded evidence proof {:02}",
+        evidence_ids.last().unwrap().0
+    );
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
     assert!(evidence_list.contains("21 total"));
     assert!(evidence_list.contains("Showing: 20 of 21"));
+    assert!(
+        evidence_list.contains(&newest_by_timestamp),
+        "newest timestamp should be visible despite sorting last by ID:\n{evidence_list}"
+    );
+    assert!(
+        !evidence_list.contains(&oldest_by_timestamp),
+        "oldest timestamp should be hidden by default limit:\n{evidence_list}"
+    );
     assert!(
         evidence_list.contains("Omitted: 1 older evidence record(s) hidden by default limit 20")
     );

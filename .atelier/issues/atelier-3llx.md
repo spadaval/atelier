@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T00:56:39.498173051+00:00"
+status: "done"
 title: "Wire terminal-aware color policy into command rendering"
-updated_at: "2026-06-24T20:36:37.481824471+00:00"
+updated_at: "2026-06-25T00:56:39.498173051+00:00"
 ---
 
 ## Description

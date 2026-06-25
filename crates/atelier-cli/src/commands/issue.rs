@@ -1686,7 +1686,7 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
         _ => group.title,
     };
     if group.id.is_some() && !group.external_blockers.is_empty() {
-        let policy = StylePolicy::plain();
+        let policy = StylePolicy::for_stdout();
         heading.push_str(&format!(
             " ({}; {})",
             DisplayRole::ContextOnly.render(policy),

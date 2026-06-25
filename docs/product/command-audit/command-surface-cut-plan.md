@@ -28,6 +28,32 @@ commands:
 Everything else is either a filter, an option, an implementation detail, an
 admin escape hatch, or obsolete vocabulary.
 
+## Contract Non-Goals
+
+This cut does not introduce a public selector DSL, dashboard language, global
+JSON result contract, or replacement search surface. `work` is an operational
+view owner for human work queues, not a general query engine. `issue show`
+owns bounded objective rollup and record detail, not full recursive bulk
+selection. `issue transition` owns lifecycle readiness and mutation, not hidden
+status repair. Canonical Markdown/YAML records remain the machine-readable API
+unless a deliberately versioned artifact is designed later.
+
+Removed commands must have replacement capability, not replacement spellings:
+
+| Removed surface | Replacement owner |
+| --- | --- |
+| `mission list` | `issue list --type mission` |
+| `mission status <id>` | objective rollup in `issue show <mission-id>` and terminal gates in `issue transition <mission-id>` |
+| `issue status <objective-id>` | objective rollup in `issue show <objective-id>` and terminal gates in `issue transition <objective-id>` |
+| `issue blocked [<id>]` | blocked inventory in `issue list --blocked`; blocker detail in `issue show <id>` |
+| `issue table` | `issue list` filters and list formatting |
+| `issue block` / `issue unblock` | `issue link` / `issue unlink --role blocked_by` |
+| root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
+| scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
+| provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
+| visible branch repair | workflow transitions, with hidden/admin recovery only when needed |
+| `lint` / `doctor` / `workflow check` / `rebuild` as separate normal surfaces | one `check` health and repair surface |
+
 ## Command Jobs
 
 ### `atelier status`
