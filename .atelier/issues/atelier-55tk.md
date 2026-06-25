@@ -24,9 +24,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Define command surface and work-view product contract"
-updated_at: "2026-06-25T01:00:19.237662618+00:00"
+updated_at: "2026-06-25T01:01:00.100564342+00:00"
 ---
 
 ## Description
