@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert transition readiness and checkout sections"
 updated_at: "2026-06-25T15:25:23.421580217+00:00"
 ---

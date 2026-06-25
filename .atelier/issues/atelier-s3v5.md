@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert issue show header and text body sections"
 updated_at: "2026-06-25T15:25:18.137465296+00:00"
 ---

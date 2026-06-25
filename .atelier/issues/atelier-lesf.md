@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Implement work epic dashboard"
 updated_at: "2026-06-25T16:23:13.436593102+00:00"
 ---

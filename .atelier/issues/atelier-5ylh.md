@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Remove issue list after work dashboard replacements land"
 updated_at: "2026-06-25T16:23:18.759236302+00:00"
 ---

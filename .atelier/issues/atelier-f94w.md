@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Run panel-system closeout validation"
 updated_at: "2026-06-25T15:25:55.637570421+00:00"
 ---

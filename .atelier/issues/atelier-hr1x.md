@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Implement work queue as mission-organized replacement for issue list"
 updated_at: "2026-06-25T16:23:02.656523106+00:00"
 ---

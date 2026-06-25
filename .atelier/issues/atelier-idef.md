@@ -20,7 +20,7 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert issue show read sections to panels"
 updated_at: "2026-06-25T15:25:28.823268642+00:00"
 ---

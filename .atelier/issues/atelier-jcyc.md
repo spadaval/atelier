@@ -32,9 +32,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+closed_at: "2026-06-25T16:55:24.616834623+00:00"
+status: "closed"
 title: "Build CLI presentation panel rendering system"
-updated_at: "2026-06-25T15:23:01.075759811+00:00"
+updated_at: "2026-06-25T16:55:24.616834623+00:00"
 ---
 
 ## Description

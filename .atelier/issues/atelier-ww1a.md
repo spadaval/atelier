@@ -20,7 +20,7 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Implement core CLI presentation panels"
 updated_at: "2026-06-25T15:24:34.941839481+00:00"
 ---

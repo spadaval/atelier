@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T16:53:45.902721944+00:00"
+status: "done"
 title: "Specify semantic style tokens and formatting preferences"
-updated_at: "2026-06-25T15:24:02.913748258+00:00"
+updated_at: "2026-06-25T16:53:45.902721944+00:00"
 ---
 
 ## Description

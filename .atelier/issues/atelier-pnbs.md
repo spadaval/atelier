@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Add color, NO_COLOR, non-terminal, and style regression tests"
 updated_at: "2026-06-25T15:25:44.857466833+00:00"
 ---

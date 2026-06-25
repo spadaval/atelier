@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert atelier work buckets to issue list panels"
 updated_at: "2026-06-25T15:24:56.350083678+00:00"
 ---

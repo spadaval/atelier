@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Define CLI rendering architecture and ownership boundaries"
-updated_at: "2026-06-25T15:24:08.370669344+00:00"
+updated_at: "2026-06-25T16:54:13.849761063+00:00"
 ---
 
 ## Description

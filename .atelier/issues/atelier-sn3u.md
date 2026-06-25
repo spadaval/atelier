@@ -20,7 +20,7 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert status and work surfaces to panels"
 updated_at: "2026-06-25T15:25:01.960056012+00:00"
 ---

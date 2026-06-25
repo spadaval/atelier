@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Preserve quiet output for status and work"
 updated_at: "2026-06-25T15:25:01.955379919+00:00"
 ---

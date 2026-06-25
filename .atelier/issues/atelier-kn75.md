@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-25T16:53:23.328969750+00:00"
+status: "done"
 title: "Define RenderContext, Panel trait, and Page composition boundary"
-updated_at: "2026-06-25T15:23:56.966627478+00:00"
+updated_at: "2026-06-25T16:53:23.328969750+00:00"
 ---
 
 ## Description

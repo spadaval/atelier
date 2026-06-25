@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert atelier status to a composed page"
 updated_at: "2026-06-25T15:24:50.947516466+00:00"
 ---

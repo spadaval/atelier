@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Convert objective rollup, relationship, subissue, impact, and footer sections"
 updated_at: "2026-06-25T15:25:28.818515839+00:00"
 ---

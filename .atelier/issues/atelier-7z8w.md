@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Define work dashboard command contract"
 updated_at: "2026-06-25T16:22:57.069881874+00:00"
 ---

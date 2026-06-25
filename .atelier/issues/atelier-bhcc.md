@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Implement workflow transition and objective rollup panels"
 updated_at: "2026-06-25T15:24:34.937141407+00:00"
 ---

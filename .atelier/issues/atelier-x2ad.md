@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Implement work mission dashboard"
 updated_at: "2026-06-25T16:23:08.096908535+00:00"
 ---

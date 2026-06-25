@@ -20,7 +20,7 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Validate and document CLI panel rendering"
 updated_at: "2026-06-25T15:25:55.642409525+00:00"
 ---

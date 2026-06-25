@@ -26,7 +26,7 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Design and implement work dashboards"
 updated_at: "2026-06-25T16:23:24.310924016+00:00"
 ---

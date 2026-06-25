@@ -11,7 +11,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Update human output docs and command audit for panels"
 updated_at: "2026-06-25T15:25:50.238990765+00:00"
 ---
