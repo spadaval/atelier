@@ -42,12 +42,12 @@ Removed commands must have replacement capability, not replacement spellings:
 
 | Removed surface | Replacement owner |
 | --- | --- |
-| `mission list` | `issue list --type mission` |
+| `mission list` | `work queue --type mission` |
 | `mission status <id>` | objective rollup in `issue show <mission-id>` and terminal gates in `issue transition <mission-id>` |
 | `issue status <objective-id>` | objective rollup in `issue show <objective-id>` and terminal gates in `issue transition <objective-id>` |
-| `issue blocked [<id>]` | blocked inventory in `issue list --blocked`; blocker detail in `issue show <id>` |
-| `issue table` | `issue list` filters and list formatting |
-| `issue block` / `issue unblock` | `issue link` / `issue unlink --role blocked_by` |
+| `issue show [<id>]` | blocked inventory in `work queue --blocked`; blocker detail in `issue show <id>` |
+| `issue table` | `work queue` filters and list formatting |
+| `issue link` / `issue unlink` | `issue link` / `issue unlink --role blocked_by` |
 | root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
 | scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
 | provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
@@ -69,7 +69,7 @@ It answers:
 It must not become an issue detail view, objective report, branch report,
 evidence report, or diagnostics console.
 
-### `atelier issue list`
+### `atelier work queue`
 
 Global issue selection and inventory.
 
@@ -85,13 +85,13 @@ It should not grow into a scoped query language. Do not reinvent JQL.
 
 Allowed direction:
 
-- `issue list`
-- `issue list --ready`
-- `issue list --blocked`
-- `issue list --status <status>`
-- `issue list --type <issue-type>`
-- `issue list --label <label>`
-- `issue list --priority <priority>`
+- `work queue`
+- `work queue --ready`
+- `work queue --blocked`
+- `work queue --status <status>`
+- `work queue --type <issue-type>`
+- `work queue --label <label>`
+- `work queue --priority <priority>`
 
 Avoid unless a later decision explicitly reverses this:
 
@@ -127,7 +127,7 @@ Objective rollup means:
 - terminal readiness summary.
 
 The rollup should be concise and bounded. Full work selection remains global
-`issue list`; lifecycle gates remain `issue transition`.
+`work queue`; lifecycle gates remain `issue transition`.
 
 ### `atelier issue transition <id> [transition]`
 
@@ -205,7 +205,7 @@ Mission is an issue type, not a command namespace.
 
 Replace:
 
-- `mission list` with `issue list --type mission`
+- `mission list` with `work queue --type mission`
 - `mission status <id>` with `issue show <mission-id>`
 
 Mission-specific status behavior should become generic objective rollup inside
@@ -227,13 +227,13 @@ Replace:
 Do not add `issue progress` unless future use proves that objective rollup in
 `issue show` is insufficient.
 
-### Remove `atelier issue blocked`
+### Remove `atelier issue show`
 
 Blocked work is not a command noun.
 
 Replace:
 
-- blocked-work inventory with `issue list --blocked`
+- blocked-work inventory with `work queue --blocked`
 - blocker detail with `issue show <id>`
 
 Do not keep a separate blocker drilldown command just because it already exists.
@@ -244,13 +244,13 @@ Tables are output format, not a command.
 
 Replace:
 
-- `issue table --kind mission` with `issue list --type mission`
-- `issue table --kind issue` with `issue list`
+- `issue table --kind mission` with `work queue --type mission`
+- `issue table --kind issue` with `work queue`
 
-If table output is needed, add a format flag or allow `issue list` to choose a
+If table output is needed, add a format flag or allow `work queue` to choose a
 table layout when appropriate.
 
-### Remove `issue block` And `issue unblock`
+### Remove `issue link` And `issue unlink`
 
 Blocking is a relationship.
 
@@ -266,7 +266,7 @@ block/unblock verbs.
 
 Search is not a command Atelier should preserve during this simplification.
 Keeping it invites another broad, underspecified discovery surface, and folding
-it into `issue list --query` would recreate the same ambiguity under a quieter
+it into `work queue --query` would recreate the same ambiguity under a quieter
 name.
 
 Remove:
@@ -274,7 +274,7 @@ Remove:
 - `search`
 - root help and docs that teach search as a normal workflow
 
-Do not add `issue list --query` as a compatibility replacement. Add a search
+Do not add `work queue --query` as a compatibility replacement. Add a search
 surface later only if a new design proves a stronger cross-record search job.
 
 ### Keep High-Level `history`
@@ -432,9 +432,9 @@ Recommended first slice:
 1. Remove visible `mission`; move mission health into objective rollup in
    `issue show`.
 2. Remove `issue status`; put objective rollup in `issue show`.
-3. Remove `issue blocked`; rely on `issue list --blocked` and `issue show`.
-4. Remove `issue table`; use `issue list --type mission`.
-5. Remove `issue block` and `issue unblock`; use `issue link/unlink --role
+3. Remove `issue show`; rely on `work queue --blocked` and `issue show`.
+4. Remove `issue table`; use `work queue --type mission`.
+5. Remove `issue link` and `issue unlink`; use `issue link/unlink --role
    blocked_by`.
 6. Remove root `search` entirely, including help/docs references.
 7. Keep high-level `history`, but remove or fold scoped history variants.

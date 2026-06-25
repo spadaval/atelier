@@ -271,7 +271,7 @@ standard recovery loop is:
 2. Run `atelier lint`.
 3. Use focused drill-down commands such as `atelier issue show <id>`,
    `atelier issue status <objective-id>`, `atelier evidence show <id>`, or
-   `atelier issue list --ready` to inspect the affected records.
+   `atelier work queue --ready` to inspect the affected records.
 4. Run `atelier doctor --fix` if ignored local projection/runtime state is
    stale or was rebuilt from invalid intermediate files.
 5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
@@ -299,7 +299,7 @@ For relationship conflicts:
 - Do not author `depends_on`; express sequencing in `blocks` and let commands
   derive inverse display.
 - After resolving dependency changes, inspect readiness with
-  `atelier issue list --ready` and targeted issue `show` output.
+  `atelier work queue --ready` and targeted issue `show` output.
 
 For activity sidecar conflicts:
 

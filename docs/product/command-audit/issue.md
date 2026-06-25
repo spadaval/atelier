@@ -22,11 +22,11 @@ terminal readiness, and closeout notes.
 Current issue forms for that target are:
 
 - `issue create --issue-type mission` for mission-shaped coordination work.
-- `issue table --kind mission` for mission inventory.
 - `issue show <objective-id>` for rich objective detail, hierarchy, blockers,
-  evidence, and affected-record context.
-- `issue status <objective-id>` for objective health, ready and blocked work,
+  evidence, affected-record context, objective health, ready and blocked work,
   proof gaps, terminal readiness, and completion gates.
+- `work queue` and `work mission <objective-id>` for mission inventory and
+  orchestration dashboards.
 - `issue link <objective-id> <issue-id> --role advances` and `issue unlink ...`
   for work membership relationships.
 - `issue transition <objective-id> close --reason "..."` for objective
@@ -54,24 +54,23 @@ create compatibility aliases for the removed mission commands.
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | `issue create` | Manager/orchestrator | Create actionable issue-shaped work. | Good. Keep `--issue-type` and template behavior explicit. |
-| `issue list` | Worker | Find candidate or assigned work. | Good, but role guides should prefer `--ready`, `--blocked`, and exact status/category examples. |
-| `issue table` | Manager/orchestrator | Inventory homogeneous objective or issue records, especially missions. | Good. This replaces mission list selection without adding a mission namespace. |
 | `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Good. It includes issue-scoped downstream impact so operators do not leave the issue view for blast-radius context. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `transition options` should be the reviewer entry point. |
 | `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
 | `issue note` | Worker | Add durable progress, handoff, or observation context. | Good. |
-| `issue status` | Worker/reviewer | Inspect type-aware objective health and terminal readiness. | Good. This absorbs the useful `mission status` behavior for objective records. |
 | `issue link` / `issue unlink` | Manager/orchestrator | Add or remove typed issue relationships such as objective work membership. | Good. Keep relationship mutation under issue records rather than a generic root link command. |
 | `issue transition <id> close --reason` | Worker | Complete accountable work after proof exists. | Good. Should continue to require a reason through configured workflow transitions. |
-| `issue block` | Manager/orchestrator | Record that one issue prevents another. | Good. |
-| `issue unblock` | Manager/orchestrator | Remove an issue blocker relationship. | Good. |
-| `issue blocked` | Reviewer | Inspect blocked work or blockers for one issue. | Good. Also useful to managers. |
+| `issue link` | Manager/orchestrator | Record that one issue prevents another. | Good. |
+| `issue unlink` | Manager/orchestrator | Remove an issue linker relationship. | Good. |
+| `issue show` | Reviewer | Inspect blocked work or blockers for one issue. | Good. Also useful to managers. |
 
 ## Role Guide Implication
 
-Workers should see `list --ready`, `show`, `note`, `transition`, and `close`.
-Reviewers should see `transition`, `blocked`, and evidence commands.
-Managers should see `create`, `update`, `block`, `unblock`, and queue filters.
+Workers should see `show`, `note`, `transition`, and close transitions after
+selecting work from `work queue --ready`.
+Reviewers should see `transition`, `issue show`, and evidence commands.
+Managers should see `create`, `update`, `link`, `unlink`, and `work queue`
+filters.
 
 ## Help Drift
 
@@ -82,12 +81,11 @@ without adding a compatibility command.
 
 ## Human Output Debt
 
-The issue family is the highest-impact UX target because it owns queues, detail
-views, blockers, objective status, transitions, links, and notes.
+The issue family is the highest-impact single-record UX target because it owns
+detail views, blockers, objective status, transitions, links, and notes.
 
-- `issue list` and `search` should stop repeating drill-down commands on every
-  blocked row. Show blocker counts inline and move commands such as
-  `atelier issue blocked <id>` to one footer.
+- `issue show` should keep blocker and relationship detail scannable without
+  duplicating queue-style drill-down commands on every row.
 - Queue summaries should avoid `key=value` count blobs in human output.
   Summaries should read as human labels and counts while quiet output stays
   terse.

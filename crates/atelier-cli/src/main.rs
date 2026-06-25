@@ -50,9 +50,11 @@ Common commands:
   atelier status
   atelier work ready
   atelier work blocked
-  atelier issue list
-  atelier issue list --ready
-  atelier issue list --blocked
+  atelier work queue
+  atelier work queue --ready
+  atelier work queue --blocked
+  atelier work mission <mission-id>
+  atelier work epic <epic-id>
   atelier issue show <id>
   atelier issue link <blocked-id> <blocker-id> --role blocked_by
   atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
@@ -119,10 +121,10 @@ enum Commands {
     /// Operational multi-issue work views
     Work {
         #[command(subcommand)]
-        action: WorkCommands,
+        action: Option<WorkCommands>,
     },
 
-    /// Issue lifecycle commands (create, show, list, transition, ...)
+    /// Issue lifecycle commands (create, show, transition, note, link, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
@@ -279,6 +281,40 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum WorkCommands {
+    /// Show the repo-wide work queue
+    Queue {
+        /// Filter by exact workflow status, or all
+        #[arg(short, long, default_value = "todo")]
+        status: String,
+        /// Filter by derived workflow category
+        #[arg(long)]
+        category: Option<String>,
+        /// Filter by label
+        #[arg(short, long)]
+        label: Option<String>,
+        /// Filter by priority
+        #[arg(short, long)]
+        priority: Option<String>,
+        /// Show only ready work
+        #[arg(long)]
+        ready: bool,
+        /// Show active-category work
+        #[arg(long)]
+        active: bool,
+        /// Show blocked-category work
+        #[arg(long)]
+        blocked: bool,
+        /// Show backlog-category work
+        #[arg(long)]
+        backlog: bool,
+        /// Show all statuses
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show one mission dashboard
+    Mission { id: String },
+    /// Show one epic dashboard
+    Epic { id: String },
     /// Show ready work
     Ready,
     /// Show blocked work
@@ -325,28 +361,6 @@ enum IssueCommands {
         /// Parent issue ID or imported source ID
         #[arg(long)]
         parent: Option<String>,
-    },
-
-    /// List issues
-    List {
-        /// Filter by exact workflow status, or all
-        #[arg(short, long, default_value = "todo")]
-        status: String,
-        /// Filter by derived workflow category
-        #[arg(long)]
-        category: Option<String>,
-        /// Filter by label
-        #[arg(short, long)]
-        label: Option<String>,
-        /// Filter by priority
-        #[arg(short, long)]
-        priority: Option<String>,
-        /// Show only ready work
-        #[arg(long)]
-        ready: bool,
-        /// Show only blocked work
-        #[arg(long)]
-        blocked: bool,
     },
 
     /// Show issue details
@@ -749,10 +763,42 @@ fn run() -> Result<()> {
         Commands::Work { action } => {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
             match action {
-                WorkCommands::Ready => commands::work::list(storage.db(), "ready", quiet),
-                WorkCommands::Blocked => commands::work::list(storage.db(), "blocked", quiet),
-                WorkCommands::Active => commands::work::list(storage.db(), "active", quiet),
-                WorkCommands::All => commands::work::list(storage.db(), "all", quiet),
+                None => commands::work::dashboards(quiet),
+                Some(WorkCommands::Queue {
+                    status,
+                    category,
+                    label,
+                    priority,
+                    ready,
+                    active,
+                    blocked,
+                    backlog,
+                    all,
+                }) => commands::work::queue(
+                    storage.db(),
+                    commands::work::QueueOptions {
+                        status: &status,
+                        category: category.as_deref(),
+                        label: label.as_deref(),
+                        priority: priority.as_deref(),
+                        ready,
+                        active,
+                        blocked,
+                        backlog,
+                        all,
+                    },
+                    quiet,
+                ),
+                Some(WorkCommands::Mission { id }) => {
+                    commands::work::mission_dashboard(storage.db(), &id, quiet)
+                }
+                Some(WorkCommands::Epic { id }) => {
+                    commands::work::epic_dashboard(storage.db(), &id, quiet)
+                }
+                Some(WorkCommands::Ready) => commands::work::list(storage.db(), "ready", quiet),
+                Some(WorkCommands::Blocked) => commands::work::list(storage.db(), "blocked", quiet),
+                Some(WorkCommands::Active) => commands::work::list(storage.db(), "active", quiet),
+                Some(WorkCommands::All) => commands::work::list(storage.db(), "all", quiet),
             }
         }
 
@@ -1226,14 +1272,17 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Man { .. } => "man",
         Commands::Status => "status",
         Commands::Work { action } => match action {
-            WorkCommands::Ready => "work ready",
-            WorkCommands::Blocked => "work blocked",
-            WorkCommands::Active => "work active",
-            WorkCommands::All => "work all",
+            None => "work",
+            Some(WorkCommands::Queue { .. }) => "work queue",
+            Some(WorkCommands::Mission { .. }) => "work mission",
+            Some(WorkCommands::Epic { .. }) => "work epic",
+            Some(WorkCommands::Ready) => "work ready",
+            Some(WorkCommands::Blocked) => "work blocked",
+            Some(WorkCommands::Active) => "work active",
+            Some(WorkCommands::All) => "work all",
         },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
-            IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",

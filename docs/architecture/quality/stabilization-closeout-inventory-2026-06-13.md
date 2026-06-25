@@ -82,7 +82,7 @@ Classification:
 
 ## Current Open Owner Map
 
-Observed transcript: `target/debug/atelier issue list --ready` after this audit
+Observed transcript: `target/debug/atelier work queue --ready` after this audit
 started.
 
 | Epic | Remaining ready owner issues |

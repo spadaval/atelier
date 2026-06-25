@@ -6,6 +6,313 @@ use std::collections::BTreeSet;
 use std::io::IsTerminal;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RenderContext {
+    style_policy: StylePolicy,
+}
+
+impl RenderContext {
+    pub(crate) fn plain() -> Self {
+        Self {
+            style_policy: StylePolicy::plain(),
+        }
+    }
+
+    pub(crate) fn for_stdout() -> Self {
+        Self {
+            style_policy: StylePolicy::for_stdout(),
+        }
+    }
+
+    pub(crate) fn from_parts(choice: ColorChoice, is_terminal: bool, no_color: bool) -> Self {
+        Self {
+            style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
+        }
+    }
+
+    pub(crate) fn style_policy(self) -> StylePolicy {
+        self.style_policy
+    }
+
+    pub(crate) fn paint(self, style: TextStyle, text: impl AsRef<str>) -> String {
+        self.style_policy.paint(style, text)
+    }
+}
+
+pub(crate) trait Panel {
+    fn render(&self, context: RenderContext) -> Vec<String>;
+}
+
+pub(crate) struct Page {
+    title: String,
+    panels: Vec<Box<dyn Panel>>,
+}
+
+impl Page {
+    pub(crate) fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            panels: Vec::new(),
+        }
+    }
+
+    pub(crate) fn panel(mut self, panel: impl Panel + 'static) -> Self {
+        self.panels.push(Box::new(panel));
+        self
+    }
+
+    pub(crate) fn render(&self, context: RenderContext) -> String {
+        let mut lines = vec![context.paint(TextStyle::Heading, &self.title)];
+        lines.push("=".repeat(self.title.len()));
+        for panel in &self.panels {
+            let rendered = panel.render(context);
+            if rendered.is_empty() {
+                continue;
+            }
+            lines.push(String::new());
+            lines.extend(rendered);
+        }
+        lines.join("\n")
+    }
+
+    pub(crate) fn print(&self, context: RenderContext) {
+        println!("{}", self.render(context));
+    }
+}
+
+pub(crate) struct MetadataPanel {
+    title: Option<String>,
+    rows: Vec<(String, String)>,
+}
+
+impl MetadataPanel {
+    pub(crate) fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: Some(title.into()),
+            rows: Vec::new(),
+        }
+    }
+
+    pub(crate) fn untitled() -> Self {
+        Self {
+            title: None,
+            rows: Vec::new(),
+        }
+    }
+
+    pub(crate) fn row(mut self, label: impl Into<String>, value: impl Into<String>) -> Self {
+        self.rows.push((label.into(), value.into()));
+        self
+    }
+
+    pub(crate) fn optional_row(
+        mut self,
+        label: impl Into<String>,
+        value: Option<impl Into<String>>,
+    ) -> Self {
+        if let Some(value) = value {
+            self.rows.push((label.into(), value.into()));
+        }
+        self
+    }
+}
+
+impl Panel for MetadataPanel {
+    fn render(&self, _context: RenderContext) -> Vec<String> {
+        if self.rows.is_empty() {
+            return Vec::new();
+        }
+        let width = self
+            .rows
+            .iter()
+            .map(|(label, _)| label.len())
+            .max()
+            .unwrap_or(0);
+        let mut lines = Vec::new();
+        if let Some(title) = &self.title {
+            lines.push(section_heading(title));
+        }
+        lines.extend(
+            self.rows
+                .iter()
+                .map(|(label, value)| format!("{label:<width$}: {value}", width = width)),
+        );
+        lines
+    }
+}
+
+pub(crate) struct TextPanel {
+    title: String,
+    body: Option<String>,
+}
+
+impl TextPanel {
+    pub(crate) fn new(title: impl Into<String>, body: Option<impl Into<String>>) -> Self {
+        Self {
+            title: title.into(),
+            body: body.map(Into::into),
+        }
+    }
+}
+
+impl Panel for TextPanel {
+    fn render(&self, _context: RenderContext) -> Vec<String> {
+        let Some(body) = self
+            .body
+            .as_deref()
+            .map(str::trim)
+            .filter(|body| !body.is_empty())
+        else {
+            return Vec::new();
+        };
+        vec![section_heading(&self.title), body.to_string()]
+    }
+}
+
+pub(crate) struct LinesPanel {
+    title: String,
+    lines: Vec<String>,
+    empty: String,
+}
+
+impl LinesPanel {
+    pub(crate) fn new(
+        title: impl Into<String>,
+        lines: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            lines: lines.into_iter().map(Into::into).collect(),
+            empty: "(none)".to_string(),
+        }
+    }
+
+    pub(crate) fn empty(mut self, empty: impl Into<String>) -> Self {
+        self.empty = empty.into();
+        self
+    }
+}
+
+impl Panel for LinesPanel {
+    fn render(&self, _context: RenderContext) -> Vec<String> {
+        let mut lines = if self.title.is_empty() {
+            Vec::new()
+        } else {
+            vec![section_heading(&self.title)]
+        };
+        if self.lines.is_empty() {
+            lines.push(self.empty.clone());
+        } else {
+            lines.extend(self.lines.iter().cloned());
+        }
+        lines
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct IssueListRow {
+    pub role: DisplayRole,
+    pub id: String,
+    pub status: Option<String>,
+    pub priority: String,
+    pub title: String,
+    pub blockers: usize,
+    pub depth: usize,
+}
+
+pub(crate) struct IssueListPanel {
+    title: String,
+    rows: Vec<IssueListRow>,
+    total_count: usize,
+    limit: usize,
+}
+
+impl IssueListPanel {
+    pub(crate) fn new(title: impl Into<String>, rows: Vec<IssueListRow>) -> Self {
+        let total_count = rows.len();
+        Self {
+            title: title.into(),
+            rows,
+            total_count,
+            limit: 20,
+        }
+    }
+
+    pub(crate) fn total_count(mut self, total_count: usize) -> Self {
+        self.total_count = total_count;
+        self
+    }
+
+    pub(crate) fn limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+impl Panel for IssueListPanel {
+    fn render(&self, context: RenderContext) -> Vec<String> {
+        let mut lines = vec![section_heading(&self.title)];
+        if self.total_count == 0 {
+            lines.push("(none)".to_string());
+            return lines;
+        }
+        let limit = self.limit.min(self.rows.len());
+        for row in self.rows.iter().take(limit) {
+            let indent = "  ".repeat(row.depth.max(1));
+            let role = row.role.render(context.style_policy());
+            let status = row
+                .status
+                .as_deref()
+                .map(|status| format!(" [{status}]"))
+                .unwrap_or_default();
+            let blockers = if row.blockers == 0 {
+                String::new()
+            } else {
+                format!(" | {} blocker{}", row.blockers, plural_suffix(row.blockers))
+            };
+            lines.push(format!(
+                "{indent}{role} {}{} {} - {}{}",
+                row.id, status, row.priority, row.title, blockers
+            ));
+        }
+        let omitted = self.total_count.saturating_sub(limit);
+        if omitted > 0 {
+            lines.push(format!(
+                "  ... {omitted} more {} item{} omitted",
+                self.title.to_lowercase(),
+                plural_suffix(omitted)
+            ));
+        }
+        lines
+    }
+}
+
+pub(crate) struct FooterPanel {
+    title: String,
+    actions: Vec<FooterAction>,
+}
+
+impl FooterPanel {
+    pub(crate) fn new(
+        title: impl Into<String>,
+        actions: impl IntoIterator<Item = FooterAction>,
+    ) -> Self {
+        Self {
+            title: title.into(),
+            actions: actions.into_iter().collect(),
+        }
+    }
+}
+
+impl Panel for FooterPanel {
+    fn render(&self, _context: RenderContext) -> Vec<String> {
+        render_footer(&self.title, self.actions.clone())
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ColorChoice {
     Auto,
     Always,
@@ -354,5 +661,47 @@ mod tests {
     fn path_summary_bounds_samples() {
         let paths = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         assert_eq!(path_summary(&paths, 2), "3 paths: a, b, 1 more omitted");
+    }
+
+    #[test]
+    fn page_skips_empty_panels_and_renders_metadata() {
+        let page = Page::new("Example")
+            .panel(MetadataPanel::untitled().row("Status", "ready"))
+            .panel(TextPanel::new("Notes", None::<String>));
+        assert_eq!(
+            page.render(RenderContext::plain()),
+            "Example\n=======\n\nStatus: ready"
+        );
+    }
+
+    #[test]
+    fn issue_list_panel_bounds_rows_and_keeps_colorless_roles() {
+        let rows = vec![
+            IssueListRow {
+                role: DisplayRole::Selectable,
+                id: "atelier-a".to_string(),
+                status: Some("todo".to_string()),
+                priority: "high".to_string(),
+                title: "A".to_string(),
+                blockers: 0,
+                depth: 1,
+            },
+            IssueListRow {
+                role: DisplayRole::Blocked,
+                id: "atelier-b".to_string(),
+                status: Some("blocked".to_string()),
+                priority: "medium".to_string(),
+                title: "B".to_string(),
+                blockers: 2,
+                depth: 1,
+            },
+        ];
+        let panel = IssueListPanel::new("Ready Work", rows)
+            .total_count(3)
+            .limit(1);
+        assert_eq!(
+            panel.render(RenderContext::plain()).join("\n"),
+            "Ready Work\n----------\n  ready atelier-a [todo] high - A\n  ... 2 more ready work items omitted"
+        );
     }
 }

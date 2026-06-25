@@ -7,7 +7,7 @@ documented, and shaped for that role.
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
-Last refreshed: 2026-06-23 from `target/debug/atelier --help`, focused
+Last refreshed: 2026-06-25 from `target/debug/atelier --help`, focused
 subcommand help, removed-command rejection checks, and human-output samples.
 
 ## Category Contract
@@ -47,21 +47,16 @@ data model instead of the work object the operator is trying to understand.
 
 ## Current Help-Visible Root Command Files
 
-- [branch](branch.md)
 - [bundle](bundle.md)
-- [doctor](doctor.md)
 - [evidence](evidence.md)
-- [forgejo](forgejo.md)
 - [history](history.md)
 - [init](init.md)
 - [issue](issue.md)
-- [lint](lint.md)
-- [maintenance](maintenance.md)
 - [man](man.md)
 - [prune](prune.md)
 - [review](review.md)
-- [search](search.md)
 - [status](status.md)
+- [work](work.md)
 
 ## Hidden Advanced Or Migration Command Notes
 
@@ -71,10 +66,18 @@ not be taught as ordinary workflow:
 - [diagnostics](diagnostics.md): hidden local command telemetry.
 - [export](export.md): hidden deterministic-renderer diagnostic or migration
   helper.
+- [branch](branch.md): hidden/manual owner-branch recovery; routine branch
+  guidance comes from status, work dashboards, issue detail, and transitions.
+- [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
+  visible `check` and explicit `check --fix`.
+- [forgejo](forgejo.md): hidden provider setup diagnostics.
 - [import-beads](import-beads.md): hidden explicit predecessor import escape
   hatch; normal setup uses `init --import-beads`.
+- [lint](lint.md): hidden compatibility health probe; normal validation uses
+  visible `check`.
+- [maintenance](maintenance.md): hidden danger-zone maintenance primitives.
 - [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
-  from `doctor --fix`.
+  from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
 
 ## Cross-Cutting Audit Artifacts
@@ -101,6 +104,8 @@ documentation:
 - [repair](repair.md): removed root repair surface; use `doctor --fix` for
   ignored local runtime/projection repair and normal issue transitions for
   durable workflow state.
+- [search](search.md): removed root search surface pending a stronger
+  cross-record search design.
 - [worktree](worktree.md): removed visible workspace-management surface pending
   redesign.
 - [start](start.md): removed duplicate root lifecycle verb; use

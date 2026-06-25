@@ -68,7 +68,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(success, "rebuild failed: {stderr}");
 
     let (success, todo_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "todo"]);
     assert!(success, "todo filter failed: {stderr}");
     assert!(todo_out.contains("Categories: 1 todo"), "{todo_out}");
     assert!(todo_out.contains("Statuses: 1 todo"), "{todo_out}");
@@ -77,7 +77,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(!todo_out.contains(&done_id), "{todo_out}");
 
     let (success, active_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "in_progress"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "in_progress"]);
     assert!(success, "in_progress filter failed: {stderr}");
     assert!(active_out.contains("Categories: 1 active"), "{active_out}");
     assert!(
@@ -89,7 +89,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(!active_out.contains(&todo_id), "{active_out}");
 
     let (success, active_category_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--category", "active"]);
+        run_atelier(dir.path(), &["work", "queue", "--category", "active"]);
     assert!(success, "active category filter failed: {stderr}");
     assert!(
         active_category_out.contains("Categories: 1 active"),
@@ -113,14 +113,14 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     );
 
     let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--category", "in_progress"]);
+        run_atelier(dir.path(), &["work", "queue", "--category", "in_progress"]);
     assert!(!success, "in_progress category alias should be rejected");
     assert!(
         stderr.contains("Invalid issue category 'in_progress'"),
         "{stderr}"
     );
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "active"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "active"]);
     assert!(
         !success,
         "active status/category ambiguity should be rejected"
@@ -128,7 +128,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(stderr.contains("Invalid issue status 'active'"), "{stderr}");
 
     let (success, done_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "done"]);
     assert!(success, "done filter failed: {stderr}");
     assert!(done_out.contains("Categories: 1 done"), "{done_out}");
     assert!(done_out.contains("Statuses: 1 done"), "{done_out}");
@@ -185,7 +185,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     migrate_default_issue_workflow(dir.path());
 
     let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(ready_out.contains(&ready_id), "{ready_out}");
 
@@ -202,7 +202,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     .unwrap();
 
     let (success, blocked_ready_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--ready"]);
+        run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(
         success,
         "ready list with blocked transition should remain readable: {stderr}"
@@ -999,8 +999,18 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     let blocker_id = issue_id_by_title(dir.path(), "Open blocker");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &work_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &work_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
     commit_all(dir.path(), "status baseline");
     std::fs::write(dir.path().join("status-dirty.txt"), "dirty").unwrap();
 
@@ -1456,7 +1466,17 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let done_id = issue_id_by_title(dir.path(), "Done work");
     let done_id = done_id.as_str();
     close_issue_with_evidence(dir.path(), done_id, Some("done"));
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &blocked_id, &ready_id]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &ready_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
     assert!(success, "block issue failed: {stderr}");
 
     let (success, loose_out, stderr) =
@@ -1480,7 +1500,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     }
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "block", &active_id, &mission_blocker_id],
+        &["issue", "link", &active_id, &mission_blocker_id],
     );
     assert!(success, "link mission blocker failed: {stderr}");
 
@@ -1520,7 +1540,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(stdout.contains(&older_row), "{stdout}");
     assert!(!stdout.contains(&closed_row));
     assert!(stdout.contains("atelier issue status <id>"));
-    assert!(stdout.contains("atelier issue list"));
+    assert!(stdout.contains("atelier work queue"));
     assert!(!stdout.contains("Loose mission work"));
     assert!(!stdout.contains("Blocked work |"));
     assert!(!stdout.contains("todo/todo"));
@@ -1630,7 +1650,17 @@ fn test_mission_status_cli_reports_control_state() {
                 "- Manual check: `atelier issue status <mission-id>` lists this blocker.",
             )
     });
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            blocked_id,
+            blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
     assert!(success, "block issue failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, epic_id]);
@@ -1655,7 +1685,7 @@ fn test_mission_status_cli_reports_control_state() {
         "blocked {blocked_id} - Blocked status work | 1 blocker; parent {epic_id}; proof checked by workflow validators"
     )));
     assert!(status_out.contains(&format!(
-        "Inspect blockers: atelier issue blocked {blocked_id}"
+        "Inspect blockers: atelier issue show {blocked_id}"
     )));
     assert!(!status_out.contains(&format!("blocked by {blocker_id}")));
     assert!(status_out.contains("Blockers"));
@@ -1687,7 +1717,7 @@ fn test_mission_status_cli_reports_control_state() {
         "Refresh mission status (current blockers and terminal checks): atelier mission status {mission_id}"
     )));
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
-    assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
+    assert!(!status_out.contains("ready item(s)): atelier work queue --ready"));
     assert!(!status_out.contains("selectable issue(s)): atelier start"));
     assert!(status_out.contains("Direct mission evidence: none"));
     assert!(
@@ -2021,7 +2051,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     });
     remove_projection_state(schema_dir.path());
 
-    let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
+    let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
     assert!(!success, "schema drift should block projection query");
     assert!(
         stderr.contains("schema this atelier binary does not understand")
@@ -2050,7 +2080,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     );
     remove_projection_state(malformed_dir.path());
 
-    let (success, _, stderr) = run_atelier(malformed_dir.path(), &["issue", "list"]);
+    let (success, _, stderr) = run_atelier(malformed_dir.path(), &["work", "queue"]);
     assert!(!success, "malformed records should block projection query");
     assert!(
         stderr.contains("recovery: 1. run `atelier lint`")
@@ -2079,7 +2109,7 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     assert!(success, "rebuild failed: {stderr}");
 
     let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "fresh list failed: {stderr}");
     assert!(list_out.contains("Indexed title"));
 
@@ -2088,7 +2118,7 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     });
 
     let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "stale list should transparently rebuild: {stderr}");
     assert!(list_out.contains("Markdown title"));
     assert!(
@@ -2138,7 +2168,7 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
     );
 
     let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(
         success,
         "many changed sources should transparently rebuild: {stderr}"
@@ -2173,7 +2203,7 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     std::fs::remove_file(&first_path).unwrap();
 
     let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(
         success,
         "deleted source list should transparently rebuild: {stderr}"
@@ -2241,7 +2271,7 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
-    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue blocked <id>` output shows the linked root.";
+    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
@@ -2269,8 +2299,18 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     assert!(success, "second create failed: {stderr}");
     assert!(second_out.contains("Created issue atelier-"));
     let second_id = issue_ref(dir.path(), 2);
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &second_id, &first_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &second_id,
+            &first_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
     ensure_issue_completion_sections(dir.path(), &first_id);
@@ -2279,10 +2319,10 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
     std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
     let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(
         success,
-        "derived files should not stale issue list --ready: {stderr}"
+        "derived files should not stale work queue --ready: {stderr}"
     );
     assert!(ready_out.contains("Projection root"));
 
@@ -2290,10 +2330,10 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
         markdown.replace("Projection root", "Projection root changed")
     });
 
-    let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "blocked", &second_id]);
+    let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "show", &second_id]);
     assert!(
         success,
-        "stale issue blocked should transparently rebuild: {stderr}"
+        "stale issue show should transparently rebuild: {stderr}"
     );
     assert!(dep_out.contains("Projection root changed"));
     assert!(
@@ -4177,11 +4217,11 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(stdout.contains("Typed issue"));
     assert!(stdout.contains("Category: todo"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "list failed: {stderr}");
     assert!(stdout.contains("validation"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("validation"));
 
@@ -4218,8 +4258,8 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     assert!(stdout.contains("atelier-0002"));
     assert!(!stdout.contains("beads:"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", "atelier-0003"]);
-    assert!(success, "mapped issue blocked failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "atelier-0003"]);
+    assert!(success, "mapped issue show failed: {stderr}");
     assert!(stdout.contains("atelier-0003"));
     assert!(stdout.contains("atelier-0002"));
 }

@@ -44,7 +44,7 @@ Orientation loop:
 ```text
 atelier man worker
 atelier status
-atelier issue list --ready
+atelier work queue --ready
 atelier issue show <id>
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
@@ -114,14 +114,14 @@ Core loop:
 
 ```text
 atelier issue table --kind mission
-atelier issue list --ready
+atelier work queue --ready
 atelier issue show <id>
 atelier issue status <id>
 atelier bundle preview <file>
 atelier bundle apply <file> --yes
 atelier issue create "..."
 atelier issue link <objective-id> <issue-id> --role advances
-atelier issue block <blocked-id> <blocker-id>
+atelier issue link <blocked-id> <blocker-id>
 atelier issue show <objective-id>
 atelier status
 ```
@@ -130,7 +130,7 @@ Manager guidance should make `bundle preview <file>` and
 `bundle apply <file> --yes` the expected path for bulk record creation, such as a
 mission with many epics, issues, blockers, objective links, or evidence links.
 Manual `issue create`, `issue link <objective-id> <issue-id> --role advances`,
-and `issue block` remain appropriate
+and `issue link` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
 branch commands belong in advanced repair and diagnostic guidance when Atelier
 routes the operator there.

@@ -5,6 +5,9 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::commands;
+use crate::human_output::{
+    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
+};
 use crate::utils::format_issue_id;
 use atelier_app::read_pipeline::{StatusNextAction, StatusView};
 use atelier_app::use_cases as app_use_cases;
@@ -34,70 +37,102 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
 }
 
 fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
-    println!("Atelier Status");
-    println!("==============");
-    println!("Tracker:       {}", view.tracker_state);
-    println!("Ready work:    {}", view.work.ready.len());
-
-    if view.work.active.is_empty() {
-        println!("Current work:  none");
+    let current_work = if view.work.active.is_empty() {
+        "none".to_string()
     } else {
-        println!("Current work:  {} issue(s)", view.work.active.len());
-        for issue in &view.work.active {
-            println!(
-                "  {} {} - {} [{}]",
-                issue.state_label(),
-                issue.id,
-                issue.title,
-                issue
-                    .status_category
-                    .as_deref()
-                    .unwrap_or("category:unconfigured")
-            );
-        }
-    }
-
-    println!("Current missions: {}", view.current_missions.len());
-    if view.active_role_counts.is_empty() {
-        println!("Active roles:   none");
+        format!("{} issue(s)", view.work.active.len())
+    };
+    let active_roles = if view.active_role_counts.is_empty() {
+        "none".to_string()
     } else {
-        println!(
-            "Active roles:   {}",
-            render_role_counts(&view.active_role_counts)
-        );
-    }
-
+        render_role_counts(&view.active_role_counts)
+    };
+    let mut summary_lines = vec![
+        format!("Tracker:       {}", view.tracker_state),
+        format!("Ready work:    {}", view.work.ready.len()),
+        format!("Current work:  {current_work}"),
+        format!("Current missions: {}", view.current_missions.len()),
+        format!("Active roles:   {active_roles}"),
+    ];
     if view.stale_records > 0 {
-        println!("Local state issues: {}", view.stale_records);
+        summary_lines.push(format!("Local state issues: {}", view.stale_records));
     }
 
-    println!();
-    println!("Local State");
-    println!("-----------");
-    print_git_state();
-    println!("Tracker:  {}", view.tracker_state);
+    let active_rows = view
+        .work
+        .active
+        .iter()
+        .map(|issue| IssueListRow {
+            role: crate::human_output::DisplayRole::Executable,
+            id: issue.id.clone(),
+            status: issue.status_category.clone(),
+            priority: issue.priority.clone(),
+            title: issue.title.clone(),
+            blockers: 0,
+            depth: 1,
+        })
+        .collect::<Vec<_>>();
 
-    println!();
-    println!("Next Actions");
-    println!("------------");
-    match view.next_action {
+    let git = git_state();
+    let local_state = match git {
+        Ok(state) => {
+            let mut panel = MetadataPanel::new("Local State");
+            if let Some(branch) = state.branch {
+                panel = panel.row("Branch", branch);
+            }
+            if state.dirty_entries.is_empty() {
+                panel = panel.row("Checkout", "clean");
+            } else {
+                panel = panel.row(
+                    "Checkout",
+                    format!(
+                        "dirty ({})",
+                        crate::human_output::path_summary(&state.dirty_entries, 3)
+                    ),
+                );
+            }
+            panel.row("Tracker", view.tracker_state.clone())
+        }
+        Err(error) => MetadataPanel::new("Local State")
+            .row("Checkout", format!("unavailable - {error}"))
+            .row("Tracker", view.tracker_state.clone()),
+    };
+
+    let next_actions = match view.next_action {
         StatusNextAction::InspectReadyWork { count } => {
-            println!("  Choose ready work ({count} ready issue(s) available): atelier work ready");
-            println!("  Inspect selected work transitions: atelier issue transition <issue-id>");
+            vec![
+                format!(
+                    "  Choose ready work ({count} ready issue(s) available): atelier work ready"
+                ),
+                "  Inspect selected work transitions: atelier issue transition <issue-id>"
+                    .to_string(),
+            ]
         }
         StatusNextAction::InspectBlockedWork => {
-            println!("  Inspect blocked work (no ready work is available): atelier work blocked");
+            vec![
+                "  Inspect blocked work (no ready work is available): atelier work blocked"
+                    .to_string(),
+            ]
         }
         StatusNextAction::InspectHealth { stale_records } => {
-            println!(
-                "  Repair local Atelier state ({stale_records} stale record(s)): atelier check --fix"
-            );
-            println!("  Check committed tracker records after repair: atelier check");
+            vec![
+                format!(
+                    "  Repair local Atelier state ({stale_records} stale record(s)): atelier check --fix"
+                ),
+                "  Check committed tracker records after repair: atelier check".to_string(),
+            ]
         }
         StatusNextAction::NoSpecificAction => {
-            println!("  No specific next action is available from checkout state.");
+            vec!["  No specific next action is available from checkout state.".to_string()]
         }
-    }
+    };
+
+    Page::new("Atelier Status")
+        .panel(LinesPanel::new("", summary_lines))
+        .panel(IssueListPanel::new("Current Work", active_rows).limit(8))
+        .panel(local_state)
+        .panel(LinesPanel::new("Next Actions", next_actions))
+        .print(RenderContext::for_stdout());
     Ok(())
 }
 
@@ -130,25 +165,6 @@ fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
         .map(|(role, count)| format!("{role}={count}"))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn print_git_state() {
-    match git_state() {
-        Ok(state) => {
-            if let Some(branch) = state.branch {
-                println!("Branch:   {branch}");
-            }
-            if state.dirty_entries.is_empty() {
-                println!("Checkout: clean");
-            } else {
-                println!("Checkout: dirty ({} entries)", state.dirty_entries.len());
-                for entry in state.dirty_entries.iter().take(3) {
-                    println!("  {entry}");
-                }
-            }
-        }
-        Err(error) => println!("Checkout: unavailable - {error}"),
-    }
 }
 
 struct GitState {

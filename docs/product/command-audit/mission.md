@@ -32,8 +32,9 @@ The replacement command model is:
   `atelier issue unlink ...` replace mission work-link commands. Relationship
   roles are part of the general issue link contract, not a generic root `link`
   namespace.
-- `atelier issue block <objective-id> <blocker-id>` records objective blockers
-  through the same issue blocker surface as ordinary work blockers.
+- `atelier issue link <objective-id> <blocker-id> --role blocked_by` records
+  objective blockers through the same typed issue-link surface as ordinary work
+  blockers.
 - `atelier issue note <objective-id> "..."` records coordination notes and
   closeout reasons. Closing an objective uses the normal workflow transition
   path, so close reasons are transition notes rather than a mission-specific
@@ -65,7 +66,7 @@ read-only report and discovery commands.
   remain on issue/workflow commands.
 - Design: Consolidate mutation. Useful mission reads live in type-aware issue
   detail and read-only mission report views. Mission relationship mutations
-  move into issue link and issue blocker commands.
+  move into typed issue links and issue detail.
 - Output hierarchy: Objective identity and lifecycle first, current
   work/blockers next, linked hierarchy and affected records next,
   proof/health/terminal readiness next, then specific next actions.
@@ -85,4 +86,4 @@ read-only report and discovery commands.
 | `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
 | `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |
 | `mission unlink` | Manager/orchestrator | Remove issue work from mission scope. | Removed. Replacement: `issue unlink <objective-id> <issue-id> --role advances`. |
-| `mission add-blocker` | Manager/orchestrator | Mark an issue as a mission blocker. | Removed. Replacement: `issue block <objective-id> <blocker-id>`. |
+| `mission add-blocker` | Manager/orchestrator | Mark an issue as a mission blocker. | Removed. Replacement: `issue link <objective-id> <blocker-id> --role blocked_by`. |

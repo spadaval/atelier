@@ -625,7 +625,7 @@ fn write_valid_command_guidance(dir: &Path) {
     write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier lint`\n",
+        "# Agent Instructions\n\n- `atelier work queue --ready`\n- `atelier check`\n",
     )
     .unwrap();
 }

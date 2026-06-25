@@ -55,7 +55,7 @@ new surviving surfaces.
 | Agent Factory job | Required CLI capability | Proposed owner |
 | --- | --- | --- |
 | Find current repository/tracker state | checkout orientation and health | `status`, health command |
-| Choose and scope work | issue inventory, objective detail, blocker visibility | `issue list`, `issue show` |
+| Choose and scope work | issue inventory, objective detail, blocker visibility | `work queue`, `issue show` |
 | Plan missions/epics/issues | create typed work and relationships | `issue create`, `issue link`, `bundle` |
 | Delegate implementation | inspect issue contract, readiness, branch/worktree state, expected proof | `issue show`, `issue transition`, `status` |
 | Execute implementation | start/close workflow, leave notes, record proof | `issue transition`, `issue note`, `evidence record` |
@@ -63,7 +63,7 @@ new surviving surfaces.
 | Review | inspect diff context, issue proof expectations, review artifact state | `issue show`, `review show`, `issue transition` |
 | Validate | inspect claim, run proof, record evidence, classify failures | `issue show`, `evidence record`, health command |
 | Docs cleanup | find source of truth, prove help/docs consistency | health command, command help, docs |
-| Audit/readiness | assess operability from executable surfaces | `status`, `issue list`, `issue show`, health command |
+| Audit/readiness | assess operability from executable surfaces | `status`, `work queue`, `issue show`, health command |
 
 ## Inventory
 
@@ -79,16 +79,16 @@ new surviving surfaces.
 | Create mission/objective record | `issue create --issue-type mission`, old/retired mission create docs | `issue create` | `atelier issue create "..." --type mission` | Low | Mission is an issue type, not a namespace. |
 | Create epic/typed work | `issue create --issue-type ...` | `issue create` | `atelier issue create "..." --type epic` | Low | Use configured issue types. |
 | Bulk create or apply authored work graph | `bundle preview`, `bundle apply` | `bundle` for now | `bundle preview <file>`, `bundle apply <file>` | Medium | Capability is real. Root `bundle` is imperfect, but `issue apply` is not clearly better. Keep it bounded until a better owner is proven. |
-| List global work queue | `issue list` | `issue list` | `atelier issue list` | Low | Core read surface. |
-| List ready work | `issue list --ready`, `status` signpost, mission selectable work | `issue list` | `atelier issue list --ready` | Low | Global ready work stays simple. |
-| List blocked work | `issue blocked`, `issue list --blocked`, queue footers | `issue list` | `atelier issue list --blocked` | Low | Remove `issue blocked` once `issue show` handles detail. |
-| Filter by workflow status | `issue list --status`, `issue table --status` | `issue list` | `atelier issue list --status <status>` | Low | Workflow status is a field/filter, not a separate command. |
-| Filter by issue type | `issue table --kind mission`, `issue table --issue-type`, ad hoc mission list | `issue list` | `atelier issue list --type mission` | Low | Replace mission inventory/table. |
-| Filter by label/priority | `issue list --label`, `issue list --priority` | `issue list` | existing simple flags | Low | Keep simple metadata filters. |
-| Search issue text when ID is unknown | root `search`, maybe issue list/search behavior | none in this cut | none | Medium | Remove search entirely for now. Do not create `issue list --query` as a quieter replacement. A future search design must prove a stronger cross-record job. |
+| List global work queue | `work queue` | `work queue` | `atelier work queue` | Low | Core read surface. |
+| List ready work | `work queue --ready`, `status` signpost, mission selectable work | `work queue` | `atelier work queue --ready` | Low | Global ready work stays simple. |
+| List blocked work | `issue show`, `work queue --blocked`, queue footers | `work queue` | `atelier work queue --blocked` | Low | Remove `issue show` once `issue show` handles detail. |
+| Filter by workflow status | `work queue --status`, `issue table --status` | `work queue` | `atelier work queue --status <status>` | Low | Workflow status is a field/filter, not a separate command. |
+| Filter by issue type | `issue table --kind mission`, `issue table --issue-type`, ad hoc mission list | `work queue` | `atelier work queue --type mission` | Low | Replace mission inventory/table. |
+| Filter by label/priority | `work queue --label`, `work queue --priority` | `work queue` | existing simple flags | Low | Keep simple metadata filters. |
+| Search issue text when ID is unknown | root `search`, maybe work queue/search behavior | none in this cut | none | Medium | Remove search entirely for now. Do not create `work queue --query` as a quieter replacement. A future search design must prove a stronger cross-record job. |
 | Show issue record detail | `issue show` | `issue show` | `atelier issue show <id>` | Low | Core durable record view. |
-| Show issue workflow status field | `issue show`, `issue list`, `issue transition`, misleading `issue status` name | `issue show` and `issue list` | displayed as `Status:` in show/list | Low | The status field is valuable; a separate `issue status` command is not. |
-| Show issue blockers and blocking relationships | `issue show`, `issue blocked <id>`, `issue status`, `mission status` | `issue show` | `atelier issue show <id>` | Medium | Detail must include enough blocker meaning to remove `issue blocked`. |
+| Show issue workflow status field | `issue show`, `work queue`, `issue transition`, misleading `issue status` name | `issue show` and `work queue` | displayed as `Status:` in show/list | Low | The status field is valuable; a separate `issue status` command is not. |
+| Show issue linkers and blocking relationships | `issue show`, `issue show <id>`, `issue status`, `mission status` | `issue show` | `atelier issue show <id>` | Medium | Detail must include enough blocker meaning to remove `issue show`. |
 | Show downstream impact | `issue show`, retired graph impact | `issue show` | `atelier issue show <id>` | Low | Keep as bounded section. |
 | Show parent/children hierarchy | `issue show`, `issue table`, retired graph tree | `issue show` | `atelier issue show <id>` | Low | Hierarchy belongs to record detail. |
 | Show linked issues/relationships | `issue show`, `issue link/list internals`, retired graph views | `issue show` | `atelier issue show <id>` | Low | Detail should be bounded and readable. |
@@ -96,7 +96,7 @@ new surviving surfaces.
 | Show objective linked work roots | `mission status`, `issue show` links | `issue show` | Objective section in `issue show` | Medium | Show direct linked roots separately from descendants so scope is explainable. |
 | Show objective work counts | `mission status`, `issue status`, `issue table` | `issue show` | Objective Progress section | Medium | Counts should cover linked work roots and descendant work under roots. |
 | Show bounded ready work inside objective | `mission status`, `issue status` | `issue show` | bounded Objective Progress sample | Medium | Avoid new scoped query language unless bounded sample is insufficient. |
-| Show bounded blocked work inside objective | `mission status`, `issue status`, `issue blocked` | `issue show` | bounded Objective Progress sample | Medium | Must show blocker titles/counts, not just IDs. |
+| Show bounded blocked work inside objective | `mission status`, `issue status`, `issue show` | `issue show` | bounded Objective Progress sample | Medium | Must show blocker titles/counts, not just IDs. |
 | Select all work inside objective for bulk action | no clean current owner; mission status prints samples | undecided | maybe not supported; maybe future selector | High | This is where a selector DSL might become justified. Do not add ad hoc `--within` casually. |
 | Inspect objective terminal readiness | `mission status`, `issue status`, `issue transition close transition options` | `issue transition` plus summary in `issue show` | `atelier issue transition <objective-id> close` | Medium | Readiness gates belong to transition; show may summarize. |
 | Show available workflow transitions | `issue transition`, `issue show` summary | `issue transition` | `atelier issue transition <id>` with no transition name | Medium | Long term, remove awkward `transition options`. |
@@ -114,7 +114,7 @@ new surviving surfaces.
 | Record manual evidence | `evidence record` | `evidence record` | unchanged | Low | Core proof surface. |
 | Capture command-backed evidence | `evidence record -- <command>` | `evidence record` | unchanged | Low | Core proof surface. |
 | Show evidence record | `evidence show` | `evidence show` | unchanged | Low | Evidence is a first-class record. |
-| List evidence records | `evidence list` | `evidence list` | bounded list with filters | Low | Needs default limit; capability is distinct from issue list. |
+| List evidence records | `evidence list` | `evidence list` | bounded list with filters | Low | Needs default limit; capability is distinct from work queue. |
 | Attach existing evidence to issue | `evidence attach`, maybe `issue link` | relationship owner | `issue link <issue> <evidence> --role validates` or keep attach if cross-kind link is not ergonomic | Medium | Capability is real; separate attach verb may be unnecessary. |
 | Show evidence for an issue | `issue show`, `evidence list`, `history` | `issue show` plus evidence list filter if needed | `issue show <id>`; maybe `evidence list --target issue/<id>` | Medium | Avoid overloading issue show with huge evidence transcripts. |
 | Open review artifact | `review open` | `review open` | infer title/body/branches from issue when possible | Medium | Current command exposes too much provider plumbing. |
@@ -159,7 +159,7 @@ may not replace a full selectable list of objective-scoped work.
 
 Options before adding a DSL:
 
-- keep only bounded rollup and rely on global `issue list --ready`;
+- keep only bounded rollup and rely on global `work queue --ready`;
 - add a single explicit non-query mode to `issue show`, such as
   `issue show <id> --work`;
 - add one selector expression mechanism later;
@@ -239,10 +239,10 @@ replaces multiple command/filter surfaces with one clearer selection model.
 2. Move mission/objective rollup into `issue show <objective-id>`.
 3. Remove `mission status` and `issue status` only after the rollup is in
    `issue show`.
-4. Remove `issue blocked` only after blocker detail in `issue show` is adequate.
-5. Remove `issue table` after `issue list --type mission` and list formatting
+4. Remove `issue show` only after blocker detail in `issue show` is adequate.
+5. Remove `issue table` after `work queue --type mission` and list formatting
    cover mission inventory.
-6. Remove root `search` entirely rather than replacing it with `issue list
+6. Remove root `search` entirely rather than replacing it with `work queue
    --query`.
 7. Keep high-level `history`, and remove or fold specific scoped history
    variants only where they earn a focused owner.

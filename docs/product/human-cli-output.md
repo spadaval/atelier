@@ -238,7 +238,7 @@ otherwise degraded; `doctor --fix` is the admin explicit local repair path.
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
-`atelier issue list`, `atelier issue list --ready`, and `atelier search`.
+`atelier work queue`, `atelier work queue --ready`, and `atelier search`.
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -260,7 +260,7 @@ only to explain child work are context-only unless the parent itself is the
 action target.
 
 Empty queue output should say what was searched and what to try next. For
-example, `issue list --ready` may include the blocked count, while
+example, `work queue --ready` may include the blocked count, while
 `issue search` should echo the search query.
 
 Quiet mode remains the terse path for strict composition values only. Quiet
@@ -309,8 +309,8 @@ their need:
   record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier issue show <objective-id>`,
-  `atelier issue status <objective-id>`, `atelier issue list --ready`,
-  `atelier issue list --blocked`, and issue blocker commands over scraping
+  `atelier issue status <objective-id>`, `atelier work queue --ready`,
+  `atelier work queue --blocked`, and issue linker commands over scraping
   broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bundle input JSON or a
@@ -432,7 +432,7 @@ unless the test is specifically for a formatter primitive.
 
 The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
 stabilization mission: `status`, `issue status <objective-id>`, `issue show`,
-`issue list --ready`, `evidence record`, `evidence show/list`, dependency and
+`work queue --ready`, `evidence record`, `evidence show/list`, dependency and
 link list output, issue impact rendered by `issue show`, `lint`, and admin
 repair commands when local state is degraded.
 

@@ -115,36 +115,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             )
         }
 
-        super::IssueCommands::List {
-            status,
-            category,
-            label,
-            priority,
-            ready,
-            blocked,
-        } => {
-            let db = degraded_projection_query_db()?;
-            if blocked {
-                if ready {
-                    bail!("--blocked cannot be combined with --ready");
-                }
-                if status != "todo" || category.is_some() || label.is_some() || priority.is_some() {
-                    bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
-                }
-                commands::deps::list_blocked(&db, quiet)
-            } else {
-                commands::issue::list(
-                    &db,
-                    Some(&status),
-                    category.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    ready,
-                    quiet,
-                )
-            }
-        }
-
         super::IssueCommands::Show { id } => {
             let db = degraded_projection_query_db()?;
             commands::issue::show(&db, &id)

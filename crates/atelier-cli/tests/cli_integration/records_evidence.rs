@@ -628,7 +628,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("1 total"));
 
@@ -644,24 +644,42 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     );
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &task_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &task_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &task_id]);
-    assert!(success, "issue blocked failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id]);
+    assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "unblock", &task_id, &blocker_id]);
-    assert!(success, "issue unblock failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &task_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue unlink failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
     for args in [
-        vec!["issue", "list", "--status", "all"],
+        vec!["work", "queue", "--status", "all"],
         vec!["search", "Factory"],
         vec!["lint"],
         vec!["export", "--check"],
@@ -2325,7 +2343,7 @@ fn test_workflow_check_rejects_stale_agent_guidance_options() {
     write_valid_command_guidance(dir.path());
     fs::write(
         dir.path().join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --not-a-real-option`\n",
+        "# Agent Instructions\n\n- `atelier work queue --not-a-real-option`\n",
     )
     .unwrap();
 

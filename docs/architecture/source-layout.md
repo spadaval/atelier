@@ -70,7 +70,7 @@ reimplement transition availability rules as a parallel source of truth.
 `atelier-cli` owns Clap command shape, process exit mapping, and terminal
 rendering only. Commands such as `atelier issue transition <id> --options`,
 `atelier issue transition <id> <transition>`, `atelier issue status
-<objective-id>`, and `atelier issue list --ready` should render the
+<objective-id>`, and `atelier work queue --ready` should render the
 app/workflow outcomes they receive. CLI code may contain formatting labels such
 as section headings, but not workflow policy decisions.
 
@@ -129,7 +129,7 @@ Follow-on workflow extraction issues should be accepted only when command output
 and tests show that:
 
 - `workflow check`, `issue transition --options`, `issue transition`,
-  `issue list --ready`, `issue status <objective-id>`, bundle status defaults, and closeout
+  `work queue --ready`, `issue status <objective-id>`, bundle status defaults, and closeout
   validators all consume the same `atelier-workflow` policy API;
 - invalid statuses and missing workflow configuration fail through the shared
   workflow diagnostics rather than command-specific messages;

@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::Path;
 use std::process::Command;
@@ -7,6 +7,101 @@ use std::process::Command;
 use atelier_app::read_pipeline::{WorkBuckets, WorkRow};
 use atelier_core::Issue;
 use atelier_sqlite::Database;
+
+use crate::human_output::{
+    DisplayRole, FooterAction, FooterPanel, IssueListPanel, IssueListRow, LinesPanel,
+    MetadataPanel, Page, RenderContext,
+};
+
+pub struct QueueOptions<'a> {
+    pub status: &'a str,
+    pub category: Option<&'a str>,
+    pub label: Option<&'a str>,
+    pub priority: Option<&'a str>,
+    pub ready: bool,
+    pub active: bool,
+    pub blocked: bool,
+    pub backlog: bool,
+    pub all: bool,
+}
+
+pub fn dashboards(quiet: bool) -> Result<()> {
+    if quiet {
+        println!("queue");
+        println!("mission");
+        println!("epic");
+        return Ok(());
+    }
+
+    Page::new("Atelier Work")
+        .panel(LinesPanel::new(
+            "Dashboards",
+            [
+                "queue    Repo-wide operational work queue",
+                "mission  Live mission orchestration dashboard",
+                "epic     Focused epic execution dashboard",
+            ],
+        ))
+        .panel(FooterPanel::new(
+            "Next Commands",
+            [
+                FooterAction::new("Browse ready queue", "atelier work queue --ready"),
+                FooterAction::new(
+                    "Open mission dashboard",
+                    "atelier work mission <mission-id>",
+                ),
+                FooterAction::new("Open epic dashboard", "atelier work epic <epic-id>"),
+            ],
+        ))
+        .print(RenderContext::for_stdout());
+    Ok(())
+}
+
+pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()> {
+    let state_filter_count = [
+        options.ready,
+        options.active,
+        options.blocked,
+        options.backlog,
+        options.all,
+    ]
+    .into_iter()
+    .filter(|flag| *flag)
+    .count();
+    if state_filter_count > 1 {
+        bail!("choose only one queue state filter");
+    }
+    if options.ready && (options.status != "todo" || options.category.is_some()) {
+        bail!("--ready cannot be combined with --status or --category");
+    }
+    if options.blocked {
+        if options.status != "todo" || options.category.is_some() {
+            bail!("--blocked cannot be combined with --status or --category");
+        }
+        return crate::commands::issue::list_blocked_with_title(db, "Work Queue", quiet);
+    }
+    let (status, category, ready) = if options.all {
+        ("all", None, false)
+    } else if options.ready {
+        ("todo", None, true)
+    } else if options.active {
+        ("todo", Some("active"), false)
+    } else if options.backlog {
+        ("todo", Some("backlog"), false)
+    } else {
+        (options.status, options.category, false)
+    };
+    crate::commands::issue::list_with_title(
+        db,
+        "Work Queue",
+        Some(status),
+        category,
+        options.label,
+        options.priority,
+        ready,
+        quiet,
+    )
+}
 
 pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
@@ -16,20 +111,27 @@ pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!("Atelier Work");
-    println!("============");
+    let mut page = Page::new("Atelier Work");
     match bucket {
-        "ready" => print_bucket("Ready Work", &buckets.ready),
-        "blocked" => print_bucket("Blocked Work", &buckets.blocked),
-        "active" => print_bucket("Active Work", &buckets.active),
+        "ready" => {
+            page = page.panel(work_bucket_panel("Ready Work", &buckets.ready));
+        }
+        "blocked" => {
+            page = page.panel(work_bucket_panel("Blocked Work", &buckets.blocked));
+        }
+        "active" => {
+            page = page.panel(work_bucket_panel("Active Work", &buckets.active));
+        }
         "all" => {
-            print_bucket("Active Work", &buckets.active);
-            print_bucket("Ready Work", &buckets.ready);
-            print_bucket("Blocked Work", &buckets.blocked);
-            print_bucket("Backlog Work", &buckets.backlog);
+            page = page
+                .panel(work_bucket_panel("Active Work", &buckets.active))
+                .panel(work_bucket_panel("Ready Work", &buckets.ready))
+                .panel(work_bucket_panel("Blocked Work", &buckets.blocked))
+                .panel(work_bucket_panel("Backlog Work", &buckets.backlog));
         }
         other => bail!("unknown work bucket '{other}'"),
     }
+    page.print(RenderContext::for_stdout());
     Ok(())
 }
 
@@ -46,38 +148,321 @@ fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
     }
 }
 
-fn print_bucket(title: &str, rows: &[WorkRow]) {
-    println!();
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
-    if rows.is_empty() {
-        println!("(none)");
-        return;
+fn work_bucket_panel(title: &str, rows: &[WorkRow]) -> IssueListPanel {
+    IssueListPanel::new(
+        title,
+        rows.iter()
+            .map(|row| IssueListRow {
+                role: display_role_for_state(row.state_label()),
+                id: row.id.clone(),
+                status: Some(row.status.clone()),
+                priority: row.priority.clone(),
+                title: row.title.clone(),
+                blockers: row.open_blockers.len(),
+                depth: 1,
+            })
+            .collect(),
+    )
+    .total_count(rows.len())
+    .limit(20)
+}
+
+fn display_role_for_state(state: &str) -> DisplayRole {
+    match state {
+        "active" => DisplayRole::Executable,
+        "ready" => DisplayRole::Selectable,
+        "blocked" => DisplayRole::Blocked,
+        _ => DisplayRole::ContextOnly,
     }
-    for row in rows.iter().take(20) {
-        if row.open_blockers.is_empty() {
-            println!(
-                "  {} {} [{}] {} - {}",
-                row.state_label(),
-                row.id,
-                row.status,
-                row.priority,
-                row.title
-            );
-        } else {
-            println!(
-                "  {} {} [{}] {} - {} | {} blocker(s)",
-                row.state_label(),
-                row.id,
-                row.status,
-                row.priority,
-                row.title,
-                row.open_blockers.len()
-            );
+}
+
+pub fn mission_dashboard(db: &Database, mission_ref: &str, quiet: bool) -> Result<()> {
+    let mission_id = crate::commands::issue::resolve_id(db, mission_ref)?;
+    let mission = db.require_issue(&mission_id)?;
+    if mission.issue_type != "mission" {
+        bail!(
+            "{} is issue_type '{}'; work mission requires issue_type 'mission'",
+            mission.id,
+            mission.issue_type
+        );
+    }
+    let scoped = mission_scoped_issues(db, &mission.id)?;
+    if quiet {
+        let counts = dashboard_counts(db, &scoped)?;
+        println!(
+            "{} active={} ready={} blocked={} done={} backlog={} proof_gaps={}",
+            mission.id,
+            counts.active,
+            counts.ready,
+            counts.blocked,
+            counts.done,
+            counts.backlog,
+            proof_gap_count(db, &scoped)?
+        );
+        return Ok(());
+    }
+
+    let counts = dashboard_counts(db, &scoped)?;
+    let proof_gaps = proof_gap_count(db, &scoped)?;
+    let close_readiness = transition_readiness(db, &mission.id, "close")?;
+    let panels = dashboard_panels(db, &scoped)?;
+    let mut page = Page::new(format!("Work Mission {} - {}", mission.id, mission.title)).panel(
+        MetadataPanel::untitled()
+            .row("Status", mission.status.clone())
+            .row("Health", health_label(counts.blocked, proof_gaps))
+            .row(
+                "Work",
+                format!(
+                    "active {}, ready {}, blocked {}, done {}, backlog {}",
+                    counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
+                ),
+            )
+            .row("Proof gaps", proof_gaps.to_string())
+            .row("Close readiness", close_readiness),
+    );
+    for panel in panels {
+        page = page.panel(panel);
+    }
+    page.panel(FooterPanel::new(
+        "Next Commands",
+        [
+            FooterAction::new(
+                "Show mission record",
+                format!("atelier issue show {}", mission.id),
+            ),
+            FooterAction::new(
+                "Inspect transitions",
+                format!("atelier issue transition {}", mission.id),
+            ),
+            FooterAction::new("Browse mission queue", "atelier work queue --all"),
+        ],
+    ))
+    .print(RenderContext::for_stdout());
+    Ok(())
+}
+
+pub fn epic_dashboard(db: &Database, epic_ref: &str, quiet: bool) -> Result<()> {
+    let epic_id = crate::commands::issue::resolve_id(db, epic_ref)?;
+    let epic = db.require_issue(&epic_id)?;
+    if epic.issue_type != "epic" {
+        bail!(
+            "{} is issue_type '{}'; work epic requires issue_type 'epic'",
+            epic.id,
+            epic.issue_type
+        );
+    }
+    let mut scoped = descendant_issues(db, &epic.id)?;
+    scoped.insert(0, epic.clone());
+    if quiet {
+        let counts = dashboard_counts(db, &scoped)?;
+        println!(
+            "{} active={} ready={} blocked={} done={} backlog={} proof_gaps={}",
+            epic.id,
+            counts.active,
+            counts.ready,
+            counts.blocked,
+            counts.done,
+            counts.backlog,
+            proof_gap_count(db, &scoped)?
+        );
+        return Ok(());
+    }
+
+    let counts = dashboard_counts(db, &scoped)?;
+    let proof_gaps = proof_gap_count(db, &scoped)?;
+    let transition = transition_readiness(db, &epic.id, "start")?;
+    let panels = dashboard_panels(db, &scoped)?;
+    let mut page = Page::new(format!("Work Epic {} - {}", epic.id, epic.title)).panel(
+        MetadataPanel::untitled()
+            .row("Status", epic.status.clone())
+            .row(
+                "Mission",
+                owning_mission_id(db, &epic.id).unwrap_or_else(|_| "(none)".to_string()),
+            )
+            .row(
+                "Work",
+                format!(
+                    "active {}, ready {}, blocked {}, done {}, backlog {}",
+                    counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
+                ),
+            )
+            .row("Proof gaps", proof_gaps.to_string())
+            .row("Transition readiness", transition),
+    );
+    for panel in panels {
+        page = page.panel(panel);
+    }
+    page.panel(FooterPanel::new(
+        "Next Commands",
+        [
+            FooterAction::new(
+                "Show epic record",
+                format!("atelier issue show {}", epic.id),
+            ),
+            FooterAction::new(
+                "Inspect transitions",
+                format!("atelier issue transition {}", epic.id),
+            ),
+            FooterAction::new(
+                "Open review branch",
+                format!("atelier branch for-epic {}", epic.id),
+            ),
+        ],
+    ))
+    .print(RenderContext::for_stdout());
+    Ok(())
+}
+
+#[derive(Default)]
+struct DashboardCounts {
+    active: usize,
+    ready: usize,
+    blocked: usize,
+    done: usize,
+    backlog: usize,
+}
+
+fn dashboard_counts(db: &Database, issues: &[Issue]) -> Result<DashboardCounts> {
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut counts = DashboardCounts::default();
+    for issue in issues {
+        match issue_category(db, policy.as_ref(), issue)?.as_str() {
+            "active" => counts.active += 1,
+            "blocked" => counts.blocked += 1,
+            "done" => counts.done += 1,
+            "backlog" => counts.backlog += 1,
+            _ => counts.ready += 1,
         }
     }
-    if rows.len() > 20 {
-        println!("  {} more work item(s) omitted", rows.len() - 20);
+    Ok(counts)
+}
+
+fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPanel>> {
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut buckets = BTreeMap::<String, Vec<IssueListRow>>::new();
+    for issue in issues {
+        let category = issue_category(db, policy.as_ref(), issue)?;
+        let role = match category.as_str() {
+            "active" => DisplayRole::Executable,
+            "blocked" => DisplayRole::Blocked,
+            "done" | "backlog" => DisplayRole::ContextOnly,
+            _ => DisplayRole::Selectable,
+        };
+        let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
+            db,
+            policy.as_ref(),
+            &issue.id,
+        )?;
+        buckets.entry(category).or_default().push(IssueListRow {
+            role,
+            id: issue.id.clone(),
+            status: Some(issue.status.clone()),
+            priority: issue.priority.clone(),
+            title: issue.title.clone(),
+            blockers: open_blockers.len(),
+            depth: 1,
+        });
+    }
+    let mut panels = Vec::new();
+    for (category, title) in [
+        ("active", "Active Work"),
+        ("todo", "Ready Work"),
+        ("blocked", "Blocked Work"),
+        ("backlog", "Backlog Work"),
+        ("done", "Done Work"),
+    ] {
+        let rows = buckets.remove(category).unwrap_or_default();
+        panels.push(IssueListPanel::new(title, rows).limit(8));
+    }
+    Ok(panels)
+}
+
+fn issue_category(
+    db: &Database,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<String> {
+    let open_blockers =
+        crate::commands::issue_workflow::open_blocker_ids_with_policy(db, policy, &issue.id)?;
+    if !open_blockers.is_empty() {
+        return Ok("blocked".to_string());
+    }
+    Ok(
+        crate::commands::issue_workflow::issue_status_category(policy, &issue.status)
+            .unwrap_or_else(|| "todo".to_string()),
+    )
+}
+
+fn mission_scoped_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
+    let mut scoped = Vec::new();
+    for issue in db.list_issues(Some("all"), None, None)? {
+        if issue.id == mission_id {
+            continue;
+        }
+        if crate::commands::mission::issue_advances_mission(db, mission_id, &issue.id)? {
+            scoped.push(issue);
+        }
+    }
+    scoped.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(scoped)
+}
+
+fn descendant_issues(db: &Database, root_id: &str) -> Result<Vec<Issue>> {
+    let mut out = Vec::new();
+    let mut stack = db
+        .get_subissues(root_id)?
+        .into_iter()
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    while let Some(id) = stack.pop() {
+        let issue = db.require_issue(&id)?;
+        stack.extend(db.get_subissues(&id)?.into_iter().map(|child| child.id));
+        out.push(issue);
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+fn proof_gap_count(db: &Database, issues: &[Issue]) -> Result<usize> {
+    let mut count = 0;
+    for issue in issues {
+        if !crate::commands::issue::issue_evidence_gate_status(db, issue, None)?.passed {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn transition_readiness(db: &Database, issue_id: &str, transition_name: &str) -> Result<String> {
+    let options = crate::commands::workflow::issue_transition_options(db, issue_id)?;
+    let Some(option) = options
+        .into_iter()
+        .find(|option| option.name == transition_name)
+    else {
+        return Ok("not available".to_string());
+    };
+    if option.allowed {
+        Ok(format!("{} allowed", option.name))
+    } else {
+        Ok(format!(
+            "{} blocked: {}",
+            option.name,
+            option
+                .blockers
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "blocked".to_string())
+        ))
+    }
+}
+
+fn health_label(blocked: usize, proof_gaps: usize) -> &'static str {
+    if blocked > 0 {
+        "blocked"
+    } else if proof_gaps > 0 {
+        "needs proof"
+    } else {
+        "ready"
     }
 }
 

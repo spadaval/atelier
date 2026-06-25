@@ -9,7 +9,10 @@ use crate::commands::issue_workflow::{
     load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
-use crate::human_output::{self, DisplayRole, FooterAction, StylePolicy};
+use crate::human_output::{
+    self, DisplayRole, FooterAction, FooterPanel, IssueListPanel, IssueListRow, LinesPanel,
+    MetadataPanel, Panel, RenderContext, StylePolicy, TextPanel,
+};
 use crate::utils::format_issue_id;
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
@@ -579,33 +582,46 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     let health = summary
         .scope
         .health(summary.relationships.open_blockers.len());
-    println!("\nObjective Rollup");
-    println!("----------------");
-    println!("Health: {health}");
-    println!(
-        "Scope:  {} scoped issue{}",
-        summary.scope.total(),
-        plural_suffix(summary.scope.total())
-    );
-    println!(
-        "Buckets: active {}, ready {}, blocked {}, done {}, backlog {}",
-        summary.scope.totals.active,
-        summary.scope.totals.ready,
-        summary.scope.totals.blocked,
-        summary.scope.totals.done,
-        summary.scope.totals.backlog
-    );
-    println!(
-        "Relationships: advances {}, open blockers {}, validates {}, other {}",
-        summary.relationships.advances_roots.len(),
-        summary.relationships.open_blockers.len(),
-        summary.evidence.linked_validating_evidence,
-        summary.relationships.other_links
-    );
-    println!(
-        "Evidence Gates: linked validating evidence {}; scoped issues without evidence {}",
-        summary.evidence.linked_validating_evidence,
-        summary.evidence.scoped_issues_without_evidence
+    print_panel(
+        MetadataPanel::new("Objective Rollup")
+            .row("Health", health.to_string())
+            .row(
+                "Scope",
+                format!(
+                    "{} scoped issue{}",
+                    summary.scope.total(),
+                    plural_suffix(summary.scope.total())
+                ),
+            )
+            .row(
+                "Buckets",
+                format!(
+                    "active {}, ready {}, blocked {}, done {}, backlog {}",
+                    summary.scope.totals.active,
+                    summary.scope.totals.ready,
+                    summary.scope.totals.blocked,
+                    summary.scope.totals.done,
+                    summary.scope.totals.backlog
+                ),
+            )
+            .row(
+                "Relationships",
+                format!(
+                    "advances {}, open blockers {}, validates {}, other {}",
+                    summary.relationships.advances_roots.len(),
+                    summary.relationships.open_blockers.len(),
+                    summary.evidence.linked_validating_evidence,
+                    summary.relationships.other_links
+                ),
+            )
+            .row(
+                "Evidence Gates",
+                format!(
+                    "linked validating evidence {}; scoped issues without evidence {}",
+                    summary.evidence.linked_validating_evidence,
+                    summary.evidence.scoped_issues_without_evidence
+                ),
+            ),
     );
 
     render_objective_issue_rows(
@@ -621,17 +637,22 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     render_objective_issue_rows("Done Work", &summary.scope.done, summary.scope.totals.done);
 
     if !summary.recent_activity.recently_updated.is_empty() {
-        println!("\nRecent Activity Facts");
-        println!("---------------------");
-        for issue in &summary.recent_activity.recently_updated {
-            println!(
-                "  updated {} [{}] {} - {}",
-                format_issue_id(&issue.id),
-                issue.bucket.label(),
-                issue.priority,
-                issue.title
-            );
-        }
+        print_panel(LinesPanel::new(
+            "Recent Activity Facts",
+            summary
+                .recent_activity
+                .recently_updated
+                .iter()
+                .map(|issue| {
+                    format!(
+                        "  updated {} [{}] {} - {}",
+                        format_issue_id(&issue.id),
+                        issue.bucket.label(),
+                        issue.priority,
+                        issue.title
+                    )
+                }),
+        ));
     }
 }
 
@@ -639,36 +660,23 @@ fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], to
     if total_count == 0 {
         return;
     }
-    println!("\n{title}");
-    println!("{}", "-".repeat(title.len()));
-    for issue in issues {
-        let blockers = if issue.open_blockers.is_empty() {
-            String::new()
-        } else {
-            format!(
-                " | {} blocker{}",
-                issue.open_blockers.len(),
-                plural_suffix(issue.open_blockers.len())
-            )
-        };
-        println!(
-            "  {} {} [{}] {} - {}{}",
-            issue.bucket.label(),
-            format_issue_id(&issue.id),
-            issue.status,
-            issue.priority,
-            issue.title,
-            blockers
-        );
-    }
-    if total_count > issues.len() {
-        println!(
-            "  ... {} more {} item{} omitted",
-            total_count - issues.len(),
-            title.to_lowercase(),
-            plural_suffix(total_count - issues.len())
-        );
-    }
+    let rows = issues
+        .iter()
+        .map(|issue| IssueListRow {
+            role: display_role_for_bucket(issue.bucket.label()),
+            id: format_issue_id(&issue.id),
+            status: Some(issue.status.clone()),
+            priority: issue.priority.clone(),
+            title: issue.title.clone(),
+            blockers: issue.open_blockers.len(),
+            depth: 1,
+        })
+        .collect::<Vec<_>>();
+    print_panel(
+        IssueListPanel::new(title, rows)
+            .total_count(total_count)
+            .limit(issues.len()),
+    );
 }
 
 fn render_issue_link_section(
@@ -697,15 +705,10 @@ fn render_issue_link_section(
         ));
     }
     rows.sort();
-    println!("\nLinked Issues");
-    println!("-------------");
-    if rows.is_empty() {
-        println!("(none)");
-    } else {
-        for row in rows {
-            println!("  {row}");
-        }
-    }
+    print_panel(LinesPanel::new(
+        "Linked Issues",
+        rows.into_iter().map(|row| format!("  {row}")),
+    ));
     Ok(())
 }
 
@@ -722,8 +725,7 @@ fn render_transition_readiness(
     canonical_id: &str,
     object: &IssueObject,
 ) -> Result<()> {
-    println!("\nTransition Readiness");
-    println!("--------------------");
+    let mut lines = Vec::new();
     match crate::commands::workflow::issue_transition_options(db, canonical_id) {
         Ok(options) => {
             for option in options {
@@ -737,15 +739,16 @@ fn render_transition_readiness(
                         .cloned()
                         .unwrap_or_else(|| format!("to {}", option.to))
                 };
-                println!("  {}: {} - {}", option.name, state, summary);
-                println!("    {}", option.command);
+                lines.push(format!("  {}: {} - {}", option.name, state, summary));
+                lines.push(format!("    {}", option.command));
             }
         }
         Err(error) => {
-            println!("  options: blocked - {error}");
+            lines.push(format!("  options: blocked - {error}"));
         }
     }
-    println!("  options: atelier issue transition {}", object.id);
+    lines.push(format!("  options: atelier issue transition {}", object.id));
+    print_panel(LinesPanel::new("Transition Readiness", lines));
     Ok(())
 }
 
@@ -764,20 +767,26 @@ fn render_checkout_summary(db: &Database, canonical_id: &str) -> Result<()> {
     let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, canonical_id) else {
         return Ok(());
     };
-    println!("\nCheckout");
-    println!("--------");
-    println!(
-        "Current:  {}",
-        context.current_branch.as_deref().unwrap_or("(detached)")
-    );
-    if context.dirty_entries.is_empty() {
-        println!("State:    clean");
+    let state = if context.dirty_entries.is_empty() {
+        "clean".to_string()
     } else {
-        println!(
-            "State:    dirty checkout: {}",
+        format!(
+            "dirty checkout: {}",
             human_output::path_summary(&context.dirty_entries, 3)
-        );
-    }
+        )
+    };
+    print_panel(
+        MetadataPanel::new("Checkout")
+            .row(
+                "Current",
+                context
+                    .current_branch
+                    .as_deref()
+                    .unwrap_or("(detached)")
+                    .to_string(),
+            )
+            .row("State", state),
+    );
     Ok(())
 }
 
@@ -884,30 +893,25 @@ fn evidence_gate(
 
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
     let issue = db.require_issue(canonical_id)?;
-    println!("\nHierarchy");
-    println!("---------");
-    match issue.parent_id {
+    let line = match issue.parent_id {
         Some(parent_id) => {
             let parent = db.require_issue(&parent_id)?;
-            println!(
+            format!(
                 "Parent: {} [{}] {} - {}",
                 format_issue_id(&parent.id),
                 parent.status,
                 parent.priority,
                 parent.title
-            );
+            )
         }
-        None => println!("Parent: (none)"),
-    }
+        None => "Parent: (none)".to_string(),
+    };
+    print_panel(LinesPanel::new("Hierarchy", [line]));
     Ok(())
 }
 
 fn print_text_section(title: &str, body: Option<&str>) {
-    if let Some(body) = body.map(str::trim).filter(|body| !body.is_empty()) {
-        println!("\n{title}");
-        println!("{}", "-".repeat(title.len()));
-        println!("{body}");
-    }
+    print_panel(TextPanel::new(title, body.map(str::to_string)));
 }
 
 fn render_dependency_section(
@@ -916,16 +920,11 @@ fn render_dependency_section(
     ids: Vec<String>,
     blockers: bool,
 ) -> Result<()> {
-    println!("\n{title}");
-    println!("{}", "-".repeat(title.len()));
     let rows = dependency_rows_for_text(db, ids, blockers)?;
-    if rows.is_empty() {
-        println!("(none)");
-    } else {
-        for row in rows {
-            println!("  {row}");
-        }
-    }
+    print_panel(LinesPanel::new(
+        title,
+        rows.into_iter().map(|row| format!("  {row}")),
+    ));
     Ok(())
 }
 
@@ -958,58 +957,84 @@ fn dependency_rows_for_text(
 fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
     let mut subissues = db.get_subissues(canonical_id)?;
     let workflow_policy = load_issue_workflow_policy()?;
-    println!("\nSubissues");
-    println!("---------");
     if subissues.is_empty() {
-        println!("(none)");
+        print_panel(LinesPanel::new("Subissues", Vec::<String>::new()));
         return Ok(());
     }
 
-    println!("{}", subissue_summary(&subissues));
+    let summary = subissue_summary(&subissues);
     subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
-    for subissue in subissues {
-        let row = work_order_row_for_issue(db, workflow_policy.as_ref(), &subissue)?;
-        let blockers = blocker_suffix(&subissue.id, &row.open_blockers);
-        println!(
-            "  {} {} [{}] {} - {}{}",
-            row.state().label(),
-            format_issue_id(&subissue.id),
-            subissue.status,
-            subissue.priority,
-            subissue.title,
-            blockers
-        );
-    }
+    let rows = subissues
+        .iter()
+        .map(|subissue| {
+            let row = work_order_row_for_issue(db, workflow_policy.as_ref(), subissue)?;
+            Ok(IssueListRow {
+                role: display_role_for_bucket(row.state().label()),
+                id: format_issue_id(&subissue.id),
+                status: Some(subissue.status.clone()),
+                priority: subissue.priority.clone(),
+                title: subissue.title.clone(),
+                blockers: row.open_blockers.len(),
+                depth: 1,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut lines = vec![summary];
+    lines.extend(
+        IssueListPanel::new("Subissues", rows)
+            .render(RenderContext::for_stdout())
+            .into_iter()
+            .skip(2),
+    );
+    print_panel(LinesPanel::new("Subissues", lines));
     Ok(())
+}
+
+fn display_role_for_bucket(label: &str) -> DisplayRole {
+    match label {
+        "active" => DisplayRole::Executable,
+        "ready" => DisplayRole::Selectable,
+        "blocked" => DisplayRole::Blocked,
+        "blocked through parent" => DisplayRole::BlockedThroughParent,
+        _ => DisplayRole::ContextOnly,
+    }
 }
 
 fn render_impact_section(db: &Database, canonical_id: &str) -> Result<()> {
     let affected = db.downstream_impact(canonical_id)?;
-    println!("\nImpact");
-    println!("------");
     if affected.is_empty() {
-        println!("No downstream issues found.");
+        print_panel(LinesPanel::new(
+            "Impact",
+            ["No downstream issues found.".to_string()],
+        ));
         return Ok(());
     }
 
-    println!(
+    let workflow_policy = load_issue_workflow_policy()?;
+    let mut lines = vec![format!(
         "{} downstream issue{} may need review before changing or closing this issue.",
         affected.len(),
         plural_suffix(affected.len())
+    )];
+    lines.extend(
+        affected
+            .iter()
+            .take(8)
+            .map(|issue| {
+                Ok(format!(
+                    "  {} [{}] {} - {}",
+                    issue_id_for_agent(db, issue)?,
+                    issue_status_label(workflow_policy.as_ref(), &issue.status),
+                    issue.priority,
+                    issue.title
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?,
     );
-    let workflow_policy = load_issue_workflow_policy()?;
-    for issue in affected.iter().take(8) {
-        println!(
-            "  {} [{}] {} - {}",
-            issue_id_for_agent(db, issue)?,
-            issue_status_label(workflow_policy.as_ref(), &issue.status),
-            issue.priority,
-            issue.title
-        );
-    }
     if affected.len() > 8 {
-        println!("  ... and {} more", affected.len() - 8);
+        lines.push(format!("  ... and {} more", affected.len() - 8));
     }
+    print_panel(LinesPanel::new("Impact", lines));
     Ok(())
 }
 
@@ -1086,40 +1111,55 @@ fn priority_rank(priority: &str) -> u8 {
 }
 
 fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> Result<()> {
-    println!("\nRecent Activity");
-    println!("---------------");
     let activity = recent_activity_lines(canonical_id, object)?;
-    if activity.is_empty() {
-        println!("(none)");
-        return Ok(());
-    }
-    for line in activity {
-        println!("  {line}");
-    }
+    print_panel(LinesPanel::new(
+        "Recent Activity",
+        activity.into_iter().map(|line| format!("  {line}")),
+    ));
     Ok(())
 }
 
 fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()> {
-    println!("\nNext Commands");
-    println!("-------------");
+    let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
-        println!("  Edit issue Markdown: {}", path.display());
+        actions.push(FooterAction::new(
+            "Edit issue Markdown",
+            path.display().to_string(),
+        ));
     }
-    println!("  Validate this issue: atelier check {}", object.id);
-    println!("  Add a note: atelier issue note {} \"...\"", object.id);
-    println!(
-        "  Show full activity: atelier history --issue {}",
-        object.id
-    );
-    println!(
-        "  Show transition options: atelier issue transition {}",
-        object.id
-    );
-    println!(
-        "  Execute a transition: atelier issue transition {} <transition>",
-        object.id
-    );
+    actions.extend([
+        FooterAction::new(
+            "Validate this issue",
+            format!("atelier check {}", object.id),
+        ),
+        FooterAction::new(
+            "Add a note",
+            format!("atelier issue note {} \"...\"", object.id),
+        ),
+        FooterAction::new(
+            "Show full activity",
+            format!("atelier history --issue {}", object.id),
+        ),
+        FooterAction::new(
+            "Show transition options",
+            format!("atelier issue transition {}", object.id),
+        ),
+        FooterAction::new(
+            "Execute a transition",
+            format!("atelier issue transition {} <transition>", object.id),
+        ),
+    ]);
+    print_panel(FooterPanel::new("Next Commands", actions));
     Ok(())
+}
+
+fn print_panel(panel: impl Panel) {
+    let lines = panel.render(RenderContext::for_stdout());
+    if lines.is_empty() {
+        return;
+    }
+    println!();
+    println!("{}", lines.join("\n"));
 }
 
 fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec<String>> {
@@ -1178,6 +1218,28 @@ pub fn list(
     ready: bool,
     quiet: bool,
 ) -> Result<()> {
+    list_with_title(
+        db,
+        "Issue Queue",
+        status,
+        category,
+        label,
+        priority,
+        ready,
+        quiet,
+    )
+}
+
+pub(crate) fn list_with_title(
+    db: &Database,
+    title: &str,
+    status: Option<&str>,
+    category: Option<&str>,
+    label: Option<&str>,
+    priority: Option<&str>,
+    ready: bool,
+    quiet: bool,
+) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
     let status_input = status.unwrap_or("todo");
     if ready && (status_input != "todo" || category.is_some()) {
@@ -1206,9 +1268,32 @@ pub fn list(
     } else if quiet {
         render_queue_ids_quiet(order_queue_rows(rows));
     } else {
-        render_issue_queue_human(db, "Issue Queue", rows, true)?;
+        render_issue_queue_human(db, title, rows, true)?;
     }
     print_workflow_read_guidance(read_context);
+    Ok(())
+}
+
+pub(crate) fn list_blocked_with_title(db: &Database, title: &str, quiet: bool) -> Result<()> {
+    let workflow_policy = load_issue_workflow_policy()?;
+    let rows = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .map(|issue| issue_summary(db, issue))
+        .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
+        .filter_map(|result| match result {
+            Ok(row) if !row.open_blockers.is_empty() => Some(Ok(row)),
+            Ok(_) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if rows.is_empty() {
+        println!("No issues found.");
+    } else if quiet {
+        render_queue_ids_quiet(order_queue_rows(rows));
+    } else {
+        render_issue_queue_human(db, title, rows, true)?;
+    }
     Ok(())
 }
 
@@ -1820,7 +1905,10 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     if group.rows.is_empty() {
         return;
     }
-    for row in group.rows {
+    let all_blocked = group.rows.iter().all(|row| !row.open_blockers.is_empty());
+    let row_limit = if all_blocked { 5 } else { 20 };
+    let total_rows = group.rows.len();
+    for row in group.rows.into_iter().take(row_limit) {
         let status_text = if show_status {
             format!("{} ", row.state_label())
         } else {
@@ -1844,6 +1932,14 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
             parent,
             row.title,
             blockers
+        );
+    }
+    if total_rows > row_limit {
+        let omitted = total_rows - row_limit;
+        let label = if all_blocked { "blocked" } else { "work" };
+        println!(
+            "  {omitted} more {label} issue{} omitted",
+            plural_suffix(omitted)
         );
     }
 }

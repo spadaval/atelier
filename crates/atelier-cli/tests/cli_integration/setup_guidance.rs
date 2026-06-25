@@ -996,8 +996,8 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier man admin",
         "atelier work ready",
         "atelier work blocked",
-        "atelier issue list",
-        "atelier issue list --ready",
+        "atelier work queue",
+        "atelier work queue --ready",
         "atelier issue show <id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
@@ -1074,9 +1074,9 @@ fn test_obsolete_command_surfaces_are_removed_without_aliases() {
         vec!["search", "needle"],
         vec!["issue", "status", "atelier-test"],
         vec!["issue", "table"],
-        vec!["issue", "blocked"],
-        vec!["issue", "block", "atelier-a", "atelier-b"],
-        vec!["issue", "unblock", "atelier-a", "atelier-b"],
+        vec!["issue", "show"],
+        vec!["issue", "link", "atelier-a", "atelier-b"],
+        vec!["issue", "unlink", "atelier-a", "atelier-b"],
     ] {
         let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} should be removed:\n{stdout}");
@@ -1171,7 +1171,7 @@ fn test_generic_link_command_rejects_with_record_specific_guidance() {
     );
     assert!(!stderr.contains("was removed"), "{stderr}");
     assert!(!stderr.contains("atelier issue link"), "{stderr}");
-    assert!(!stderr.contains("atelier issue block"), "{stderr}");
+    assert!(!stderr.contains("atelier issue link"), "{stderr}");
     assert!(!stderr.contains("atelier evidence attach"), "{stderr}");
 }
 
@@ -1449,7 +1449,17 @@ fn test_issue_status_renders_objective_work_health() {
     let blocker_id = issue_id_by_title(dir.path(), "Blocking child");
     let blocker_id = blocker_id.as_str();
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            blocked_id,
+            blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
     assert!(success, "block issue failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
@@ -1468,7 +1478,7 @@ fn test_issue_status_renders_objective_work_health() {
     assert!(stdout.contains("Blocked Work"));
     assert!(stdout.contains(&format!("blocked {blocked_id} - Blocked child | 1 blocker")));
     assert!(stdout.contains(&format!(
-        "Inspect blockers: atelier issue blocked {blocked_id}"
+        "Inspect blockers: atelier issue show {blocked_id}"
     )));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
@@ -1701,12 +1711,12 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains(
-        "Inspect blocked work (no ready work is available): atelier issue list --blocked"
+        "Inspect blocked work (no ready work is available): atelier work queue --blocked"
     ));
     assert!(!stdout.contains("workflow validate"));
-    assert!(!stdout.contains("issue blocked"));
+    assert!(!stdout.contains("issue show"));
 
-    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["work", "queue", "--blocked"]);
     assert!(success, "suggested blocked-list command failed: {stderr}");
     assert!(blocked_out.contains("No blocked issues."));
 }
@@ -1795,7 +1805,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Most Relevant Commands"));
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
-    assert!(stdout.contains("atelier issue list --ready"));
+    assert!(stdout.contains("atelier work queue --ready"));
     assert!(stdout.contains("atelier issue transition <id>"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
@@ -1885,9 +1895,9 @@ fn test_issue_ready_list_uses_current_workflow_commands() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Next item");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "issue ready list failed: {stderr}");
-    assert!(stdout.contains("Issue Queue"));
+    assert!(stdout.contains("Work Queue"));
     assert!(stdout.contains(&issue_id));
     assert!(stdout.contains("Next item"));
     assert!(
@@ -2864,7 +2874,14 @@ fn test_issue_status_orders_children_by_visible_blockers() {
     let contract_id = issue_ref(dir.path(), 3);
     run_atelier(
         dir.path(),
-        &["issue", "block", &implementation_id, &contract_id],
+        &[
+            "issue",
+            "link",
+            &implementation_id,
+            &contract_id,
+            "--role",
+            "blocked_by",
+        ],
     );
 
     let (success, full_out, stderr) = run_atelier(dir.path(), &["issue", "status", &parent_id]);
@@ -2881,7 +2898,7 @@ fn test_issue_status_orders_children_by_visible_blockers() {
         "{full_out}"
     );
     assert!(full_out.contains(&format!(
-        "Inspect blockers: atelier issue blocked {implementation_id}"
+        "Inspect blockers: atelier issue show {implementation_id}"
     )));
     assert!(!full_out.contains("todo/todo"), "{full_out}");
 }
@@ -2919,7 +2936,17 @@ fn test_issue_status_reports_omitted_blocked_rows() {
             ],
         );
         let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked child {index}"));
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+        run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "link",
+                &blocked_id,
+                &blocker_id,
+                "--role",
+                "blocked_by",
+            ],
+        );
     }
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", &objective_id]);
@@ -2929,7 +2956,7 @@ fn test_issue_status_reports_omitted_blocked_rows() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("Inspect blockers: atelier issue blocked"),
+        stdout.contains("Inspect blockers: atelier issue show"),
         "{stdout}"
     );
 }
@@ -3038,7 +3065,7 @@ fn test_generic_link_rejection_is_plain_unknown_command() {
     );
     assert!(!stderr.contains("was removed"), "{stderr}");
     assert!(!stderr.contains("atelier issue link"), "{stderr}");
-    assert!(!stderr.contains("atelier issue block"), "{stderr}");
+    assert!(!stderr.contains("atelier issue link"), "{stderr}");
     assert!(!stderr.contains("atelier evidence attach"), "{stderr}");
 }
 

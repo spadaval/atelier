@@ -12,11 +12,11 @@ solved by layout alone.
 Sampled commands:
 
 - `target/debug/atelier status`
-- `target/debug/atelier issue list`
-- `target/debug/atelier issue list --ready`
+- `target/debug/atelier work queue`
+- `target/debug/atelier work queue --ready`
 - `target/debug/atelier issue show atelier-kpa1`
-- `target/debug/atelier issue blocked`
-- `target/debug/atelier issue blocked atelier-t3h3`
+- `target/debug/atelier issue show`
+- `target/debug/atelier issue show atelier-t3h3`
 - `target/debug/atelier issue table --kind mission`
 - `target/debug/atelier issue status atelier-24xn --verbose`
 - `target/debug/atelier issue transition atelier-kpa1`
@@ -29,7 +29,7 @@ Sampled commands:
 
 | Complaint | Evidence | Target behavior |
 | --- | --- | --- |
-| Inline help is repeated per row. | `issue list` and `issue blocked` repeat `details: atelier issue blocked <id>` on many rows. | Move repeated drill-down commands to one footer. Rows may show a short marker such as `blocked by 4`, but command syntax belongs in `Next Commands` or `Drill Down`. |
+| Inline help is repeated per row. | `work queue` and `issue show` repeat `details: atelier issue show <id>` on many rows. | Move repeated drill-down commands to one footer. Rows may show a short marker such as `blocked by 4`, but command syntax belongs in `Next Commands` or `Drill Down`. |
 | Summary lines overuse `key=value`. | Queue summaries print `Category: todo=10`, `Status: ready=2, todo=4`, and similar count blobs. | Human summaries should read as labels and counts, not telemetry. Prefer `10 total · 6 blocked · status: 2 ready, 4 todo` or a compact vertical summary when several dimensions matter. Keep `key=value` for quiet output, logs, diagnostics, or machine-adjacent snippets. |
 | Some row labels are opaque. | `context; parent blocked` does not explain what action is blocked or why the parent is rendered as a context group. | Replace implementation labels with domain language: `parent blocked`, `shown for context`, or `blocked through parent`, and put the reason near the grouped parent. |
 | Blocker rows show IDs without enough human meaning. | Long blocker lists emphasize issue IDs and repeated commands more than blocker titles or blocker counts. | Inline blockers should answer "what is blocking this?" with title, type, status, and count. IDs remain visible but secondary. Large blocker sets should be summarized with one footer command for full detail. |
@@ -115,11 +115,11 @@ app logic supplies them.
 | Surface | Complaint | Target behavior |
 | --- | --- | --- |
 | `status` | Output is mostly useful but still uses dense labels and a long generic evidence warning. | Keep it compact, color status/health in interactive terminals, and keep next actions ranked by the current checkout state. |
-| `issue list` and `search` | Repeated blocker drill-downs, `key=value` summaries, heavy context headings, and opaque labels. | Use grouped rows with readable summaries, one blocker drill-down footer, clear parent/context labels, and bounded child rows. |
+| `work queue` and `search` | Repeated blocker drill-downs, `key=value` summaries, heavy context headings, and opaque labels. | Use grouped rows with readable summaries, one blocker drill-down footer, clear parent/context labels, and bounded child rows. |
 | `issue show` | Dirty checkout state and recent activity are too raw and verbose. | Summarize dirty state, wrap or bound path samples, render recent activity as sentences, and move raw fields to history or verbose output. |
 | `issue status <objective-id>` | Objective status repeats blocker drill-down commands and uses pipe-heavy row metadata such as parent/proof notes. | Keep objective health first, group ready/blocked work cleanly, move repeated blocker commands to a footer, and de-emphasize validator/proof metadata unless verbose output asks for it. |
 | `issue transition` | Repeats dirty state and mixes validation, blockers, branch context, commands, and descriptions with equal visual weight. | Start with the allowed/blocked decision, then show blockers and required inputs, then planned actions and one command per transition. Collapse repeated branch context. |
-| `issue blocked` | Repeats detail commands and does not prioritize blocker meaning. | Show blocker counts and human titles first; put `atelier issue blocked <id>` once in a footer. |
+| `issue show` | Repeats detail commands and does not prioritize blocker meaning. | Show blocker counts and human titles first; put `atelier issue show <id>` once in a footer. |
 | `issue table` | Columns are useful but fragile for long titles and narrow terminals. | Keep short columns, wrap the title field, and use color/dim styling for secondary counts. |
 | `history` | Pipe-delimited rows are hard to scan. | Group or wrap events, de-emphasize repeated scope/target data, and keep filters visible. |
 | `evidence list` | Default output is unbounded and swamps the terminal. | Add a default limit, grouping/filter hints, omitted count, and command transcript elision. |
