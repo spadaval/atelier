@@ -3,6 +3,10 @@ created_at: "2026-06-24T19:26:31.661899720+00:00"
 id: "atelier-8c91"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 29
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate command-surface rework and update agent guidance"
-updated_at: "2026-06-25T01:44:55.019166321+00:00"
+updated_at: "2026-06-25T01:51:21.865683691+00:00"
 ---
 
 ## Description
