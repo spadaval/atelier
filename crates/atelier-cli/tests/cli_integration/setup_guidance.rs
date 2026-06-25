@@ -1275,11 +1275,10 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout
-        .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
-    assert!(stdout.contains(
-        "Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
-    ));
+    assert!(stdout.contains("Choose ready work (1 ready issue(s) available): atelier work ready"));
+    assert!(
+        stdout.contains("Inspect selected work transitions: atelier issue transition <issue-id>")
+    );
     assert!(!stdout.contains(
         "Start selected work (ready work exists): atelier issue transition <issue-id> start"
     ));
@@ -1441,6 +1440,16 @@ fn test_issue_status_renders_objective_work_health() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", objective_id]);
     assert!(success, "issue show objective failed: {stderr}");
+    assert!(stdout.contains("Objective Rollup"));
+    assert!(stdout.contains("Health: blocked"));
+    assert!(stdout.contains("Buckets: active 0, ready 2, blocked 1, done 0, backlog 0"));
+    assert!(stdout.contains("Evidence Gates: linked validating evidence 0"));
+    assert!(stdout.contains("Ready Work"));
+    assert!(stdout.contains(&format!("ready {ready_id} [todo] medium - Ready child")));
+    assert!(stdout.contains("Blocked Work"));
+    assert!(stdout.contains(&format!(
+        "blocked {blocked_id} [todo] medium - Blocked child | 1 blocker"
+    )));
     assert!(stdout.contains("Impact"));
     assert!(stdout.contains("downstream issue"));
     assert!(stdout.contains(ready_id));

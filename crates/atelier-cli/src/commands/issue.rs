@@ -11,6 +11,7 @@ use crate::commands::issue_workflow::{
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::human_output::{self, DisplayRole, FooterAction, StylePolicy};
 use crate::utils::format_issue_id;
+use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
@@ -477,6 +478,8 @@ fn render_issue_show_human(
     degraded: Option<&str>,
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
+    let objective_summary =
+        objective_read_summary_for_show(db, canonical_id, workflow_policy.as_ref())?;
     let status_category = issue_status_category(workflow_policy.as_ref(), &object.status);
     let identity = format!(
         "{} [{}] {} - {}",
@@ -543,11 +546,129 @@ fn render_issue_show_human(
     render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
     render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
     render_issue_link_section(db, canonical_id, &object.relationships)?;
+    render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(db, canonical_id)?;
     render_impact_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
     Ok(())
+}
+
+fn objective_read_summary_for_show(
+    db: &Database,
+    canonical_id: &str,
+    workflow_policy: Option<&WorkflowPolicy>,
+) -> Result<Option<ObjectiveReadSummary>> {
+    let active_issue_ids = active_issue_ids(db)?;
+    let active_issue_refs = active_issue_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    atelier_app::issue_read::objective_read_summary(
+        db,
+        canonical_id,
+        workflow_policy,
+        &active_issue_refs,
+    )
+}
+
+fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
+    let Some(summary) = summary else {
+        return;
+    };
+    let health = summary
+        .scope
+        .health(summary.relationships.open_blockers.len());
+    println!("\nObjective Rollup");
+    println!("----------------");
+    println!("Health: {health}");
+    println!(
+        "Scope:  {} scoped issue{}",
+        summary.scope.total(),
+        plural_suffix(summary.scope.total())
+    );
+    println!(
+        "Buckets: active {}, ready {}, blocked {}, done {}, backlog {}",
+        summary.scope.totals.active,
+        summary.scope.totals.ready,
+        summary.scope.totals.blocked,
+        summary.scope.totals.done,
+        summary.scope.totals.backlog
+    );
+    println!(
+        "Relationships: advances {}, open blockers {}, validates {}, other {}",
+        summary.relationships.advances_roots.len(),
+        summary.relationships.open_blockers.len(),
+        summary.evidence.linked_validating_evidence,
+        summary.relationships.other_links
+    );
+    println!(
+        "Evidence Gates: linked validating evidence {}; scoped issues without evidence {}",
+        summary.evidence.linked_validating_evidence,
+        summary.evidence.scoped_issues_without_evidence
+    );
+
+    render_objective_issue_rows(
+        "Ready Work",
+        &summary.scope.ready,
+        summary.scope.totals.ready,
+    );
+    render_objective_issue_rows(
+        "Blocked Work",
+        &summary.scope.blocked,
+        summary.scope.totals.blocked,
+    );
+    render_objective_issue_rows("Done Work", &summary.scope.done, summary.scope.totals.done);
+
+    if !summary.recent_activity.recently_updated.is_empty() {
+        println!("\nRecent Activity Facts");
+        println!("---------------------");
+        for issue in &summary.recent_activity.recently_updated {
+            println!(
+                "  updated {} [{}] {} - {}",
+                format_issue_id(&issue.id),
+                issue.bucket.label(),
+                issue.priority,
+                issue.title
+            );
+        }
+    }
+}
+
+fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], total_count: usize) {
+    if total_count == 0 {
+        return;
+    }
+    println!("\n{title}");
+    println!("{}", "-".repeat(title.len()));
+    for issue in issues {
+        let blockers = if issue.open_blockers.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " | {} blocker{}",
+                issue.open_blockers.len(),
+                plural_suffix(issue.open_blockers.len())
+            )
+        };
+        println!(
+            "  {} {} [{}] {} - {}{}",
+            issue.bucket.label(),
+            format_issue_id(&issue.id),
+            issue.status,
+            issue.priority,
+            issue.title,
+            blockers
+        );
+    }
+    if total_count > issues.len() {
+        println!(
+            "  ... {} more {} item{} omitted",
+            total_count - issues.len(),
+            title.to_lowercase(),
+            plural_suffix(total_count - issues.len())
+        );
+    }
 }
 
 fn render_issue_link_section(
