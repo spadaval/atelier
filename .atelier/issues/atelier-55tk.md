@@ -3,6 +3,10 @@ created_at: "2026-06-24T19:25:52.609349735+00:00"
 id: "atelier-55tk"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 25
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -20,9 +24,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Define command surface and work-view product contract"
-updated_at: "2026-06-25T00:59:42.613300753+00:00"
+updated_at: "2026-06-25T01:00:19.237662618+00:00"
 ---
 
 ## Description
