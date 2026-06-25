@@ -22,4 +22,4 @@ Define semantic styling for headings, secondary/context text, ready/success, war
 
 ## Outcome
 
-Outcome was not specified.
+Semantic style tokens and formatting preferences are documented for the panel system. The design keeps tokens Atelier-owned, maps them through StylePolicy to the chosen ANSI/style library, keeps raw color-library calls out of panel and command code, and proves colorless output preserves all status, blocker, diagnostic, and action meaning in text.
