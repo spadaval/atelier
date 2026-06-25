@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define command surface and work-view product contract"
-updated_at: "2026-06-24T19:25:52.609349735+00:00"
+updated_at: "2026-06-25T00:59:42.613300753+00:00"
 ---
 
 ## Description
