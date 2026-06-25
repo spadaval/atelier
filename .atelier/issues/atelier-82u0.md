@@ -20,9 +20,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-25T01:44:12.050916304+00:00"
+status: "done"
 title: "Consolidate health, relationships, review, and admin escape hatches"
-updated_at: "2026-06-25T01:43:41.052987636+00:00"
+updated_at: "2026-06-25T01:44:12.050916304+00:00"
 ---
 
 ## Description
