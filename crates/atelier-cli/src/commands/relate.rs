@@ -261,7 +261,7 @@ fn print_link_next_commands(issue_id: &str, target_id: &str) {
     println!("Next Commands");
     println!("-------------");
     println!("  atelier issue show {issue_id}");
-    println!("  atelier issue status {issue_id}");
+    println!("  atelier issue transition {issue_id}");
     println!("  atelier issue show {target_id}");
 }
 

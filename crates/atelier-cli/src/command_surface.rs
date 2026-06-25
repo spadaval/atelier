@@ -27,13 +27,18 @@ const REMOVED_ROOTS: &[&str] = &[
     "sync",
     "timer",
     "usage",
-    "work",
+    "mission",
+    "search",
 ];
 
 const REMOVED_COMMAND_PATHS: &[&[&str]] = &[
     &["evidence", "add"],
     &["evidence", "capture"],
-    &["mission", "view"],
+    &["issue", "block"],
+    &["issue", "blocked"],
+    &["issue", "status"],
+    &["issue", "table"],
+    &["issue", "unblock"],
     &["workflow", "init"],
     &["work", "worktree"],
 ];
@@ -915,17 +920,16 @@ mod tests {
     }
 
     #[test]
-    fn mission_status_verbose_reference_targets_subcommand_help() {
-        let groups = grouped_paths(&[&[], &["mission"]]);
-        let uses =
-            expand_command_reference("atelier mission status <mission-id> --verbose", &groups);
+    fn no_argument_issue_transition_reference_targets_subcommand_help() {
+        let groups = grouped_paths(&[&[], &["issue"]]);
+        let uses = expand_command_reference("atelier issue transition <issue-id>", &groups);
 
         assert_eq!(
             uses,
             vec![CommandUse {
-                display: "atelier mission status --verbose".to_string(),
-                path: vec!["mission".to_string(), "status".to_string()],
-                options: vec!["--verbose".to_string()],
+                display: "atelier issue transition".to_string(),
+                path: vec!["issue".to_string(), "transition".to_string()],
+                options: Vec::new(),
             }]
         );
     }
@@ -965,11 +969,11 @@ mod tests {
     }
 
     #[test]
-    fn root_help_parser_includes_missions_section() {
-        let help = "Missions:\n  mission       Read-only mission reports and discovery\n";
+    fn root_help_parser_includes_work_section() {
+        let help = "Orientation:\n  work          Show operational multi-issue work views\n";
         let roots = parse_root_help_commands(help);
 
-        assert!(roots.contains("mission"));
+        assert!(roots.contains("work"));
     }
 
     #[test]
@@ -985,13 +989,13 @@ mod tests {
 
     #[test]
     fn extracts_visible_roots_without_removed_or_hidden_sections() {
-        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier issue show`\n\n## Removed Behavior\n\nThere is no `atelier work status`.\nThere is no `atelier mission close`.\n";
+        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier work ready`\n- `atelier issue show`\n\n## Removed Behavior\n\nThere is no `atelier work status`.\nThere is no `atelier mission close`.\n";
         let roots = documented_visible_roots(doc);
 
         assert!(roots.contains_key("status"));
         assert!(roots.contains_key("issue"));
         assert!(!roots.contains_key("mission"));
-        assert!(!roots.contains_key("work"));
+        assert!(roots.contains_key("work"));
     }
 
     #[test]

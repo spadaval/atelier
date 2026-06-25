@@ -242,10 +242,7 @@ pub fn merge(
         println!("Issue:   {}", outcome.issue_id);
         println!("Role:    {} ({})", role.role, role.source);
         println!("State:   {}", outcome.status);
-        println!(
-            "Next:    atelier issue transition {} --options",
-            outcome.issue_id
-        );
+        println!("Next:    atelier issue transition {}", outcome.issue_id);
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
@@ -277,10 +274,7 @@ pub fn merge(
     println!("Role:    {} ({})", role.role, role.source);
     println!("State:   {}", outcome.pull.state);
     println!("Merged:  {}", outcome.pull.merged);
-    println!(
-        "Next:    atelier issue transition {} --options",
-        outcome.owner_id
-    );
+    println!("Next:    atelier issue transition {}", outcome.owner_id);
     Ok(())
 }
 

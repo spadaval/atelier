@@ -128,9 +128,6 @@ fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
         init_git_repo(dir);
         commit_if_dirty(dir, "test fixture state before workflow command");
     }
-    if matches!(args, ["issue", "transition", _, "--options"]) && dir.join(".git").exists() {
-        commit_if_dirty(dir, "test fixture state before workflow options");
-    }
     if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
         commit_if_dirty(dir, "test fixture state before transition close");
     }
@@ -592,16 +589,15 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier init`
 - `atelier man`
 - `atelier status`
+- `atelier work ready`
+- `atelier work blocked`
 - `atelier issue ...`
 - `atelier issue transition <issue-id> start`
 - `atelier issue create "..." --issue-type mission`
 - `atelier issue show <objective-id>`
-- `atelier issue status <objective-id>`
 - `atelier issue link <objective-id> <issue-id> --role advances`
-- `atelier issue block <objective-id> <issue-id>`
-- `atelier search <query>`
-- `atelier mission list`
-- `atelier mission status <mission-id>`
+- `atelier issue unlink <objective-id> <issue-id> --role advances`
+- `atelier issue transition <objective-id>`
 - `atelier issue note`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
@@ -819,8 +815,7 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
     migrate_default_issue_workflow(dir);
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     for transition in ["start", "request_review", "request_validation"] {
-        let (success, options, stderr) =
-            run_atelier(dir, &["issue", "transition", &issue_id, "--options"]);
+        let (success, options, stderr) = run_atelier(dir, &["issue", "transition", &issue_id]);
         assert!(
             success,
             "transition options failed for {issue_id}: {stderr}"
@@ -924,8 +919,7 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(stdout.contains("request_review [blocked]"), "{stdout}");
     assert!(stdout.contains("review.open"), "{stdout}");

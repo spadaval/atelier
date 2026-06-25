@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove redundant status, mission, blocker, table, and search surfaces"
-updated_at: "2026-06-24T19:26:12.686012959+00:00"
+updated_at: "2026-06-25T01:12:37.628713031+00:00"
 ---
 
 ## Description

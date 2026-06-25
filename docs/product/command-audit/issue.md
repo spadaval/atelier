@@ -57,7 +57,7 @@ create compatibility aliases for the removed mission commands.
 | `issue list` | Worker | Find candidate or assigned work. | Good, but role guides should prefer `--ready`, `--blocked`, and exact status/category examples. |
 | `issue table` | Manager/orchestrator | Inventory homogeneous objective or issue records, especially missions. | Good. This replaces mission list selection without adding a mission namespace. |
 | `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Good. It includes issue-scoped downstream impact so operators do not leave the issue view for blast-radius context. |
-| `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `--options` should be the reviewer entry point. |
+| `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `transition options` should be the reviewer entry point. |
 | `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
 | `issue note` | Worker | Add durable progress, handoff, or observation context. | Good. |
 | `issue status` | Worker/reviewer | Inspect type-aware objective health and terminal readiness. | Good. This absorbs the useful `mission status` behavior for objective records. |
@@ -70,7 +70,7 @@ create compatibility aliases for the removed mission commands.
 ## Role Guide Implication
 
 Workers should see `list --ready`, `show`, `note`, `transition`, and `close`.
-Reviewers should see `transition --options`, `blocked`, and evidence commands.
+Reviewers should see `transition`, `blocked`, and evidence commands.
 Managers should see `create`, `update`, `block`, `unblock`, and queue filters.
 
 ## Help Drift
@@ -93,7 +93,7 @@ views, blockers, objective status, transitions, links, and notes.
   terse.
 - Replace opaque group labels such as `context; parent blocked` with domain
   language that says why the parent or child is being shown.
-- `issue show` and `issue transition --options` should summarize dirty
+- `issue show` and `issue transition` should summarize dirty
   checkout state instead of printing every dirty path on one line, and they
   should not repeat the same path list in multiple sections.
 - Recent activity in `issue show` should render as concise event sentences.

@@ -151,7 +151,7 @@ When proof is present, the same block should name the evidence IDs and results.
 `atelier issue transition <id> start` should remind the worker what proof will
 be needed before close, because this is where the operator forms the work plan.
 
-`atelier issue transition <id> --options` should preview completion blockers in
+`atelier issue transition <id>` should preview completion blockers in
 operator language:
 
 ```text

@@ -160,12 +160,10 @@ pub fn transition_issue(
     if transition_name == "start" {
         println!("  Inspect checkout status: atelier status");
         if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
-            println!(
-                "  Inspect mission selection and blockers: atelier mission status {mission_id}"
-            );
+            println!("  Inspect objective selection and blockers: atelier issue show {mission_id}");
         }
         println!(
-            "  Inspect work transitions: atelier issue transition {} --options",
+            "  Inspect work transitions: atelier issue transition {}",
             issue.id
         );
         println!(
@@ -174,7 +172,7 @@ pub fn transition_issue(
         );
     } else {
         println!("  atelier issue show {}", issue.id);
-        println!("  atelier issue transition {} --options", issue.id);
+        println!("  atelier issue transition {}", issue.id);
     }
     Ok(())
 }
@@ -951,7 +949,7 @@ pub fn close_issue(
 
     if candidates.is_empty() {
         bail!(
-            "Issue {} has no terminal done-category transitions from status '{}'; inspect `atelier issue transition {} --options`",
+            "Issue {} has no terminal done-category transitions from status '{}'; inspect `atelier issue transition {}`",
             issue.id,
             issue.status,
             issue.id
@@ -1809,9 +1807,11 @@ fn objective_work_terminal(
         Ok((
             false,
             format!(
-                "open advancing work via advances: {}; inspect `atelier issue transition {} --options`",
+                "open advancing work via advances: {}; inspect `atelier issue transition {}`",
                 open.join(", "),
-                open.first().cloned().unwrap_or_else(|| "<issue-id>".to_string())
+                open.first()
+                    .cloned()
+                    .unwrap_or_else(|| "<issue-id>".to_string())
             ),
         ))
     }
@@ -1840,7 +1840,7 @@ fn objective_direct_blockers_none_open(
         Ok((
             false,
             format!(
-                "open direct objective blockers via blocked_by: {}; inspect `atelier issue blocked {target_id}`",
+                "open direct objective blockers via blocked_by: {}; inspect `atelier issue show {target_id}`",
                 open.join(", ")
             ),
         ))

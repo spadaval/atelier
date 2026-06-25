@@ -59,7 +59,7 @@ are hard to preview, validate, and recover.
 
 ## Consequences
 
-- `atelier issue transition <id> --options` must render validators and planned
+- `atelier issue transition <id>` must render validators and planned
   effects as separate sections.
 - Successful transition output must name applied and skipped effects separately
   from validator results.

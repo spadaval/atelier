@@ -85,10 +85,10 @@ full Atelier command or workflow contract.
 | Source locations; tracker identity; durable `.atelier/` state; ignored runtime/cache state | Repository instructions | `AGENTS.md`, `docs/index.md` | Keep concise so a fresh worker can locate authoritative docs and tracker shape. |
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
-| Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
-| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue status <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
-| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue status <mission-id>`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue status <mission-id> --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; objective status and completion surface docs/help drift validators when a mission-typed issue is being closed. |
+| Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition <id>` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
+| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue show <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue show <mission-id>`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue show <mission-id>`, mission completion | Routine handoff uses visible lint/status surfaces; objective detail and completion surface docs/help drift validators when a mission-typed issue is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 This means source locations and tracker shape belong in repository instructions
@@ -99,7 +99,7 @@ audit, lint, admin repair, and workflow-policy surfaces.
 ## Stale-State Preflight
 
 Before mutating workflow state, trust normal Atelier-owned health surfaces
-first. If `atelier lint`, `atelier status`, `atelier issue status <mission-id>`, or another
+first. If `atelier lint`, `atelier status`, `atelier issue show <mission-id>`, or another
 normal tracker read reports invalid canonical Markdown, blocked readiness, or
 unreadable tracker state, stop workflow mutation until the state is repaired.
 
@@ -111,7 +111,7 @@ Use this recovery order:
    names them.
 3. Use `atelier man admin` and the named admin repair command only when Atelier
    reports degraded local runtime, cache, or derived state.
-4. Return to `atelier status`, `atelier issue status <mission-id>`, or the relevant
+4. Return to `atelier status`, `atelier issue show <mission-id>`, or the relevant
    `issue show` command after the reported check passes.
 
 Do not edit `.atelier/runtime/`, `.atelier/cache/`, local locks, or identity
@@ -222,7 +222,7 @@ than "make objective status faster."
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTS.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
 | Crate migration root-deletion completion | Crate-migration guard script, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before root deletion, run the guard self-test if one exists. | First-class evidence attached to the root-deletion or validation issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission completion. |
-| Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
+| Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id>`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
 | Mission completion | Mission status synthesizes linked work state, clear blockers, committed tracker health, configured gates, and explicit validation work when parent-level judgment is required. It does not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation issue when one exists. | Required for explicit mission-level validation work, adversarial validation, or cross-cutting mission claims; routine mission shell completion stays a thin synthesis over proved child work and health gates. |
 
 Unavailable optional tooling should not be converted into an implicit failure.
@@ -239,7 +239,7 @@ Stable claim anchors are optional and reserved for high-risk or
 automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
 
-`atelier issue status <mission-id>` is the normal operator surface for mission
+`atelier issue show <mission-id>` is the normal operator surface for mission
 state, blockers, configured validator failures, next actions, and completion
 status. Verbose issue status is completion drill-down: it reports mission shell
 completion and any explicit linked validation work that supplies workflow
@@ -325,7 +325,7 @@ when the command already accepts the direct value you want to inspect.
 After the first clear unrecognized command or wrong command-family error, stop
 and consult the repository-owned command map instead of probing neighboring
 names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier man <role>`,
-`atelier status`, or `atelier issue status <mission-id>` to recover the correct surface
+`atelier status`, or `atelier issue show <mission-id>` to recover the correct surface
 for the current job.
 
 The stop rule exists to avoid retry loops around removed commands, hidden
@@ -380,7 +380,7 @@ than through Agent Factory prose alone.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
   validate durable state with tracked `.atelier/` records, `atelier lint`,
-  focused `show` commands, `issue transition --options`, and objective status or
+  focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
 - Diagnostics JSON from commands such as `atelier diagnostics slow` is valid

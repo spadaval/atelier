@@ -345,7 +345,7 @@ fn print_status_next_commands(
             println!("  Resolve open blockers before assigning more implementation work");
         } else if let Some(issue) = summary.selectable_work.first() {
             println!(
-                "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
+                "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {}",
                 summary.selectable_work.len(),
                 issue.id
             );

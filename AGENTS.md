@@ -9,8 +9,8 @@ product policy in the linked sources instead of duplicating it here.
 - Tracker state: `.atelier/`
 - Tracker command guidance: `atelier man manager`
 - Current work and lifecycle guidance: `atelier status`,
-  `atelier issue status <id>`, `atelier issue show <id>`, and
-  `atelier issue transition <id> --options`
+  `atelier work ready`, `atelier issue show <id>`, and
+  `atelier issue transition <id>`
 
 ## Product Sources
 
