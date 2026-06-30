@@ -71,7 +71,7 @@ pub fn transition_issue(
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
-    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
@@ -100,36 +100,19 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
-    let mut action_results = execute_pre_transition_actions(
+    let action_results = execute_transition_actions(
         db,
         state_dir,
         db_path,
         &repo_root,
         &before,
         transition_name,
+        &policy,
+        transition,
         &planned_actions,
+        close_reason,
+        git_rollback.as_ref(),
     )?;
-    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
-    apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
-    record_applied_actions(&before.id, transition_name, &planned_actions)?;
-    record_applied_transition(&before, transition_name, transition)?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    match execute_post_transition_actions(
-        &repo_root,
-        state_dir,
-        db_path,
-        &before,
-        transition_name,
-        &planned_actions,
-    ) {
-        Ok(mut results) => action_results.append(&mut results),
-        Err(error) => {
-            if let Some(rollback) = git_rollback {
-                rollback.rollback_after_post_action_failure(state_dir, db_path)?;
-            }
-            bail!("{error:#}");
-        }
-    }
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     if transition_name == "start" {
@@ -333,26 +316,106 @@ struct AppliedAction {
     detail: String,
 }
 
-fn execute_pre_transition_actions(
+struct TransitionApply<'a> {
+    state_dir: &'a Path,
+    db_path: &'a Path,
+    issue: &'a Issue,
+    transition_name: &'a str,
+    policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &'a atelier_app::workflow_policy::TransitionDefinition,
+    planned_actions: &'a [PlannedAction],
+    close_reason: Option<&'a str>,
+}
+
+impl TransitionApply<'_> {
+    fn apply(&self) -> Result<()> {
+        let mut record = app_use_cases::load_canonical_issue(self.state_dir, &self.issue.id)?;
+        apply_transition_record(
+            self.policy,
+            self.state_dir,
+            &mut record,
+            self.transition,
+            self.close_reason,
+        )?;
+        record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
+        record_applied_transition(self.issue, self.transition_name, self.transition)?;
+        app_use_cases::refresh_after_canonical_write(self.state_dir, self.db_path)
+    }
+}
+
+fn execute_transition_actions(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
     transition_name: &str,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     planned_actions: &[PlannedAction],
+    close_reason: Option<&str>,
+    git_rollback: Option<&TransitionGitRollback>,
 ) -> Result<Vec<AppliedAction>> {
+    let transition_apply = TransitionApply {
+        state_dir,
+        db_path,
+        issue,
+        transition_name,
+        policy,
+        transition,
+        planned_actions,
+        close_reason,
+    };
     let mut applied = Vec::new();
+    let mut transition_applied = false;
     for action in planned_actions {
-        match action.name.as_str() {
+        if action_requires_applied_transition(action.name.as_str()) && !transition_applied {
+            transition_apply.apply()?;
+            transition_applied = true;
+        }
+        let result = match action.name.as_str() {
             "git.prepare_branch" => {
                 let detail = prepare_branch_action(state_dir, repo_root, issue, action)?;
-                applied.push(AppliedAction {
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate" => {}
+            "tracker.commit" => {
+                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.push" => {
+                let detail = push_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "review.merge" => {
+                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.sync" => {
+                let detail = sync_base_action(repo_root, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "branch_integrate" => {
+                let detail = integrate_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -363,69 +426,39 @@ fn execute_pre_transition_actions(
                     transition_name,
                     action,
                 )?;
-                applied.push(AppliedAction {
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            other => bail!(
-                "action {other} failed: action execution is not implemented; status was not changed"
-            ),
-        }
+            other => Err(anyhow!(
+                "action {other} failed: action execution is not implemented; status was {}changed",
+                if transition_applied { "" } else { "not " }
+            )),
+        };
+        match result {
+            Ok(result) => applied.push(result),
+            Err(error) => {
+                if transition_applied {
+                    if let Some(rollback) = git_rollback {
+                        rollback.rollback_after_post_action_failure(state_dir, db_path)?;
+                    }
+                }
+                bail!("{error:#}");
+            }
+        };
+    }
+    if !transition_applied {
+        transition_apply.apply()?;
     }
     Ok(applied)
 }
 
-fn execute_post_transition_actions(
-    repo_root: &Path,
-    state_dir: &Path,
-    db_path: &Path,
-    issue: &Issue,
-    transition_name: &str,
-    planned_actions: &[PlannedAction],
-) -> Result<Vec<AppliedAction>> {
-    let mut applied = Vec::new();
-    for action in planned_actions {
-        match action.name.as_str() {
-            "tracker.commit" => {
-                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "git.push" => {
-                let detail = push_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "review.merge" => {
-                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "git.sync" => {
-                let detail = sync_base_action(repo_root, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "branch_integrate" => {
-                let detail = integrate_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            _ => {}
-        }
-    }
-    Ok(applied)
+fn action_requires_applied_transition(name: &str) -> bool {
+    matches!(
+        name,
+        "tracker.commit" | "review.merge" | "git.sync" | "branch_integrate"
+    )
 }
 
 fn prepare_branch_action(
@@ -2587,6 +2620,17 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "branch_integrate"));
+    }
+
+    #[test]
+    fn action_transition_barrier_preserves_configured_push_before_review_open() {
+        assert!(!action_requires_applied_transition("git.prepare_branch"));
+        assert!(!action_requires_applied_transition("git.push"));
+        assert!(!action_requires_applied_transition("review.open"));
+        assert!(action_requires_applied_transition("tracker.commit"));
+        assert!(action_requires_applied_transition("review.merge"));
+        assert!(action_requires_applied_transition("git.sync"));
+        assert!(action_requires_applied_transition("branch_integrate"));
     }
 
     #[test]
