@@ -27,9 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Implement baseline and closeout reliability gates"
-updated_at: "2026-06-30T15:04:23.741988831+00:00"
+updated_at: "2026-06-30T15:05:14.426148210+00:00"
 ---
 
 ## Description
