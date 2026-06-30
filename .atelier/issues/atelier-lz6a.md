@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "draft"
+status: "ready"
 title: "Mission: Mission-isolated execution and publish"
-updated_at: "2026-06-30T21:33:31.445683005+00:00"
+updated_at: "2026-06-30T21:35:07.782783036+00:00"
 ---
 
 ## Description
