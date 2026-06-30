@@ -24,7 +24,7 @@ impl WorkRow {
             "active"
         } else if !self.open_blockers.is_empty() {
             "blocked"
-        } else if self.status_category.as_deref() == Some("todo") {
+        } else if self.status == "ready" {
             "ready"
         } else if self.status_category.as_deref() == Some("done") {
             "done"
@@ -74,7 +74,7 @@ pub fn status_view(
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<StatusView> {
     let work = work_buckets(db, workflow_policy)?;
-    let current_missions = current_missions(db, workflow_policy)?;
+    let current_missions = current_missions(db)?;
     let active_role_counts = active_role_counts(&work.active, workflow_policy);
     let stale_records = crate::export::canonical_stale_entries(db, state_dir)?.len();
     let tracker_state = if stale_records == 0 {
@@ -166,17 +166,12 @@ fn issue_blocks_work(workflow_policy: Option<&WorkflowPolicy>, issue: &Issue) ->
     workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
 }
 
-fn current_missions(
-    db: &Database,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Vec<MissionSummary>> {
+fn current_missions(db: &Database) -> Result<Vec<MissionSummary>> {
     let mut missions = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| issue.issue_type == "mission")
-        .filter(|issue| {
-            workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
-        })
+        .filter(|issue| !matches!(issue.status.as_str(), "closed" | "superseded"))
         .map(|issue| MissionSummary {
             id: issue.id,
             title: issue.title,

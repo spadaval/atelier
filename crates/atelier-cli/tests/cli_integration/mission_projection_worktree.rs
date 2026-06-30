@@ -29,17 +29,7 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
         &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
     );
     assert!(success, "mission fixture bundle apply failed: {stderr}");
-    let mission_id = issue_id_by_title(dir, title);
-    let (success, _stdout, stderr) =
-        run_atelier(dir, &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission fixture ready transition failed: {stderr}");
-    mission_id
-}
-
-fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
-    let (success, _stdout, stderr) =
-        run_atelier(dir, &["issue", "transition", mission_id, "ready"]);
-    assert!(success, "mission ready transition failed: {stderr}");
+    issue_id_by_title(dir, title)
 }
 
 #[test]
@@ -388,10 +378,8 @@ fn test_mission_terminal_status_and_options_use_configured_objective_validators(
     assert!(status_out.contains("Ready Work"), "{status_out}");
     assert!(status_out.contains(&work_id), "{status_out}");
 
-    let (success, options_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--verbose"],
-    );
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
         options_out.contains("objective.work_present"),
@@ -433,10 +421,8 @@ fn test_mission_close_uses_configured_objective_validators() {
     );
     commit_all(dir.path(), "configured validator close ready");
 
-    let (success, options_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--verbose"],
-    );
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
         options_out.contains("pass  objective.work_present"),
@@ -517,7 +503,6 @@ fn test_mission_closeout_enforces_gates() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Strict closeout");
-    move_mission_to_ready(dir.path(), &mission_id);
 
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Closeout work"]);
@@ -596,7 +581,6 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Dirty closeout");
-    move_mission_to_ready(dir.path(), &mission_id);
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Dirty terminal work"]);
     assert!(success, "work create failed: {stderr}");
@@ -655,7 +639,6 @@ fn test_off_base_branch_blocks_mission_closeout() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Off base closeout");
-    move_mission_to_ready(dir.path(), &mission_id);
 
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Off base terminal work"]);
@@ -719,7 +702,6 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Dirty canonical tracker closeout");
-    move_mission_to_ready(dir.path(), &mission_id);
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),

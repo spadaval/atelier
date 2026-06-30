@@ -16,10 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T04:07:36.832723749+00:00"
-status: "done"
+status: "todo"
 title: "Add generic issue list inventory command"
-updated_at: "2026-06-30T04:07:36.832723749+00:00"
+updated_at: "2026-06-29T18:20:16.722514121+00:00"
 ---
 
 ## Description

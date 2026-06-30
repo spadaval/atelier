@@ -916,8 +916,7 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(stdout.contains("request_review [blocked]"), "{stdout}");
     assert!(stdout.contains("review.open"), "{stdout}");
