@@ -6,6 +6,15 @@ labels:
 - "test"
 - "validation"
 - "workflow"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-gayo
+    owner_kind: issue
+    review_target: master
+    work_branch: task/atelier-gayo
 priority: "P1"
 relationships:
   blocks:
@@ -19,9 +28,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Fix mission integration validation fallout"
-updated_at: "2026-06-30T19:53:53.069731170+00:00"
+updated_at: "2026-06-30T19:55:16.814647189+00:00"
 ---
 
 ## Description
