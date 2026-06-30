@@ -3239,7 +3239,7 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
 
 "#,

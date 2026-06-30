@@ -142,10 +142,10 @@ workflows:
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
         actions:
-          - branch.prepare
+          - git.prepare_branch
       close:
         from: [ready, in_progress, validation]
         to: closed
@@ -173,7 +173,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -197,9 +197,9 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_base
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -243,7 +243,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -280,7 +280,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -437,11 +437,11 @@ Built-in actions are:
 
 | Action | Purpose |
 | --- | --- |
-| `branch.prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
+| `git.prepare_branch` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
 | `tracker.commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
-| `branch.push` | Push the workflow-derived owner branch to the configured review provider remote. |
+| `git.push` | Push the workflow-derived owner branch to the configured review provider remote. |
 | `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
-| `base.sync` | Synchronize the local base branch after provider-owned merge completion. |
+| `git.sync` | Synchronize the local base branch after provider-owned merge completion. |
 | `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` for local review-room workflows only. |
 | `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
 
@@ -465,8 +465,8 @@ close issues, add `pr` aliases, or replace explicit
 `atelier issue transition`.
 
 Merge authority is mode-specific. Provider-backed terminal workflows must use
-provider-owned actions such as `tracker.commit`, `branch.push`, `review.merge`,
-and `base.sync`; they must not perform local base integration through
+provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
+and `git.sync`; they must not perform local base integration through
 `branch_integrate`. Local review-room workflows may keep `branch_integrate`, but
 only as an explicit workflow action that records local branch integration under
 room authority.
@@ -556,7 +556,7 @@ Supported built-ins include:
 | `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for closeout risk. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
-| `git.on_base_branch` | Current checkout is the configured `branch_policy.base_branch`. |
+| `git.on_base` | Current checkout is the configured `branch_policy.base_branch`. |
 | `git.worktree_clean` | Worktree cleanliness gate passes. |
 | `review.linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 

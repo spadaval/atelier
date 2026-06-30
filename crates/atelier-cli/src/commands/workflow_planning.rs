@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_app::project_config;
 use atelier_app::workflow_policy::{
-    BranchLifecycleResolution, MergeStrategy, WorkflowForgejoRoleAuthors,
+    ActionParams, BranchLifecycleResolution, GitPrepareBranchBase, MergeStrategy,
+    WorkflowForgejoRoleAuthors,
 };
 use atelier_core::Issue;
 use atelier_sqlite::Database;
@@ -132,12 +133,23 @@ pub(crate) fn plan_transition_actions(
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
     let _ = transition_name;
-    Ok(plan_actions_for_resolution(
-        issue,
-        &resolution,
-        &transition.actions,
-        1,
-    ))
+    let mut planned = plan_actions_for_resolution(issue, &resolution, &transition.actions, 1);
+    if transition
+        .actions
+        .iter()
+        .any(action_uses_current_branch_base)
+    {
+        let current_branch = crate::commands::workflow::git_current_branch(&repo_root)?;
+        if current_branch.trim().is_empty() {
+            bail!("git.prepare_branch: current requires an attached current branch");
+        }
+        for action in &mut planned {
+            if action.name == "git.prepare_branch" {
+                action.base_branch = current_branch.clone();
+            }
+        }
+    }
+    Ok(planned)
 }
 
 pub(crate) fn plan_actions_for_resolution(
@@ -174,6 +186,19 @@ pub(crate) fn plan_actions_for_resolution(
             }
         })
         .collect()
+}
+
+fn action_uses_current_branch_base(
+    action: &atelier_app::workflow_policy::ActionDefinition,
+) -> bool {
+    match action.params.as_ref() {
+        Some(ActionParams::GitPrepareBranch(params))
+            if params.base == GitPrepareBranchBase::Current =>
+        {
+            true
+        }
+        _ => false,
+    }
 }
 
 struct ReviewArtifactActionPlan {
@@ -256,6 +281,7 @@ pub(crate) fn branch_owner_label(
 ) -> &'static str {
     match owner_kind {
         atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
+        atelier_app::workflow_policy::BranchOwnerKind::Mission => "mission",
         atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
     }
 }
@@ -371,11 +397,11 @@ pub(crate) fn planned_actions_need_branch_context(planned_actions: &[PlannedActi
     planned_actions.iter().any(|action| {
         matches!(
             action.name.as_str(),
-            "branch.prepare"
+            "git.prepare_branch"
                 | "tracker.commit"
-                | "branch.push"
+                | "git.push"
                 | "review.merge"
-                | "base.sync"
+                | "git.sync"
                 | "branch_integrate"
                 | "review.open"
         )
@@ -510,9 +536,10 @@ mod tests {
         assert!(empty_plan.is_empty());
         assert!(!planned_actions_need_branch_context(&empty_plan));
 
-        let plan = plan_actions_for_resolution(&issue, &resolution, &[action("branch.prepare")], 1);
+        let plan =
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.prepare_branch")], 1);
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].name, "branch.prepare");
+        assert_eq!(plan[0].name, "git.prepare_branch");
         assert!(planned_actions_need_branch_context(&plan));
     }
 
@@ -566,9 +593,9 @@ mod tests {
         };
         let actions = vec![
             action("tracker.commit"),
-            action("branch.push"),
+            action("git.push"),
             action("review.merge"),
-            action("base.sync"),
+            action("git.sync"),
         ];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
@@ -577,7 +604,7 @@ mod tests {
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "branch_integrate"));

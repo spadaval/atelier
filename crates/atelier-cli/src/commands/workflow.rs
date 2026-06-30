@@ -344,15 +344,14 @@ fn execute_pre_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
-            "branch.prepare" => {
+            "git.prepare_branch" => {
                 let detail = prepare_branch_action(repo_root, issue, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
                     detail,
                 });
             }
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
-            | "branch_integrate" => {}
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate" => {}
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -394,7 +393,7 @@ fn execute_post_transition_actions(
                     detail,
                 });
             }
-            "branch.push" => {
+            "git.push" => {
                 let detail = push_branch_action(repo_root, issue, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
@@ -408,7 +407,7 @@ fn execute_post_transition_actions(
                     detail,
                 });
             }
-            "base.sync" => {
+            "git.sync" => {
                 let detail = sync_base_action(repo_root, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
@@ -698,7 +697,7 @@ fn ensure_expected_branch_checked_out(
     }
     ensure_branch_exists(repo_root, &action.expected_branch).with_context(|| {
         format!(
-            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `branch.prepare` first, then retry the transition for {}.",
+            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `git.prepare_branch` first, then retry the transition for {}.",
             action.name, action.expected_branch, issue.id
         )
     })?;
@@ -852,12 +851,14 @@ fn record_applied_actions(
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
                 transition_name,
                 action.name,
                 action.order,
                 action.target_issue_id,
                 action.branch_owner_id,
+                action.expected_branch,
+                action.base_branch,
                 action
                     .review_artifact_target
                     .as_deref()
@@ -1016,7 +1017,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
         )
     })
 }
@@ -1024,7 +1025,7 @@ fn transition_declares_branch_git_actions(
 fn transition_git_action_names(name: &str) -> bool {
     matches!(
         name,
-        "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+        "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
     )
 }
 
@@ -1913,7 +1914,7 @@ pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
         "lint.none_blocking",
         "command_surface_current",
         "ignored_tests_reviewed",
-        "git.on_base_branch",
+        "git.on_base",
         "git.worktree_clean",
     ]
 }
@@ -2386,9 +2387,9 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         };
         let actions = vec![
             action("tracker.commit"),
-            action("branch.push"),
+            action("git.push"),
             action("review.merge"),
-            action("base.sync"),
+            action("git.sync"),
         ];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
@@ -2397,7 +2398,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "branch_integrate"));

@@ -17,9 +17,6 @@ schema_version: 3
 branch_policy:
   base_branch: main
   merge_strategy: squash
-  branch_templates:
-    epic: epic/{{ issue.id }}
-    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: { label: Bug }
@@ -86,7 +83,7 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
 
   task_delivery:
@@ -99,7 +96,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -127,9 +124,9 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_base
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -170,7 +167,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -211,7 +208,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -254,15 +251,16 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "lint.none_blocking",
     "command_surface_current",
     "ignored_tests_reviewed",
-    "git.on_base_branch",
+    "git.on_base",
+    "git.on_mission_branch",
     "git.worktree_clean",
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
-    "branch.prepare",
+    "git.prepare_branch",
     "tracker.commit",
-    "branch.push",
+    "git.push",
     "review.merge",
-    "base.sync",
+    "git.sync",
     "branch_integrate",
     "review.open",
 ];
@@ -284,8 +282,6 @@ const TOP_LEVEL_FIELDS: &[&str] = &[
     "statuses",
     "workflows",
 ];
-const ALLOWED_BRANCH_TEMPLATE_VARIABLES: &[&str] = &["issue.id", "issue.type"];
-
 #[derive(Debug, Clone)]
 pub struct WorkflowPolicy {
     pub schema_version: i64,
@@ -300,7 +296,6 @@ pub struct WorkflowPolicy {
 pub struct BranchLifecycleConfig {
     pub base_branch: String,
     pub merge_strategy: MergeStrategy,
-    pub branch_templates: BranchTemplates,
 }
 
 impl Default for BranchLifecycleConfig {
@@ -308,22 +303,6 @@ impl Default for BranchLifecycleConfig {
         Self {
             base_branch: "main".to_string(),
             merge_strategy: MergeStrategy::Squash,
-            branch_templates: BranchTemplates::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BranchTemplates {
-    pub epic: String,
-    pub issue: String,
-}
-
-impl Default for BranchTemplates {
-    fn default() -> Self {
-        Self {
-            epic: "epic/{{ issue.id }}".to_string(),
-            issue: "codex/{{ issue.id }}".to_string(),
         }
     }
 }
@@ -348,6 +327,7 @@ impl MergeStrategy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BranchOwnerKind {
     Epic,
+    Mission,
     StandaloneIssue,
 }
 
@@ -411,7 +391,19 @@ pub enum ValidatorParams {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionParams {
+    GitPrepareBranch(GitPrepareBranchActionParams),
     ReviewArtifact(ReviewArtifactActionParams),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitPrepareBranchActionParams {
+    pub base: GitPrepareBranchBase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitPrepareBranchBase {
+    Configured,
+    Current,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -535,11 +527,18 @@ impl WorkflowPolicy {
         owner: &Issue,
         owner_kind: &BranchOwnerKind,
     ) -> Result<String> {
-        let template = match owner_kind {
-            BranchOwnerKind::Epic => &self.branch_policy.branch_templates.epic,
-            BranchOwnerKind::StandaloneIssue => &self.branch_policy.branch_templates.issue,
+        let branch = match owner_kind {
+            BranchOwnerKind::Epic => format!("epic/{}", owner.id),
+            BranchOwnerKind::Mission => format!("mission/{}", owner.id),
+            BranchOwnerKind::StandaloneIssue => format!("{}/{}", owner.issue_type, owner.id),
         };
-        render_branch_template(template, owner)
+        validate_branch_value(
+            &branch,
+            WORKFLOW_POLICY_PATH,
+            "branch_policy",
+            "canonical branch name",
+        )?;
+        Ok(branch)
     }
 }
 
@@ -626,17 +625,6 @@ struct BranchLifecycleRaw {
     base_branch: Option<String>,
     #[serde(default)]
     merge_strategy: Option<String>,
-    #[serde(default)]
-    branch_templates: Option<BranchTemplatesRaw>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BranchTemplatesRaw {
-    #[serde(default)]
-    epic: Option<String>,
-    #[serde(default)]
-    issue: Option<String>,
 }
 
 pub fn load(repo_root: &Path) -> Result<WorkflowPolicy> {
@@ -760,11 +748,9 @@ fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<Bran
         "base branch",
     )?;
     let merge_strategy = parse_merge_strategy(raw.merge_strategy.as_deref(), display_path)?;
-    let branch_templates = parse_branch_templates(raw.branch_templates, display_path)?;
     Ok(BranchLifecycleConfig {
         base_branch,
         merge_strategy,
-        branch_templates,
     })
 }
 
@@ -783,32 +769,6 @@ fn parse_merge_strategy(value: Option<&str>, display_path: &str) -> Result<Merge
             ),
         )),
     }
-}
-
-fn parse_branch_templates(
-    raw: Option<BranchTemplatesRaw>,
-    display_path: &str,
-) -> Result<BranchTemplates> {
-    let defaults = BranchTemplates::default();
-    let raw = raw.unwrap_or(BranchTemplatesRaw {
-        epic: None,
-        issue: None,
-    });
-    let templates = BranchTemplates {
-        epic: raw.epic.unwrap_or(defaults.epic),
-        issue: raw.issue.unwrap_or(defaults.issue),
-    };
-    validate_branch_template(
-        &templates.epic,
-        display_path,
-        "branch_policy.branch_templates.epic",
-    )?;
-    validate_branch_template(
-        &templates.issue,
-        display_path,
-        "branch_policy.branch_templates.issue",
-    )?;
-    Ok(templates)
 }
 
 fn parse_yaml(text: &str, display_path: &str) -> Result<Value> {
@@ -1547,6 +1507,42 @@ fn parse_transition_action_params(
         });
     }
 
+    if name == "git.prepare_branch" {
+        let base = match params {
+            None => GitPrepareBranchBase::Configured,
+            Some(Value::String(value)) if value == "current" => GitPrepareBranchBase::Current,
+            Some(Value::Mapping(mapping)) if mapping.is_empty() => GitPrepareBranchBase::Configured,
+            Some(Value::String(value)) => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    &field,
+                    format!(
+                        "built-in action '{}' only accepts scalar param 'current', got '{}'",
+                        name, value
+                    ),
+                ));
+            }
+            Some(_) => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    &field,
+                    format!(
+                        "built-in action '{}' only accepts scalar param 'current' or an empty mapping",
+                        name
+                    ),
+                ));
+            }
+        };
+        return Ok(ActionDefinition {
+            builtin: name.to_string(),
+            params: Some(ActionParams::GitPrepareBranch(
+                GitPrepareBranchActionParams { base },
+            )),
+        });
+    }
+
     if let Some(params) = params {
         let params = params.as_mapping().ok_or_else(|| {
             policy_error_with_field(
@@ -2183,54 +2179,6 @@ where
     })
 }
 
-fn validate_branch_template(template: &str, display_path: &str, field: &str) -> Result<()> {
-    if template.trim().is_empty() {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_policy",
-            display_path,
-            field,
-            "branch template must not be empty",
-        ));
-    }
-    let mut rest = template;
-    while let Some(start) = rest.find("{{") {
-        rest = &rest[start + 2..];
-        let Some(end) = rest.find("}}") else {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_policy",
-                display_path,
-                field,
-                "branch template contains '{{' without a matching '}}'",
-            ));
-        };
-        let variable = rest[..end].trim();
-        if !ALLOWED_BRANCH_TEMPLATE_VARIABLES.contains(&variable) {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_policy",
-                display_path,
-                field,
-                format!(
-                    "unsupported branch template variable '{}'; expected {}",
-                    variable,
-                    ALLOWED_BRANCH_TEMPLATE_VARIABLES.join(", ")
-                ),
-            ));
-        }
-        rest = &rest[end + 2..];
-    }
-    if rest.contains("}}") {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_policy",
-            display_path,
-            field,
-            "branch template contains '}}' without a matching '{{'",
-        ));
-    }
-    let rendered = render_branch_template_with(template, "atelier-example", "task")?;
-    validate_branch_value(&rendered, display_path, field, "branch template")?;
-    Ok(())
-}
-
 fn validate_branch_value(value: &str, display_path: &str, field: &str, kind: &str) -> Result<()> {
     if value.trim().is_empty()
         || value.starts_with('/')
@@ -2247,53 +2195,6 @@ fn validate_branch_value(value: &str, display_path: &str, field: &str, kind: &st
         ));
     }
     Ok(())
-}
-
-fn render_branch_template(template: &str, issue: &Issue) -> Result<String> {
-    let branch = render_branch_template_with(template, &issue.id, &issue.issue_type)?;
-    validate_branch_value(
-        &branch,
-        WORKFLOW_POLICY_PATH,
-        "branch_policy.branch_templates",
-        "rendered branch name",
-    )?;
-    Ok(branch)
-}
-
-fn render_branch_template_with(template: &str, issue_id: &str, issue_type: &str) -> Result<String> {
-    let mut rendered = String::new();
-    let mut rest = template;
-    while let Some(start) = rest.find("{{") {
-        rendered.push_str(&rest[..start]);
-        rest = &rest[start + 2..];
-        let Some(end) = rest.find("}}") else {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_policy",
-                WORKFLOW_POLICY_PATH,
-                "branch_policy.branch_templates",
-                "branch template contains '{{' without a matching '}}'",
-            ));
-        };
-        match rest[..end].trim() {
-            "issue.id" => rendered.push_str(issue_id),
-            "issue.type" => rendered.push_str(issue_type),
-            variable => {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_branch_policy",
-                    WORKFLOW_POLICY_PATH,
-                    "branch_policy.branch_templates",
-                    format!(
-                        "unsupported branch template variable '{}'; expected {}",
-                        variable,
-                        ALLOWED_BRANCH_TEMPLATE_VARIABLES.join(", ")
-                    ),
-                ));
-            }
-        }
-        rest = &rest[end + 2..];
-    }
-    rendered.push_str(rest);
-    Ok(rendered)
 }
 
 fn ensure_identifier(
@@ -2402,13 +2303,13 @@ mod tests {
     }
 
     fn default_branch_policy() -> &'static str {
-        "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n"
+        "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n"
     }
 
     fn configured_policy() -> String {
         valid_policy().replace(
             default_branch_policy(),
-            "branch_policy:\n  base_branch: trunk\n  merge_strategy: fast_forward_only\n  branch_templates:\n    epic: review/{{ issue.id }}\n    issue: work/{{ issue.type }}/{{ issue.id }}\n",
+            "branch_policy:\n  base_branch: trunk\n  merge_strategy: fast_forward_only\n",
         )
     }
 
@@ -2486,7 +2387,7 @@ mod tests {
         );
         assert_eq!(
             validator_names(&policy.workflows["epic_delivery"].transitions["start"].validators),
-            vec!["git.on_base_branch"]
+            vec!["git.on_base"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
@@ -2600,13 +2501,62 @@ mod tests {
     fn accepts_empty_action_param_object() {
         let policy = valid_policy().replace(
             "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - branch.prepare: {}",
+            "        actions:\n          - git.prepare_branch: {}",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
-            vec!["branch.prepare"]
+            vec!["git.prepare_branch"]
         );
+    }
+
+    #[test]
+    fn accepts_git_prepare_branch_current_scalar_param() {
+        let policy = valid_policy().replace(
+            "        actions:\n          - review.open: { role: worker }",
+            "        actions:\n          - git.prepare_branch: current",
+        );
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+
+        assert_eq!(action.builtin, "git.prepare_branch");
+        assert_eq!(
+            action.params.as_ref(),
+            Some(&ActionParams::GitPrepareBranch(
+                GitPrepareBranchActionParams {
+                    base: GitPrepareBranchBase::Current,
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn rejects_git_prepare_branch_unknown_scalar_param() {
+        let policy = valid_policy().replace(
+            "        actions:\n          - review.open: { role: worker }",
+            "        actions:\n          - git.prepare_branch: mission",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("current"));
+        assert!(error.contains("mission"));
+    }
+
+    #[test]
+    fn rejects_obsolete_git_action_names() {
+        for obsolete in ["branch.prepare", "branch.push", "base.sync"] {
+            let policy =
+                valid_policy().replace(review_action_line(), &format!("          - {obsolete}"));
+            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("workflow_config_invalid_action"));
+            assert!(error.contains(obsolete));
+        }
     }
 
     #[test]
@@ -2774,14 +2724,20 @@ mod tests {
             policy.branch_policy.merge_strategy,
             MergeStrategy::FastForwardOnly
         );
-        assert_eq!(
-            policy.branch_policy.branch_templates.epic,
-            "review/{{ issue.id }}"
+    }
+
+    #[test]
+    fn rejects_obsolete_branch_templates() {
+        let text = valid_policy().replace(
+            default_branch_policy(),
+            "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n",
         );
-        assert_eq!(
-            policy.branch_policy.branch_templates.issue,
-            "work/{{ issue.type }}/{{ issue.id }}"
-        );
+        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_config_unknown_field"));
+        assert!(error.contains("branch_templates"));
     }
 
     #[test]
@@ -2809,7 +2765,7 @@ mod tests {
     }
 
     #[test]
-    fn branch_name_for_owner_renders_configured_templates() {
+    fn branch_name_for_owner_uses_canonical_issue_type_and_id() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let issue = Issue {
             id: "atelier-abc1".to_string(),
@@ -2829,7 +2785,7 @@ mod tests {
             .branch_name_for_owner(&issue, &BranchOwnerKind::StandaloneIssue)
             .unwrap();
 
-        assert_eq!(branch, "work/task/atelier-abc1");
+        assert_eq!(branch, "task/atelier-abc1");
     }
 
     #[test]
@@ -2901,6 +2857,7 @@ mod tests {
             ("no_open_blockers", "blockers.none_open"),
             ("no_blocking_lints", "lint.none_blocking"),
             ("git_worktree_clean", "git.worktree_clean"),
+            ("git.on_base_branch", "git.on_base"),
         ];
 
         for (obsolete, _) in obsolete_names {

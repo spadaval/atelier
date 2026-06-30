@@ -51,14 +51,14 @@ context is computed from the work graph plus repository branch policy.
 
 4. The v1 built-in action families are exact and closed.
    Version 1 recognizes only these configured action families:
-   - `branch.prepare`: create or check out the workflow-derived owner branch.
+   - `git.prepare_branch`: create or check out the workflow-derived owner branch.
    - `tracker.commit`: commit the transition's canonical tracker changes on the
      workflow-derived owner branch.
-   - `branch.push`: push the workflow-derived owner branch to the configured
+   - `git.push`: push the workflow-derived owner branch to the configured
      review provider remote.
    - `review.merge`: ask the active review authority to merge or record merge
      completion for the branch owner's review artifact.
-   - `base.sync`: synchronize the local base branch after provider-owned merge
+   - `git.sync`: synchronize the local base branch after provider-owned merge
      completion.
    - `branch_integrate`: integrate the owner branch to its recorded branch base
      using the configured merge strategy for local review-room workflows only.

@@ -42,7 +42,7 @@ branch templates are not part of the target contract.
 
 Mission integration branches are workflow-owned, not implicit. A mission
 workflow may opt in by declaring Git validators and branch actions such as
-`branch.prepare`; without those declarations, a mission remains an objective
+`git.prepare_branch`; without those declarations, a mission remains an objective
 record and workspace boundary, not a hidden branch lifecycle.
 
 Projection freshness is internal command-storage health. Commands may repair or

@@ -143,7 +143,7 @@
   confirmation to the configured provider. In both modes it does not transition
   Atelier issue workflow.
 - Provider terminal actions: provider-backed workflow actions such as
-  `tracker.commit`, `branch.push`, `review.merge`, and `base.sync` that make
+  `tracker.commit`, `git.push`, `review.merge`, and `git.sync` that make
   the provider review artifact and remote base branch the integration
   authority. They are not aliases for local `branch_integrate`.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are

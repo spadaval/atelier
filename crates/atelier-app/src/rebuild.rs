@@ -1721,9 +1721,6 @@ schema_version: 3
 branch_policy:
   base_branch: main
   merge_strategy: squash
-  branch_templates:
-    epic: epic/{{ issue.id }}
-    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: { label: Bug }
@@ -1781,7 +1778,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_base
       block:
         from: [todo, in_progress, review, validation]
         to: blocked

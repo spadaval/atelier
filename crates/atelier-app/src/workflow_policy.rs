@@ -8,10 +8,11 @@ use serde_json::Value;
 
 pub use atelier_workflow::{
     configured_initial_status, load, validate_issue_against_policy, ActionDefinition, ActionParams,
-    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind, BranchTemplates,
-    GuidanceTemplate, MergeStrategy, ReviewArtifactActionParams, StatusDefinition,
-    TransitionDefinition, ValidatorDefinition, ValidatorParams, WorkflowDefinition,
-    WorkflowForgejoRoleAuthors, WorkflowPolicy, WORKFLOW_POLICY_PATH,
+    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind,
+    GitPrepareBranchActionParams, GitPrepareBranchBase, GuidanceTemplate, MergeStrategy,
+    ReviewArtifactActionParams, StatusDefinition, TransitionDefinition, ValidatorDefinition,
+    ValidatorParams, WorkflowDefinition, WorkflowForgejoRoleAuthors, WorkflowPolicy,
+    WORKFLOW_POLICY_PATH,
 };
 
 pub use atelier_workflow::STARTER_POLICY_YAML;
@@ -103,6 +104,8 @@ pub fn resolve_branch_lifecycle(
     let issue = db.require_issue(issue_id)?;
     let (owner, owner_kind, nested_under_epic) = if issue.issue_type == "epic" {
         (issue.clone(), BranchOwnerKind::Epic, false)
+    } else if issue.issue_type == "mission" {
+        (issue.clone(), BranchOwnerKind::Mission, false)
     } else if issue.parent_id.is_none() {
         (issue.clone(), BranchOwnerKind::StandaloneIssue, false)
     } else {
