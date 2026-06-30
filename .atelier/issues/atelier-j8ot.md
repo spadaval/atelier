@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "docs"
 - "workflow"
+review:
+  kind: pull_request
+  number: 39
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-sszj
@@ -27,9 +31,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Migrate workflow defaults and guidance to mission branch model"
-updated_at: "2026-06-30T19:16:51.185417031+00:00"
+updated_at: "2026-06-30T19:23:41.539687803+00:00"
 ---
 
 ## Description
