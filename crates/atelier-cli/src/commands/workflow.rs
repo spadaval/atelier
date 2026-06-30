@@ -439,7 +439,7 @@ fn prepare_branch_action(
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
-        git_checked(repo_root, &["switch", &action.expected_branch], "checkout action branch")
+        git_switch_checked(repo_root, &action.expected_branch, "checkout action branch")
             .with_context(|| {
                 format!(
                     "action {} failed while switching to branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} start`.",
@@ -531,11 +531,7 @@ fn integrate_branch_action(
             action.name, action.base_branch, issue.id
         )
     })?;
-    git_checked(
-        repo_root,
-        &["switch", &action.base_branch],
-        "checkout action integration target",
-    )
+    git_switch_checked(repo_root, &action.base_branch, "checkout action integration target")
     .with_context(|| {
         format!(
             "action {} failed while switching to base branch '{}'.\nRecovery: source branch '{}' contains transition work; inspect `git status --short --branch`, switch to the base branch, and retry integration or the transition after repair.",
@@ -670,7 +666,7 @@ fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> 
                 action.name, action.base_branch
             )
         })?;
-    git_checked(repo_root, &["switch", &action.base_branch], "checkout base branch")
+    git_switch_checked(repo_root, &action.base_branch, "checkout base branch")
         .with_context(|| {
             format!(
                 "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
@@ -706,11 +702,7 @@ fn ensure_expected_branch_checked_out(
             action.name, action.expected_branch, issue.id
         )
     })?;
-    git_checked(
-        repo_root,
-        &["switch", &action.expected_branch],
-        "checkout action source branch",
-    )
+    git_switch_checked(repo_root, &action.expected_branch, "checkout action source branch")
     .with_context(|| {
         format!(
             "action {} failed while switching to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry the transition for {}.",
@@ -1107,9 +1099,9 @@ impl TransitionGitRollback {
             )?;
         }
         if branch_exists_at(&self.repo_root, &self.expected_branch)? {
-            git_checked(
+            git_switch_checked(
                 &self.repo_root,
-                &["switch", &self.expected_branch],
+                &self.expected_branch,
                 "return to action source branch for rollback",
             )?;
         }
@@ -1179,9 +1171,9 @@ impl CloseGitIntegration {
         }
         let current = git_current_branch(&repo_root)?;
         if current != resolution.expected_branch {
-            git_checked(
+            git_switch_checked(
                 &repo_root,
-                &["switch", &resolution.expected_branch],
+                &resolution.expected_branch,
                 "checkout source branch before close",
             )
             .with_context(|| {
@@ -1281,9 +1273,9 @@ impl CloseGitIntegration {
     }
 
     fn merge_to_base(&self) -> Result<String> {
-        git_checked(
+        git_switch_checked(
             &self.repo_root,
-            &["switch", &self.resolution.base_branch],
+            &self.resolution.base_branch,
             "checkout base branch before merge",
         )
         .with_context(|| {
@@ -1380,9 +1372,9 @@ impl CloseGitIntegration {
                 "reset failed merge state",
             )?;
         }
-        git_checked(
+        git_switch_checked(
             &self.repo_root,
-            &["switch", &self.resolution.expected_branch],
+            &self.resolution.expected_branch,
             "return to source branch for rollback",
         )?;
         self.rollback_tracker_state(state_dir, db_path)
@@ -1562,6 +1554,18 @@ fn git_checked(root: &Path, args: &[&str], action: &str) -> Result<()> {
         },
         stdout.trim()
     )
+}
+
+fn git_switch_checked(root: &Path, branch: &str, action: &str) -> Result<()> {
+    match git_checked(root, &["switch", branch], action) {
+        Ok(()) => Ok(()),
+        Err(error) if error.to_string().contains("is already used by worktree") => git_checked(
+            root,
+            &["switch", "--ignore-other-worktrees", branch],
+            action,
+        ),
+        Err(error) => Err(error),
+    }
 }
 
 pub(crate) fn git_stdout(root: &Path, args: &[&str], action: &str) -> Result<String> {
