@@ -21,7 +21,6 @@ pub mod review_room;
 pub mod storage_layout;
 pub mod test_inventory;
 pub mod use_cases;
-pub mod user_config;
 pub mod workflow_policy;
 pub mod workflow_validation;
 

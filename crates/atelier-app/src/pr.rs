@@ -869,6 +869,7 @@ mod tests {
             host: "forge.example.test".to_string(),
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
+            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
             role_authors: Some(ForgejoRoleAuthors {
                 worker: "worker".to_string(),
                 reviewer: "reviewer".to_string(),
@@ -908,6 +909,7 @@ provider = "forgejo"
 host = "forge.example.test"
 owner = "tools"
 repo = "atelier"
+admin_token_env = "FORGEJO_ADMIN_TOKEN"
 "#,
         )
         .unwrap();

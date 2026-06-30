@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:20:49.171160159+00:00"
+status: "done"
 title: "Make validator guidance derive proof from Outcome"
-updated_at: "2026-06-29T17:40:07.733724397+00:00"
+updated_at: "2026-06-30T15:20:49.171160159+00:00"
 ---
 
 ## Description

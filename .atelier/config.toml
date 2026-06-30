@@ -8,7 +8,7 @@ state_root = ".atelier"
 [prune]
 canonical_retention_days = 7
 
-# Review provider integration reads the admin token from ~/.config/atelier.toml;
+# Review provider integration uses an environment variable for the admin token;
 # the token value must not be committed.
 [review]
 mode = "provider"
@@ -18,3 +18,4 @@ provider = "forgejo"
 host = "http://iiot-grand-central.cisco.com:3000"
 owner = "supadava"
 repo = "atelier"
+admin_token_env = "FORGEJO_ADMIN_TOKEN"

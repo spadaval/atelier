@@ -57,6 +57,7 @@ pub struct ForgejoConfig {
     pub host: String,
     pub owner: String,
     pub repo: String,
+    pub admin_token_env: String,
     pub role_authors: Option<ForgejoRoleAuthors>,
 }
 
@@ -221,6 +222,7 @@ struct RawForgejoConfig {
     host: Option<String>,
     owner: Option<String>,
     repo: Option<String>,
+    admin_token_env: Option<String>,
 }
 
 pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
@@ -414,6 +416,11 @@ fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<For
         host: require_owned_option(raw.host, config_path, "review.providers.forgejo.host")?,
         owner: require_owned_option(raw.owner, config_path, "review.providers.forgejo.owner")?,
         repo: require_owned_option(raw.repo, config_path, "review.providers.forgejo.repo")?,
+        admin_token_env: require_env_var_name(
+            raw.admin_token_env,
+            config_path,
+            "review.providers.forgejo.admin_token_env",
+        )?,
         role_authors: None,
     };
     Ok(config)
@@ -433,6 +440,21 @@ fn require_owned_option(value: Option<String>, config_path: &Path, field: &str) 
         )
     })?;
     require_owned(value, config_path, field)
+}
+
+fn require_env_var_name(value: Option<String>, config_path: &Path, field: &str) -> Result<String> {
+    let value = require_owned_option(value, config_path, field)?;
+    let valid = value.chars().enumerate().all(|(index, ch)| {
+        ch == '_' || ch.is_ascii_uppercase() || (index > 0 && ch.is_ascii_digit())
+    });
+    if !valid || value.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
+        return Err(anyhow!(
+            "forgejo_config_invalid: {} field '{}' must be an environment variable name such as FORGEJO_ADMIN_TOKEN",
+            config_path.display(),
+            field
+        ));
+    }
+    Ok(value)
 }
 
 fn require_non_empty(value: &str, config_path: &Path, field: &str) -> Result<()> {
@@ -474,6 +496,7 @@ provider = "forgejo"
 host = "forge.example.test"
 owner = "tools"
 repo = "atelier"
+admin_token_env = "FORGEJO_ADMIN_TOKEN"
 "#
     }
 
@@ -570,6 +593,7 @@ workflows:
         assert_eq!(forgejo.host, "forge.example.test");
         assert_eq!(forgejo.owner, "tools");
         assert_eq!(forgejo.repo, "atelier");
+        assert_eq!(forgejo.admin_token_env, "FORGEJO_ADMIN_TOKEN");
         assert_eq!(forgejo.role_authors, None);
         assert!(forgejo
             .role_author_for_role("worker")
@@ -631,7 +655,7 @@ mode = "room"
     }
 
     #[test]
-    fn rejects_legacy_forgejo_runtime_settings() {
+    fn invalid_forgejo_config_names_and_legacy_role_authors() {
         let old_role_authors = format!(
             "{}\n[review.providers.forgejo.role_authors]\nworker = \"atelier-worker\"\nreviewer = \"atelier-reviewer\"\nvalidator = \"atelier-validator\"\nmanager = \"atelier-manager\"\n",
             valid_config()
@@ -650,14 +674,15 @@ mode = "room"
             .to_string();
         assert!(error.contains("unknown field `sudo_users`"));
 
-        let legacy_token_env = valid_config().replace(
-            "repo = \"atelier\"",
-            "repo = \"atelier\"\nadmin_token_env = \"FORGEJO_ADMIN_TOKEN\"",
+        let bad_token = valid_config().replace(
+            "admin_token_env = \"FORGEJO_ADMIN_TOKEN\"",
+            "admin_token_env = \"forgejo-token\"",
         );
-        let error = parse_project_config(&legacy_token_env, &path())
+        let error = parse_project_config(&bad_token, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("unknown field `admin_token_env`"));
+        assert!(error.contains("review.providers.forgejo.admin_token_env"));
+        assert!(error.contains("FORGEJO_ADMIN_TOKEN"));
     }
 
     #[test]

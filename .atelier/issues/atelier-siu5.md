@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:15:30.747560641+00:00"
+status: "done"
 title: "Define record-shape and scope guidelines for planners"
-updated_at: "2026-06-29T17:53:55.606250281+00:00"
+updated_at: "2026-06-30T15:15:30.747560641+00:00"
 ---
 
 ## Description

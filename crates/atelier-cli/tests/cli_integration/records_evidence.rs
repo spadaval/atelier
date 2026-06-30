@@ -803,9 +803,9 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
     );
     assert!(
         stderr.contains(&format!(
-            "Unknown transition 'start' for issue {mission_id}"
-        )) && stderr.contains("available from 'ready' are: close"),
-        "mission transition error should name the close replacement: {stderr}"
+            "Transition 'start' is not available from status 'draft' for issue {mission_id}"
+        )),
+        "mission transition error should name the draft workflow state: {stderr}"
     );
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", evidence_id]);
@@ -1566,7 +1566,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     );
 
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
     assert!(transitions.contains("expected at least 1 passing evidence record"));
@@ -1622,6 +1622,9 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Stale test closeout");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready transition failed: {stderr}");
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),

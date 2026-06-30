@@ -50,9 +50,7 @@ Common commands:
   atelier status
   atelier work ready
   atelier work blocked
-  atelier work queue
-  atelier work queue --ready
-  atelier work queue --blocked
+  atelier issue list
   atelier work mission <mission-id>
   atelier work epic <epic-id>
   atelier issue show <id>
@@ -281,7 +279,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum WorkCommands {
-    /// Show the repo-wide work queue
+    /// Show the legacy repo-wide operational queue
     Queue {
         /// Filter by exact workflow status, or all
         #[arg(short, long, default_value = "todo")]
@@ -312,7 +310,24 @@ enum WorkCommands {
         all: bool,
     },
     /// Show one mission dashboard
-    Mission { id: String },
+    Mission {
+        id: String,
+        /// Show mission-scoped ready work only
+        #[arg(long)]
+        ready: bool,
+        /// Show mission-scoped blocked work only
+        #[arg(long)]
+        blocked: bool,
+        /// Show mission-scoped active work only
+        #[arg(long)]
+        active: bool,
+        /// Show mission-scoped done work only
+        #[arg(long)]
+        done: bool,
+        /// Show all mission-scoped work
+        #[arg(long)]
+        all: bool,
+    },
     /// Show one epic dashboard
     Epic { id: String },
     /// Show ready work
@@ -334,17 +349,17 @@ enum IssueCommands {
         /// Initial Markdown description/body text
         #[arg(long)]
         description: Option<String>,
-        /// Mission intent/body text; requires --issue-type mission
+        /// Plain mission Markdown centered on Outcome; requires --issue-type mission
         #[arg(long)]
         body: Option<String>,
-        /// Add one mission Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Constraints section bullet
+        #[arg(long, hide = true)]
         constraint: Vec<String>,
-        /// Add one mission Risks section bullet; repeat for multiple risks
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Risks section bullet
+        #[arg(long, hide = true)]
         risk: Vec<String>,
-        /// Add one mission Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Validation section bullet
+        #[arg(long, hide = true)]
         validation: Vec<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
@@ -369,6 +384,31 @@ enum IssueCommands {
         id: String,
     },
 
+    /// List issue records as generic inventory
+    List {
+        /// Filter by exact workflow status, or all
+        #[arg(short, long, default_value = "all")]
+        status: String,
+        /// Filter by derived workflow category
+        #[arg(long)]
+        category: Option<String>,
+        /// Filter by issue type from .atelier/workflow.yaml
+        #[arg(long = "issue-type")]
+        issue_type: Option<String>,
+        /// Filter by label
+        #[arg(short, long)]
+        label: Option<String>,
+        /// Filter by priority
+        #[arg(short, long)]
+        priority: Option<String>,
+        /// Show only ready todo-category issue records
+        #[arg(long)]
+        ready: bool,
+        /// Show blocked issue records
+        #[arg(long)]
+        blocked: bool,
+    },
+
     /// Show or execute issue transitions
     Transition {
         /// Issue ID
@@ -378,6 +418,9 @@ enum IssueCommands {
         /// Close reason used by transitions that require it
         #[arg(long = "reason")]
         close_reason: Option<String>,
+        /// Show validator passes, action preflight detail, descriptions, and debug context
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Update an issue
@@ -396,17 +439,17 @@ enum IssueCommands {
         /// New status for mission objective records
         #[arg(long)]
         status: Option<String>,
-        /// Mission intent/body text; requires a mission objective record
+        /// Plain mission Markdown centered on Outcome; requires a mission objective record
         #[arg(long)]
         body: Option<String>,
-        /// Add one mission Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Constraints section bullet
+        #[arg(long, hide = true)]
         constraint: Vec<String>,
-        /// Add one mission Risks section bullet; repeat for multiple risks
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Risks section bullet
+        #[arg(long, hide = true)]
         risk: Vec<String>,
-        /// Add one mission Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Validation section bullet
+        #[arg(long, hide = true)]
         validation: Vec<String>,
         /// Add labels to the issue
         #[arg(short, long)]
@@ -484,7 +527,7 @@ enum BundleCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation \"summary\"
+  atelier evidence record --target issue/<id> --kind validation \"checked claim X; result pass\"
   atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
@@ -724,7 +767,16 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // ============================================================================
 
 fn main() -> Result<()> {
+    load_dotenv()?;
     run()
+}
+
+fn load_dotenv() -> Result<()> {
+    match dotenvy::dotenv() {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn run() -> Result<()> {
@@ -780,9 +832,25 @@ fn run() -> Result<()> {
                     },
                     quiet,
                 ),
-                Some(WorkCommands::Mission { id }) => {
-                    commands::work::mission_dashboard(storage.db(), &id, quiet)
-                }
+                Some(WorkCommands::Mission {
+                    id,
+                    ready,
+                    blocked,
+                    active,
+                    done,
+                    all,
+                }) => commands::work::mission_dashboard(
+                    storage.db(),
+                    &id,
+                    commands::work::MissionDashboardOptions {
+                        ready,
+                        blocked,
+                        active,
+                        done,
+                        all,
+                    },
+                    quiet,
+                ),
                 Some(WorkCommands::Epic { id }) => {
                     commands::work::epic_dashboard(storage.db(), &id, quiet)
                 }
@@ -1274,6 +1342,7 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
+            IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",

@@ -33,6 +33,7 @@ mode = "room"
 # host = "forge.example.test"
 # owner = "workspace"
 # repo = "atelier"
+# admin_token_env = "FORGEJO_ADMIN_TOKEN"
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
