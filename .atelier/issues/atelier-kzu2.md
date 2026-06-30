@@ -27,9 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Make mission lifecycle workflow-configured"
-updated_at: "2026-06-29T17:39:33.984857543+00:00"
+updated_at: "2026-06-30T15:16:55.915495427+00:00"
 ---
 
 ## Description
