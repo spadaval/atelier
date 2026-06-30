@@ -35,8 +35,11 @@ updated_at: "2026-06-30T19:55:16.814647189+00:00"
 
 ## Description
 
-Validation issue atelier-fs79 found mission closeout blockers.\n\nOutcome\n-------\n- Full cargo nextest run no longer fails on stale branch-name expectations introduced before canonical issue-type branch names.\n- Branch integration conflict rollback behavior is either corrected or the test expectation is updated to the intended recovery contract.\n- A direct end-to-end proof covers epic close targeting a recorded mission branch in the configured mission integration workflow.\n- Focused tracker checks and baseline formatting/whitespace checks pass.
+Validation issue `atelier-fs79` found mission closeout blockers.
 
 ## Outcome
 
-Outcome was not specified.
+- Full `cargo nextest run` no longer fails on stale branch-name expectations introduced before canonical issue-type branch names.
+- Branch integration conflict rollback behavior is either corrected or the test expectation is updated to the intended recovery contract.
+- A direct end-to-end proof covers epic close targeting a recorded mission branch in the configured mission integration workflow.
+- Focused tracker checks and baseline formatting/whitespace checks pass.

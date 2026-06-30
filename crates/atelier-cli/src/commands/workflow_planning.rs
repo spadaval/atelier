@@ -373,10 +373,11 @@ fn branch_context_guidance(
         context.resolution.owner_issue_type
     ));
     guidance.push(format!(
-        "Expected branch: {}",
+        "Source branch: {}",
         context.resolution.expected_branch
     ));
     guidance.push(format!("Base branch: {}", context.resolution.base_branch));
+    guidance.push(format!("Target branch: {}", context.resolution.base_branch));
     guidance.push(branch_lifecycle_state_line(&context));
     if is_start {
         guidance.push(format!(

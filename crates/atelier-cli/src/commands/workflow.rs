@@ -71,7 +71,7 @@ pub fn transition_issue(
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
-    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
@@ -100,36 +100,19 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
-    let mut action_results = execute_pre_transition_actions(
+    let action_results = execute_transition_actions(
         db,
         state_dir,
         db_path,
         &repo_root,
         &before,
         transition_name,
+        &policy,
+        transition,
         &planned_actions,
+        close_reason,
+        git_rollback.as_ref(),
     )?;
-    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
-    apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
-    record_applied_actions(&before.id, transition_name, &planned_actions)?;
-    record_applied_transition(&before, transition_name, transition)?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    match execute_post_transition_actions(
-        &repo_root,
-        state_dir,
-        db_path,
-        &before,
-        transition_name,
-        &planned_actions,
-    ) {
-        Ok(mut results) => action_results.append(&mut results),
-        Err(error) => {
-            if let Some(rollback) = git_rollback {
-                rollback.rollback_after_post_action_failure(state_dir, db_path)?;
-            }
-            bail!("{error:#}");
-        }
-    }
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     if transition_name == "start" {
@@ -175,8 +158,9 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
             context.resolution.owner_id,
             context.resolution.owner_issue_type
         );
-        println!("Effective branch: {}", context.resolution.expected_branch);
+        println!("Source branch: {}", context.resolution.expected_branch);
         println!("Base branch: {}", context.resolution.base_branch);
+        println!("Target branch: {}", context.resolution.base_branch);
     }
     if let Some(branch) = branch {
         println!("Branch: {branch}");
@@ -332,26 +316,106 @@ struct AppliedAction {
     detail: String,
 }
 
-fn execute_pre_transition_actions(
+struct TransitionApply<'a> {
+    state_dir: &'a Path,
+    db_path: &'a Path,
+    issue: &'a Issue,
+    transition_name: &'a str,
+    policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &'a atelier_app::workflow_policy::TransitionDefinition,
+    planned_actions: &'a [PlannedAction],
+    close_reason: Option<&'a str>,
+}
+
+impl TransitionApply<'_> {
+    fn apply(&self) -> Result<()> {
+        let mut record = app_use_cases::load_canonical_issue(self.state_dir, &self.issue.id)?;
+        apply_transition_record(
+            self.policy,
+            self.state_dir,
+            &mut record,
+            self.transition,
+            self.close_reason,
+        )?;
+        record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
+        record_applied_transition(self.issue, self.transition_name, self.transition)?;
+        app_use_cases::refresh_after_canonical_write(self.state_dir, self.db_path)
+    }
+}
+
+fn execute_transition_actions(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
     transition_name: &str,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     planned_actions: &[PlannedAction],
+    close_reason: Option<&str>,
+    git_rollback: Option<&TransitionGitRollback>,
 ) -> Result<Vec<AppliedAction>> {
+    let transition_apply = TransitionApply {
+        state_dir,
+        db_path,
+        issue,
+        transition_name,
+        policy,
+        transition,
+        planned_actions,
+        close_reason,
+    };
     let mut applied = Vec::new();
+    let mut transition_applied = false;
     for action in planned_actions {
-        match action.name.as_str() {
+        if action_requires_applied_transition(action.name.as_str()) && !transition_applied {
+            transition_apply.apply()?;
+            transition_applied = true;
+        }
+        let result = match action.name.as_str() {
             "git.prepare_branch" => {
-                let detail = prepare_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
+                let detail = prepare_branch_action(state_dir, repo_root, issue, action)?;
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate" => {}
+            "tracker.commit" => {
+                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.push" => {
+                let detail = push_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "review.merge" => {
+                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.sync" => {
+                let detail = sync_base_action(repo_root, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "branch_integrate" => {
+                let detail = integrate_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -362,72 +426,43 @@ fn execute_pre_transition_actions(
                     transition_name,
                     action,
                 )?;
-                applied.push(AppliedAction {
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            other => bail!(
-                "action {other} failed: action execution is not implemented; status was not changed"
-            ),
-        }
+            other => Err(anyhow!(
+                "action {other} failed: action execution is not implemented; status was {}changed",
+                if transition_applied { "" } else { "not " }
+            )),
+        };
+        match result {
+            Ok(result) => applied.push(result),
+            Err(error) => {
+                if transition_applied {
+                    if let Some(rollback) = git_rollback {
+                        rollback.rollback_after_post_action_failure(state_dir, db_path)?;
+                    }
+                }
+                bail!("{error:#}");
+            }
+        };
+    }
+    if !transition_applied {
+        transition_apply.apply()?;
     }
     Ok(applied)
 }
 
-fn execute_post_transition_actions(
-    repo_root: &Path,
-    state_dir: &Path,
-    db_path: &Path,
-    issue: &Issue,
-    transition_name: &str,
-    planned_actions: &[PlannedAction],
-) -> Result<Vec<AppliedAction>> {
-    let mut applied = Vec::new();
-    for action in planned_actions {
-        match action.name.as_str() {
-            "tracker.commit" => {
-                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "git.push" => {
-                let detail = push_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "review.merge" => {
-                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "git.sync" => {
-                let detail = sync_base_action(repo_root, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "branch_integrate" => {
-                let detail = integrate_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            _ => {}
-        }
-    }
-    Ok(applied)
+fn action_requires_applied_transition(name: &str) -> bool {
+    matches!(
+        name,
+        "tracker.commit" | "review.merge" | "git.sync" | "branch_integrate"
+    )
 }
 
 fn prepare_branch_action(
+    state_dir: &Path,
     repo_root: &Path,
     issue: &Issue,
     action: &PlannedAction,
@@ -435,6 +470,7 @@ fn prepare_branch_action(
     ensure_non_tracker_clean_for_action(repo_root, action, issue, "before workflow transition")?;
     let current = git_current_branch(repo_root).unwrap_or_default();
     if current == action.expected_branch {
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
@@ -445,6 +481,7 @@ fn prepare_branch_action(
                     action.name, action.expected_branch, issue.id
                 )
             })?;
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("checked out branch {}", action.expected_branch));
     }
     ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
@@ -464,10 +501,48 @@ fn prepare_branch_action(
             action.name, action.expected_branch, action.base_branch, issue.id
         )
     })?;
+    persist_workflow_branch_field(state_dir, action)?;
     Ok(format!(
         "created branch {} from {}",
         action.expected_branch, action.base_branch
     ))
+}
+
+fn persist_workflow_branch_field(state_dir: &Path, action: &PlannedAction) -> Result<()> {
+    let mut owner = app_use_cases::load_canonical_issue(state_dir, &action.branch_owner_id)
+        .with_context(|| {
+            format!(
+                "action {} failed while loading branch owner {} to record workflow_branch",
+                action.name, action.branch_owner_id
+            )
+        })?;
+    owner.issue.fields.insert(
+        atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+        serde_json::json!({
+            "owner_issue_id": action.branch_owner_id.clone(),
+            "work_branch": action.expected_branch.clone(),
+            "branch_base": action.base_branch.clone(),
+            "review_target": action.base_branch.clone(),
+            "integration_target": action.base_branch.clone(),
+            "owner_kind": workflow_branch_owner_kind(&owner.issue.issue_type),
+            "merge_strategy": action.merge_strategy.as_str(),
+        }),
+    );
+    owner.issue.updated_at = Utc::now();
+    app_use_cases::write_canonical_issue(state_dir, &owner).with_context(|| {
+        format!(
+            "action {} failed while recording workflow_branch on {}",
+            action.name, action.branch_owner_id
+        )
+    })
+}
+
+fn workflow_branch_owner_kind(issue_type: &str) -> &'static str {
+    match issue_type {
+        "epic" => "epic",
+        "mission" => "mission",
+        _ => "issue",
+    }
 }
 
 fn commit_branch_action(
@@ -658,32 +733,85 @@ fn merge_review_action(
 }
 
 fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
-    git_checked(repo_root, &["fetch", "origin", &action.base_branch], "fetch base branch")
-        .with_context(|| {
+    let remote_ref = format!("origin/{}", action.base_branch);
+    let remote_tracking_ref = format!("refs/remotes/{remote_ref}");
+    let fetch_refspec = format!("refs/heads/{}:{remote_tracking_ref}", action.base_branch);
+    git_checked(repo_root, &["fetch", "origin", &fetch_refspec], "fetch base branch")
+    .with_context(|| {
             format!(
                 "action {} failed while fetching base branch '{}'.\nRecovery: inspect the configured provider remote and retry the transition.",
                 action.name, action.base_branch
             )
         })?;
-    git_switch_checked(repo_root, &action.base_branch, "checkout base branch")
+    let current = git_current_branch(repo_root).unwrap_or_default();
+    if current == action.base_branch {
+        git_checked(
+            repo_root,
+            &["merge", "--ff-only", &remote_ref],
+            "fast-forward checked-out base branch",
+        )
         .with_context(|| {
             format!(
-                "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                "action {} failed while syncing checked-out base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
                 action.name, action.base_branch
             )
         })?;
+        return Ok(format!("synced {}", action.base_branch));
+    }
+    if let Some(worktree_path) = branch_checked_out_worktree(repo_root, &action.base_branch)? {
+        bail!(
+            "action {} failed because target branch '{}' is checked out in another worktree at {}.\nRecovery: close or switch that worktree, then retry the transition.",
+            action.name,
+            action.base_branch,
+            worktree_path
+        );
+    }
+    ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
+        format!(
+            "action {} failed because target branch '{}' is missing.\nRecovery: create or fetch the target branch, then retry the transition.",
+            action.name, action.base_branch
+        )
+    })?;
     git_checked(
         repo_root,
-        &["merge", "--ff-only", &format!("origin/{}", action.base_branch)],
-        "fast-forward base branch",
+        &["merge-base", "--is-ancestor", &action.base_branch, &remote_ref],
+        "verify base branch fast-forward",
     )
     .with_context(|| {
         format!(
-            "action {} failed while syncing base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
+            "action {} failed because target branch '{}' cannot fast-forward to '{}'.\nRecovery: inspect local/remote divergence before retrying.",
+            action.name, action.base_branch, remote_ref
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["update-ref", &format!("refs/heads/{}", action.base_branch), &remote_tracking_ref],
+        "fast-forward base branch ref",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while updating target branch '{}'.\nRecovery: inspect local refs and retry the transition.",
             action.name, action.base_branch
         )
     })?;
     Ok(format!("synced {}", action.base_branch))
+}
+
+fn branch_checked_out_worktree(repo_root: &Path, branch: &str) -> Result<Option<String>> {
+    let output = git_stdout(
+        repo_root,
+        &["worktree", "list", "--porcelain"],
+        "inspect worktrees",
+    )?;
+    let mut current_path: Option<String> = None;
+    for line in output.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.to_string());
+        } else if line == format!("branch refs/heads/{branch}") {
+            return Ok(current_path);
+        }
+    }
+    Ok(None)
 }
 
 fn ensure_expected_branch_checked_out(
@@ -851,13 +979,15 @@ fn record_applied_actions(
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_target: {}\nintegration_target: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
                 transition_name,
                 action.name,
                 action.order,
                 action.target_issue_id,
                 action.branch_owner_id,
                 action.expected_branch,
+                action.base_branch,
+                action.base_branch,
                 action.base_branch,
                 action
                     .review_artifact_target
@@ -1644,8 +1774,9 @@ fn render_issue_transition_options(
                 context.resolution.owner_id,
                 context.resolution.owner_issue_type
             ));
-            lines.push(format!("Expected: {}", context.resolution.expected_branch));
+            lines.push(format!("Source:   {}", context.resolution.expected_branch));
             lines.push(format!("Base:     {}", context.resolution.base_branch));
+            lines.push(format!("Target:   {}", context.resolution.base_branch));
             lines.push(format!(
                 "Current:  {}",
                 context.current_branch.as_deref().unwrap_or("(detached)")
@@ -1804,8 +1935,14 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
         .iter()
         .map(|action| {
             let mut line = format!(
-                "{}. {} target={} owner={}",
-                action.order, action.name, action.target_issue_id, action.branch_owner_id
+                "{}. {} target={} owner={} source={} base={} integration_target={}",
+                action.order,
+                action.name,
+                action.target_issue_id,
+                action.branch_owner_id,
+                action.expected_branch,
+                action.base_branch,
+                action.base_branch
             );
             if let Some(review_target) = &action.review_artifact_target {
                 line.push_str(&format!(" review_target={review_target}"));
@@ -2046,7 +2183,7 @@ mod tests {
     use atelier_app::workflow_policy::{
         ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
     };
-    use atelier_records::{IssueSections, RecordStore, Relationships};
+    use atelier_records::{IssueSections, Record, RecordStore, Relationships};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
@@ -2295,6 +2432,87 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         (dir, db)
     }
 
+    fn setup_sync_repo() -> (TempDir, TempDir, PlannedAction) {
+        let repo = tempdir().unwrap();
+        let remote = tempdir().unwrap();
+        git_ok(remote.path(), &["init", "-q", "--bare"]);
+        git_ok(repo.path(), &["init", "-q"]);
+        git_ok(
+            repo.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(repo.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(repo.path().join("README.md"), "initial\n").unwrap();
+        git_ok(repo.path(), &["add", "README.md"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "initial"]);
+        git_ok(repo.path(), &["branch", "-M", "main"]);
+        git_ok(repo.path(), &["switch", "-c", "mission/atelier-sync"]);
+        std::fs::write(repo.path().join("mission.txt"), "local\n").unwrap();
+        git_ok(repo.path(), &["add", "mission.txt"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "mission local"]);
+        git_ok(
+            repo.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git_ok(
+            repo.path(),
+            &["push", "-u", "origin", "mission/atelier-sync"],
+        );
+        git_ok(repo.path(), &["switch", "-c", "epic/atelier-sync"]);
+
+        let remote_work = tempdir().unwrap();
+        git_ok(
+            remote_work.path(),
+            &["clone", "-q", remote.path().to_str().unwrap(), "."],
+        );
+        git_ok(remote_work.path(), &["switch", "mission/atelier-sync"]);
+        git_ok(
+            remote_work.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(remote_work.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(remote_work.path().join("remote.txt"), "remote\n").unwrap();
+        git_ok(remote_work.path(), &["add", "remote.txt"]);
+        git_ok(
+            remote_work.path(),
+            &["commit", "-q", "-m", "remote advance"],
+        );
+        git_ok(
+            remote_work.path(),
+            &["push", "origin", "mission/atelier-sync"],
+        );
+
+        let issue = test_issue("atelier-sync");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-sync".to_string(),
+            owner_id: "atelier-sync".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-sync".to_string(),
+            base_branch: "mission/atelier-sync".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let action =
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.sync")], 1).remove(0);
+        (repo, remote, action)
+    }
+
+    fn git_ok(repo: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
@@ -2405,6 +2623,74 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
+    fn action_transition_barrier_preserves_configured_push_before_review_open() {
+        assert!(!action_requires_applied_transition("git.prepare_branch"));
+        assert!(!action_requires_applied_transition("git.push"));
+        assert!(!action_requires_applied_transition("review.open"));
+        assert!(action_requires_applied_transition("tracker.commit"));
+        assert!(action_requires_applied_transition("review.merge"));
+        assert!(action_requires_applied_transition("git.sync"));
+        assert!(action_requires_applied_transition("branch_integrate"));
+    }
+
+    #[test]
+    fn git_sync_fast_forwards_target_without_checkout() {
+        let (repo, _remote, action) = setup_sync_repo();
+
+        let detail = sync_base_action(repo.path(), &action).unwrap();
+
+        assert_eq!(detail, "synced mission/atelier-sync");
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
+        let local = git_stdout(
+            repo.path(),
+            &["rev-parse", "mission/atelier-sync"],
+            "read local target",
+        )
+        .unwrap();
+        let remote = git_stdout(
+            repo.path(),
+            &["rev-parse", "origin/mission/atelier-sync"],
+            "read remote target",
+        )
+        .unwrap();
+        assert_eq!(local, remote);
+    }
+
+    #[test]
+    fn git_sync_rejects_target_checked_out_in_other_worktree() {
+        let (repo, _remote, action) = setup_sync_repo();
+        let other = tempdir().unwrap();
+        git_ok(
+            repo.path(),
+            &[
+                "worktree",
+                "add",
+                other.path().to_str().unwrap(),
+                "mission/atelier-sync",
+            ],
+        );
+
+        let error = sync_base_action(repo.path(), &action)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("target branch 'mission/atelier-sync' is checked out"));
+        assert!(error.contains(other.path().to_str().unwrap()));
+        assert!(error.contains("Recovery:"));
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
+    }
+
+    #[test]
     fn action_preflight_checks_git_actions_before_execution() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
@@ -2471,7 +2757,19 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let state_dir = dir.path().join(".atelier");
         let db_path = dir.path().join(".atelier/runtime/state.db");
         let db = Database::open(&db_path).unwrap();
-        let issue = test_issue("atelier-epic1");
+        let mut issue = test_issue("atelier-epic1");
+        issue.fields.insert(
+            atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-epic1",
+                "work_branch": "epic/atelier-epic1",
+                "branch_base": "mission/atelier-miss",
+                "review_target": "mission/atelier-miss",
+                "integration_target": "mission/atelier-miss",
+                "owner_kind": "epic",
+                "merge_strategy": "squash",
+            }),
+        );
         insert_canonical_issue(&db, &state_dir, issue.clone());
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2479,7 +2777,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             owner_issue_type: "epic".to_string(),
             owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
             expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "master".to_string(),
+            base_branch: "mission/atelier-miss".to_string(),
             merge_strategy: MergeStrategy::Squash,
             merge_owned: true,
             nested_under_epic: false,
@@ -2503,6 +2801,14 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let review = owner.issue.fields.get("review").unwrap();
         assert_eq!(review["kind"], "room");
         assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
+        let Record::Review(review_record) = RecordStore::new(&state_dir)
+            .load_record_by_id("review", review["id"].as_str().unwrap())
+            .unwrap()
+        else {
+            panic!("expected review record");
+        };
+        assert_eq!(review_record.source_branch, "epic/atelier-epic1");
+        assert_eq!(review_record.target_branch, "mission/atelier-miss");
 
         let second_detail = open_review_artifact_action(
             &db,

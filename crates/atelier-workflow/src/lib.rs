@@ -51,7 +51,7 @@ statuses:
     category: done
 
 workflows:
-  mission_delivery:
+  mission:
     applies_to: [mission]
     initial_status: draft
     done_statuses: [closed]
@@ -86,7 +86,7 @@ workflows:
           - git.on_base
           - git.worktree_clean
 
-  task_delivery:
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -114,7 +114,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -157,7 +157,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -198,7 +198,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -343,6 +343,8 @@ pub struct BranchLifecycleResolution {
     pub merge_owned: bool,
     pub nested_under_epic: bool,
 }
+
+pub const WORKFLOW_BRANCH_FIELD: &str = "workflow_branch";
 
 #[derive(Debug, Clone)]
 pub struct StatusDefinition {
@@ -2034,6 +2036,8 @@ fn validate_issue_fields_against_policy(
     for (field_name, value) in &issue.fields {
         if field_name == "review" {
             validate_review_field(value, issue, policy_path)?;
+        } else if field_name == WORKFLOW_BRANCH_FIELD {
+            validate_workflow_branch_field(value, issue, policy_path)?;
         } else if field_name == "pull_request" {
             return Err(WorkflowPolicyError {
                 code: "workflow_issue_field_legacy",
@@ -2053,7 +2057,7 @@ fn validate_issue_fields_against_policy(
                 code: "workflow_issue_field_unknown",
                 path: policy_path.display().to_string(),
                 message: format!(
-                    "issue {} defines field '{}' but schema_version 3 only supports built-in field 'review'",
+                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'review' and 'workflow_branch'",
                     issue.id, field_name
                 ),
                 field: Some(field_name.to_string()),
@@ -2065,6 +2069,109 @@ fn validate_issue_fields_against_policy(
         }
     }
     Ok(())
+}
+
+fn validate_workflow_branch_field(
+    value: &JsonValue,
+    issue: &Issue,
+    policy_path: &Path,
+) -> Result<()> {
+    let Some(object) = value.as_object() else {
+        return invalid_workflow_branch_field(
+            issue,
+            policy_path,
+            "field 'workflow_branch' must be an object",
+        );
+    };
+    let allowed_keys = [
+        "owner_issue_id",
+        "work_branch",
+        "branch_base",
+        "review_target",
+        "integration_target",
+        "owner_kind",
+        "merge_strategy",
+    ];
+    for key in object.keys() {
+        if !allowed_keys.contains(&key.as_str()) {
+            return invalid_workflow_branch_field(
+                issue,
+                policy_path,
+                &format!("field 'workflow_branch.{key}' is not supported"),
+            );
+        }
+    }
+    for key in allowed_keys {
+        match object.get(key).and_then(JsonValue::as_str) {
+            Some(value) if !value.trim().is_empty() => {}
+            _ => {
+                return invalid_workflow_branch_field(
+                    issue,
+                    policy_path,
+                    &format!("field 'workflow_branch.{key}' must be a non-empty string"),
+                );
+            }
+        }
+    }
+    if object
+        .get("owner_issue_id")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|owner_id| owner_id != issue.id)
+    {
+        return invalid_workflow_branch_field(
+            issue,
+            policy_path,
+            "field 'workflow_branch.owner_issue_id' must match the issue id",
+        );
+    }
+    for key in [
+        "work_branch",
+        "branch_base",
+        "review_target",
+        "integration_target",
+    ] {
+        let branch = object.get(key).and_then(JsonValue::as_str).unwrap_or("");
+        validate_branch_value(
+            branch,
+            &policy_path.display().to_string(),
+            &format!("workflow_branch.{key}"),
+            "workflow branch field",
+        )?;
+    }
+    match object.get("owner_kind").and_then(JsonValue::as_str) {
+        Some("epic" | "mission" | "issue") => {}
+        _ => {
+            return invalid_workflow_branch_field(
+                issue,
+                policy_path,
+                "field 'workflow_branch.owner_kind' must be 'epic', 'mission', or 'issue'",
+            );
+        }
+    }
+    match object.get("merge_strategy").and_then(JsonValue::as_str) {
+        Some("squash" | "merge_commit" | "fast_forward_only") => {}
+        _ => {
+            return invalid_workflow_branch_field(
+                issue,
+                policy_path,
+                "field 'workflow_branch.merge_strategy' must be 'squash', 'merge_commit', or 'fast_forward_only'",
+            );
+        }
+    }
+    Ok(())
+}
+
+fn invalid_workflow_branch_field(issue: &Issue, policy_path: &Path, detail: &str) -> Result<()> {
+    Err(WorkflowPolicyError {
+        code: "workflow_branch_field_invalid",
+        path: policy_path.display().to_string(),
+        message: format!("issue {} has invalid workflow_branch: {detail}", issue.id),
+        field: Some(WORKFLOW_BRANCH_FIELD.to_string()),
+        reference: Some(issue.id.clone()),
+        line: None,
+        column: None,
+    }
+    .into())
 }
 
 fn validate_review_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
@@ -2338,21 +2445,21 @@ mod tests {
                 .workflow_by_issue_type
                 .get("task")
                 .map(String::as_str),
-            Some("task_delivery")
+            Some("task")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("epic")
                 .map(String::as_str),
-            Some("epic_delivery")
+            Some("epic")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("validation")
                 .map(String::as_str),
-            Some("validation_delivery")
+            Some("validation")
         );
         assert_eq!(
             policy
@@ -2372,7 +2479,7 @@ mod tests {
         assert_eq!(policy.status_role("review"), Some("reviewer"));
         assert_eq!(policy.status_role("validation"), Some("validator"));
         assert_eq!(policy.status_role("todo"), None);
-        let close = &policy.workflows["task_delivery"].transitions["close"];
+        let close = &policy.workflows["task"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             close.validators[0].params.as_ref(),
@@ -2382,11 +2489,11 @@ mod tests {
             })
         );
         assert_eq!(
-            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
             vec!["review.open"]
         );
         assert_eq!(
-            validator_names(&policy.workflows["epic_delivery"].transitions["start"].validators),
+            validator_names(&policy.workflows["epic"].transitions["start"].validators),
             vec!["git.on_base"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
@@ -2505,7 +2612,7 @@ mod tests {
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
-            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
             vec!["git.prepare_branch"]
         );
     }
@@ -2517,7 +2624,7 @@ mod tests {
             "        actions:\n          - git.prepare_branch: current",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
 
         assert_eq!(action.builtin, "git.prepare_branch");
         assert_eq!(
@@ -2580,7 +2687,7 @@ mod tests {
         );
 
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
 
         assert_eq!(action.builtin, "review.open");
         assert_eq!(
@@ -2654,6 +2761,53 @@ mod tests {
         let issue = issue_with_fields(fields);
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
+    }
+
+    #[test]
+    fn validates_workflow_branch_field_shape() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-pr01",
+                "work_branch": "epic/atelier-pr01",
+                "branch_base": "mission/atelier-root",
+                "review_target": "mission/atelier-root",
+                "integration_target": "mission/atelier-root",
+                "owner_kind": "epic",
+                "merge_strategy": "squash",
+            }),
+        );
+        let issue = issue_with_fields(fields);
+
+        validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
+    }
+
+    #[test]
+    fn rejects_mismatched_workflow_branch_owner() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-other",
+                "work_branch": "epic/atelier-test",
+                "branch_base": "mission/atelier-root",
+                "review_target": "mission/atelier-root",
+                "integration_target": "mission/atelier-root",
+                "owner_kind": "epic",
+                "merge_strategy": "squash",
+            }),
+        );
+        let issue = issue_with_fields(fields);
+
+        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_branch_field_invalid"));
+        assert!(error.contains("owner_issue_id"));
     }
 
     #[test]
@@ -2911,7 +3065,7 @@ mod tests {
                 .workflow_by_issue_type
                 .get("incident")
                 .map(String::as_str),
-            Some("task_delivery")
+            Some("task")
         );
     }
 

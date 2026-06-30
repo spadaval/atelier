@@ -12,7 +12,7 @@ pub use atelier_workflow::{
     GitPrepareBranchActionParams, GitPrepareBranchBase, GuidanceTemplate, MergeStrategy,
     ReviewArtifactActionParams, StatusDefinition, TransitionDefinition, ValidatorDefinition,
     ValidatorParams, WorkflowDefinition, WorkflowForgejoRoleAuthors, WorkflowPolicy,
-    WORKFLOW_POLICY_PATH,
+    WORKFLOW_BRANCH_FIELD, WORKFLOW_POLICY_PATH,
 };
 
 pub use atelier_workflow::STARTER_POLICY_YAML;
@@ -112,7 +112,14 @@ pub fn resolve_branch_lifecycle(
         let owner = nearest_parent_epic(db, &issue)?;
         (owner, BranchOwnerKind::Epic, true)
     };
-    let expected_branch = policy.branch_name_for_owner(&owner, &owner_kind)?;
+    let mut expected_branch = policy.branch_name_for_owner(&owner, &owner_kind)?;
+    let mut base_branch = policy.branch_policy.base_branch.clone();
+    let mut merge_strategy = policy.branch_policy.merge_strategy;
+    if let Some(branch) = recorded_workflow_branch(&owner)? {
+        expected_branch = branch.work_branch;
+        base_branch = branch.branch_base;
+        merge_strategy = branch.merge_strategy;
+    }
     let merge_owned = !nested_under_epic;
     Ok(BranchLifecycleResolution {
         issue_id: issue.id,
@@ -120,11 +127,83 @@ pub fn resolve_branch_lifecycle(
         owner_issue_type: owner.issue_type,
         owner_kind,
         expected_branch,
-        base_branch: policy.branch_policy.base_branch.clone(),
-        merge_strategy: policy.branch_policy.merge_strategy,
+        base_branch,
+        merge_strategy,
         merge_owned,
         nested_under_epic,
     })
+}
+
+#[derive(Debug, Clone)]
+struct RecordedWorkflowBranch {
+    work_branch: String,
+    branch_base: String,
+    merge_strategy: MergeStrategy,
+}
+
+fn recorded_workflow_branch(issue: &Issue) -> Result<Option<RecordedWorkflowBranch>> {
+    let Some(field) = issue.fields.get(WORKFLOW_BRANCH_FIELD) else {
+        return Ok(None);
+    };
+    let object = field.as_object().ok_or_else(|| {
+        anyhow!(
+            "workflow_branch_invalid: issue {} field '{}' must be an object",
+            issue.id,
+            WORKFLOW_BRANCH_FIELD
+        )
+    })?;
+    let owner_issue_id = required_workflow_branch_string(issue, object, "owner_issue_id")?;
+    if owner_issue_id != issue.id {
+        return Err(anyhow!(
+            "workflow_branch_invalid: issue {} records owner_issue_id {}, but branch owner is {}",
+            issue.id,
+            owner_issue_id,
+            issue.id
+        ));
+    }
+    let merge_strategy = merge_strategy_from_field(&required_workflow_branch_string(
+        issue,
+        object,
+        "merge_strategy",
+    )?)?;
+    Ok(Some(RecordedWorkflowBranch {
+        work_branch: required_workflow_branch_string(issue, object, "work_branch")?,
+        branch_base: required_workflow_branch_string(issue, object, "branch_base")?,
+        merge_strategy,
+    }))
+}
+
+fn required_workflow_branch_string(
+    issue: &Issue,
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String> {
+    object
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            anyhow!(
+                "workflow_branch_invalid: issue {} field '{}.{}' must be a non-empty string",
+                issue.id,
+                WORKFLOW_BRANCH_FIELD,
+                field
+            )
+        })
+}
+
+fn merge_strategy_from_field(value: &str) -> Result<MergeStrategy> {
+    match value {
+        "squash" => Ok(MergeStrategy::Squash),
+        "merge_commit" => Ok(MergeStrategy::MergeCommit),
+        "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
+        other => Err(anyhow!(
+            "workflow_branch_invalid: issue field '{}.merge_strategy' has unsupported value '{}'",
+            WORKFLOW_BRANCH_FIELD,
+            other
+        )),
+    }
 }
 
 pub fn effective_pull_request_field(db: &Database, issue_id: &str) -> Result<Option<Value>> {
@@ -345,5 +424,50 @@ mod tests {
         assert!(error.contains("atelier issue update atelier-child --parent <epic-id>"));
         assert!(error.contains("atelier issue update atelier-child --no-parent"));
         assert!(error.contains("atelier issue link atelier-mission atelier-child"));
+    }
+
+    #[test]
+    fn branch_lifecycle_uses_recorded_workflow_branch_on_owner() {
+        let (db, _dir) = setup_test_db();
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-epic",
+                "work_branch": "epic/atelier-epic",
+                "branch_base": "mission/atelier-mission",
+                "review_target": "mission/atelier-mission",
+                "integration_target": "mission/atelier-mission",
+                "owner_kind": "epic",
+                "merge_strategy": "merge_commit",
+            }),
+        );
+        insert_issue(&db, "atelier-epic", "epic", None, fields);
+        insert_issue(
+            &db,
+            "atelier-child",
+            "task",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+        let policy = WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig {
+                base_branch: "main".to_string(),
+                ..BranchLifecycleConfig::default()
+            },
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::new(),
+            statuses: BTreeMap::new(),
+            workflows: BTreeMap::new(),
+        };
+
+        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-child").unwrap();
+
+        assert_eq!(resolution.owner_id, "atelier-epic");
+        assert_eq!(resolution.expected_branch, "epic/atelier-epic");
+        assert_eq!(resolution.base_branch, "mission/atelier-mission");
+        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
+        assert!(resolution.nested_under_epic);
     }
 }
