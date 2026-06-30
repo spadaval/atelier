@@ -2360,8 +2360,8 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         view.review_backend.provider.as_deref().unwrap_or("(none)")
     );
     println!("  status: {}", view.review_backend.status);
-    if let Some(token_env) = &view.review_backend.token_env {
-        println!("  token_env: {}", token_env);
+    if let Some(credential_file) = &view.review_backend.credential_file {
+        println!("  credential_file: {}", credential_file);
     }
     println!("  detail: {}", view.review_backend.detail);
     println!("Projection database:");

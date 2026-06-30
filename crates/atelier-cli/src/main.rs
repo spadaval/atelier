@@ -724,16 +724,7 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // ============================================================================
 
 fn main() -> Result<()> {
-    load_dotenv()?;
     run()
-}
-
-fn load_dotenv() -> Result<()> {
-    match dotenvy::dotenv() {
-        Ok(_) => Ok(()),
-        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
-    }
 }
 
 fn run() -> Result<()> {

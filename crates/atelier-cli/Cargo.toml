@@ -34,7 +34,6 @@ atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
-dotenvy.workspace = true
 fs2.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

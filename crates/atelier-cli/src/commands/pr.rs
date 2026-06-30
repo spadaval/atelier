@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -8,6 +7,7 @@ use atelier_app::forgejo::{
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig};
 use atelier_app::review_room;
+use atelier_app::user_config::forgejo_admin_token;
 use atelier_sqlite::Database;
 use atelier_workflow as workflow_policy;
 
@@ -47,12 +47,9 @@ pub fn open(
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env).with_context(|| {
-        format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier review open`",
-            forgejo.admin_token_env
-        )
-    })?;
+    let token = forgejo_admin_token().context(
+        "forgejo_config_missing_token: Forgejo admin token is required for `atelier review open`",
+    )?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -93,12 +90,9 @@ pub fn link(
         bail!("review_mode_invalid: `atelier review link` is only available when review.mode = \"provider\"");
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env).with_context(|| {
-        format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier review link`",
-            forgejo.admin_token_env
-        )
-    })?;
+    let token = forgejo_admin_token().context(
+        "forgejo_config_missing_token: Forgejo admin token is required for `atelier review link`",
+    )?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -191,12 +185,9 @@ pub fn show(
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env).with_context(|| {
-        format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier review show`",
-            forgejo.admin_token_env
-        )
-    })?;
+    let token = forgejo_admin_token().context(
+        "forgejo_config_missing_token: Forgejo admin token is required for `atelier review show`",
+    )?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -246,12 +237,9 @@ pub fn merge(
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env).with_context(|| {
-        format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier review merge`",
-            forgejo.admin_token_env
-        )
-    })?;
+    let token = forgejo_admin_token().context(
+        "forgejo_config_missing_token: Forgejo admin token is required for `atelier review merge`",
+    )?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -311,12 +299,8 @@ pub fn comments(
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env).with_context(|| {
-        format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier review comments`",
-            forgejo.admin_token_env
-        )
-    })?;
+    let token = forgejo_admin_token()
+        .context("forgejo_config_missing_token: Forgejo admin token is required for `atelier review comments`")?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -387,7 +371,8 @@ pub fn comment(
         bail!("review_mode_invalid: --finding and --severity are only available for native review rooms");
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env)?;
+    let token = forgejo_admin_token()
+        .context("forgejo_config_missing_token: Forgejo admin token is required for `atelier review comment`")?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -461,7 +446,9 @@ pub fn review(
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
-    let token = env::var(&forgejo.admin_token_env)?;
+    let token = forgejo_admin_token().context(
+        "forgejo_config_missing_token: Forgejo admin token is required for `atelier review review`",
+    )?;
     let event = app_pr::parse_review_event(event)?;
     let client = ForgejoClient::new(
         forgejo.clone(),

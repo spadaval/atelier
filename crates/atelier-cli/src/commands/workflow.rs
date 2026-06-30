@@ -11,6 +11,7 @@ use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use atelier_app::review_room;
 use atelier_app::use_cases as app_use_cases;
+use atelier_app::user_config::forgejo_admin_token;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::Issue;
 use atelier_records::CanonicalIssueRecord;
@@ -783,10 +784,10 @@ fn open_review_artifact_action(
                         action.name
                     )
                 })?);
-                let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                let token = forgejo_admin_token().with_context(|| {
                     format!(
-                        "action {} failed: environment variable {} is required for provider review open",
-                        action.name, forgejo.admin_token_env
+                        "action {} failed: Forgejo admin token is required for provider review open",
+                        action.name
                     )
                 })?;
                 let client = ForgejoClient::new(
@@ -2189,7 +2190,6 @@ provider = "forgejo"
 host = "https://forge.example.test"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
 "#,
         )
         .unwrap();
@@ -2393,7 +2393,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn provider_review_action_preflight_uses_workflow_role_authors_and_env_secret() {
+    fn provider_review_action_preflight_uses_workflow_role_authors_and_user_secret() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2411,11 +2411,15 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
 
         let actions =
             plan_actions_for_resolution(&issue, &resolution, &[forgejo_review_action()], 1);
-        let blockers = action_preflight_blockers(dir.path(), &actions);
+        let blocker = crate::commands::workflow_actions::review_open_preflight_for_test(
+            dir.path(),
+            &actions[0],
+            false,
+        )
+        .unwrap();
 
-        assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("ATELIER_TEST_FORGEJO_TOKEN"));
-        assert!(!blockers[0].contains("role_authors"));
+        assert!(blocker.contains("~/.config/atelier.toml"));
+        assert!(!blocker.contains("role_authors"));
         assert_eq!(
             actions[0].review_artifact_provider.as_deref(),
             Some("forgejo")

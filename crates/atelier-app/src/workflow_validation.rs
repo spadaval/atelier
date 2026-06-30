@@ -13,6 +13,7 @@ use crate::lint::{self, LintRequest};
 use crate::pr as app_pr;
 use crate::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use crate::review_room;
+use crate::user_config::forgejo_admin_token;
 use crate::workflow_policy::{ValidatorDefinition, ValidatorParams, WorkflowPolicy};
 
 pub struct ValidatorRequest<'a> {
@@ -711,14 +712,13 @@ fn linked_pr_merged(
             ));
         }
     };
-    let token = match std::env::var(&forgejo.admin_token_env) {
+    let token = match forgejo_admin_token() {
         Ok(token) => token,
-        Err(_) => {
+        Err(error) => {
             return Ok((
                 false,
                 format!(
-                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
-                    forgejo.admin_token_env,
+                    "{error:#}; run `atelier review status --issue {}` after configuring Forgejo credentials",
                     target_id
                 ),
             ));
