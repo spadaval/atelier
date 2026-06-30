@@ -25,6 +25,50 @@ pub struct QueueOptions<'a> {
     pub all: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MissionDashboardOptions {
+    pub ready: bool,
+    pub blocked: bool,
+    pub active: bool,
+    pub done: bool,
+    pub all: bool,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum DashboardFilter {
+    Summary,
+    Ready,
+    Blocked,
+    Active,
+    Done,
+    All,
+}
+
+impl MissionDashboardOptions {
+    fn filter(self) -> Result<DashboardFilter> {
+        let count = [self.ready, self.blocked, self.active, self.done, self.all]
+            .into_iter()
+            .filter(|flag| *flag)
+            .count();
+        if count > 1 {
+            bail!("choose only one mission work filter");
+        }
+        Ok(if self.ready {
+            DashboardFilter::Ready
+        } else if self.blocked {
+            DashboardFilter::Blocked
+        } else if self.active {
+            DashboardFilter::Active
+        } else if self.done {
+            DashboardFilter::Done
+        } else if self.all {
+            DashboardFilter::All
+        } else {
+            DashboardFilter::Summary
+        })
+    }
+}
+
 pub fn dashboards(quiet: bool) -> Result<()> {
     if quiet {
         println!("queue");
@@ -37,7 +81,8 @@ pub fn dashboards(quiet: bool) -> Result<()> {
         .panel(LinesPanel::new(
             "Dashboards",
             [
-                "queue    Repo-wide operational work queue",
+                "ready    Small top-level executable work picker",
+                "blocked  Repo-wide blocker triage",
                 "mission  Live mission orchestration dashboard",
                 "epic     Focused epic execution dashboard",
             ],
@@ -45,12 +90,12 @@ pub fn dashboards(quiet: bool) -> Result<()> {
         .panel(FooterPanel::new(
             "Next Commands",
             [
-                FooterAction::new("Browse ready queue", "atelier work queue --ready"),
+                FooterAction::new("Browse ready work", "atelier work ready"),
+                FooterAction::new("Triage blockers", "atelier work blocked"),
                 FooterAction::new(
                     "Open mission dashboard",
                     "atelier work mission <mission-id>",
                 ),
-                FooterAction::new("Open epic dashboard", "atelier work epic <epic-id>"),
             ],
         ))
         .print(RenderContext::for_stdout());
@@ -96,6 +141,7 @@ pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()
         "Work Queue",
         Some(status),
         category,
+        None,
         options.label,
         options.priority,
         ready,
@@ -176,7 +222,13 @@ fn display_role_for_state(state: &str) -> DisplayRole {
     }
 }
 
-pub fn mission_dashboard(db: &Database, mission_ref: &str, quiet: bool) -> Result<()> {
+pub fn mission_dashboard(
+    db: &Database,
+    mission_ref: &str,
+    options: MissionDashboardOptions,
+    quiet: bool,
+) -> Result<()> {
+    let filter = options.filter()?;
     let mission_id = crate::commands::issue::resolve_id(db, mission_ref)?;
     let mission = db.require_issue(&mission_id)?;
     if mission.issue_type != "mission" {
@@ -187,57 +239,56 @@ pub fn mission_dashboard(db: &Database, mission_ref: &str, quiet: bool) -> Resul
         );
     }
     let scoped = mission_scoped_issues(db, &mission.id)?;
+    let filtered = filter_dashboard_issues(db, &scoped, filter)?;
     if quiet {
-        let counts = dashboard_counts(db, &scoped)?;
-        println!(
-            "{} active={} ready={} blocked={} done={} backlog={} proof_gaps={}",
-            mission.id,
-            counts.active,
-            counts.ready,
-            counts.blocked,
-            counts.done,
-            counts.backlog,
-            proof_gap_count(db, &scoped)?
-        );
+        if filter == DashboardFilter::Summary {
+            let counts = dashboard_counts(db, &scoped)?;
+            println!(
+                "{} active={} ready={} blocked={} done={} backlog={}",
+                mission.id,
+                counts.active,
+                counts.ready,
+                counts.blocked,
+                counts.done,
+                counts.backlog
+            );
+        } else {
+            for issue in filtered {
+                println!("{}", issue.id);
+            }
+        }
         return Ok(());
     }
 
     let counts = dashboard_counts(db, &scoped)?;
-    let proof_gaps = proof_gap_count(db, &scoped)?;
-    let close_readiness = transition_readiness(db, &mission.id, "close")?;
-    let panels = dashboard_panels(db, &scoped)?;
-    let mut page = Page::new(format!("Work Mission {} - {}", mission.id, mission.title)).panel(
-        MetadataPanel::untitled()
-            .row("Status", mission.status.clone())
-            .row("Health", health_label(counts.blocked, proof_gaps))
-            .row(
-                "Work",
-                format!(
-                    "active {}, ready {}, blocked {}, done {}, backlog {}",
-                    counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
-                ),
-            )
-            .row("Proof gaps", proof_gaps.to_string())
-            .row("Close readiness", close_readiness),
-    );
+    let panels = if filter == DashboardFilter::Summary {
+        dashboard_panels(db, &scoped)?
+    } else {
+        vec![dashboard_panel_for_filter(db, filter, &filtered)?]
+    };
+    let title = strip_mission_title_prefix(&mission.title);
+    let mut metadata = MetadataPanel::untitled()
+        .row("Status", mission.status.clone())
+        .row(
+            "Work",
+            format!(
+                "active {}, ready {}, blocked {}, done {}, backlog {}",
+                counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
+            ),
+        );
+    if scoped_work_is_terminal(&counts) {
+        metadata = metadata.row("Closeout", transition_readiness(db, &mission.id, "close")?);
+    }
+    let mut page = Page::new(format!(
+        "{} [mission] {} - {}",
+        mission.id, mission.status, title
+    ))
+    .panel(metadata);
     for panel in panels {
         page = page.panel(panel);
     }
-    page.panel(FooterPanel::new(
-        "Next Commands",
-        [
-            FooterAction::new(
-                "Show mission record",
-                format!("atelier issue show {}", mission.id),
-            ),
-            FooterAction::new(
-                "Inspect transitions",
-                format!("atelier issue transition {}", mission.id),
-            ),
-            FooterAction::new("Browse mission queue", "atelier work queue --all"),
-        ],
-    ))
-    .print(RenderContext::for_stdout());
+    page.panel(mission_footer(&mission.id, &counts))
+        .print(RenderContext::for_stdout());
     Ok(())
 }
 
@@ -353,15 +404,10 @@ fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPane
             policy.as_ref(),
             &issue.id,
         )?;
-        buckets.entry(category).or_default().push(IssueListRow {
-            role,
-            id: issue.id.clone(),
-            status: Some(issue.status.clone()),
-            priority: issue.priority.clone(),
-            title: issue.title.clone(),
-            blockers: open_blockers.len(),
-            depth: 1,
-        });
+        buckets
+            .entry(category)
+            .or_default()
+            .push(dashboard_row(issue, role, open_blockers));
     }
     let mut panels = Vec::new();
     for (category, title) in [
@@ -372,9 +418,129 @@ fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPane
         ("done", "Done Work"),
     ] {
         let rows = buckets.remove(category).unwrap_or_default();
+        if rows.is_empty() {
+            continue;
+        }
         panels.push(IssueListPanel::new(title, rows).limit(8));
     }
     Ok(panels)
+}
+
+fn dashboard_panel_for_filter(
+    db: &Database,
+    filter: DashboardFilter,
+    issues: &[Issue],
+) -> Result<IssueListPanel> {
+    let title = match filter {
+        DashboardFilter::Ready => "Ready Work",
+        DashboardFilter::Blocked => "Blocked Work",
+        DashboardFilter::Active => "Active Work",
+        DashboardFilter::Done => "Done Work",
+        DashboardFilter::All | DashboardFilter::Summary => "Scoped Work",
+    };
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let rows = issues
+        .iter()
+        .map(|issue| {
+            let category = issue_category(db, policy.as_ref(), issue)?;
+            let role = match category.as_str() {
+                "active" => DisplayRole::Executable,
+                "blocked" => DisplayRole::Blocked,
+                "done" | "backlog" => DisplayRole::ContextOnly,
+                _ => DisplayRole::Selectable,
+            };
+            let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
+                db,
+                policy.as_ref(),
+                &issue.id,
+            )?;
+            Ok(dashboard_row(issue, role, open_blockers))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(IssueListPanel::new(title, rows).limit(usize::MAX))
+}
+
+fn dashboard_row(issue: &Issue, role: DisplayRole, open_blockers: Vec<String>) -> IssueListRow {
+    let title = if open_blockers.is_empty() {
+        issue.title.clone()
+    } else {
+        format!("{} | blockers: {}", issue.title, open_blockers.join(", "))
+    };
+    IssueListRow {
+        role,
+        id: issue.id.clone(),
+        status: Some(issue.status.clone()),
+        priority: issue.priority.clone(),
+        title,
+        blockers: open_blockers.len(),
+        depth: 1,
+    }
+}
+
+fn filter_dashboard_issues(
+    db: &Database,
+    issues: &[Issue],
+    filter: DashboardFilter,
+) -> Result<Vec<Issue>> {
+    if filter == DashboardFilter::Summary || filter == DashboardFilter::All {
+        return Ok(issues.to_vec());
+    }
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    issues
+        .iter()
+        .filter_map(|issue| match issue_category(db, policy.as_ref(), issue) {
+            Ok(category)
+                if matches!(
+                    (filter, category.as_str()),
+                    (DashboardFilter::Ready, "todo")
+                        | (DashboardFilter::Blocked, "blocked")
+                        | (DashboardFilter::Active, "active")
+                        | (DashboardFilter::Done, "done")
+                ) =>
+            {
+                Some(Ok(issue.clone()))
+            }
+            Ok(_) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+}
+
+fn scoped_work_is_terminal(counts: &DashboardCounts) -> bool {
+    counts.active == 0 && counts.ready == 0 && counts.blocked == 0 && counts.backlog == 0
+}
+
+fn strip_mission_title_prefix(title: &str) -> &str {
+    title
+        .strip_prefix("Mission:")
+        .map(str::trim)
+        .unwrap_or(title)
+}
+
+fn mission_footer(mission_id: &str, counts: &DashboardCounts) -> FooterPanel {
+    let mut actions = vec![
+        FooterAction::new(
+            "Show mission record",
+            format!("atelier issue show {mission_id}"),
+        ),
+        FooterAction::new(
+            "Inspect transitions",
+            format!("atelier issue transition {mission_id}"),
+        ),
+    ];
+    if counts.ready > 0 {
+        actions.push(FooterAction::new(
+            "List mission ready work",
+            format!("atelier work mission {mission_id} --ready"),
+        ));
+    }
+    if counts.blocked > 0 {
+        actions.push(FooterAction::new(
+            "List mission blockers",
+            format!("atelier work mission {mission_id} --blocked"),
+        ));
+    }
+    FooterPanel::new("Next Commands", actions)
 }
 
 fn issue_category(
@@ -462,16 +628,6 @@ fn transition_readiness(db: &Database, issue_id: &str, transition_name: &str) ->
                 .cloned()
                 .unwrap_or_else(|| "blocked".to_string())
         ))
-    }
-}
-
-fn health_label(blocked: usize, proof_gaps: usize) -> &'static str {
-    if blocked > 0 {
-        "blocked"
-    } else if proof_gaps > 0 {
-        "needs proof"
-    } else {
-        "ready"
     }
 }
 

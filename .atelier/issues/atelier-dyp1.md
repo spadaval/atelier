@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T04:08:58.708485586+00:00"
+status: "done"
 title: "Implement closeout failure classification and waiver rules"
-updated_at: "2026-06-29T17:47:31.411840618+00:00"
+updated_at: "2026-06-30T04:08:58.708485586+00:00"
 ---
 
 ## Description

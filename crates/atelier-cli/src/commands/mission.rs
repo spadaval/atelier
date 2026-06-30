@@ -27,7 +27,7 @@ pub fn transition_options(db: &Database, id: &str) -> Result<()> {
     if issue.issue_type != "mission" {
         bail!("{id} is not a mission objective issue");
     }
-    crate::commands::issue::transition_options(db, id)
+    crate::commands::issue::transition_options(db, id, false)
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -101,8 +101,8 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     if let Some(row) = rows.first() {
         println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier work queue --all");
-    println!("  atelier work queue --ready");
+    println!("  atelier issue list --issue-type mission");
+    println!("  atelier work ready");
     Ok(())
 }
 
@@ -402,14 +402,24 @@ fn issue_mission_summary(issue: Issue) -> RecordSummary {
     }
 }
 
-fn normalize_mission_status(status: &str) -> Result<&str> {
-    match status {
-        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(status),
-        _ => bail!(
-            "Invalid mission status '{}'. Must be one of: draft, ready, active, superseded, closed",
-            status
-        ),
+fn normalize_mission_status(status: &str) -> Result<String> {
+    if let Some(policy) = crate::commands::issue_workflow::load_issue_workflow_policy()? {
+        if policy.statuses.contains_key(status) {
+            return Ok(status.to_string());
+        }
+        let valid = policy
+            .statuses
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "Invalid mission status '{}'. Must be one of: {}",
+            status,
+            valid
+        );
     }
+    Ok(status.to_string())
 }
 
 fn mission_lifecycle_status(record: &RecordSummary) -> String {
@@ -417,7 +427,7 @@ fn mission_lifecycle_status(record: &RecordSummary) -> String {
 }
 
 fn is_current_mission_status(status: &str) -> bool {
-    !matches!(status, "closed" | "superseded")
+    mission_status_category(status).as_deref() != Some("done")
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
@@ -1033,8 +1043,10 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
     mission_status_rank(&mission_lifecycle_status(&a.record))
         .cmp(&mission_status_rank(&mission_lifecycle_status(&b.record)))
         .then_with(|| {
-            if mission_lifecycle_status(&a.record) != "ready"
-                && mission_lifecycle_status(&b.record) != "ready"
+            if mission_status_category(&mission_lifecycle_status(&a.record)).as_deref()
+                != Some("todo")
+                && mission_status_category(&mission_lifecycle_status(&b.record)).as_deref()
+                    != Some("todo")
             {
                 mission_lifecycle_status(&a.record).cmp(&mission_lifecycle_status(&b.record))
             } else {
@@ -1046,14 +1058,20 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
 }
 
 fn mission_status_rank(status: &str) -> u8 {
-    match status {
-        "active" => 0,
-        "ready" => 1,
-        "draft" => 2,
-        "superseded" => 3,
-        "closed" => 5,
+    match mission_status_category(status).as_deref() {
+        Some("active") => 0,
+        Some("todo") => 1,
+        Some("blocked") => 2,
+        Some("done") => 5,
         _ => 4,
     }
+}
+
+fn mission_status_category(status: &str) -> Option<String> {
+    crate::commands::issue_workflow::load_issue_workflow_policy()
+        .ok()
+        .flatten()
+        .and_then(|policy| policy.status_category(status).map(str::to_string))
 }
 
 fn mission_status_summary_text(total: usize, statuses: BTreeMap<String, usize>) -> String {

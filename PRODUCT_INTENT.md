@@ -144,13 +144,14 @@ to be an issue.
 ### Mission
 
 A mission is a high-level objective that may span hours or days. It is useful
-for orchestrators and Mission Control. It should contain intent, constraints,
-current risks, status, validation expectations, linked accountable work,
-supporting evidence, and current health. A mission is also the normal shared
-background workspace boundary: one
-mission owns one shared Git worktree or equivalent background checkout where
-coordinated agents can operate on related epics without creating a new checkout
-for every implementation issue.
+for orchestrators and Mission Control. It should contain a concrete target
+`Outcome`, explicit non-scope, current risks, status, direct `advances` links to
+root work, explicit validation work when required, and current health. Mission
+scope is those direct root links plus their descendants. A mission is also the
+normal shared background workspace boundary: one mission owns one shared Git
+worktree or equivalent background checkout where coordinated agents can operate
+on related epics without creating a new checkout for every implementation
+issue.
 
 Missions should be focused on the goal or end state, not on a specific task.
 They are the right shape when the objective is large enough to require at least
@@ -181,7 +182,8 @@ run, but the system must not require one issue to equal one run. Issues can be
 tasks, bugs, research items, implementation slices, review items, validation
 items, or custom configured types. Under the mission/epic model, an ordinary
 implementation issue is a local slice on its parent epic branch. It closes with
-the proof named by its `Evidence` section unless the issue itself is a review,
+focused proof of its `Outcome`; an `Evidence` section names a specific check
+only when the issue contract needs one, or when the issue itself is a review,
 validation, migration, or other explicitly risk-escalated item.
 
 ### Plans
@@ -195,20 +197,21 @@ ephemeral context.
 
 ### Evidence
 
-Evidence records prove that accountable work, review, validation, or migration
-happened. Evidence may point to test results, logs, screenshots, videos, API
-responses, benchmark output, review notes, or generated reports. Normal evidence
-targets issue-shaped work because issues own accountability; mission and epic
-readiness is derived from linked implementation,
-validation, and review work rather than direct parent attachments.
+Evidence records are receipts from checks that actually ran for accountable
+work, review, validation, or migration. Evidence may point to test results,
+logs, screenshots, videos, API responses, benchmark output, review notes, or
+generated reports. Normal evidence targets issue-shaped work because issues own
+accountability; mission and epic readiness is derived from linked
+implementation, validation, and review work rather than direct parent
+attachments.
 
 Evidence metadata should include:
 
 - ID.
 - Accountable target IDs, normally issue-shaped work such as implementation,
   review, validation, or migration issues.
-- Proof scope: the issue Outcome line, parent validation criterion, workflow
-  validator result, milestone criterion, or review/audit claim being proven.
+- Proof scope: the issue Outcome line, parent outcome claim, workflow validator
+  result, milestone criterion, or review/audit claim being checked.
 - Kind.
 - Result.
 - Summary.
