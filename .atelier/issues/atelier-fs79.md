@@ -33,9 +33,9 @@ relationships:
     type: "validates"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate mission integration branch workflow end to end"
-updated_at: "2026-06-30T20:16:09.220374920+00:00"
+updated_at: "2026-06-30T20:17:45.620013217+00:00"
 ---
 
 ## Description
