@@ -3,6 +3,15 @@ created_at: "2026-06-30T21:33:31.445683005+00:00"
 id: "atelier-lz6a"
 issue_type: "mission"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-lz6a
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-lz6a
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Mission: Mission-isolated execution and publish"
-updated_at: "2026-06-30T21:35:07.782783036+00:00"
+updated_at: "2026-06-30T21:35:15.307604618+00:00"
 ---
 
 ## Description
