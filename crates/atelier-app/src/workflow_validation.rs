@@ -707,14 +707,13 @@ fn linked_pr_merged(
             ));
         }
     };
-    let token = match std::env::var(&forgejo.admin_token_env) {
+    let token = match crate::project_config::load_forgejo_admin_token() {
         Ok(token) => token,
-        Err(_) => {
+        Err(error) => {
             return Ok((
                 false,
                 format!(
-                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
-                    forgejo.admin_token_env,
+                    "{error:#}; run `atelier review status --issue {}` after configuring ~/.config/atelier.toml",
                     target_id
                 ),
             ));

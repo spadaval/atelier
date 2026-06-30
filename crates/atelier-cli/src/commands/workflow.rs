@@ -921,12 +921,8 @@ fn open_review_artifact_action(
                         action.name
                     )
                 })?);
-                let token = env::var(&forgejo.admin_token_env).with_context(|| {
-                    format!(
-                        "action {} failed: environment variable {} is required for provider review open",
-                        action.name, forgejo.admin_token_env
-                    )
-                })?;
+                let token = atelier_app::project_config::load_forgejo_admin_token()
+                    .with_context(|| format!("action {} failed", action.name))?;
                 let client = ForgejoClient::new(
                     forgejo.clone(),
                     UreqForgejoTransport::new(&forgejo.host, token),
@@ -2388,7 +2384,6 @@ provider = "forgejo"
 host = "https://forge.example.test"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
 "#,
         )
         .unwrap();
@@ -2735,7 +2730,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn provider_review_action_preflight_uses_workflow_role_authors_and_env_secret() {
+    fn provider_review_action_preflight_uses_workflow_role_authors_and_global_secret() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2756,7 +2751,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let blockers = action_preflight_blockers(dir.path(), &actions);
 
         assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("ATELIER_TEST_FORGEJO_TOKEN"));
+        assert!(blockers[0].contains(".config/atelier.toml"));
         assert!(!blockers[0].contains("role_authors"));
         assert_eq!(
             actions[0].review_artifact_provider.as_deref(),

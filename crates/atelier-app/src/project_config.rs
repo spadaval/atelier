@@ -1,5 +1,6 @@
+use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
@@ -9,6 +10,8 @@ use crate::workflow_policy::{self, ActionParams, WorkflowForgejoRoleAuthors};
 
 const PROJECT_CONFIG_SCHEMA: &str = "atelier.project_config";
 const PROJECT_CONFIG_SCHEMA_VERSION: i64 = 1;
+const USER_CONFIG_SCHEMA: &str = "atelier.user_config";
+const USER_CONFIG_SCHEMA_VERSION: i64 = 1;
 pub const FORGEJO_ROLES: &[&str] = &["worker", "reviewer", "validator", "manager"];
 pub const DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS: u64 = 7;
 
@@ -57,7 +60,6 @@ pub struct ForgejoConfig {
     pub host: String,
     pub owner: String,
     pub repo: String,
-    pub admin_token_env: String,
     pub role_authors: Option<ForgejoRoleAuthors>,
 }
 
@@ -222,7 +224,32 @@ struct RawForgejoConfig {
     host: Option<String>,
     owner: Option<String>,
     repo: Option<String>,
-    admin_token_env: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUserConfig {
+    schema: String,
+    schema_version: i64,
+    review: RawUserReviewConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUserReviewConfig {
+    providers: RawUserReviewProviders,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUserReviewProviders {
+    forgejo: RawUserForgejoConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawUserForgejoConfig {
+    admin_token: String,
 }
 
 pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
@@ -416,11 +443,6 @@ fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<For
         host: require_owned_option(raw.host, config_path, "review.providers.forgejo.host")?,
         owner: require_owned_option(raw.owner, config_path, "review.providers.forgejo.owner")?,
         repo: require_owned_option(raw.repo, config_path, "review.providers.forgejo.repo")?,
-        admin_token_env: require_env_var_name(
-            raw.admin_token_env,
-            config_path,
-            "review.providers.forgejo.admin_token_env",
-        )?,
         role_authors: None,
     };
     Ok(config)
@@ -442,21 +464,6 @@ fn require_owned_option(value: Option<String>, config_path: &Path, field: &str) 
     require_owned(value, config_path, field)
 }
 
-fn require_env_var_name(value: Option<String>, config_path: &Path, field: &str) -> Result<String> {
-    let value = require_owned_option(value, config_path, field)?;
-    let valid = value.chars().enumerate().all(|(index, ch)| {
-        ch == '_' || ch.is_ascii_uppercase() || (index > 0 && ch.is_ascii_digit())
-    });
-    if !valid || value.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
-        return Err(anyhow!(
-            "forgejo_config_invalid: {} field '{}' must be an environment variable name such as FORGEJO_ADMIN_TOKEN",
-            config_path.display(),
-            field
-        ));
-    }
-    Ok(value)
-}
-
 fn require_non_empty(value: &str, config_path: &Path, field: &str) -> Result<()> {
     if value.trim().is_empty() {
         Err(anyhow!(
@@ -467,6 +474,55 @@ fn require_non_empty(value: &str, config_path: &Path, field: &str) -> Result<()>
     } else {
         Ok(())
     }
+}
+
+pub fn user_config_path() -> Result<PathBuf> {
+    let home = env::var_os("HOME").ok_or_else(|| {
+        anyhow!("user_config_missing: HOME is not set; cannot locate ~/.config/atelier.toml")
+    })?;
+    Ok(PathBuf::from(home).join(".config").join("atelier.toml"))
+}
+
+pub fn load_forgejo_admin_token() -> Result<String> {
+    let path = user_config_path()?;
+    load_forgejo_admin_token_from_path(&path)
+}
+
+pub fn load_forgejo_admin_token_from_path(path: &Path) -> Result<String> {
+    let text = fs::read_to_string(path).with_context(|| {
+        format!(
+            "forgejo_config_missing_token: failed to read {}; create it with [review.providers.forgejo] admin_token = \"...\"",
+            path.display()
+        )
+    })?;
+    parse_forgejo_admin_token(&text, path)
+}
+
+fn parse_forgejo_admin_token(text: &str, config_path: &Path) -> Result<String> {
+    let raw = toml::from_str::<RawUserConfig>(text).map_err(|error| {
+        anyhow!(
+            "user_config_parse_error: {}: {}",
+            config_path.display(),
+            error
+        )
+    })?;
+    if raw.schema != USER_CONFIG_SCHEMA {
+        bail!(
+            "user_config_schema_unsupported: {} schema must be '{}'",
+            config_path.display(),
+            USER_CONFIG_SCHEMA
+        );
+    }
+    if raw.schema_version != USER_CONFIG_SCHEMA_VERSION {
+        bail!(
+            "user_config_schema_unsupported: {} schema_version must be {}",
+            config_path.display(),
+            USER_CONFIG_SCHEMA_VERSION
+        );
+    }
+    let token = raw.review.providers.forgejo.admin_token;
+    require_non_empty(&token, config_path, "review.providers.forgejo.admin_token")?;
+    Ok(token)
 }
 
 #[cfg(test)]
@@ -496,7 +552,6 @@ provider = "forgejo"
 host = "forge.example.test"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "FORGEJO_ADMIN_TOKEN"
 "#
     }
 
@@ -593,7 +648,6 @@ workflows:
         assert_eq!(forgejo.host, "forge.example.test");
         assert_eq!(forgejo.owner, "tools");
         assert_eq!(forgejo.repo, "atelier");
-        assert_eq!(forgejo.admin_token_env, "FORGEJO_ADMIN_TOKEN");
         assert_eq!(forgejo.role_authors, None);
         assert!(forgejo
             .role_author_for_role("worker")
@@ -674,15 +728,50 @@ mode = "room"
             .to_string();
         assert!(error.contains("unknown field `sudo_users`"));
 
-        let bad_token = valid_config().replace(
-            "admin_token_env = \"FORGEJO_ADMIN_TOKEN\"",
-            "admin_token_env = \"forgejo-token\"",
+        let committed_token = format!(
+            "{valid}\nadmin_token = \"secret-token\"\n",
+            valid = valid_config()
         );
-        let error = parse_project_config(&bad_token, &path())
+        let error = parse_project_config(&committed_token, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("review.providers.forgejo.admin_token_env"));
-        assert!(error.contains("FORGEJO_ADMIN_TOKEN"));
+        assert!(error.contains("unknown field `admin_token`"));
+    }
+
+    #[test]
+    fn parses_global_user_forgejo_token() {
+        let path = PathBuf::from("/home/alice/.config/atelier.toml");
+        let token = parse_forgejo_admin_token(
+            r#"schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = "plain-token"
+"#,
+            &path,
+        )
+        .unwrap();
+
+        assert_eq!(token, "plain-token");
+    }
+
+    #[test]
+    fn rejects_empty_global_user_forgejo_token() {
+        let path = PathBuf::from("/home/alice/.config/atelier.toml");
+        let error = parse_forgejo_admin_token(
+            r#"schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = ""
+"#,
+            &path,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("review.providers.forgejo.admin_token"));
+        assert!(!error.contains("plain-token"));
     }
 
     #[test]

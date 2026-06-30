@@ -33,7 +33,7 @@ mode = "room"
 # host = "forge.example.test"
 # owner = "workspace"
 # repo = "atelier"
-# admin_token_env = "FORGEJO_ADMIN_TOKEN"
+# Store the Forgejo admin token in ~/.config/atelier.toml, not in this file.
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[

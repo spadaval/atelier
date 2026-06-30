@@ -52,13 +52,13 @@ Optional environment variables are limited to local behavior overrides:
   retention.
 - `ATELIER_AGENT` and `ATELIER_AGENT_ID` can label local activity/diagnostic
   records.
-- Provider admin token variables named by tracked project config, such as
-  `FORGEJO_ADMIN_TOKEN`, are required only for commands that mutate the
-  configured provider review artifact. The token value is local secret material
-  and must not be committed.
 
-These variables are optional local overrides, not required setup inputs. Keep
-secrets out of committed files.
+These variables are optional local overrides, not required setup inputs.
+
+`~/.config/atelier.toml` is required only for commands that mutate the
+configured provider review artifact. Store the Forgejo admin token there as
+`review.providers.forgejo.admin_token`. The token value is local secret
+material and must not be committed.
 
 ## Local Runtime And Cache
 

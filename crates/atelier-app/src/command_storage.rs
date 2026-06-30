@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn schema_drift_detection_covers_config_and_workflow_errors() {
         assert!(looks_like_schema_drift(
-            "project_config_parse_error: .atelier/config.toml: unknown field `admin_token_env`"
+            "project_config_parse_error: .atelier/config.toml: unknown field `admin_token`"
         ));
         assert!(looks_like_schema_drift(
             "workflow_config_invalid_validator: unsupported built-in validator"

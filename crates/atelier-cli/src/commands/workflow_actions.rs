@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
@@ -147,7 +146,7 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
             None
         }
         Ok(ReviewConfig::Provider(provider)) => match provider.provider {
-            ReviewProviderKind::Forgejo(forgejo) => {
+            ReviewProviderKind::Forgejo(_forgejo) => {
                 if action.review_artifact_provider.as_deref() != Some("forgejo") {
                     return Some(format!(
                         "action {} failed preflight: provider review open requires workflow action provider: forgejo",
@@ -160,12 +159,9 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
                         action.name
                     ));
                 }
-                env::var(&forgejo.admin_token_env).err().map(|_| {
-                    format!(
-                        "action {} failed preflight: environment variable {} is required for provider review open",
-                        action.name, forgejo.admin_token_env
-                    )
-                })
+                atelier_app::project_config::load_forgejo_admin_token()
+                    .err()
+                    .map(|error| format!("action {} failed preflight: {error:#}", action.name))
             }
         },
         Err(error) => Some(format!(

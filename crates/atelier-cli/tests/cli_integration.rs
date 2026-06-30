@@ -878,7 +878,23 @@ provider = "forgejo"
 host = "{host}"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
+"#
+        ),
+    )
+    .unwrap();
+}
+
+fn write_user_forgejo_token(home: &Path, token: &str) {
+    let config_dir = home.join(".config");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("atelier.toml"),
+        format!(
+            r#"schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = "{token}"
 "#
         ),
     )
@@ -1031,7 +1047,7 @@ fn write_mission_branch_workflow(dir: &Path) {
 }
 
 #[test]
-fn provider_review_open_action_reads_workflow_config_and_env_secret() {
+fn provider_review_open_action_reads_workflow_config_and_global_secret() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     write_provider_config_without_role_authors(dir.path());
@@ -1055,10 +1071,7 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
     assert!(stdout.contains("review.open"), "{stdout}");
     assert!(stdout.contains("provider=forgejo"), "{stdout}");
     assert!(stdout.contains("role=worker"), "{stdout}");
-    assert!(
-        stdout.contains("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"),
-        "{stdout}"
-    );
+    assert!(stdout.contains(".config/atelier.toml"), "{stdout}");
     assert!(!stdout.contains("role_authors"), "{stdout}");
 }
 
@@ -1111,12 +1124,13 @@ fn provider_request_review_pushes_source_before_opening_pr() {
         target_branch,
     );
     write_provider_config_with_host(dir.path(), &host);
+    write_user_forgejo_token(dir.path(), "test-token");
     commit_all(dir.path(), "provider review config");
 
     let (success, stdout, stderr) = run_atelier_with_env(
         dir.path(),
         &["issue", "transition", &issue_id, "request_review"],
-        &[("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN", "test-token")],
+        &[("HOME", dir.path().to_str().unwrap())],
     );
     assert!(success, "request_review failed: {stderr}");
     server.join().unwrap();

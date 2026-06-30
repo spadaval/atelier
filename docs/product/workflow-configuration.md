@@ -20,9 +20,10 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
-| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, local path overrides, projection/cache content, or hidden defaults. |
+| `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, projection data, diagnostics, locks, or caches. |
+| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for provider credentials. |
 
 The boundary is intentionally split for review integration. `.atelier/config.toml`
 selects the review backend, such as `review.mode = "provider"` with
@@ -31,11 +32,10 @@ normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
 transition opens or links the branch owner's review artifact through explicit
 actions such as `review.open`. Provider
 review actions declare the workflow role and any provider role-author mapping
-they use; provider secrets remain environment-only through the token variable
-named in `.atelier/config.toml`. Provider approval rules, branch protection,
-and merge authorization remain with the provider or native room implementation;
-workflow validators only read enough review state to decide whether an Atelier
-transition may proceed.
+they use; provider secrets remain user-local in `~/.config/atelier.toml`.
+Provider approval rules, branch protection, and merge authorization remain with
+the provider or native room implementation; workflow validators only read enough
+review state to decide whether an Atelier transition may proceed.
 
 Custom issue links belong to `.atelier/config.toml` because they are project
 vocabulary, not workflow behavior:
@@ -503,8 +503,16 @@ actions:
         manager: atelier-manager
 ```
 
-The Forgejo admin token value is not a workflow parameter. It remains a secret
-read from the environment variable named by `.atelier/config.toml`.
+The Forgejo admin token value is not a workflow parameter and is not tracked in
+project config. It is read from the user-global config file:
+
+```toml
+schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = "..."
+```
 
 Failure behavior is part of the action contract:
 
