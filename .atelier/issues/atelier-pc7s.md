@@ -7,6 +7,10 @@ labels:
 - "dashboard"
 - "mission"
 - "workflow"
+review:
+  kind: pull_request
+  number: 31
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
