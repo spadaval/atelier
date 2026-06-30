@@ -2037,6 +2037,96 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
 }
 
 #[test]
+fn test_epic_close_integrates_into_recorded_mission_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Close target mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Close target mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Close target epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Close target epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "mission close target baseline");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "mission branch ready for epic close");
+    let mission_head_before_epic = git_rev_parse(dir.path(), &format!("mission/{mission_id}"));
+    let main_head_before_close = git_rev_parse(dir.path(), "main");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic start failed: {stderr}");
+    std::fs::write(
+        dir.path().join("mission-close-target.txt"),
+        "epic work for mission branch\n",
+    )
+    .unwrap();
+    commit_all(dir.path(), "epic work for mission close target");
+    move_issue_to_validation(dir.path(), &epic_id);
+    ensure_all_issue_completion_sections(dir.path());
+    attach_issue_pass_evidence(dir.path(), &epic_id);
+    commit_all(dir.path(), "epic proof ready for mission close target");
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &epic_id, "close", "--reason", "done"],
+    );
+    assert!(success, "epic close failed: {stderr}");
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+    assert!(
+        close_out.contains("Action:   tracker.commit")
+            && close_out.contains("Action:   branch_integrate squash commit"),
+        "{close_out}"
+    );
+    assert_ne!(
+        git_rev_parse(dir.path(), &format!("mission/{mission_id}")),
+        mission_head_before_epic
+    );
+    assert_eq!(git_rev_parse(dir.path(), "main"), main_head_before_close);
+    let mission_log = git_log_oneline(dir.path(), &format!("mission/{mission_id}"), 2);
+    assert!(
+        mission_log.contains(&format!(
+            "Squash merge epic/{epic_id} into mission/{mission_id}"
+        )),
+        "{mission_log}"
+    );
+    assert!(git_status_short(dir.path()).trim().is_empty());
+}
+
+#[test]
 fn test_epic_start_rejects_wrong_branch_for_mission_scope() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
