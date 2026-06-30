@@ -3,6 +3,15 @@ created_at: "2026-06-30T21:34:08.403828655+00:00"
 id: "atelier-c4s7"
 issue_type: "epic"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-lz6a
+    integration_target: mission/atelier-lz6a
+    merge_strategy: squash
+    owner_issue_id: atelier-c4s7
+    owner_kind: epic
+    review_target: mission/atelier-lz6a
+    work_branch: epic/atelier-c4s7
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Mission-isolated publish workflow"
-updated_at: "2026-06-30T21:34:08.403828655+00:00"
+updated_at: "2026-06-30T21:35:39.599910692+00:00"
 ---
 
 ## Description
