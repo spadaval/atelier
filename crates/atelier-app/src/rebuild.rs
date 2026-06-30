@@ -1721,9 +1721,6 @@ schema_version: 3
 branch_policy:
   base_branch: main
   merge_strategy: squash
-  branch_templates:
-    epic: epic/{{ issue.id }}
-    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: { label: Bug }

@@ -8,7 +8,7 @@ use serde_json::Value;
 
 pub use atelier_workflow::{
     configured_initial_status, load, validate_issue_against_policy, ActionDefinition, ActionParams,
-    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind, BranchTemplates,
+    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind,
     GitPrepareBranchActionParams, GitPrepareBranchBase, GuidanceTemplate, MergeStrategy,
     ReviewArtifactActionParams, StatusDefinition, TransitionDefinition, ValidatorDefinition,
     ValidatorParams, WorkflowDefinition, WorkflowForgejoRoleAuthors, WorkflowPolicy,

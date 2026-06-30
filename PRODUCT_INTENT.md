@@ -326,10 +326,10 @@ workflows:
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
         actions:
-          - branch.prepare
+          - git.prepare_branch
       close:
         from: [ready, in_progress, validation]
         to: closed
@@ -492,15 +492,15 @@ workflow.
 
 Version 1 built-in actions include:
 
-- `branch.prepare`: create or check out the workflow-derived owner branch when
+- `git.prepare_branch`: create or check out the workflow-derived owner branch when
   the transition needs branch preparation.
 - `tracker.commit`: commit the transition's canonical tracker changes on
   the workflow-derived owner branch.
-- `branch.push`: push the workflow-derived owner branch to the configured
+- `git.push`: push the workflow-derived owner branch to the configured
   review provider remote.
 - `review.merge`: ask the active review authority to merge or record merge
   completion for the branch owner's review artifact.
-- `base.sync`: synchronize the local base branch after provider-owned merge
+- `git.sync`: synchronize the local base branch after provider-owned merge
   completion.
 - `branch_integrate`: integrate the owner branch to the configured base
   branch using the configured merge strategy for local review-room workflows
@@ -527,8 +527,8 @@ resolve findings, merge review artifacts, hide issue close, or replace
 for v1.
 
 Terminal merge behavior follows the review mode. Provider-backed workflows use
-provider-owned actions such as `tracker.commit`, `branch.push`, `review.merge`,
-and `base.sync`; they do not use local `branch_integrate` as a substitute for
+provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
+and `git.sync`; they do not use local `branch_integrate` as a substitute for
 provider merge authority. Local review-room workflows may still declare
 `branch_integrate`, but only as an explicit local integration action.
 
