@@ -22,9 +22,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-30T18:43:34.876207653+00:00"
+status: "done"
 title: "Epic: Implement Git workflow validators and actions for mission branches"
-updated_at: "2026-06-30T18:43:06.209884234+00:00"
+updated_at: "2026-06-30T18:43:34.876207653+00:00"
 ---
 
 ## Description
