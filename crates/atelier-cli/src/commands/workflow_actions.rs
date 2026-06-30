@@ -1,7 +1,7 @@
+use std::env;
 use std::path::Path;
 
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
-use atelier_app::user_config::forgejo_admin_token;
 
 use crate::commands::workflow::PlannedAction;
 
@@ -123,17 +123,6 @@ fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<()
 }
 
 fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
-    review_open_preflight_with_token_check(repo_root, action, || forgejo_admin_token().is_ok())
-}
-
-fn review_open_preflight_with_token_check<TokenAvailable>(
-    repo_root: &Path,
-    action: &PlannedAction,
-    token_available: TokenAvailable,
-) -> Option<String>
-where
-    TokenAvailable: FnOnce() -> bool,
-{
     if action.review_artifact_target.is_none() {
         return Some(format!(
             "action {} failed preflight: missing review artifact target",
@@ -158,7 +147,7 @@ where
             None
         }
         Ok(ReviewConfig::Provider(provider)) => match provider.provider {
-            ReviewProviderKind::Forgejo(_) => {
+            ReviewProviderKind::Forgejo(forgejo) => {
                 if action.review_artifact_provider.as_deref() != Some("forgejo") {
                     return Some(format!(
                         "action {} failed preflight: provider review open requires workflow action provider: forgejo",
@@ -171,10 +160,10 @@ where
                         action.name
                     ));
                 }
-                (!token_available()).then(|| {
+                env::var(&forgejo.admin_token_env).err().map(|_| {
                     format!(
-                        "action {} failed preflight: Forgejo admin token is required for provider review open; set forgejo.admin_token in ~/.config/atelier.toml",
-                        action.name
+                        "action {} failed preflight: environment variable {} is required for provider review open",
+                        action.name, forgejo.admin_token_env
                     )
                 })
             }
@@ -184,13 +173,4 @@ where
             action.name, error
         )),
     }
-}
-
-#[cfg(test)]
-pub(crate) fn review_open_preflight_for_test(
-    repo_root: &Path,
-    action: &PlannedAction,
-    token_available: bool,
-) -> Option<String> {
-    review_open_preflight_with_token_check(repo_root, action, || token_available)
 }

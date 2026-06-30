@@ -55,7 +55,7 @@ defaults, not committed project policy.
 Review provider integration is optional tracked project configuration. The
 current implementation ships a Forgejo provider, so repositories that use
 `atelier review` commands or review validators with Forgejo configure the
-remote in `.atelier/config.toml`:
+remote and token environment variable name in `.atelier/config.toml`:
 
 ```toml
 [review]
@@ -66,12 +66,13 @@ provider = "forgejo"
 host = "forge.example.test"
 owner = "workspace"
 repo = "atelier"
+admin_token_env = "FORGEJO_ADMIN_TOKEN"
 ```
 
-The admin token value stays in plaintext at `~/.config/atelier.toml` as
-`forgejo.admin_token`. The config parser rejects missing Forgejo remote fields,
-empty values, and obsolete sudo-user or token environment mappings with errors
-that name the required key. Workflow action role attribution, including Forgejo
+The admin token value stays in the named environment variable. The config parser
+rejects missing Forgejo remote fields, empty values, obsolete sudo-user
+mappings, and invalid token environment variable names with errors that name
+the required key. Workflow action role attribution, including Forgejo
 role-author mappings used by review artifact actions, belongs in
 `.atelier/workflow.yaml`.
 

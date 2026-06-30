@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:15:02.734908972+00:00"
+status: "done"
 title: "Make mission readiness review focus on Outcome clarity"
-updated_at: "2026-06-29T17:48:05.585520946+00:00"
+updated_at: "2026-06-30T15:15:02.734908972+00:00"
 ---
 
 ## Description

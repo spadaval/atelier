@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:09:55.489261469+00:00"
+status: "done"
 title: "Rework work mission dashboard around operational questions"
-updated_at: "2026-06-29T18:20:30.160139983+00:00"
+updated_at: "2026-06-30T15:09:55.489261469+00:00"
 ---
 
 ## Description

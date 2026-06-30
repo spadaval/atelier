@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -8,15 +9,17 @@ use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport
 use atelier_app::project_config::{
     load_forgejo_with_workflow_role_authors, ForgejoConfig, FORGEJO_ROLES,
 };
-use atelier_app::user_config::forgejo_admin_token;
 
 const ROLE_PERMISSION: &str = "write";
 
 pub fn roles_check(repo_root: &Path) -> Result<()> {
     let forgejo = load_forgejo_with_workflow_role_authors(repo_root)?;
-    let token = forgejo_admin_token().context(
-        "forgejo_config_missing_token: Forgejo admin token is required for `atelier forgejo roles check`",
-    )?;
+    let token = env::var(&forgejo.admin_token_env).with_context(|| {
+        format!(
+            "forgejo_config_missing_token: environment variable {} is required for `atelier forgejo roles check`",
+            forgejo.admin_token_env
+        )
+    })?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -29,9 +32,12 @@ pub fn roles_check(repo_root: &Path) -> Result<()> {
 
 pub fn roles_provision(repo_root: &Path) -> Result<()> {
     let forgejo = load_forgejo_with_workflow_role_authors(repo_root)?;
-    let token = forgejo_admin_token().context(
-        "forgejo_config_missing_token: Forgejo admin token is required for `atelier forgejo roles provision`",
-    )?;
+    let token = env::var(&forgejo.admin_token_env).with_context(|| {
+        format!(
+            "forgejo_config_missing_token: environment variable {} is required for `atelier forgejo roles provision`",
+            forgejo.admin_token_env
+        )
+    })?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -233,6 +239,7 @@ mod tests {
             host: "forge.example.test".to_string(),
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
+            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
             role_authors: Some(ForgejoRoleAuthors {
                 worker: "atelier-worker".to_string(),
                 reviewer: "atelier-reviewer".to_string(),

@@ -622,6 +622,7 @@ mod tests {
             host: "forge.example.test".to_string(),
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
+            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
             role_authors: Some(ForgejoRoleAuthors {
                 worker: "forge-worker".to_string(),
                 reviewer: "forge-reviewer".to_string(),

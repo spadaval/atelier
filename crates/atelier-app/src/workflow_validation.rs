@@ -13,7 +13,6 @@ use crate::lint::{self, LintRequest};
 use crate::pr as app_pr;
 use crate::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use crate::review_room;
-use crate::user_config::forgejo_admin_token;
 use crate::workflow_policy::{ValidatorDefinition, ValidatorParams, WorkflowPolicy};
 
 pub struct ValidatorRequest<'a> {
@@ -176,6 +175,12 @@ fn evaluate_builtin_with_params(
         "objective.blockers_none_open" => {
             objective_direct_blockers_none_open(db, policy, target_kind, target_id)
                 .map(without_validator_help)
+        }
+        "baseline.default_checks" => {
+            baseline_default_checks(db, repo_root).map(without_validator_help)
+        }
+        "closeout.failures_classified" => {
+            closeout_failures_classified(db, repo_root).map(without_validator_help)
         }
         "review.linked_pr_merged" => {
             linked_pr_merged(db, repo_root, target_kind, target_id).map(without_validator_help)
@@ -712,13 +717,14 @@ fn linked_pr_merged(
             ));
         }
     };
-    let token = match forgejo_admin_token() {
+    let token = match std::env::var(&forgejo.admin_token_env) {
         Ok(token) => token,
-        Err(error) => {
+        Err(_) => {
             return Ok((
                 false,
                 format!(
-                    "{error:#}; run `atelier review status --issue {}` after configuring Forgejo credentials",
+                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
+                    forgejo.admin_token_env,
                     target_id
                 ),
             ));
@@ -880,6 +886,72 @@ fn ignored_tests_reviewed(repo_root: &Path) -> Result<(bool, String)> {
 
 fn command_surface_current(repo_root: &Path) -> Result<(bool, String)> {
     crate::command_surface::status_reason(repo_root)
+}
+
+fn baseline_default_checks(db: &Database, repo_root: &Path) -> Result<(bool, String)> {
+    let mut failures = Vec::new();
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let stale = crate::export::canonical_stale_entries(db, &state_dir)?;
+    if !stale.is_empty() {
+        failures.push(format!("tracker.current failed: {}", stale.join("; ")));
+    }
+    let (lint_passed, lint_reason) = lint_none_blocking(db)?;
+    if !lint_passed {
+        failures.push(format!("lint.none_blocking failed: {lint_reason}"));
+    }
+    let (whitespace_passed, whitespace_reason) = git_diff_check(repo_root)?;
+    if !whitespace_passed {
+        failures.push(format!("git diff --check failed: {whitespace_reason}"));
+    }
+    if failures.is_empty() {
+        Ok((
+            true,
+            "baseline checks passed: tracker.current, lint.none_blocking, git diff --check; record default test-suite proof or workflow waiver before closeout".to_string(),
+        ))
+    } else {
+        Ok((
+            false,
+            format!(
+                "baseline checks failed and require owner or waiver: {}",
+                failures.join("; ")
+            ),
+        ))
+    }
+}
+
+fn closeout_failures_classified(db: &Database, repo_root: &Path) -> Result<(bool, String)> {
+    let (baseline_passed, baseline_reason) = baseline_default_checks(db, repo_root)?;
+    if baseline_passed {
+        Ok((
+            true,
+            "closeout default checks have no unclassified failures; default test-suite proof remains owned by validation evidence".to_string(),
+        ))
+    } else {
+        Ok((
+            false,
+            format!(
+                "default check failures need a linked blocker or human-approved waiver: {baseline_reason}"
+            ),
+        ))
+    }
+}
+
+fn git_diff_check(repo_root: &Path) -> Result<(bool, String)> {
+    let output = Command::new("git")
+        .args(["diff", "--check"])
+        .current_dir(repo_root)
+        .output()?;
+    if output.status.success() {
+        return Ok((true, "git diff --check passed".to_string()));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detail = [stdout.trim(), stderr.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ");
+    Ok((false, detail))
 }
 
 fn repo_root() -> Result<PathBuf> {
