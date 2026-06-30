@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T04:09:12.775094648+00:00"
+status: "done"
 title: "Implement mission-start baseline gate"
-updated_at: "2026-06-29T17:47:20.256398457+00:00"
+updated_at: "2026-06-30T04:09:12.775094648+00:00"
 ---
 
 ## Description

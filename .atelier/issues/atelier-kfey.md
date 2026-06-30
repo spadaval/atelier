@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:10:38.508204038+00:00"
+status: "done"
 title: "Add regression coverage for transition output budget"
-updated_at: "2026-06-29T20:10:40.564602241+00:00"
+updated_at: "2026-06-30T15:10:38.508204038+00:00"
 ---
 
 ## Description

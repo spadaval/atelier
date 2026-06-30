@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:10:52.658360051+00:00"
+status: "done"
 title: "Implement mission-scoped dashboard filters and shared state labels"
-updated_at: "2026-06-29T18:20:43.204322941+00:00"
+updated_at: "2026-06-30T15:10:52.658360051+00:00"
 ---
 
 ## Description
