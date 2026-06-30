@@ -2,18 +2,22 @@
 created_at: "2026-06-30T16:09:49.593046637+00:00"
 id: "atelier-ms7i"
 issue_type: "epic"
-fields:
-  workflow_branch:
-    owner_issue_id: "atelier-ms7i"
-    work_branch: "epic/atelier-ms7i"
-    branch_base: "mission/atelier-sszj"
-    review_target: "mission/atelier-sszj"
-    integration_target: "mission/atelier-sszj"
-    owner_kind: "epic"
-    merge_strategy: "squash"
 labels:
 - "git"
 - "workflow"
+review:
+  kind: pull_request
+  number: 37
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-sszj
+    integration_target: mission/atelier-sszj
+    merge_strategy: squash
+    owner_issue_id: atelier-ms7i
+    owner_kind: epic
+    review_target: mission/atelier-sszj
+    work_branch: epic/atelier-ms7i
 priority: "P1"
 relationships:
   blocks:
@@ -27,9 +31,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Persist branch base context for workflow branches"
-updated_at: "2026-06-30T18:45:08.993357159+00:00"
+updated_at: "2026-06-30T18:58:23.037975134+00:00"
 ---
 
 ## Description
