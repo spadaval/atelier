@@ -72,6 +72,7 @@ pub fn transition_issue(
     ensure_transition_available(&before, transition_name, transition)?;
 
     let record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let pre_transition_record = record.clone();
     let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
@@ -100,7 +101,7 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
-    let action_results = execute_transition_actions(
+    let action_results = match execute_transition_actions(
         db,
         state_dir,
         db_path,
@@ -112,7 +113,18 @@ pub fn transition_issue(
         &planned_actions,
         close_reason,
         git_rollback.as_ref(),
-    )?;
+        &pre_transition_record,
+    ) {
+        Ok(results) => results,
+        Err(error) => {
+            if let Some(rollback) = git_rollback.as_ref() {
+                rollback.rollback_after_post_action_failure(state_dir, db_path)?;
+            }
+            app_use_cases::write_canonical_issue(state_dir, &pre_transition_record)?;
+            app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+            bail!("{error:#}");
+        }
+    };
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     if transition_name == "start" {
@@ -355,6 +367,7 @@ fn execute_transition_actions(
     planned_actions: &[PlannedAction],
     close_reason: Option<&str>,
     git_rollback: Option<&TransitionGitRollback>,
+    pre_transition_record: &CanonicalIssueRecord,
 ) -> Result<Vec<AppliedAction>> {
     let transition_apply = TransitionApply {
         state_dir,
@@ -443,6 +456,8 @@ fn execute_transition_actions(
                     if let Some(rollback) = git_rollback {
                         rollback.rollback_after_post_action_failure(state_dir, db_path)?;
                     }
+                    app_use_cases::write_canonical_issue(state_dir, pre_transition_record)?;
+                    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
                 }
                 bail!("{error:#}");
             }
@@ -1233,13 +1248,17 @@ impl TransitionGitRollback {
                 "reset failed action merge state",
             )?;
         }
-        if branch_exists_at(&self.repo_root, &self.expected_branch)? {
-            git_checked(
-                &self.repo_root,
-                &["switch", &self.expected_branch],
-                "return to action source branch for rollback",
-            )?;
-        }
+        git_checked(
+            &self.repo_root,
+            &["switch", "--force", &self.expected_branch],
+            "return to action source branch for rollback",
+        )
+        .with_context(|| {
+            format!(
+                "action rollback failed for {} {} while returning to source branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                self.issue_id, self.transition_name, self.expected_branch
+            )
+        })?;
         git_checked(
             &self.repo_root,
             &["reset", "--hard", &self.source_pre_head],
