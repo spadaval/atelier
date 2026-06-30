@@ -534,7 +534,7 @@ Supported built-ins include:
 | `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
 | `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
 | `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
-| `validation.criteria_satisfied` | Explicit mission validation work and linked evidence satisfy the mission `Outcome` according to the configured objective closeout check. |
+| `validation.criteria_satisfied` | Mission `Validation` criteria are satisfied by linked work and evidence according to the configured objective closeout check. |
 | `command_surface_current` | Public command-surface guidance has been checked against current help and docs for closeout. |
 | `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for closeout risk. |
 | `blockers.none_open` | Target has no open blockers. |

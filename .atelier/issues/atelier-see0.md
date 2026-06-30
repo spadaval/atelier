@@ -14,10 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:17:39.953002164+00:00"
-status: "done"
+status: "todo"
 title: "Derive mission status vocabulary from workflow policy"
-updated_at: "2026-06-30T15:17:39.953002164+00:00"
+updated_at: "2026-06-29T17:39:13.926907534+00:00"
 ---
 
 ## Description

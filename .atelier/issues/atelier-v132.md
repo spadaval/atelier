@@ -14,10 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:20:06.561428135+00:00"
-status: "done"
+status: "todo"
 title: "Retire mission section authoring flags"
-updated_at: "2026-06-30T15:20:06.561428135+00:00"
+updated_at: "2026-06-29T17:39:54.810945279+00:00"
 ---
 
 ## Description

@@ -31,8 +31,6 @@ issue_types:
   validation: { label: Validation }
 
 statuses:
-  draft:
-    category: todo
   ready:
     category: todo
   todo:
@@ -56,21 +54,9 @@ statuses:
 workflows:
   mission_delivery:
     applies_to: [mission]
-    initial_status: draft
+    initial_status: ready
     done_statuses: [closed]
     transitions:
-      ready:
-        from: [draft]
-        to: ready
-        description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
-        validators:
-          - issue.sections_parseable
-      start:
-        from: [ready]
-        to: in_progress
-        description: "Start mission execution after the configured repository baseline is green or explicitly waived."
-        validators:
-          - baseline.default_checks
       close:
         from: [ready, in_progress, validation]
         to: closed
@@ -81,8 +67,8 @@ workflows:
           - objective.work_terminal
           - objective.blockers_none_open
           - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
           - validation.criteria_satisfied
-          - closeout.failures_classified
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
@@ -253,8 +239,6 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "objective.work_present",
     "objective.work_terminal",
     "objective.blockers_none_open",
-    "baseline.default_checks",
-    "closeout.failures_classified",
     "review.linked_pr_merged",
     "blockers.none_open",
     "lint.none_blocking",

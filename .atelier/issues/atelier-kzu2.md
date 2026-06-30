@@ -6,10 +6,6 @@ labels:
 - "cli"
 - "mission"
 - "workflow"
-review:
-  kind: pull_request
-  number: 33
-  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -31,10 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:18:38.580660961+00:00"
-status: "done"
+status: "todo"
 title: "Epic: Make mission lifecycle workflow-configured"
-updated_at: "2026-06-30T15:18:38.580660961+00:00"
+updated_at: "2026-06-29T17:39:33.984857543+00:00"
 ---
 
 ## Description

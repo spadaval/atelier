@@ -16,10 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:10:10.263564905+00:00"
-status: "done"
+status: "todo"
 title: "Simplify issue transition default output to failed requirements"
-updated_at: "2026-06-30T15:10:10.263564905+00:00"
+updated_at: "2026-06-29T20:10:26.913475599+00:00"
 ---
 
 ## Description

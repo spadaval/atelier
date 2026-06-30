@@ -120,46 +120,10 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             commands::issue::show(&db, &id)
         }
 
-        super::IssueCommands::List {
-            status,
-            category,
-            issue_type,
-            label,
-            priority,
-            ready,
-            blocked,
-        } => {
-            let db = degraded_projection_query_db()?;
-            if blocked {
-                if ready || status != "all" || category.is_some() {
-                    bail!("--blocked cannot be combined with --ready, --status, or --category");
-                }
-                commands::issue::list_blocked_inventory(
-                    &db,
-                    issue_type.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    quiet,
-                )
-            } else {
-                commands::issue::list_inventory(
-                    &db,
-                    Some(&status),
-                    category.as_deref(),
-                    issue_type.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    ready,
-                    quiet,
-                )
-            }
-        }
-
         super::IssueCommands::Transition {
             id,
             transition,
             close_reason,
-            verbose,
         } => {
             if let Some(transition) = transition {
                 let (state_dir, db_path) = state_and_db_paths()?;
@@ -174,7 +138,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                 )
             } else {
                 let db = degraded_projection_query_db()?;
-                commands::issue::transition_options(&db, &id, verbose)
+                commands::issue::transition_options(&db, &id)
             }
         }
 

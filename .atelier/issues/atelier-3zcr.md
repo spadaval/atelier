@@ -16,10 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:09:41.082935112+00:00"
-status: "done"
+status: "todo"
 title: "Add regression coverage for issue list and mission dashboard behavior"
-updated_at: "2026-06-30T15:09:41.082935112+00:00"
+updated_at: "2026-06-29T18:21:10.127683093+00:00"
 ---
 
 ## Description

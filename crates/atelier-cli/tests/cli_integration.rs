@@ -871,7 +871,6 @@ provider = "forgejo"
 host = "https://forge.example.test"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
 "#,
     )
     .unwrap();
@@ -899,8 +898,9 @@ fn write_branch_action_workflow(dir: &Path) {
 }
 
 #[test]
-fn provider_review_open_action_reads_workflow_config_and_env_secret() {
+fn provider_review_open_action_reads_workflow_config_and_user_secret() {
     let dir = tempdir().unwrap();
+    let home = tempdir().unwrap();
     init_atelier(dir.path());
     write_provider_config_without_role_authors(dir.path());
     write_provider_review_action_workflow(dir.path());
@@ -916,17 +916,18 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
+    let home_path = home.path().to_string_lossy().to_string();
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "transition", &issue_id],
+        &[("HOME", &home_path)],
+    );
     assert!(success, "transition options failed: {stderr}");
     assert!(stdout.contains("request_review [blocked]"), "{stdout}");
     assert!(stdout.contains("review.open"), "{stdout}");
     assert!(stdout.contains("provider=forgejo"), "{stdout}");
     assert!(stdout.contains("role=worker"), "{stdout}");
-    assert!(
-        stdout.contains("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("~/.config/atelier.toml"), "{stdout}");
     assert!(!stdout.contains("role_authors"), "{stdout}");
 }
 

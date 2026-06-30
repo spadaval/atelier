@@ -33,10 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-closed_at: "2026-06-30T15:22:42.555053602+00:00"
-status: "closed"
+status: "ready"
 title: "Mission: Simplify mission planning and workflow behavior"
-updated_at: "2026-06-30T15:22:42.555053602+00:00"
+updated_at: "2026-06-29T17:37:11.545961188+00:00"
 ---
 
 ## Description

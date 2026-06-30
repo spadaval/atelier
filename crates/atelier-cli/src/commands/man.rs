@@ -189,7 +189,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 );
                 println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
-                println!("  1. atelier work ready - Find executable work.");
+                println!("  1. atelier work queue --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
                 println!("  3. atelier issue transition <id> - Follow current lifecycle guidance.");
             }
@@ -202,7 +202,9 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             );
         }
         Role::Validator => {
-            println!("  1. atelier issue show <id> - Read the target Outcome and linked proof.");
+            println!(
+                "  1. atelier issue show <id> - Read the validation target and proof contract."
+            );
             println!("  2. atelier evidence record --target issue/<id> --kind validation -- <command> - Attach validation proof.");
             println!("  3. atelier issue transition <id> - Follow current workflow guidance.");
         }
@@ -229,7 +231,7 @@ fn print_normal_loop(role: Role) {
     match role {
         Role::Worker => {
             println!("  atelier status");
-            println!("  atelier work ready");
+            println!("  atelier work queue --ready");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id>");
             println!("  atelier issue note <id> \"...\"");

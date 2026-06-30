@@ -2,13 +2,11 @@
 
 ## Proof Routing Policy
 
-Proof starts on the work item that made the claim. The `Outcome` names the
-target state; an `Evidence` section, workflow validator, or validation issue may
-name a specific check when the contract needs it. The worker or validator
-records proof after running the check. Escalate by risk and scope: ordinary
-local implementation work proves itself on the issue, while risky, broad,
-review-boundary, or parent-level claims require independent validation and
-first-class evidence.
+Proof starts on the work item that made the claim. The issue `Evidence`
+section names the expected proof, and the worker records that proof before
+completion. Escalate by risk and scope: ordinary local implementation work proves
+itself on the issue, while risky, broad, review-boundary, or parent-level
+claims require independent validation and first-class evidence.
 
 Strong proof is claim-specific, reproducible, attached, classified, scoped, and
 independent when required by risk. Weak proof is broad, summary-only,
@@ -16,18 +14,16 @@ unattached, unverifiable, stale, or not mapped to a claim. A full test suite,
 lint run, or objective status page can support proof, but it is weak by itself
 when it does not show the exact changed behavior, file content, command result,
 rejected command, help text, benchmark, or evidence record named by the claim.
-Workers and validators should quote or paraphrase the exact `Outcome`, explicit
-proof claim, or workflow gate they checked when they close work or hand it off,
-especially for parent-level, process-policy, and other broad claims.
+Workers should quote or paraphrase the exact `Outcome` or `Evidence` line they
+proved when they close work or hand it off, especially for parent-level,
+process-policy, and other broad claims.
 
 Epics and missions coordinate work; they are not the normal executable proof
-surface. A mission is the target-state and optional shared workspace/background
-checkout boundary, and an epic is the branch and review boundary. Mission scope
-is the direct `advances` links plus descendants of those roots. Parent claims
-are proven by evidence on accountable child work plus validation work when
-independent judgment is required. Direct evidence on a mission is legacy,
-migration-only, or explicitly workflow-configured; it is not the normal way to
-satisfy mission proof.
+surface. A mission is the shared workspace/background checkout boundary, and an
+epic is the branch and review boundary. Their claims are proven by evidence on
+accountable child work plus a validation item that audits the parent outcome.
+Direct evidence on a mission is legacy or migration-only; it is not the normal
+way to satisfy mission proof.
 
 Session `show` and `list` are read-only inspection surfaces over derived issue
 activity. They can support attribution proof, but they do not create, end, or
@@ -40,10 +36,10 @@ detail at every parent layer.
 
 | Layer | Owns | Avoid |
 | --- | --- | --- |
-| Mission `Outcome` | Mission-level target state, explicit non-scope, and the root work directly linked by `advances`; descendants of those roots carry detailed work. | Child implementation steps, exact file lists, every command each issue must run, or prewritten validation paperwork. |
-| Epic `Outcome` | Cohesive product, process, or architecture result and branch/review scope. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
-| Executable issue `Outcome`/explicit `Evidence` | The local observable result and any named check for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
-| Dedicated validation issue `Outcome` | Independent judgment derived from the target Outcome, claim classification, evaluator context, baseline or scenario setup when needed, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |
+| Mission `Validation` | Mission-level target state, shared workspace confidence, completion confidence, required independent or adversarial review, and the evidence classes needed to trust the whole mission. | Child implementation steps, exact file lists, or every command each issue must run. |
+| Epic `Outcome`/`Evidence` | Cohesive product, process, or architecture result, branch/review scope, plus how child work or a validation item will prove the parent claim. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
+| Executable issue `Outcome`/`Evidence` | The local observable result and proof for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
+| Dedicated validation issue `Outcome`/`Evidence` | Independent review scenarios, claim classification, evaluator context, baseline or scenario setup, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |
 
 Anti-red-tape rule: add detail to a higher layer only when it changes scope,
 risk, sequencing, or parent-level confidence. Otherwise, keep detail at the
@@ -139,7 +135,7 @@ claim without private context.
 
 | Destination | Use when | Not enough for |
 | --- | --- | --- |
-| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where no separate proof artifact is meaningful. | Required proof for behavior changes, parent completion, validation items, process-policy changes, or workflow validators that require evidence. |
+| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where the issue Evidence section explicitly says no separate proof artifact is meaningful. | Required proof for behavior changes, parent completion, validation items, process-policy changes, or workflow validators that require evidence. |
 | First-class evidence record | Any non-trivial proof: command transcripts, focused tests, migration results, docs/help parity, workflow validation, validation audit tables, screenshots, or `fail`, `blocked`, `deferred`, and `not-applicable` classifications that should survive handoff. Attach it to the accountable issue-shaped work that produced or validated the proof. Parent completion reads those child links through implementation, review, and validation issues. | Proof that must be performed independently by another worker, or unresolved defects that need their own owner. |
 | Separate validation issue | Independent judgment is required, proof is broad enough to be its own work, or the implementer should not validate their own claim. Link it as validation or a blocker before relying on its result. | Tiny local checks where the issue worker can produce objective proof directly on the implementing issue. |
 
@@ -162,8 +158,7 @@ Evidence records should include accountable targets, proof scope, kind, result,
 commands or artifacts, agent identity, independence level, residual risks, and
 follow-up IDs. Capture mode preserves command, exit status, success, timestamp,
 and bounded stdout/stderr summaries. Manual mode stores the same classification
-fields without command output. Bare summaries are context unless they name the
-claim checked, action taken, result, and an inspectable rationale or artifact.
+fields without command output.
 
 Examples:
 
@@ -189,7 +184,7 @@ Create or use a separate validation issue when any of these apply:
 - stale-test, ignored-test, fixture drift, or broad-green-test risk;
 - irreversible, security-sensitive, data-loss, or hard-to-reproduce behavior;
 - subjective process claims where the implementer has a conflict of interest;
-- any case where the issue contract says a different role must validate the
+- any case where the Evidence section says a different role must validate the
   result.
 
 When validation discovers a real defect, create or identify a follow-up issue
@@ -211,7 +206,7 @@ the metric, baseline when available, measurement command or fixture, observed
 result, and acceptable threshold or reason a hard threshold is not practical.
 
 Do not over-specify subjective output before implementation. For example, an
-information-hierarchy issue for `atelier work mission <mission-id>` should name the user task,
+information-hierarchy issue for `work queue --type mission` should name the user task,
 important information to surface, and evaluator context; it should not mandate
 the final row layout unless that layout is the contract. A performance issue
 should be concrete: "reduce `work mission <mission-id>` wall time on fixture X from about
@@ -237,10 +232,9 @@ environment-specific tool is unavailable, record `deferred` evidence that names
 the missing tool, the reason it is not required for the current slice, and any
 follow-up owner.
 
-Parent coverage summaries should classify each parent `Outcome` line or
-explicit validation claim as `covered`, `missing`, `failed`, `blocked`,
-`deferred`, or `not-applicable`, then cite the accountable child issue IDs and
-evidence IDs.
+Parent coverage summaries should classify each parent Outcome or validation
+line as `covered`, `missing`, `failed`, `blocked`, `deferred`, or
+`not-applicable`, then cite the accountable child issue IDs and evidence IDs.
 Stable claim anchors are optional and reserved for high-risk or
 automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
@@ -259,20 +253,20 @@ accountable issue that performed the check.
 
 For a subjective mission table information-hierarchy task:
 
-- Mission `Outcome` says the mission operator can identify state, blockers,
+- Mission validation says the mission operator can identify state, blockers,
   configured proof validator failures, and next action without private context.
 - Epic outcome says the mission operator CLI presents a concise default view
   with drill-down available for audit detail.
-- Executable issue outcome says `atelier work mission <mission-id>` output
-  groups active mission work by status and exposes blockers and configured
-  validator failures in the default human output.
+- Executable issue outcome says `work queue --type mission` output groups active missions by
+  status and exposes blockers and configured validator failures in the default
+  human output.
 - The validation issue says an independent evaluator reviews the default output
   for a representative mission fixture, classifies the information hierarchy,
   records rationale, and attaches the transcript or screenshot.
 
 For a quantitative performance task:
 
-- Mission `Outcome` says operator commands remain fast enough for routine
+- Mission validation says operator commands remain fast enough for routine
   mission work.
 - Epic outcome names the affected command family and delegates proof to
   benchmarked child issues.
@@ -283,7 +277,7 @@ For a quantitative performance task:
 
 For a canonical write or projection-refresh issue:
 
-- Mission `Outcome` says canonical Markdown remains the durable source of
+- Mission validation says canonical Markdown remains the durable source of
   truth and rebuildable projections stay current.
 - Epic outcome names the write/rebuild boundary and delegates proof to child
   round-trip and concurrency scenarios.

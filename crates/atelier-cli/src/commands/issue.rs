@@ -103,7 +103,7 @@ impl IssueStatusFilter {
         category: Option<&str>,
     ) -> Result<Self> {
         if let Some(category) = category {
-            if status != "todo" && status != "all" {
+            if status != "todo" {
                 bail!("--status and --category cannot be combined");
             }
             return Self::category(policy, category);
@@ -712,11 +712,11 @@ fn render_issue_link_section(
     Ok(())
 }
 
-pub fn transition_options(db: &Database, issue_ref: &str, verbose: bool) -> Result<()> {
+pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
-    crate::commands::workflow::print_issue_transition_options(db, &issue, &options, verbose);
+    crate::commands::workflow::print_issue_transition_options(db, &issue, &options);
     Ok(())
 }
 
@@ -1217,31 +1217,6 @@ pub fn list(
         "Issue Queue",
         status,
         category,
-        None,
-        label,
-        priority,
-        ready,
-        quiet,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn list_inventory(
-    db: &Database,
-    status: Option<&str>,
-    category: Option<&str>,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    ready: bool,
-    quiet: bool,
-) -> Result<()> {
-    list_with_title(
-        db,
-        "Issue List",
-        status,
-        category,
-        issue_type,
         label,
         priority,
         ready,
@@ -1254,32 +1229,14 @@ pub(crate) fn list_with_title(
     title: &str,
     status: Option<&str>,
     category: Option<&str>,
-    issue_type: Option<&str>,
     label: Option<&str>,
     priority: Option<&str>,
     ready: bool,
     quiet: bool,
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
-    if let Some(issue_type) = issue_type {
-        let Some(policy) = workflow_policy.as_ref() else {
-            bail!("--issue-type requires a workflow policy");
-        };
-        if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
     let status_input = status.unwrap_or("todo");
-    if ready && ((status_input != "todo" && status_input != "all") || category.is_some()) {
+    if ready && (status_input != "todo" || category.is_some()) {
         bail!("--ready uses startable todo-category work; do not combine it with --status or --category");
     }
     let status_filter =
@@ -1292,9 +1249,6 @@ pub(crate) fn list_with_title(
         .list_issues(Some("all"), label, priority)?
         .into_iter()
         .filter(|issue| {
-            if issue_type.is_some_and(|issue_type| issue.issue_type != issue_type) {
-                return false;
-            }
             ready || status_filter.matches(workflow_policy.as_ref(), issue, &mut read_context)
         })
         .map(|issue| issue_summary(db, issue))
@@ -1315,58 +1269,14 @@ pub(crate) fn list_with_title(
 }
 
 pub(crate) fn list_blocked_with_title(db: &Database, title: &str, quiet: bool) -> Result<()> {
-    list_blocked_filtered_with_title(db, title, None, None, None, quiet)
-}
-
-pub fn list_blocked_inventory(
-    db: &Database,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    quiet: bool,
-) -> Result<()> {
-    list_blocked_filtered_with_title(db, "Issue List", issue_type, label, priority, quiet)
-}
-
-fn list_blocked_filtered_with_title(
-    db: &Database,
-    title: &str,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    quiet: bool,
-) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
-    if let Some(issue_type) = issue_type {
-        let Some(policy) = workflow_policy.as_ref() else {
-            bail!("--issue-type requires a workflow policy");
-        };
-        if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
     let rows = db
-        .list_issues(Some("all"), label, priority)?
+        .list_issues(Some("all"), None, None)?
         .into_iter()
-        .filter(|issue| issue_type.is_none_or(|issue_type| issue.issue_type == issue_type))
         .map(|issue| issue_summary(db, issue))
         .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
         .filter_map(|result| match result {
-            Ok(row)
-                if !row.open_blockers.is_empty()
-                    || row.status_category.as_deref() == Some("blocked") =>
-            {
-                Some(Ok(row))
-            }
+            Ok(row) if !row.open_blockers.is_empty() => Some(Ok(row)),
             Ok(_) => None,
             Err(error) => Some(Err(error)),
         })
@@ -2450,8 +2360,8 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         view.review_backend.provider.as_deref().unwrap_or("(none)")
     );
     println!("  status: {}", view.review_backend.status);
-    if let Some(token_env) = &view.review_backend.token_env {
-        println!("  token_env: {}", token_env);
+    if let Some(credential_file) = &view.review_backend.credential_file {
+        println!("  credential_file: {}", credential_file);
     }
     println!("  detail: {}", view.review_backend.detail);
     println!("Projection database:");
