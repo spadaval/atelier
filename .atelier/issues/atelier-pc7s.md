@@ -42,9 +42,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Epic: Repair CLI issue listing and mission dashboard"
-updated_at: "2026-06-30T03:39:16.314547992+00:00"
+updated_at: "2026-06-30T15:13:19.256864415+00:00"
 ---
 
 ## Description
