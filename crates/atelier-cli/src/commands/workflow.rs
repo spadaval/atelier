@@ -439,7 +439,7 @@ fn prepare_branch_action(
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
-        git_switch_checked(repo_root, &action.expected_branch, "checkout action branch")
+        git_checked(repo_root, &["switch", &action.expected_branch], "checkout action branch")
             .with_context(|| {
                 format!(
                     "action {} failed while switching to branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} start`.",
@@ -702,7 +702,11 @@ fn ensure_expected_branch_checked_out(
             action.name, action.expected_branch, issue.id
         )
     })?;
-    git_switch_checked(repo_root, &action.expected_branch, "checkout action source branch")
+    git_checked(
+        repo_root,
+        &["switch", &action.expected_branch],
+        "checkout action source branch",
+    )
     .with_context(|| {
         format!(
             "action {} failed while switching to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry the transition for {}.",
@@ -1099,9 +1103,9 @@ impl TransitionGitRollback {
             )?;
         }
         if branch_exists_at(&self.repo_root, &self.expected_branch)? {
-            git_switch_checked(
+            git_checked(
                 &self.repo_root,
-                &self.expected_branch,
+                &["switch", &self.expected_branch],
                 "return to action source branch for rollback",
             )?;
         }
@@ -1171,9 +1175,9 @@ impl CloseGitIntegration {
         }
         let current = git_current_branch(&repo_root)?;
         if current != resolution.expected_branch {
-            git_switch_checked(
+            git_checked(
                 &repo_root,
-                &resolution.expected_branch,
+                &["switch", &resolution.expected_branch],
                 "checkout source branch before close",
             )
             .with_context(|| {
@@ -1372,9 +1376,9 @@ impl CloseGitIntegration {
                 "reset failed merge state",
             )?;
         }
-        git_switch_checked(
+        git_checked(
             &self.repo_root,
-            &self.resolution.expected_branch,
+            &["switch", &self.resolution.expected_branch],
             "return to source branch for rollback",
         )?;
         self.rollback_tracker_state(state_dir, db_path)
