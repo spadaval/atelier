@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted.
+Accepted. Updated by
+[ADR 0016](0016-canonical-work-branches-and-mission-integration.md) for
+canonical work branch names, branch base terminology, and opt-in mission
+integration branches.
 
 ## Context
 
@@ -51,9 +54,9 @@ Atelier uses this hierarchy as the target operating model:
 
 5. Squash merge is the default integration strategy.
    Repositories may configure merge commit or fast-forward-only alternatives,
-   base branch selection, and branch naming templates. Close must be
-   failure-atomic: a failed tracker commit, merge, or required push must not
-   leave the item closed in the integration branch.
+   while work branch names use the canonical `<issue_type>/<issue_id>` form
+   from ADR 0016. Close must be failure-atomic: a failed tracker commit, merge,
+   or required push must not leave the item closed in the integration branch.
 
 6. Per-issue worktrees and per-issue branches are exceptional isolation.
    Use them only when the assignment or risk justifies containment: dirty

@@ -294,28 +294,60 @@ schema_version: 3
 branch_policy:
   base_branch: master
   merge_strategy: squash
-  branch_templates:
-    epic: epic/{{ issue.id }}
-    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: { label: Bug }
   epic: { label: Epic }
   feature: { label: Feature }
+  mission: { label: Mission }
   spike: { label: Spike }
   task: { label: Task }
   validation: { label: Validation }
 
 statuses:
+  ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active }
   blocked: { category: blocked }
   review: { category: active }
   validation: { category: active }
   done: { category: done }
+  closed: { category: done }
+  superseded: { category: done }
 
 workflows:
-  task_delivery:
+  mission:
+    applies_to: [mission]
+    initial_status: ready
+    done_statuses: [closed, superseded]
+    transitions:
+      start:
+        from: [ready]
+        to: in_progress
+        description: "Start coordinated mission work."
+        validators:
+          - git.on_base_branch
+          - git.worktree_clean
+        actions:
+          - branch.prepare
+      close:
+        from: [ready, in_progress, validation]
+        to: closed
+        required_fields: [close_reason]
+        description: "Closing requires configured objective validators to pass."
+        validators:
+          - objective.work_present
+          - objective.work_terminal
+          - objective.blockers_none_open
+          - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
+          - validation.criteria_satisfied
+          - lint.none_blocking
+          - command_surface_current
+          - ignored_tests_reviewed
+          - git.worktree_clean
+
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -332,9 +364,9 @@ workflows:
         validators:
           - evidence.attached: { min_count: 1 }
           - blockers.none_open
-          - tracker.current
+          - lint.none_blocking
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -360,9 +392,11 @@ workflows:
         validators:
           - evidence.attached: { min_count: 1 }
           - children.proof_complete
-          - tracker.current
+          - blockers.none_open
+          - lint.none_blocking
+          - git.worktree_clean
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -388,9 +422,11 @@ workflows:
         validators:
           - evidence.attached: { min_count: 1 }
           - children.proof_complete
-          - tracker.current
+          - blockers.none_open
+          - lint.none_blocking
+          - git.worktree_clean
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -411,7 +447,7 @@ workflows:
         required_fields: [close_reason]
         validators:
           - review.complete
-          - tracker.current
+          - git.worktree_clean
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
@@ -456,7 +492,7 @@ workflow.
 
 Version 1 built-in actions include:
 
-- `branch_prepare`: create or check out the workflow-derived owner branch when
+- `branch.prepare`: create or check out the workflow-derived owner branch when
   the transition needs branch preparation.
 - `tracker.commit`: commit the transition's canonical tracker changes on
   the workflow-derived owner branch.
@@ -564,24 +600,36 @@ refreshes local runtime/projection state, and then transitions the issue into
 the checkout's current-work set. Routine workers should not run explicit branch
 setup before issue work.
 
-The default branch model should be opinionated but configurable. Branch owner
-derivation is:
+The default branch model is opinionated. Branch owner derivation is:
 
 - Child issue: the nearest parent epic's branch.
 - Standalone issue: an issue branch.
 - Epic: an epic branch.
+- Mission: no work branch unless the mission workflow explicitly declares
+  branch validators and actions, in which case the mission owns an integration
+  branch.
 
-The branch owner is derived from the issue or epic being started. Branch names
-come from configurable templates, with defaults shaped like:
+`base_branch` is the configured repository integration branch used when no
+recorded narrower branch base applies. A work branch is the branch that owns
+mutation and review for a branch-owning record. Its canonical name is
+`<issue_type>/<issue_id>` with no slug or configurable template. A branch base
+is the recorded branch/ref and commit that a work branch was prepared from;
+review targets, sync, and integration checks use that recorded base instead of
+recomputing a target from the current parent graph.
+
+Branch names are shaped like:
 
 ```text
-main
-  default integration branch unless configured otherwise
+master
+  default base_branch unless configured otherwise
 
-epic/atelier-4p7q-short-slug
+mission/atelier-k7mq
+  optional mission integration branch when workflow actions opt in
+
+epic/atelier-4p7q
   normal reviewable owner branch for epics and their child issues
 
-issue/atelier-z1p8-short-slug
+task/atelier-z1p8
   owner branch for standalone issues or exceptional issue isolation
 ```
 
@@ -589,15 +637,18 @@ Close-time integration is part of the workflow contract:
 
 - Closing a child issue commits its tracker-state change on the parent epic
   branch and does not merge that branch to base.
-- Closing a standalone issue commits its tracker-state change on the issue
-  branch and merges that owner branch to the configured base branch.
+- Closing a standalone issue commits its tracker-state change on the issue-type
+  owner branch and integrates that owner branch into its recorded branch base.
 - Closing an epic commits its tracker-state change on the epic branch and
-  merges that owner branch to the configured base branch.
+  integrates that owner branch into its recorded branch base.
+- Closing an opt-in mission integration branch follows the workflow-declared
+  validators and actions for that mission workflow. No mission branch exists
+  without those declarations.
 - The default merge strategy is squash merge. Configurable alternatives may
   include merge commit and fast-forward-only where repository policy allows.
-- Base branch selection is configurable by repository, mission, or epic policy,
-  defaulting to the repository's integration branch when no narrower policy is
-  set.
+- Base branch selection starts from `branch_policy.base_branch`; narrower
+  targets are recorded branch bases produced by workflow actions, not ad hoc
+  per-command recomputation.
 
 Close must be atomic with respect to durable workflow state: if the tracker
 commit, integration merge, or required push fails, the item must not be left
@@ -610,9 +661,10 @@ Useful enforcement:
 - Warn or fail when implementation starts on `main`.
 - Refuse start or close when the checkout is dirty unless policy allows the
   specific operation.
-- Record owner branch, base branch, merge strategy, and current issue
-  association.
-- Refuse close when durable records or derived projections are stale.
+- Record owner branch, branch base, merge strategy, and current issue
+  association when workflow actions prepare or integrate branches.
+- Repair stale projections as internal command-storage health rather than
+  exposing projection freshness as user-configurable workflow policy.
 - Allow multi-issue slices with explicit intent.
 
 Atelier-managed workspace isolation is deferred pending redesign. It should be
@@ -635,7 +687,6 @@ evaluate whether a record can advance or close.
 
 Version 1 built-in validators include:
 
-- `tracker.current`
 - `review.complete`
 - `review.linked_pr_merged`
 - `evidence.attached`

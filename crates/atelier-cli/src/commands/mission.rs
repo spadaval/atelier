@@ -698,7 +698,6 @@ fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "tracker.current" => Some(("Tracker State", "current", "stale", "atelier doctor --fix")),
         "issue.sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",

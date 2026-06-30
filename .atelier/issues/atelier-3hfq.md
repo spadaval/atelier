@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T18:02:22.267630574+00:00"
+status: "done"
 title: "Remove tracker.current from workflow policy"
-updated_at: "2026-06-30T16:46:04.714754960+00:00"
+updated_at: "2026-06-30T18:02:22.267630574+00:00"
 ---
 
 ## Description

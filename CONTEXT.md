@@ -73,6 +73,20 @@
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
+- Base branch: the named integration branch from `branch_policy.base_branch`.
+  It is the repository default target for owner-branch integration unless an
+  explicit mission or epic branch base is recorded by workflow actions.
+- Work branch: the Git branch that owns mutation and review for a branch-owning
+  record. Its canonical name is `<issue_type>/<issue_id>`, such as
+  `epic/atelier-li5h` or `mission/atelier-sszj`; the issue type is the
+  registry key and the issue ID is the canonical record ID.
+- Branch base: the recorded branch/ref and commit from which a work branch was
+  prepared. Review targets, sync, and integration checks use the recorded
+  branch base instead of recomputing a target from the current parent graph.
+- Mission integration branch: an optional mission work branch named
+  `mission/<issue_id>`. It exists only when the mission workflow opts in through
+  explicit validators and branch actions; missions do not implicitly create a
+  hidden branch, and mission scope is still defined by direct `advances` links.
 - Review artifact action: the v1 transition action that opens or links the
   configured review artifact for the branch-owning issue or epic and writes the
   canonical `review` field. It follows the active review mode and must not
@@ -229,8 +243,11 @@
   owner branch; standalone issues and epics use provider terminal actions in
   provider mode or explicit `branch_integrate` in local room mode. Squash merge
   is the default local integration strategy, with repository policy able to
-  select alternatives and branch naming templates. A failed close-time
-  commit or merge must not leave the item closed in the integration branch.
+  select merge alternatives but not configurable branch-name templates. Owner
+  branches use canonical `<issue_type>/<issue_id>` names, and optional mission
+  integration branches are created only by configured workflow actions. A failed
+  close-time commit or merge must not leave the item closed in the integration
+  branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic
   modules under `crates/atelier-cli/src/` are migration input for lower crates,

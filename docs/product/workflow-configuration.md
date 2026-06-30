@@ -20,7 +20,7 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
 | `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
@@ -110,9 +110,6 @@ schema_version: 3
 branch_policy:
   base_branch: master
   merge_strategy: squash
-  branch_templates:
-    epic: epic/{{ issue.id }}
-    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: { label: Bug }
@@ -135,11 +132,20 @@ statuses:
   superseded: { category: done }
 
 workflows:
-  mission_delivery:
+  mission:
     applies_to: [mission]
     initial_status: ready
     done_statuses: [closed, superseded]
     transitions:
+      start:
+        from: [ready]
+        to: in_progress
+        description: "Start coordinated mission work."
+        validators:
+          - git.on_base_branch
+          - git.worktree_clean
+        actions:
+          - branch.prepare
       close:
         from: [ready, in_progress, validation]
         to: closed
@@ -155,11 +161,9 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - tracker.current
-          - git.on_base_branch
           - git.worktree_clean
 
-  task_delivery:
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -182,9 +186,8 @@ workflows:
           - evidence.attached: { min_count: 1 }
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -228,10 +231,9 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -266,10 +268,9 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -300,7 +301,7 @@ workflows:
         description: "Closing requires complete review and current durable state."
         validators:
           - review.complete
-          - tracker.current
+          - git.worktree_clean
 ```
 
 Required top-level fields are `schema`, `schema_version`, `branch_policy`,
@@ -318,21 +319,36 @@ tracker graph rather than duplicated in command handlers:
 - child issues under an epic use the nearest parent epic as branch owner;
 - standalone issues own their issue branch;
 - epics own their epic branch;
+- missions own no branch unless their workflow declares branch validators and
+  actions, in which case they own an opt-in mission integration branch;
 - child issue completion actions commit tracker state on the epic branch and do
   not merge to base; and
-- standalone issue and epic completion actions integrate their owner branch to
-  base when the workflow declares that action.
+- standalone issue, epic, and opt-in mission completion actions integrate their
+  owner branch to the recorded branch base when the workflow declares that
+  action.
 
 | Field | Rule |
 | --- | --- |
 | `base_branch` | Required non-empty Git branch name. |
 | `merge_strategy` | Required. One of `squash`, `merge_commit`, or `fast_forward_only`. |
-| `branch_templates.epic` | Required branch template for epic owners. |
-| `branch_templates.issue` | Required branch template for standalone issue owners. |
 
-Branch templates support only `{{ issue.id }}` and `{{ issue.type }}`. In this
-context, `issue` means the branch owner, not necessarily the child issue being
-started or closed.
+`base_branch` is the named repository integration branch used when no narrower
+recorded branch base applies. It is configuration, not a statement that every
+transition must run from that branch.
+
+A work branch is the owner branch that carries mutation and review for a
+branch-owning record. Work branch names are canonical and are not configurable:
+`<issue_type>/<issue_id>`, for example `mission/atelier-k7mq`,
+`epic/atelier-4p7q`, or `task/atelier-z1p8`. The issue type is the registered
+`issue_types` key and the issue ID is the canonical record ID. Slugs and
+branch templates are rejected target-contract alternatives.
+
+A branch base is the branch/ref and commit recorded when workflow branch
+actions prepare a work branch. Review target validation, provider sync, and
+local integration use the recorded branch base rather than recomputing a target
+from parent hierarchy at close time. A mission integration branch can become the
+recorded branch base for direct work that advances that mission, but only when
+the mission workflow opts in through explicit validators and actions.
 
 ## Issue Types
 
@@ -388,11 +404,11 @@ Starter workflow names are:
 
 | Workflow | Applies to |
 | --- | --- |
-| `mission_delivery` | `mission` |
-| `task_delivery` | `bug`, `feature`, `task` |
-| `epic_delivery` | `epic` |
-| `validation_delivery` | `validation` |
-| `spike_review` | `spike` |
+| `mission` | `mission` |
+| `task` | `bug`, `feature`, `task` |
+| `epic` | `epic` |
+| `validation` | `validation` |
+| `spike` | `spike` |
 
 ## Transitions
 
@@ -505,7 +521,7 @@ Transition validators use namespaced built-in names directly:
 ```yaml
 validators:
   - blockers.none_open
-  - tracker.current
+  - git.worktree_clean
 ```
 
 Parameterized validators use single-key map syntax:
@@ -517,16 +533,17 @@ validators:
 
 There is no top-level validator alias registry. Unknown validators, obsolete
 flat validator names, and invalid params are hard config errors.
-Validators must be read-only. They may inspect canonical records, projection
-freshness, worktree state, evidence, blockers, and review artifacts, but they
-must not write records, create commits, change branches, open reviews, or merge
-anything. Mutating behavior belongs in transition actions.
+Validators must be read-only. They may inspect canonical records, worktree
+state, evidence, blockers, and review artifacts, but they must not write
+records, create commits, change branches, open reviews, or merge anything.
+Mutating behavior belongs in transition actions. Projection freshness is an
+internal command-storage health concern repaired by normal commands or explicit
+diagnostics; it is not a user-configurable workflow validator.
 
 Supported built-ins include:
 
 | Validator | Purpose |
 | --- | --- |
-| `tracker.current` | Canonical state and local projection are current enough for the transition. |
 | `issue.sections_parseable` | Issue Markdown sections can be parsed. |
 | `evidence.attached` | Required evidence is attached; supports `min_count`. |
 | `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |

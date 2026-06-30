@@ -1770,7 +1770,6 @@ workflows:
           - evidence.attached: { min_count: 1 }
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
 
   epic_delivery:
     applies_to: [epic]
@@ -1807,7 +1806,6 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
 
   validation_delivery:
@@ -1843,7 +1841,6 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
 
   spike_review:
@@ -1872,10 +1869,9 @@ workflows:
       close:
         from: [review]
         to: done
-        description: "Closing requires complete review and current durable state."
+        description: "Closing requires complete review."
         validators:
           - review.complete
-          - tracker.current
 "#,
         )
         .unwrap();

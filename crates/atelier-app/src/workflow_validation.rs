@@ -119,19 +119,6 @@ fn evaluate_builtin_with_params(
     params: Option<&ValidatorParams>,
 ) -> Result<(bool, String, Option<String>)> {
     match validator {
-        "tracker.current" => {
-            let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-            let stale = crate::export::canonical_stale_entries(db, &state_dir)?;
-            if stale.is_empty() {
-                Ok((true, "canonical export is current".to_string(), None))
-            } else {
-                Ok((
-                    false,
-                    format!("canonical export is stale: {}", stale.join("; ")),
-                    None,
-                ))
-            }
-        }
         "evidence.attached" => evidence_attached(db, repo_root, target_kind, target_id, params),
         "blockers.none_open" => {
             let open = open_blockers(db, policy, target_kind, target_id)?;
@@ -890,11 +877,6 @@ fn command_surface_current(repo_root: &Path) -> Result<(bool, String)> {
 
 fn baseline_default_checks(db: &Database, repo_root: &Path) -> Result<(bool, String)> {
     let mut failures = Vec::new();
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let stale = crate::export::canonical_stale_entries(db, &state_dir)?;
-    if !stale.is_empty() {
-        failures.push(format!("tracker.current failed: {}", stale.join("; ")));
-    }
     let (lint_passed, lint_reason) = lint_none_blocking(db)?;
     if !lint_passed {
         failures.push(format!("lint.none_blocking failed: {lint_reason}"));
@@ -906,7 +888,7 @@ fn baseline_default_checks(db: &Database, repo_root: &Path) -> Result<(bool, Str
     if failures.is_empty() {
         Ok((
             true,
-            "baseline checks passed: tracker.current, lint.none_blocking, git diff --check; record default test-suite proof or workflow waiver before closeout".to_string(),
+            "baseline checks passed: lint.none_blocking, git diff --check; record default test-suite proof or workflow waiver before closeout".to_string(),
         ))
     } else {
         Ok((
@@ -962,5 +944,34 @@ fn repo_root() -> Result<PathBuf> {
         Ok(Path::new(String::from_utf8_lossy(&output.stdout).trim()).to_path_buf())
     } else {
         Ok(std::env::current_dir()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::baseline_default_checks;
+    use atelier_sqlite::Database;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    #[test]
+    fn baseline_default_checks_do_not_report_projection_freshness() {
+        let repo = tempdir().unwrap();
+        let status = Command::new("git")
+            .arg("init")
+            .current_dir(repo.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let db_dir = tempdir().unwrap();
+        let db = Database::open(&db_dir.path().join("atelier.db")).unwrap();
+        let (passed, reason) = baseline_default_checks(&db, repo.path()).unwrap();
+
+        assert!(passed, "{reason}");
+        assert!(reason.contains("lint.none_blocking"));
+        assert!(reason.contains("git diff --check"));
+        assert!(!reason.contains("tracker.current"));
+        assert!(!reason.contains("projection freshness"));
     }
 }

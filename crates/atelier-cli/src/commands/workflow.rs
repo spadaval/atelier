@@ -1884,39 +1884,28 @@ fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
-        ("issue", "start") => &[
-            "tracker.current",
-            "issue.sections_parseable",
-            "blockers.none_open",
-        ],
+        ("issue", "start") => &["issue.sections_parseable", "blockers.none_open"],
         ("issue", "close") => &[
-            "tracker.current",
             "issue.sections_parseable",
             "blockers.none_open",
             "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
-        ("mission", _) => &[
-            "tracker.current",
-            "issue.sections_parseable",
-            "blockers.none_open",
-        ],
-        ("evidence", _) => &["tracker.current"],
+        ("mission", _) => &["issue.sections_parseable", "blockers.none_open"],
+        ("evidence", _) => &[],
         ("tracker", "health") => &[
-            "tracker.current",
             "lint.none_blocking",
             "command_surface_current",
             "ignored_tests_reviewed",
             "git.worktree_clean",
         ],
-        _ => &["tracker.current"],
+        _ => &[],
     };
     names.iter().map(|name| (*name).to_string()).collect()
 }
 
 pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
     &[
-        "tracker.current",
         "issue.sections_parseable",
         "no_open_work",
         "blockers.none_open",
@@ -2094,9 +2083,9 @@ mod tests {
                 target_kind: "issue".to_string(),
                 target_id: "atelier-test".to_string(),
                 transition: "start".to_string(),
-                validator: "tracker.current".to_string(),
+                validator: "issue.sections_parseable".to_string(),
                 passed,
-                reason: "tracker is current".to_string(),
+                reason: "sections are parseable".to_string(),
                 help: None,
                 elapsed_ms: 1,
             }],
@@ -2122,7 +2111,7 @@ mod tests {
 
         assert!(output.contains("\u{1b}[32mallowed\u{1b}[0m"));
         assert!(output.contains("Decision: \u{1b}[32mallowed\u{1b}[0m"));
-        assert!(output.contains("tracker.current"));
+        assert!(output.contains("issue.sections_parseable"));
     }
 
     #[test]
@@ -2142,7 +2131,7 @@ mod tests {
         assert!(!output.contains("\u{1b}["));
         assert!(output.contains("start [blocked]"));
         assert!(output.contains("Decision: blocked"));
-        assert!(output.contains("fail  tracker.current"));
+        assert!(output.contains("fail  issue.sections_parseable"));
     }
 
     #[test]
@@ -2162,7 +2151,7 @@ mod tests {
         assert!(!output.contains("\u{1b}["));
         assert!(output.contains("start [allowed]"));
         assert!(output.contains("Decision: allowed"));
-        assert!(output.contains("pass  tracker.current"));
+        assert!(output.contains("pass  issue.sections_parseable"));
     }
 
     fn action(name: &str) -> atelier_app::workflow_policy::ActionDefinition {
@@ -2309,16 +2298,11 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
             default_validators("issue", "start"),
-            vec![
-                "tracker.current",
-                "issue.sections_parseable",
-                "blockers.none_open"
-            ]
+            vec!["issue.sections_parseable", "blockers.none_open"]
         );
         assert_eq!(
             default_validators("issue", "close"),
             vec![
-                "tracker.current",
                 "issue.sections_parseable",
                 "blockers.none_open",
                 "evidence.attached"
@@ -2333,12 +2317,11 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         );
         assert_eq!(
             default_validators("evidence", "attach"),
-            vec!["tracker.current"]
+            Vec::<String>::new()
         );
         assert_eq!(
             default_validators("tracker", "health"),
             vec![
-                "tracker.current",
                 "lint.none_blocking",
                 "command_surface_current",
                 "ignored_tests_reviewed",
