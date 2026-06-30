@@ -1835,7 +1835,7 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(child_out.contains(&format!("Started work on {child_id} Child work")));
     assert!(child_out.contains(&format!("Branch owner: epic {epic_id} (epic)")));
-    assert!(child_out.contains(&format!("Effective branch: epic/{epic_id}")));
+    assert!(child_out.contains(&format!("Source branch: epic/{epic_id}")));
     assert!(child_out.contains("Base branch: main"));
     assert!(child_out.contains(&format!(
         "Record proof: atelier evidence record --target issue/{child_id}"
@@ -1860,7 +1860,7 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
         format!("task/{standalone_id}")
     );
     assert!(standalone_out.contains(&format!("Branch owner: issue {standalone_id} (task)")));
-    assert!(standalone_out.contains(&format!("Effective branch: task/{standalone_id}")));
+    assert!(standalone_out.contains(&format!("Source branch: task/{standalone_id}")));
     let (success, standalone_show, stderr) =
         run_atelier(dir.path(), &["issue", "show", &standalone_id]);
     assert!(success, "standalone show failed: {stderr}");
@@ -1929,6 +1929,12 @@ fn test_mission_start_prepares_mission_branch_from_base() {
         start_out.contains(&format!("Branch owner: mission {mission_id} (mission)")),
         "{start_out}"
     );
+    assert!(
+        start_out.contains(&format!("Source branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    assert!(start_out.contains("Base branch: main"), "{start_out}");
+    assert!(start_out.contains("Target branch: main"), "{start_out}");
 }
 
 #[test]
@@ -1984,6 +1990,49 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
             "created branch epic/{epic_id} from mission/{mission_id}"
         )),
         "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Source branch: epic/{epic_id}")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Base branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Target branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    let front_matter = canonical_record_front_matter(dir.path(), "issues", &epic_id);
+    let workflow_branch = &front_matter["fields"]["workflow_branch"];
+    assert_eq!(workflow_branch["owner_issue_id"], epic_id);
+    assert_eq!(workflow_branch["work_branch"], format!("epic/{epic_id}"));
+    assert_eq!(
+        workflow_branch["branch_base"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(
+        workflow_branch["review_target"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(
+        workflow_branch["integration_target"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(workflow_branch["owner_kind"], "epic");
+    assert_eq!(workflow_branch["merge_strategy"], "squash");
+
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after epic start failed: {stderr}");
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "--verbose"]);
+    assert!(success, "transition options after rebuild failed: {stderr}");
+    assert!(
+        options_out.contains(&format!("Source:   epic/{epic_id}"))
+            && options_out.contains(&format!("Base:     mission/{mission_id}"))
+            && options_out.contains(&format!("Target:   mission/{mission_id}")),
+        "{options_out}"
     );
 }
 

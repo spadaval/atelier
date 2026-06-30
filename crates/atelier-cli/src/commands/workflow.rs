@@ -175,8 +175,9 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
             context.resolution.owner_id,
             context.resolution.owner_issue_type
         );
-        println!("Effective branch: {}", context.resolution.expected_branch);
+        println!("Source branch: {}", context.resolution.expected_branch);
         println!("Base branch: {}", context.resolution.base_branch);
+        println!("Target branch: {}", context.resolution.base_branch);
     }
     if let Some(branch) = branch {
         println!("Branch: {branch}");
@@ -345,7 +346,7 @@ fn execute_pre_transition_actions(
     for action in planned_actions {
         match action.name.as_str() {
             "git.prepare_branch" => {
-                let detail = prepare_branch_action(repo_root, issue, action)?;
+                let detail = prepare_branch_action(state_dir, repo_root, issue, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
                     detail,
@@ -428,6 +429,7 @@ fn execute_post_transition_actions(
 }
 
 fn prepare_branch_action(
+    state_dir: &Path,
     repo_root: &Path,
     issue: &Issue,
     action: &PlannedAction,
@@ -435,6 +437,7 @@ fn prepare_branch_action(
     ensure_non_tracker_clean_for_action(repo_root, action, issue, "before workflow transition")?;
     let current = git_current_branch(repo_root).unwrap_or_default();
     if current == action.expected_branch {
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
@@ -445,6 +448,7 @@ fn prepare_branch_action(
                     action.name, action.expected_branch, issue.id
                 )
             })?;
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("checked out branch {}", action.expected_branch));
     }
     ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
@@ -464,10 +468,48 @@ fn prepare_branch_action(
             action.name, action.expected_branch, action.base_branch, issue.id
         )
     })?;
+    persist_workflow_branch_field(state_dir, action)?;
     Ok(format!(
         "created branch {} from {}",
         action.expected_branch, action.base_branch
     ))
+}
+
+fn persist_workflow_branch_field(state_dir: &Path, action: &PlannedAction) -> Result<()> {
+    let mut owner = app_use_cases::load_canonical_issue(state_dir, &action.branch_owner_id)
+        .with_context(|| {
+            format!(
+                "action {} failed while loading branch owner {} to record workflow_branch",
+                action.name, action.branch_owner_id
+            )
+        })?;
+    owner.issue.fields.insert(
+        atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+        serde_json::json!({
+            "owner_issue_id": action.branch_owner_id.clone(),
+            "work_branch": action.expected_branch.clone(),
+            "branch_base": action.base_branch.clone(),
+            "review_target": action.base_branch.clone(),
+            "integration_target": action.base_branch.clone(),
+            "owner_kind": workflow_branch_owner_kind(&owner.issue.issue_type),
+            "merge_strategy": action.merge_strategy.as_str(),
+        }),
+    );
+    owner.issue.updated_at = Utc::now();
+    app_use_cases::write_canonical_issue(state_dir, &owner).with_context(|| {
+        format!(
+            "action {} failed while recording workflow_branch on {}",
+            action.name, action.branch_owner_id
+        )
+    })
+}
+
+fn workflow_branch_owner_kind(issue_type: &str) -> &'static str {
+    match issue_type {
+        "epic" => "epic",
+        "mission" => "mission",
+        _ => "issue",
+    }
 }
 
 fn commit_branch_action(
@@ -851,13 +893,15 @@ fn record_applied_actions(
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_target: {}\nintegration_target: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
                 transition_name,
                 action.name,
                 action.order,
                 action.target_issue_id,
                 action.branch_owner_id,
                 action.expected_branch,
+                action.base_branch,
+                action.base_branch,
                 action.base_branch,
                 action
                     .review_artifact_target
@@ -1644,8 +1688,9 @@ fn render_issue_transition_options(
                 context.resolution.owner_id,
                 context.resolution.owner_issue_type
             ));
-            lines.push(format!("Expected: {}", context.resolution.expected_branch));
+            lines.push(format!("Source:   {}", context.resolution.expected_branch));
             lines.push(format!("Base:     {}", context.resolution.base_branch));
+            lines.push(format!("Target:   {}", context.resolution.base_branch));
             lines.push(format!(
                 "Current:  {}",
                 context.current_branch.as_deref().unwrap_or("(detached)")
@@ -1804,8 +1849,14 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
         .iter()
         .map(|action| {
             let mut line = format!(
-                "{}. {} target={} owner={}",
-                action.order, action.name, action.target_issue_id, action.branch_owner_id
+                "{}. {} target={} owner={} source={} base={} integration_target={}",
+                action.order,
+                action.name,
+                action.target_issue_id,
+                action.branch_owner_id,
+                action.expected_branch,
+                action.base_branch,
+                action.base_branch
             );
             if let Some(review_target) = &action.review_artifact_target {
                 line.push_str(&format!(" review_target={review_target}"));
