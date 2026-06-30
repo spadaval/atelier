@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "git"
 - "workflow"
+review:
+  kind: pull_request
+  number: 37
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-sszj
+    integration_target: mission/atelier-sszj
+    merge_strategy: squash
+    owner_issue_id: atelier-ms7i
+    owner_kind: epic
+    review_target: mission/atelier-sszj
+    work_branch: epic/atelier-ms7i
 priority: "P1"
 relationships:
   blocks:
@@ -18,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T19:04:04.034337511+00:00"
+status: "done"
 title: "Epic: Persist branch base context for workflow branches"
-updated_at: "2026-06-30T16:09:49.593046637+00:00"
+updated_at: "2026-06-30T19:04:04.034337511+00:00"
 ---
 
 ## Description
@@ -37,5 +51,5 @@ Make branch base context durable and use it consistently across transition plann
 ## Evidence
 
 - Tests prove branch base survives process restart or projection rebuild.
-- Transition output shows resolved source and target branches for mission and epic workflows.
+- `cargo test -p atelier-cli --test cli_integration test_epic_start_from_mission_branch_uses_current_branch_base -- --nocapture` verifies transition output shows resolved source and target branches for mission and epic workflows.
 - `target/debug/atelier check atelier-ms7i` passes.
