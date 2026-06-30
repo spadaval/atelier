@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:19:52.233486387+00:00"
+status: "done"
 title: "Remove mission-authored validation and direct-evidence closeout gates"
-updated_at: "2026-06-29T17:39:45.118470075+00:00"
+updated_at: "2026-06-30T15:19:52.233486387+00:00"
 ---
 
 ## Description

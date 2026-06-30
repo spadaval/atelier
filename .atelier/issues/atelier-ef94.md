@@ -6,6 +6,10 @@ labels:
 - "mission"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 34
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -31,9 +35,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Simplify mission validation and closeout"
-updated_at: "2026-06-29T17:47:53.987890864+00:00"
+updated_at: "2026-06-30T15:21:07.767330533+00:00"
 ---
 
 ## Description
