@@ -6,6 +6,10 @@ labels:
 - "git"
 - "review"
 - "workflow"
+review:
+  kind: pull_request
+  number: 40
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-sszj
@@ -26,9 +30,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Execute workflow actions in configured order"
-updated_at: "2026-06-30T19:30:03.813239090+00:00"
+updated_at: "2026-06-30T19:37:46.237481988+00:00"
 ---
 
 ## Description
