@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-30T15:12:07.182262352+00:00"
+status: "done"
 title: "Validate repaired issue list and mission dashboard CLI behavior"
-updated_at: "2026-06-30T15:11:37.929544797+00:00"
+updated_at: "2026-06-30T15:12:07.182262352+00:00"
 ---
 
 ## Description

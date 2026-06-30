@@ -6,6 +6,10 @@ labels:
 - "agent-factory"
 - "planning"
 - "process"
+review:
+  kind: pull_request
+  number: 32
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -29,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Simplify mission planning to target state"
-updated_at: "2026-06-30T03:39:16.349563264+00:00"
+updated_at: "2026-06-30T15:15:49.621930961+00:00"
 ---
 
 ## Description

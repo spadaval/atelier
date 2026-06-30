@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:14:34.249370185+00:00"
+status: "done"
 title: "Add concrete mission outcome examples and vague-plan anti-examples"
-updated_at: "2026-06-29T17:38:53.597532851+00:00"
+updated_at: "2026-06-30T15:14:34.249370185+00:00"
 ---
 
 ## Description
