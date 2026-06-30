@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "git"
 - "workflow"
+review:
+  kind: pull_request
+  number: 36
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -18,9 +22,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Implement Git workflow validators and actions for mission branches"
-updated_at: "2026-06-30T18:16:15.021238490+00:00"
+updated_at: "2026-06-30T18:28:58.505132698+00:00"
 ---
 
 ## Description
