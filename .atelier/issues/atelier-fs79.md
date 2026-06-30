@@ -6,6 +6,10 @@ labels:
 - "git"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 41
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
@@ -29,9 +33,9 @@ relationships:
     type: "validates"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate mission integration branch workflow end to end"
-updated_at: "2026-06-30T20:12:23.029549+00:00"
+updated_at: "2026-06-30T20:16:09.220374920+00:00"
 ---
 
 ## Description
