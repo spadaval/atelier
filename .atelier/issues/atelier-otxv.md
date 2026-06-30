@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "git"
 - "review"
+review:
+  kind: pull_request
+  number: 38
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-sszj
@@ -27,9 +31,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Retarget review and sync to recorded branch bases"
-updated_at: "2026-06-30T19:05:36.427391438+00:00"
+updated_at: "2026-06-30T19:10:14.086118458+00:00"
 ---
 
 ## Description
