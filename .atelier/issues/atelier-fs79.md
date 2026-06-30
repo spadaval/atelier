@@ -31,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Validate mission integration branch workflow end to end"
-updated_at: "2026-06-30T19:44:45.852954285+00:00"
+updated_at: "2026-06-30T20:12:23.029549+00:00"
 ---
 
 ## Description
