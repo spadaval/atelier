@@ -892,8 +892,21 @@ fn write_branch_action_workflow(dir: &Path) {
         "          - lint.none_blocking\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",
     );
     workflow = workflow.replace(
-        "          - tracker.commit\n          - branch.push\n          - review.merge\n          - base.sync",
+        "          - tracker.commit\n          - git.push\n          - review.merge\n          - git.sync",
         "          - tracker.commit\n          - branch_integrate",
+    );
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
+}
+
+fn write_mission_branch_workflow(dir: &Path) {
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
+    workflow = workflow.replace(
+        "      start:\n        from: [ready]\n        to: in_progress\n        description: \"Start mission execution after the configured repository baseline is green or explicitly waived.\"\n        validators:\n          - baseline.default_checks",
+        "      start:\n        from: [ready]\n        to: in_progress\n        description: \"Start mission execution after the configured repository baseline is green or explicitly waived.\"\n        validators:\n          - baseline.default_checks\n          - git.on_base\n        actions:\n          - git.prepare_branch",
+    );
+    workflow = workflow.replace(
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base\n        actions:\n          - git.prepare_branch",
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_mission_branch\n        actions:\n          - git.prepare_branch: current",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

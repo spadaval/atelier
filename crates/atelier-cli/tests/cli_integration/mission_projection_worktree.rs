@@ -688,10 +688,7 @@ fn test_off_base_branch_blocks_mission_closeout() {
     );
     assert!(!success, "mission close must require the base branch");
     assert!(stdout.contains("Issue Transition"), "{stdout}");
-    assert!(
-        stdout.contains("validator git.on_base_branch failed"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("validator git.on_base failed"), "{stdout}");
     assert!(
         stdout.contains("current branch is side-closeout; expected configured base branch main"),
         "{stdout}"
@@ -1860,10 +1857,10 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
     assert!(success, "standalone start failed: {stderr}");
     assert_eq!(
         git_current_branch(dir.path()),
-        format!("codex/{standalone_id}")
+        format!("task/{standalone_id}")
     );
     assert!(standalone_out.contains(&format!("Branch owner: issue {standalone_id} (task)")));
-    assert!(standalone_out.contains(&format!("Effective branch: codex/{standalone_id}")));
+    assert!(standalone_out.contains(&format!("Effective branch: task/{standalone_id}")));
     let (success, standalone_show, stderr) =
         run_atelier(dir.path(), &["issue", "show", &standalone_id]);
     assert!(success, "standalone show failed: {stderr}");
@@ -1886,6 +1883,173 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
     let (success, epic_show, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
     assert!(success, "epic show failed: {stderr}");
     assert!(epic_show.contains("Status:   in_progress"), "{epic_show}");
+}
+
+#[test]
+fn test_mission_start_prepares_mission_branch_from_base() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Integration mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Integration mission");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "mission branch baseline");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+    assert!(
+        start_out.contains("Action:   git.prepare_branch"),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("created branch mission/{mission_id} from main")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Branch owner: mission {mission_id} (mission)")),
+        "{start_out}"
+    );
+}
+
+#[test]
+fn test_epic_start_from_mission_branch_uses_current_branch_base() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Scoped mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Scoped mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Scoped epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Scoped epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "mission scoped baseline");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "mission branch started");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic start from mission branch failed: {stderr}");
+
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains("Action:   git.prepare_branch"),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!(
+            "created branch epic/{epic_id} from mission/{mission_id}"
+        )),
+        "{start_out}"
+    );
+}
+
+#[test]
+fn test_epic_start_rejects_wrong_branch_for_mission_scope() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Wrong branch mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Wrong branch mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Wrong branch epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Wrong branch epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "wrong branch baseline");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "-c", "side-start"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git switch -c side-start failed");
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+
+    assert!(!success, "epic start should reject non-mission branch");
+    let output = format!("{stdout}\n{stderr}");
+    assert!(output.contains("git.on_mission_branch"), "{output}");
+    assert!(
+        output.contains(&format!(
+            "current branch is side-start; expected mission/<id> for issue {epic_id}"
+        )),
+        "{output}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "side-start");
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
+    assert!(success, "epic show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
 }
 
 #[test]
@@ -1937,7 +2101,7 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
     commit_all(dir.path(), "initial tracker state");
     let other_dir = tempdir().unwrap();
     let other_worktree = other_dir.path().join("other-worktree");
-    let expected_branch = format!("codex/{issue_id}");
+    let expected_branch = format!("task/{issue_id}");
     let status = Command::new("git")
         .current_dir(dir.path())
         .args(["worktree", "add", "-b", &expected_branch])
@@ -1954,7 +2118,7 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
         "checkout-failure start unexpectedly succeeded:\n{stdout}"
     );
     assert!(
-        stderr.contains("action branch.prepare failed while switching")
+        stderr.contains("action git.prepare_branch failed while switching")
             && stderr.contains("retry `atelier issue transition")
             && stderr.contains("start`"),
         "{stderr}"
@@ -1996,7 +2160,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     assert!(success, "epic action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch.prepare"),
+        start_out.contains("Action:   git.prepare_branch"),
         "{start_out}"
     );
 
@@ -2072,7 +2236,7 @@ fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
     assert!(success, "child action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch.prepare"),
+        start_out.contains("Action:   git.prepare_branch"),
         "{start_out}"
     );
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
@@ -2105,7 +2269,7 @@ fn test_epic_start_requires_base_branch() {
         run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
     assert!(!success, "epic start must require the base branch");
     let output = format!("{stdout}\n{stderr}");
-    assert!(output.contains("git.on_base_branch"), "{output}");
+    assert!(output.contains("git.on_base"), "{output}");
     assert!(
         output.contains("current branch is side-start; expected configured base branch main"),
         "{output}"
@@ -2153,7 +2317,7 @@ fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
     commit_all(dir.path(), "main branch conflict content");
     let status = Command::new("git")
         .current_dir(dir.path())
-        .args(["switch", &format!("codex/{issue_id}")])
+        .args(["switch", &format!("task/{issue_id}")])
         .status()
         .unwrap();
     assert!(status.success(), "switch back to issue branch failed");
@@ -2179,7 +2343,7 @@ fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
             && stderr.contains(&format!("transition for {issue_id}")),
         "{stderr}"
     );
-    assert_eq!(git_current_branch(dir.path()), format!("codex/{issue_id}"));
+    assert_eq!(git_current_branch(dir.path()), format!("task/{issue_id}"));
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed after action rollback: {stderr}");
     assert!(show_out.contains("Status:   in_progress"), "{show_out}");
@@ -2301,7 +2465,7 @@ fn test_standalone_issue_close_squash_merges_to_base() {
     );
     let main_log = git_log_oneline(dir.path(), "main", 2);
     assert!(
-        main_log.contains(&format!("Squash merge codex/{issue_id} into main")),
+        main_log.contains(&format!("Squash merge task/{issue_id} into main")),
         "{main_log}"
     );
     assert!(

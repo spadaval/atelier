@@ -86,7 +86,7 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
 
   task_delivery:
@@ -99,7 +99,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -127,9 +127,9 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_base
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -170,7 +170,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -211,7 +211,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -254,15 +254,16 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "lint.none_blocking",
     "command_surface_current",
     "ignored_tests_reviewed",
-    "git.on_base_branch",
+    "git.on_base",
+    "git.on_mission_branch",
     "git.worktree_clean",
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
-    "branch.prepare",
+    "git.prepare_branch",
     "tracker.commit",
-    "branch.push",
+    "git.push",
     "review.merge",
-    "base.sync",
+    "git.sync",
     "branch_integrate",
     "review.open",
 ];
@@ -348,6 +349,7 @@ impl MergeStrategy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BranchOwnerKind {
     Epic,
+    Mission,
     StandaloneIssue,
 }
 
@@ -411,7 +413,19 @@ pub enum ValidatorParams {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionParams {
+    GitPrepareBranch(GitPrepareBranchActionParams),
     ReviewArtifact(ReviewArtifactActionParams),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitPrepareBranchActionParams {
+    pub base: GitPrepareBranchBase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitPrepareBranchBase {
+    Configured,
+    Current,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -535,11 +549,18 @@ impl WorkflowPolicy {
         owner: &Issue,
         owner_kind: &BranchOwnerKind,
     ) -> Result<String> {
-        let template = match owner_kind {
-            BranchOwnerKind::Epic => &self.branch_policy.branch_templates.epic,
-            BranchOwnerKind::StandaloneIssue => &self.branch_policy.branch_templates.issue,
+        let branch = match owner_kind {
+            BranchOwnerKind::Epic => format!("epic/{}", owner.id),
+            BranchOwnerKind::Mission => format!("mission/{}", owner.id),
+            BranchOwnerKind::StandaloneIssue => format!("{}/{}", owner.issue_type, owner.id),
         };
-        render_branch_template(template, owner)
+        validate_branch_value(
+            &branch,
+            WORKFLOW_POLICY_PATH,
+            "branch_policy",
+            "canonical branch name",
+        )?;
+        Ok(branch)
     }
 }
 
@@ -1547,6 +1568,42 @@ fn parse_transition_action_params(
         });
     }
 
+    if name == "git.prepare_branch" {
+        let base = match params {
+            None => GitPrepareBranchBase::Configured,
+            Some(Value::String(value)) if value == "current" => GitPrepareBranchBase::Current,
+            Some(Value::Mapping(mapping)) if mapping.is_empty() => GitPrepareBranchBase::Configured,
+            Some(Value::String(value)) => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    &field,
+                    format!(
+                        "built-in action '{}' only accepts scalar param 'current', got '{}'",
+                        name, value
+                    ),
+                ));
+            }
+            Some(_) => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    &field,
+                    format!(
+                        "built-in action '{}' only accepts scalar param 'current' or an empty mapping",
+                        name
+                    ),
+                ));
+            }
+        };
+        return Ok(ActionDefinition {
+            builtin: name.to_string(),
+            params: Some(ActionParams::GitPrepareBranch(
+                GitPrepareBranchActionParams { base },
+            )),
+        });
+    }
+
     if let Some(params) = params {
         let params = params.as_mapping().ok_or_else(|| {
             policy_error_with_field(
@@ -2249,17 +2306,6 @@ fn validate_branch_value(value: &str, display_path: &str, field: &str, kind: &st
     Ok(())
 }
 
-fn render_branch_template(template: &str, issue: &Issue) -> Result<String> {
-    let branch = render_branch_template_with(template, &issue.id, &issue.issue_type)?;
-    validate_branch_value(
-        &branch,
-        WORKFLOW_POLICY_PATH,
-        "branch_policy.branch_templates",
-        "rendered branch name",
-    )?;
-    Ok(branch)
-}
-
 fn render_branch_template_with(template: &str, issue_id: &str, issue_type: &str) -> Result<String> {
     let mut rendered = String::new();
     let mut rest = template;
@@ -2486,7 +2532,7 @@ mod tests {
         );
         assert_eq!(
             validator_names(&policy.workflows["epic_delivery"].transitions["start"].validators),
-            vec!["git.on_base_branch"]
+            vec!["git.on_base"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
@@ -2600,13 +2646,62 @@ mod tests {
     fn accepts_empty_action_param_object() {
         let policy = valid_policy().replace(
             "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - branch.prepare: {}",
+            "        actions:\n          - git.prepare_branch: {}",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
-            vec!["branch.prepare"]
+            vec!["git.prepare_branch"]
         );
+    }
+
+    #[test]
+    fn accepts_git_prepare_branch_current_scalar_param() {
+        let policy = valid_policy().replace(
+            "        actions:\n          - review.open: { role: worker }",
+            "        actions:\n          - git.prepare_branch: current",
+        );
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+
+        assert_eq!(action.builtin, "git.prepare_branch");
+        assert_eq!(
+            action.params.as_ref(),
+            Some(&ActionParams::GitPrepareBranch(
+                GitPrepareBranchActionParams {
+                    base: GitPrepareBranchBase::Current,
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn rejects_git_prepare_branch_unknown_scalar_param() {
+        let policy = valid_policy().replace(
+            "        actions:\n          - review.open: { role: worker }",
+            "        actions:\n          - git.prepare_branch: mission",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("current"));
+        assert!(error.contains("mission"));
+    }
+
+    #[test]
+    fn rejects_obsolete_git_action_names() {
+        for obsolete in ["branch.prepare", "branch.push", "base.sync"] {
+            let policy =
+                valid_policy().replace(review_action_line(), &format!("          - {obsolete}"));
+            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("workflow_config_invalid_action"));
+            assert!(error.contains(obsolete));
+        }
     }
 
     #[test]
@@ -2829,7 +2924,7 @@ mod tests {
             .branch_name_for_owner(&issue, &BranchOwnerKind::StandaloneIssue)
             .unwrap();
 
-        assert_eq!(branch, "work/task/atelier-abc1");
+        assert_eq!(branch, "task/atelier-abc1");
     }
 
     #[test]
@@ -2901,6 +2996,7 @@ mod tests {
             ("no_open_blockers", "blockers.none_open"),
             ("no_blocking_lints", "lint.none_blocking"),
             ("git_worktree_clean", "git.worktree_clean"),
+            ("git.on_base_branch", "git.on_base"),
         ];
 
         for (obsolete, _) in obsolete_names {

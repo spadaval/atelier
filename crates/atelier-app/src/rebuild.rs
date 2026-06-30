@@ -1781,7 +1781,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_base
       block:
         from: [todo, in_progress, review, validation]
         to: blocked

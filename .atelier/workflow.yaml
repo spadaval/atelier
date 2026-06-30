@@ -60,6 +60,9 @@ workflows:
         description: "Start mission execution after the configured repository baseline is green or explicitly waived."
         validators:
           - baseline.default_checks
+          - git.on_base
+        actions:
+          - git.prepare_branch
       close:
         from: [ready, in_progress, validation]
         to: closed
@@ -75,7 +78,7 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base_branch
+          - git.on_base
           - git.worktree_clean
 
   task_delivery:
@@ -88,7 +91,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -113,9 +116,9 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         validators:
-          - git.on_base_branch
+          - git.on_mission_branch
         actions:
-          - branch.prepare
+          - git.prepare_branch: current
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -151,9 +154,9 @@ workflows:
           - git.worktree_clean
         actions:
           - tracker.commit
-          - branch.push
+          - git.push
           - review.merge
-          - base.sync
+          - git.sync
 
   validation_delivery:
     applies_to: [validation]
@@ -165,7 +168,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -201,9 +204,9 @@ workflows:
           - git.worktree_clean
         actions:
           - tracker.commit
-          - branch.push
+          - git.push
           - review.merge
-          - base.sync
+          - git.sync
 
   spike_review:
     applies_to: [spike]
@@ -215,7 +218,7 @@ workflows:
         to: in_progress
         description: "Start active work on this item."
         actions:
-          - branch.prepare
+          - git.prepare_branch
       block:
         from: [todo, in_progress, review]
         to: blocked

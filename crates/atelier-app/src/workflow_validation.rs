@@ -140,7 +140,10 @@ fn evaluate_builtin_with_params(
                 ))
             }
         }
-        "git.on_base_branch" => git_on_base_branch(repo_root, policy).map(without_validator_help),
+        "git.on_base" => git_on_base_branch(repo_root, policy).map(without_validator_help),
+        "git.on_mission_branch" => {
+            git_on_mission_branch(db, repo_root, target_kind, target_id).map(without_validator_help)
+        }
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
         "lint.none_blocking" => lint_none_blocking(db).map(without_validator_help),
         "ignored_tests_reviewed" => ignored_tests_reviewed(repo_root).map(without_validator_help),
@@ -849,6 +852,58 @@ fn git_on_base_branch(repo_root: &Path, policy: &WorkflowPolicy) -> Result<(bool
             false,
             format!("detached HEAD; expected configured base branch {expected}"),
         )),
+    }
+}
+
+fn git_on_mission_branch(
+    db: &Database,
+    repo_root: &Path,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            false,
+            format!("mission branch validator only applies to issue targets, got {target_kind}"),
+        ));
+    }
+    let Some(current) = current_git_branch(repo_root)? else {
+        return Ok((
+            false,
+            format!("detached HEAD; expected mission branch for issue {target_id}"),
+        ));
+    };
+    let Some(mission_id) = current.strip_prefix("mission/") else {
+        return Ok((
+            false,
+            format!("current branch is {current}; expected mission/<id> for issue {target_id}"),
+        ));
+    };
+    let mission = db.get_issue(mission_id)?;
+    if !mission
+        .as_ref()
+        .is_some_and(|issue| issue.issue_type == "mission")
+    {
+        return Ok((
+            false,
+            format!("current branch {current} does not name a mission issue"),
+        ));
+    }
+    let scoped = crate::objective_graph::mission_issue_ids(db, mission_id)?;
+    if scoped.contains(target_id) {
+        Ok((
+            true,
+            format!(
+                "current branch {current} scopes issue {target_id} through mission {mission_id}"
+            ),
+        ))
+    } else {
+        Ok((
+            false,
+            format!(
+                "current branch {current} scopes mission {mission_id}, but issue {target_id} is not linked by advances or descendants"
+            ),
+        ))
     }
 }
 

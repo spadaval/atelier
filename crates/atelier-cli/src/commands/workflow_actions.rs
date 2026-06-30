@@ -12,8 +12,8 @@ pub(crate) fn action_preflight_blockers(
     planned_actions
         .iter()
         .filter_map(|action| match action.name.as_str() {
-            "branch.prepare" => branch_prepare_preflight(repo_root, action),
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
+            "git.prepare_branch" => branch_prepare_preflight(repo_root, action),
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync"
             | "branch_integrate" => branch_post_action_preflight(repo_root, action),
             "review.open" => review_open_preflight(repo_root, action),
             other => Some(format!(
@@ -98,7 +98,7 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
 }
 
 fn provider_action_names(name: &str) -> bool {
-    matches!(name, "branch.push" | "review.merge" | "base.sync")
+    matches!(name, "git.push" | "review.merge" | "git.sync")
 }
 
 fn review_config_is_provider(repo_root: &Path) -> bool {
