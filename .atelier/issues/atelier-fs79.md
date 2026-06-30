@@ -6,6 +6,19 @@ labels:
 - "git"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 41
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-fs79
+    owner_kind: issue
+    review_target: master
+    work_branch: validation/atelier-fs79
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +33,10 @@ relationships:
     type: "validates"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T20:18:12.942829369+00:00"
+status: "done"
 title: "Validate mission integration branch workflow end to end"
-updated_at: "2026-06-30T16:10:07.073285491+00:00"
+updated_at: "2026-06-30T20:18:12.942829369+00:00"
 ---
 
 ## Description
