@@ -28,9 +28,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-30T20:10:58.986285267+00:00"
+status: "done"
 title: "Fix mission integration validation fallout"
-updated_at: "2026-06-30T19:55:16.814647189+00:00"
+updated_at: "2026-06-30T20:10:58.986285267+00:00"
 ---
 
 ## Description
