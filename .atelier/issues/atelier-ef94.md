@@ -35,9 +35,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-30T15:21:30.419033764+00:00"
+status: "done"
 title: "Epic: Simplify mission validation and closeout"
-updated_at: "2026-06-30T15:21:07.767330533+00:00"
+updated_at: "2026-06-30T15:21:30.419033764+00:00"
 ---
 
 ## Description
