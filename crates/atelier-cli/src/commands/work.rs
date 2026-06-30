@@ -181,6 +181,20 @@ pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn missions(db: &Database, quiet: bool) -> Result<()> {
+    crate::commands::issue::list_with_title(
+        db,
+        "Missions",
+        Some("all"),
+        None,
+        Some("mission"),
+        None,
+        None,
+        false,
+        quiet,
+    )
+}
+
 fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
     let rows = match bucket {
         "ready" => &buckets.ready,

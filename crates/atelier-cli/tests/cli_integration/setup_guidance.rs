@@ -1269,7 +1269,9 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
     assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("tracker.current"));
+    assert!(docs.contains("Projection freshness is an"));
+    assert!(docs.contains("internal command-storage health concern"));
+    assert!(!docs.contains("| `tracker.current` |"));
 }
 
 #[test]

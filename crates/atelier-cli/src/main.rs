@@ -50,6 +50,7 @@ Common commands:
   atelier status
   atelier work ready
   atelier work blocked
+  atelier work missions
   atelier issue list
   atelier work mission <mission-id>
   atelier work epic <epic-id>
@@ -338,6 +339,8 @@ enum WorkCommands {
     Active,
     /// Show all operational work buckets
     All,
+    /// List mission records by issue_type
+    Missions,
 }
 
 #[derive(Subcommand)]
@@ -858,6 +861,7 @@ fn run() -> Result<()> {
                 Some(WorkCommands::Blocked) => commands::work::list(storage.db(), "blocked", quiet),
                 Some(WorkCommands::Active) => commands::work::list(storage.db(), "active", quiet),
                 Some(WorkCommands::All) => commands::work::list(storage.db(), "all", quiet),
+                Some(WorkCommands::Missions) => commands::work::missions(storage.db(), quiet),
             }
         }
 
@@ -1339,6 +1343,7 @@ fn command_identity(command: &Commands) -> &'static str {
             Some(WorkCommands::Blocked) => "work blocked",
             Some(WorkCommands::Active) => "work active",
             Some(WorkCommands::All) => "work all",
+            Some(WorkCommands::Missions) => "work missions",
         },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",

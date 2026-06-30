@@ -86,7 +86,6 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - tracker.current
           - git.on_base_branch
           - git.worktree_clean
 
@@ -114,7 +113,6 @@ workflows:
           - evidence.attached: { min_count: 1 }
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
         actions:
           - tracker.commit
           - branch_integrate
@@ -157,7 +155,6 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
         actions:
           - tracker.commit
@@ -199,7 +196,6 @@ workflows:
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - tracker.current
           - git.worktree_clean
         actions:
           - tracker.commit
@@ -233,10 +229,9 @@ workflows:
       close:
         from: [review]
         to: done
-        description: "Closing requires complete review and current durable state."
+        description: "Closing requires complete review."
         validators:
           - review.complete
-          - tracker.current
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -244,7 +239,6 @@ const WORKFLOW_SCHEMA: &str = "atelier.workflow";
 const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
-    "tracker.current",
     "issue.sections_parseable",
     "evidence.attached",
     "review.complete",
@@ -2681,6 +2675,25 @@ mod tests {
     }
 
     #[test]
+    fn starter_policy_does_not_expose_projection_freshness_validator() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        for (workflow_name, workflow) in &policy.workflows {
+            for (transition_name, transition) in &workflow.transitions {
+                let validator_names = transition
+                    .validators
+                    .iter()
+                    .map(|validator| validator.builtin.as_str())
+                    .collect::<Vec<_>>();
+                assert!(
+                    !validator_names.contains(&"tracker.current"),
+                    "unexpected tracker.current validator for {workflow_name}.{transition_name}: {validator_names:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn validates_review_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
@@ -2859,6 +2872,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_removed_tracker_current_validator() {
+        let error = parse_policy_text(
+            &valid_policy().replace(
+                "          - blockers.none_open\n",
+                "          - blockers.none_open\n          - tracker.current\n",
+            ),
+            WORKFLOW_POLICY_PATH,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("workflow_config_invalid_validator"));
+        assert!(error.contains("tracker.current"));
+    }
+
+    #[test]
     fn rejects_obsolete_flat_validator_names() {
         let obsolete_names = [
             ("evidence_attached", "evidence.attached"),
@@ -2872,7 +2901,6 @@ mod tests {
             ("no_open_blockers", "blockers.none_open"),
             ("no_blocking_lints", "lint.none_blocking"),
             ("git_worktree_clean", "git.worktree_clean"),
-            ("durable_state_current", "tracker.current"),
         ];
 
         for (obsolete, _) in obsolete_names {

@@ -3,7 +3,10 @@
 ## Status
 
 Accepted. Supersedes
-[ADR 0012](0012-explicit-workflow-transition-effects.md).
+[ADR 0012](0012-explicit-workflow-transition-effects.md). Updated by
+[ADR 0016](0016-canonical-work-branches-and-mission-integration.md) for
+canonical work branch names, branch base terminology, and opt-in mission
+integration branches.
 
 ## Context
 
@@ -35,22 +38,30 @@ context is computed from the work graph plus repository branch policy.
    do not mutate records, branches, review artifacts, or providers.
 
 3. Branch operations are transition actions.
-   Workflow branch policy defines the base branch, merge strategy, and branch
-   naming templates. The workflow engine derives the owner branch from the
-   work graph: child issues use the nearest parent epic branch, standalone
-   issues use an issue branch, and epics use an epic branch. Branch mutation is
-   still explicit transition work, not a separate branch lifecycle surface:
-   actions prepare an owner branch when needed, commit transition tracker state
-   on that owner branch, or integrate the owner branch to base when the
-   declaring transition says to do so.
+   Workflow branch policy defines the base branch and merge strategy, while
+   work branch names use the canonical `<issue_type>/<issue_id>` form. The
+   workflow engine derives the owner branch from the work graph: child issues
+   use the nearest parent epic branch, standalone issues use an issue-type
+   branch, epics use an epic branch, and missions use a mission integration
+   branch only when configured actions opt in. Branch mutation is still
+   explicit transition work, not a separate branch lifecycle surface: actions
+   prepare an owner branch when needed, commit transition tracker state on that
+   owner branch, or integrate the owner branch to its recorded branch base when
+   the declaring transition says to do so.
 
 4. The v1 built-in action families are exact and closed.
    Version 1 recognizes only these configured action families:
    - `branch.prepare`: create or check out the workflow-derived owner branch.
-   - `branch_commit`: commit the transition's canonical tracker changes on the
+   - `tracker.commit`: commit the transition's canonical tracker changes on the
      workflow-derived owner branch.
-   - `branch_integrate`: integrate the owner branch to the configured base
-     branch using the configured merge strategy.
+   - `branch.push`: push the workflow-derived owner branch to the configured
+     review provider remote.
+   - `review.merge`: ask the active review authority to merge or record merge
+     completion for the branch owner's review artifact.
+   - `base.sync`: synchronize the local base branch after provider-owned merge
+     completion.
+   - `branch_integrate`: integrate the owner branch to its recorded branch base
+     using the configured merge strategy for local review-room workflows only.
    - `review.open`: open or reuse the branch owner's configured review
      artifact and write the canonical `review` field.
 

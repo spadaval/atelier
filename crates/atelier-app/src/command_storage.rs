@@ -201,7 +201,11 @@ fn projection_validation_error(error: anyhow::Error, prefix: &str) -> anyhow::Er
 }
 
 fn looks_like_schema_drift(detail: &str) -> bool {
-    detail.contains("Unsupported schema") || detail.contains("Unsupported schema_version")
+    detail.contains("Unsupported schema")
+        || detail.contains("Unsupported schema_version")
+        || detail.contains("project_config_parse_error")
+        || detail.contains("workflow_config_invalid")
+        || detail.contains("unknown field")
 }
 
 pub fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
@@ -235,7 +239,7 @@ pub fn canonical_mutation_db() -> Result<Database> {
 
 #[cfg(test)]
 mod tests {
-    use super::CommandStorageAccess;
+    use super::{looks_like_schema_drift, CommandStorageAccess};
 
     #[test]
     fn access_modes_declare_projection_freshness_policy() {
@@ -247,5 +251,19 @@ mod tests {
         assert!(!CommandStorageAccess::ProjectionQuery.allows_degraded_projection());
         assert!(CommandStorageAccess::DegradedProjectionQuery.allows_degraded_projection());
         assert!(!CommandStorageAccess::CanonicalMutation.allows_degraded_projection());
+    }
+
+    #[test]
+    fn schema_drift_detection_covers_config_and_workflow_errors() {
+        assert!(looks_like_schema_drift(
+            "project_config_parse_error: .atelier/config.toml: unknown field `admin_token_env`"
+        ));
+        assert!(looks_like_schema_drift(
+            "workflow_config_invalid_validator: unsupported built-in validator"
+        ));
+        assert!(looks_like_schema_drift("Unsupported schema_version 99"));
+        assert!(!looks_like_schema_drift(
+            "canonical issue record is missing required section"
+        ));
     }
 }

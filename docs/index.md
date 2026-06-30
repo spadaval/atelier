@@ -33,6 +33,10 @@
   accepted choice that transition actions replace effects, branch mutation is
   declared transition work, and v1 rejects generic capabilities, separate
   branch lifecycles, mission-only branching, and arbitrary hooks.
+- [docs/adr/0016-canonical-work-branches-and-mission-integration.md](adr/0016-canonical-work-branches-and-mission-integration.md):
+  accepted choice that work branch names use `<issue_type>/<issue_id>`,
+  mission integration branches are opt-in through workflow policy, branch base
+  is recorded context, and projection freshness is not workflow policy.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required

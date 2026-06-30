@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "git"
 - "workflow"
+review:
+  kind: pull_request
+  number: 35
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -26,9 +30,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Define mission integration branch workflow contract"
-updated_at: "2026-06-30T16:46:04.719516036+00:00"
+updated_at: "2026-06-30T18:06:19.475338896+00:00"
 ---
 
 ## Description
