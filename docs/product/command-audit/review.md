@@ -39,6 +39,21 @@ Refine `review open` before adding more provider-specific flags. Routine review
 creation should use issue and branch context; fully manual branch/title/body
 forms belong in recovery guidance if they remain necessary.
 
+## Complexity Budget
+
+`review` is over budget if it mirrors every provider operation as a first-class
+Atelier verb. Keep the review artifact job, but collapse submit-like actions
+where possible and infer issue, branch, title, body, and provider context from
+workflow state.
+
+Budget pressure:
+
+- `review open` should not require routine manual provider plumbing.
+- `review status` should fold into `review show` if the concise default can
+  answer the status question.
+- `review comment`, `review approve`, and `review request-changes` should be
+  considered for one submit-style owner unless separate verbs prove clearer.
+
 ## Human Output Debt
 
 Review output should make the review authority and state obvious before showing

@@ -99,10 +99,10 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     print_mission_heading("Next Commands");
     if let Some(row) = rows.first() {
-        println!("  atelier mission status {}", row.record.id);
+        println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier issue list --status all");
-    println!("  atelier issue list --ready");
+    println!("  atelier work queue --all");
+    println!("  atelier work queue --ready");
     Ok(())
 }
 
@@ -225,7 +225,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         }
         if let Some(blocked) = summary.blocked_work.first() {
             println!(
-                "  Inspect blockers: atelier issue blocked {}",
+                "  Inspect blockers: atelier issue show {}",
                 blocked.issue.id
             );
         }
@@ -326,9 +326,9 @@ fn print_status_next_commands(
         }
         _ => {
             println!(
-            "  Refresh mission status (current blockers and terminal checks): atelier mission status {}",
-                mission.id
-            );
+            "  Refresh mission status (current blockers and terminal checks): atelier issue show {}",
+            mission.id
+        );
         }
     }
     if terminal.ready() {
@@ -338,7 +338,7 @@ fn print_status_next_commands(
         );
     } else {
         println!(
-            "  Inspect terminal check detail: atelier mission status {} --verbose",
+            "  Inspect terminal check detail: atelier issue transition {}",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -554,7 +554,7 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier mission status {} --verbose", mission.id);
+    println!("  atelier issue transition {}", mission.id);
     println!("  atelier check");
     Ok(())
 }
@@ -712,7 +712,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier mission status {mission}",
+            "atelier issue show {mission}",
         )),
         "objective.work_present" => Some((
             "Linked Work",
@@ -724,13 +724,13 @@ fn terminal_validator_user_text(
             "Linked Work Terminal",
             "closed",
             "open",
-            "atelier mission status {mission}",
+            "atelier issue show {mission}",
         )),
         "objective.blockers_none_open" => Some((
             "Direct Objective Blockers",
             "clear",
             "open",
-            "atelier issue blocked {mission}",
+            "atelier issue show {mission}",
         )),
         "git.worktree_clean" => Some((
             "Checkout",
@@ -743,45 +743,9 @@ fn terminal_validator_user_text(
             "Additional Terminal Check",
             "passed",
             "failed",
-            "atelier mission status {mission}",
+            "atelier issue transition {mission}",
         )),
     }
-}
-
-pub(crate) fn mission_validation_criteria_gate(
-    db: &Database,
-    mission_id: &str,
-) -> Result<(bool, String)> {
-    let approval = mission_workflow_approval(db, mission_id)?;
-    if approval.is_empty() {
-        return Ok((
-            true,
-            "no explicit linked terminal validation work requires workflow approval".to_string(),
-        ));
-    }
-    if approval.open.is_empty() && approval.blocked.is_empty() {
-        return Ok((
-            true,
-            format!(
-                "workflow approval complete via linked terminal validation work: {}",
-                compact_strings(&approval.issue_ids())
-            ),
-        ));
-    }
-    let mut pending = approval
-        .open
-        .iter()
-        .map(|issue| issue.id.clone())
-        .collect::<Vec<_>>();
-    pending.extend(approval.blocked.iter().map(|issue| issue.id.clone()));
-    pending.sort();
-    Ok((
-        false,
-        format!(
-            "workflow approval is still pending on linked terminal validation work: {}",
-            compact_strings(&pending)
-        ),
-    ))
 }
 
 fn validating_evidence_records(
@@ -818,56 +782,6 @@ fn validating_evidence_ids(
         .into_iter()
         .map(|record| record.id)
         .collect())
-}
-
-#[derive(Default)]
-struct MissionWorkflowApproval {
-    done: Vec<Issue>,
-    open: Vec<Issue>,
-    blocked: Vec<Issue>,
-}
-
-impl MissionWorkflowApproval {
-    fn is_empty(&self) -> bool {
-        self.done.is_empty() && self.open.is_empty() && self.blocked.is_empty()
-    }
-
-    fn issue_ids(&self) -> Vec<String> {
-        let mut ids = self
-            .done
-            .iter()
-            .chain(self.open.iter())
-            .chain(self.blocked.iter())
-            .map(|issue| issue.id.clone())
-            .collect::<Vec<_>>();
-        ids.sort();
-        ids
-    }
-}
-
-fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionWorkflowApproval> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut approval = MissionWorkflowApproval::default();
-    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
-        let issue = db.require_issue(&issue_id)?;
-        if issue.issue_type != "validation" {
-            continue;
-        }
-        match crate::commands::issue_workflow::issue_status_category(
-            workflow_policy.as_ref(),
-            &issue.status,
-        )
-        .as_deref()
-        {
-            Some("done") => approval.done.push(issue),
-            Some("blocked") => approval.blocked.push(issue),
-            _ => approval.open.push(issue),
-        }
-    }
-    approval.done.sort_by(|a, b| a.id.cmp(&b.id));
-    approval.open.sort_by(|a, b| a.id.cmp(&b.id));
-    approval.blocked.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(approval)
 }
 
 fn compact_strings(values: &[String]) -> String {

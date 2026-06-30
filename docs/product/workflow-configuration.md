@@ -496,7 +496,7 @@ Failure behavior is part of the action contract:
   owner-branch tracker commit.
 - Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
-  transition options`, `atelier review status --issue <id>`, or `atelier lint <id>`.
+  transition options`, `atelier review status --issue <id>`, or `atelier check <id>`.
 
 ## Validators
 

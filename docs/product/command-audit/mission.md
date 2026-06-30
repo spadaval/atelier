@@ -1,7 +1,7 @@
 # Retired `atelier mission`
 
-Primary role: Retired; current objective coordination uses mission-typed issue
-records.
+Primary role: Retired namespace; current objective coordination uses
+mission-typed issue records plus `work mission` dashboards.
 
 Primary question: "How do I create, focus, inspect, coordinate, and close a
 durable mission?"
@@ -23,11 +23,9 @@ The replacement command model is:
 - `atelier issue show <objective-id>` is the rich objective detail view. It
   owns intent, constraints, risks, validation criteria, linked work, blockers,
   hierarchy, evidence, and affected-record context.
-- `atelier issue status <objective-id>` is the compact health and terminal
-  readiness view. It owns the useful behavior currently provided by
-  `mission status`: ready and blocked work, proof gaps, open blockers,
-  completion gates, docs/help drift, ignored-test review, dirty checkout state,
-  and concrete next commands.
+- `atelier work mission <objective-id>` is the mission orchestration dashboard.
+  It owns mission-scoped ready, active, blocked, and done work views.
+- `atelier issue transition <objective-id>` owns terminal readiness gates.
 - `atelier issue link <objective-id> <issue-id> --role advances` and
   `atelier issue unlink ...` replace mission work-link commands. Relationship
   roles are part of the general issue link contract, not a generic root `link`
@@ -53,20 +51,16 @@ subcommands without compatibility guidance. There is no staged deprecation, no
 `mission` alias to issue mutation, and no fallback for old mission-only
 mutation shapes unless a human explicitly asks for a compatibility window.
 
-Current verification: `target/debug/atelier mission --help` exposes only
-read-only report and discovery commands.
+Current verification: `target/debug/atelier mission --help` is rejected because
+the root namespace is retired.
 
 ## Assessment
 
-- Name: Keep narrowly for reads. Mission is a durable purpose boundary, and a
-  mission-shaped report can be a root namespace as long as it does not own
-  lifecycle or mutation.
-- Documentation: Read-only. Operator guidance should teach `mission status` and
-  `mission list` for reports, while creation, mutation, linking, and closeout
-  remain on issue/workflow commands.
-- Design: Consolidate mutation. Useful mission reads live in type-aware issue
-  detail and read-only mission report views. Mission relationship mutations
-  move into typed issue links and issue detail.
+- Name: Removed. Mission is a durable purpose boundary, not a root command.
+- Documentation: Operator guidance should teach mission-typed issue records,
+  `work mission`, `issue show`, and `issue transition`.
+- Design: Consolidate both reads and mutation. Mission relationship mutations
+  move into typed issue links; orchestration reads move to `work mission`.
 - Output hierarchy: Objective identity and lifecycle first, current
   work/blockers next, linked hierarchy and affected records next,
   proof/health/terminal readiness next, then specific next actions.
@@ -78,10 +72,10 @@ read-only report and discovery commands.
 | `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Removed. Replacement: `issue create --issue-type mission`. |
 | `mission show` | Manager/orchestrator | Inspect rich mission prose and relationship context. | Removed. Replacement: `issue show <objective-id>`. |
 | `mission start --switch` | Manager/orchestrator | Set active mission focus. | Removed. Root status and canonical in-progress issue records own checkout orientation. |
-| `mission status` | Manager/orchestrator | See current mission health and next actions. | Keep as read-only report surface. |
-| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Keep as read-only report drill-down. |
+| `mission status` | Manager/orchestrator | See current mission health and next actions. | Removed. Replacement: `work mission <id>` and `issue transition <id>`. |
+| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue transition <id> --verbose` once verbose transition output lands. |
 | `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Removed. Replacement: `issue transition <objective-id> close --reason`. |
-| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Keep as read-only discovery surface; historical inventory can still use `issue table --kind mission --status all`. |
+| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Removed. Replacement: `issue list --issue-type mission` once issue inventory lands. |
 | `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Removed. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
 | `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
 | `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |

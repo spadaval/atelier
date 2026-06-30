@@ -28,7 +28,7 @@ fn test_issue_status_with_subissues() {
         &parent_id,
     ]);
 
-    let status = h.run_ok(&["issue", "status", &parent_id]);
+    let status = h.run_ok(&["issue", "show", &parent_id]);
     assert!(status.stdout.contains("Parent lifecycle issue"));
     assert!(status.stdout.contains("Child lifecycle issue"));
 }
@@ -70,7 +70,7 @@ fn test_issue_status_reports_sibling_children() {
         "spike",
     ]);
 
-    let status = h.run_ok(&["issue", "status", &parent_id]);
+    let status = h.run_ok(&["issue", "show", &parent_id]);
     assert!(status.stdout.contains("Todo child"));
     assert!(status.stdout_contains("Sibling child"));
     assert!(status.stdout.contains("Ready Work"));
@@ -92,24 +92,24 @@ fn test_dependency_chain_and_ready() {
     let issue_c = h.issue_id(3);
 
     // A blocked by B, B blocked by C
-    h.run_ok(&["issue", "block", &issue_a, &issue_b]);
-    h.run_ok(&["issue", "block", &issue_b, &issue_c]);
+    h.run_ok(&["issue", "link", &issue_a, &issue_b, "--role", "blocked_by"]);
+    h.run_ok(&["issue", "link", &issue_b, &issue_c, "--role", "blocked_by"]);
 
     // Only C should be ready
-    let ready = h.run_ok(&["issue", "list", "--ready"]);
+    let ready = h.run_ok(&["work", "queue", "--ready"]);
     assert!(ready.stdout.contains("Issue C"));
     assert!(!ready.stdout.contains("Issue A"));
     assert!(!ready.stdout.contains("Issue B"));
 
     // Close C, then B should become ready
     h.close_issue_with_evidence(&issue_c);
-    let ready2 = h.run_ok(&["issue", "list", "--ready"]);
+    let ready2 = h.run_ok(&["work", "queue", "--ready"]);
     assert!(ready2.stdout.contains("Issue B"));
     assert!(!ready2.stdout.contains("Issue A"));
 
     // Close B, then A should become ready
     h.close_issue_with_evidence(&issue_b);
-    let ready3 = h.run_ok(&["issue", "list", "--ready"]);
+    let ready3 = h.run_ok(&["work", "queue", "--ready"]);
     assert!(ready3.stdout.contains("Issue A"));
 }
 
@@ -124,11 +124,11 @@ fn test_circular_dependency_prevented() {
     let issue_2 = h.issue_id(2);
     let issue_3 = h.issue_id(3);
 
-    h.run_ok(&["issue", "block", &issue_1, &issue_2]);
-    h.run_ok(&["issue", "block", &issue_2, &issue_3]);
+    h.run_ok(&["issue", "link", &issue_1, &issue_2, "--role", "blocked_by"]);
+    h.run_ok(&["issue", "link", &issue_2, &issue_3, "--role", "blocked_by"]);
 
     // Attempting to create cycle 3 -> 1 should fail
-    let result = h.run(&["issue", "block", &issue_3, &issue_1]);
+    let result = h.run(&["issue", "link", &issue_3, &issue_1, "--role", "blocked_by"]);
     assert!(
         !result.success || result.stderr.contains("circular"),
         "Circular dependency should be rejected.\nstdout: {}\nstderr: {}",

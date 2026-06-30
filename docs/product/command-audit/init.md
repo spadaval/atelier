@@ -14,7 +14,7 @@ this repository?"
   runtime storage, and ignore rules. `--import-beads` is acceptable as explicit
   migration input, but the command must not silently import predecessor state.
 - Output hierarchy: Created/reused paths first, migration detection second,
-  verification commands last. It should point to `atelier lint`,
+  verification commands last. It should point to `atelier check`,
   `atelier man admin`, and `atelier status` before issue creation.
 
 ## Role Use

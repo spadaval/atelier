@@ -58,6 +58,22 @@ Give agents freedom for everything else.
 Every feature must justify its cost.
 Less is more. Curation is a virtue.
 
+Choose the simplest thing that works.
+Always prefer the least magical solution that solves the real problem.
+Do not add abstraction, hidden inference, clever formatting, or policy machinery
+when a direct representation of the truth is enough.
+
+Complexity has product cost and architecture cost.
+Product complexity is what an operator has to understand: which command to use,
+which facts matter, how much output to scan, and how many commands must be
+stitched together before they can act. Good hierarchy, bounded defaults,
+semantic color, and role-shaped output reduce product complexity.
+Architecture complexity is what the system has to carry: code paths,
+queries, caches, domain abstractions, renderers, tests, and migration work.
+Good caching, smaller read models, simpler ownership, and deleting unused paths
+reduce architecture complexity.
+Do not optimize one kind by blindly increasing the other.
+
 Resilience over perfection.
 Keep useful paths open.
 Make uncertainty visible.

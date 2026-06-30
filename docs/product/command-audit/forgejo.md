@@ -10,8 +10,8 @@ identity and permissions?"
 - Name: Correct only as a provider-specific admin surface. It should not leak
   into normal worker, reviewer, or manager loops unless the repository is
   configured for Forgejo and a repair path names it.
-- Documentation: Visible in root help because provider setup is a real admin
-  job. It should remain out of ordinary role loops.
+- Documentation: Hidden from root help. It should remain out of ordinary role
+  loops unless an explicit provider setup or recovery path names it.
 - Design: The supported surface is intentionally small: check the configured
   role accounts or provision them from workflow-owned role parameters.
 - Output hierarchy: Configured provider, role accounts, permission check
@@ -23,6 +23,12 @@ identity and permissions?"
 | --- | --- | --- | --- |
 | `forgejo roles check` | Admin | Verify configured role author users, repo permissions, and sudo access. | Good. |
 | `forgejo roles provision` | Admin | Create missing role author users and grant repository access. | Good as explicit admin setup. |
+
+## Complexity Budget
+
+`forgejo` is over budget as a normal visible root because it exposes one
+provider's setup machinery. Keep it hidden or fold it behind provider-neutral
+review/admin diagnostics unless a repository setup flow explicitly needs it.
 
 ## Cutting Note
 

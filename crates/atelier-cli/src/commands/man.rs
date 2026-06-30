@@ -189,7 +189,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 );
                 println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
-                println!("  1. atelier issue list --ready - Find executable work.");
+                println!("  1. atelier work queue --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
                 println!("  3. atelier issue transition <id> - Follow current lifecycle guidance.");
             }
@@ -231,7 +231,7 @@ fn print_normal_loop(role: Role) {
     match role {
         Role::Worker => {
             println!("  atelier status");
-            println!("  atelier issue list --ready");
+            println!("  atelier work queue --ready");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id>");
             println!("  atelier issue note <id> \"...\"");

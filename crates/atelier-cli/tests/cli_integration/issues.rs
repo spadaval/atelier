@@ -17,7 +17,7 @@ fn test_create_issue() {
     );
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
+    assert!(stdout.contains(&format!("atelier check {issue_id}")));
     assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
     assert!(issue_text.contains("## Description\n\nNo description provided."));
@@ -100,7 +100,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
         )
         .replace(
             "Outcome was not specified.",
-            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier lint <id>` passes after section edits.",
+            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier check <id>` passes after section edits.",
         );
     std::fs::write(&path, text).unwrap();
 
@@ -110,7 +110,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
     assert!(success, "issue show failed: {stderr}");
     assert!(show.contains("Describe the markdown-first issue."));
     assert!(show.contains("Issue sections are populated by editing canonical Markdown."));
-    assert!(show.contains("atelier lint <id>"));
+    assert!(show.contains("atelier check <id>"));
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn test_create_subissue() {
     );
     let child_id = issue_id_by_title(dir.path(), "Child issue");
     assert!(stdout.contains(&format!(".atelier/issues/{child_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {child_id}")));
+    assert!(stdout.contains(&format!("atelier check {child_id}")));
 
     // Verify parent-child relationship in show
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
@@ -314,23 +314,17 @@ fn test_configured_custom_issue_link_is_context_only() {
     assert!(mission_markdown.contains("type: \"advances\""));
     assert!(mission_markdown.contains("type: \"informs\""));
 
-    let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "informs"]);
-    assert!(success, "search failed: {stderr}");
-    assert!(search_out.contains("Context mission"), "{search_out}");
-    assert!(search_out.contains("Context note"), "{search_out}");
-
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "show failed: {stderr}");
     assert!(show_out.contains("informs"), "{show_out}");
     assert!(show_out.contains("Context note"), "{show_out}");
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
-    assert!(success, "mission status failed: {stderr}");
-    assert!(status_out.contains("Total: 1"), "{status_out}");
-    assert!(status_out.contains("Mission work"), "{status_out}");
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(mission_out.contains("Mission work"), "{mission_out}");
     assert!(
-        !status_out.contains("Context note"),
-        "custom context links must not count as mission work:\n{status_out}"
+        !mission_out.contains("Context note"),
+        "custom context links must not count as mission work:\n{mission_out}"
     );
 
     let (success, _, stderr) = run_atelier(
@@ -637,7 +631,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     );
     assert!(
         stdout.contains(&format!(
-            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker)"
+            "blocked {external_child_id} [todo] medium - External blocked child | 1 blocker"
         )),
         "{stdout}"
     );
@@ -1424,7 +1418,7 @@ fn test_issue_show_summarizes_dirty_checkout_state() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Checkout"), "{stdout}");
     assert!(
-        stdout.contains("State:    dirty checkout: 1 path:"),
+        stdout.contains("State  : dirty checkout: 1 path:"),
         "{stdout}"
     );
     assert!(stdout.contains("tracked.txt"), "{stdout}");
@@ -1509,11 +1503,6 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     assert!(stdout.contains(edited_body), "{stdout}");
     assert!(stdout.contains(edited_outcome), "{stdout}");
     assert!(stdout.contains(edited_evidence), "{stdout}");
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["search", "projected from issue body"]);
-    assert!(success, "search failed: {stderr}");
-    assert!(stdout.contains(&issue_id), "{stdout}");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let projected_text: String = conn
@@ -1615,46 +1604,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
         );
     }
     assert!(!dir.path().join(".atelier/plans").exists());
-}
-
-#[test]
-fn test_issue_search_reads_payloads_from_record_store_and_activity() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Canonical search issue"]);
-    assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Canonical search issue");
-    set_issue_description(dir.path(), &issue_id, "canonical body needle");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after description edit failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "note", &issue_id, "canonical activity needle"],
-    );
-    assert!(success, "issue note failed: {stderr}");
-
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    conn.execute(
-        "UPDATE issues SET description = 'sqlite body needle' WHERE id = ?1",
-        [&issue_id],
-    )
-    .unwrap();
-
-    let (success, body_out, stderr) = run_atelier(dir.path(), &["search", "canonical body needle"]);
-    assert!(success, "canonical body search failed: {stderr}");
-    assert!(body_out.contains("Canonical search issue"));
-
-    let (success, activity_out, stderr) =
-        run_atelier(dir.path(), &["search", "canonical activity needle"]);
-    assert!(success, "canonical activity search failed: {stderr}");
-    assert!(activity_out.contains("Canonical search issue"));
-
-    let (success, shadow_body_out, stderr) =
-        run_atelier(dir.path(), &["search", "sqlite body needle"]);
-    assert!(success, "sqlite shadow body search failed: {stderr}");
-    assert!(shadow_body_out.contains("No issues found"));
 }
 
 #[test]
@@ -2533,7 +2482,7 @@ fn test_block_issue() {
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show"]);
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
     assert!(blocked_out.contains("Blocked issue"));
 }
 
@@ -2609,8 +2558,9 @@ fn test_unblock_issue() {
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show"]);
-    assert!(!blocked_out.contains("Blocked issue"));
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    assert!(blocked_out.contains("Blocked by"));
+    assert!(blocked_out.contains("(none)"));
 }
 
 #[test]
@@ -2668,7 +2618,7 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
     assert!(success, "issue show after issue unlink failed: {stderr}");
     assert!(
-        stdout.contains("No dependencies found."),
+        stdout.contains("Blocked by") && stdout.contains("(none)"),
         "dependency should be removed after rebuild: {stdout}"
     );
 }
@@ -3035,6 +2985,38 @@ fn test_removed_issue_type_is_rejected() {
             "{stderr}"
         );
     }
+}
+
+#[test]
+fn test_work_mission_uses_quiet_structured_readiness() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Validator purity mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Validator purity mission");
+
+    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(dashboard.contains("Close readiness"), "{dashboard}");
+    assert!(
+        !dashboard.contains("Lint passed."),
+        "dashboard must not print validator renderer output:\n{dashboard}"
+    );
+
+    let (success, transition, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
+    assert!(success, "issue transition failed: {stderr}");
+    assert!(transition.contains("Validators") || transition.contains("validator"));
 }
 
 fn write_incident_issue_type_workflow(dir: &std::path::Path) {

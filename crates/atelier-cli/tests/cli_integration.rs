@@ -577,10 +577,6 @@ fn canonical_record_front_matter(
     serde_json::to_value(yaml).unwrap()
 }
 
-fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
-    format!("#[test]\n#[{ignore_attribute}]\nfn {test_name}() {{}}\n")
-}
-
 fn valid_command_surface_doc() -> &'static str {
     r#"# CLI Surface Tiers
 
@@ -591,6 +587,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier status`
 - `atelier work ready`
 - `atelier work blocked`
+- `atelier check`
 - `atelier issue ...`
 - `atelier issue transition <issue-id> start`
 - `atelier issue create "..." --issue-type mission`
@@ -602,16 +599,16 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier review open/status/show/comments/comment/approve/request-changes`
-- `atelier forgejo roles check`
 - `atelier history`
 - `atelier prune`
-- `atelier maintenance delete`
-- `atelier lint`
 
-## Advanced Repair
+## Advanced Diagnostics
 
-- `atelier branch for-epic/status/merge`
-- `atelier doctor`
+- hidden/advanced `atelier forgejo roles check`
+- hidden/advanced `atelier maintenance delete`
+- hidden/advanced `atelier lint`
+- hidden/advanced `atelier branch for-epic/status/merge`
+- hidden/advanced `atelier doctor`
 "#
 }
 

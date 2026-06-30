@@ -7,8 +7,8 @@ Primary question: "How do I inspect raw workflow-policy diagnostics?"
 ## Assessment
 
 - Name: Correct for a hidden diagnostic family.
-- Documentation: Correctly hidden. Normal workflow users should use `lint`,
-  `issue status <objective-id>`, and `issue transition`.
+- Documentation: Correctly hidden. Normal workflow users should use `check`,
+  `issue show <objective-id>`, and `issue transition`.
 - Design: Acceptable as an admin/debug surface. It should not appear in normal
   role guides.
 - Output hierarchy: Raw validator or policy detail, failed configuration path,

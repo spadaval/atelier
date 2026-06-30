@@ -44,9 +44,9 @@ machinery while changing the durable product model:
 - SQLite remains the fast local ProjectionIndex and RuntimeState store for
   queries, locks, sessions, workflow checks, and Mission Control inputs.
 - Mutating commands are migrating toward Markdown-first writes, and normal
-  health is reported through `lint` and `doctor`.
+  health is reported through `check` and `check`.
 - Hidden/admin projection diagnostics may verify deterministic rendered output,
-  and `doctor --fix` owns explicit ignored-state repair from committed Markdown
+  and `check --fix` owns explicit ignored-state repair from committed Markdown
   records after checkout, pull, merge, or clone.
 - Missions, issues, evidence, workflow validators, runs, typed links, and
   workflows become first-class Atelier concepts instead of only inherited

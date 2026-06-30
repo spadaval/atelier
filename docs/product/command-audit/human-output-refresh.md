@@ -17,8 +17,8 @@ Sampled commands:
 - `target/debug/atelier issue show atelier-kpa1`
 - `target/debug/atelier issue show`
 - `target/debug/atelier issue show atelier-t3h3`
-- `target/debug/atelier issue table --kind mission`
-- `target/debug/atelier issue status atelier-24xn --verbose`
+- historical removed-surface samples: `issue table --kind mission` and
+  `issue status atelier-24xn --verbose`
 - `target/debug/atelier issue transition atelier-kpa1`
 - `target/debug/atelier history --issue atelier-kpa1 --limit 10`
 - `target/debug/atelier evidence list`
@@ -41,6 +41,7 @@ Sampled commands:
 | Section headings are visually heavy in queue output. | Parent groups and standalone groups use full underline separators even when the section is only a small context wrapper. | Detail views may keep strong headings. Queue views should use quieter group headers and reserve heavy headings for the command title or major sections. |
 | Next commands are too literal and too numerous. | Detail views print many command lines without ranking by the current problem. | Footer actions should be intent-labeled, ranked, and deduplicated. Put the command after a short action label, and include only commands likely to be useful from the current state. |
 | Color is unused. | All sampled output is monochrome, so status, danger, secondary metadata, and headings compete equally. | Add color only behind shared terminal styling: automatic in interactive terminals, disabled when not interactive or when `NO_COLOR` is set. Color must reinforce text, not replace it. |
+| Transition output dumps machinery. | `issue transition` shows passing validators, failed validators, blocker summaries, planned actions, dirty path lists, descriptions, and commands in one default view. | Default transition output should show transitions and failed requirements only. Verbose output owns pass rows, messages, action preflights, descriptions, and path samples. |
 
 ## Color Contract
 
@@ -73,6 +74,8 @@ The UX refresh should converge on a shared formatter boundary.
   done; then priority and parent context.
 - Detail views optimize for diagnosis: identity, state, blockers, evidence,
   recent human-readable activity, then next actions.
+- Transition views optimize for decision: transition name, allowed/blocked
+  state, failed requirements, and one path to verbose detail.
 
 ## Shared Vocabulary
 
@@ -117,11 +120,11 @@ app logic supplies them.
 | `status` | Output is mostly useful but still uses dense labels and a long generic evidence warning. | Keep it compact, color status/health in interactive terminals, and keep next actions ranked by the current checkout state. |
 | `work queue` and `search` | Repeated blocker drill-downs, `key=value` summaries, heavy context headings, and opaque labels. | Use grouped rows with readable summaries, one blocker drill-down footer, clear parent/context labels, and bounded child rows. |
 | `issue show` | Dirty checkout state and recent activity are too raw and verbose. | Summarize dirty state, wrap or bound path samples, render recent activity as sentences, and move raw fields to history or verbose output. |
-| `issue status <objective-id>` | Objective status repeats blocker drill-down commands and uses pipe-heavy row metadata such as parent/proof notes. | Keep objective health first, group ready/blocked work cleanly, move repeated blocker commands to a footer, and de-emphasize validator/proof metadata unless verbose output asks for it. |
-| `issue transition` | Repeats dirty state and mixes validation, blockers, branch context, commands, and descriptions with equal visual weight. | Start with the allowed/blocked decision, then show blockers and required inputs, then planned actions and one command per transition. Collapse repeated branch context. |
+| `work mission <objective-id>` | Current ready work is a flat sample of child tasks without enough workstream context. | Default should be epic-first and mission-scoped. Child tasks appear when active, blocked, or requested by drill-down flags. |
+| `issue transition` | Repeats dirty state and mixes validators, blockers, branch context, commands, and descriptions with equal visual weight. | Show transition names and failed requirements by default. Hide passing validators, messages, action preflight detail, descriptions, and dirty path firehoses behind verbose output. |
 | `issue show` | Repeats detail commands and does not prioritize blocker meaning. | Show blocker counts and human titles first; put `atelier issue show <id>` once in a footer. |
-| `issue table` | Columns are useful but fragile for long titles and narrow terminals. | Keep short columns, wrap the title field, and use color/dim styling for secondary counts. |
+| `issue list` | Simple inventory is missing today even though root help claims listing. | Add bounded inventory output with simple filters; do not turn it into `work queue` or search. |
 | `history` | Pipe-delimited rows are hard to scan. | Group or wrap events, de-emphasize repeated scope/target data, and keep filters visible. |
 | `evidence list` | Default output is unbounded and swamps the terminal. | Add a default limit, grouping/filter hints, omitted count, and command transcript elision. |
 | `man` | Role guides are readable but still use raw command lists and stale objective wording in places. | Keep guides terse, use objective terminology, and color only headings/roles/health when interactive. |
-| `review`, `forgejo`, `branch`, `doctor`, `lint`, `prune`, `maintenance` | Less frequently sampled in this pass, but they should still use the shared footer, color, and bounded-list rules. | Audit implementation output before each command is refreshed; do not invent a separate style per command. |
+| `review`, `doctor`, `lint`, `prune`, hidden provider/branch/maintenance diagnostics | Less frequently sampled in this pass, but they should still use the shared footer, color, and bounded-list rules. | Audit implementation output before each command is refreshed; do not invent a separate style per command. Hidden diagnostics stay out of normal role output unless routed by a failure. |

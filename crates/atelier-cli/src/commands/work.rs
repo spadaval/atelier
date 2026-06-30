@@ -434,7 +434,16 @@ fn proof_gap_count(db: &Database, issues: &[Issue]) -> Result<usize> {
 }
 
 fn transition_readiness(db: &Database, issue_id: &str, transition_name: &str) -> Result<String> {
-    let options = crate::commands::workflow::issue_transition_options(db, issue_id)?;
+    let options = match crate::commands::workflow::issue_transition_options(db, issue_id) {
+        Ok(options) => options,
+        Err(error) => {
+            let message = error.to_string();
+            if message.contains("has no configured transitions") {
+                return Ok("terminal".to_string());
+            }
+            return Ok(format!("not available: {message}"));
+        }
+    };
     let Some(option) = options
         .into_iter()
         .find(|option| option.name == transition_name)

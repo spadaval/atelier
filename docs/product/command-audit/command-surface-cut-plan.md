@@ -8,6 +8,11 @@ The only valid reason to keep a command surface is that its job cannot
 reasonably be done by another command. Existing implementation, historical
 usage, role labels, or compatibility are not enough.
 
+Apply the [complexity budget](complexity-budget.md): every command needs a
+clear operator question, a clear owner, and a lower-cost shape than the
+alternatives. If a command only preserves old vocabulary, provider plumbing, or
+debug machinery, hide it or remove it.
+
 ## Target Shape
 
 The public workflow surface should collapse toward a small set of powerful
@@ -42,12 +47,12 @@ Removed commands must have replacement capability, not replacement spellings:
 
 | Removed surface | Replacement owner |
 | --- | --- |
-| `mission list` | `work queue --type mission` |
-| `mission status <id>` | objective rollup in `issue show <mission-id>` and terminal gates in `issue transition <mission-id>` |
-| `issue status <objective-id>` | objective rollup in `issue show <objective-id>` and terminal gates in `issue transition <objective-id>` |
-| `issue show [<id>]` | blocked inventory in `work queue --blocked`; blocker detail in `issue show <id>` |
-| `issue table` | `work queue` filters and list formatting |
-| `issue link` / `issue unlink` | `issue link` / `issue unlink --role blocked_by` |
+| `mission list` | `issue list --issue-type mission` once issue inventory lands |
+| `mission status <id>` | `work mission <mission-id>` for operational dashboard, `issue show <mission-id>` for record detail, and `issue transition <mission-id>` for terminal gates |
+| `issue status <objective-id>` | `work mission` / `work epic` for operational dashboard, `issue show <objective-id>` for record detail, and `issue transition <objective-id>` for gates |
+| `issue blocked` | blocked triage in `work blocked`; blocker detail in `issue show <id>` |
+| `issue table` | `issue list` for inventory; scoped operational work in `work ready`, `work blocked`, `work mission`, and `work epic` |
+| separate block/unblock verbs | typed `issue link` / `issue unlink --role blocked_by` |
 | root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
 | scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
 | provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
@@ -69,29 +74,30 @@ It answers:
 It must not become an issue detail view, objective report, branch report,
 evidence report, or diagnostics console.
 
-### `atelier work queue`
+### `atelier work`
 
-Global issue selection and inventory.
+Bounded operational work views.
 
-It answers:
+The surviving `work` commands answer:
 
-- what work exists;
-- what is ready;
-- what is blocked;
-- what matches simple filters such as workflow status, issue type, priority, or
-  label.
+- `work ready`: what top-level work can be started or coordinated now;
+- `work blocked`: what work is stopped by open blockers;
+- `work active`: what work is already in motion;
+- `work mission <id>`: what one mission needs next;
+- `work epic <id>`: what one epic boundary needs next.
 
-It should not grow into a scoped query language. Do not reinvent JQL.
+`work queue` remains under audit. Keep it only if a distinct repo-wide
+operational question remains after the smaller views and `issue list` exist.
 
-Allowed direction:
+Allowed direction today:
 
-- `work queue`
-- `work queue --ready`
-- `work queue --blocked`
-- `work queue --status <status>`
-- `work queue --type <issue-type>`
-- `work queue --label <label>`
-- `work queue --priority <priority>`
+- `work ready`
+- `work blocked`
+- `work active`
+- `work mission <id>`
+- `work epic <id>`
+
+Generic issue inventory belongs to `issue list`.
 
 Avoid unless a later decision explicitly reverses this:
 
@@ -126,8 +132,23 @@ Objective rollup means:
 - a bounded sample of ready and blocked work;
 - terminal readiness summary.
 
-The rollup should be concise and bounded. Full work selection remains global
-`work queue`; lifecycle gates remain `issue transition`.
+The rollup should be concise and bounded. Full operational work selection
+belongs in `work ready`, `work blocked`, `work mission`, and `work epic`;
+lifecycle gates remain `issue transition`.
+
+### `atelier issue list`
+
+Generic issue inventory.
+
+It answers:
+
+- what issue records exist;
+- which records match simple metadata filters;
+- which IDs should be passed to a focused command.
+
+It must not become the mission dashboard, operational queue, search engine, or
+objective query language. Keep filters simple: status, category, issue type,
+label, priority, ready, blocked, and quiet IDs.
 
 ### `atelier issue transition <id> [transition]`
 
@@ -137,8 +158,12 @@ It answers:
 
 - what transitions are possible;
 - why a transition is blocked;
-- what validators or branch actions are involved;
 - how to execute the transition.
+
+Default output should show transition names, allowed/blocked state, and failed
+requirements only. Passing validators, branch/action preflight detail, dirty
+path dumps, descriptions, and full recovery diagnostics belong in verbose
+output.
 
 No separate `--options` command should be necessary long term. If no transition
 name is supplied, the command should show available transitions. Executing a
@@ -205,8 +230,9 @@ Mission is an issue type, not a command namespace.
 
 Replace:
 
-- `mission list` with `work queue --type mission`
-- `mission status <id>` with `issue show <mission-id>`
+- `mission list` with `issue list --issue-type mission` once inventory lands
+- `mission status <id>` with `work mission <mission-id>` for orchestration and
+  `issue show <mission-id>` for record detail
 
 Mission-specific status behavior should become generic objective rollup inside
 `issue show`.
@@ -227,13 +253,13 @@ Replace:
 Do not add `issue progress` unless future use proves that objective rollup in
 `issue show` is insufficient.
 
-### Remove `atelier issue show`
+### Remove `atelier issue blocked`
 
 Blocked work is not a command noun.
 
 Replace:
 
-- blocked-work inventory with `work queue --blocked`
+- blocked-work triage with `work blocked`
 - blocker detail with `issue show <id>`
 
 Do not keep a separate blocker drilldown command just because it already exists.
@@ -244,17 +270,18 @@ Tables are output format, not a command.
 
 Replace:
 
-- `issue table --kind mission` with `work queue --type mission`
-- `issue table --kind issue` with `work queue`
+- `issue table --kind mission` with `issue list --issue-type mission`
+- `issue table --kind issue` with `issue list`
 
-If table output is needed, add a format flag or allow `work queue` to choose a
-table layout when appropriate.
+If table output is needed, add a format flag to the owner command. Inventory
+tables belong to `issue list`; operational work layout belongs to the bounded
+`work` view that owns the operator question.
 
-### Remove `issue link` And `issue unlink`
+### Keep `issue link` And `issue unlink`
 
 Blocking is a relationship.
 
-Replace with the general relationship surface:
+Keep the general relationship surface:
 
 - `issue link <blocked-id> <blocker-id> --role blocked_by`
 - `issue unlink <blocked-id> <blocker-id> --role blocked_by`
@@ -429,13 +456,14 @@ When a replacement is implemented and clear:
 
 Recommended first slice:
 
-1. Remove visible `mission`; move mission health into objective rollup in
-   `issue show`.
-2. Remove `issue status`; put objective rollup in `issue show`.
-3. Remove `issue show`; rely on `work queue --blocked` and `issue show`.
-4. Remove `issue table`; use `work queue --type mission`.
-5. Remove `issue link` and `issue unlink`; use `issue link/unlink --role
-   blocked_by`.
+1. Remove visible `mission`; move mission orchestration into `work mission`
+   and record detail into `issue show`.
+2. Remove `issue status`; put objective dashboards in `work mission` / `work
+   epic`, record detail in `issue show`, and gates in `issue transition`.
+3. Remove `issue blocked`; rely on `work blocked` and `issue show`.
+4. Remove `issue table`; use `issue list --issue-type mission`.
+5. Keep `issue link` and `issue unlink`; do not add separate block/unblock
+   verbs.
 6. Remove root `search` entirely, including help/docs references.
 7. Keep high-level `history`, but remove or fold scoped history variants.
 8. Keep `bundle` as the graph preview/apply owner for now.

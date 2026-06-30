@@ -231,14 +231,15 @@ Next Commands
 Setup and health commands should name only the next command that can succeed in
 the current state. A fresh `atelier init` checkout creates tracker directories,
 runtime state, and starter workflow policy. Its default next steps point to
-`atelier lint` before issue creation. Health commands may name low-level repair
+`atelier check` before issue creation. Health commands may name low-level repair
 commands only when the checked state is actually stale, invalid, missing, or
-otherwise degraded; `doctor --fix` is the admin explicit local repair path.
+otherwise degraded; `check --fix` is the admin explicit local repair path.
 
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
-`atelier work queue`, `atelier work queue --ready`, and `atelier search`.
+`atelier work ready`, `atelier work blocked`, and bounded `atelier work`
+dashboards.
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -260,7 +261,7 @@ only to explain child work are context-only unless the parent itself is the
 action target.
 
 Empty queue output should say what was searched and what to try next. For
-example, `work queue --ready` may include the blocked count, while
+example, `work ready` may include the blocked count, while
 `issue search` should echo the search query.
 
 Quiet mode remains the terse path for strict composition values only. Quiet
@@ -301,7 +302,7 @@ their need:
   for issues, missions, evidence, and activity sidecars. Planning and
   checkpoint intent lives in the accountable record prose or referenced
   repository Markdown artifacts until first-class records are reintroduced.
-- Use committed-state commands for handoff gates. `atelier lint` is the
+- Use committed-state commands for handoff gates. `atelier check` is the
   supported noninteractive check for invalid tracker state. Local runtime repair
   commands are admin repair tools, not normal script workflow.
 - Preserve blocked-command and record context in stale projection or invalid
@@ -309,9 +310,8 @@ their need:
   record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier issue show <objective-id>`,
-  `atelier issue status <objective-id>`, `atelier work queue --ready`,
-  `atelier work queue --blocked`, and issue linker commands over scraping
-  broad human reports.
+  `atelier work ready`, `atelier work blocked`, and issue linker commands over
+  scraping broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
@@ -431,10 +431,10 @@ unless the test is specifically for a formatter primitive.
 ## Operator Output Audit
 
 The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
-stabilization mission: `status`, `issue status <objective-id>`, `issue show`,
-`work queue --ready`, `evidence record`, `evidence show/list`, dependency and
-link list output, issue impact rendered by `issue show`, `lint`, and admin
-repair commands when local state is degraded.
+stabilization mission: `status`, `issue show <objective-id>`, `issue show`,
+ready-work output, `evidence record`, `evidence show/list`, dependency and link
+list output, issue impact rendered by `issue show`, `check`, and admin repair
+commands when local state is degraded.
 
 Classification:
 
@@ -442,11 +442,11 @@ Classification:
   health-check views have concise default answers and explicit drill-down
   commands in existing focused tests.
 - Degraded orientation and objective status output keeps ordinary reads usable
-  while routing repair to `atelier lint` or admin repair commands only when
+  while routing repair to `atelier check` or admin repair commands only when
   committed records or local state are degraded.
 - Fresh `atelier init` previously suggested `atelier issue create "Task"` before
   workflow setup, which produced an immediate workflow-policy error. The default
-  setup output now creates workflow policy and routes through `atelier lint`
+  setup output now creates workflow policy and routes through `atelier check`
   before issue creation.
 - No additional failed output classifications were found in the sampled common
   operator workflows; future failures should become follow-up implementation

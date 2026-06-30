@@ -160,7 +160,7 @@ close -> done: blocked
   next: atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
-`atelier issue status <objective-id>` should show objective proof gaps by
+`atelier issue show <objective-id>` should show objective proof gaps by
 accountable work item, not as raw validator names:
 
 ```text
@@ -171,7 +171,7 @@ Proof Gaps
   atelier-epic1: child proof incomplete
 ```
 
-`atelier issue status <objective-id> --verbose` may show deeper terminal-check
+`atelier issue transition <objective-id>` may show deeper terminal-check
 detail, including unmapped parent outcome lines, failed proof, blocked proof,
 deferred proof, and residual risks.
 

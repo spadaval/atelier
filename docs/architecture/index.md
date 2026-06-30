@@ -77,9 +77,9 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
 - The root package is being deleted in favor of a virtual workspace root; all
   executable ownership moves to `crates/atelier-cli`.
-- `doctor` and `lint` detect stale, invalid, or missing tracker state through
+- `check` and `check` detect stale, invalid, or missing tracker state through
   operator-facing health checks.
-- `doctor --fix` repairs ignored local projection/cache state from committed
+- `check --fix` repairs ignored local projection/cache state from committed
   Markdown records when it is safe to do so.
 - First-class concepts include missions, issues, evidence, typed links,
   workflows, workflow validators, status roles, review artifacts, and deferred

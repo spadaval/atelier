@@ -2,8 +2,8 @@
 
 Primary role: Manager/orchestrator.
 
-Primary question: "How do I create, inspect, mutate, and advance accountable
-issue work, including objective records that replace missions?"
+Primary question: "How do I create, list, inspect, mutate, and advance
+accountable issue work, including objective records that replace missions?"
 
 `issue` is intentionally shared by roles. The root noun is correct because the
 command owns issue records and issue workflow state, not a single user persona.
@@ -22,11 +22,12 @@ terminal readiness, and closeout notes.
 Current issue forms for that target are:
 
 - `issue create --issue-type mission` for mission-shaped coordination work.
+- `issue list` for generic issue inventory once the current listing gap is
+  fixed. It is not the mission dashboard and not the operational work queue.
 - `issue show <objective-id>` for rich objective detail, hierarchy, blockers,
   evidence, affected-record context, objective health, ready and blocked work,
   proof gaps, terminal readiness, and completion gates.
-- `work queue` and `work mission <objective-id>` for mission inventory and
-  orchestration dashboards.
+- `work mission <objective-id>` for mission orchestration dashboards.
 - `issue link <objective-id> <issue-id> --role advances` and `issue unlink ...`
   for work membership relationships.
 - `issue transition <objective-id> close --reason "..."` for objective
@@ -54,6 +55,7 @@ create compatibility aliases for the removed mission commands.
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | `issue create` | Manager/orchestrator | Create actionable issue-shaped work. | Good. Keep `--issue-type` and template behavior explicit. |
+| `issue list` | Manager/orchestrator | Browse issue records with simple metadata filters. | Missing today but correct target. Keep it inventory-shaped; do not turn it into the work dashboard. |
 | `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Good. It includes issue-scoped downstream impact so operators do not leave the issue view for blast-radius context. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `transition options` should be the reviewer entry point. |
 | `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
@@ -67,17 +69,20 @@ create compatibility aliases for the removed mission commands.
 ## Role Guide Implication
 
 Workers should see `show`, `note`, `transition`, and close transitions after
-selecting work from `work queue --ready`.
+selecting assigned or ready work from `work ready`.
 Reviewers should see `transition`, `issue show`, and evidence commands.
-Managers should see `create`, `update`, `link`, `unlink`, and `work queue`
-filters.
+Managers should see `create`, `list`, `update`, `link`, `unlink`, and focused
+work dashboards.
 
 ## Help Drift
 
-`atelier issue --help` currently describes the family as including "close", but
-there is no `issue close` subcommand. Closure is intentionally owned by
-`issue transition <id> close --reason`, so the help summary should be tightened
-without adding a compatibility command.
+Root help currently describes `issue` as including "list", but
+`atelier issue --help` has no `list` subcommand. The product target is to add
+`issue list` as a simple inventory surface. Do not compensate by making
+`work queue` the generic inventory owner.
+
+`atelier issue --help` must also avoid implying an `issue close` subcommand.
+Closure is intentionally owned by `issue transition <id> close --reason`.
 
 ## Human Output Debt
 
@@ -96,6 +101,6 @@ detail views, blockers, objective status, transitions, links, and notes.
   should not repeat the same path list in multiple sections.
 - Recent activity in `issue show` should render as concise event sentences.
   Raw event fields belong in `history` or verbose output.
-- Transition options should visually separate the decision (`allowed` or
-  `blocked`), the reason, required inputs, planned actions, and the command to
-  run.
+- Transition output should hide passing validators and full action/debug
+  machinery by default. Show transition names, allowed/blocked state, and failed
+  requirements; keep the full detail behind verbose output.

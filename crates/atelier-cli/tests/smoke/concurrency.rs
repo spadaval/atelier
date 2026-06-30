@@ -40,7 +40,7 @@ fn test_concurrent_creates_10() {
 
     // Concurrent writers can leave the projection index stale; ordinary reads
     // should validate canonical state, rebuild automatically, and continue.
-    let result = h.run_ok(&["issue", "list", "-s", "all"]);
+    let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
 
@@ -64,7 +64,7 @@ fn test_concurrent_reads() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["issue", "list", "-s", "all"])
+                    .args(["work", "queue", "--all"])
                     .output()
                     .expect("failed to execute atelier");
                 output.status.success()
@@ -116,7 +116,7 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["issue", "list", "-s", "all"])
+                .args(["work", "queue", "--all"])
                 .output()
                 .expect("failed to execute atelier");
             output.status.success()
@@ -146,7 +146,7 @@ fn test_concurrent_mixed_operations() {
 
     // Concurrent writers can leave the projection index stale; ordinary reads
     // should validate canonical state, rebuild automatically, and continue.
-    let result = h.run_ok(&["issue", "list", "-s", "all"]);
+    let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
 
@@ -169,7 +169,7 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
         let args: Vec<&'static str> = if index % 2 == 0 {
             vec!["rebuild"]
         } else {
-            vec!["issue", "list", "--status", "all"]
+            vec!["work", "queue", "--all"]
         };
         handles.push(thread::spawn(move || {
             Command::new(&bin)
@@ -190,7 +190,7 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
         );
     }
 
-    let result = h.run_ok(&["issue", "list", "--status", "all"]);
+    let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.stdout.contains("Serialized rebuild changed"));
     h.run_ok(&["export", "--check"]);
 }

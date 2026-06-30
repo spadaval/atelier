@@ -14,7 +14,7 @@ mission/issue worktrees?"
 - Design: Remove pending redesign. Mission worktree ownership and per-issue
   worktree setup were buggy, under-specified, and not valuable enough to carry
   as first-class surface.
-- Replacement: Use `atelier status`, `atelier issue status <id>`,
+- Replacement: Use `atelier status`, `atelier issue show <id>`,
   `atelier issue transition <id>`, and workflow-backed issue
   transitions for ordinary work. Use `atelier branch ...` only for advanced
   owner-branch recovery.
@@ -23,9 +23,9 @@ mission/issue worktrees?"
 
 | Form | Previous role | Replacement |
 | --- | --- | --- |
-| `worktree for-mission <id>` | Manager/orchestrator | Deferred. Use normal checkout plus `issue status <objective-id>` until workspace management is redesigned. |
+| `worktree for-mission <id>` | Manager/orchestrator | Deferred. Use normal checkout plus `issue show <objective-id>` until workspace management is redesigned. |
 | `worktree for <issue-id>` | Manager/orchestrator | Deferred. Use issue transitions and explicit branch/checkouts outside Atelier when isolation is required. |
 | `worktree status` | Worker/manager | `atelier status`, `git status --short --branch`, and `issue transition <id> transition options`. |
 | `worktree merge <id>` | Manager/orchestrator | Workflow close transitions or advanced `branch merge` for epic-owner recovery. |
 | `worktree remove <id>` | Manager/orchestrator | Plain Git cleanup outside Atelier until workspace management returns with a clearer contract. |
-| `worktree repair <id>` | Admin | `doctor --fix` for ignored runtime/projection state; canonical issue transitions for durable workflow state. |
+| `worktree repair <id>` | Admin | `check --fix` for ignored runtime/projection state; canonical issue transitions for durable workflow state. |

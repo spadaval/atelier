@@ -23,8 +23,8 @@ views?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Removed. Issue-sourced impact now belongs in `issue show`; objective work health belongs in `issue status <objective-id>`. |
-| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Removed. Objective hierarchy and work buckets belong in `issue status <objective-id>` and issue detail. |
+| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Removed. Issue-sourced impact now belongs in `issue show`; objective work health belongs in `issue show <objective-id>`. |
+| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Removed. Objective hierarchy and work buckets belong in `issue show <objective-id>` and issue detail. |
 | `graph tree --status <status>` | Manager/orchestrator | Filter the hierarchy by status. | Remove. It is redundant with `work queue` status/category filters and currently hard-codes predecessor statuses. |
 
 ## Cutting Direction
@@ -34,7 +34,7 @@ useful operator questions:
 
 - `issue show <id>` renders parent/children, blockers, evidence, and downstream
   impact records that may need review before changing or closing the source.
-- `issue status <objective-id>` renders objective health, linked work buckets,
+- `issue show <objective-id>` renders objective health, linked work buckets,
   blockers, proof gaps, terminal checks, and next actions.
 - `issue show <id>` remains the focused blocker inspection surface.
 

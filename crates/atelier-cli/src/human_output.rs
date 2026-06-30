@@ -1,6 +1,4 @@
-// This module is the shared formatter boundary for the output refresh. Some
-// helpers intentionally land before every command surface has been migrated.
-#![allow(dead_code)]
+// This module is the shared formatter boundary for the output refresh.
 
 use std::collections::BTreeSet;
 use std::io::IsTerminal;
@@ -11,6 +9,7 @@ pub(crate) struct RenderContext {
 }
 
 impl RenderContext {
+    #[allow(dead_code)]
     pub(crate) fn plain() -> Self {
         Self {
             style_policy: StylePolicy::plain(),
@@ -23,6 +22,7 @@ impl RenderContext {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_parts(choice: ColorChoice, is_terminal: bool, no_color: bool) -> Self {
         Self {
             style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
@@ -104,6 +104,7 @@ impl MetadataPanel {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn optional_row(
         mut self,
         label: impl Into<String>,
@@ -186,6 +187,7 @@ impl LinesPanel {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn empty(mut self, empty: impl Into<String>) -> Self {
         self.empty = empty.into();
         self
@@ -312,6 +314,7 @@ impl Panel for FooterPanel {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ColorChoice {
     Auto,
@@ -325,6 +328,7 @@ pub(crate) struct StylePolicy {
 }
 
 impl StylePolicy {
+    #[allow(dead_code)]
     pub(crate) fn plain() -> Self {
         Self { color: false }
     }
@@ -363,6 +367,7 @@ impl StylePolicy {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TextStyle {
     Heading,
@@ -403,6 +408,7 @@ impl DecisionState {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BlockerState {
     Clear,
@@ -410,6 +416,7 @@ pub(crate) enum BlockerState {
     ThroughParent,
 }
 
+#[allow(dead_code)]
 impl BlockerState {
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -432,6 +439,7 @@ impl BlockerState {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRole {
     Executable,
@@ -468,12 +476,14 @@ impl DisplayRole {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RecoveryCallout {
     title: String,
     steps: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl RecoveryCallout {
     pub(crate) fn new(
         title: impl Into<String>,

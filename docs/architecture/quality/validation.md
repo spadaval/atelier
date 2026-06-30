@@ -206,10 +206,10 @@ the metric, baseline when available, measurement command or fixture, observed
 result, and acceptable threshold or reason a hard threshold is not practical.
 
 Do not over-specify subjective output before implementation. For example, an
-information-hierarchy issue for `issue table --kind mission` should name the user task,
+information-hierarchy issue for `work queue --type mission` should name the user task,
 important information to surface, and evaluator context; it should not mandate
 the final row layout unless that layout is the contract. A performance issue
-should be concrete: "reduce `issue status <mission-id>` wall time on fixture X from about
+should be concrete: "reduce `work mission <mission-id>` wall time on fixture X from about
 1.2s to under 500ms, proven by the benchmark command transcript" is stronger
 than "make objective status faster."
 
@@ -257,7 +257,7 @@ For a subjective mission table information-hierarchy task:
   configured proof validator failures, and next action without private context.
 - Epic outcome says the mission operator CLI presents a concise default view
   with drill-down available for audit detail.
-- Executable issue outcome says `issue table --kind mission` output groups active missions by
+- Executable issue outcome says `work queue --type mission` output groups active missions by
   status and exposes blockers and configured validator failures in the default
   human output.
 - The validation issue says an independent evaluator reviews the default output

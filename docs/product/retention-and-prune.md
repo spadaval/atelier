@@ -46,7 +46,7 @@ but normal output must give enough IDs or paths to inspect the candidate set.
 | Class | Default policy | Apply behavior |
 | --- | --- | --- |
 | Local diagnostics logs | Retain command diagnostics for 30 UTC days unless the operator supplies a command override. | Delete expired ignored diagnostics log files. |
-| Ignored runtime, cache, and projection artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable projections are disposable. | Delete only ignored local files that are not locked and are safe to rebuild; print `doctor --fix` guidance when cleanup affects projection state. |
+| Ignored runtime, cache, and projection artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable projections are disposable. | Delete only ignored local files that are not locked and are safe to rebuild; print `check --fix` guidance when cleanup affects projection state. |
 | Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Remove eligible terminal records from the active tree. Recovery uses Git history for the removed path or ID. |
 | Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | Remove only evidence metadata records pruned with their sole terminal dependents; do not delete external payloads. |
 | Native review rooms | Keep while the branch owner is open, under review, or has unmerged branch state. | Prune only with the terminal branch owner after review completion and branch integration are proven. |
@@ -110,4 +110,4 @@ records by force.
 Exceptional destructive surgery stays under explicit maintenance commands, not
 routine pruning. Operators who need to delete a protected or malformed record
 must use the destructive maintenance surface with force/confirmation semantics
-and then run `atelier lint` plus the recovery commands it names.
+and then run `atelier check` plus the recovery commands it names.

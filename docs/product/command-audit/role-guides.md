@@ -44,7 +44,7 @@ Orientation loop:
 ```text
 atelier man worker
 atelier status
-atelier work queue --ready
+atelier work ready
 atelier issue show <id>
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
@@ -62,7 +62,7 @@ bundle apply, branch merge, and destructive record deletion.
 
 Primary job: check proof, review outputs, and validate transitions.
 
-Default first command: `atelier issue status <id>`.
+Default first command: `atelier issue show <id>`.
 
 Orientation loop:
 
@@ -72,13 +72,12 @@ atelier issue transition <id>
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
-atelier lint <id>
-atelier issue status <id> --verbose
+atelier check <id>
 ```
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
-normal readiness inspection uses `issue transition`, `lint`, and
-`issue status <objective-id>`. Any review-artifact action should come from
+normal readiness inspection uses `issue transition`, `check`, and
+`issue show <objective-id>`. Any review-artifact action should come from
 Atelier's current workflow or recovery guidance, not from static reviewer
 policy.
 
@@ -108,15 +107,14 @@ Primary job: create and coordinate work.
 `manager` is the broad CLI role class. `orchestrator` remains a specific Agent
 Factory agent type within that class.
 
-Default first command: `atelier issue table --kind mission`.
+Default first command: `atelier status`.
 
 Core loop:
 
 ```text
-atelier issue table --kind mission
-atelier work queue --ready
+atelier work ready
+atelier work mission <mission-id>
 atelier issue show <id>
-atelier issue status <id>
 atelier bundle preview <file>
 atelier bundle apply <file> --yes
 atelier issue create "..."
@@ -141,24 +139,20 @@ mission and issue views should own hierarchy and impact context.
 
 Primary job: configure, migrate, repair, and maintain Atelier state.
 
-Default first command: `atelier doctor`.
+Default first command: `atelier check`.
 
 Core loop:
 
 ```text
 atelier init
-atelier lint
-atelier doctor
-atelier doctor --fix
+atelier check
+atelier check --fix
 atelier prune
-atelier forgejo roles check
-atelier maintenance delete <kind> <id> --force
 ```
 
-Admin guide is the only role guide that should teach local tracker machinery.
-It should name hidden diagnostics only when they are explicitly useful:
-`workflow check`, `diagnostics slow`, `import-beads`, hidden advanced `export`,
-and hidden advanced `rebuild`.
+Admin guide is the only role guide that may route to local tracker machinery.
+Hidden diagnostics, provider setup, and destructive maintenance commands appear
+only when an explicit recovery path needs them.
 
 ## Resolved Design
 

@@ -19,7 +19,7 @@ use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
-use atelier_sqlite::{validate_issue_type, Database, RecordSummary};
+use atelier_sqlite::{validate_issue_type, Database};
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -818,8 +818,6 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Evide
 #[derive(Debug, Clone)]
 pub(crate) struct EvidenceGateStatus {
     pub passed: bool,
-    pub reason: String,
-    pub help: Option<String>,
 }
 
 pub(crate) fn issue_evidence_gate_status(
@@ -881,14 +879,10 @@ pub(crate) fn evidence_help_hint() -> String {
 
 fn evidence_gate(
     passed: bool,
-    reason: impl Into<String>,
-    help: Option<String>,
+    _reason: impl Into<String>,
+    _help: Option<String>,
 ) -> EvidenceGateStatus {
-    EvidenceGateStatus {
-        passed,
-        reason: reason.into(),
-        help,
-    }
+    EvidenceGateStatus { passed }
 }
 
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
@@ -1297,209 +1291,6 @@ pub(crate) fn list_blocked_with_title(db: &Database, title: &str, quiet: bool) -
     Ok(())
 }
 
-pub fn table(
-    db: &Database,
-    kind: &str,
-    status: &str,
-    issue_type: Option<&str>,
-    quiet: bool,
-) -> Result<()> {
-    match kind {
-        "mission" => mission_table(db, status, quiet),
-        "issue" => issue_table(db, status, issue_type, quiet),
-        _ => bail!("Invalid table kind '{kind}'. Use `mission` or `issue`."),
-    }
-}
-
-fn mission_table(db: &Database, status: &str, quiet: bool) -> Result<()> {
-    let mut records = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| issue.issue_type == "mission")
-        .map(mission_summary_from_issue)
-        .collect::<Vec<_>>();
-    if status == "current" {
-        records.retain(|record| record.status != "closed" && record.status != "superseded");
-    } else if status != "all" {
-        records.retain(|record| record.status == status);
-    }
-    records.sort_by(|a, b| a.id.cmp(&b.id));
-
-    let active_issue_ids = active_issue_ids(db)?;
-    let rows = records
-        .into_iter()
-        .map(|record| mission_table_row(db, &active_issue_ids, record))
-        .collect::<Result<Vec<_>>>()?;
-
-    if quiet {
-        for row in rows {
-            println!("{}", row.id);
-        }
-        return Ok(());
-    }
-
-    println!("Issue Table: mission");
-    println!("====================");
-    if rows.is_empty() {
-        println!("(none)");
-    } else {
-        println!("ID           Status       Health     Ready  Blocked  Done  Backlog  Title");
-        for row in rows {
-            println!(
-                "{:<12} {:<12} {:<10} {:>5} {:>8} {:>5} {:>7}  {}",
-                row.id,
-                row.status,
-                row.health,
-                row.ready,
-                row.blocked,
-                row.done,
-                row.backlog,
-                row.title
-            );
-        }
-    }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Open one objective record: atelier issue show <id>");
-    println!("  Browse grouped work: atelier issue list");
-    Ok(())
-}
-
-fn mission_summary_from_issue(issue: Issue) -> RecordSummary {
-    let id = issue.id.clone();
-    RecordSummary {
-        kind: "issue".to_string(),
-        id: id.clone(),
-        title: issue.title,
-        status: issue.status,
-        created_at: issue.created_at,
-        updated_at: issue.updated_at,
-        source_path: format!("issues/{id}.md"),
-    }
-}
-
-fn issue_table(db: &Database, status: &str, issue_type: Option<&str>, quiet: bool) -> Result<()> {
-    let mut issues = db.list_issues(Some("all"), None, None)?;
-    if status != "all" {
-        issues.retain(|issue| issue.status == status);
-    }
-    if let Some(issue_type) = issue_type {
-        issues.retain(|issue| issue.issue_type == issue_type);
-    }
-    issues.sort_by(|a, b| a.id.cmp(&b.id));
-
-    let active_issue_ids = active_issue_ids(db)?;
-    let rows = issues
-        .into_iter()
-        .map(|issue| issue_table_row(db, &active_issue_ids, issue))
-        .collect::<Result<Vec<_>>>()?;
-
-    if quiet {
-        for row in rows {
-            println!("{}", row.id);
-        }
-        return Ok(());
-    }
-
-    println!("Issue Table: issue");
-    println!("==================");
-    if rows.is_empty() {
-        println!("(none)");
-    } else {
-        println!(
-            "ID           Type       Status       Health     Ready  Blocked  Done  Backlog  Title"
-        );
-        for row in rows {
-            println!(
-                "{:<12} {:<10} {:<12} {:<10} {:>5} {:>8} {:>5} {:>7}  {}",
-                row.id,
-                row.issue_type.unwrap_or_default(),
-                row.status,
-                row.health,
-                row.ready,
-                row.blocked,
-                row.done,
-                row.backlog,
-                row.title
-            );
-        }
-    }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Open one objective record: atelier issue show <id>");
-    println!("  Browse grouped work: atelier issue list");
-    Ok(())
-}
-
-#[derive(Debug)]
-struct ObjectiveTableRow {
-    id: String,
-    title: String,
-    status: String,
-    issue_type: Option<String>,
-    health: &'static str,
-    ready: usize,
-    blocked: usize,
-    done: usize,
-    backlog: usize,
-}
-
-fn mission_table_row(
-    db: &Database,
-    active_issue_ids: &BTreeSet<String>,
-    record: RecordSummary,
-) -> Result<ObjectiveTableRow> {
-    let active_issue_refs = active_issue_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-    let snapshot = crate::commands::objective_status::snapshot_for_mission(
-        db,
-        &record.id,
-        &active_issue_refs,
-    )?;
-    Ok(ObjectiveTableRow {
-        id: record.id,
-        title: record.title,
-        status: record.status,
-        issue_type: None,
-        health: snapshot.health(),
-        ready: snapshot.ready,
-        blocked: snapshot.blocked,
-        done: snapshot.done,
-        backlog: snapshot.backlog,
-    })
-}
-
-fn issue_table_row(
-    db: &Database,
-    active_issue_ids: &BTreeSet<String>,
-    issue: Issue,
-) -> Result<ObjectiveTableRow> {
-    let active_issue_refs = active_issue_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-    let snapshot = crate::commands::objective_status::snapshot_for_issue_objective(
-        db,
-        &issue.id,
-        &active_issue_refs,
-    )?;
-    Ok(ObjectiveTableRow {
-        id: issue.id,
-        title: issue.title,
-        status: issue.status,
-        issue_type: Some(issue.issue_type),
-        health: snapshot.health(),
-        ready: snapshot.ready,
-        blocked: snapshot.blocked,
-        done: snapshot.done,
-        backlog: snapshot.backlog,
-    })
-}
-
 fn active_issue_ids(db: &Database) -> Result<BTreeSet<String>> {
     let workflow_policy = load_issue_workflow_policy()?;
     let active_issues = crate::commands::status::current_work_issues(db, workflow_policy.as_ref())?;
@@ -1507,110 +1298,6 @@ fn active_issue_ids(db: &Database) -> Result<BTreeSet<String>> {
         .into_iter()
         .map(|issue| issue.id)
         .collect::<BTreeSet<_>>())
-}
-
-pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
-    let lowercase = query.to_lowercase();
-    let mut items = Vec::new();
-    for issue in search_candidate_issues(db, &lowercase)? {
-        items.push(issue_summary(db, issue)?);
-    }
-    if items.is_empty() {
-        println!("No issues found matching '{query}'.");
-        Ok(())
-    } else if quiet {
-        render_issue_ids_quiet(items);
-        Ok(())
-    } else {
-        let rows = items
-            .into_iter()
-            .map(|item| {
-                let workflow_policy = load_issue_workflow_policy()?;
-                queue_row(db, workflow_policy.as_ref(), item)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        render_issue_queue_human(db, &format!("Issue Search Results: {query}"), rows, true)
-    }
-}
-
-fn search_candidate_issues(db: &Database, lowercase_query: &str) -> Result<Vec<Issue>> {
-    let projection_issues = db.list_issues(Some("all"), None, None)?;
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        let matched = projection_issues
-            .into_iter()
-            .filter(|issue| projection_issue_matches(issue, lowercase_query))
-            .collect::<Vec<_>>();
-        return Ok(matched);
-    };
-
-    let store = RecordStore::new(&state_dir);
-    let mut canonical = store
-        .load_issues()?
-        .into_iter()
-        .map(|record| (record.issue.id.clone(), record))
-        .collect::<BTreeMap<_, _>>();
-
-    let mut matched = Vec::new();
-    for projection_issue in projection_issues {
-        let Some(record) = canonical.remove(&projection_issue.id) else {
-            bail!(
-                "Projection issue {} has no canonical Markdown record",
-                projection_issue.id
-            );
-        };
-        let activity_matches = list_issue_activities(&state_dir, &projection_issue.id)?
-            .into_iter()
-            .any(|activity| {
-                activity.summary.to_lowercase().contains(lowercase_query)
-                    || activity.body.to_lowercase().contains(lowercase_query)
-            });
-        if canonical_issue_matches(&record, lowercase_query) || activity_matches {
-            let mut issue = record.issue;
-            issue.parent_id = projection_issue.parent_id;
-            issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
-            matched.push(issue);
-        }
-    }
-    Ok(matched)
-}
-
-fn projection_issue_matches(issue: &Issue, lowercase_query: &str) -> bool {
-    let haystack = format!(
-        "{}\n{}",
-        issue.title,
-        issue.description.as_deref().unwrap_or_default()
-    )
-    .to_lowercase();
-    haystack.contains(lowercase_query)
-}
-
-fn canonical_issue_matches(record: &CanonicalIssueRecord, lowercase_query: &str) -> bool {
-    let relationship_text = record
-        .relationships
-        .relates
-        .iter()
-        .map(|relation| {
-            format!(
-                "{} {} {}",
-                relation.relation_type, relation.kind, relation.id
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let haystack = format!(
-        "{}\n{}\n{}",
-        record.issue.title,
-        record.sections.searchable_text(),
-        relationship_text
-    )
-    .to_lowercase();
-    haystack.contains(lowercase_query)
-}
-
-fn render_issue_ids_quiet(items: Vec<IssueSummary>) {
-    for item in items {
-        println!("{}", item.id);
-    }
 }
 
 fn render_queue_ids_quiet(items: Vec<QueueRow>) {

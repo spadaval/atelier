@@ -27,5 +27,5 @@ non-Markdown tracker facts. Current work is derived from canonical issue status
 and checkout context.
 
 Old SQLite schema compatibility is out of scope for the crate rewrite. The
-supported migration path is `atelier doctor --fix` or rebuild from committed
+supported migration path is `atelier check --fix` or rebuild from committed
 Markdown records.

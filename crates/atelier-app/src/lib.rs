@@ -4,12 +4,14 @@
 //! that do not write directly to stdout or stderr.
 
 pub mod command_storage;
+pub mod command_surface;
 pub mod export;
 pub mod forgejo;
 pub mod health;
 pub mod init;
 pub mod issue_read;
 pub mod lint;
+pub mod objective_graph;
 pub mod pr;
 pub mod project_config;
 pub mod projection;
@@ -17,8 +19,10 @@ pub mod read_pipeline;
 pub mod rebuild;
 pub mod review_room;
 pub mod storage_layout;
+pub mod test_inventory;
 pub mod use_cases;
 pub mod workflow_policy;
+pub mod workflow_validation;
 
 /// Minimal outcome wrapper for early app-layer extraction.
 #[derive(Clone, Debug, Eq, PartialEq)]

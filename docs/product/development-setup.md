@@ -31,7 +31,7 @@ From the repository root:
 cargo fmt -- --check
 cargo nextest run
 atelier man admin
-atelier doctor
+atelier check
 ```
 
 Use the installed `atelier` command for normal tracker work. Use
@@ -70,7 +70,7 @@ SQLite projections, locks, diagnostics, identity hints, or UI caches, but they
 must not be treated as durable project policy or committed work records.
 
 If runtime or cache state is missing or stale, prefer normal Atelier health and
-repair surfaces such as `atelier doctor` and commands named by `atelier status`.
+repair surfaces such as `atelier check` and commands named by `atelier status`.
 Do not edit ignored runtime/cache files as a substitute for updating tracked
 Markdown records, `.atelier/config.toml`, or `.atelier/workflow.yaml`.
 

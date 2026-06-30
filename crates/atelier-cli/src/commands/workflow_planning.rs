@@ -239,12 +239,6 @@ pub(crate) fn branch_lifecycle_context(
     })
 }
 
-pub(crate) fn configured_base_branch() -> Result<String> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    Ok(policy.branch_policy.base_branch)
-}
-
 pub(crate) fn current_git_branch() -> Result<Option<String>> {
     let repo_root = crate::commands::workflow::repo_root()?;
     Ok(crate::commands::workflow::git_stdout(
