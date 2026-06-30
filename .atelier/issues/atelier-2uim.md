@@ -14,7 +14,7 @@ relationships:
   relates:
   - kind: "issue"
     id: "atelier-1mga"
-    type: "validates"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"

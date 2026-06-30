@@ -409,11 +409,15 @@ fn test_mission_terminal_status_and_options_use_configured_objective_validators(
 }
 
 #[test]
-fn test_mission_close_uses_configured_objective_validators() {
+fn test_mission_request_publish_uses_configured_objective_validators() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
-    let mission_id = create_mission_fixture(dir.path(), "Configured validator close");
+    let remote = tempdir().unwrap();
+    git_push(remote.path(), &["init", "--bare", "-q"]);
+    add_origin_remote(dir.path(), remote.path());
+    git_push(dir.path(), &["push", "-u", "origin", "main"]);
+    let mission_id = create_mission_fixture(dir.path(), "Configured validator publish");
 
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Configured terminal work"]);
@@ -422,7 +426,14 @@ fn test_mission_close_uses_configured_objective_validators() {
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission link failed: {stderr}");
-    commit_all(dir.path(), "configured validator close fixture");
+    commit_all(dir.path(), "configured validator publish fixture");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "configured validator mission branch");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &work_id, "start"]);
+    assert!(success, "work start failed: {stderr}");
+    commit_all(dir.path(), "configured validator work branch");
 
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
     attach_pass_evidence(
@@ -453,21 +464,17 @@ fn test_mission_close_uses_configured_objective_validators() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "configured validators passed",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
-    assert!(success, "mission close failed: {stderr}");
+    assert!(success, "mission request_publish failed: {stderr}");
     assert!(
-        close_out.contains("Applied transition close"),
+        close_out.contains("Applied transition request_publish"),
         "{close_out}"
     );
-    assert!(close_out.contains("To:       closed"), "{close_out}");
+    assert!(
+        close_out.contains("To:       publish_review"),
+        "{close_out}"
+    );
     assert!(close_out.contains("atelier issue show"), "{close_out}");
 }
 
@@ -499,50 +506,54 @@ fn test_root_status_reports_current_mission_counts_without_active_focus() {
 }
 
 #[test]
-fn test_mission_closeout_enforces_gates() {
+fn test_mission_publish_enforces_gates() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
+    let remote = tempdir().unwrap();
+    git_push(remote.path(), &["init", "--bare", "-q"]);
+    add_origin_remote(dir.path(), remote.path());
+    git_push(dir.path(), &["push", "-u", "origin", "main"]);
 
     let (success, mission_out, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
             "create",
-            "Strict closeout",
+            "Strict publish",
             "--issue-type",
             "mission",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
-    let mission_id = issue_id_by_title(dir.path(), "Strict closeout");
+    let mission_id = issue_id_by_title(dir.path(), "Strict publish");
     move_mission_to_ready(dir.path(), &mission_id);
 
-    let (success, work_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Closeout work"]);
+    let (success, work_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Publish work"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(work_out.contains("Created issue atelier-"));
-    let work_id = issue_id_by_title(dir.path(), "Closeout work");
+    let work_id = issue_id_by_title(dir.path(), "Publish work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
+    commit_all(dir.path(), "ready strict mission publish");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "strict mission publish branch");
 
     let (success, closeout_blocked_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "done",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
-    assert!(!success, "mission close should fail with open work");
+    assert!(!success, "mission publish should fail with open work");
     assert!(closeout_blocked_out.contains("Issue Transition"));
     assert!(closeout_blocked_out.contains("objective.work_terminal"));
     assert!(closeout_blocked_out.contains("validator objective.work_terminal failed"));
-    assert!(stderr.contains("Transition 'close' is blocked"));
+    assert!(stderr.contains("Transition 'request_publish' is blocked"));
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &work_id, "start"]);
+    assert!(success, "work start failed: {stderr}");
+    commit_all(dir.path(), "strict mission work branch");
 
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
 
@@ -557,28 +568,21 @@ fn test_mission_closeout_enforces_gates() {
     assert!(stderr.contains("issue status changes use `atelier issue transition"));
 
     attach_pass_evidence(dir.path(), "mission", &mission_id, "strict mission proof");
-    commit_all(dir.path(), "ready strict mission closeout");
+    commit_all(dir.path(), "ready strict mission publish");
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "ready to close",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
     assert!(
         success,
-        "mission close should succeed after gates pass: {stderr}"
+        "mission publish should succeed after gates pass: {stderr}"
     );
-    assert!(close_out.contains("Applied transition close"));
-    assert!(close_out.contains("To:       closed"));
+    assert!(close_out.contains("Applied transition request_publish"));
+    assert!(close_out.contains("To:       publish_review"));
 }
 
 #[test]
-fn test_dirty_worktree_blocks_mission_closeout() {
+fn test_dirty_worktree_blocks_mission_publish() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -588,14 +592,14 @@ fn test_dirty_worktree_blocks_mission_closeout() {
         &[
             "issue",
             "create",
-            "Dirty closeout",
+            "Dirty publish",
             "--issue-type",
             "mission",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
-    let mission_id = issue_id_by_title(dir.path(), "Dirty closeout");
+    let mission_id = issue_id_by_title(dir.path(), "Dirty publish");
     move_mission_to_ready(dir.path(), &mission_id);
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Dirty terminal work"]);
@@ -604,6 +608,13 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
+    commit_all(dir.path(), "dirty mission publish ready");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "dirty mission branch");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &work_id, "start"]);
+    assert!(success, "work start failed: {stderr}");
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
     attach_pass_evidence(
         dir.path(),
@@ -611,33 +622,26 @@ fn test_dirty_worktree_blocks_mission_closeout() {
         &mission_id,
         "dirty closeout mission proof",
     );
-    commit_all(dir.path(), "ready dirty mission closeout");
-    std::fs::write(dir.path().join("untracked-closeout.txt"), "dirty").unwrap();
+    commit_all(dir.path(), "ready dirty mission publish");
+    std::fs::write(dir.path().join("untracked-publish.txt"), "dirty").unwrap();
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "done",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
-    assert!(!success, "dirty worktree must block mission closeout");
+    assert!(!success, "dirty worktree must block mission publish");
     assert!(stdout.contains("Issue Transition"));
     assert!(stdout.contains("validator git.worktree_clean failed"));
     assert!(
         stdout.contains("git checkout has") || stdout.contains("Dirty state: dirty"),
         "{stdout}"
     );
-    assert!(stdout.contains("untracked-closeout.txt"));
-    assert!(stderr.contains("Transition 'close' is blocked"));
+    assert!(stdout.contains("untracked-publish.txt"));
+    assert!(stderr.contains("Transition 'request_publish' is blocked"));
 }
 
 #[test]
-fn test_off_base_branch_blocks_mission_closeout() {
+fn test_mission_start_from_side_branch_does_not_require_base_checkout() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -647,58 +651,42 @@ fn test_off_base_branch_blocks_mission_closeout() {
         &[
             "issue",
             "create",
-            "Off base closeout",
+            "Side branch mission",
             "--issue-type",
             "mission",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
-    let mission_id = issue_id_by_title(dir.path(), "Off base closeout");
+    let mission_id = issue_id_by_title(dir.path(), "Side branch mission");
     move_mission_to_ready(dir.path(), &mission_id);
-
-    let (success, work_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Off base terminal work"]);
-    assert!(success, "work create failed: {stderr}");
-    assert!(work_out.contains("Created issue atelier-"));
-    let work_id = issue_id_by_title(dir.path(), "Off base terminal work");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
-    assert!(success, "mission add work failed: {stderr}");
-    close_issue_with_evidence(dir.path(), &work_id, Some("done"));
-    attach_pass_evidence(dir.path(), "mission", &mission_id, "off-base mission proof");
-    commit_all(dir.path(), "ready off-base mission closeout");
+    commit_all(dir.path(), "ready side branch mission");
 
     let status = Command::new("git")
         .current_dir(dir.path())
-        .args(["switch", "-c", "side-closeout"])
+        .args(["switch", "-c", "side-start"])
         .status()
         .unwrap();
-    assert!(status.success(), "git switch -c side-closeout failed");
+    assert!(status.success(), "git switch -c side-start failed");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "done",
-        ],
-    );
-    assert!(!success, "mission close must require the base branch");
-    assert!(stdout.contains("Issue Transition"), "{stdout}");
-    assert!(stdout.contains("validator git.on_base failed"), "{stdout}");
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
     assert!(
-        stdout.contains("current branch is side-closeout; expected configured base branch main"),
+        success,
+        "mission start should work from a side branch: {stderr}"
+    );
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+    assert!(
+        stdout.contains(&format!("created branch mission/{mission_id} from main")),
         "{stdout}"
     );
-    assert!(stderr.contains("Transition 'close' is blocked"), "{stderr}");
-    assert_eq!(git_current_branch(dir.path()), "side-closeout");
 }
 
 #[test]
-fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
+fn test_mission_publish_still_blocks_hand_edited_issue_markdown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -708,14 +696,14 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
         &[
             "issue",
             "create",
-            "Dirty canonical tracker closeout",
+            "Dirty canonical tracker publish",
             "--issue-type",
             "mission",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
-    let mission_id = issue_id_by_title(dir.path(), "Dirty canonical tracker closeout");
+    let mission_id = issue_id_by_title(dir.path(), "Dirty canonical tracker publish");
     move_mission_to_ready(dir.path(), &mission_id);
 
     let (success, issue_out, stderr) = run_atelier(
@@ -728,6 +716,14 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
+    commit_all(dir.path(), "dirty canonical mission publish ready");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "dirty canonical mission branch");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "work start failed: {stderr}");
     attach_pass_evidence(
         dir.path(),
         "mission",
@@ -745,18 +741,11 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "done",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
     assert!(
         !success,
-        "hand-edited canonical issue markdown must block closeout"
+        "hand-edited canonical issue markdown must block publish"
     );
     assert!(stdout.contains("Issue Transition"));
     assert!(stdout.contains("validator git.worktree_clean failed"));
@@ -765,7 +754,7 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
         "{stdout}"
     );
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stderr.contains("Transition 'close' is blocked"));
+    assert!(stderr.contains("Transition 'request_publish' is blocked"));
 }
 
 #[test]
@@ -2127,7 +2116,7 @@ fn test_epic_close_integrates_into_recorded_mission_branch() {
 }
 
 #[test]
-fn test_epic_start_rejects_wrong_branch_for_mission_scope() {
+fn test_epic_start_requires_started_mission_branch_for_mission_scope() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2176,19 +2165,86 @@ fn test_epic_start_rejects_wrong_branch_for_mission_scope() {
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
 
-    assert!(!success, "epic start should reject non-mission branch");
+    assert!(!success, "epic start should reject missing mission branch");
     let output = format!("{stdout}\n{stderr}");
-    assert!(output.contains("git.on_mission_branch"), "{output}");
     assert!(
-        output.contains(&format!(
-            "current branch is side-start; expected mission/<id> for issue {epic_id}"
-        )),
+        output.contains(&format!("base branch 'mission/{mission_id}' is missing"))
+            || output.contains(&format!("base branch 'mission/{mission_id}'")),
         "{output}"
     );
     assert_eq!(git_current_branch(dir.path()), "side-start");
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
     assert!(success, "epic show failed: {stderr}");
     assert!(show_out.contains("Status:   todo"), "{show_out}");
+}
+
+#[test]
+fn test_epic_start_from_other_branch_uses_recorded_mission_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Side branch mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Side branch mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Side branch epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Side branch epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "side branch mission baseline");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "side branch mission started");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "-c", "side-start"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git switch -c side-start failed");
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+
+    assert!(success, "epic start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains(&format!(
+            "created branch epic/{epic_id} from mission/{mission_id}"
+        )),
+        "{start_out}"
+    );
+    let mission_head = git_rev_parse(dir.path(), &format!("mission/{mission_id}"));
+    assert_eq!(
+        git_rev_parse(dir.path(), &format!("epic/{epic_id}~0")),
+        mission_head
+    );
 }
 
 #[test]
@@ -2384,7 +2440,7 @@ fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
 }
 
 #[test]
-fn test_epic_start_requires_base_branch() {
+fn test_epic_start_from_side_branch_uses_configured_base_branch() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2406,18 +2462,16 @@ fn test_epic_start_requires_base_branch() {
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
-    assert!(!success, "epic start must require the base branch");
-    let output = format!("{stdout}\n{stderr}");
-    assert!(output.contains("git.on_base"), "{output}");
+    assert!(success, "epic start should work from side branch: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        output.contains("current branch is side-start; expected configured base branch main"),
-        "{output}"
+        stdout.contains(&format!("created branch epic/{epic_id} from main")),
+        "{stdout}"
     );
-    assert_eq!(git_current_branch(dir.path()), "side-start");
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
     assert!(success, "epic show failed: {stderr}");
-    assert!(show_out.contains("Status:   todo"), "{show_out}");
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
 }
 
 #[test]

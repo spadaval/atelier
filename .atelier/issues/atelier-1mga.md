@@ -15,7 +15,7 @@ relationships:
   relates:
   - kind: "issue"
     id: "atelier-2uim"
-    type: "validates"
+    type: "advances"
   - kind: "issue"
     id: "atelier-ef94"
     type: "advances"

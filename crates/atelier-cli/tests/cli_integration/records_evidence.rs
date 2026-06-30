@@ -1648,19 +1648,12 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &mission_id,
-            "close",
-            "--reason",
-            "done",
-        ],
+        &["issue", "transition", &mission_id, "request_publish"],
     );
 
     assert!(
         !success,
-        "mission closeout should block undeferred obsolete-command tests"
+        "mission publish should block undeferred obsolete-command tests"
     );
     assert!(stdout.contains("Issue Transition"));
     assert!(stdout.contains("validator command_surface_current failed"));
@@ -1677,7 +1670,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
     assert!(stdout.contains("tests/legacy_session.rs"));
     assert!(stdout.contains("legacy_session_still_works"));
     assert!(stdout.contains("atelier session start"));
-    assert!(stderr.contains("Transition 'close' is blocked"));
+    assert!(stderr.contains("Transition 'request_publish' is blocked"));
 }
 
 #[test]

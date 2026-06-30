@@ -607,7 +607,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
             .row(
                 "Relationships",
                 format!(
-                    "advances {}, open blockers {}, validates {}, other {}",
+                    "advances {}, open blockers {}, validating evidence {}, other {}",
                     summary.relationships.advances_roots.len(),
                     summary.relationships.open_blockers.len(),
                     summary.evidence.linked_validating_evidence,

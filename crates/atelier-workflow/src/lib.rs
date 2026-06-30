@@ -42,6 +42,8 @@ statuses:
   review:
     category: active
     role: reviewer
+  publish_review:
+    category: done
   validation:
     category: active
     role: validator
@@ -54,7 +56,7 @@ workflows:
   mission:
     applies_to: [mission]
     initial_status: draft
-    done_statuses: [closed]
+    done_statuses: [publish_review, closed]
     transitions:
       ready:
         from: [draft]
@@ -68,11 +70,12 @@ workflows:
         description: "Start mission execution after the configured repository baseline is green or explicitly waived."
         validators:
           - baseline.default_checks
-      close:
+        actions:
+          - git.prepare_branch
+      request_publish:
         from: [ready, in_progress, validation]
-        to: closed
-        required_fields: [close_reason]
-        description: "Closing requires configured objective validators to pass."
+        to: publish_review
+        description: "Open the mission publish review from the mission branch to the configured base branch."
         validators:
           - objective.work_present
           - objective.work_terminal
@@ -83,8 +86,10 @@ workflows:
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - review.open: { role: manager }
 
   task:
     applies_to: [bug, feature, task]
@@ -123,8 +128,6 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
-        validators:
-          - git.on_base
         actions:
           - git.prepare_branch
       block:
@@ -1356,12 +1359,12 @@ fn parse_transition_actions(
                 ),
             ));
         }
-        if name == "review.open" && to_status != "review" {
+        if name == "review.open" && to_status != "review" && !to_status.ends_with("_review") {
             return Err(policy_error(
                 "workflow_config_invalid_action",
                 display_path,
                 format!(
-                    "workflows.{}.transitions.{}.actions declares '{}' but review artifact actions are only supported on transitions to review",
+                    "workflows.{}.transitions.{}.actions declares '{}' but review artifact actions are only supported on transitions to review or *_review statuses",
                     workflow_name, transition_name, name
                 ),
             ));
@@ -2494,7 +2497,7 @@ mod tests {
         );
         assert_eq!(
             validator_names(&policy.workflows["epic"].transitions["start"].validators),
-            vec!["git.on_base"]
+            Vec::<&str>::new()
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
@@ -2711,17 +2714,14 @@ mod tests {
 
         for issue_type in policy.issue_types.keys() {
             let workflow_name = policy.workflow_by_issue_type.get(issue_type).unwrap();
-            let close_validators = policy.workflows[workflow_name]
-                .transitions
-                .get("close")
-                .map(|transition| {
-                    transition
-                        .validators
-                        .iter()
-                        .map(|validator| validator.builtin.as_str())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap();
+            let Some(close) = policy.workflows[workflow_name].transitions.get("close") else {
+                continue;
+            };
+            let close_validators = close
+                .validators
+                .iter()
+                .map(|validator| validator.builtin.as_str())
+                .collect::<Vec<_>>();
             let has_linked_pr_merged = close_validators.contains(&"review.linked_pr_merged");
             assert_eq!(
                 has_linked_pr_merged,

@@ -969,7 +969,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier history",
         "atelier issue transition <issue-id> start",
         "atelier issue transition <issue-id>",
-        "atelier issue transition <mission-id> close --reason",
+        "atelier issue transition <mission-id> request_publish",
         "atelier check",
         "atelier check <issue-id>",
         "atelier check --fix",

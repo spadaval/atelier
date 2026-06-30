@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "done"
 title: "Bug: Issue-to-issue validates links are accepted but not handled as validation"
-updated_at: "2026-06-30T17:48:20.061197566+00:00"
+updated_at: "2026-06-30T22:07:16+00:00"
 ---
 
 ## Description
@@ -32,3 +32,8 @@ Issue-to-issue `validates` links currently round-trip as generic typed links, bu
 - Reject or lint issue-to-issue `validates` links with clear guidance.
 - Update rollup wording so evidence counts cannot be confused with validation issue links.
 - Migrate existing issue-to-issue `validates` links to the chosen model or document any intentional exception.
+
+## Evidence
+
+- Evidence `atelier-esmi` records validation for the evidence-only `validates`
+  contract and migration.

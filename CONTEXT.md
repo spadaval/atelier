@@ -37,6 +37,10 @@
   use-case orchestration, and `atelier-cli` for the public `atelier` binary.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
+- Evidence validates relationship: the proof relationship from an evidence
+  record to the issue, mission, epic, or other record whose claim it supports.
+  `validates` is reserved for evidence links; issue-to-issue mission scope uses
+  `advances`.
 - Strong proof: claim-specific evidence that is reproducible from durable
   repository state or recorded transcripts, attached to the accountable work,
   classified with a result, scoped to the claim being made, and independently
@@ -83,10 +87,14 @@
 - Branch base: the recorded branch/ref and commit from which a work branch was
   prepared. Review targets, sync, and integration checks use the recorded
   branch base instead of recomputing a target from the current parent graph.
-- Mission integration branch: an optional mission work branch named
-  `mission/<issue_id>`. It exists only when the mission workflow opts in through
-  explicit validators and branch actions; missions do not implicitly create a
-  hidden branch, and mission scope is still defined by direct `advances` links.
+- Mission integration branch: the mission work branch named
+  `mission/<issue_id>`. Mission workflows prepare it explicitly with branch
+  actions, and mission scope is still defined by direct `advances` links.
+- Mission publish review: the mission workflow state where mission-scoped work
+  is complete enough to open a review artifact from `mission/<issue_id>` to the
+  configured base branch. This is the explicit handoff to base-branch
+  publication; normal mission execution and scoped work closeout happen on
+  mission-derived branches before this state.
 - Review artifact action: the v1 transition action that opens or links the
   configured review artifact for the branch-owning issue or epic and writes the
   canonical `review` field. It follows the active review mode and must not
@@ -231,7 +239,7 @@
   epics own reviewable branches, and ordinary issues own local implementation
   proof. Per-issue worktrees or branches are exceptional isolation tools, not
   the default assignment model.
-- Mission lifecycle and closeout policy is workflow-owned. The CLI may provide
+- Mission lifecycle and publish policy is workflow-owned. The CLI may provide
   objective graph summaries and migration helpers, but the valid statuses,
   transitions, validators, and evidence requirements for mission-shaped work
   come from `.atelier/workflow.yaml`.

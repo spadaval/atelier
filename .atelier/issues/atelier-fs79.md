@@ -28,9 +28,6 @@ relationships:
   - kind: "issue"
     id: "atelier-sszj"
     type: "advances"
-  - kind: "issue"
-    id: "atelier-sszj"
-    type: "validates"
 schema: "atelier.issue"
 schema_version: 1
 closed_at: "2026-06-30T20:18:12.942829369+00:00"

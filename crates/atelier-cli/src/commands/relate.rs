@@ -210,6 +210,12 @@ pub fn unlink_issue(
 }
 
 fn validate_issue_link_role(repo_root: &Path, role: &str) -> Result<()> {
+    if matches!(role, "validates" | "evidenced_by") {
+        bail!(
+            "Invalid issue link role '{}'. Proof roles are reserved for evidence links; use `atelier evidence record --target issue/<id> --kind validation \"...\"` or `atelier evidence attach <evidence-id> issue <id>`.",
+            role
+        );
+    }
     if WELL_KNOWN_LINK_TYPES.contains(&role) || WELL_KNOWN_RELATION_TYPES.contains(&role) {
         return Ok(());
     }

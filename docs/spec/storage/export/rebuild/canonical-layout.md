@@ -161,6 +161,8 @@ stores peer semantic relationships with a `type`; mission work and direct
 mission blockers use this typed relationship surface. Rebuild derives issue
 readiness, hierarchy, and runtime relation indexes from these buckets;
 `depends_on` is a query/display concept derived as the inverse of `blocks`.
+Proof roles such as `validates` are reserved for evidence attachments and are
+not valid issue-to-issue `relates` types.
 
 ## Direct Edit Contract
 

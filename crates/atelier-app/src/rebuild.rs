@@ -576,6 +576,13 @@ fn validate_issue_link_type(
     relation_type: &str,
     custom_issue_link_types: &BTreeSet<String>,
 ) -> Result<()> {
+    if matches!(relation_type, "validates" | "evidenced_by") {
+        bail!(
+            "workflow_issue_link_type_invalid: issue {} has proof relationship '{}' to another issue; proof roles are reserved for evidence attachments. Use 'advances' for mission scope or attach evidence with role 'validates'.",
+            issue_id,
+            relation_type
+        );
+    }
     if WELL_KNOWN_LINK_TYPES.contains(&relation_type)
         || WELL_KNOWN_RELATION_TYPES.contains(&relation_type)
         || custom_issue_link_types.contains(relation_type)
