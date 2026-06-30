@@ -13,6 +13,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-akxm"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-fs79"
     type: "advances"
   - kind: "issue"
