@@ -6,6 +6,15 @@ labels:
 - "git"
 - "validation"
 - "workflow"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-fs79
+    owner_kind: issue
+    review_target: master
+    work_branch: validation/atelier-fs79
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +29,9 @@ relationships:
     type: "validates"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate mission integration branch workflow end to end"
-updated_at: "2026-06-30T16:10:07.073285491+00:00"
+updated_at: "2026-06-30T19:44:45.852954285+00:00"
 ---
 
 ## Description
