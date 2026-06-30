@@ -33,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Simplify mission planning to target state"
-updated_at: "2026-06-30T15:15:49.621930961+00:00"
+updated_at: "2026-06-30T15:16:03.127139552+00:00"
 ---
 
 ## Description
