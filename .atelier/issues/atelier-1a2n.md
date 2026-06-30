@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:19:38.214631656+00:00"
+status: "done"
 title: "Align product and quality docs with simplified mission model"
-updated_at: "2026-06-29T17:40:17.982088449+00:00"
+updated_at: "2026-06-30T15:19:38.214631656+00:00"
 ---
 
 ## Description

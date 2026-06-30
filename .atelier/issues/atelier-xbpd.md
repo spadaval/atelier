@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:20:34.990191587+00:00"
+status: "done"
 title: "Record validation results as pass-fail receipts"
-updated_at: "2026-06-29T17:47:42.680885710+00:00"
+updated_at: "2026-06-30T15:20:34.990191587+00:00"
 ---
 
 ## Description
