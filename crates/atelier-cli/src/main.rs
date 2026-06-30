@@ -59,7 +59,7 @@ Common commands:
   atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
-  atelier issue transition <mission-id> close --reason \"...\"
+  atelier issue transition <mission-id> request_publish
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
   atelier history

@@ -291,7 +291,10 @@ pub fn mission_dashboard(
             ),
         );
     if scoped_work_is_terminal(&counts) {
-        metadata = metadata.row("Closeout", transition_readiness(db, &mission.id, "close")?);
+        metadata = metadata.row(
+            "Publish",
+            transition_readiness(db, &mission.id, "request_publish")?,
+        );
     }
     let mut page = Page::new(format!(
         "{} [mission] {} - {}",

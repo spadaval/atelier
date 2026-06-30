@@ -49,8 +49,9 @@ Configured custom link types are accepted by `atelier issue link --role <type>`
 and stored in issue `relationships.relates[]`. They are context-only: commands
 may display, search, preserve, and unlink them, but they do not affect mission
 progress, readiness, blockers, branch ownership, review ownership, or workflow
-transition validators. Built-in workflow-driving roles such as `advances`,
-`blocked_by`, and evidence `validates` remain hard-coded semantics. Unknown
+transition validators. Built-in workflow-driving roles such as `advances` and
+`blocked_by` remain hard-coded semantics. Evidence `validates` is reserved for
+evidence attachments and is rejected as an issue-to-issue link role. Unknown
 custom link roles are rejected until listed in
 `issue_links.custom_context_types`.
 
@@ -127,6 +128,7 @@ statuses:
   blocked: { category: blocked }
   review: { category: active, role: reviewer }
   validation: { category: active, role: validator }
+  publish_review: { category: done }
   done: { category: done }
   closed: { category: done }
   superseded: { category: done }
@@ -135,22 +137,20 @@ workflows:
   mission:
     applies_to: [mission]
     initial_status: ready
-    done_statuses: [closed, superseded]
+    done_statuses: [publish_review, closed, superseded]
     transitions:
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - git.on_base
           - git.worktree_clean
         actions:
           - git.prepare_branch
-      close:
+      request_publish:
         from: [ready, in_progress, validation]
-        to: closed
-        required_fields: [close_reason]
-        description: "Closing requires configured objective validators to pass."
+        to: publish_review
+        description: "Open the mission publish review from the mission branch to the configured base branch."
         validators:
           - objective.work_present
           - objective.work_terminal
@@ -162,6 +162,17 @@ workflows:
           - command_surface_current
           - ignored_tests_reviewed
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - git.push
+          - review.open:
+              provider: forgejo
+              role: manager
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
 
   task:
     applies_to: [bug, feature, task]
@@ -196,8 +207,6 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
-        validators:
-          - git.on_base
         actions:
           - git.prepare_branch
       block:
@@ -323,7 +332,7 @@ tracker graph rather than duplicated in command handlers:
   actions, in which case they own an opt-in mission integration branch;
 - child issue completion actions commit tracker state on the epic branch and do
   not merge to base; and
-- standalone issue, epic, and opt-in mission completion actions integrate their
+- standalone issue and epic completion actions integrate their
   owner branch to the recorded branch base when the workflow declares that
   action.
 
@@ -551,9 +560,9 @@ Supported built-ins include:
 | `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
 | `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
 | `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
-| `validation.criteria_satisfied` | Explicit mission validation work and linked evidence satisfy the mission `Outcome` according to the configured objective closeout check. |
-| `command_surface_current` | Public command-surface guidance has been checked against current help and docs for closeout. |
-| `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for closeout risk. |
+| `validation.criteria_satisfied` | Explicit mission validation work and linked evidence satisfy the mission `Outcome` according to the configured objective publish check. |
+| `command_surface_current` | Public command-surface guidance has been checked against current help and docs for publish readiness. |
+| `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for publish risk. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
 | `git.on_base` | Current checkout is the configured `branch_policy.base_branch`. |
@@ -653,10 +662,10 @@ Agents use the review artifact for code discussion: worker context for the diff,
 reviewer findings and review decisions, validator bugs tied to changed code or
 tests, and worker responses plus follow-up commits. Agents keep Atelier as the
 durable work record: issue status, blockers, evidence transcripts, scenario
-validation, mission or epic closeout, and proof summaries remain in canonical
-records. Native Markdown comments or activity sidecars may capture durable
-notes, but they are not a second PR system and do not satisfy review-provider
-merge gates.
+validation, mission publish readiness, epic closeout, and proof summaries
+remain in canonical records. Native Markdown comments or activity sidecars may
+capture durable notes, but they are not a second PR system and do not satisfy
+review-provider merge gates.
 
 ## Errors
 

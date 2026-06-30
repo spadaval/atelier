@@ -317,7 +317,7 @@ are diagnostic detail; normal completion output names the operator-facing
 blocker class and the next domain command.
 `atelier check` owns committed
 workflow/config validity, `issue transition` owns issue-level
-readiness inspection, and `mission status <objective-id>` owns mission completion inspection;
+readiness inspection, and `mission status <objective-id>` owns mission publish-readiness inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier check` or an explicitly

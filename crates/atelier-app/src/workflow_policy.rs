@@ -115,6 +115,16 @@ pub fn resolve_branch_lifecycle(
     let mut expected_branch = policy.branch_name_for_owner(&owner, &owner_kind)?;
     let mut base_branch = policy.branch_policy.base_branch.clone();
     let mut merge_strategy = policy.branch_policy.merge_strategy;
+    if owner_kind != BranchOwnerKind::Mission {
+        if let Some(mission) = containing_mission(db, &issue.id)? {
+            if let Some(branch) = recorded_workflow_branch(&mission)? {
+                base_branch = branch.work_branch;
+                merge_strategy = branch.merge_strategy;
+            } else {
+                base_branch = policy.branch_name_for_owner(&mission, &BranchOwnerKind::Mission)?;
+            }
+        }
+    }
     if let Some(branch) = recorded_workflow_branch(&owner)? {
         expected_branch = branch.work_branch;
         base_branch = branch.branch_base;
@@ -132,6 +142,26 @@ pub fn resolve_branch_lifecycle(
         merge_owned,
         nested_under_epic,
     })
+}
+
+fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<Issue>> {
+    for relation in db.get_typed_relations(issue_id)? {
+        if relation.relation_type != "advances" {
+            continue;
+        }
+        let linked_id = if relation.issue_id_1 == issue_id {
+            relation.issue_id_2
+        } else {
+            relation.issue_id_1
+        };
+        let Some(linked) = db.get_issue(&linked_id)? else {
+            continue;
+        };
+        if linked.issue_type == "mission" {
+            return Ok(Some(linked));
+        }
+    }
+    Ok(None)
 }
 
 #[derive(Debug, Clone)]
@@ -469,5 +499,52 @@ mod tests {
         assert_eq!(resolution.base_branch, "mission/atelier-mission");
         assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
         assert!(resolution.nested_under_epic);
+    }
+
+    #[test]
+    fn branch_lifecycle_uses_recorded_mission_branch_for_direct_scoped_work() {
+        let (db, _dir) = setup_test_db();
+        let mut mission_fields = BTreeMap::new();
+        mission_fields.insert(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-mission",
+                "work_branch": "mission/atelier-mission",
+                "branch_base": "main",
+                "review_target": "main",
+                "integration_target": "main",
+                "owner_kind": "mission",
+                "merge_strategy": "merge_commit",
+            }),
+        );
+        insert_issue(&db, "atelier-mission", "mission", None, mission_fields);
+        insert_issue(
+            &db,
+            "atelier-validation",
+            "validation",
+            None,
+            BTreeMap::new(),
+        );
+        db.add_typed_relation("atelier-mission", "atelier-validation", "advances")
+            .unwrap();
+        let policy = WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig {
+                base_branch: "main".to_string(),
+                ..BranchLifecycleConfig::default()
+            },
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::new(),
+            statuses: BTreeMap::new(),
+            workflows: BTreeMap::new(),
+        };
+
+        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-validation").unwrap();
+
+        assert_eq!(resolution.owner_id, "atelier-validation");
+        assert_eq!(resolution.expected_branch, "validation/atelier-validation");
+        assert_eq!(resolution.base_branch, "mission/atelier-mission");
+        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
+        assert!(resolution.merge_owned);
     }
 }

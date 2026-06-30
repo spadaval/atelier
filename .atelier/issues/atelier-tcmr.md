@@ -24,7 +24,7 @@ relationships:
     type: advances
   - kind: issue
     id: atelier-v9id
-    type: validates
+    type: advances
   - kind: issue
     id: atelier-wpyb
     type: advances

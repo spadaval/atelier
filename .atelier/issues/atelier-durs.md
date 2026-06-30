@@ -20,7 +20,7 @@ relationships:
     type: "advances"
   - kind: "issue"
     id: "atelier-vqhi"
-    type: "validates"
+    type: "advances"
   - kind: "issue"
     id: "atelier-ye11"
     type: "advances"

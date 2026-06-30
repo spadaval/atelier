@@ -92,7 +92,7 @@ full Atelier command or workflow contract.
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition <id>` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
 | Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue show <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
 | Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue show <mission-id>`, `atelier check`; admin repair uses `atelier check --fix` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier check`, `atelier issue show <mission-id>`, mission completion | Routine handoff uses visible lint/status surfaces; objective detail and completion surface docs/help drift validators when a mission-typed issue is being closed. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier check`, `atelier issue show <mission-id>`, mission publish readiness | Routine handoff uses visible lint/status surfaces; objective detail and publish-readiness surfaces docs/help drift validators when a mission-typed issue requests publish review. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 This means source locations and tracker shape belong in repository instructions
@@ -356,16 +356,16 @@ Rust hazard scan classifications live in
 `docs/architecture/quality/rust-quality-hazard-scans.md`.
 
 Workflow and completion validation failures are command failures by default.
-Mission completion is valid only when all linked work is closed, mission
-blockers are clear, required evidence is attached to accountable child work,
-configured transition gates pass, docs/help/Agent Factory command guidance has
-no drift, stale obsolete-command tests are explicitly owned or deferred, and
-the Git worktree is clean. Routine mission completion does not require a second
-direct mission evidence record when those child and health gates already prove
-the mission shell.
+Mission publish readiness is valid only when all linked work is terminal,
+mission blockers are clear, required evidence is attached to accountable child
+work, configured transition gates pass, docs/help/Agent Factory command
+guidance has no drift, stale obsolete-command tests are explicitly owned or
+deferred, and the Git worktree is clean. Routine mission publish readiness does
+not require a second direct mission evidence record when those child and health
+gates already prove the mission shell.
 The `validation.criteria_satisfied` completion gate is Atelier-owned: for mission
-completion it checks configured workflow approval on explicit validation or
-validation work when parent-level judgment is required. Missing parent coverage,
+publish readiness it checks configured workflow approval on explicit validation
+or validation work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through
 objective status, validation issue output, and completion failure output rather
 than through Agent Factory prose alone.

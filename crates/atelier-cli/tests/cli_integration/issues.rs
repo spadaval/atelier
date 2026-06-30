@@ -367,6 +367,36 @@ fn test_unconfigured_custom_issue_link_is_rejected() {
     );
 }
 
+#[test]
+fn test_issue_to_issue_validates_link_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Validation source"]);
+    run_atelier(dir.path(), &["issue", "create", "Validation target"]);
+    let source_id = issue_id_by_title(dir.path(), "Validation source");
+    let target_id = issue_id_by_title(dir.path(), "Validation target");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &source_id,
+            &target_id,
+            "--role",
+            "validates",
+        ],
+    );
+
+    assert!(!success, "issue-to-issue validates should be rejected");
+    assert!(
+        stderr.contains("Proof roles are reserved for evidence links")
+            && stderr.contains("atelier evidence record"),
+        "{stderr}"
+    );
+}
+
 // ==================== Issue Listing Tests ====================
 
 #[test]
@@ -3167,15 +3197,19 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, closeout_ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id]);
     assert!(success, "closeout-ready work mission failed: {stderr}");
-    assert!(closeout_ready.contains("Closeout"), "{closeout_ready}");
+    assert!(closeout_ready.contains("Publish"), "{closeout_ready}");
 
     let (success, transition, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "issue transition failed: {stderr}");
-    assert!(!transition.contains("Validators"), "{transition}");
-    assert!(!transition.contains("Planned Actions"), "{transition}");
-    assert!(!transition.contains("Description"), "{transition}");
-    assert!(transition.contains("Failed Requirements"), "{transition}");
+    assert!(
+        transition.contains("request_publish [allowed]"),
+        "{transition}"
+    );
+    assert!(transition.contains("To:   publish_review"), "{transition}");
+    assert!(transition.contains(&format!(
+        "atelier issue transition {mission_id} request_publish"
+    )));
 
     let (success, verbose, stderr) = run_atelier(
         dir.path(),
@@ -3210,7 +3244,7 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
             r#"  mission:
     applies_to: [mission]
     initial_status: draft
-    done_statuses: [closed]
+    done_statuses: [publish_review, closed]
     transitions:
       ready:
         from: [draft]
@@ -3224,11 +3258,12 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
         description: "Start mission execution after the configured repository baseline is green or explicitly waived."
         validators:
           - baseline.default_checks
-      close:
+        actions:
+          - git.prepare_branch
+      request_publish:
         from: [ready, in_progress, validation]
-        to: closed
-        required_fields: [close_reason]
-        description: "Closing requires configured objective validators to pass."
+        to: publish_review
+        description: "Open the mission publish review from the mission branch to the configured base branch."
         validators:
           - objective.work_present
           - objective.work_terminal
@@ -3239,8 +3274,10 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - git.on_base
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - review.open: { role: manager }
 
 "#,
             "",

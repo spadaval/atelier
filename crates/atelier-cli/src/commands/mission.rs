@@ -333,7 +333,7 @@ fn print_status_next_commands(
     }
     if terminal.ready() {
         println!(
-            "  Close mission (all terminal checks pass): atelier issue transition {} close --reason \"...\"",
+            "  Request mission publish review (all terminal checks pass): atelier issue transition {} request_publish",
             mission.id
         );
     } else {

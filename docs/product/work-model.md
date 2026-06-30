@@ -102,7 +102,7 @@ claims.
 
 Missions are coordination objectives by default, not work logs. A mission may
 retain direct evidence links only when the configured workflow or migration
-contract requires them. Normal mission completion is derived from the workflow
+contract requires them. Normal mission publish readiness is derived from the workflow
 declared for the mission-shaped issue type: direct `advances` roots and their
 descendants are terminal, blockers are clear, configured validators pass,
 transition actions run, and explicit validation approval applies only when
@@ -133,7 +133,7 @@ Choose the proof surface by the claim being closed:
 | Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier check <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
 | Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent completion should map the parent claim to the independent validation issue and its evidence ID. |
-| Epic or mission completion | Validation issue that maps parent `Outcome` claims to child proof | Record evidence on the validation issue. | Mission completion comes from terminal linked root work plus descendants, clear blockers, configured health gates, and workflow approval on accountable child work. |
+| Epic completion or mission publish readiness | Validation issue that maps parent `Outcome` claims to child proof | Record evidence on the validation issue. | Mission publish readiness comes from terminal linked root work plus descendants, clear blockers, configured health gates, and workflow approval on accountable child work. |
 
 Example for ordinary documentation work:
 
@@ -152,8 +152,8 @@ atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/
 Example for independent completion proof:
 
 ```text
-atelier evidence record --target issue/<validation-issue-id> --kind validation "mission completion validation maps mission expectations to closed linked work and evidence IDs"
-atelier issue transition <mission-id> close --reason "linked work closed and completion proof attached"
+atelier evidence record --target issue/<validation-issue-id> --kind validation "mission publish validation maps mission expectations to terminal linked work and evidence IDs"
+atelier issue transition <mission-id> request_publish
 ```
 
 ## Parent Coverage Summaries
@@ -169,7 +169,7 @@ residual risks plus follow-up IDs. It may use stable claim anchors for
 automation-heavy, high-risk, or repeated audit work, but ordinary issues should
 not need line-level claim plumbing.
 
-A mission completion summary, when the mission needs one, lives on explicit
+A mission publish summary, when the mission needs one, lives on explicit
 validation issue-shaped work. It maps explicit approval work and linked
 execution status to implementation, review, and validation issues. The mission
 derives completion from closed linked work, clear blockers, configured health
@@ -343,7 +343,7 @@ Repair the CLI workflow and validation gaps.
 ## Outcome
 
 CLI workflow records use sectioned issue Markdown, linked root work carries
-detailed implementation, and mission closeout derives from terminal linked work
+detailed implementation, and mission publish readiness derives from terminal linked work
 plus explicit validation evidence when configured."
 ```
 
@@ -372,7 +372,7 @@ Repair the CLI workflow and validation gaps.
 ## Outcome
 
 CLI workflow records use sectioned issue Markdown, linked root work carries
-detailed implementation, and mission closeout derives from terminal linked work
+detailed implementation, and mission publish readiness derives from terminal linked work
 plus explicit validation evidence when configured.
 ```
 
