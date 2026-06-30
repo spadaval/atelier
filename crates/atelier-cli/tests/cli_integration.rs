@@ -1144,6 +1144,34 @@ fn provider_request_review_pushes_source_before_opening_pr() {
         "{}",
         requests[0]
     );
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    let push_activity = activities
+        .iter()
+        .position(|text| {
+            text.contains("transition: request_review")
+                && text.contains("action: git.push")
+                && text.contains("order: 1")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing request_review git.push activity order:\n{}",
+                activities.join("\n--- activity ---\n")
+            )
+        });
+    let open_activity = activities
+        .iter()
+        .position(|text| {
+            text.contains("transition: request_review")
+                && text.contains("action: review.open")
+                && text.contains("order: 2")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing request_review review.open activity order:\n{}",
+                activities.join("\n--- activity ---\n")
+            )
+        });
+    assert!(push_activity < open_activity);
 }
 
 #[test]
