@@ -30,9 +30,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-30T19:43:17.142305102+00:00"
+status: "done"
 title: "Epic: Execute workflow actions in configured order"
-updated_at: "2026-06-30T19:37:46.237481988+00:00"
+updated_at: "2026-06-30T19:43:17.142305102+00:00"
 ---
 
 ## Description
