@@ -51,7 +51,7 @@ statuses:
     category: done
 
 workflows:
-  mission_delivery:
+  mission:
     applies_to: [mission]
     initial_status: draft
     done_statuses: [closed]
@@ -86,7 +86,7 @@ workflows:
           - git.on_base
           - git.worktree_clean
 
-  task_delivery:
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -114,7 +114,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -157,7 +157,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -198,7 +198,7 @@ workflows:
           - tracker.commit
           - branch_integrate
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -2445,21 +2445,21 @@ mod tests {
                 .workflow_by_issue_type
                 .get("task")
                 .map(String::as_str),
-            Some("task_delivery")
+            Some("task")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("epic")
                 .map(String::as_str),
-            Some("epic_delivery")
+            Some("epic")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("validation")
                 .map(String::as_str),
-            Some("validation_delivery")
+            Some("validation")
         );
         assert_eq!(
             policy
@@ -2479,7 +2479,7 @@ mod tests {
         assert_eq!(policy.status_role("review"), Some("reviewer"));
         assert_eq!(policy.status_role("validation"), Some("validator"));
         assert_eq!(policy.status_role("todo"), None);
-        let close = &policy.workflows["task_delivery"].transitions["close"];
+        let close = &policy.workflows["task"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             close.validators[0].params.as_ref(),
@@ -2489,11 +2489,11 @@ mod tests {
             })
         );
         assert_eq!(
-            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
             vec!["review.open"]
         );
         assert_eq!(
-            validator_names(&policy.workflows["epic_delivery"].transitions["start"].validators),
+            validator_names(&policy.workflows["epic"].transitions["start"].validators),
             vec!["git.on_base"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
@@ -2612,7 +2612,7 @@ mod tests {
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
-            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
             vec!["git.prepare_branch"]
         );
     }
@@ -2624,7 +2624,7 @@ mod tests {
             "        actions:\n          - git.prepare_branch: current",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
 
         assert_eq!(action.builtin, "git.prepare_branch");
         assert_eq!(
@@ -2687,7 +2687,7 @@ mod tests {
         );
 
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
 
         assert_eq!(action.builtin, "review.open");
         assert_eq!(
@@ -3065,7 +3065,7 @@ mod tests {
                 .workflow_by_issue_type
                 .get("incident")
                 .map(String::as_str),
-            Some("task_delivery")
+            Some("task")
         );
     }
 

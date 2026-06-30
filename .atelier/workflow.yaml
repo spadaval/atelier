@@ -40,7 +40,7 @@ statuses:
     category: done
 
 workflows:
-  mission_delivery:
+  mission:
     applies_to: [mission]
     initial_status: draft
     done_statuses: [closed, superseded]
@@ -78,7 +78,7 @@ workflows:
           - git.on_base
           - git.worktree_clean
 
-  task_delivery:
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -103,7 +103,7 @@ workflows:
           - blockers.none_open
           - lint.none_blocking
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -155,7 +155,7 @@ workflows:
           - review.merge
           - git.sync
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -205,7 +205,7 @@ workflows:
           - review.merge
           - git.sync
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
