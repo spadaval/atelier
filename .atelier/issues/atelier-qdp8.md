@@ -6,6 +6,10 @@ labels:
 - "reliability"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 30
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -23,9 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Implement baseline and closeout reliability gates"
-updated_at: "2026-06-30T03:39:16.408288781+00:00"
+updated_at: "2026-06-30T15:04:23.741988831+00:00"
 ---
 
 ## Description
