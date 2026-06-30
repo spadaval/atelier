@@ -124,7 +124,10 @@ workflows:
         from: [in_progress]
         to: review
         description: "Open the configured review artifact for this work."
+        validators:
+          - git.worktree_clean
         actions:
+          - git.push
           - review.open:
               provider: forgejo
               role: worker
@@ -174,7 +177,10 @@ workflows:
         from: [in_progress]
         to: review
         description: "Open the configured review artifact for this work."
+        validators:
+          - git.worktree_clean
         actions:
+          - git.push
           - review.open:
               provider: forgejo
               role: worker
@@ -224,7 +230,10 @@ workflows:
         from: [in_progress]
         to: review
         description: "Open the configured review artifact for this spike."
+        validators:
+          - git.worktree_clean
         actions:
+          - git.push
           - review.open:
               provider: forgejo
               role: worker

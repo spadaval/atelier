@@ -6,6 +6,19 @@ labels:
 - "git"
 - "review"
 - "workflow"
+review:
+  kind: pull_request
+  number: 40
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-sszj
+    integration_target: mission/atelier-sszj
+    merge_strategy: squash
+    owner_issue_id: atelier-akxm
+    owner_kind: epic
+    review_target: mission/atelier-sszj
+    work_branch: epic/atelier-akxm
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +30,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Execute workflow actions in configured order"
-updated_at: "2026-06-30T19:18:31.878755328+00:00"
+updated_at: "2026-06-30T19:37:46.237481988+00:00"
 ---
 
 ## Description
