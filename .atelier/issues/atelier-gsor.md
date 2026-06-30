@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:10:24.431347999+00:00"
+status: "done"
 title: "Update CLI help, role guides, and docs for issue inventory versus work dashboards"
-updated_at: "2026-06-29T18:20:56.771882055+00:00"
+updated_at: "2026-06-30T15:10:24.431347999+00:00"
 ---
 
 ## Description
