@@ -31,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-30T19:28:59.792746433+00:00"
+status: "done"
 title: "Epic: Migrate workflow defaults and guidance to mission branch model"
-updated_at: "2026-06-30T19:28:30.558716965+00:00"
+updated_at: "2026-06-30T19:28:59.792746433+00:00"
 ---
 
 ## Description
