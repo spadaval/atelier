@@ -31,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-30T15:18:38.580660961+00:00"
+status: "done"
 title: "Epic: Make mission lifecycle workflow-configured"
-updated_at: "2026-06-30T15:18:16.137989545+00:00"
+updated_at: "2026-06-30T15:18:38.580660961+00:00"
 ---
 
 ## Description
