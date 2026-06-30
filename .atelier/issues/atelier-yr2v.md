@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:17:54.213053291+00:00"
+status: "done"
 title: "Make mission dashboard read workflow-derived state"
-updated_at: "2026-06-29T17:39:24.112337206+00:00"
+updated_at: "2026-06-30T15:17:54.213053291+00:00"
 ---
 
 ## Description

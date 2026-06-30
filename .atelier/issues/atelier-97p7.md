@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:17:11.413488857+00:00"
+status: "done"
 title: "Add draft-to-ready mission workflow"
-updated_at: "2026-06-29T17:39:04.246375805+00:00"
+updated_at: "2026-06-30T15:17:11.413488857+00:00"
 ---
 
 ## Description
