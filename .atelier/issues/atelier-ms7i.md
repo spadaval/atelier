@@ -31,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-30T19:04:04.034337511+00:00"
+status: "done"
 title: "Epic: Persist branch base context for workflow branches"
-updated_at: "2026-06-30T18:58:23.037975134+00:00"
+updated_at: "2026-06-30T19:04:04.034337511+00:00"
 ---
 
 ## Description
