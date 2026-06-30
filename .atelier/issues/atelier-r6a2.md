@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:15:16.729599606+00:00"
+status: "done"
 title: "Rewrite planner guidance around target-state outcomes"
-updated_at: "2026-06-29T17:38:29.580755425+00:00"
+updated_at: "2026-06-30T15:15:16.729599606+00:00"
 ---
 
 ## Description

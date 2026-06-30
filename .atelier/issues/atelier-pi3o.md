@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:14:48.348790732+00:00"
+status: "done"
 title: "Stop treating Evidence and Validation prose as planning defaults"
-updated_at: "2026-06-29T17:38:43.683898165+00:00"
+updated_at: "2026-06-30T15:14:48.348790732+00:00"
 ---
 
 ## Description
