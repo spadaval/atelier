@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Validate repaired issue list and mission dashboard CLI behavior"
-updated_at: "2026-06-29T18:21:24.681981303+00:00"
+updated_at: "2026-06-30T15:11:37.929544797+00:00"
 ---
 
 ## Description

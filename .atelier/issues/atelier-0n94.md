@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T15:09:26.781205746+00:00"
+status: "done"
 title: "Resolve work queue identity and fold bucket shortcuts"
-updated_at: "2026-06-30T03:31:02.030382290+00:00"
+updated_at: "2026-06-30T15:09:26.781205746+00:00"
 ---
 
 ## Description
