@@ -700,32 +700,85 @@ fn merge_review_action(
 }
 
 fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
-    git_checked(repo_root, &["fetch", "origin", &action.base_branch], "fetch base branch")
-        .with_context(|| {
+    let remote_ref = format!("origin/{}", action.base_branch);
+    let remote_tracking_ref = format!("refs/remotes/{remote_ref}");
+    let fetch_refspec = format!("refs/heads/{}:{remote_tracking_ref}", action.base_branch);
+    git_checked(repo_root, &["fetch", "origin", &fetch_refspec], "fetch base branch")
+    .with_context(|| {
             format!(
                 "action {} failed while fetching base branch '{}'.\nRecovery: inspect the configured provider remote and retry the transition.",
                 action.name, action.base_branch
             )
         })?;
-    git_switch_checked(repo_root, &action.base_branch, "checkout base branch")
+    let current = git_current_branch(repo_root).unwrap_or_default();
+    if current == action.base_branch {
+        git_checked(
+            repo_root,
+            &["merge", "--ff-only", &remote_ref],
+            "fast-forward checked-out base branch",
+        )
         .with_context(|| {
             format!(
-                "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                "action {} failed while syncing checked-out base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
                 action.name, action.base_branch
             )
         })?;
+        return Ok(format!("synced {}", action.base_branch));
+    }
+    if let Some(worktree_path) = branch_checked_out_worktree(repo_root, &action.base_branch)? {
+        bail!(
+            "action {} failed because target branch '{}' is checked out in another worktree at {}.\nRecovery: close or switch that worktree, then retry the transition.",
+            action.name,
+            action.base_branch,
+            worktree_path
+        );
+    }
+    ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
+        format!(
+            "action {} failed because target branch '{}' is missing.\nRecovery: create or fetch the target branch, then retry the transition.",
+            action.name, action.base_branch
+        )
+    })?;
     git_checked(
         repo_root,
-        &["merge", "--ff-only", &format!("origin/{}", action.base_branch)],
-        "fast-forward base branch",
+        &["merge-base", "--is-ancestor", &action.base_branch, &remote_ref],
+        "verify base branch fast-forward",
     )
     .with_context(|| {
         format!(
-            "action {} failed while syncing base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
+            "action {} failed because target branch '{}' cannot fast-forward to '{}'.\nRecovery: inspect local/remote divergence before retrying.",
+            action.name, action.base_branch, remote_ref
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["update-ref", &format!("refs/heads/{}", action.base_branch), &remote_tracking_ref],
+        "fast-forward base branch ref",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while updating target branch '{}'.\nRecovery: inspect local refs and retry the transition.",
             action.name, action.base_branch
         )
     })?;
     Ok(format!("synced {}", action.base_branch))
+}
+
+fn branch_checked_out_worktree(repo_root: &Path, branch: &str) -> Result<Option<String>> {
+    let output = git_stdout(
+        repo_root,
+        &["worktree", "list", "--porcelain"],
+        "inspect worktrees",
+    )?;
+    let mut current_path: Option<String> = None;
+    for line in output.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.to_string());
+        } else if line == format!("branch refs/heads/{branch}") {
+            return Ok(current_path);
+        }
+    }
+    Ok(None)
 }
 
 fn ensure_expected_branch_checked_out(
@@ -2097,7 +2150,7 @@ mod tests {
     use atelier_app::workflow_policy::{
         ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
     };
-    use atelier_records::{IssueSections, RecordStore, Relationships};
+    use atelier_records::{IssueSections, Record, RecordStore, Relationships};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
@@ -2346,6 +2399,87 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         (dir, db)
     }
 
+    fn setup_sync_repo() -> (TempDir, TempDir, PlannedAction) {
+        let repo = tempdir().unwrap();
+        let remote = tempdir().unwrap();
+        git_ok(remote.path(), &["init", "-q", "--bare"]);
+        git_ok(repo.path(), &["init", "-q"]);
+        git_ok(
+            repo.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(repo.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(repo.path().join("README.md"), "initial\n").unwrap();
+        git_ok(repo.path(), &["add", "README.md"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "initial"]);
+        git_ok(repo.path(), &["branch", "-M", "main"]);
+        git_ok(repo.path(), &["switch", "-c", "mission/atelier-sync"]);
+        std::fs::write(repo.path().join("mission.txt"), "local\n").unwrap();
+        git_ok(repo.path(), &["add", "mission.txt"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "mission local"]);
+        git_ok(
+            repo.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git_ok(
+            repo.path(),
+            &["push", "-u", "origin", "mission/atelier-sync"],
+        );
+        git_ok(repo.path(), &["switch", "-c", "epic/atelier-sync"]);
+
+        let remote_work = tempdir().unwrap();
+        git_ok(
+            remote_work.path(),
+            &["clone", "-q", remote.path().to_str().unwrap(), "."],
+        );
+        git_ok(remote_work.path(), &["switch", "mission/atelier-sync"]);
+        git_ok(
+            remote_work.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(remote_work.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(remote_work.path().join("remote.txt"), "remote\n").unwrap();
+        git_ok(remote_work.path(), &["add", "remote.txt"]);
+        git_ok(
+            remote_work.path(),
+            &["commit", "-q", "-m", "remote advance"],
+        );
+        git_ok(
+            remote_work.path(),
+            &["push", "origin", "mission/atelier-sync"],
+        );
+
+        let issue = test_issue("atelier-sync");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-sync".to_string(),
+            owner_id: "atelier-sync".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-sync".to_string(),
+            base_branch: "mission/atelier-sync".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let action =
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.sync")], 1).remove(0);
+        (repo, remote, action)
+    }
+
+    fn git_ok(repo: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
@@ -2456,6 +2590,63 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
+    fn git_sync_fast_forwards_target_without_checkout() {
+        let (repo, _remote, action) = setup_sync_repo();
+
+        let detail = sync_base_action(repo.path(), &action).unwrap();
+
+        assert_eq!(detail, "synced mission/atelier-sync");
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
+        let local = git_stdout(
+            repo.path(),
+            &["rev-parse", "mission/atelier-sync"],
+            "read local target",
+        )
+        .unwrap();
+        let remote = git_stdout(
+            repo.path(),
+            &["rev-parse", "origin/mission/atelier-sync"],
+            "read remote target",
+        )
+        .unwrap();
+        assert_eq!(local, remote);
+    }
+
+    #[test]
+    fn git_sync_rejects_target_checked_out_in_other_worktree() {
+        let (repo, _remote, action) = setup_sync_repo();
+        let other = tempdir().unwrap();
+        git_ok(
+            repo.path(),
+            &[
+                "worktree",
+                "add",
+                other.path().to_str().unwrap(),
+                "mission/atelier-sync",
+            ],
+        );
+
+        let error = sync_base_action(repo.path(), &action)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("target branch 'mission/atelier-sync' is checked out"));
+        assert!(error.contains(other.path().to_str().unwrap()));
+        assert!(error.contains("Recovery:"));
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
+    }
+
+    #[test]
     fn action_preflight_checks_git_actions_before_execution() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
@@ -2522,7 +2713,19 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let state_dir = dir.path().join(".atelier");
         let db_path = dir.path().join(".atelier/runtime/state.db");
         let db = Database::open(&db_path).unwrap();
-        let issue = test_issue("atelier-epic1");
+        let mut issue = test_issue("atelier-epic1");
+        issue.fields.insert(
+            atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-epic1",
+                "work_branch": "epic/atelier-epic1",
+                "branch_base": "mission/atelier-miss",
+                "review_target": "mission/atelier-miss",
+                "integration_target": "mission/atelier-miss",
+                "owner_kind": "epic",
+                "merge_strategy": "squash",
+            }),
+        );
         insert_canonical_issue(&db, &state_dir, issue.clone());
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2530,7 +2733,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             owner_issue_type: "epic".to_string(),
             owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
             expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "master".to_string(),
+            base_branch: "mission/atelier-miss".to_string(),
             merge_strategy: MergeStrategy::Squash,
             merge_owned: true,
             nested_under_epic: false,
@@ -2554,6 +2757,14 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let review = owner.issue.fields.get("review").unwrap();
         assert_eq!(review["kind"], "room");
         assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
+        let Record::Review(review_record) = RecordStore::new(&state_dir)
+            .load_record_by_id("review", review["id"].as_str().unwrap())
+            .unwrap()
+        else {
+            panic!("expected review record");
+        };
+        assert_eq!(review_record.source_branch, "epic/atelier-epic1");
+        assert_eq!(review_record.target_branch, "mission/atelier-miss");
 
         let second_detail = open_review_artifact_action(
             &db,
