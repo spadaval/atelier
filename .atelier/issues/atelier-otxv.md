@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "git"
 - "review"
+review:
+  kind: pull_request
+  number: 38
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-sszj
+    integration_target: mission/atelier-sszj
+    merge_strategy: squash
+    owner_issue_id: atelier-otxv
+    owner_kind: epic
+    review_target: mission/atelier-sszj
+    work_branch: epic/atelier-otxv
 priority: "P1"
 relationships:
   blocks:
@@ -18,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-30T19:15:33.089267491+00:00"
+status: "done"
 title: "Epic: Retarget review and sync to recorded branch bases"
-updated_at: "2026-06-30T16:09:55.493794454+00:00"
+updated_at: "2026-06-30T19:15:33.089267491+00:00"
 ---
 
 ## Description

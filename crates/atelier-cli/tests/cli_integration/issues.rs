@@ -3207,7 +3207,7 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
         .expect("failed to read workflow policy")
         .replace("  mission: { label: Mission }\n", "")
         .replace(
-            r#"  mission_delivery:
+            r#"  mission:
     applies_to: [mission]
     initial_status: draft
     done_statuses: [closed]

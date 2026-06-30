@@ -1159,9 +1159,9 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
         assert!(error.contains("pull_request_mismatch"));
         assert!(error.contains("codex/wrong -> master"));
-        assert!(error.contains("atelier-issue expects codex/atelier-issue -> master"));
+        assert!(error.contains("atelier-issue expects feature/atelier-issue -> master"));
         assert!(error.contains(
-            "atelier review open --issue atelier-issue --source-branch codex/atelier-issue --target-branch master"
+            "atelier review open --issue atelier-issue --source-branch feature/atelier-issue --target-branch master"
         ));
         assert!(transport.requests().is_empty());
         let refreshed = Database::open(&db_path).unwrap();
@@ -1191,7 +1191,7 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
         crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 201,
-            body: pull_response(42, "open", false, "codex/atelier-issue"),
+            body: pull_response(42, "open", false, "feature/atelier-issue"),
         }]);
         let client = ForgejoClient::new(forgejo_config(), &transport);
 
@@ -1205,7 +1205,7 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
                 role: "worker",
                 title: "Title",
                 body: "Body",
-                source_branch: "codex/atelier-issue",
+                source_branch: "feature/atelier-issue",
                 target_branch: "master",
             },
             &forgejo_config(),
@@ -1256,7 +1256,7 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
         crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
-            body: pull_response(42, "open", false, "codex/atelier-issue"),
+            body: pull_response(42, "open", false, "feature/atelier-issue"),
         }]);
         let client = ForgejoClient::new(forgejo_config(), &transport);
 
@@ -1533,7 +1533,7 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
         crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
-            body: pull_response(42, "closed", true, "codex/atelier-issue"),
+            body: pull_response(42, "closed", true, "feature/atelier-issue"),
         }]);
         let client = ForgejoClient::new(forgejo_config(), &transport);
 

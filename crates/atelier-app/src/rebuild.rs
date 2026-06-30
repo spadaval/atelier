@@ -1745,7 +1745,7 @@ statuses:
     category: done
 
 workflows:
-  task_delivery:
+  task:
     applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done]
@@ -1768,7 +1768,7 @@ workflows:
           - blockers.none_open
           - lint.none_blocking
 
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]
@@ -1805,7 +1805,7 @@ workflows:
           - lint.none_blocking
           - git.worktree_clean
 
-  validation_delivery:
+  validation:
     applies_to: [validation]
     initial_status: todo
     done_statuses: [done]
@@ -1840,7 +1840,7 @@ workflows:
           - lint.none_blocking
           - git.worktree_clean
 
-  spike_review:
+  spike:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]

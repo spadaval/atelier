@@ -13,11 +13,17 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-akxm"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-fs79"
     type: "advances"
   - kind: "issue"
     id: "atelier-fs79"
     type: "validates"
+  - kind: "issue"
+    id: "atelier-gayo"
+    type: "advances"
   - kind: "issue"
     id: "atelier-j8ot"
     type: "advances"

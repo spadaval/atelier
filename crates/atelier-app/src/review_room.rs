@@ -784,7 +784,7 @@ mode = "room"
                 role: "worker",
                 title: "Review atelier-issue",
                 body: "",
-                source_branch: "codex/atelier-issue",
+                source_branch: "feature/atelier-issue",
                 target_branch: "main",
             },
         )

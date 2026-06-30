@@ -1835,7 +1835,7 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(child_out.contains(&format!("Started work on {child_id} Child work")));
     assert!(child_out.contains(&format!("Branch owner: epic {epic_id} (epic)")));
-    assert!(child_out.contains(&format!("Effective branch: epic/{epic_id}")));
+    assert!(child_out.contains(&format!("Source branch: epic/{epic_id}")));
     assert!(child_out.contains("Base branch: main"));
     assert!(child_out.contains(&format!(
         "Record proof: atelier evidence record --target issue/{child_id}"
@@ -1860,7 +1860,7 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
         format!("task/{standalone_id}")
     );
     assert!(standalone_out.contains(&format!("Branch owner: issue {standalone_id} (task)")));
-    assert!(standalone_out.contains(&format!("Effective branch: task/{standalone_id}")));
+    assert!(standalone_out.contains(&format!("Source branch: task/{standalone_id}")));
     let (success, standalone_show, stderr) =
         run_atelier(dir.path(), &["issue", "show", &standalone_id]);
     assert!(success, "standalone show failed: {stderr}");
@@ -1929,6 +1929,12 @@ fn test_mission_start_prepares_mission_branch_from_base() {
         start_out.contains(&format!("Branch owner: mission {mission_id} (mission)")),
         "{start_out}"
     );
+    assert!(
+        start_out.contains(&format!("Source branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    assert!(start_out.contains("Base branch: main"), "{start_out}");
+    assert!(start_out.contains("Target branch: main"), "{start_out}");
 }
 
 #[test]
@@ -1985,6 +1991,139 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
         )),
         "{start_out}"
     );
+    assert!(
+        start_out.contains(&format!("Source branch: epic/{epic_id}")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Base branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Target branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    let front_matter = canonical_record_front_matter(dir.path(), "issues", &epic_id);
+    let workflow_branch = &front_matter["fields"]["workflow_branch"];
+    assert_eq!(workflow_branch["owner_issue_id"], epic_id);
+    assert_eq!(workflow_branch["work_branch"], format!("epic/{epic_id}"));
+    assert_eq!(
+        workflow_branch["branch_base"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(
+        workflow_branch["review_target"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(
+        workflow_branch["integration_target"],
+        format!("mission/{mission_id}")
+    );
+    assert_eq!(workflow_branch["owner_kind"], "epic");
+    assert_eq!(workflow_branch["merge_strategy"], "squash");
+
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after epic start failed: {stderr}");
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "--verbose"]);
+    assert!(success, "transition options after rebuild failed: {stderr}");
+    assert!(
+        options_out.contains(&format!("Source:   epic/{epic_id}"))
+            && options_out.contains(&format!("Base:     mission/{mission_id}"))
+            && options_out.contains(&format!("Target:   mission/{mission_id}")),
+        "{options_out}"
+    );
+}
+
+#[test]
+fn test_epic_close_integrates_into_recorded_mission_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Close target mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Close target mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Close target epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Close target epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "mission ready failed: {stderr}");
+    commit_all(dir.path(), "mission close target baseline");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "mission branch ready for epic close");
+    let mission_head_before_epic = git_rev_parse(dir.path(), &format!("mission/{mission_id}"));
+    let main_head_before_close = git_rev_parse(dir.path(), "main");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic start failed: {stderr}");
+    std::fs::write(
+        dir.path().join("mission-close-target.txt"),
+        "epic work for mission branch\n",
+    )
+    .unwrap();
+    commit_all(dir.path(), "epic work for mission close target");
+    move_issue_to_validation(dir.path(), &epic_id);
+    ensure_all_issue_completion_sections(dir.path());
+    attach_issue_pass_evidence(dir.path(), &epic_id);
+    commit_all(dir.path(), "epic proof ready for mission close target");
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &epic_id, "close", "--reason", "done"],
+    );
+    assert!(success, "epic close failed: {stderr}");
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+    assert!(
+        close_out.contains("Action:   tracker.commit")
+            && close_out.contains("Action:   branch_integrate squash commit"),
+        "{close_out}"
+    );
+    assert_ne!(
+        git_rev_parse(dir.path(), &format!("mission/{mission_id}")),
+        mission_head_before_epic
+    );
+    assert_eq!(git_rev_parse(dir.path(), "main"), main_head_before_close);
+    let mission_log = git_log_oneline(dir.path(), &format!("mission/{mission_id}"), 2);
+    assert!(
+        mission_log.contains(&format!(
+            "Squash merge epic/{epic_id} into mission/{mission_id}"
+        )),
+        "{mission_log}"
+    );
+    assert!(git_status_short(dir.path()).trim().is_empty());
 }
 
 #[test]
