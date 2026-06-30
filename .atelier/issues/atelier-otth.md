@@ -11,7 +11,10 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-lz6a"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"
