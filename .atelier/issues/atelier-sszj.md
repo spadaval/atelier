@@ -41,9 +41,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-30T20:19:52.660950127+00:00"
+status: "closed"
 title: "Mission: Add workflow-configured mission integration branches"
-updated_at: "2026-06-30T18:15:15.391510506+00:00"
+updated_at: "2026-06-30T20:19:52.660950127+00:00"
 ---
 
 ## Description
