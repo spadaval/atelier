@@ -30,9 +30,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Define mission integration branch workflow contract"
-updated_at: "2026-06-30T18:06:19.475338896+00:00"
+updated_at: "2026-06-30T18:12:31.871937957+00:00"
 ---
 
 ## Description
