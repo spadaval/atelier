@@ -959,8 +959,8 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier man admin",
         "atelier work ready",
         "atelier work blocked",
-        "atelier work queue",
-        "atelier work queue --ready",
+        "atelier issue list",
+        "atelier work mission <mission-id>",
         "atelier issue show <id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
@@ -1162,8 +1162,9 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "record", "--help"]);
     assert!(success, "evidence record help failed: {stderr}");
     assert!(stdout.contains("issue/<id>"));
-    assert!(stdout
-        .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""));
+    assert!(stdout.contains(
+        "atelier evidence record --target issue/<id> --kind validation \"checked claim X; result pass\""
+    ));
     assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
 }
@@ -1202,10 +1203,10 @@ fn test_mission_create_help_names_generated_sections() {
     assert!(success, "mission create help failed: {stderr}");
 
     assert!(stdout.contains("--issue-type <ISSUE_TYPE>"));
-    assert!(stdout.contains("Mission intent/body text; requires --issue-type mission"));
-    assert!(stdout.contains("Constraints section bullet"));
-    assert!(stdout.contains("Risks section bullet"));
-    assert!(stdout.contains("Validation section bullet"));
+    assert!(!stdout.contains("Mission intent/body text; requires --issue-type mission"));
+    assert!(!stdout.contains("Constraints section bullet"));
+    assert!(!stdout.contains("Risks section bullet"));
+    assert!(!stdout.contains("Validation section bullet"));
 }
 
 #[test]
@@ -1235,9 +1236,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout.contains("No specific next action is available from checkout state."));
-    assert!(!stdout.contains("Choose ready work"));
-    assert!(!stdout.contains("Inspect selected work transitions"));
+    assert!(stdout.contains("Choose ready work"));
+    assert!(stdout.contains("Inspect selected work transitions"));
     assert!(!stdout.contains(
         "Start selected work (ready work exists): atelier issue transition <issue-id> start"
     ));
@@ -1343,7 +1343,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Most Relevant Commands"));
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
-    assert!(stdout.contains("atelier work queue --ready"));
+    assert!(stdout.contains("atelier work ready"));
     assert!(stdout.contains("atelier issue transition <id>"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
@@ -1437,7 +1437,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
     let git_before = git_status_short(dir.path());
 
     let (success, transition_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition failed: {stderr}");
     assert!(transition_out.contains("Issue Transitions"));
     assert!(
@@ -1445,7 +1445,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
-        transition_out.contains("  Decision: allowed"),
+        transition_out.contains("Requirements: satisfied"),
         "{transition_out}"
     );
     assert!(
@@ -1519,7 +1519,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
 
     let git_before = git_status_short(dir.path());
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("Issue Transitions"), "{options_out}");
     let git_after = git_status_short(dir.path());
@@ -1772,7 +1772,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     commit_all(dir.path(), "validator-gated start policy");
 
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
     assert!(
@@ -2226,7 +2226,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     }
 
     let (success, options_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");

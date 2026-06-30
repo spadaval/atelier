@@ -1598,10 +1598,11 @@ pub fn print_issue_transition_options(
     db: &Database,
     issue: &Issue,
     options: &[IssueTransitionOption],
+    verbose: bool,
 ) {
     println!(
         "{}",
-        render_issue_transition_options(db, issue, options, StylePolicy::for_stdout())
+        render_issue_transition_options(db, issue, options, StylePolicy::for_stdout(), verbose)
     );
 }
 
@@ -1610,6 +1611,7 @@ fn render_issue_transition_options(
     issue: &Issue,
     options: &[IssueTransitionOption],
     style_policy: StylePolicy,
+    verbose: bool,
 ) -> String {
     let mut lines = vec![
         human_output::heading(&format!("Issue Transitions {} - {}", issue.id, issue.title)),
@@ -1618,11 +1620,12 @@ fn render_issue_transition_options(
         format!("Type:     {}", issue.issue_type),
         format!("Options:  {}", options.len()),
     ];
-    let needs_branch_context = options.iter().any(|option| {
-        crate::commands::workflow_planning::planned_actions_need_branch_context(
-            &option.planned_actions,
-        )
-    });
+    let needs_branch_context = verbose
+        && options.iter().any(|option| {
+            crate::commands::workflow_planning::planned_actions_need_branch_context(
+                &option.planned_actions,
+            )
+        });
     if needs_branch_context {
         if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
             lines.push(human_output::section_heading("Branch Context"));
@@ -1656,23 +1659,54 @@ fn render_issue_transition_options(
             option.name,
             decision.render(style_policy)
         ));
-        lines.push(format!("  Decision: {}", decision.render(style_policy)));
         lines.push(format!("  From: {}", option.from.join(", ")));
         lines.push(format!("  To:   {}", option.to));
-        lines.extend(render_transition_detail(
-            "Validators",
-            &option.validator_results,
-            style_policy,
-        ));
-        lines.extend(render_text_list("Blockers", &option.blockers));
-        lines.extend(render_text_list(
-            "Planned Actions",
-            &planned_action_lines(&option.planned_actions),
-        ));
-        lines.extend(render_text_list("Description", &option.descriptions));
+        if option.allowed {
+            lines.push("  Requirements: satisfied".to_string());
+        } else {
+            lines.extend(render_text_list(
+                "Failed Requirements",
+                &failed_requirement_lines(&option.blockers),
+            ));
+        }
+        if verbose {
+            lines.push(format!("  Decision: {}", decision.render(style_policy)));
+            lines.extend(render_transition_detail(
+                "Validators",
+                &option.validator_results,
+                style_policy,
+            ));
+            lines.extend(render_text_list(
+                "Planned Actions",
+                &planned_action_lines(&option.planned_actions),
+            ));
+            lines.extend(render_text_list("Description", &option.descriptions));
+        }
         lines.extend(render_text_list("Commands", &[option.command.clone()]));
     }
     lines.join("\n")
+}
+
+fn failed_requirement_lines(blockers: &[String]) -> Vec<String> {
+    blockers
+        .iter()
+        .map(|blocker| {
+            if let Some(rest) = blocker.strip_prefix("validator ") {
+                if let Some((name, _)) = rest.split_once(" failed:") {
+                    return format!("validator {name}");
+                }
+            }
+            if let Some(rest) = blocker.strip_prefix("missing required field ") {
+                if let Some((field, _)) = rest.split_once(';') {
+                    return format!("required field {field}");
+                }
+            }
+            if let Some((requirement, _)) = blocker.split_once(':') {
+                return requirement.to_string();
+            }
+            blocker.clone()
+        })
+        .collect()
 }
 
 pub fn evaluate(
@@ -2070,8 +2104,13 @@ mod tests {
         let issue = test_issue("atelier-test");
         let policy = StylePolicy::from_context(ColorChoice::Auto, true, false);
 
-        let output =
-            render_issue_transition_options(&db, &issue, &[transition_option(true, true)], policy);
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(true, true)],
+            policy,
+            true,
+        );
 
         assert!(output.contains("\u{1b}[32mallowed\u{1b}[0m"));
         assert!(output.contains("Decision: \u{1b}[32mallowed\u{1b}[0m"));
@@ -2089,6 +2128,7 @@ mod tests {
             &issue,
             &[transition_option(false, false)],
             policy,
+            true,
         );
 
         assert!(!output.contains("\u{1b}["));
@@ -2103,8 +2143,13 @@ mod tests {
         let issue = test_issue("atelier-test");
         let policy = StylePolicy::from_context(ColorChoice::Auto, false, false);
 
-        let output =
-            render_issue_transition_options(&db, &issue, &[transition_option(true, true)], policy);
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(true, true)],
+            policy,
+            true,
+        );
 
         assert!(!output.contains("\u{1b}["));
         assert!(output.contains("start [allowed]"));
