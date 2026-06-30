@@ -16,19 +16,20 @@ Outcome is the desired observable result of a work item. It says what should be
 true when the work is done. Outcomes should describe product, command, file,
 workflow, or coordination behavior, not the private implementation path.
 
-Evidence requirement is the expected way to prove an outcome. On issue-shaped
-work this normally lives in the issue `Evidence` section. It should name an
-observable check: command output, test result, help text, file content, review
-artifact, screenshot, migration transcript, or another inspectable record.
+Evidence requirement is the expected way to prove an outcome. It may live in an
+issue `Evidence` section, a workflow validator, or an explicit validation issue
+when the work needs a named check. It should name an observable check: command
+output, test result, help text, file content, review artifact, screenshot,
+migration transcript, or another inspectable record.
 
 Proof is the relationship between a claim and supporting facts. A passing test
 run is not automatically proof for every claim; it is proof when it supports the
 specific outcome being closed.
 
-Evidence record is the durable proof envelope. It records what was observed,
-the result, the accountable target, and any command transcript or artifact
-reference. Evidence records let future operators inspect proof without relying
-on chat history.
+Evidence record is the durable proof receipt. It records the claim checked, the
+action taken, the result, the accountable target, and any command transcript or
+artifact reference. Evidence records let future operators inspect proof without
+relying on chat history.
 
 Validation is the act of checking a claim against evidence. Ordinary
 implementation work can validate its own local outcome with focused proof.
@@ -71,8 +72,10 @@ Proof requirements must be visible before completion.
 
 Agents should not discover required proof only after `atelier issue transition
 <id> <close-transition> --reason "..."` fails. The normal workflow surfaces
-should show the expected proof early, summarize whether it is satisfied, and
-provide the next command that moves the work forward.
+should show configured proof gates early, summarize whether they are satisfied,
+and provide the next command that moves the work forward. Planner-authored
+validation scenarios are not required unless the exact scenario is itself the
+product contract.
 
 ## Ordinary Issue Flow
 
@@ -80,8 +83,8 @@ For normal implementation work, validation should stay light:
 
 1. Read the issue outcome and evidence requirement.
 2. Implement the feature or fix.
-3. Run the focused check that proves the outcome.
-4. Record the check as evidence attached to the issue.
+3. Choose and run the focused check that proves or disproves the outcome.
+4. Record the check result as evidence attached to the issue.
 5. Close when transition checks are satisfied.
 
 The happy path should be one command for proof capture when possible:
@@ -123,9 +126,9 @@ work is closed, child proof exists, and any explicit review or validation work
 has approved the branch. The configured epic close transition also requires the
 linked provider-backed review artifact to be merged.
 
-A mission completion should answer whether linked work is closed, blockers are
-clear, configured health gates pass, and any explicit mission-level validation
-or validation work is complete.
+A mission completion should answer whether the direct `advances` roots and
+their descendants are terminal, blockers are clear, configured health gates
+pass, and any explicit mission-level validation work is complete.
 
 Parent completion should cite child issue IDs and evidence IDs. It should not ask
 operators to restate proof that already belongs on closed child work.
@@ -182,8 +185,7 @@ Evidence is for completion proof.
 
 A note can explain why a command was skipped, where follow-up should start, or
 what an operator learned. A note should not satisfy an evidence requirement for
-a behavior change, validation issue, validation issue, workflow gate, or parent
-claim.
+a behavior change, validation issue, workflow gate, or parent claim.
 
 ## Results
 

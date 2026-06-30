@@ -29,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Simplify mission planning to target state"
-updated_at: "2026-06-29T17:53:55.611130936+00:00"
+updated_at: "2026-06-30T03:39:16.349563264+00:00"
 ---
 
 ## Description
