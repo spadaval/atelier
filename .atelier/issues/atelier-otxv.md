@@ -31,9 +31,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Retarget review and sync to recorded branch bases"
-updated_at: "2026-06-30T19:10:14.086118458+00:00"
+updated_at: "2026-06-30T19:15:11.018745536+00:00"
 ---
 
 ## Description
