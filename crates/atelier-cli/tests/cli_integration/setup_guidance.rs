@@ -2190,10 +2190,7 @@ fn test_issue_transition_rejects_unmigrated_issue_status() {
     );
     assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("status 'open'"), "{stderr}");
-    assert!(
-        stderr.contains("not valid for workflow 'task_delivery'"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("not valid for workflow 'task'"), "{stderr}");
 }
 
 #[test]

@@ -1696,10 +1696,10 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     assert!(policy.contains("  todo:\n    category: todo"));
     assert!(policy.contains("    initial_status: todo"));
     assert!(policy.contains("    done_statuses: [done]"));
-    assert!(policy.contains("  task_delivery:"));
-    assert!(policy.contains("  epic_delivery:"));
-    assert!(policy.contains("  validation_delivery:"));
-    assert!(policy.contains("  spike_review:"));
+    assert!(policy.contains("  task:"));
+    assert!(policy.contains("  epic:"));
+    assert!(policy.contains("  validation:"));
+    assert!(policy.contains("  spike:"));
     assert!(policy.contains("applies_to:"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);

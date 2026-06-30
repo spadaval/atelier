@@ -517,7 +517,7 @@ statuses:
   done:
     category: done
 workflows:
-  epic_delivery:
+  epic:
     applies_to: [epic]
     initial_status: todo
     done_statuses: [done]

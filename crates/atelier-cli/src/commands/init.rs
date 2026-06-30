@@ -94,10 +94,10 @@ mod tests {
         assert!(workflow.contains("schema: atelier.workflow"));
         assert!(workflow.contains("schema_version: 3"));
         assert!(workflow.contains("branch_policy:"));
-        assert!(workflow.contains("  task_delivery:"));
-        assert!(workflow.contains("  epic_delivery:"));
-        assert!(workflow.contains("  validation_delivery:"));
-        assert!(workflow.contains("  spike_review:"));
+        assert!(workflow.contains("  task:"));
+        assert!(workflow.contains("  epic:"));
+        assert!(workflow.contains("  validation:"));
+        assert!(workflow.contains("  spike:"));
         assert!(workflow.contains("applies_to:"));
     }
 
