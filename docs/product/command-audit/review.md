@@ -5,6 +5,12 @@ Primary role: Reviewer.
 Primary question: "How do I manage the configured review artifact for issue or
 epic work?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I act on the configured review artifact? | Reviewer | Manual provider verbs and inputs make routine review costly. | Provider adapters and issue/branch context risk duplicated policy. | Simplify | Infer routine context; fold duplicate status or submit verbs where proof shows it is clearer. |
+
 ## Assessment
 
 - Name: Correct. Review is a first-class workflow concern, but it should not

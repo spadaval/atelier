@@ -6,6 +6,12 @@ explicit ready-work pickup.
 Primary question: "Which bounded work view reduces the next coordination
 decision?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Which bounded view resolves my next coordination decision? | Manager/orchestrator; worker for explicit pickup | Scoped dashboards reduce scanning; the legacy queue mixes unrelated decisions. | Each view risks duplicating inventory, hierarchy, and blocker reads. | Simplify | Keep role-shaped views; leave `work queue` legacy and out of normal guidance. |
+
 `work` is the dashboard namespace for multi-issue operational views. It does not
 own issue mutation, workflow transitions, or durable record text. Those remain
 under `issue`, `evidence`, `review`, and `history`.

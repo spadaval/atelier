@@ -4,6 +4,12 @@ Primary role: Reviewer.
 
 Primary question: "What happened on this repo, mission, issue, or epic?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| What durable activity matters for this scope? | Reviewer | Low when timelines are bounded; scoped flags can become query syntax. | Reuses canonical activity reads but each scope broadens filtering. | Simplify | Keep concise root history; fold scoped views that issue or work detail already answers. |
+
 ## Assessment
 
 - Name: Correct.

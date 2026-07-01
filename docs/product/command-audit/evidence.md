@@ -4,6 +4,12 @@ Primary role: Reviewer.
 
 Primary question: "How do I record, inspect, and reuse proof?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I record and inspect proof? | Reviewer | Low for record/show/list; attaching adds a second relationship path. | First-class evidence records are shared; attach duplicates linking. | Simplify | Teach `record`, `show`, and bounded `list`; fold `attach` if reuse does not justify it. |
+
 ## Assessment
 
 - Name: Correct. Evidence is a first-class product concept.
