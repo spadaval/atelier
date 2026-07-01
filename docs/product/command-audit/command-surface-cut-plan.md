@@ -384,13 +384,11 @@ Replace:
 Manual branch repair can exist only as a hidden/admin recovery path if workflow
 transitions cannot reasonably do the job.
 
-### Hide Or Remove `maintenance`
+### Remove `maintenance`
 
-Public destructive record surgery is not normal workflow.
-
-Keep only if there is a clear admin-only escape hatch, and keep it out of root
-workflow guidance. Otherwise prefer `prune` for supported cleanup and Git for
-recovery.
+`maintenance delete` was removed because no explicit recovery flow required
+arbitrary record surgery. `prune` owns supported cleanup and Git history owns
+canonical recovery.
 
 ### Merge `lint`, `doctor`, `workflow`, `export`, And `rebuild`
 

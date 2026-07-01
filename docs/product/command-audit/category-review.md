@@ -19,7 +19,7 @@ Audited low-level surfaces:
 | `workflow check` | Hide/admin-frame | Keep as raw workflow-policy debugging. Normal readiness uses `issue transition`, `issue show <objective-id>`, and `check`. | No new issue. |
 | `diagnostics slow` | Hide/admin-frame | Keep as local-only telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
 | `import-beads` | Hide/migration-only | Keep as explicit predecessor import escape hatch. Normal setup uses `init`, with `init --import-beads` only for intentional migration. | No new issue. |
-| `maintenance delete` | Hide or remove | Destructive record surgery is over budget as a normal visible surface. Keep only as explicitly routed recovery if it remains necessary. | Needs budget verdict before being taught. |
+| `maintenance delete` | Removed | No explicit recovery flow required arbitrary record surgery. Supported cleanup is `prune`; canonical recovery uses Git history and reviewed repair. | Removed by `atelier-g87o`. |
 | `prune` | Keep visible admin | Keep dry-run by default. `--apply` may remove only cleanup classes with implemented retention contracts from the retention policy. | No new issue. |
 | `bundle` | Keep visible manager/orchestrator | Keep as the reviewed bulk record creation surface. It replaces shell loops over issue/mission/evidence mutation commands, not normal single-record editing. | Implementation ownership is now `commands::bundle`. |
 | `review` | Keep visible workflow/review | Keep review artifact management visible, but static guides should not decide when a review artifact is required. Lifecycle/status output owns that route. | Refine manual `review open` fields. |

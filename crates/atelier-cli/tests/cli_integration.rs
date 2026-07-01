@@ -607,7 +607,6 @@ fn valid_command_surface_doc() -> &'static str {
 ## Advanced Diagnostics
 
 - hidden/advanced `atelier forgejo roles check`
-- hidden/advanced `atelier maintenance delete`
 - hidden/advanced `atelier lint`
 - hidden/advanced `atelier branch for-epic/status/merge`
 - hidden/advanced `atelier doctor`
