@@ -175,7 +175,7 @@ enum Commands {
         action: ReviewCommands,
     },
 
-    /// Configure and verify Forgejo integration
+    /// Admin recovery for Forgejo role author accounts
     #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]

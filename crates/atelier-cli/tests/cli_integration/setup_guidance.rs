@@ -1027,6 +1027,33 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
+fn test_forgejo_role_setup_is_hidden_from_normal_guidance_but_callable_for_recovery() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, root_help, stderr) = run_atelier_raw(dir.path(), &["--help"]);
+    assert!(success, "root help failed: {stderr}");
+    assert!(
+        !root_help.contains("forgejo"),
+        "root help must not teach provider setup as routine workflow:\n{root_help}"
+    );
+
+    for role in ["worker", "reviewer", "validator", "manager", "admin"] {
+        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
+        assert!(success, "man {role} failed: {stderr}");
+        assert!(
+            !guide.contains("forgejo roles"),
+            "{role} guidance must not teach provider setup as routine workflow:\n{guide}"
+        );
+    }
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
+    assert!(success, "Forgejo recovery help failed: {stderr}");
+    assert!(recovery_help.contains("Create missing role author users"));
+}
+
+#[test]
 fn test_obsolete_command_surfaces_are_removed_without_aliases() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

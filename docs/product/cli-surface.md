@@ -154,6 +154,9 @@ in the command audit:
   `init --import-beads`.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
+- `forgejo roles`: hidden provider-specific role-account recovery. Routine review
+  commands use the configured provider; readiness failures may name this surface
+  when an admin must inspect or provision role authors.
 - `worktree`: removed visible workspace-management surface pending redesign.
 
 Hidden advanced diagnostics probes may remain callable for local performance
