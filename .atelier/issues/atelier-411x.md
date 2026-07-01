@@ -36,7 +36,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Collapse retired command audit and stale guidance"
-updated_at: "2026-07-01T05:52:42.010146394+00:00"
+updated_at: "2026-07-01T05:58:40.233517218+00:00"
 ---
 
 ## Description
