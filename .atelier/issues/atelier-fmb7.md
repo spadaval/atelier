@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-01T06:02:11.286090417+00:00"
+status: "done"
 title: "Collapse retired command pages to tombstones"
-updated_at: "2026-07-01T05:58:40.234411523+00:00"
+updated_at: "2026-07-01T06:02:11.286090417+00:00"
 ---
 
 ## Description
