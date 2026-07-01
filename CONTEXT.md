@@ -12,14 +12,15 @@
   not ongoing Atelier state.
 - Beads migration input: repo-local `.beads/issues.manual.jsonl` data that
   `atelier init --import-beads` may import when explicitly requested.
-- Canonical record tree: deterministic tracked Markdown files under `.atelier/`
-  that can rebuild the local SQLite projection database.
-- RecordStore: the target component that owns canonical Markdown record reads,
-  writes, validation, deterministic rendering, and ID allocation.
-- ProjectionIndex: the target rebuildable SQLite index derived from
-  RecordStore records for global queries, graph traversal, search, validation,
-  and Mission Control inputs. It may keep covered-index metadata but not
-  project facts that cannot be recreated from canonical Markdown.
+- Record files: deterministic tracked Markdown files under `.atelier/`; they
+  are the durable project state and can rebuild the local SQLite domain cache.
+- RecordStore: the target component that owns record-file reads, writes,
+  validation, deterministic rendering, and ID allocation for concrete domain
+  types.
+- SQLite domain cache: the target rebuildable cache derived from record files
+  for global queries, graph traversal, search, validation, and Mission Control
+  inputs. It holds selected query facts, never a generic object mirror or facts
+  that cannot be recreated from record files.
 - Local diagnostics and cache: local-only ignored files such as command
   diagnostics, locks, and UI caches. These are not SQLite tracker state and
   must not define durable project records or current work.

@@ -17,17 +17,17 @@ mission-control features needed by agent-factory style orchestration.
 
 Atelier should use:
 
-- Markdown records for canonical state at rest.
-- SQLite for rebuildable projection indexes and local runtime state.
+- Record files for durable project state at rest.
+- SQLite for rebuildable domain-cache indexes and local runtime state.
 - Git for merge, review, and long-term audit.
 - Agent-facing commands as the primary interface.
 - Optional UI surfaces built on top of mechanical projections.
 
-Markdown records are the durable, mergeable repo surface. The SQLite database is
-the fast local projection and runtime store. It supports queries, locks,
-sessions, workflow checks, and Mission Control projections without making
-Markdown parsing the hot path for every command. A worktree should be able to
-rebuild its local SQLite projection from committed Markdown records after
+Record files are the durable, mergeable repo surface. The SQLite database is a
+fast local domain cache and runtime store. It supports query and workflow
+lookups without making record-file parsing the hot path for every command; it
+does not own locks, sessions, or durable workflow facts. A worktree should be
+able to rebuild its local SQLite cache from committed record files after
 checkout, pull, merge, or clone.
 
 ## Starting Point

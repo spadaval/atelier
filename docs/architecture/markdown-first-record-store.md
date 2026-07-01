@@ -1,34 +1,36 @@
 # Markdown-First Record Store
 
 This document defines the target persistence architecture for Atelier after the
-Markdown-only canonical state cutover. It refines the storage contract in
+Markdown-only project-state cutover. It refines the storage contract in
 [Canonical Record And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md)
-by separating canonical record ownership from rebuildable query indexes and
+by separating record-file ownership from rebuildable domain-cache read models and
 ignored local diagnostics/cache files.
 
 ## Direction
 
 Atelier's durable project state lives in tracked Markdown record files under
-`.atelier/`. SQLite remains valuable, but as a rebuildable projection rather
-than a second canonical copy of the same facts.
+`.atelier/`. SQLite remains valuable as a rebuildable lazy domain cache, not a
+second project-state model or a copy of complete record content.
 
-The target architecture has two explicit tracker-state components:
+The target architecture has three explicit layers:
 
-| Component | Owns | Does not own |
+| Layer | Owns | Does not own |
 | --- | --- | --- |
-| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, runtime-only checkout/session context, or long-lived caches. |
-| `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: work queues, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
+| Record files / `RecordStore` | Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, runtime-only checkout/session context, or cache rows. |
+| Concrete domain types | Typed record semantics, record-local invariants, and complete record-file content. | Generic escaped payloads or a universal record object schema. |
+| SQLite domain cache | Rebuildable selected facts for work queues, ready queries, traversal, search, validation, and Mission Control inputs. | Record-file mutation, complete Markdown bodies, or facts that cannot be recreated from record files. |
 
 Ignored local diagnostics, lock files, and UI caches may exist beside these
 components, but they are not SQLite tracker state and must not define durable
 project records or current work.
 
-Successful canonical mutations must write Markdown first. A command may refresh
-the projection in the same operation, but durability must not depend on a later
+Successful durable mutations write record files first. A command may refresh
+the cache in the same operation, but durability must not depend on a later
 SQLite export. Query commands may use SQLite after a cheap freshness check, but
 cache refresh is transparent product behavior; user-facing recovery should name
-record or workflow repairs rather than ask operators to maintain projection
-state.
+record-file or workflow repairs rather than ask operators to maintain cache
+state. [SQLite Domain Cache Schema](sqlite-runtime-schema.md) is authoritative
+for cache tables, shared full/incremental indexing, and fallback behavior.
 
 Current work in a checkout is derived from the canonical issue records in that
 checkout whose workflow status is `in_progress`, interpreted alongside the
@@ -45,8 +47,8 @@ links, and mission/evidence commands follow this order:
 2. Apply the domain mutation to the in-memory record.
 3. Validate record-local invariants and affected graph references.
 4. Render deterministic Markdown and replace the record file atomically.
-5. Refresh the affected `ProjectionIndex` rows, or mark the projection stale
-   with enough metadata for the next query to repair it.
+5. Refresh the affected SQLite cache rows, or mark the cache stale with enough
+   metadata for the next query to repair it.
 
 New-record creation allocates a project-scoped random ID through `RecordStore`,
 checks for local file collisions across all record kinds, writes the Markdown

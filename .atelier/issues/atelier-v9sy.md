@@ -3,6 +3,15 @@ created_at: "2026-06-23T16:21:20.070365285+00:00"
 id: "atelier-v9sy"
 issue_type: "epic"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-mska
+    integration_target: mission/atelier-mska
+    merge_strategy: squash
+    owner_issue_id: atelier-v9sy
+    owner_kind: epic
+    review_target: mission/atelier-mska
+    work_branch: epic/atelier-v9sy
 priority: "P1"
 relationships:
   blocks:
@@ -26,9 +35,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Persistence architecture contract"
-updated_at: "2026-06-23T16:21:20.086417637+00:00"
+updated_at: "2026-07-01T05:53:51.868669887+00:00"
 ---
 
 ## Description
