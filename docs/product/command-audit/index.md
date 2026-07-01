@@ -4,6 +4,10 @@ This audit classifies the current `atelier` CLI surface by the operator role
 most likely to reach for each command, then records whether the command is named,
 documented, and shaped for that role.
 
+Each active audit page uses the compact decision-record contract: operator
+question, role, product/cognitive cost, architecture/code cost, verdict, and
+next action. It is a decision aid, not a workflow.
+
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
@@ -72,7 +76,7 @@ not be taught as ordinary workflow:
 
 - [diagnostics](diagnostics.md): hidden local command telemetry.
 - [export](export.md): hidden deterministic-renderer diagnostic or migration
-  helper.
+  helper; normal operator health uses `check`.
 - [branch](branch.md): hidden/manual owner-branch recovery; routine branch
   guidance comes from status, work dashboards, issue detail, and transitions.
 - [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
@@ -144,7 +148,7 @@ runtime active-pointer helpers.
 | Retired command notes were still mixed with current command files. | `mission`, `graph`, `plan`, `start`, `worktree`, `repair`, `note`, and `abandon` are rejected as unrecognized root commands. | Leave them only as retired/deferred audit notes or delete them after remaining references are gone. |
 | `graph` was an abstract helper namespace compensating for underpowered record views. | `graph` is now rejected; prior `graph impact` and `graph tree` behavior belongs in issue detail/status and blocker views. | Removed. Use `issue show` for downstream impact and `issue show <objective-id>` for objective hierarchy and work health. |
 | The audit previously overloaded `work queue`. | Older docs routed mission inventory and generic issue inventory through `work queue --type mission`, but the current direction restores `issue list` as a simple inventory command and keeps mission dashboards under `work mission`. | Update docs and help so inventory, operational queues, and mission dashboards are separate jobs. |
-| Root help claims issue listing before the subcommand exists. | `target/debug/atelier --help` says `issue` can "Create, list, show..." but `target/debug/atelier issue --help` has no `list` subcommand. | Track this as current drift until `atelier issue list` lands. |
+| `issue list` has a defined inventory role. | `target/debug/atelier issue --help` lists `list` as generic issue inventory. | Keep it simple; do not route work-queue or dashboard decisions through it. |
 | `mission` was a parallel objective namespace. | `mission` is now rejected; root help teaches mission-typed issue records and `work mission <mission-id>`. | Keep mission guidance under typed issue records and work dashboards rather than aliases. |
 | Complex commands need explicit budget verdicts. | `review` mirrors provider verbs, scoped `history` risks query-language sprawl, `evidence attach` duplicates relationship mutation, and transition output dumps implementation machinery. | Apply Keep/Simplify/Fold/Hide/Remove verdicts in each command file before adding new surfaces. |
 | `review open` exposes provider plumbing as required operator input. | `atelier review open --help` requires `--title`, `--body`, `--source-branch`, and `--target-branch`; the product contract says lifecycle/status output should route review artifacts. | Refine `review open` toward issue-derived defaults or move the fully manual form to admin/advanced guidance. |

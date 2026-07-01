@@ -6,6 +6,15 @@ labels:
 - "cli"
 - "command-audit"
 - "complexity"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-durs
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-durs
 priority: "P1"
 relationships:
   blocks: []
@@ -29,9 +38,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Mission: Apply command complexity budget to remaining CLI surfaces"
-updated_at: "2026-06-29T20:11:38.060404364+00:00"
+updated_at: "2026-07-01T05:52:04.477244238+00:00"
 ---
 
 ## Description

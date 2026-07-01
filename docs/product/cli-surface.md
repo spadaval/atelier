@@ -240,9 +240,11 @@ Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier check <id>`, and focused
 drill-down commands rather than generic command dumps.
-`atelier work queue --status <status>` filters by exact configured workflow
-status only, with `all` as the only special token. Derived status categories
-are a separate concept and use `atelier work queue --category <category>`.
+`atelier issue list --status <status>` filters the normal inventory by exact
+configured workflow status only, with `all` as the only special token. Derived
+status categories are a separate concept and use `atelier issue list --category
+<category>`. The legacy `work queue` accepts equivalent filters only for its
+legacy operational view; it is not normal inventory guidance.
 Category values are the exact category names from `.atelier/workflow.yaml`
 such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
 tokens such as `in_progress` are not category aliases.
@@ -317,7 +319,8 @@ are diagnostic detail; normal completion output names the operator-facing
 blocker class and the next domain command.
 `atelier check` owns committed
 workflow/config validity, `issue transition` owns issue-level
-readiness inspection, and `mission status <objective-id>` owns mission publish-readiness inspection;
+readiness inspection, and `work mission <objective-id>` owns mission
+publish-readiness inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier check` or an explicitly
@@ -570,7 +573,7 @@ Mission-vs-issue example:
 atelier issue link atelier-hy2i atelier-4p7q
 atelier issue link atelier-isd5 atelier-a625
 atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map checked against current help"
-atelier issue status atelier-4p7q
+atelier issue show atelier-4p7q
 atelier issue note atelier-isd5 "CLI surface examples checked against root help."
 ```
 

@@ -200,7 +200,7 @@ future tools that summarize command behavior. It is not the contract for normal
 project operation.
 
 Normal mission, issue, validation, and terminal workflows must use
-human-oriented operator surfaces: `atelier status`, `atelier issue status
+human-oriented operator surfaces: `atelier status`, `atelier issue show
 <objective-id>`, `atelier issue transition <id> --options`, `atelier check`,
 `atelier check`, and `atelier evidence record`. Agents and scripts must not
 parse diagnostics JSON to choose ready work, decide blockers, prove validation,

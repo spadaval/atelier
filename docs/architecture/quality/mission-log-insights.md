@@ -92,14 +92,15 @@ Confidence: high.
 
 ### 5. Mission readiness and closeout were split across too many surfaces
 
-Controllers repeatedly stitched together `atelier status`, `mission status`,
+Controllers repeatedly stitched together `atelier status`, a now-retired
+mission dashboard,
 `mission audit`, `workflow check`, `lint`, `doctor`, `export --check`,
 evidence commands, and manual issue drill-down. The information was usually
 available, but the path to a closeout decision was noisy.
 
 Improvement:
 
-- CLI: make `mission status` the normal operator surface for state, blockers,
+- CLI: make `work mission` the normal operator surface for state, blockers,
   missing proof, stale projection, next action, and closeout readiness.
 - CLI: fold mission audit output into contextual status or verbose/advanced
   modes.

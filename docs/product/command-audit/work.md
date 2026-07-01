@@ -6,6 +6,12 @@ explicit ready-work pickup.
 Primary question: "Which bounded work view reduces the next coordination
 decision?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Which bounded view resolves my next coordination decision? | Manager/orchestrator; worker for explicit pickup | Scoped dashboards reduce scanning; the legacy queue mixes unrelated decisions. | Each view risks duplicating inventory, hierarchy, and blocker reads. | Simplify | Keep role-shaped views; leave `work queue` legacy and out of normal guidance. |
+
 `work` is the dashboard namespace for multi-issue operational views. It does not
 own issue mutation, workflow transitions, or durable record text. Those remain
 under `issue`, `evidence`, `review`, and `history`.
@@ -24,9 +30,8 @@ not a data view.
 - `work blocked`: manager triage for work stopped by open blockers.
 - `work active`: in-flight work surface when the operator needs to see what is
   already moving.
-- `work queue`: unresolved pressure point. If kept, it must be a bounded
-  repo-wide operational overview, not generic inventory and not a replacement
-  for scoped dashboards.
+- `work queue`: a legacy compatibility view, not normal guidance. It is not
+  generic inventory and not a replacement for scoped dashboards.
 - `work mission <mission-id>`: live mission orchestration dashboard with
   mission-scoped progress, ready/active/blocked/done workstreams, blockers,
   closeout only when relevant, and next actions.
@@ -47,9 +52,9 @@ the behavior belongs in `work mission`, `work epic`, or `issue list`.
 | `work blocked` | Manager/orchestrator | Triage blocked work across the repo. | Keep if terse. It has a distinct interruption/removal job. |
 | `work active` | Manager/orchestrator | See work already in motion. | Keep only if it answers in-flight coordination better than `status`. |
 | `work all` | Manager/orchestrator | Inspect all operational buckets at once. | Questionable. High cognitive load; prefer scoped dashboards unless a clear all-buckets job is proven. |
-| `work queue` | Unclear | Browse repo-wide actionable work. | Simplify or fold. Current output is a nested repo-wide dump that overlaps `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, and `issue list`. |
-| `work queue --ready` | Worker/scripts | Choose selectable leaf work. | Fold toward `work ready` unless quiet leaf IDs are a proven automation need. |
-| `work queue --blocked` | Manager/orchestrator | Inspect work with open blockers. | Fold toward `work blocked` unless the broader queue adds distinct context. |
+| `work queue` | Legacy only | Browse repo-wide actionable work. | Retired from normal guidance. Use `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, or `issue list` for the actual decision. |
+| `work queue --ready` | Legacy only | Choose selectable leaf work. | Retired from normal guidance. Use `work ready`. |
+| `work queue --blocked` | Legacy only | Inspect work with open blockers. | Retired from normal guidance. Use `work blocked`. |
 | `work mission <id>` | Manager/orchestrator | Coordinate one live mission. | Keep. It avoids stitching issue detail, blockers, and child state across commands. |
 | `work epic <id>` | Worker/reviewer | Coordinate one epic boundary. | Keep only if it remains tighter than `issue show <epic-id>` plus child issue drill-down. |
 
@@ -68,7 +73,7 @@ blocker count, omitted-row count, and next command needed to act.
 `issue list`, record detail in `issue show`, and lifecycle gates in
 `issue transition`.
 
-The current `work queue` identity is too broad. Its output shows repo-wide
+The legacy `work queue` identity is too broad. Its output shows repo-wide
 mission, epic, task, blocker, validation, and standalone context in one view.
 That increases product complexity because the operator has to decide whether
 they are choosing a mission, selecting a leaf task, triaging blockers, or
@@ -85,9 +90,8 @@ survives only when it removes command stitching for a real role decision:
 - `work epic <id>` answers the epic execution-boundary question.
 - `issue list` answers the inventory question.
 
-Anything left for `work queue` must be named explicitly. If no distinct
-operator question remains, remove it from normal guidance and fold its useful
-behavior into the commands above.
+The legacy queue is intentionally absent from normal guidance; its useful
+behavior belongs to the commands above.
 
 `work mission` should be epic-first by default. Child tasks appear when they are
 active, blocked, or specifically requested by a scoped drill-down flag. Default

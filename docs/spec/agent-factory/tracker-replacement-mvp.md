@@ -51,7 +51,7 @@ supported replacements:
 - freshness and health commands such as `atelier export --check`,
   `atelier lint`, and `atelier doctor`;
 - focused drill-down commands such as `atelier issue show <id>`,
-  `atelier issue status <objective-id>`, `atelier work queue --ready`, and dependency commands;
+  `atelier issue transition <objective-id>`, `atelier work ready`, and dependency commands;
 - documented authored JSON inputs or derived projection files only when a
   specific spec defines the contract.
 
@@ -124,11 +124,11 @@ JSON result from the command itself.
 | Move issue workflow status | `bd update <id> --status ...` | `atelier issue transition <id> <transition>` | Print the applied transition and resulting status, or rejected workflow gates with actionable text. | Canonical issue record plus transition activity sidecar. | Yes | `atelier-z1p.3` |
 | Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Quiet acknowledgement and canonical close metadata; `atelier lint` or workflow validation owns machine-checkable closure defects. | Yes | `atelier-z1p.3` |
 | Reopen accidentally closed work | `bd reopen <id>` | `atelier issue transition <id> reopen` | Print the applied transition and previous close reason when present. | Workflow transition acknowledgement and canonical issue record with reopened state. | Yes | `atelier-z1p.3` |
-| Find ready executable work | `bd ready` | `atelier work queue --ready` | List todo-category issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
-| List/filter work | `bd list --status=open` | `atelier work queue --status todo` | Print compact rows with ID, status, priority, type, title, and assignee. | Focused queue command backed by ProjectionIndex; durable fields remain in canonical records. | Yes | `atelier-z1p.3` |
+| Find ready executable work | `bd ready` | `atelier work ready` | List todo-category issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused ready-work view backed by ProjectionIndex rebuilt from `.atelier/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
+| List/filter work | `bd list --status=open` | `atelier issue list --status todo` | Print compact rows with ID, status, priority, type, title, and assignee. | Focused inventory command backed by ProjectionIndex; durable fields remain in canonical records. | Yes | `atelier-z1p.3` |
 | Search work by text | `bd search "<topic>"` | `atelier search "<topic>"` | Print ranked matches with ID, title, status, and short excerpt when available. | Focused search command backed by ProjectionIndex; scripts should use returned IDs for follow-up drill-down instead of parsing excerpts. | Yes | `atelier-z1p.3` |
 | Create normal task/feature/bug/validation/closeout beads | `bd create ...` | `atelier issue create ...` | Print new ID and title. All required fields must be accepted by flags or stdin, not an editor. | Quiet acknowledgement with new ID; canonical record is the durable created state. | Yes | `atelier-z1p.3` |
-| Create parent/child hierarchy | `bd update <child> --parent <epic>` and `bd children <epic>` | `atelier issue update <child> --parent <parent>` for mutation and `atelier issue status <objective-id>` for inspection | Parent update prints child and parent IDs. Status output distinguishes hierarchy from blocking dependencies. | Parent mutation uses quiet acknowledgement and canonical links/parent fields; status is a focused drill-down command backed by ProjectionIndex. | Yes | `atelier-z1p.3` |
+| Create parent/child hierarchy | `bd update <child> --parent <epic>` and `bd children <epic>` | `atelier issue update <child> --parent <parent>` for mutation and `atelier issue show <objective-id>` for inspection | Parent update prints child and parent IDs. Detail output distinguishes hierarchy from blocking dependencies. | Parent mutation uses quiet acknowledgement and canonical links/parent fields; detail is a focused drill-down command backed by ProjectionIndex. | Yes | `atelier-z1p.3` |
 | Add/remove blocking dependency | `bd dep add <blocked> <blocker>` and `bd dep remove <blocked> <blocker>` | `atelier issue link <blocked> <blocker>` and `atelier issue unlink <blocked> <blocker>` or `atelier dep add/remove` | Print blocked ID and blocker ID. Duplicate adds and missing removes must be idempotent or report clear no-op behavior. | Quiet acknowledgement and canonical typed relation state; invalid edges fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
 | List blocked work | `bd blocked` | `atelier issue show` | Print open issues grouped or annotated by open blockers. | Focused queue command backed by ProjectionIndex; use `issue show` for a selected record's durable details. | Yes | `atelier-z1p.3` |
 | Validate tracker records | `bd lint` and `bd lint <id>` | `atelier lint` and `atelier lint <id>` or documented equivalent | Print pass/fail summary and each actionable defect with record ID. | Supported health/check command. Exit status and finding text are the stable automation boundary unless a future diagnostic format is documented. | Yes | `atelier-z1p.3` |
@@ -154,7 +154,7 @@ commands:
    --claim`, `git status --short --branch`, and tracker health checks must let
    an implement worker verify scope, claim ownership, and detect stale tracker
    state.
-2. Planning/orchestration: `atelier work queue --ready`, `atelier issue create`,
+2. Planning/orchestration: `atelier work ready`, `atelier issue create`,
    parent updates, and dependency operations must let an orchestrator create and
    sequence child work without `bd`.
 3. Implementation handoff: notes, close, `atelier lint`, `atelier doctor`,
@@ -179,8 +179,8 @@ used by workers and orchestrators:
 | `bd update <id> --title ... --priority ...` | `atelier issue update <id> --title ... --priority ...`; edit body sections in `.atelier/issues/<id>.md` |
 | `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |
 | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` |
-| `bd ready` | `atelier work queue --ready` |
-| `bd list --status=open` | `atelier work queue --status todo` |
+| `bd ready` | `atelier work ready` |
+| `bd list --status=open` | `atelier issue list --status todo` |
 | `bd search "<topic>"` | `atelier search "<topic>"` |
 | `bd create ...` | `atelier issue create ...` |
 | `bd dep add <blocked> <blocker>` | `atelier dep add <blocked> <blocker>` |
