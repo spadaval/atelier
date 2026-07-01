@@ -2775,9 +2775,6 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
             &source_id,
         ],
     );
-    run_atelier(dir.path(), &["issue", "create", "Disposable item"]);
-    let disposable_id = issue_ref(dir.path(), 3);
-
     let (success, impact_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(impact_out.contains("Impact"));
@@ -2804,13 +2801,6 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Explicit note body"));
-
-    let (success, delete_out, stderr) = run_atelier(
-        dir.path(),
-        &["maintenance", "delete", "issue", &disposable_id, "--force"],
-    );
-    assert!(success, "maintenance delete failed: {stderr}");
-    assert!(delete_out.contains("Deleted issue"));
 }
 
 #[test]
@@ -2922,7 +2912,7 @@ fn test_generic_link_rejection_is_plain_unknown_command() {
 }
 
 #[test]
-fn test_explicit_homes_reject_non_issue_targets_until_supported() {
+fn test_removed_maintenance_delete_is_unknown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2936,11 +2926,12 @@ fn test_explicit_homes_reject_non_issue_targets_until_supported() {
             "--force",
         ],
     );
+    assert!(!success, "maintenance delete should be removed");
     assert!(
-        !success,
-        "maintenance delete unexpectedly accepted a mission target"
+        stderr.contains("unrecognized subcommand 'maintenance'"),
+        "{stderr}"
     );
-    assert!(stderr.contains("supports issue records only"));
+    assert!(!stderr.contains("was removed"), "{stderr}");
 }
 
 #[test]

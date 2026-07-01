@@ -17,8 +17,8 @@ The product surface uses four command categories:
 
 - Normal workflow: visible operator commands for orientation, work lifecycle,
   proof, terminal readiness, and ordinary health.
-- Admin maintenance: visible setup, explicit repair, destructive maintenance,
-  and manual owner-branch recovery.
+- Admin maintenance: visible setup, explicit repair, supported pruning, and
+  manual owner-branch recovery.
 - Hidden debug diagnostics: raw policy, telemetry, projection, or
   deterministic-renderer probes that are callable only for targeted diagnostics,
   tests, or migration work.
@@ -82,7 +82,7 @@ not be taught as ordinary workflow:
   hatch; normal setup uses `init --import-beads`.
 - [lint](lint.md): hidden compatibility health probe; normal validation uses
   visible `check`.
-- [maintenance](maintenance.md): hidden danger-zone maintenance primitives.
+- [maintenance](maintenance.md): removed arbitrary-record deletion surface.
 - [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
   from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
