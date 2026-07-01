@@ -53,4 +53,3 @@ Truncated: no
 bash: command substitution: line 1: syntax error near unexpected token `abandon'
 bash: command substitution: line 1: `atelier (abandon|graph|mission|note|plan|repair|search|start|worktree)'
 ```
-
