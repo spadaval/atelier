@@ -73,9 +73,9 @@ the root namespace is retired.
 | `mission show` | Manager/orchestrator | Inspect rich mission prose and relationship context. | Removed. Replacement: `issue show <objective-id>`. |
 | `mission start --switch` | Manager/orchestrator | Set active mission focus. | Removed. Root status and canonical in-progress issue records own checkout orientation. |
 | `mission status` | Manager/orchestrator | See current mission health and next actions. | Removed. Replacement: `work mission <id>` and `issue transition <id>`. |
-| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue transition <id> --verbose` once verbose transition output lands. |
+| `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue transition <id> --verbose`. |
 | `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Removed. Replacement: `issue transition <objective-id> close --reason`. |
-| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Removed. Replacement: `issue list --issue-type mission` once issue inventory lands. |
+| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Removed. Replacement: `work missions` for a mission list, or `issue list --issue-type mission` for filtered inventory. |
 | `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Removed. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
 | `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
 | `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |

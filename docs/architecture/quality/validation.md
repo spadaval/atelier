@@ -247,7 +247,7 @@ mandatory line IDs.
 
 `atelier issue show <mission-id>` is the normal operator surface for mission
 state, blockers, configured validator failures, next actions, and completion
-status. Verbose issue status is completion drill-down: it reports mission shell
+status. Verbose issue transition output is completion drill-down: it reports mission shell
 completion and any explicit linked validation work that supplies workflow
 approval.
 Hidden workflow validators are

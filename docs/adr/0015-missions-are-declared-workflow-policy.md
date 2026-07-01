@@ -35,7 +35,8 @@ The replacement command boundary is:
 - `atelier status` orients the checkout and names active work.
 - `atelier issue show <objective-id>` renders one objective record and its
   linked work, blockers, and proof.
-- `atelier issue status <objective-id>` inspects readiness and terminal checks
+- `atelier issue show <objective-id>` inspects objective detail, while
+  `atelier issue transition <objective-id>` inspects readiness and terminal checks
   for one objective.
 - Explicit issue browsing or inventory surfaces discover objective records.
 - `atelier issue transition <objective-id> <transition>` applies the workflow

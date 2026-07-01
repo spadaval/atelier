@@ -15,7 +15,7 @@ and skill bindings were updated.
   `atelier-z1p.6`; `atelier issue note 43 ...` annotated it;
   `atelier start 43` established active local work; `atelier issue close 43
   --reason ...` closed it after this note was added.
-- Ready discovery: `atelier work queue --ready` listed `atelier-z1p.6` as ready after
+- Ready discovery: `atelier work ready` listed `atelier-z1p.6` as ready after
   its blockers were closed.
 - Dependency workflow: `atelier issue link 43 44` added a blocker; `atelier
   issue show 43` displayed `Blocked by: #44`; `atelier issue unlink 43 44`
@@ -30,7 +30,8 @@ and skill bindings were updated.
 - Current Agent Factory validation should inspect and close work through human
   command output, quiet acknowledgements where a command naturally returns a
   single result, and explicit drill-down commands such as `atelier issue show
-  <id>`, `atelier issue status <objective-id>`, `atelier lint` and `atelier
+  <id>`, `atelier issue show <objective-id>`, `atelier issue transition
+  <objective-id>`, `atelier lint` and `atelier
   doctor`. Do not use command-result `--json` as the workflow proof.
 - Historical storage-rendering check: `/tmp/atelier-rebuild-check` was populated with
   `.atelier` and an empty `.atelier`; from that directory, `atelier

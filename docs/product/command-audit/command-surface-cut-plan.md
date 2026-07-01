@@ -47,7 +47,7 @@ Removed commands must have replacement capability, not replacement spellings:
 
 | Removed surface | Replacement owner |
 | --- | --- |
-| `mission list` | `issue list --issue-type mission` once issue inventory lands |
+| `mission list` | `work missions` for mission selection, or `issue list --issue-type mission` for inventory |
 | `mission status <id>` | `work mission <mission-id>` for operational dashboard, `issue show <mission-id>` for record detail, and `issue transition <mission-id>` for terminal gates |
 | `issue status <objective-id>` | `work mission` / `work epic` for operational dashboard, `issue show <objective-id>` for record detail, and `issue transition <objective-id>` for gates |
 | `issue blocked` | blocked triage in `work blocked`; blocker detail in `issue show <id>` |
@@ -230,14 +230,14 @@ Mission is an issue type, not a command namespace.
 
 Replace:
 
-- `mission list` with `issue list --issue-type mission` once inventory lands
+- `mission list` with `work missions` for selection or `issue list --issue-type mission` for inventory
 - `mission status <id>` with `work mission <mission-id>` for orchestration and
   `issue show <mission-id>` for record detail
 
 Mission-specific status behavior should become generic objective rollup inside
 `issue show`.
 
-### Remove `atelier issue status`
+### Remove the retired issue-status command
 
 The workflow status field is valuable. The `issue status` command is not.
 

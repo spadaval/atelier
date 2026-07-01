@@ -13,12 +13,12 @@ Sampled commands:
 
 - `target/debug/atelier status`
 - `target/debug/atelier work queue`
-- `target/debug/atelier work queue --ready`
+- `target/debug/atelier work ready`
 - `target/debug/atelier issue show atelier-kpa1`
 - `target/debug/atelier issue show`
 - `target/debug/atelier issue show atelier-t3h3`
-- historical removed-surface samples: `issue table --kind mission` and
-  `issue status atelier-24xn --verbose`
+- historical removed-surface samples: `issue table --kind mission` and the
+  retired `issue status` form (replaced by `issue show` and `issue transition`)
 - `target/debug/atelier issue transition atelier-kpa1`
 - `target/debug/atelier history --issue atelier-kpa1 --limit 10`
 - `target/debug/atelier evidence list`

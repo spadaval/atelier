@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-01T05:57:40.969721482+00:00"
+status: "done"
 title: "Remove stale command references from product and role docs"
-updated_at: "2026-06-29T20:16:30.938172765+00:00"
+updated_at: "2026-07-01T05:57:40.969721482+00:00"
 ---
 
 ## Description

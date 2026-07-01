@@ -69,8 +69,8 @@ reimplement transition availability rules as a parallel source of truth.
 
 `atelier-cli` owns Clap command shape, process exit mapping, and terminal
 rendering only. Commands such as `atelier issue transition <id> --options`,
-`atelier issue transition <id> <transition>`, `atelier issue status
-<objective-id>`, and `atelier work queue --ready` should render the
+`atelier issue transition <id> <transition>`, `atelier issue show
+<objective-id>`, and `atelier work ready` should render the
 app/workflow outcomes they receive. CLI code may contain formatting labels such
 as section headings, but not workflow policy decisions.
 

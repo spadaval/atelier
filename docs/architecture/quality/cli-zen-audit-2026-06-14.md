@@ -91,7 +91,7 @@ checks as part of operator validation.
 
 That creates a contract mismatch. If workflow policy validation is a normal
 gate, it should be reachable through normal surfaces such as `status`, `doctor`,
-`lint`, or mission status. If it is an advanced diagnostic, docs and agent
+`lint`, or `work mission`. If it is an advanced diagnostic, docs and agent
 guidance should stop presenting it as a normal handoff step.
 
 Tracked by `atelier-gh3m`.
