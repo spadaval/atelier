@@ -49,6 +49,7 @@ pub(crate) struct BranchLifecycleContext {
     pub expected_branch_exists: bool,
     pub base_branch_exists: bool,
     pub dirty_entries: Vec<String>,
+    pub non_tracker_dirty_entries: Vec<String>,
 }
 
 pub fn issue_transition_options(
@@ -260,6 +261,9 @@ pub(crate) fn branch_lifecycle_context(
             &resolution.base_branch,
         )?,
         dirty_entries: crate::commands::workflow::git_dirty_entries(&repo_root)?,
+        non_tracker_dirty_entries: crate::commands::workflow::non_tracker_dirty_entries(
+            &repo_root,
+        )?,
         resolution,
     })
 }
@@ -287,9 +291,15 @@ pub(crate) fn branch_owner_label(
 }
 
 pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> String {
-    if !context.dirty_entries.is_empty() {
+    if !context.non_tracker_dirty_entries.is_empty() {
         return format!(
             "dirty checkout: {}",
+            human_output::path_summary(&context.non_tracker_dirty_entries, 3)
+        );
+    }
+    if !context.dirty_entries.is_empty() {
+        return format!(
+            "tracker changes present: {}",
             human_output::path_summary(&context.dirty_entries, 3)
         );
     }
@@ -327,9 +337,9 @@ fn branch_context_blockers(
         return Ok(blockers);
     }
     let context = branch_lifecycle_context(db, &issue.id)?;
-    if !context.dirty_entries.is_empty() {
+    if !context.non_tracker_dirty_entries.is_empty() {
         blockers.push(format!(
-            "branch context: checkout has uncommitted changes; inspect `git status --short --branch`, then rerun `{}`",
+            "branch context: checkout has uncommitted non-tracker changes; inspect `git status --short --branch`, then rerun `{}`",
             transition_command(&issue.id, transition_name, transition)
         ));
         return Ok(blockers);
@@ -568,6 +578,13 @@ mod tests {
                 "M fourth.txt".to_string(),
                 "M fifth.txt".to_string(),
             ],
+            non_tracker_dirty_entries: vec![
+                "M first.txt".to_string(),
+                "M second.txt".to_string(),
+                "M third.txt".to_string(),
+                "M fourth.txt".to_string(),
+                "M fifth.txt".to_string(),
+            ],
         };
 
         let summary = branch_lifecycle_state_line(&context);
@@ -576,6 +593,33 @@ mod tests {
         assert!(summary.contains("M first.txt"));
         assert!(summary.contains("2 more omitted"));
         assert!(!summary.contains("M fifth.txt"));
+    }
+
+    #[test]
+    fn branch_lifecycle_state_reports_tracker_only_changes_without_dirty_blocker_language() {
+        let context = BranchLifecycleContext {
+            resolution: BranchLifecycleResolution {
+                issue_id: "atelier-epic1".to_string(),
+                owner_id: "atelier-epic1".to_string(),
+                owner_issue_type: "epic".to_string(),
+                owner_kind: BranchOwnerKind::Epic,
+                expected_branch: "epic/atelier-epic1".to_string(),
+                base_branch: "mission/atelier-mission".to_string(),
+                merge_strategy: MergeStrategy::Squash,
+                merge_owned: true,
+                nested_under_epic: false,
+            },
+            current_branch: Some("mission/atelier-mission".to_string()),
+            expected_branch_exists: false,
+            base_branch_exists: true,
+            dirty_entries: vec!["M .atelier/issues/atelier-mission.md".to_string()],
+            non_tracker_dirty_entries: Vec::new(),
+        };
+
+        let summary = branch_lifecycle_state_line(&context);
+
+        assert!(summary.contains("tracker changes present"));
+        assert!(!summary.contains("dirty checkout"));
     }
 
     #[test]
