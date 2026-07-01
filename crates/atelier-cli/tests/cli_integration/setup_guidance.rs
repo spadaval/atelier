@@ -584,6 +584,17 @@ fn test_prune_dry_run_reports_diagnostics_without_removing_logs() {
 }
 
 #[test]
+fn test_prune_help_describes_both_retention_classes() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["prune", "--help"]);
+    assert!(success, "prune help failed: {stderr}");
+    assert!(
+        stdout.contains("Override diagnostics and canonical record retention for this prune pass"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn test_prune_apply_removes_only_expired_diagnostics_logs() {
     let dir = tempdir().unwrap();
     let diagnostics_dir = dir.path().join("diagnostics");
@@ -645,6 +656,218 @@ fn test_prune_apply_removes_only_expired_diagnostics_logs() {
         "apply left expired diagnostics log in place"
     );
     assert!(recent_path.exists(), "apply removed recent diagnostics log");
+}
+
+#[test]
+fn test_prune_removes_ignored_orphaned_runtime_artifacts_but_protects_locks() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "prune local artifacts fixture");
+
+    let runtime = dir.path().join(".atelier/runtime");
+    let cache = dir.path().join(".atelier/cache");
+    let orphan = cache.join("orphan.tmp");
+    let lock = runtime.join(".state.db.rebuild.lock");
+    fs::create_dir_all(&cache).unwrap();
+    fs::write(&orphan, "interrupted rebuild").unwrap();
+    fs::write(&lock, "pid=999\n").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(
+        stdout.contains("Ignored Runtime, Cache, And Projection Artifacts"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("eligible stale-cache"), "{stdout}");
+    assert!(stdout.contains("protected runtime-lock"), "{stdout}");
+    assert!(orphan.exists(), "dry-run removed orphaned artifact");
+    assert!(lock.exists(), "dry-run removed lock");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("removed stale-cache"), "{stdout}");
+    assert!(stdout.contains("atelier check --fix"), "{stdout}");
+    assert!(!orphan.exists(), "apply left orphaned artifact in place");
+    assert!(lock.exists(), "apply removed protected lock");
+}
+
+#[test]
+fn test_prune_protects_active_projection_rebuild_artifacts() {
+    use fs2::FileExt;
+    use std::fs::OpenOptions;
+
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "active projection prune fixture");
+    let runtime = dir.path().join(".atelier/runtime");
+    let artifact = runtime.join(".state.db.1.2.rebuild-tmp");
+    let lock_path = runtime.join(".state.db.rebuild.lock");
+    fs::write(&artifact, "active rebuild").unwrap();
+    let lock = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .unwrap();
+    lock.lock_exclusive().unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("protected orphaned-temp"), "{stdout}");
+    assert!(
+        stdout.contains("projection rebuild lock is active"),
+        "{stdout}"
+    );
+    assert!(artifact.exists(), "apply removed active rebuild artifact");
+}
+
+#[test]
+fn test_prune_protects_current_base_and_unowned_git_branches() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "prune Git fixture");
+    let base = String::from_utf8(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["branch", "--show-current"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "merged-but-unowned"])
+        .status()
+        .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["checkout", "-b", "unmerged-branch"])
+        .status()
+        .unwrap();
+    fs::write(dir.path().join("unmerged.txt"), "unmerged\n").unwrap();
+    commit_all(dir.path(), "unmerged branch work");
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["checkout", &base])
+        .status()
+        .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Git Branches And Worktrees"), "{stdout}");
+    assert!(
+        stdout.contains("protected branch merged-but-unowned"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("no terminal owner record association"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("protected branch unmerged-branch"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("protected branch {base}")),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn test_prune_protects_non_current_dirty_worktree() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "dirty worktree prune fixture");
+    let worktree = dir.path().join("dirty-worktree");
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            "dirty-worktree",
+            worktree.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::write(worktree.join("dirty.txt"), "dirty\n").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("protected worktree"), "{stdout}");
+    assert!(stdout.contains("dirty worktree"), "{stdout}");
+    assert!(worktree.exists(), "apply removed dirty worktree");
+}
+
+#[test]
+fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
+    let dir = tempdir().unwrap();
+    let remote = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Terminal branch owner"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "terminal owner fixture");
+    let branch = format!("task/{issue_id}");
+    let worktree = dir.path().join("terminal-owner-worktree");
+    for args in [
+        vec!["init", "--bare", remote.path().to_str().unwrap()],
+        vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
+        vec!["push", "-u", "origin", "main"],
+        vec!["branch", &branch],
+        vec!["push", "-u", "origin", &branch],
+        vec!["worktree", "add", worktree.to_str().unwrap(), &branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("eligible branch {branch}")),
+        "{stdout}"
+    );
+    assert!(stdout.contains("eligible worktree"), "{stdout}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("removed branch {branch}")),
+        "{stdout}"
+    );
+    assert!(stdout.contains("removed worktree"), "{stdout}");
+    assert!(!worktree.exists(), "apply left eligible worktree in place");
+    let branch_exists = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .status()
+        .unwrap();
+    assert!(
+        !branch_exists.success(),
+        "apply left eligible branch in place"
+    );
 }
 
 #[test]
@@ -1399,7 +1622,8 @@ fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
     assert!(stdout.contains("atelier init"));
     assert!(stdout.contains("docs/product/workflow-configuration.md"));
     assert!(stdout.contains("atelier issue transition <id>"));
-    assert!(stdout.contains("atelier prune --dry-run"));
+    assert!(stdout.contains("atelier prune"));
+    assert!(!stdout.contains("atelier prune --dry-run"));
 }
 
 #[test]

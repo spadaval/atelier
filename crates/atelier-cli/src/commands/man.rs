@@ -267,7 +267,7 @@ fn print_normal_loop(role: Role) {
             println!("  atelier check");
             println!("  atelier check --fix");
             println!("  atelier workflow check");
-            println!("  atelier prune --dry-run");
+            println!("  atelier prune");
             println!("  docs/product/workflow-configuration.md");
             println!("  docs/product/work-model.md");
         }
