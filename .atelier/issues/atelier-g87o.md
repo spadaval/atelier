@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove or admin-hide destructive maintenance delete"
-updated_at: "2026-06-29T20:15:20.520150409+00:00"
+updated_at: "2026-07-01T15:36:48.047047054+00:00"
 ---
 
 ## Description
