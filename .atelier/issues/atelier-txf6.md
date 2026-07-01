@@ -33,7 +33,7 @@ for the prune workflow.
 
 ## Outcome
 
-- SPEC.md, product docs, architecture docs, and any needed ADR state how Atelier
+- PRODUCT_INTENT.md, product docs, architecture docs, and any needed ADR state how Atelier
   classifies tracked canonical records, evidence metadata, evidence payloads,
   issue activity sidecars, ignored runtime/cache data, diagnostics, branches,
   and worktrees for pruning.

@@ -8,11 +8,11 @@ priority: P2
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: evidence
     id: atelier-tm8c
-    type: validates
+    role: validates
+  relates:
   - kind: issue
     id: atelier-ap3r
     type: advances
