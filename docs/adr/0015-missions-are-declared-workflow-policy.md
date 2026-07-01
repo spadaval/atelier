@@ -68,6 +68,6 @@ The replacement command boundary is:
   rendering path as other work.
 - Legacy mission records need a direct migration or rebuild into the declared
   objective model.
-- Documentation and role guidance should route operators to status, issue
-  detail, issue status, issue transition options, and explicit browsing
-  surfaces, not to hidden mission-specific lifecycle rules.
+- Documentation and role guidance should route operators to status, `issue
+  show`, `issue transition` options, and explicit browsing surfaces, not to
+  hidden mission-specific lifecycle rules.
