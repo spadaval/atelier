@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Hide routine Forgejo provider setup from normal workflow"
-updated_at: "2026-06-29T20:15:16.029096137+00:00"
+updated_at: "2026-07-01T15:41:42.865274339+00:00"
 ---
 
 ## Description
