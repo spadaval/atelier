@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::project_config::DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS;
+use atelier_app::workflow_policy::MergeStrategy;
 use atelier_core::{Issue, RecordLink};
 use atelier_sqlite::{Database, RecordSummary};
 use chrono::{DateTime, Days, NaiveDate, Utc};
@@ -91,6 +92,14 @@ struct GitWorktree {
     prunable: bool,
 }
 
+#[derive(Debug, Clone)]
+struct GitBranchOwner {
+    id: String,
+    base: String,
+    merge_strategy: MergeStrategy,
+    protection: Option<String>,
+}
+
 impl CanonicalCandidate {
     fn eligible(&self) -> bool {
         self.protection.is_none()
@@ -107,7 +116,7 @@ pub fn run(
     // before opening or validating canonical state so a broken projection never
     // prevents removal of an abandoned temporary file.
     let local = prune_local_artifacts(tracker.as_ref(), retention_days, apply)?;
-    let git = prune_git_artifacts(tracker.as_ref(), apply)?;
+    let git = prune_git_artifacts(tracker.as_ref(), retention_days, apply)?;
     let canonical = prune_canonical_records(tracker, retention_days, apply)?;
 
     println!("Prune");
@@ -133,7 +142,11 @@ pub fn run(
     Ok(())
 }
 
-fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<GitPruneSummary> {
+fn prune_git_artifacts(
+    tracker: Option<&TrackerContext>,
+    retention_days_override: Option<u64>,
+    apply: bool,
+) -> Result<GitPruneSummary> {
     let Some(tracker) = tracker else {
         return Ok(GitPruneSummary {
             unavailable: Some("tracker unavailable in this directory".to_string()),
@@ -163,16 +176,49 @@ fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<
         }
     };
     let base = policy.branch_policy.base_branch.clone();
-    let mut terminal_branch_owners = BTreeMap::new();
-    for issue in tracker.db.list_issues(Some("all"), None, None)? {
-        if !crate::commands::issue_workflow::issue_is_done(Some(&policy), &issue) {
-            continue;
+    let (_, cutoff) = canonical_retention_cutoff(Some(tracker), retention_days_override);
+    let mut owner_candidates = issue_candidates(tracker, cutoff)?;
+    apply_git_history_protection(&tracker.repo_root, &mut owner_candidates)?;
+    for candidate in owner_candidates
+        .iter_mut()
+        .filter(|candidate| candidate.eligible())
+    {
+        if canonical_path_is_dirty(&tracker.repo_root, &candidate.path)? {
+            candidate.protection = Some("owner record has uncommitted changes".to_string());
         }
+    }
+    let owner_candidates = owner_candidates
+        .into_iter()
+        .map(|candidate| (candidate.id.clone(), candidate))
+        .collect::<BTreeMap<_, _>>();
+    let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
+    for issue in tracker.db.list_issues(Some("all"), None, None)? {
         if let Ok(resolution) =
             atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
         {
             if resolution.owner_id == issue.id {
-                terminal_branch_owners.insert(resolution.expected_branch, resolution.base_branch);
+                let protection =
+                    if !crate::commands::issue_workflow::issue_is_done(Some(&policy), &issue) {
+                        Some(format!("owner {} has active workflow state", issue.id))
+                    } else if let Some(candidate) = owner_candidates.get(&issue.id) {
+                        candidate.protection.as_ref().map(|reason| {
+                            format!("terminal owner {} is protected: {reason}", issue.id)
+                        })
+                    } else {
+                        Some(format!(
+                            "terminal owner {} is within retention window",
+                            issue.id
+                        ))
+                    };
+                branch_owners
+                    .entry(resolution.expected_branch)
+                    .or_default()
+                    .push(GitBranchOwner {
+                        id: issue.id,
+                        base: resolution.base_branch,
+                        merge_strategy: resolution.merge_strategy,
+                        protection,
+                    });
             }
         }
     }
@@ -209,16 +255,8 @@ fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<
             Some("configured base branch".to_string())
         } else if let Some(reason) = worktree_branch_blockers.get(branch) {
             Some(reason.clone())
-        } else if let Some(owner_base) = terminal_branch_owners.get(branch) {
-            if !branch_is_merged(&tracker.repo_root, branch, owner_base)? {
-                Some(format!(
-                    "contains commits not integrated into owner base {owner_base}"
-                ))
-            } else if let Some(reason) = branch_push_protection(&tracker.repo_root, branch)? {
-                Some(reason)
-            } else {
-                None
-            }
+        } else if let Some(owners) = branch_owners.get(branch) {
+            git_owner_protection(&tracker.repo_root, branch, owners)?
         } else {
             Some("no terminal owner record association".to_string())
         };
@@ -257,16 +295,14 @@ fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<
         } else if let Some(branch) = &worktree.branch {
             if branch == &base {
                 Some("configured base branch".to_string())
-            } else if let Some(owner_base) = terminal_branch_owners.get(branch) {
-                if !branch_is_merged(&tracker.repo_root, branch, owner_base)? {
-                    Some(format!(
-                        "branch commits are not integrated into owner base {owner_base}"
-                    ))
-                } else if let Some(reason) = branch_push_protection(&tracker.repo_root, branch)? {
-                    Some(reason)
-                } else {
-                    None
-                }
+            } else if let Some(owners) = branch_owners.get(branch) {
+                git_owner_protection(&tracker.repo_root, branch, owners)?.map(|reason| {
+                    if reason.starts_with("contains commits not integrated") {
+                        format!("branch {reason}")
+                    } else {
+                        reason
+                    }
+                })
             } else {
                 Some("no terminal owner record association".to_string())
             }
@@ -344,6 +380,32 @@ fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<
     Ok(summary)
 }
 
+fn git_owner_protection(
+    repo_root: &Path,
+    branch: &str,
+    owners: &[GitBranchOwner],
+) -> Result<Option<String>> {
+    if owners.len() != 1 {
+        let ids = owners
+            .iter()
+            .map(|owner| owner.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Ok(Some(format!("ambiguous owner record associations: {ids}")));
+    }
+    let owner = &owners[0];
+    if let Some(reason) = &owner.protection {
+        return Ok(Some(reason.clone()));
+    }
+    if !branch_is_integrated(repo_root, branch, &owner.base, owner.merge_strategy)? {
+        return Ok(Some(format!(
+            "contains commits not integrated into owner base {}",
+            owner.base
+        )));
+    }
+    branch_push_protection(repo_root, branch)
+}
+
 fn git_worktrees(repo_root: &Path) -> Result<Vec<GitWorktree>> {
     let output = git_stdout_trimmed(repo_root, &["worktree", "list", "--porcelain"])?;
     let mut worktrees = Vec::new();
@@ -387,13 +449,71 @@ fn git_worktrees(repo_root: &Path) -> Result<Vec<GitWorktree>> {
     Ok(worktrees)
 }
 
-fn branch_is_merged(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
+fn branch_is_integrated(
+    repo_root: &Path,
+    branch: &str,
+    base: &str,
+    merge_strategy: MergeStrategy,
+) -> Result<bool> {
     let output = Command::new("git")
         .current_dir(repo_root)
         .args(["merge-base", "--is-ancestor", branch, base])
         .output()
         .context("failed to inspect Git branch integration for prune candidate")?;
-    Ok(output.status.success())
+    if output.status.success() {
+        return Ok(true);
+    }
+    if merge_strategy != MergeStrategy::Squash {
+        return Ok(false);
+    }
+    branch_has_equivalent_squash(repo_root, branch, base)
+}
+
+fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
+    let merge_base = git_stdout_trimmed(repo_root, &["merge-base", branch, base])?;
+    let branch_diff = git_diff(repo_root, &merge_base, branch)?;
+    if branch_diff.is_empty() {
+        return Ok(false);
+    }
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["log", "-z", "--format=%H%x00%s", base])
+        .output()
+        .context("failed to inspect squash integration history for prune candidate")?;
+    if !output.status.success() {
+        return Ok(false);
+    }
+    let fields = output.stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
+    let expected_subject = format!("Squash merge {branch} into {base}");
+    for pair in fields.chunks(2) {
+        let [commit, subject] = pair else {
+            continue;
+        };
+        if String::from_utf8_lossy(subject) != expected_subject {
+            continue;
+        }
+        let commit = String::from_utf8_lossy(commit);
+        let parent = match git_stdout_trimmed(repo_root, &["rev-parse", &format!("{commit}^")]) {
+            Ok(parent) => parent,
+            Err(_) => continue,
+        };
+        if git_diff(repo_root, &parent, &commit)? == branch_diff {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn git_diff(repo_root: &Path, from: &str, to: &str) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["diff", "--binary", "--full-index", "--no-renames", from, to])
+        .output()
+        .context("failed to compare Git integration patches for prune candidate")?;
+    if !output.status.success() {
+        bail!("git diff failed while inspecting prune candidate integration");
+    }
+    Ok(output.stdout)
 }
 
 fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<String>> {
@@ -647,17 +767,8 @@ fn prune_canonical_records(
     retention_days_override: Option<u64>,
     apply: bool,
 ) -> Result<CanonicalPruneSummary> {
-    let retention_days = retention_days_override
-        .or_else(|| {
-            tracker
-                .as_ref()
-                .map(|tracker| tracker.canonical_retention_days)
-        })
-        .unwrap_or(DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS);
-    let cutoff = Utc::now()
-        .date_naive()
-        .checked_sub_days(Days::new(retention_days))
-        .unwrap_or_else(|| Utc::now().date_naive());
+    let (retention_days, cutoff) =
+        canonical_retention_cutoff(tracker.as_ref(), retention_days_override);
     let Some(tracker) = tracker else {
         return Ok(CanonicalPruneSummary {
             retention_days,
@@ -719,6 +830,20 @@ fn prune_canonical_records(
         unavailable: None,
         rebuilt_projection: false,
     })
+}
+
+fn canonical_retention_cutoff(
+    tracker: Option<&TrackerContext>,
+    retention_days_override: Option<u64>,
+) -> (u64, NaiveDate) {
+    let retention_days = retention_days_override
+        .or_else(|| tracker.map(|tracker| tracker.canonical_retention_days))
+        .unwrap_or(DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS);
+    let cutoff = Utc::now()
+        .date_naive()
+        .checked_sub_days(Days::new(retention_days))
+        .unwrap_or_else(|| Utc::now().date_naive());
+    (retention_days, cutoff)
 }
 
 fn issue_candidates(
@@ -958,6 +1083,24 @@ fn path_exists_in_head(repo_root: &Path, path: &Path) -> Result<bool> {
         .output()
         .context("failed to inspect Git history for prune candidate")?;
     Ok(output.status.success())
+}
+
+fn canonical_path_is_dirty(repo_root: &Path, path: &Path) -> Result<bool> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args([
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            &display_git_path(path),
+        ])
+        .output()
+        .context("failed to inspect branch owner record state for prune candidate")?;
+    if !output.status.success() {
+        bail!("git status failed while inspecting branch owner record");
+    }
+    Ok(!output.stdout.is_empty())
 }
 
 fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
@@ -1351,6 +1494,33 @@ mod tests {
 
         let reason = branch_push_protection(repo.path(), "main").unwrap();
         assert!(reason.unwrap().contains("has no upstream"));
+    }
+
+    #[test]
+    fn squash_subject_without_equivalent_patch_does_not_prove_integration() {
+        let repo = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::write(repo.path().join("base"), "base").unwrap();
+        git(repo.path(), &["add", "base"]);
+        git(repo.path(), &["commit", "-m", "base"]);
+        git(repo.path(), &["checkout", "-b", "task/owner"]);
+        fs::write(repo.path().join("owner-work"), "owner").unwrap();
+        git(repo.path(), &["add", "owner-work"]);
+        git(repo.path(), &["commit", "-m", "owner work"]);
+        git(repo.path(), &["checkout", "main"]);
+        fs::write(repo.path().join("different-work"), "different").unwrap();
+        git(repo.path(), &["add", "different-work"]);
+        git(
+            repo.path(),
+            &["commit", "-m", "Squash merge task/owner into main"],
+        );
+
+        assert!(
+            !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
+                .unwrap()
+        );
     }
 
     #[test]

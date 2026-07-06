@@ -780,6 +780,134 @@ fn test_prune_protects_current_base_and_unowned_git_branches() {
 }
 
 #[test]
+fn test_prune_protects_active_and_recent_terminal_owner_branches() {
+    let dir = tempdir().unwrap();
+    let remote = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    for title in ["Active branch owner", "Recent terminal branch owner"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue create failed: {stderr}");
+    }
+    let active_id = issue_ref(dir.path(), 1);
+    let recent_id = issue_ref(dir.path(), 2);
+    make_issue_terminal_before_retention(dir.path(), &recent_id, 1);
+    commit_all(dir.path(), "active and recent owner fixture");
+    let active_branch = format!("task/{active_id}");
+    let recent_branch = format!("task/{recent_id}");
+    for args in [
+        vec!["init", "--bare", remote.path().to_str().unwrap()],
+        vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
+        vec!["push", "-u", "origin", "main"],
+        vec!["branch", &active_branch],
+        vec!["push", "-u", "origin", &active_branch],
+        vec!["branch", &recent_branch],
+        vec!["push", "-u", "origin", &recent_branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {active_branch}"))
+            && stdout.contains(&format!("owner {active_id} has active workflow state")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("protected branch {recent_branch}"))
+            && stdout.contains(&format!(
+                "terminal owner {recent_id} is within retention window"
+            )),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn test_prune_protects_unmerged_and_unpushed_terminal_owner_branches() {
+    let dir = tempdir().unwrap();
+    let remote = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    for title in ["Unmerged branch owner", "Unpushed branch owner"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue create failed: {stderr}");
+    }
+    let unmerged_id = issue_ref(dir.path(), 1);
+    let unpushed_id = issue_ref(dir.path(), 2);
+    make_issue_terminal_before_retention(dir.path(), &unmerged_id, 45);
+    make_issue_terminal_before_retention(dir.path(), &unpushed_id, 45);
+    commit_all(dir.path(), "terminal branch safety fixture");
+    let unmerged_branch = format!("task/{unmerged_id}");
+    let unpushed_branch = format!("task/{unpushed_id}");
+    for args in [
+        vec!["init", "--bare", remote.path().to_str().unwrap()],
+        vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
+        vec!["push", "-u", "origin", "main"],
+        vec!["branch", &unmerged_branch],
+        vec!["push", "-u", "origin", &unmerged_branch],
+        vec!["branch", &unpushed_branch],
+        vec!["push", "-u", "origin", &unpushed_branch],
+        vec!["checkout", &unmerged_branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+    fs::write(dir.path().join("unmerged-owner.txt"), "unmerged\n").unwrap();
+    commit_all(dir.path(), "unmerged owner work");
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["push"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["checkout", &unpushed_branch])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::write(dir.path().join("unpushed-owner.txt"), "unpushed\n").unwrap();
+    commit_all(dir.path(), "unpushed owner work");
+    for args in [
+        vec!["checkout", "main"],
+        vec!["merge", "--ff-only", &unpushed_branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {unmerged_branch}"))
+            && stdout.contains("contains commits not integrated into owner base main"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("protected branch {unpushed_branch}"))
+            && stdout.contains(&format!(
+                "contains commits not present in upstream origin/{unpushed_branch}"
+            )),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn test_prune_protects_non_current_dirty_worktree() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -828,6 +956,25 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
         vec!["branch", &branch],
         vec!["push", "-u", "origin", &branch],
         vec!["worktree", "add", worktree.to_str().unwrap(), &branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+    fs::write(worktree.join("squash-merged.txt"), "merged branch work\n").unwrap();
+    commit_all(&worktree, "terminal owner branch work");
+    let status = Command::new("git")
+        .current_dir(&worktree)
+        .args(["push"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    for args in [
+        vec!["merge", "--squash", &branch],
+        vec!["commit", "-m", &format!("Squash merge {branch} into main")],
     ] {
         let status = Command::new("git")
             .current_dir(dir.path())

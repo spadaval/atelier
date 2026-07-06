@@ -5,6 +5,15 @@ issue_type: "epic"
 labels:
 - "implementation"
 - "prune"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-t3h3
+    owner_kind: epic
+    review_target: master
+    work_branch: epic/atelier-t3h3
 priority: "P1"
 relationships:
   blocks: []
@@ -25,7 +34,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Prune command implementation"
-updated_at: "2026-06-19T19:39:57.006493999+00:00"
+updated_at: "2026-07-06T17:48:32.295795460+00:00"
 ---
 
 ## Description
