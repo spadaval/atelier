@@ -104,7 +104,7 @@ pub fn run_beads_jsonl(input_path: &Path, state_dir: &Path) -> Result<()> {
     println!("  blocking relationships: {}", report.blocking_links);
     println!("  skipped records: {}", report.skipped_records);
     println!("  lossy/deferred fields: {}", report.lossy_fields.len());
-    println!("  canonical state: {}", state_dir.display());
+    println!("  record files: {}", state_dir.display());
     if !report.lossy_fields.is_empty() {
         println!("\nLossy/deferred field report:");
         for field in &report.lossy_fields {
@@ -332,7 +332,7 @@ fn imported_description(record: &BeadsIssue) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("Imported Beads issue did not include acceptance criteria.");
     format!(
-        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier check` validates canonical Markdown."
+        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier check` validates its record file."
     )
 }
 

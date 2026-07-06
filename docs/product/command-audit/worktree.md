@@ -28,4 +28,4 @@ mission/issue worktrees?"
 | `worktree status` | Worker/manager | `atelier status`, `git status --short --branch`, and `issue transition <id> transition options`. |
 | `worktree merge <id>` | Manager/orchestrator | Workflow close transitions or advanced `branch merge` for epic-owner recovery. |
 | `worktree remove <id>` | Manager/orchestrator | Plain Git cleanup outside Atelier until workspace management returns with a clearer contract. |
-| `worktree repair <id>` | Admin | `check --fix` for ignored runtime/projection state; canonical issue transitions for durable workflow state. |
+| `worktree repair <id>` | Admin | `check --fix` for ignored runtime/cache state; issue transitions for durable workflow state. |

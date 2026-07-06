@@ -538,7 +538,7 @@ fn write_ignored_canonical_artifacts(dir: &Path, issue_id: &str) {
     .unwrap();
     let cache_dir = dir.join(".atelier/cache");
     std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::write(cache_dir.join("projection.lock"), "cache lock").unwrap();
+    std::fs::write(cache_dir.join("cache.lock"), "cache lock").unwrap();
     let issue_dir = dir.join(".atelier/issues");
     std::fs::write(issue_dir.join(format!("{issue_id}.md.lock")), "lock").unwrap();
     std::fs::write(issue_dir.join(format!("{issue_id}.md-journal")), "journal").unwrap();
@@ -555,7 +555,7 @@ fn corrupt_issue_title_yaml(dir: &Path, issue_id: &str, title: &str) {
     });
 }
 
-fn remove_projection_state(dir: &Path) {
+fn remove_cache_state(dir: &Path) {
     std::fs::remove_file(dir.join(".atelier/runtime/state.db")).unwrap();
 }
 
@@ -745,7 +745,7 @@ fn attach_evidence(
     let rebuild = run_atelier_raw(dir, &["rebuild"]);
     assert!(
         rebuild.0,
-        "test fixture projection rebuild failed after evidence result edit: {}",
+        "test fixture cache rebuild failed after evidence result edit: {}",
         rebuild.2
     );
     evidence_id
@@ -1316,8 +1316,8 @@ fn is_record_id(value: &str) -> bool {
 
 #[path = "cli_integration/issues.rs"]
 mod issues;
-#[path = "cli_integration/mission_projection_worktree.rs"]
-mod mission_projection_worktree;
+#[path = "cli_integration/mission_cache_worktree.rs"]
+mod mission_cache_worktree;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
 #[path = "cli_integration/setup_guidance.rs"]

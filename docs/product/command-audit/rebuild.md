@@ -5,8 +5,8 @@ Primary role: Admin.
 Category: Hidden advanced diagnostic or admin repair primitive. It is not
 normal workflow and is intentionally omitted from root help.
 
-Primary question: "How do I rebuild local SQLite runtime/projection state from
-canonical records?"
+Primary question: "How do I rebuild the local SQLite domain cache from record
+files?"
 
 ## Assessment
 
@@ -24,12 +24,12 @@ canonical records?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| hidden advanced `atelier rebuild` | Admin/debug | Recreate ignored projection/runtime state from canonical Markdown during targeted repair or testing. | Should stay out of normal role guides except admin recovery; `check --fix` owns the operator repair path. |
+| hidden advanced `atelier rebuild` | Admin/debug | Recreate the ignored SQLite domain cache from record files during targeted repair or testing. | Should stay out of normal role guides except admin recovery; `check --fix` owns the operator repair path. |
 
 ## Boundary
 
-Rebuild must only recreate ignored local projection/runtime/cache state from
-tracked canonical Markdown. It must not change canonical `.atelier/` records,
+Rebuild must only recreate ignored local domain-cache/runtime state from
+tracked record files. It must not change durable `.atelier/` records,
 and a successful rebuild is not evidence that issue content, mission closeout,
 or validation proof is correct. Ordinary proof uses `check` and the workflow
 command being retried after repair.

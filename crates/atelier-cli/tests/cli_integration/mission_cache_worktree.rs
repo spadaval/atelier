@@ -783,7 +783,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     edit_canonical_record(dir.path(), "issues", &mission_id, |markdown| {
         markdown.replace("schema: \"atelier.issue\"", "schema: \"atelier.evidence\"")
     });
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(!success, "rebuild should reject issue schema drift");
@@ -805,10 +805,10 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
     edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
         markdown.replace("schema_version: 1", "schema_version: 99")
     });
-    remove_projection_state(schema_dir.path());
+    remove_cache_state(schema_dir.path());
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
-    assert!(!success, "schema drift should block projection query");
+    assert!(!success, "schema drift should block cache-backed query");
     assert!(
         stderr.contains("schema this atelier binary does not understand")
             && stderr.contains("target/debug/atelier")
@@ -817,7 +817,7 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
         "schema drift diagnostic should name stale-binary repair: {stderr}"
     );
     assert!(
-        !stderr.contains("fix canonical tracker records before querying"),
+        !stderr.contains("fix tracker record files before querying"),
         "schema drift should not be presented as ordinary malformed records: {stderr}"
     );
 
@@ -834,13 +834,16 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
         &malformed_issue_id,
         "Malformed source",
     );
-    remove_projection_state(malformed_dir.path());
+    remove_cache_state(malformed_dir.path());
 
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["work", "queue"]);
-    assert!(!success, "malformed records should block projection query");
     assert!(
-        stderr.contains("recovery: 1. run `atelier lint`")
-            && stderr.contains("2. fix the named canonical record")
+        !success,
+        "malformed records should block cache-backed query"
+    );
+    assert!(
+        stderr.contains("recovery: 1. run `atelier check`")
+            && stderr.contains("2. fix the named record file")
             && stderr.contains("4. rerun the blocked command")
             && stderr.contains("Invalid YAML front matter"),
         "malformed diagnostic should stay record-focused: {stderr}"
@@ -894,7 +897,7 @@ fn test_cache_query_rebuilds_missing_cache_on_demand() {
         run_atelier(dir.path(), &["issue", "create", "Lazy missing cache"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
 
@@ -930,10 +933,13 @@ fn test_cache_decision_query_never_returns_known_stale_rows() {
         "known-stale cache row escaped into decision output: {stdout}"
     );
     assert!(
-        stderr.contains(
-            "canonical tracker records use a schema this atelier binary does not understand"
-        ),
+        stderr
+            .contains("tracker record files use a schema this atelier binary does not understand"),
         "missing source-schema diagnostic: {stderr}"
+    );
+    assert!(
+        stderr.contains("Tracker record files are invalid"),
+        "missing record-file validity prefix: {stderr}"
     );
 }
 
@@ -964,6 +970,18 @@ fn test_cache_orientation_names_degraded_last_good_state() {
         stderr.contains("using the existing local cache for orientation only"),
         "missing degraded orientation diagnostic: {stderr}"
     );
+    assert!(
+        stderr.contains("Record-file diagnostic:"),
+        "missing record-file diagnostic label: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "degraded issue show failed: {stderr}");
+    assert!(
+        stdout.contains("Issue record file is malformed:"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("Canonical issue record"), "{stdout}");
 }
 
 #[test]
@@ -992,12 +1010,16 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
     }
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "export check should report stale projection");
+    assert!(
+        !success,
+        "export check should report a stale cache diagnostic"
+    );
     assert!(
         stderr.contains("12 indexed sources changed")
+            && stderr.contains("Cache diagnostic is stale")
             && stderr.contains("showing first 5")
-            && stderr.contains("recovery: 1. run `atelier lint`")
-            && stderr.contains("3. run `atelier doctor --fix`")
+            && stderr.contains("recovery: 1. run `atelier check`")
+            && stderr.contains("3. run `atelier check --fix`")
             && stderr.contains("4. rerun the blocked command"),
         "stale diagnostics should be bounded and actionable: {stderr}"
     );
@@ -1020,6 +1042,9 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
                 .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "fresh export check failed: {stderr}");
+    assert!(stdout.contains("Record files and domain cache are current"));
 }
 
 #[test]
@@ -1114,18 +1139,12 @@ The unindexed issue is discoverable after rebuild.
 fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
-    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
+    let first_body = "## Description\n\nCache root body.\n\n## Outcome\n\nCache root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
+    let second_body = "## Description\n\nCache leaf body.\n\n## Outcome\n\nCache leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Projection root",
-            "--description",
-            first_body,
-        ],
+        &["issue", "create", "Cache root", "--description", first_body],
     );
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
@@ -1135,7 +1154,7 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         &[
             "issue",
             "create",
-            "Projection leaf",
+            "Cache leaf",
             "--description",
             second_body,
         ],
@@ -1168,10 +1187,10 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         success,
         "derived files should not stale work queue --ready: {stderr}"
     );
-    assert!(ready_out.contains("Projection root"));
+    assert!(ready_out.contains("Cache root"));
 
     edit_canonical_issue(dir.path(), &first_id, |markdown| {
-        markdown.replace("Projection root", "Projection root changed")
+        markdown.replace("Cache root", "Cache root changed")
     });
 
     let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "show", &second_id]);
@@ -1179,7 +1198,7 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         success,
         "stale issue show should transparently rebuild: {stderr}"
     );
-    assert!(dep_out.contains("Projection root changed"));
+    assert!(dep_out.contains("Cache root changed"));
     assert!(
         stderr.contains("Local cache was stale; rebuilt SQLite cache")
             || stderr
@@ -1243,14 +1262,14 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
             !combined.contains("rebuild-tmp")
                 && !combined.contains(".md.lock")
                 && !combined.contains(".md-journal")
-                && !combined.contains("projection.lock"),
+                && !combined.contains("cache.lock"),
             "{args:?} diagnostics must not report ignored local artifacts: {combined}"
         );
     }
 }
 
 #[test]
-fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh() {
+fn test_lint_validates_record_markdown_even_when_cache_metadata_is_fresh() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let issue_id = "atelier-lint1".to_string();
@@ -1341,7 +1360,7 @@ Lint rejects malformed canonical state.
         !transcript.contains("rebuild-tmp")
             && !transcript.contains(".md.lock")
             && !transcript.contains(".md-journal")
-            && !transcript.contains("projection.lock"),
+            && !transcript.contains("cache.lock"),
         "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
     assert!(stderr.contains("Lint failed"));
@@ -1450,7 +1469,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(
@@ -1539,7 +1558,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
     assert!(
         transcript.contains("has blocks reference to missing issue atelier-missing")
             && transcript.contains(&issue_id)
-            && transcript.contains("Canonical tracker Markdown is invalid"),
+            && transcript.contains("Tracker record files are invalid"),
         "unexpected focused lint error: {transcript}"
     );
 }
@@ -1636,7 +1655,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         |markdown, issue_id| {
             markdown.replace(&format!("id: \"{issue_id}\""), "id: \"atelier-zzzz\"")
         },
-        &["does not match canonical path"],
+        &["does not match record-file path"],
     );
 
     assert_lint_rejects_canonical_mutation(
@@ -1656,10 +1675,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         |dir, _issue_id| {
             std::fs::write(dir.join(".atelier/issues/junk.txt"), "junk\n").unwrap();
         },
-        &[
-            "Unsupported canonical issue file",
-            ".atelier/issues/junk.txt",
-        ],
+        &["Unsupported issue record file", ".atelier/issues/junk.txt"],
     );
     assert_lint_rejects_canonical_mutation(
         "Duplicate ID fixture",
@@ -1687,7 +1703,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
             std::fs::write(&new_path, evidence_markdown).unwrap();
             std::fs::remove_file(old_path).unwrap();
         },
-        &["Duplicate record ID in canonical projection"],
+        &["Duplicate record ID in record files"],
     );
 }
 
@@ -1733,7 +1749,7 @@ fn assert_lint_rejects_canonical_mutation(
     );
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
-        transcript.contains("Canonical tracker Markdown is invalid")
+        transcript.contains("Tracker record files are invalid")
             || transcript.contains("Lint found"),
         "lint should identify canonical markdown failure for {title}: {transcript}"
     );

@@ -646,7 +646,7 @@ fn quote_command_arg(arg: &str) -> String {
 
 fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Cannot locate canonical Atelier state directory");
+        bail!("Cannot locate Atelier record-file directory");
     };
     app_use_cases::load_canonical_evidence(&state_dir, id)
 }

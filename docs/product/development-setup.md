@@ -66,7 +66,7 @@ Atelier uses implementation-owned defaults for local runtime and cache paths:
 `.atelier/runtime/` and `.atelier/cache/`. Tracked `.atelier/config.toml` does
 not name runtime database, cache, or compatibility-state paths. The contents of
 `.atelier/runtime/` and `.atelier/cache/` are ignored local files. They may contain
-SQLite projections, locks, diagnostics, identity hints, or UI caches, but they
+the SQLite domain cache, locks, diagnostics, identity hints, or UI caches, but they
 must not be treated as durable project policy or committed work records.
 
 If runtime or cache state is missing or stale, prefer normal Atelier health and

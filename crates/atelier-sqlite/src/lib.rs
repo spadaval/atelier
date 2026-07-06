@@ -3,9 +3,9 @@ mod comments;
 mod dependencies;
 mod issues;
 mod labels;
-pub mod projection_index;
 mod record_id;
 mod records;
+pub mod source_freshness;
 pub use records::RecordSummary;
 mod relations;
 

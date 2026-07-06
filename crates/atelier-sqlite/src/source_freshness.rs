@@ -31,7 +31,7 @@ struct SourceStat {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum FreshnessProblem {
+pub enum SourceFreshnessProblem {
     MissingMetadata { path: String },
     MissingSource { path: String },
     ChangedSource { path: String },
@@ -39,13 +39,13 @@ pub enum FreshnessProblem {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct FreshnessReport {
+pub struct SourceFreshnessReport {
     pub checked: bool,
     pub source_count: usize,
-    pub problems: Vec<FreshnessProblem>,
+    pub problems: Vec<SourceFreshnessProblem>,
 }
 
-impl FreshnessReport {
+impl SourceFreshnessReport {
     pub fn is_fresh(&self) -> bool {
         self.problems.is_empty()
     }
@@ -59,10 +59,18 @@ impl FreshnessReport {
 
         for problem in &self.problems {
             match problem {
-                FreshnessProblem::MissingMetadata { path } => missing_metadata.push(path.as_str()),
-                FreshnessProblem::MissingSource { path } => missing_sources.push(path.as_str()),
-                FreshnessProblem::ChangedSource { path } => changed_sources.push(path.as_str()),
-                FreshnessProblem::UnindexedSource { path } => unindexed_sources.push(path.as_str()),
+                SourceFreshnessProblem::MissingMetadata { path } => {
+                    missing_metadata.push(path.as_str())
+                }
+                SourceFreshnessProblem::MissingSource { path } => {
+                    missing_sources.push(path.as_str())
+                }
+                SourceFreshnessProblem::ChangedSource { path } => {
+                    changed_sources.push(path.as_str())
+                }
+                SourceFreshnessProblem::UnindexedSource { path } => {
+                    unindexed_sources.push(path.as_str())
+                }
             }
         }
 
@@ -82,12 +90,12 @@ impl FreshnessReport {
         push_path_group_message(
             &mut messages,
             &unindexed_sources,
-            "canonical source is not indexed",
-            "canonical sources are not indexed",
+            "record-file source is not cached",
+            "record-file sources are not cached",
         );
         if !messages.is_empty() {
             messages.push(
-                "recovery: 1. run `atelier lint`; 2. fix any named canonical Markdown records; 3. run `atelier doctor --fix` to repair local runtime/projection state; 4. rerun the blocked command"
+                "recovery: 1. run `atelier check`; 2. fix any named record files; 3. run `atelier check --fix` to repair local runtime/cache state; 4. rerun the blocked command"
                     .to_string(),
             );
         }
@@ -99,10 +107,10 @@ fn push_missing_metadata_message(messages: &mut Vec<String>, paths: &[&str]) {
     match paths {
         [] => {}
         [path] => messages.push(format!(
-            "runtime projection metadata is missing for canonical source: {path}"
+            "domain-cache metadata is missing for record-file source: {path}"
         )),
         _ => messages.push(format!(
-            "runtime projection metadata is missing for {} canonical sources (showing first {}): {}",
+            "domain-cache metadata is missing for {} record-file sources (showing first {}): {}",
             paths.len(),
             paths.len().min(MAX_PROBLEM_SAMPLES),
             paths
@@ -139,11 +147,11 @@ fn push_path_group_message(
     }
 }
 
-pub fn refresh(db: &Database, state_dir: &Path) -> Result<()> {
+pub fn refresh_source_metadata(db: &Database, state_dir: &Path) -> Result<()> {
     let snapshot = snapshot_sources(state_dir)?;
     let stored = db.record_source_cache_rows()?;
     if snapshot.len() != stored.len() {
-        bail!("canonical record set does not match indexed record-source metadata");
+        bail!("record-file set does not match domain-cache source metadata");
     }
     for entry in snapshot {
         db.refresh_record_source_metadata(&RecordSourceCacheRow {
@@ -164,9 +172,9 @@ pub fn source_entry_for_path(state_dir: &Path, relative: &str) -> Result<SourceE
     source_entry(state_dir, &path)
 }
 
-pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
+pub fn check(db: &Database, state_dir: &Path) -> Result<SourceFreshnessReport> {
     if !state_dir.exists() {
-        return Ok(FreshnessReport {
+        return Ok(SourceFreshnessReport {
             checked: false,
             source_count: 0,
             problems: Vec::new(),
@@ -187,7 +195,7 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     let mut problems = Vec::new();
     if stored.is_empty() && !current.is_empty() {
         for entry in &current {
-            problems.push(FreshnessProblem::MissingMetadata {
+            problems.push(SourceFreshnessProblem::MissingMetadata {
                 path: entry.path.clone(),
             });
         }
@@ -210,26 +218,26 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
                             indexed_at: chrono::Utc::now(),
                         })?;
                     } else {
-                        problems.push(FreshnessProblem::ChangedSource {
+                        problems.push(SourceFreshnessProblem::ChangedSource {
                             path: stored_entry.path.clone(),
                         });
                     }
                 }
-                None => problems.push(FreshnessProblem::MissingSource {
+                None => problems.push(SourceFreshnessProblem::MissingSource {
                     path: stored_entry.path.clone(),
                 }),
             }
         }
         for current_entry in &current {
             if !stored_by_path.contains_key(&current_entry.path) {
-                problems.push(FreshnessProblem::UnindexedSource {
+                problems.push(SourceFreshnessProblem::UnindexedSource {
                     path: current_entry.path.clone(),
                 });
             }
         }
     }
 
-    Ok(FreshnessReport {
+    Ok(SourceFreshnessReport {
         checked: true,
         source_count: current.len(),
         problems,
@@ -407,16 +415,16 @@ fn source_identity(relative: &str) -> Result<(String, String)> {
         .components()
         .next()
         .and_then(|component| component.as_os_str().to_str())
-        .ok_or_else(|| anyhow!("canonical source path has no directory: {relative}"))?;
+        .ok_or_else(|| anyhow!("record-file source path has no directory: {relative}"))?;
     let kind = record_store::CANONICAL_RECORD_KINDS
         .iter()
         .find(|spec| spec.canonical_dir == Some(dir))
         .map(|spec| spec.kind.to_string())
-        .ok_or_else(|| anyhow!("canonical source path has unknown directory: {relative}"))?;
+        .ok_or_else(|| anyhow!("record-file source path has unknown directory: {relative}"))?;
     let id = path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .ok_or_else(|| anyhow!("canonical source path has no record id: {relative}"))?
+        .ok_or_else(|| anyhow!("record-file source path has no record id: {relative}"))?
         .to_string();
     Ok((kind, id))
 }
@@ -427,12 +435,10 @@ fn canonical_relative_path(path: &Path) -> Result<String> {
         match component {
             std::path::Component::Normal(part) => parts.push(
                 part.to_str()
-                    .ok_or_else(|| {
-                        anyhow!("canonical state path is not UTF-8: {}", path.display())
-                    })?
+                    .ok_or_else(|| anyhow!("record-file path is not UTF-8: {}", path.display()))?
                     .to_string(),
             ),
-            _ => bail!("canonical state path is not relative: {}", path.display()),
+            _ => bail!("record-file path is not relative: {}", path.display()),
         }
     }
     Ok(parts.join("/"))

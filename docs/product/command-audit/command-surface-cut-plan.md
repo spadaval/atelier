@@ -216,7 +216,7 @@ It should absorb the useful parts of:
 - `lint`
 - `doctor`
 - hidden `workflow check`
-- hidden projection/runtime diagnostics when needed for public recovery
+- hidden domain-cache/runtime diagnostics when needed for public recovery
 
 If renaming is too disruptive in the first implementation slice, `lint` may
 temporarily remain the spelling, but the product target is one health command,

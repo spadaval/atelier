@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
-use atelier_sqlite::projection_index;
+use atelier_sqlite::source_freshness;
 use atelier_sqlite::Database;
 
 use crate::{Outcome, Request, ViewModel};
@@ -36,7 +36,7 @@ pub fn canonical_export(
 
     let stale_entries = canonical_stale_entries(input.db, &input.state_dir)?;
     if !stale_entries.is_empty() {
-        bail!("Canonical export is stale:\n{}", stale_entries.join("\n"));
+        bail!("Cache diagnostic is stale:\n{}", stale_entries.join("\n"));
     }
 
     Ok(Outcome {
@@ -51,7 +51,7 @@ pub fn canonical_export(
     })
 }
 
-/// Validate canonical record files and their disposable cache source metadata.
+/// Validate durable record files and their disposable cache source metadata.
 pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
     let mut stale = Vec::new();
 
@@ -64,12 +64,12 @@ pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<St
 
     if let Err(error) = crate::rebuild::validate_canonical_state(state_dir) {
         stale.push(format!(
-            "invalid: canonical tracker Markdown is invalid while running a deterministic cache diagnostic: {error:#}\nrecovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor --fix`; 4. rerun the blocked command"
+            "invalid: a tracker record file is invalid while running a deterministic cache diagnostic: {error:#}\nrecovery: 1. run `atelier check`; 2. fix the named record file; 3. run `atelier check --fix`; 4. rerun the blocked command"
         ));
         return Ok(stale);
     }
 
-    let freshness = projection_index::check(db, state_dir)?;
+    let freshness = source_freshness::check(db, state_dir)?;
     stale.extend(
         freshness
             .problem_messages()

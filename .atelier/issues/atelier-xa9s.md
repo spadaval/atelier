@@ -3,6 +3,19 @@ created_at: "2026-06-23T16:21:20.082763958+00:00"
 id: "atelier-xa9s"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 53
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-mska
+    integration_target: mission/atelier-mska
+    merge_strategy: squash
+    owner_issue_id: atelier-xa9s
+    owner_kind: epic
+    review_target: mission/atelier-mska
+    work_branch: epic/atelier-xa9s
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Validate and document cache architecture rewrite"
-updated_at: "2026-06-23T16:21:20.850026598+00:00"
+updated_at: "2026-07-06T20:40:14.001900070+00:00"
 ---
 
 ## Description
@@ -35,6 +48,15 @@ Prove the persistence rewrite end to end and update docs, command audit, and ter
 
 ## Evidence
 
-- Batch writes do not trigger repeated full cache rebuilds.
-- Queries after stale writes rebuild cache lazily and return correct results.
-- Docs and command output use cache terminology.
+- Independent validation evidence `atelier-x1d1` proves a relationship-heavy
+  batch left `state.db` unchanged, became detectably stale, then performed
+  exactly one lazy rebuild; focused cache evidence `atelier-vj0b` passes 67/67
+  tests and the repaired mission/blocker graph matched the record files.
+- Independent command evidence `atelier-mfxj` covers list/show/status,
+  ready/blocked, transitions, evidence, native review rooms, check/lint,
+  rebuild, doctor repair, and lazy query repair; evidence `atelier-oy2z`
+  records all 448 Atelier CLI tests passing.
+- Evidence records `atelier-j5aa` and `atelier-y1zi` capture the targeted
+  terminology audit and `target/debug/atelier check --help` transcript: retained
+  projection references are historical or Mission Control-specific, while
+  active repair help uses disposable runtime/domain-cache terminology.

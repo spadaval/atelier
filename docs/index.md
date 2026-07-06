@@ -9,8 +9,8 @@
 - [PRODUCT_INTENT.md](../PRODUCT_INTENT.md): product direction, principles, and
   target-state constraints for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  canonical `.atelier/` record file, ignored projection/cache, compatibility, and
-  rebuild layout.
+  historical export/rebuild migration layout; current persistence guidance is
+  in the architecture documents below.
 - [docs/spec/bundle/schema.md](spec/bundle/schema.md):
   versioned JSON contract, validation diagnostics, preview output shape, and
   fixtures for authored bundle graph deltas.
@@ -22,9 +22,12 @@
   accepted choice that canonical record IDs are project-scoped random IDs
   such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
 - [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
-  accepted choice that Markdown records are canonical, SQLite is a
-  rebuildable projection index, and export is a
-  hidden/admin compatibility and determinism-check path during migration.
+  historical choice of Markdown record authority, superseded for persistence
+  and query-cache behavior by ADR 0017.
+- [docs/adr/0017-sqlite-domain-cache-and-hard-removal.md](adr/0017-sqlite-domain-cache-and-hard-removal.md):
+  accepted current contract that record files are durable state, SQLite is a
+  disposable lazy domain cache, and obsolete dual-write/projection paths have
+  no compatibility window.
 - [docs/adr/0011-native-review-modes-and-room-authority.md](adr/0011-native-review-modes-and-room-authority.md):
   accepted choice that projects configure exactly one review mode, native
   rooms live under `.atelier/reviews/`, the public command surface is
@@ -36,7 +39,8 @@
 - [docs/adr/0016-canonical-work-branches-and-mission-integration.md](adr/0016-canonical-work-branches-and-mission-integration.md):
   accepted choice that work branch names use `<issue_type>/<issue_id>`,
   mission integration branches are opt-in through workflow policy, branch base
-  is recorded context, and projection freshness is not workflow policy.
+  is recorded context, and domain-cache freshness is an internal command
+  concern rather than workflow policy.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required
@@ -69,8 +73,8 @@
   cleanup classes, protection rules, Git-history recovery, and explicit apply
   semantics.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
-  RecordStore and ProjectionIndex boundaries for Markdown-first durable writes,
-  issue activity sidecars, rebuildable SQLite indexes, and local cache data.
+  record-file, concrete domain service, and lazy SQLite domain-cache boundaries
+  for durable writes and cache-backed reads.
 - [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
   local command telemetry storage, redaction defaults, opt-out controls,
   retention behavior, event fields, and Mission Control export boundary.

@@ -122,7 +122,7 @@ fn test_integrations_command_is_removed() {
 }
 
 #[test]
-fn test_doctor_human_separates_projection_and_runtime_state_health() {
+fn test_doctor_human_separates_cache_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     run_atelier(dir.path(), &["issue", "create", "Health check"]);
@@ -144,11 +144,10 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
 }
 
 #[test]
-fn test_doctor_distinguishes_missing_runtime_projection_database() {
+fn test_doctor_distinguishes_missing_runtime_cache_database() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Missing projection db"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Missing cache db"]);
     assert!(success, "issue create failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "cache repair query failed: {stderr}");
@@ -170,8 +169,8 @@ fn test_doctor_help_documents_fix_boundary() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["doctor", "--help"]);
     assert!(success, "doctor help failed: {stderr}");
     assert!(stdout.contains("--fix"));
-    assert!(stdout.contains("Repair ignored local runtime/cache/projection state"));
-    assert!(stdout.contains("never edits tracked canonical records"));
+    assert!(stdout.contains("Repair ignored local runtime/cache state"));
+    assert!(stdout.contains("never edits tracked record files"));
 }
 
 #[test]
@@ -179,7 +178,7 @@ fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Doctor fix projection"]);
+        run_atelier(dir.path(), &["issue", "create", "Doctor fix cache"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
@@ -191,24 +190,21 @@ fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     assert!(success, "doctor --fix failed for missing db: {stderr}");
     assert!(stdout.contains("Repair:"));
     assert!(stdout.contains("local_cache: repaired"));
-    assert!(stdout.contains("canonical_records: unchanged"));
+    assert!(stdout.contains("record_files: unchanged"));
     assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("database: ok"));
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Doctor fix projection", "Doctor fix projection repaired")
+        markdown.replace("Doctor fix cache", "Doctor fix cache repaired")
     });
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(
-        success,
-        "doctor --fix failed for stale projection: {stderr}"
-    );
+    assert!(success, "doctor --fix failed for stale cache: {stderr}");
     assert!(stdout.contains("local_cache: repaired"));
     assert!(stdout.contains("cache_fresh: ok"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed after doctor --fix: {stderr}");
-    assert!(stdout.contains("Doctor fix projection repaired"));
+    assert!(stdout.contains("Doctor fix cache repaired"));
 }
 
 #[test]
@@ -240,7 +236,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     );
     let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     assert!(
-        lint_transcript.contains("Canonical tracker Markdown is invalid")
+        lint_transcript.contains("Tracker record files are invalid")
             && lint_transcript.contains("Invalid YAML front matter"),
         "unexpected lint error: {lint_transcript}"
     );
@@ -866,6 +862,8 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
+    assert!(stdout.contains("history       Inspect repository, mission, issue, or epic activity"));
+    assert!(!stdout.contains("Inspect canonical repo"));
 
     for heading in [
         "Setup:",
@@ -1024,6 +1022,18 @@ fn test_top_level_help_only_shows_core_commands() {
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_import_beads_help_names_record_files_and_lazy_cache_repair() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["import-beads", "--help"]);
+    assert!(success, "import-beads help failed: {stderr}");
+    assert!(stdout.contains("Import Beads JSONL backup into durable record files"));
+    assert!(stdout.contains("cache repair remains lazy"));
+    assert!(stdout.contains("Record-file directory to write after import"));
+    assert!(!stdout.contains("local runtime"));
+    assert!(!stdout.contains("Canonical state directory"));
 }
 
 #[test]
@@ -1269,7 +1279,7 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
     assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("Projection freshness is an"));
+    assert!(docs.contains("Domain-cache freshness is an"));
     assert!(docs.contains("internal command-storage health concern"));
     assert!(!docs.contains("| `tracker.current` |"));
 }

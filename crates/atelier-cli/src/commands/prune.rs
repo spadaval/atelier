@@ -27,7 +27,7 @@ struct CanonicalPruneSummary {
     removed: Vec<CanonicalRemoval>,
     failures: Vec<(PathBuf, String)>,
     unavailable: Option<String>,
-    rebuilt_projection: bool,
+    rebuilt_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +106,7 @@ fn prune_canonical_records(
             removed: Vec::new(),
             failures: Vec::new(),
             unavailable: Some("tracker unavailable in this directory".to_string()),
-            rebuilt_projection: false,
+            rebuilt_cache: false,
         });
     };
 
@@ -134,7 +134,7 @@ fn prune_canonical_records(
         if !removed.is_empty() {
             drop(tracker.db);
             atelier_app::rebuild::run(&tracker.state_dir, &tracker.db_path)
-                .context("failed to rebuild local projection after canonical prune")?;
+                .context("failed to rebuild the local domain cache after pruning record files")?;
             return Ok(CanonicalPruneSummary {
                 retention_days,
                 cutoff,
@@ -143,7 +143,7 @@ fn prune_canonical_records(
                 removed,
                 failures,
                 unavailable: None,
-                rebuilt_projection: true,
+                rebuilt_cache: true,
             });
         }
     }
@@ -156,7 +156,7 @@ fn prune_canonical_records(
         removed,
         failures,
         unavailable: None,
-        rebuilt_projection: false,
+        rebuilt_cache: false,
     })
 }
 
@@ -518,8 +518,8 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
         }
     }
 
-    if summary.rebuilt_projection {
-        println!("Projection: rebuilt after canonical prune");
+    if summary.rebuilt_cache {
+        println!("Domain cache: rebuilt after pruning record files");
     }
 
     if !summary.failures.is_empty() {
@@ -587,9 +587,7 @@ fn print_canonical_candidate(
 fn print_deferred_classes() {
     println!("Deferred Cleanup Classes");
     println!("------------------------");
-    println!(
-        "  report-only ignored runtime/cache projection artifacts - local safety contract pending"
-    );
+    println!("  report-only ignored runtime/cache artifacts - local safety contract pending");
     println!("  report-only branches and worktrees - Git safety contract pending");
 }
 

@@ -107,7 +107,7 @@ agents or users depend on:
 - public CLI behavior, help text, or command contracts;
 - workflow policy, transition gates, or proof behavior;
 - external review-artifact gates such as linked PR merge state;
-- canonical records, projection rebuild, migration, or runtime repair;
+- record files, domain-cache rebuild, migration, or runtime repair;
 - mission, epic, milestone, or other parent-level completion claims;
 - security, data-loss, irreversible, or hard-to-reproduce behavior;
 - broad claims where one green test run could easily miss the real outcome.

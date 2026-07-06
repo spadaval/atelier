@@ -66,14 +66,15 @@ may be cited as ordinary workflow proof.
 | --- | --- | --- | --- |
 | Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, manage review artifacts, inspect high-level history, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `review show`, `history`, `bundle preview`, `check` | Removed/deprecated surfaces, admin repair commands, and hidden diagnostics. |
 | Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply`; hidden/manual branch or provider repair only when a transition cannot own it safely | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
-| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `check`, `issue show`, `issue transition <id>` |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
 
-Tracked Markdown under `.atelier/` is authoritative. Local SQLite projection
-state, runtime tables, locks, diagnostics, and cache files are repairable
-checkout state. Normal commands should refresh or mark projections stale safely
-when possible. `atelier check --fix` is the admin repair surface for ignored
-runtime/cache/projection state and must not edit tracked canonical Markdown. If
+Tracked Markdown under `.atelier/` is authoritative. The local SQLite domain
+cache and other runtime, lock, diagnostic, and cache files are repairable
+checkout state. Cache-backed commands check record-file freshness and repair
+changed sources lazily through `CacheManager`. `atelier check --fix` is the
+admin repair surface for ignored runtime/cache state and must not edit tracked
+record files. If
 an `export`-style deterministic renderer is retained, it
 is hidden/admin migration or test infrastructure, not a normal health, handoff,
 validation, or completion command.
@@ -131,7 +132,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `review` | Manage the configured review artifact for issue or epic work. | `open`, `status`, `show`, `merge`, `comments`, `comment`, `approve`, `request-changes`, and `resolve` operate on the configured review mode. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
-| `history` | Inspect canonical repo activity. | Newest-first bounded activity feed with broad project context. | Event counts and timestamps only. | Return to `issue show` or `issue transition <id>` for current state. |
+| `history` | Inspect repository activity. | Newest-first bounded activity feed with broad project context. | Event counts and timestamps only. | Return to `issue show` or `issue transition <id>` for current state. |
 ### Specialized But Visible Surfaces
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
@@ -194,7 +195,7 @@ time pressure:
 
 Normal workflow commands speak in product terms: issue, mission, evidence,
 blocker, proof, completion, and committed-state validity. Advanced
-diagnostics may expose workflow policy names, projections, cache repair,
+diagnostics may expose workflow policy names, cache repair,
 command telemetry, JSON summaries, or raw validator detail, but normal
 operators should only run them when an admin repair path, targeted error,
 assignment, or completion contract names them. JSON emitted by diagnostics
@@ -232,10 +233,11 @@ it commits the lifecycle change and records the reason. `atelier issue update
 <id> --status <done-status>` is not the ordinary completion path. Reopening by
 direct status update does not run completion validators.
 
-Issue mutation commands are migrating toward Markdown-direct writes through
-RecordStore followed by projection refresh. Projection-backed query commands
-such as work queue, ready queues, search, issue detail/status, lint, and
-Mission Control views may use SQLite after freshness checks.
+Issue mutation commands write concrete Markdown records through `RecordStore`
+and invalidate facts derived from the changed source. Cache-backed query
+commands such as work queues, ready queues, issue detail/status, lint, and
+Mission Control views use `CacheManager` to check freshness and repair changed
+sources before answering.
 Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier check <id>`, and focused
@@ -258,9 +260,10 @@ creating a surprising record.
 
 First-class mission, evidence, relationship, and work lifecycle
 commands are now core as a staged implementation. Mission,
-evidence, and issue lifecycle mutations write canonical
-Markdown through RecordStore before refreshing the SQLite projection; local
-projection repair is normally transparent or routed through `check --fix`.
+evidence, and issue lifecycle mutations write durable Markdown through
+`RecordStore`; they do not synchronously refresh SQLite. The next cache-backed
+query repairs changed facts lazily, while explicit local cache repair is routed
+through `check --fix`.
 `atelier bundle preview <file>` is the manager and orchestrator path for bulk
 graph creation. It validates authored bundle JSON from a real file path and
 prints a non-mutating deterministic preview. Use it before `atelier bundle
@@ -270,8 +273,8 @@ relationships, or evidence links; do not script repeated `issue create`,
 bundle apply` applies create-only v1 bundle resources from a file path after
 the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
-canonical relationship buckets, refreshes projection state after successful
-canonical writes, and reports recovery detail if an unexpected apply failure
+durable relationship buckets, leaves the affected cache facts detectably
+stale after successful record-file writes, and reports recovery detail if an unexpected apply failure
 leaves any created IDs. `atelier issue show <objective-id>` is the rich
 objective detail read: it summarizes evidence, prose planning/checkpoint
 references, and work grouped by ready, blocked, done, and backlog state.
@@ -409,20 +412,20 @@ clean.
 
 ## Cache Transparency
 
-The local SQLite projection and cache are implementation details. Normal
-operators should not need to know that they exist, refresh them manually, or
-interpret projection freshness as a product concept. Core read and mutation
-commands must transparently keep local projection state usable, and degraded
-states must be reported as record or workflow repair problems rather than cache
-maintenance chores.
+The local SQLite domain cache is an implementation detail. Normal operators
+should not need to know that it exists, refresh it manually, or interpret
+source-freshness metadata as a product concept. Core read commands repair the
+smallest safe stale unit before answering; mutation commands write record files
+without an eager cache rebuild. Degraded states are reported as record or
+workflow repair problems rather than cache-maintenance chores.
 
 Low-level debug and repair surfaces may expose cache mechanics when diagnosing
 Atelier itself. Doctor/export/rebuild diagnostics and similar repair checks
 must not appear as ordinary next actions from core workflow surfaces or root
 help, and their output should make clear that they are diagnostic tools rather
 than required user workflow. `atelier check --fix` is the admin explicit
-repair path for ignored local runtime/cache/projection state and must not edit
-tracked `.atelier/` canonical records. Hidden slow-command telemetry summarizes
+repair path for ignored local runtime/cache state and must not edit tracked
+`.atelier/` record files. Hidden slow-command telemetry summarizes
 local command performance for investigations; it is an advanced diagnostic, not
 a normal mission or issue workflow step. Its JSON is stable for diagnostic
 tooling and local analysis, but normal recipes must not parse it to decide
@@ -437,7 +440,7 @@ binary before continuing. Use `cargo run -- ...` only when a one-off rebuild
 plus execution is specifically useful. When canonical Markdown is malformed,
 the repair path remains `atelier check`, editing the named record, and rerunning
 `atelier check`; ordinary record syntax errors are not stale-binary drift.
-Stale projection and invalid canonical-record diagnostics should present one
+Stale cache and invalid record-file diagnostics should present one
 ordered recovery path, preserve the original blocked command, and keep the
 specific record path or parser detail visible so operators do not cycle through
 export, rebuild, lint, and read commands blindly.
@@ -455,9 +458,9 @@ surface is `delete` unless it is in the core list above.
 | Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
 | Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
-| Export check diagnostic | Low-level diagnostic | Cache/projection state should be transparent; normal health and completion routes use `check`, objective detail, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
+| Export check diagnostic | Low-level diagnostic | Cache state should be transparent; normal health and completion routes use `check`, objective detail, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
 | Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `check --fix` owns admin explicit local repair. |
-| Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `check --fix` owns admin explicit local repair. |
+| Rebuild diagnostic | Low-level diagnostic | Domain-cache rebuild is repair, not a product workflow. | Hidden/advanced diagnostic only; `check --fix` owns admin explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, `work queue`, issue detail, record-specific notes, `evidence`, and `status`. |
 | Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and work dashboards as next-step sources. |
 | `mission` root namespace | Remove | Mission objectives are issue records, so a parallel root namespace duplicates lifecycle, linking, and status concepts. | `issue create --issue-type mission`, `issue show <objective-id>`, `work mission <objective-id>`, `issue link <objective-id> <issue-id> --role advances`, and `issue transition <objective-id> close --reason "..."`. |
@@ -582,13 +585,13 @@ rebuild, predecessor import, and workflow diagnostics may still exist for
 development, migration, or targeted diagnostics, but they are not the normal
 operator route for mission progress, proof, blockers, or completion.
 
-## Canonical And Projection Recovery
+## Record-File And Cache Recovery
 
 Tracked Markdown under `.atelier/` is the durable source of truth. The local
-SQLite projection, runtime state, locks, diagnostics, and cache files are
+The SQLite domain cache, runtime state, locks, diagnostics, and cache files are
 rebuildable checkout state. A command that writes canonical Markdown has landed
 durable state when the tracked Markdown diff exists and `atelier check` accepts
-the record; a stale projection can block reads without invalidating the durable
+the record; a stale cache can block reads without invalidating the durable
 write.
 
 Use this recovery order:
@@ -596,7 +599,7 @@ Use this recovery order:
 | Symptom | First command | Repair path |
 | --- | --- | --- |
 | Unsure whether committed tracker records are valid | `atelier check` | Edit the named `.atelier/` Markdown or workflow config, then rerun `atelier check`. |
-| Operator-facing command reports stale or missing derived state | Re-run the same command once after the automatic refresh path, then follow its named repair guidance if it still reports degraded local state. | Use `atelier check --fix` for ignored runtime/cache/projection repair. It must not edit tracked canonical records. |
+| Operator-facing command reports stale or missing cached state | Re-run the same command once after the automatic repair path, then follow its named repair guidance if it still reports degraded local state. | Use `atelier check --fix` for ignored runtime/cache repair. It must not edit tracked record files. |
 | Canonical Markdown parse or schema error | `atelier check <id-or-path>` | Fix the named tracked file. Do not treat parser failures as cache problems. |
 | Checkout context is unclear after interrupted cleanup | `atelier status` then `git status --short --branch` | Reconcile canonical issue statuses through normal issue transitions or record edits. There is no separate active-pointer repair path in the target workflow. |
 | Workspace isolation is needed for a risky or conflicting slice | Plain Git checkout/worktree commands outside Atelier | Keep the durable issue state in canonical `.atelier/` records and use `atelier status`/`issue show <objective-id>` inside the checkout. |

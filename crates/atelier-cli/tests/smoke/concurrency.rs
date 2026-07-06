@@ -38,8 +38,8 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // Concurrent writers can leave the projection index stale; ordinary reads
-    // should validate canonical state, rebuild automatically, and continue.
+    // Concurrent writers can leave the domain cache stale; ordinary reads
+    // should validate record files, repair automatically, and continue.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
@@ -144,8 +144,8 @@ fn test_concurrent_mixed_operations() {
         "At least one concurrent read should succeed"
     );
 
-    // Concurrent writers can leave the projection index stale; ordinary reads
-    // should validate canonical state, rebuild automatically, and continue.
+    // Concurrent writers can leave the domain cache stale; ordinary reads
+    // should validate record files, repair automatically, and continue.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
