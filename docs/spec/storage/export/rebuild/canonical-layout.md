@@ -10,9 +10,10 @@ ignored local state.
 - Canonical rendering is deterministic for the same logical state.
 - Canonical records are sufficient to rebuild SQLite for all canonical records.
 - Every record carries schema and version metadata.
-- `lint` validates `.atelier/` Markdown directly, `doctor` reports local
-  projection/runtime health, and hidden/admin deterministic-renderer or rebuild
-  diagnostics may verify migration internals.
+- `atelier check` validates canonical `.atelier/` Markdown and reports local
+  projection/runtime health; `atelier check --fix` repairs ignored local state.
+  Hidden/admin deterministic-renderer or projection diagnostics may verify
+  migration internals.
 - Git merges happen through tracked `.atelier/` record files, not through
   SQLite.
 
@@ -310,7 +311,7 @@ For relationship conflicts:
 - Do not author `depends_on`; express sequencing in `blocks` and let commands
   derive inverse display.
 - After resolving dependency changes, inspect readiness with
-  `atelier work ready` and targeted issue `show` output.
+  `atelier work ready` and targeted `atelier issue show <id>` output.
 
 For activity sidecar conflicts:
 

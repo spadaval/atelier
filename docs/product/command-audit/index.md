@@ -139,7 +139,7 @@ come from canonical in-progress issue records rendered by `status`, type-aware
 `issue show <objective-id>`, and issue workflow surfaces, not from separate
 runtime active-pointer helpers.
 
-## Cutting Findings
+## Historical Cutting Findings (Non-Normative)
 
 | Finding | Evidence | Next step |
 | --- | --- | --- |

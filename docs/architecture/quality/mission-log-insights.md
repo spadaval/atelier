@@ -31,8 +31,8 @@ Improvement:
 
 - CLI: make record lookup type-aware for common read commands, or make the
   error say when the ID exists as another record kind.
-- Docs: clarify when to use `mission show/status` versus `issue show`, and when
-  epics are executable work versus parent validation scope.
+- Docs: replace the legacy mission-detail routes with `atelier issue show`, and
+  clarify when epics are executable work versus parent validation scope.
 
 Confidence: high.
 

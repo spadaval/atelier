@@ -18,9 +18,10 @@ epic work?"
 - Documentation: Visible in root help. Role guides should send operators here
   only when status, transition, or configured review output names a review
   action.
-- Design: Simplified. `open` derives routine context from the issue, branch
-  policy, workflow state, and configured review mode. `show` owns inspection;
-  `submit` owns comment, approval, and change-request mutations.
+- Design: Simplified. `atelier review open` derives routine context from the
+  issue, branch policy, workflow state, and configured review mode.
+  `atelier review show` owns inspection; `atelier review submit` owns comment,
+  approval, and change-request mutations.
 - Output hierarchy: Issue/owner, review artifact identifier or URL, provider
   mode, role source, action result, then `issue transition`.
 

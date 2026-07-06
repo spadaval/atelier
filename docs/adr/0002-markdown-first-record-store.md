@@ -47,7 +47,7 @@ stale projection, it must refresh/reindex when safe or fail with an actionable
 rebuild or repair command.
 
 Hidden/admin export and deterministic-check surfaces remain compatibility tools
-for migration or targeted maintenance. `doctor --fix` owns explicit
+for migration or targeted maintenance. `atelier check --fix` owns explicit
 ignored-state repair for normal operators. Export's target role is not to be the
 ordinary step that makes successful mutations durable.
 

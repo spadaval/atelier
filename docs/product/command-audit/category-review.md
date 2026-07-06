@@ -18,7 +18,7 @@ route is retained here only to explain the audit change; current work selection
 uses `work ready`, `work blocked`, `work missions`, `work mission`, and
 `work epic`.
 
-## Audited Low-Level Surfaces
+## Historical Audited Low-Level Surfaces (Non-Normative)
 
 | Command family | Classification | Replacement or boundary | Follow-up |
 | --- | --- | --- | --- |

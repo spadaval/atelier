@@ -89,7 +89,7 @@ must name the surviving status, category, issue-type, label, priority, limit,
 and quiet forms, and route ready/blocked selection to `work ready` and `work
 blocked`. Do not compensate by making `work queue` the generic inventory owner.
 
-`atelier issue --help` must also avoid implying an `issue close` subcommand.
+`atelier issue --help` must also avoid implying a direct closure subcommand.
 Closure is intentionally owned by `issue transition <id> close --reason`.
 
 ## Human Output Debt

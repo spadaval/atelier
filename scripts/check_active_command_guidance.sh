@@ -183,10 +183,12 @@ command_boundary='([^[:alnum:]_-]|$)'
 # The remaining forms are subcommand/option cuts recorded by the issue, review,
 # history, work, maintenance, and migration audits.
 prohibited_command_core="atelier ((${root_alternatives})${command_boundary}|(${path_alternatives})${command_boundary}|issue (close|claim|new|quick|subissue|search|relate|tree|tested)${command_boundary}|issue update[^\x60]*--claim|issue list[^\x60]*(--ready|--blocked)|work (start|status|queue)${command_boundary}|maintenance delete${command_boundary}|export[^\x60]*--format|review (link|status|comments|comment|approve|request-changes)${command_boundary}|review open[^\x60]*--(title|body|source-branch|target-branch)|history[^\x60]*--(mission|epic|include-descendants|event-kind|actor|since)${command_boundary})"
+bare_prohibited_command_core="((${root_alternatives})${command_boundary}|(${path_alternatives})${command_boundary}|issue (close|claim|new|quick|subissue|search|relate|tree|tested)${command_boundary}|issue update.*--claim|issue list.*(--ready|--blocked)|work (start|status|queue)${command_boundary}|maintenance delete${command_boundary}|export.*--format|review (link|status|comments|comment|approve|request-changes)${command_boundary}|review open.*--(title|body|source-branch|target-branch)|history.*--(mission|epic|include-descendants|event-kind|actor|since)${command_boundary})"
 # `work queue` is still callable and explicitly bounded by the c0mp contract;
 # it is not a Removed/Retired root. Its named section-level boundary remains
 # distinct from the strict no-mention rule for removed commands.
 legacy_callable_command_core="atelier work queue${command_boundary}"
+bare_legacy_callable_command_core="work queue${command_boundary}"
 legacy_callable_document='docs/product/issue-inventory-and-mission-overview.md'
 legacy_callable_heading='## legacy queue boundary'
 
@@ -194,6 +196,7 @@ legacy_callable_heading='## legacy queue boundary'
 # but indexed active guidance may name them only with an explicit setup,
 # recovery, migration, historical, or diagnostic boundary.
 restricted_command_core="atelier ((${restricted_root_alternatives})${command_boundary})"
+bare_restricted_command_core="((${restricted_root_alternatives})${command_boundary})"
 
 active_content() {
   local source=${1:-}
@@ -206,12 +209,28 @@ active_content() {
     }
     function excluded_heading(line, lower) {
       lower = tolower(line)
-      return lower ~ /(historical|removed|retired).*(non-normative|evidence|transcript|commands|behavior|surface|inventory|classification)/ ||
+      return lower ~ /(historical|removed|retired).*(non-normative|evidence|transcript|commands?|behavior|surface|inventory|classification)/ ||
              lower ~ /(rejected alternatives|alternatives considered)/ ||
              lower ~ /quantitative snapshot/ ||
              lower ~ /agents guessed command surfaces too often/
     }
-    /^#{1,6} / {
+    {
+      fence_marker = ($0 ~ /^[[:space:]]*(```|~~~)/)
+      if (fence_marker) {
+        if (in_fence) {
+          in_fence = 0
+          shell_fence = 0
+        } else {
+          marker = tolower($0)
+          shell_fence = (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*(sh|bash|shell|console|terminal|zsh)?[[:space:]]*$/)
+          in_fence = 1
+        }
+        fenced_content = 0
+      } else {
+        fenced_content = (in_fence && shell_fence) ? 1 : 0
+      }
+    }
+    !fenced_content && /^#{1,6} / {
       level = heading_level($0)
       if (excluded && level <= excluded_level) {
         excluded = 0
@@ -224,7 +243,9 @@ active_content() {
         heading = tolower($0)
       }
     }
-    !excluded { print source "|" FNR ":" heading " :: " $0 }
+    !excluded {
+      print source "|" FNR "|" fenced_content "|" heading " :: " $0
+    }
   '
 }
 
@@ -257,6 +278,59 @@ restricted_occurrence_has_explicit_context() {
   [[ "$heading" =~ ^#{1,6}[[:space:]]+(setup[[:space:]]+and[[:space:]]+recovery|recovery|admin[[:space:]]+setup|diagnostics|merge[[:space:]]+conflict[[:space:]]+and[[:space:]]+recovery[[:space:]]+guidance|hidden[[:space:]]+diagnostic:[[:space:]]+slow[[:space:]]+command[[:space:]]+query[[:space:]]+defaults|hidden[[:space:]]+rebuild[[:space:]]+diagnostic[[:space:]]+and[[:space:]]+freshness)$ ]]
 }
 
+prefixed_candidate_is_finding() {
+  local candidate=$1
+  local source=$2
+  local heading=$3
+
+  if printf '%s\n' "$candidate" | rg -q "^$legacy_callable_command_core" &&
+    [[ "$source" == "$legacy_callable_document" ]] &&
+    [[ "$heading" == "$legacy_callable_heading" ]]; then
+    return 1
+  fi
+  if printf '%s\n' "$candidate" | rg -q "^$prohibited_command_core"; then
+    return 0
+  fi
+  if printf '%s\n' "$candidate" | rg -q "^$restricted_command_core" &&
+    ! restricted_occurrence_has_explicit_context "$source" "$heading"; then
+    return 0
+  fi
+  return 1
+}
+
+bare_candidate_is_finding() {
+  local candidate=$1
+  local source=$2
+  local heading=$3
+  local first_token
+  local command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
+  local legacy_pattern="^$bare_legacy_callable_command_core"
+  local prohibited_pattern="^$bare_prohibited_command_core"
+  local restricted_pattern="^$bare_restricted_command_core"
+
+  candidate=${candidate#"${candidate%%[![:space:]]*}"}
+  candidate=${candidate%"${candidate##*[![:space:]]}"}
+  [[ -n "$candidate" ]] || return 1
+  [[ "$candidate" != atelier\ * ]] || return 1
+  [[ "$candidate" != target/debug/atelier\ * ]] || return 1
+  first_token=${candidate%%[[:space:]]*}
+  [[ "$first_token" =~ $command_token_pattern ]] || return 1
+
+  if [[ "$candidate" =~ $legacy_pattern ]] &&
+    [[ "$source" == "$legacy_callable_document" ]] &&
+    [[ "$heading" == "$legacy_callable_heading" ]]; then
+    return 1
+  fi
+  if [[ "$candidate" =~ $prohibited_pattern ]]; then
+    return 0
+  fi
+  if [[ "$candidate" =~ $restricted_pattern ]] &&
+    ! restricted_occurrence_has_explicit_context "$source" "$heading"; then
+    return 0
+  fi
+  return 1
+}
+
 scan_content() {
   local content
   local hit
@@ -264,6 +338,8 @@ scan_content() {
   local metadata
   local source
   local heading
+  local location
+  local fenced
   local remaining
   local before
   local full_before
@@ -271,23 +347,38 @@ scan_content() {
   local previous
   local consumed
   local finding
+  local span
+  local structural_candidate
+  local structural_context
+  local inline_code_pattern='`([^`]*)`'
+  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|try|enter|owns?|validates|reports?|mutates?|current route|normal repair)([^[:alnum:]_-]|$)'
+  local list_command_shape_pattern="^(((${path_alternatives})${command_boundary})|(dep (add|remove)${command_boundary})|(issue (close|claim|new|quick|subissue|search|relate|tree|tested|update|list)${command_boundary})|(work (start|status|queue)${command_boundary})|(maintenance delete${command_boundary})|(review (link|status|comments|comment|approve|request-changes|open)${command_boundary})|(history[[:space:]]+--)|(worktree (create|for|list|remove)${command_boundary})|(mission (atelier-|--|<|create|show|start|status|close|list|update|note|add-work|unlink|add-blocker))|((${root_alternatives}|${restricted_root_alternatives})[[:space:]]+(--|atelier-|<)))"
+  local single_command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
+  local inline_remaining
+  local inline_before
+  local inline_after
+  local inline_context
+  local list_shape_regex
+  local structural_kind
   content=$(cat)
 
   while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    [[ "$hit" == *'atelier '* ]] || continue
 
     if [[ "$hit" == *' :: '* ]]; then
       metadata=${hit%% :: *}
       text=${hit#* :: }
       source=${metadata%%|*}
-      heading=${metadata#*|}
-      heading=${heading#*:}
+      location=${metadata#*|}
+      location=${location#*|}
+      fenced=${location%%|*}
+      heading=${location#*|}
     else
       metadata=''
       text=$hit
       source=''
       heading=''
+      fenced=0
     fi
 
     remaining=$text
@@ -301,15 +392,7 @@ scan_content() {
       [[ -z "$full_before" ]] || previous=${full_before: -1}
 
       if [[ -z "$previous" || ! "$previous" =~ [[:alnum:]_-] ]]; then
-        if printf '%s\n' "$candidate" | rg -q "^$legacy_callable_command_core" &&
-          [[ "$source" == "$legacy_callable_document" ]] &&
-          [[ "$heading" == "$legacy_callable_heading" ]]; then
-          : # The callable legacy queue is not a Removed/Retired command.
-        elif printf '%s\n' "$candidate" | rg -q "^$prohibited_command_core"; then
-          finding=1
-          break
-        elif printf '%s\n' "$candidate" | rg -q "^$restricted_command_core" &&
-          ! restricted_occurrence_has_explicit_context "$source" "$heading"; then
+        if prefixed_candidate_is_finding "$candidate" "$source" "$heading"; then
           finding=1
           break
         fi
@@ -318,6 +401,58 @@ scan_content() {
       consumed+="$before"'atelier '
       remaining=${remaining#*atelier }
     done
+
+    # Bare retired/hidden commands are scanned only where Markdown or shell
+    # structure makes the text command-shaped: inline code, fenced code,
+    # prompts, block quotes, and list items. Ordinary prose words remain out of
+    # scope even when they happen to equal a retired root such as "mission".
+    if ((!finding)) && [[ "$text" == *\`* ]]; then
+      inline_remaining=$text
+      while [[ "$inline_remaining" =~ $inline_code_pattern ]]; do
+        span=${BASH_REMATCH[0]}
+        candidate=${BASH_REMATCH[1]}
+        inline_before=${inline_remaining%%"$span"*}
+        inline_after=${inline_remaining#*"$span"}
+        inline_context="$inline_before ${inline_after%%\`*}"
+        if [[ ! "${inline_after,,}" =~ ^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$) ]] &&
+          [[ "${inline_context,,}" =~ $inline_command_context_pattern ]] &&
+          bare_candidate_is_finding "$candidate" "$source" "$heading"; then
+          finding=1
+          break
+        fi
+        inline_remaining=$inline_after
+      done
+    fi
+
+    if ((!finding)); then
+      structural_candidate=${text#"${text%%[![:space:]]*}"}
+      structural_context=$fenced
+      structural_kind=''
+      ((fenced)) && structural_kind='shell'
+      while [[ "$structural_candidate" =~ ^(\>|-|\*|\+|[0-9]+\.)[[:space:]]+(.*)$ ]]; do
+        structural_context=1
+        [[ "$structural_kind" == shell ]] || structural_kind='list'
+        structural_candidate=${BASH_REMATCH[2]}
+      done
+      if [[ "$structural_candidate" =~ ^\$[[:space:]]+(.*)$ ]]; then
+        structural_context=1
+        structural_kind='shell'
+        structural_candidate=${BASH_REMATCH[1]}
+      fi
+      if ((structural_context)); then
+        if [[ "$structural_kind" == shell ]] &&
+          bare_candidate_is_finding "$structural_candidate" "$source" "$heading"; then
+          finding=1
+        elif [[ "$structural_kind" == list ]]; then
+          list_shape_regex=$list_command_shape_pattern
+          if [[ "$structural_candidate" =~ $single_command_token_pattern ||
+            "$structural_candidate" =~ $list_shape_regex ]] &&
+            bare_candidate_is_finding "$structural_candidate" "$source" "$heading"; then
+            finding=1
+          fi
+        fi
+      fi
+    fi
 
     if ((finding)); then
       printf '%s\n' "$hit"
@@ -467,6 +602,8 @@ run_self_test() {
   local relative
   local -a prohibited_examples=()
   local -a restricted_examples=()
+  local -a bare_prohibited_examples=()
+  local -a bare_restricted_examples=()
   local -a required_prohibited_examples=(
     'atelier work queue'
     'atelier start'
@@ -476,6 +613,19 @@ run_self_test() {
   )
   local -a required_restricted_examples=(
     'atelier doctor --fix'
+  )
+  local -a required_bare_examples=(
+    'lint'
+    'doctor --fix'
+    'dep add atelier-demo atelier-blocker'
+    'dep remove atelier-demo atelier-blocker'
+    'start atelier-demo'
+    'mission atelier-demo'
+    'worktree create atelier-demo'
+    'issue close atelier-demo --reason done'
+    'maintenance delete atelier-demo'
+    'review approve atelier-demo'
+    'history --mission atelier-demo'
   )
   local -a restricted_adversarial_examples=(
     'The hidden API is gone; use atelier doctor --fix now.'
@@ -544,6 +694,19 @@ run_self_test() {
   )
   restricted_examples+=("${restricted_adversarial_examples[@]}")
 
+  for root in "${restricted_roots[@]}"; do
+    bare_restricted_examples+=("$root")
+  done
+  bare_restricted_examples+=(
+    'doctor --fix'
+    'export --check'
+    'import-beads backup.jsonl'
+    'workflow check'
+    'diagnostics slow'
+    'branch merge atelier-demo'
+    'forgejo status'
+  )
+
   for example in "${removed_roots[@]}"; do
     prohibited_examples+=("atelier $example")
   done
@@ -590,6 +753,41 @@ run_self_test() {
   prohibited_examples+=("${adversarial_prohibited_examples[@]}")
   prohibited_examples+=("${local_negative_examples[@]}")
 
+  for example in "${removed_roots[@]}"; do
+    bare_prohibited_examples+=("$example")
+  done
+  for example in "${removed_paths[@]}"; do
+    bare_prohibited_examples+=("$example")
+  done
+  bare_prohibited_examples+=(
+    'dep add atelier-demo atelier-blocker'
+    'dep remove atelier-demo atelier-blocker'
+    'start atelier-demo'
+    'mission atelier-demo'
+    'worktree create atelier-demo'
+    'issue close atelier-demo --reason done'
+    'issue update atelier-demo --claim'
+    'issue list --ready'
+    'work start atelier-demo'
+    'work status'
+    'work queue'
+    'maintenance delete atelier-demo'
+    'export --format json'
+    'review link atelier-demo'
+    'review status atelier-demo'
+    'review comments atelier-demo'
+    'review comment atelier-demo text'
+    'review approve atelier-demo'
+    'review request-changes atelier-demo'
+    'review open --title manual'
+    'history --mission atelier-demo'
+    'history --epic atelier-demo'
+    'history --include-descendants'
+    'history --event-kind note'
+    'history --actor worker'
+    'history --since 2026-01-01'
+  )
+
   for example in "${required_prohibited_examples[@]}"; do
     if ! array_contains "$example" "${prohibited_examples[@]}"; then
       printf 'self-test missing required active-context fixture: %s\n' "$example" >&2
@@ -599,6 +797,13 @@ run_self_test() {
   for example in "${required_restricted_examples[@]}"; do
     if ! array_contains "$example" "${restricted_examples[@]}"; then
       printf 'self-test missing required restricted-context fixture: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  for example in "${required_bare_examples[@]}"; do
+    if ! array_contains "$example" "${bare_prohibited_examples[@]}" &&
+      ! array_contains "$example" "${bare_restricted_examples[@]}"; then
+      printf 'self-test missing required bare structural fixture: %s\n' "$example" >&2
       failures=$((failures + 1))
     fi
   done
@@ -627,6 +832,192 @@ run_self_test() {
       failures=$((failures + 1))
     fi
   done
+
+  # Every authoritative removed root/path is exercised without the binary
+  # prefix inside an actual fenced-command context. This keeps bare coverage
+  # derived from the same inventory as prefixed coverage.
+  for example in "${bare_prohibited_examples[@]}" "${bare_restricted_examples[@]}"; do
+    checked=$((checked + 1))
+    output=$(
+      printf '# Live Guidance\n```sh\n%s\n```\n' "$example" |
+        active_content | scan_content
+    )
+    if [[ -z "$output" ]]; then
+      printf 'self-test failed to reject bare fenced command: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exercise each structural entry path through active_content | scan_content,
+  # including arguments, punctuation, bullets, prompts, and inline spans.
+  for example in \
+    'Use `lint --all` for normal validation.' \
+    'Run `doctor --fix`, then continue.' \
+    'Use `dep add atelier-demo atelier-blocker`.' \
+    'Use `dep remove atelier-demo atelier-blocker`.' \
+    '- start atelier-demo, then continue' \
+    '1. mission atelier-demo.' \
+    '> worktree create atelier-demo' \
+    '* issue close atelier-demo --reason done' \
+    '+ maintenance delete atelier-demo' \
+    'Use `review request-changes atelier-demo`.' \
+    'Use `history --mission atelier-demo`.' \
+    '$ review approve atelier-demo'; do
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed bare structural variant: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent-review fixtures from atelier-b8xw. These use the same
+  # active_content | scan_content pipeline as the broad indexed-doc check.
+  for example in \
+    'Hidden/admin export and deterministic-check surfaces remain compatibility tools for migration or targeted maintenance. `doctor --fix` owns explicit ignored-state repair for normal operators.' \
+    '- `lint` validates `.atelier/` Markdown directly, `doctor` reports local projection/runtime health.' \
+    '| `dep add` and `dep remove` | RecordStore-owned Markdown-first | Top-level Agent Factory dependency aliases mutate canonical issue relationship front matter before projection refresh. |'; do
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-b8xw bare-command fixture: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  output=$(
+    printf '%s\n' \
+      '# Live Guidance' \
+      '```console' \
+      'history --event-kind note' \
+      '```' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed bare command in fenced console transcript\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  for example in \
+    'Mission records remain canonical.' \
+    'Start time is recorded separately.' \
+    'A doctor reports health in ordinary prose.' \
+    'The `mission_id` field is not a command.' \
+    'The `mission::Record` type is not a command.' \
+    'The `starter` helper is not a command.' \
+    'The `worktree-like` adjective is not a command.' \
+    'The service may report that the `close` transition is blocked.'; do
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for non-command prose/code: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  output=$(
+    printf '%s\n' \
+      '## Historical Commands (Non-Normative)' \
+      'Use `mission atelier-demo`.' |
+      active_content | scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected historical bare command section\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Historical Commands (Non-Normative)' \
+      'Use `mission atelier-demo`.' \
+      '## Live Guidance' \
+      'Use `mission atelier-demo`.' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed bare command re-entry after historical section\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Setup And Recovery' \
+      '```sh' \
+      'doctor --fix' \
+      '```' |
+      active_content | scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected context-bounded bare restricted command\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Setup And Recovery' \
+      'Use `doctor --fix`.' \
+      '# Live Guidance' \
+      'Use `doctor --fix`.' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed bare restricted-command live re-entry\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '# Audit\nUse `lint` only as classified here.\n' |
+      active_content "$repo_root/docs/product/command-audit/lint.md" |
+      scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected bare restricted command in exact audit document\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'Use `work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected bare c0mp legacy-callable boundary\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary Extended' \
+      'Use `work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted bare c0mp extended heading spoof\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'Use `work queue` now.' |
+      active_content "$repo_root/docs/product/work-view-ordering.md" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted bare c0mp command in wrong document\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'Use `work queue` now.' \
+      '## Live Guidance' \
+      'Use `work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed bare c0mp live re-entry\n' >&2
+    failures=$((failures + 1))
+  fi
 
   for example in "${local_negative_examples[@]}"; do
     output=$(printf '## Historical Commands (Non-Normative)\n%s\n' "$example" |
