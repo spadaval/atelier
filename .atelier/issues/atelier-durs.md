@@ -38,9 +38,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-06T19:12:13.111761133+00:00"
+status: "publish_review"
 title: "Mission: Apply command complexity budget to remaining CLI surfaces"
-updated_at: "2026-07-06T17:43:56.173732904+00:00"
+updated_at: "2026-07-06T19:12:13.111761133+00:00"
 ---
 
 ## Description
