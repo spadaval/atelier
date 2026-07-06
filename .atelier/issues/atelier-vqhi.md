@@ -6,6 +6,15 @@ labels:
 - "cli"
 - "command-audit"
 - "validation"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-vqhi
+    owner_kind: issue
+    review_target: mission/atelier-durs
+    work_branch: validation/atelier-vqhi
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate command complexity budget cleanup"
-updated_at: "2026-06-29T20:16:55.721310737+00:00"
+updated_at: "2026-07-06T18:41:17.622793671+00:00"
 ---
 
 ## Description
