@@ -3,6 +3,15 @@ created_at: "2026-06-23T16:21:20.073661392+00:00"
 id: "atelier-hl1n"
 issue_type: "epic"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-mska
+    integration_target: mission/atelier-mska
+    merge_strategy: squash
+    owner_issue_id: atelier-hl1n
+    owner_kind: epic
+    review_target: mission/atelier-mska
+    work_branch: epic/atelier-hl1n
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Unify record-file storage and domain models"
-updated_at: "2026-06-23T16:21:20.267807317+00:00"
+updated_at: "2026-07-06T18:06:27.896578994+00:00"
 ---
 
 ## Description
