@@ -39,9 +39,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Simplify evidence and history browse surfaces"
-updated_at: "2026-07-06T18:01:36.572085977+00:00"
+updated_at: "2026-07-06T18:22:52.419936362+00:00"
 ---
 
 ## Description
