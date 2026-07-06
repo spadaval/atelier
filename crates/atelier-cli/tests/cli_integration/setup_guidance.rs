@@ -122,7 +122,7 @@ fn test_integrations_command_is_removed() {
 }
 
 #[test]
-fn test_doctor_human_separates_projection_and_runtime_state_health() {
+fn test_doctor_human_separates_cache_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     run_atelier(dir.path(), &["issue", "create", "Health check"]);
@@ -144,11 +144,10 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
 }
 
 #[test]
-fn test_doctor_distinguishes_missing_runtime_projection_database() {
+fn test_doctor_distinguishes_missing_runtime_cache_database() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Missing projection db"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Missing cache db"]);
     assert!(success, "issue create failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "cache repair query failed: {stderr}");
@@ -179,7 +178,7 @@ fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Doctor fix projection"]);
+        run_atelier(dir.path(), &["issue", "create", "Doctor fix cache"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
@@ -196,19 +195,16 @@ fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     assert!(stdout.contains("database: ok"));
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Doctor fix projection", "Doctor fix projection repaired")
+        markdown.replace("Doctor fix cache", "Doctor fix cache repaired")
     });
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(
-        success,
-        "doctor --fix failed for stale projection: {stderr}"
-    );
+    assert!(success, "doctor --fix failed for stale cache: {stderr}");
     assert!(stdout.contains("local_cache: repaired"));
     assert!(stdout.contains("cache_fresh: ok"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed after doctor --fix: {stderr}");
-    assert!(stdout.contains("Doctor fix projection repaired"));
+    assert!(stdout.contains("Doctor fix cache repaired"));
 }
 
 #[test]

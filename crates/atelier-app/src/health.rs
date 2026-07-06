@@ -62,14 +62,12 @@ pub fn doctor(
             "doctor --fix refused to edit tracked `.atelier/` record files; \
              run `atelier check`, fix the named record file, then rerun `atelier check --fix`"
         })?;
-        crate::rebuild::refresh_projection(&input.state_dir, &input.db_path).with_context(
-            || {
-                format!(
-                    "doctor --fix failed while repairing the ignored local domain cache at {}",
-                    input.db_path.display()
-                )
-            },
-        )?;
+        crate::rebuild::refresh_cache(&input.state_dir, &input.db_path).with_context(|| {
+            format!(
+                "doctor --fix failed while repairing the ignored local domain cache at {}",
+                input.db_path.display()
+            )
+        })?;
         repaired_db =
             Database::open(&input.db_path).context("Failed to reopen repaired database")?;
         &repaired_db
@@ -78,7 +76,7 @@ pub fn doctor(
     };
 
     let rebuild_ready = crate::rebuild::validate_canonical_state(&input.state_dir).is_ok();
-    let cache_fresh = atelier_sqlite::projection_index::check(active_db, &input.state_dir)
+    let cache_fresh = atelier_sqlite::source_freshness::check(active_db, &input.state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
     let runtime_db_available = if input.fix {

@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
-use atelier_sqlite::projection_index;
+use atelier_sqlite::source_freshness;
 use atelier_sqlite::Database;
 
 use crate::{Outcome, Request, ViewModel};
@@ -69,7 +69,7 @@ pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<St
         return Ok(stale);
     }
 
-    let freshness = projection_index::check(db, state_dir)?;
+    let freshness = source_freshness::check(db, state_dir)?;
     stale.extend(
         freshness
             .problem_messages()

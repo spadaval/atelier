@@ -2164,7 +2164,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(
         fresh,
-        "export --check validates canonical Markdown/projection state, not SQLite-only drift: {fresh_err}"
+        "export --check validates record Markdown/cache state, not SQLite-only drift: {fresh_err}"
     );
 }
 

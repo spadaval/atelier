@@ -14,7 +14,7 @@ use atelier_records::activity::IssueActivity;
 use atelier_records::{
     Relationships, FIRST_CLASS_RECORD_KINDS, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
-use atelier_sqlite::projection_index;
+use atelier_sqlite::source_freshness;
 use atelier_sqlite::{
     Database, EvidenceCacheRow, EvidenceTargetCacheRow, IssueBlockCacheRow, IssueCacheRow,
     IssueRelationCacheRow, RecordSourceCacheRow, ReviewRoomCacheRow,
@@ -28,7 +28,7 @@ struct CanonicalIssue {
 }
 
 #[derive(Debug)]
-struct RebuildProjection {
+struct CacheRebuild {
     issues: Vec<CanonicalIssue>,
     records: Vec<Record>,
     child_edges: Vec<(String, String)>,
@@ -37,16 +37,16 @@ struct RebuildProjection {
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
-    let _lock = ProjectionRebuildLock::acquire(db_path)?;
-    let rebuild = load_projection(state_dir)?;
+    let _lock = CacheRebuildLock::acquire(db_path)?;
+    let rebuild = load_cache_rebuild(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!("Rebuilt {} from {}", db_path.display(), state_dir.display());
     Ok(())
 }
 
-pub fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    let _lock = ProjectionRebuildLock::acquire(db_path)?;
-    let rebuild = load_projection(state_dir)?;
+pub fn refresh_cache(state_dir: &Path, db_path: &Path) -> Result<()> {
+    let _lock = CacheRebuildLock::acquire(db_path)?;
+    let rebuild = load_cache_rebuild(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!(
         "Rebuilt domain cache in {} from {}",
@@ -65,7 +65,7 @@ pub enum IncrementalRepair {
 pub fn repair_incremental(
     db: &Database,
     state_dir: &Path,
-    report: &projection_index::FreshnessReport,
+    report: &source_freshness::SourceFreshnessReport,
 ) -> Result<IncrementalRepair> {
     if report.problems.is_empty() {
         return Ok(IncrementalRepair::Repaired);
@@ -82,8 +82,8 @@ pub fn repair_incremental(
     let store = record_store::RecordStore::new(state_dir);
     let mut problems = report.problems.iter().collect::<Vec<_>>();
     problems.sort_by_key(|problem| match problem {
-        projection_index::FreshnessProblem::MissingMetadata { .. } => 0,
-        projection_index::FreshnessProblem::MissingSource { path } => stored_by_path
+        source_freshness::SourceFreshnessProblem::MissingMetadata { .. } => 0,
+        source_freshness::SourceFreshnessProblem::MissingSource { path } => stored_by_path
             .get(path.as_str())
             .map(|source| match source.record_kind.as_str() {
                 "review" => 1,
@@ -92,8 +92,8 @@ pub fn repair_incremental(
                 _ => 4,
             })
             .unwrap_or(4),
-        projection_index::FreshnessProblem::ChangedSource { path }
-        | projection_index::FreshnessProblem::UnindexedSource { path } => {
+        source_freshness::SourceFreshnessProblem::ChangedSource { path }
+        | source_freshness::SourceFreshnessProblem::UnindexedSource { path } => {
             match canonical_spec_for_path(path).map(|spec| spec.kind) {
                 Some("issue") => 5,
                 Some("evidence") => 6,
@@ -105,10 +105,10 @@ pub fn repair_incremental(
 
     for problem in problems {
         match problem {
-            projection_index::FreshnessProblem::MissingMetadata { .. } => {
+            source_freshness::SourceFreshnessProblem::MissingMetadata { .. } => {
                 return Ok(IncrementalRepair::NeedsFullRebuild);
             }
-            projection_index::FreshnessProblem::MissingSource { path } => {
+            source_freshness::SourceFreshnessProblem::MissingSource { path } => {
                 let Some(source) = stored_by_path.get(path.as_str()) else {
                     return Ok(IncrementalRepair::NeedsFullRebuild);
                 };
@@ -116,8 +116,8 @@ pub fn repair_incremental(
                     return Ok(IncrementalRepair::NeedsFullRebuild);
                 }
             }
-            projection_index::FreshnessProblem::ChangedSource { path }
-            | projection_index::FreshnessProblem::UnindexedSource { path } => {
+            source_freshness::SourceFreshnessProblem::ChangedSource { path }
+            | source_freshness::SourceFreshnessProblem::UnindexedSource { path } => {
                 let Some(spec) = canonical_spec_for_path(path) else {
                     return Ok(IncrementalRepair::NeedsFullRebuild);
                 };
@@ -139,11 +139,11 @@ pub fn repair_incremental(
     Ok(IncrementalRepair::Repaired)
 }
 
-struct ProjectionRebuildLock {
+struct CacheRebuildLock {
     file: File,
 }
 
-impl ProjectionRebuildLock {
+impl CacheRebuildLock {
     fn acquire(db_path: &Path) -> Result<Self> {
         let path = rebuild_lock_path(db_path)?;
         let parent = path
@@ -206,7 +206,7 @@ impl ProjectionRebuildLock {
     }
 }
 
-impl Drop for ProjectionRebuildLock {
+impl Drop for CacheRebuildLock {
     fn drop(&mut self) {
         if let Err(error) = self.file.unlock() {
             tracing::warn!("failed to unlock domain-cache rebuild lock: {}", error);
@@ -230,14 +230,14 @@ fn rebuild_lock_path(db_path: &Path) -> Result<PathBuf> {
 }
 
 pub fn validate_canonical_state(state_dir: &Path) -> Result<()> {
-    load_projection(state_dir).map(|_| ())
+    load_cache_rebuild(state_dir).map(|_| ())
 }
 
-fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
-    ProjectionLoader::new(state_dir).load()
+fn load_cache_rebuild(state_dir: &Path) -> Result<CacheRebuild> {
+    CacheRebuildLoader::new(state_dir).load()
 }
 
-struct ProjectionLoader<'a> {
+struct CacheRebuildLoader<'a> {
     state_dir: &'a Path,
     store: record_store::RecordStore,
     issues: Vec<CanonicalIssue>,
@@ -250,7 +250,7 @@ struct ProjectionLoader<'a> {
     activity_record_refs: BTreeSet<(String, String)>,
 }
 
-impl<'a> ProjectionLoader<'a> {
+impl<'a> CacheRebuildLoader<'a> {
     fn new(state_dir: &'a Path) -> Self {
         Self {
             state_dir,
@@ -266,7 +266,7 @@ impl<'a> ProjectionLoader<'a> {
         }
     }
 
-    fn load(mut self) -> Result<RebuildProjection> {
+    fn load(mut self) -> Result<CacheRebuild> {
         self.load_issues()?;
         self.load_issue_activities()?;
         self.load_records()?;
@@ -283,7 +283,7 @@ impl<'a> ProjectionLoader<'a> {
         self.records.sort_by(|a, b| {
             (&a.header().kind, &a.header().id).cmp(&(&b.header().kind, &b.header().id))
         });
-        Ok(RebuildProjection {
+        Ok(CacheRebuild {
             issues: self.issues,
             records: self.records,
             child_edges,
@@ -369,7 +369,7 @@ impl<'a> ProjectionLoader<'a> {
         Vec<(String, String, String)>,
     )> {
         let custom_issue_link_types = self.custom_issue_link_types()?;
-        let mut graph = IssueRelationshipProjection::default();
+        let mut graph = IssueRelationshipIndex::default();
         for subject_id in &self.activity_issue_subject_ids {
             ensure_issue_exists(subject_id, &self.issue_ids, "activity", subject_id)?;
         }
@@ -483,7 +483,7 @@ impl<'a> ProjectionLoader<'a> {
 }
 
 #[derive(Default)]
-struct IssueRelationshipProjection {
+struct IssueRelationshipIndex {
     relations: Vec<(String, String, String)>,
     relation_keys: BTreeSet<(String, String, String)>,
     child_edges: Vec<(String, String)>,
@@ -492,7 +492,7 @@ struct IssueRelationshipProjection {
     dependency_edge_keys: BTreeSet<(String, String)>,
 }
 
-impl IssueRelationshipProjection {
+impl IssueRelationshipIndex {
     fn collect_issue(
         &mut self,
         issue: &CanonicalIssue,
@@ -819,11 +819,7 @@ fn collect_activity_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> 
     Ok(())
 }
 
-fn write_rebuilt_database(
-    state_dir: &Path,
-    db_path: &Path,
-    rebuild: &RebuildProjection,
-) -> Result<()> {
+fn write_rebuilt_database(state_dir: &Path, db_path: &Path, rebuild: &CacheRebuild) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
         anyhow!(
             "Cannot determine parent directory for {}",
@@ -1646,9 +1642,9 @@ mod tests {
     }
 
     fn report(
-        problems: Vec<projection_index::FreshnessProblem>,
-    ) -> projection_index::FreshnessReport {
-        projection_index::FreshnessReport {
+        problems: Vec<source_freshness::SourceFreshnessProblem>,
+    ) -> source_freshness::SourceFreshnessReport {
+        source_freshness::SourceFreshnessReport {
             checked: true,
             source_count: problems.len(),
             problems,
@@ -1720,7 +1716,7 @@ mod tests {
         write_domain_set(&state_dir, "base", 2);
         let changed = domain_paths(&base)
             .into_iter()
-            .map(|path| projection_index::FreshnessProblem::ChangedSource { path })
+            .map(|path| source_freshness::SourceFreshnessProblem::ChangedSource { path })
             .collect();
         assert_eq!(
             repair_incremental(&incremental, &state_dir, &report(changed)).unwrap(),
@@ -1736,7 +1732,7 @@ mod tests {
         let unindexed = domain_paths(&added)
             .into_iter()
             .rev()
-            .map(|path| projection_index::FreshnessProblem::UnindexedSource { path })
+            .map(|path| source_freshness::SourceFreshnessProblem::UnindexedSource { path })
             .collect();
         assert_eq!(
             repair_incremental(&incremental, &state_dir, &report(unindexed)).unwrap(),
@@ -1755,7 +1751,7 @@ mod tests {
         let missing = added_paths
             .into_iter()
             .rev()
-            .map(|path| projection_index::FreshnessProblem::MissingSource { path })
+            .map(|path| source_freshness::SourceFreshnessProblem::MissingSource { path })
             .collect();
         assert_eq!(
             repair_incremental(&incremental, &state_dir, &report(missing)).unwrap(),
@@ -1791,9 +1787,11 @@ mod tests {
         let outcome = repair_incremental(
             &database,
             &state_dir,
-            &report(vec![projection_index::FreshnessProblem::ChangedSource {
-                path: paths[0].clone(),
-            }]),
+            &report(vec![
+                source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: paths[0].clone(),
+                },
+            ]),
         )
         .unwrap();
 
@@ -1836,9 +1834,11 @@ mod tests {
         let outcome = repair_incremental(
             &database,
             &state_dir,
-            &report(vec![projection_index::FreshnessProblem::ChangedSource {
-                path: domain_paths(&first)[0].clone(),
-            }]),
+            &report(vec![
+                source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: domain_paths(&first)[0].clone(),
+                },
+            ]),
         )
         .unwrap();
         assert_eq!(outcome, IncrementalRepair::NeedsFullRebuild);
@@ -1885,9 +1885,11 @@ mod tests {
         let outcome = repair_incremental(
             &database,
             &state_dir,
-            &report(vec![projection_index::FreshnessProblem::ChangedSource {
-                path: domain_paths(&first)[0].clone(),
-            }]),
+            &report(vec![
+                source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: domain_paths(&first)[0].clone(),
+                },
+            ]),
         )
         .unwrap();
 
@@ -1913,9 +1915,9 @@ mod tests {
         let error = repair_incremental(
             &database,
             &state_dir,
-            &report(vec![projection_index::FreshnessProblem::ChangedSource {
-                path,
-            }]),
+            &report(vec![
+                source_freshness::SourceFreshnessProblem::ChangedSource { path },
+            ]),
         )
         .unwrap_err();
         assert!(error

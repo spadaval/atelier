@@ -369,12 +369,12 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
 
 fn issue_object_from_canonical(
     db: &Database,
-    projection_issue: Issue,
+    cached_issue: Issue,
     record: CanonicalIssueRecord,
 ) -> Result<IssueObject> {
     let mut issue = record.issue;
-    issue.parent_id = projection_issue.parent_id;
-    issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
+    issue.parent_id = cached_issue.parent_id;
+    issue.closed_at = cached_issue.closed_at.or(issue.closed_at);
     issue_object_from_parts(
         db,
         issue,

@@ -31,7 +31,7 @@ struct SourceStat {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum FreshnessProblem {
+pub enum SourceFreshnessProblem {
     MissingMetadata { path: String },
     MissingSource { path: String },
     ChangedSource { path: String },
@@ -39,13 +39,13 @@ pub enum FreshnessProblem {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct FreshnessReport {
+pub struct SourceFreshnessReport {
     pub checked: bool,
     pub source_count: usize,
-    pub problems: Vec<FreshnessProblem>,
+    pub problems: Vec<SourceFreshnessProblem>,
 }
 
-impl FreshnessReport {
+impl SourceFreshnessReport {
     pub fn is_fresh(&self) -> bool {
         self.problems.is_empty()
     }
@@ -59,10 +59,18 @@ impl FreshnessReport {
 
         for problem in &self.problems {
             match problem {
-                FreshnessProblem::MissingMetadata { path } => missing_metadata.push(path.as_str()),
-                FreshnessProblem::MissingSource { path } => missing_sources.push(path.as_str()),
-                FreshnessProblem::ChangedSource { path } => changed_sources.push(path.as_str()),
-                FreshnessProblem::UnindexedSource { path } => unindexed_sources.push(path.as_str()),
+                SourceFreshnessProblem::MissingMetadata { path } => {
+                    missing_metadata.push(path.as_str())
+                }
+                SourceFreshnessProblem::MissingSource { path } => {
+                    missing_sources.push(path.as_str())
+                }
+                SourceFreshnessProblem::ChangedSource { path } => {
+                    changed_sources.push(path.as_str())
+                }
+                SourceFreshnessProblem::UnindexedSource { path } => {
+                    unindexed_sources.push(path.as_str())
+                }
             }
         }
 
@@ -139,7 +147,7 @@ fn push_path_group_message(
     }
 }
 
-pub fn refresh(db: &Database, state_dir: &Path) -> Result<()> {
+pub fn refresh_source_metadata(db: &Database, state_dir: &Path) -> Result<()> {
     let snapshot = snapshot_sources(state_dir)?;
     let stored = db.record_source_cache_rows()?;
     if snapshot.len() != stored.len() {
@@ -164,9 +172,9 @@ pub fn source_entry_for_path(state_dir: &Path, relative: &str) -> Result<SourceE
     source_entry(state_dir, &path)
 }
 
-pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
+pub fn check(db: &Database, state_dir: &Path) -> Result<SourceFreshnessReport> {
     if !state_dir.exists() {
-        return Ok(FreshnessReport {
+        return Ok(SourceFreshnessReport {
             checked: false,
             source_count: 0,
             problems: Vec::new(),
@@ -187,7 +195,7 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     let mut problems = Vec::new();
     if stored.is_empty() && !current.is_empty() {
         for entry in &current {
-            problems.push(FreshnessProblem::MissingMetadata {
+            problems.push(SourceFreshnessProblem::MissingMetadata {
                 path: entry.path.clone(),
             });
         }
@@ -210,26 +218,26 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
                             indexed_at: chrono::Utc::now(),
                         })?;
                     } else {
-                        problems.push(FreshnessProblem::ChangedSource {
+                        problems.push(SourceFreshnessProblem::ChangedSource {
                             path: stored_entry.path.clone(),
                         });
                     }
                 }
-                None => problems.push(FreshnessProblem::MissingSource {
+                None => problems.push(SourceFreshnessProblem::MissingSource {
                     path: stored_entry.path.clone(),
                 }),
             }
         }
         for current_entry in &current {
             if !stored_by_path.contains_key(&current_entry.path) {
-                problems.push(FreshnessProblem::UnindexedSource {
+                problems.push(SourceFreshnessProblem::UnindexedSource {
                     path: current_entry.path.clone(),
                 });
             }
         }
     }
 
-    Ok(FreshnessReport {
+    Ok(SourceFreshnessReport {
         checked: true,
         source_count: current.len(),
         problems,

@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 use crate::storage_layout;
-use atelier_sqlite::projection_index;
+use atelier_sqlite::source_freshness;
 use atelier_sqlite::{inspect_cache_file, CacheFileState, Database};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -219,7 +219,7 @@ impl CacheManager {
             return Ok(self.access(db, initial_state, preparation));
         }
 
-        let report = projection_index::check(&db, &state_dir)?;
+        let report = source_freshness::check(&db, &state_dir)?;
         if report.is_fresh() {
             return Ok(self.access(db, initial_state, preparation));
         }
@@ -273,7 +273,7 @@ impl CacheManager {
         &self,
         db: Database,
         initial_state: CacheFileState,
-        report: &projection_index::FreshnessReport,
+        report: &source_freshness::SourceFreshnessReport,
         error: &anyhow::Error,
     ) -> CacheAccess {
         tracing::warn!(

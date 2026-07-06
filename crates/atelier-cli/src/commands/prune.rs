@@ -27,7 +27,7 @@ struct CanonicalPruneSummary {
     removed: Vec<CanonicalRemoval>,
     failures: Vec<(PathBuf, String)>,
     unavailable: Option<String>,
-    rebuilt_projection: bool,
+    rebuilt_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +106,7 @@ fn prune_canonical_records(
             removed: Vec::new(),
             failures: Vec::new(),
             unavailable: Some("tracker unavailable in this directory".to_string()),
-            rebuilt_projection: false,
+            rebuilt_cache: false,
         });
     };
 
@@ -143,7 +143,7 @@ fn prune_canonical_records(
                 removed,
                 failures,
                 unavailable: None,
-                rebuilt_projection: true,
+                rebuilt_cache: true,
             });
         }
     }
@@ -156,7 +156,7 @@ fn prune_canonical_records(
         removed,
         failures,
         unavailable: None,
-        rebuilt_projection: false,
+        rebuilt_cache: false,
     })
 }
 
@@ -518,7 +518,7 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
         }
     }
 
-    if summary.rebuilt_projection {
+    if summary.rebuilt_cache {
         println!("Domain cache: rebuilt after pruning record files");
     }
 

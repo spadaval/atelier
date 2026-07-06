@@ -783,7 +783,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     edit_canonical_record(dir.path(), "issues", &mission_id, |markdown| {
         markdown.replace("schema: \"atelier.issue\"", "schema: \"atelier.evidence\"")
     });
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(!success, "rebuild should reject issue schema drift");
@@ -805,10 +805,10 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
     edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
         markdown.replace("schema_version: 1", "schema_version: 99")
     });
-    remove_projection_state(schema_dir.path());
+    remove_cache_state(schema_dir.path());
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
-    assert!(!success, "schema drift should block projection query");
+    assert!(!success, "schema drift should block cache-backed query");
     assert!(
         stderr.contains("schema this atelier binary does not understand")
             && stderr.contains("target/debug/atelier")
@@ -834,10 +834,13 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
         &malformed_issue_id,
         "Malformed source",
     );
-    remove_projection_state(malformed_dir.path());
+    remove_cache_state(malformed_dir.path());
 
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["work", "queue"]);
-    assert!(!success, "malformed records should block projection query");
+    assert!(
+        !success,
+        "malformed records should block cache-backed query"
+    );
     assert!(
         stderr.contains("recovery: 1. run `atelier check`")
             && stderr.contains("2. fix the named record file")
@@ -894,7 +897,7 @@ fn test_cache_query_rebuilds_missing_cache_on_demand() {
         run_atelier(dir.path(), &["issue", "create", "Lazy missing cache"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
 
@@ -1116,18 +1119,12 @@ The unindexed issue is discoverable after rebuild.
 fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
-    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
+    let first_body = "## Description\n\nCache root body.\n\n## Outcome\n\nCache root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
+    let second_body = "## Description\n\nCache leaf body.\n\n## Outcome\n\nCache leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Projection root",
-            "--description",
-            first_body,
-        ],
+        &["issue", "create", "Cache root", "--description", first_body],
     );
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
@@ -1137,7 +1134,7 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         &[
             "issue",
             "create",
-            "Projection leaf",
+            "Cache leaf",
             "--description",
             second_body,
         ],
@@ -1170,10 +1167,10 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         success,
         "derived files should not stale work queue --ready: {stderr}"
     );
-    assert!(ready_out.contains("Projection root"));
+    assert!(ready_out.contains("Cache root"));
 
     edit_canonical_issue(dir.path(), &first_id, |markdown| {
-        markdown.replace("Projection root", "Projection root changed")
+        markdown.replace("Cache root", "Cache root changed")
     });
 
     let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "show", &second_id]);
@@ -1181,7 +1178,7 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         success,
         "stale issue show should transparently rebuild: {stderr}"
     );
-    assert!(dep_out.contains("Projection root changed"));
+    assert!(dep_out.contains("Cache root changed"));
     assert!(
         stderr.contains("Local cache was stale; rebuilt SQLite cache")
             || stderr
@@ -1245,14 +1242,14 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
             !combined.contains("rebuild-tmp")
                 && !combined.contains(".md.lock")
                 && !combined.contains(".md-journal")
-                && !combined.contains("projection.lock"),
+                && !combined.contains("cache.lock"),
             "{args:?} diagnostics must not report ignored local artifacts: {combined}"
         );
     }
 }
 
 #[test]
-fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh() {
+fn test_lint_validates_record_markdown_even_when_cache_metadata_is_fresh() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let issue_id = "atelier-lint1".to_string();
@@ -1343,7 +1340,7 @@ Lint rejects malformed canonical state.
         !transcript.contains("rebuild-tmp")
             && !transcript.contains(".md.lock")
             && !transcript.contains(".md-journal")
-            && !transcript.contains("projection.lock"),
+            && !transcript.contains("cache.lock"),
         "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
     assert!(stderr.contains("Lint failed"));
@@ -1452,7 +1449,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    remove_projection_state(dir.path());
+    remove_cache_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(
