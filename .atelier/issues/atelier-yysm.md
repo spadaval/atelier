@@ -7,6 +7,10 @@ labels:
 - "complexity"
 - "evidence"
 - "history"
+review:
+  kind: pull_request
+  number: 46
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-durs
@@ -35,9 +39,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Simplify evidence and history browse surfaces"
-updated_at: "2026-07-06T17:46:42.573426412+00:00"
+updated_at: "2026-07-06T18:01:36.572085977+00:00"
 ---
 
 ## Description
