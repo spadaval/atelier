@@ -1,0 +1,25 @@
+---
+created_at: "2026-07-06T18:35:47.170447067+00:00"
+id: "atelier-vgpr"
+evidence_type: "validation"
+captured_at: "2026-07-06T18:35:47.170441352+00:00"
+target:
+  kind: "issue"
+  id: "atelier-ye11"
+  role: "validates"
+relationships:
+  blocks: []
+  children: []
+  attachments:
+  - kind: "issue"
+    id: "atelier-ye11"
+    role: "validates"
+  relates: []
+schema: "atelier.evidence"
+schema_version: 1
+status: "recorded"
+title: "Independent adversarial validation result: PASS. Claim classifications: PASS — review open derives accountable issue/branch owner, source/target branches, title/body, configured mode/provider, and explicit-or-status-derived role in direct and workflow-action paths (atelier-iwcj, atelier-r5vu, atelier-159z). PASS — open --existing owns provider recovery/linking and old review link/pr aliases reject (atelier-ot9g, atelier-159z). PASS — show owns state and optional comments; live Forgejo PR 47 reports closed/merged and retrieves provider comments 230/241 (atelier-sdnv). PASS — submit owns exactly one comment/approval/request-changes mutation and provider approval serializes official APPROVED (atelier-wxe1 relevant passing cases, atelier-r5vu, atelier-159z, superseding fixes atelier-q0yw/atelier-zjst). PASS — resolve and merge remain distinct artifact operations and merge does not transition issue workflow (atelier-ot9g, atelier-159z). PASS — retired status/comments/link/comment/approve/request-changes verbs, legacy pr root, and manual title/body/source/target/provider/owner/repo/host open fields reject without compatibility paths (atelier-ot9g). PASS — workflow review.open shares canonical derivation and preserves the owner review field (atelier-iwcj, atelier-r5vu, atelier-159z). PASS — PRODUCT_INTENT/CONTEXT, cli-surface, ADR 0011, workflow configuration, command audit, and help agree; no active stale command guidance found (atelier-a5kn; atelier-xs5p was only a line-wrap-sensitive validator-script failure corrected by atelier-a5kn). PASS — integrated evidence/history/provider surfaces remain readable (atelier-7ti6, atelier-sdnv). Environment classification: atelier-wxe1 exit 100 came only from the two known HOME-sensitive provider fixture tests; both passed under isolated HOME in atelier-r5vu, and the isolated full suite passed in atelier-159z. Ignored-test classification: NOT-APPLICABLE to this review epic — four explicitly nonblocking extended atelier-sqlite property tests cover dependency/search/delete behavior, not review contracts. Prior failed review evidence atelier-9xvc and atelier-u8kg is superseded by fixes atelier-q0yw/atelier-zjst and passing reviews atelier-e4lm/atelier-mxrf. Repository gates pass in atelier-su6w. No blocked or deferred review claim; no residual product defect found."
+updated_at: "2026-07-06T18:35:51.214345632+00:00"
+---
+
+Independent adversarial validation result: PASS. Claim classifications: PASS — review open derives accountable issue/branch owner, source/target branches, title/body, configured mode/provider, and explicit-or-status-derived role in direct and workflow-action paths (atelier-iwcj, atelier-r5vu, atelier-159z). PASS — open --existing owns provider recovery/linking and old review link/pr aliases reject (atelier-ot9g, atelier-159z). PASS — show owns state and optional comments; live Forgejo PR 47 reports closed/merged and retrieves provider comments 230/241 (atelier-sdnv). PASS — submit owns exactly one comment/approval/request-changes mutation and provider approval serializes official APPROVED (atelier-wxe1 relevant passing cases, atelier-r5vu, atelier-159z, superseding fixes atelier-q0yw/atelier-zjst). PASS — resolve and merge remain distinct artifact operations and merge does not transition issue workflow (atelier-ot9g, atelier-159z). PASS — retired status/comments/link/comment/approve/request-changes verbs, legacy pr root, and manual title/body/source/target/provider/owner/repo/host open fields reject without compatibility paths (atelier-ot9g). PASS — workflow review.open shares canonical derivation and preserves the owner review field (atelier-iwcj, atelier-r5vu, atelier-159z). PASS — PRODUCT_INTENT/CONTEXT, cli-surface, ADR 0011, workflow configuration, command audit, and help agree; no active stale command guidance found (atelier-a5kn; atelier-xs5p was only a line-wrap-sensitive validator-script failure corrected by atelier-a5kn). PASS — integrated evidence/history/provider surfaces remain readable (atelier-7ti6, atelier-sdnv). Environment classification: atelier-wxe1 exit 100 came only from the two known HOME-sensitive provider fixture tests; both passed under isolated HOME in atelier-r5vu, and the isolated full suite passed in atelier-159z. Ignored-test classification: NOT-APPLICABLE to this review epic — four explicitly nonblocking extended atelier-sqlite property tests cover dependency/search/delete behavior, not review contracts. Prior failed review evidence atelier-9xvc and atelier-u8kg is superseded by fixes atelier-q0yw/atelier-zjst and passing reviews atelier-e4lm/atelier-mxrf. Repository gates pass in atelier-su6w. No blocked or deferred review claim; no residual product defect found.
