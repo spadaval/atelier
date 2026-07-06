@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::params;
 
-use super::{issue_from_row, Database};
+use super::Database;
 use atelier_core::Issue;
 
 impl Database {
@@ -67,9 +67,9 @@ impl Database {
 
     pub fn get_blockers(&self, issue_id: impl ToString) -> Result<Vec<String>> {
         let issue_id = issue_id.to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT blocker_id FROM dependencies WHERE blocked_id = ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT blocker_id FROM issue_block_index WHERE blocked_id = ?1 ORDER BY blocker_id",
+        )?;
         let blockers = stmt
             .query_map([issue_id], |row| row.get(0))?
             .collect::<std::result::Result<Vec<String>, _>>()?;
@@ -78,9 +78,9 @@ impl Database {
 
     pub fn get_blocking(&self, issue_id: impl ToString) -> Result<Vec<String>> {
         let issue_id = issue_id.to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT blocked_id FROM dependencies WHERE blocker_id = ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT blocked_id FROM issue_block_index WHERE blocker_id = ?1 ORDER BY blocked_id",
+        )?;
         let blocking = stmt
             .query_map([issue_id], |row| row.get(0))?
             .collect::<std::result::Result<Vec<String>, _>>()?;
@@ -88,43 +88,33 @@ impl Database {
     }
 
     pub fn list_blocked_issues(&self) -> Result<Vec<Issue>> {
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            JOIN dependencies d ON i.id = d.blocked_id
-            JOIN issues blocker ON d.blocker_id = blocker.id
-            WHERE i.closed_at IS NULL AND blocker.closed_at IS NULL
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        Ok(self
+            .list_issues(Some("all"), None, None)?
+            .into_iter()
+            .filter(|issue| issue.closed_at.is_none())
+            .filter(|issue| {
+                self.get_blockers(&issue.id).is_ok_and(|blockers| {
+                    blockers.into_iter().any(|id| {
+                        self.get_issue(id)
+                            .ok()
+                            .flatten()
+                            .is_some_and(|blocker| blocker.closed_at.is_none())
+                    })
+                })
+            })
+            .collect())
     }
 
     pub fn list_ready_issues(&self) -> Result<Vec<Issue>> {
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            WHERE i.closed_at IS NULL
-            AND NOT EXISTS (
-                SELECT 1 FROM dependencies d
-                JOIN issues blocker ON d.blocker_id = blocker.id
-                WHERE d.blocked_id = i.id AND blocker.closed_at IS NULL
-            )
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        let blocked = self
+            .list_blocked_issues()?
+            .into_iter()
+            .map(|issue| issue.id)
+            .collect::<std::collections::HashSet<_>>();
+        Ok(self
+            .list_issues(Some("all"), None, None)?
+            .into_iter()
+            .filter(|issue| issue.closed_at.is_none() && !blocked.contains(&issue.id))
+            .collect())
     }
 }

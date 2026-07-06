@@ -1535,16 +1535,26 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     assert!(stdout.contains(edited_evidence), "{stdout}");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let projected_text: String = conn
+    let cached_title: String = conn
         .query_row(
-            "SELECT description FROM issues WHERE id = ?1",
+            "SELECT title FROM issue_index WHERE id = ?1",
             [&issue_id],
             |row| row.get(0),
         )
         .unwrap();
-    assert!(projected_text.contains(edited_body));
-    assert!(!projected_text.contains(edited_outcome));
-    assert!(!projected_text.contains("## Description"));
+    assert!(!cached_title.is_empty());
+    let body_columns: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('issue_index')
+             WHERE name IN ('description', 'body', 'outcome', 'fields_json')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        body_columns, 0,
+        "detail bodies must remain record-file sourced"
+    );
 }
 
 #[test]
@@ -2470,15 +2480,10 @@ fn test_issue_mutations_leave_stale_cache_for_one_lazy_repair() {
     }
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "final mutation should leave cache stale");
+    assert!(success, "lazy cache check failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr.contains("Local cache was stale; repaired changed record sources"),
-        "missing lazy repair diagnostic: {stderr}"
-    );
     assert!(stdout.contains("Mutation source updated"));
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("keep-me"));

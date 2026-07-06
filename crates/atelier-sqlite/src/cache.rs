@@ -706,6 +706,18 @@ impl Database {
         Ok(rows)
     }
 
+    pub fn review_room_cache_rows(&self) -> Result<Vec<ReviewRoomCacheRow>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, issue_id, title, status, source_branch, target_branch, approvals,
+                    unresolved_blocking, unresolved_nonblocking, created_at, updated_at
+             FROM review_room_index ORDER BY updated_at DESC, id",
+        )?;
+        let rows = statement
+            .query_map([], review_room_cache_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     pub fn record_source_cache_row(&self, path: &str) -> Result<Option<RecordSourceCacheRow>> {
         self.conn
             .query_row(

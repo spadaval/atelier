@@ -2,10 +2,26 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
+use super::{validate_issue_type, validate_priority, validate_status, Database, IssueCacheQuery};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
 use crate::record_id;
 use atelier_core::{Issue, IssuePriority};
+
+fn issue_from_cache(row: super::IssueCacheRow) -> Issue {
+    Issue {
+        id: row.id,
+        title: row.title,
+        description: None,
+        status: row.status,
+        issue_type: row.issue_type,
+        priority: row.priority,
+        fields: Default::default(),
+        parent_id: row.parent_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        closed_at: row.closed_at,
+    }
+}
 
 impl Database {
     pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
@@ -112,26 +128,17 @@ impl Database {
 
     pub fn get_subissues(&self, parent_id: impl ToString) -> Result<Vec<Issue>> {
         let parent_id = parent_id.to_string();
-        let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
-        )?;
-
-        let issues = stmt
-            .query_map([parent_id], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        Ok(self
+            .query_issue_cache(&IssueCacheQuery::default())?
+            .into_iter()
+            .filter(|issue| issue.parent_id.as_deref() == Some(parent_id.as_str()))
+            .map(issue_from_cache)
+            .collect())
     }
 
     pub fn get_issue(&self, id: impl ToString) -> Result<Option<Issue>> {
         let id = id.to_string();
-        let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
-        )?;
-
-        let issue = stmt.query_row([id], issue_from_row).ok();
-
-        Ok(issue)
+        Ok(self.issue_cache_row(&id)?.map(issue_from_cache))
     }
 
     pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<String>> {
@@ -153,7 +160,7 @@ impl Database {
         let suffix = format!("%-{normalized}");
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM issues WHERE id LIKE ?1 ORDER BY id LIMIT 2")?;
+            .prepare("SELECT id FROM issue_index WHERE id LIKE ?1 ORDER BY id LIMIT 2")?;
         let matches = stmt
             .query_map([suffix], |row| row.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -181,52 +188,24 @@ impl Database {
         label_filter: Option<&str>,
         priority_filter: Option<&str>,
     ) -> Result<Vec<Issue>> {
-        let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
-        );
-        let mut conditions = Vec::new();
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-        if label_filter.is_some() {
-            sql.push_str(" JOIN labels l ON i.id = l.issue_id");
+        let status = status_filter.filter(|status| *status != "all");
+        if let Some(status) = status {
+            validate_status(status)?;
         }
-
-        if let Some(status) = status_filter {
-            if status != "all" {
-                validate_status(status)?;
-                conditions.push("i.status = ?".to_string());
-                params_vec.push(Box::new(status.to_string()));
-            }
-        }
-
-        if let Some(label) = label_filter {
-            conditions.push("l.label = ?".to_string());
-            params_vec.push(Box::new(label.to_string()));
-        }
-
-        if let Some(priority) = priority_filter {
-            conditions.push("i.priority = ?".to_string());
-            params_vec.push(Box::new(
-                IssuePriority::from_cli_input(priority)?.label().to_string(),
-            ));
-        }
-
-        if !conditions.is_empty() {
-            sql.push_str(" WHERE ");
-            sql.push_str(&conditions.join(" AND "));
-        }
-
-        sql.push_str(" ORDER BY i.id DESC");
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
-
-        let issues = stmt
-            .query_map(params_refs.as_slice(), issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        let priority = priority_filter
+            .map(IssuePriority::from_cli_input)
+            .transpose()?
+            .map(|priority| priority.label().to_string());
+        Ok(self
+            .query_issue_cache(&IssueCacheQuery {
+                status,
+                issue_type: None,
+                priority: priority.as_deref(),
+                label: label_filter,
+            })?
+            .into_iter()
+            .map(issue_from_cache)
+            .collect())
     }
     pub fn update_issue(
         &self,
@@ -337,23 +316,12 @@ impl Database {
 
     /// Search issues by query string across titles and descriptions.
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
-        let escaped = query.replace('%', "\\%").replace('_', "\\_");
-        let pattern = format!("%{}%", escaped);
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            WHERE i.title LIKE ?1 ESCAPE '\' COLLATE NOCASE
-               OR i.description LIKE ?1 ESCAPE '\' COLLATE NOCASE
-            ORDER BY i.id DESC
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([&pattern], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        let query = query.to_lowercase();
+        Ok(self
+            .list_issues(Some("all"), None, None)?
+            .into_iter()
+            .filter(|issue| issue.title.to_lowercase().contains(&query))
+            .collect())
     }
 }
 

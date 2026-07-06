@@ -43,7 +43,6 @@ Truncated: no
 
 ```text
 ```
-
 ## Stderr
 
 Bytes: 0
@@ -51,4 +50,3 @@ Truncated: no
 
 ```text
 ```
-

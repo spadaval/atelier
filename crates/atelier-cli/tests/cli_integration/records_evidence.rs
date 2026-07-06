@@ -1249,11 +1249,17 @@ fn test_evidence_list_bounds_default_output() {
     }
     evidence_ids.sort_by(|(_, left), (_, right)| left.cmp(right));
 
+    let (success, _, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(
+        success,
+        "initial evidence list/cache repair failed: {stderr}"
+    );
+
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     for (rank, (_, evidence_id)) in evidence_ids.iter().enumerate() {
         let timestamp = format!("2024-01-{:02}T00:00:00+00:00", rank + 1);
         conn.execute(
-            "UPDATE records SET created_at = ?1, updated_at = ?1 WHERE kind = 'evidence' AND id = ?2",
+            "UPDATE evidence_index SET created_at = ?1, updated_at = ?1 WHERE id = ?2",
             rusqlite::params![timestamp, evidence_id],
         )
         .unwrap();

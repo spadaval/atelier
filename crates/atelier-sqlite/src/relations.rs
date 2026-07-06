@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use rusqlite::params;
 
-use super::{issue_from_row, Database};
+use super::Database;
 use atelier_core::{Issue, Relation};
 
 const TRANSITIVE_IMPACT_RELATIONS: &[&str] = &["derived", "caused-by", "falsifies"];
@@ -67,23 +67,19 @@ impl Database {
     /// Get all related issues (any relation type).
     pub fn get_related_issues(&self, issue_id: impl ToString) -> Result<Vec<Issue>> {
         let issue_id = issue_id.to_string();
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            WHERE i.id IN (
-                SELECT issue_id_2 FROM relations WHERE issue_id_1 = ?1
-                UNION
-                SELECT issue_id_1 FROM relations WHERE issue_id_2 = ?1
-            )
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([issue_id], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
+        let mut issues = Vec::new();
+        for relation in self.get_typed_relations(&issue_id)? {
+            let other = if relation.issue_id_1 == issue_id {
+                relation.issue_id_2
+            } else {
+                relation.issue_id_1
+            };
+            if let Some(issue) = self.get_issue(other)? {
+                issues.push(issue);
+            }
+        }
+        issues.sort_by(|left, right| left.id.cmp(&right.id));
+        issues.dedup_by(|left, right| left.id == right.id);
         Ok(issues)
     }
 
@@ -92,9 +88,9 @@ impl Database {
         let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT issue_id_1, issue_id_2, relation_type, created_at
-            FROM relations
-            WHERE issue_id_1 = ?1 OR issue_id_2 = ?1
+            SELECT source_issue_id, target_issue_id, relation_type, created_at
+            FROM issue_relation_index
+            WHERE source_issue_id = ?1 OR target_issue_id = ?1
             ORDER BY created_at
             "#,
         )?;
@@ -120,23 +116,23 @@ impl Database {
         relation_type: &str,
     ) -> Result<Vec<Issue>> {
         let issue_id = issue_id.to_string();
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            WHERE i.id IN (
-                SELECT issue_id_2 FROM relations WHERE issue_id_1 = ?1 AND relation_type = ?2
-                UNION
-                SELECT issue_id_1 FROM relations WHERE issue_id_2 = ?1 AND relation_type = ?2
-            )
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map(params![issue_id, relation_type], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
+        let mut issues = Vec::new();
+        for relation in self
+            .get_typed_relations(&issue_id)?
+            .into_iter()
+            .filter(|relation| relation.relation_type == relation_type)
+        {
+            let other = if relation.issue_id_1 == issue_id {
+                relation.issue_id_2
+            } else {
+                relation.issue_id_1
+            };
+            if let Some(issue) = self.get_issue(other)? {
+                issues.push(issue);
+            }
+        }
+        issues.sort_by(|left, right| left.id.cmp(&right.id));
+        issues.dedup_by(|left, right| left.id == right.id);
         Ok(issues)
     }
 

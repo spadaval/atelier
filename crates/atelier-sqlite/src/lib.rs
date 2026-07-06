@@ -22,7 +22,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{Issue, IssuePriority, ISSUE_PRIORITY_LABELS};
+use atelier_core::{IssuePriority, ISSUE_PRIORITY_LABELS};
 use atelier_records as record_store;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -328,26 +328,6 @@ pub(crate) fn parse_datetime(s: String) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(&s)
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now())
-}
-
-/// Maps a database row to an Issue struct.
-/// Expects columns in order: id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at
-pub(crate) fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
-    let fields_json = row.get::<_, String>(6)?;
-    let fields = serde_json::from_str(&fields_json).unwrap_or_default();
-    Ok(Issue {
-        id: row.get(0)?,
-        title: row.get(1)?,
-        description: row.get(2)?,
-        status: row.get(3)?,
-        issue_type: row.get(4)?,
-        priority: row.get(5)?,
-        fields,
-        parent_id: row.get(7)?,
-        created_at: parse_datetime(row.get::<_, String>(8)?),
-        updated_at: parse_datetime(row.get::<_, String>(9)?),
-        closed_at: row.get::<_, Option<String>>(10)?.map(parse_datetime),
-    })
 }
 
 /// Issue row stored in the rebuildable SQLite projection.
