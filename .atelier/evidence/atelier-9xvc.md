@@ -62,4 +62,3 @@ Truncated: no
 ```text
 Error: forgejo_api_error: GET /api/v1/repos/supadava/atelier/pulls/47/reviews/comments failed with status 404: {"message":"GetReviewByID","url":"http://iiot-grand-central.cisco.com:3000/api/swagger","errors":["review does not exist [id: 0]"]}
 ```
-
