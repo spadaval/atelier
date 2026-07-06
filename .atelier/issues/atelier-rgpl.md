@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "blocked"
 title: "Archive or compact eligible canonical records"
-updated_at: "2026-06-19T19:39:51.356083457+00:00"
+updated_at: "2026-07-06T18:10:51.461935897+00:00"
 ---
 
 ## Description
