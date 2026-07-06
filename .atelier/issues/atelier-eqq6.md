@@ -40,9 +40,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Hide or remove provider and recovery escape hatches"
-updated_at: "2026-07-06T17:56:33.289081502+00:00"
+updated_at: "2026-07-06T18:09:45.253823619+00:00"
 ---
 
 ## Description
