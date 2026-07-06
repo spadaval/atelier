@@ -30,9 +30,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-06T19:10:04.304395363+00:00"
+status: "done"
 title: "Validate command complexity budget cleanup"
-updated_at: "2026-07-06T19:09:35.161714790+00:00"
+updated_at: "2026-07-06T19:10:04.304395363+00:00"
 ---
 
 ## Description
