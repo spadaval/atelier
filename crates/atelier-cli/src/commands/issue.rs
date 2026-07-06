@@ -2471,6 +2471,11 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
 }
 
 pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
+    if !check {
+        bail!(
+            "SQLite-to-record export has been removed; use `atelier export --check` only for targeted freshness diagnostics"
+        );
+    }
     let outcome = atelier_app::export::canonical_export(atelier_app::Request {
         input: atelier_app::export::CanonicalExportRequest {
             db,
@@ -2479,25 +2484,15 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         },
     })?;
     let view = outcome.value.data;
-    if view.check {
-        if view.stale_entries.is_empty() {
-            println!("Canonical export is current");
-            println!("State: {}", view.state_dir.display());
-            Ok(())
-        } else {
-            bail!(
-                "Canonical export is stale:\n{}",
-                view.stale_entries.join("\n")
-            )
-        }
-    } else {
-        println!("Canonical export written");
+    if view.stale_entries.is_empty() {
+        println!("Canonical record cache is current");
         println!("State: {}", view.state_dir.display());
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier check");
         Ok(())
+    } else {
+        bail!(
+            "Canonical record cache is stale:\n{}",
+            view.stale_entries.join("\n")
+        )
     }
 }
 

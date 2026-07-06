@@ -15,7 +15,7 @@ fn issue_from_cache(row: super::IssueCacheRow) -> Issue {
         status: row.status,
         issue_type: row.issue_type,
         priority: row.priority,
-        fields: Default::default(),
+        fields: row.fields,
         parent_id: row.parent_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -35,25 +35,32 @@ impl Database {
             );
         }
 
-        let fields_json = serde_json::to_string(&issue.fields)?;
-        self.conn.execute(
-            "INSERT INTO issues (id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![
-                issue.id,
-                issue.title,
-                issue.description,
-                issue.status,
-                issue.issue_type,
-                issue.priority,
-                fields_json,
-                issue.parent_id,
-                issue.created_at.to_rfc3339(),
-                issue.updated_at.to_rfc3339(),
-                issue.closed_at.as_ref().map(DateTime::<Utc>::to_rfc3339),
-            ],
-        )?;
-        Ok(())
+        self.index_issue(
+            &super::IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title.clone(),
+                status: issue.status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                fields: issue.fields.clone(),
+                parent_id: issue.parent_id.clone(),
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &super::RecordSourceCacheRow {
+                path: format!("issues/{}.md", issue.id),
+                record_kind: "issue".to_string(),
+                record_id: issue.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
     }
 
     pub fn insert_issue_import(&self, issue: &Issue) -> Result<()> {
@@ -308,7 +315,7 @@ impl Database {
     ) -> Result<bool> {
         let id = id.to_string();
         let rows = self.conn.execute(
-            "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDATE issue_index SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
             params![parent_id, updated_at.to_rfc3339(), id],
         )?;
         Ok(rows > 0)

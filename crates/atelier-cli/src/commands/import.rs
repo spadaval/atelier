@@ -9,6 +9,9 @@ use std::path::Path;
 use crate::record_id;
 use crate::utils::format_issue_id;
 use atelier_core::{Issue, IssuePriority};
+use atelier_records::{
+    relationship_target, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
+};
 use atelier_sqlite::Database;
 
 #[derive(Debug, Deserialize)]
@@ -74,7 +77,8 @@ struct LossyField {
 
 pub fn run_beads_jsonl(db: &Database, input_path: &Path, state_dir: &Path) -> Result<()> {
     let report = import_beads_jsonl(db, input_path)?;
-    atelier_app::export::run_canonical(db, state_dir, false)?;
+    write_imported_records(input_path, state_dir, &report.id_mapping)?;
+    atelier_sqlite::projection_index::refresh(db, state_dir)?;
 
     println!("Imported Beads backup from {}", input_path.display());
     println!("  source records: {}", report.source_records);
@@ -94,6 +98,74 @@ pub fn run_beads_jsonl(db: &Database, input_path: &Path, state_dir: &Path) -> Re
         }
     }
 
+    Ok(())
+}
+
+fn write_imported_records(
+    input_path: &Path,
+    state_dir: &Path,
+    id_mapping: &BTreeMap<String, String>,
+) -> Result<()> {
+    let content = fs::read_to_string(input_path).context("Failed to read Beads import file")?;
+    let mut source_records = Vec::new();
+    for (line_number, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record: BeadsIssue = serde_json::from_str(line)
+            .with_context(|| format!("Failed to parse Beads JSONL line {}", line_number + 1))?;
+        if record.record_type == "issue" {
+            source_records.push(record);
+        }
+    }
+
+    let mut issues = BTreeMap::new();
+    let mut relationships = BTreeMap::new();
+    let mut labels = BTreeMap::new();
+    for source in &source_records {
+        let id = mapped_id(id_mapping, &source.id)?;
+        let mut ignored_lossy_fields = Vec::new();
+        issues.insert(
+            id.clone(),
+            imported_issue(source, id.clone(), &mut ignored_lossy_fields)?,
+        );
+        relationships.insert(id.clone(), Relationships::default());
+        labels.insert(id, source.labels.clone().unwrap_or_default());
+    }
+
+    for source in &source_records {
+        let issue_id = mapped_id(id_mapping, &source.id)?;
+        for dependency in source.dependencies.as_deref().unwrap_or_default() {
+            let depends_on_id = mapped_id(id_mapping, &dependency.depends_on_id)?;
+            match dependency.dependency_type.as_str() {
+                "parent-child" => {
+                    issues.get_mut(&issue_id).unwrap().parent_id = Some(depends_on_id.clone());
+                    relationships
+                        .get_mut(&depends_on_id)
+                        .unwrap()
+                        .children
+                        .push(relationship_target("issue", &issue_id));
+                }
+                "blocks" => relationships
+                    .get_mut(&depends_on_id)
+                    .unwrap()
+                    .blocks
+                    .push(relationship_target("issue", &issue_id)),
+                _ => {}
+            }
+        }
+    }
+
+    let store = RecordStore::new(state_dir);
+    for (id, issue) in issues {
+        let sections = IssueSections::unchecked_from_body(issue.description.as_deref());
+        store.write_issue_atomic(&CanonicalIssueRecord {
+            issue,
+            labels: labels.remove(&id).unwrap_or_default(),
+            sections,
+            relationships: relationships.remove(&id).unwrap_or_default(),
+        })?;
+    }
     Ok(())
 }
 

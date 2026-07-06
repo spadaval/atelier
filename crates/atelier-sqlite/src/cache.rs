@@ -1,12 +1,13 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
+use std::collections::BTreeMap;
 
 use crate::{parse_datetime, Database};
 
 /// Domain-cache schema identity. A mismatch means the ignored cache must be rebuilt.
 pub const CACHE_APPLICATION_ID: i32 = 0x4154_4c52; // "ATLR"
-pub const CACHE_SCHEMA_VERSION: i32 = 1;
+pub const CACHE_SCHEMA_VERSION: i32 = 2;
 
 pub const DOMAIN_CACHE_TABLES: &[&str] = &[
     "issue_index",
@@ -53,6 +54,7 @@ pub struct IssueCacheRow {
     pub status: String,
     pub issue_type: String,
     pub priority: String,
+    pub fields: BTreeMap<String, serde_json::Value>,
     pub parent_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -147,6 +149,17 @@ impl Database {
                 status TEXT NOT NULL,
                 issue_type TEXT NOT NULL,
                 priority TEXT NOT NULL,
+                review_kind TEXT,
+                review_id TEXT,
+                review_provider TEXT,
+                review_number INTEGER,
+                workflow_owner_issue_id TEXT,
+                workflow_work_branch TEXT,
+                workflow_branch_base TEXT,
+                workflow_review_target TEXT,
+                workflow_integration_target TEXT,
+                workflow_owner_kind TEXT,
+                workflow_merge_strategy TEXT,
                 parent_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -267,14 +280,44 @@ impl Database {
             self.remove_issue_rows(&issue.id)?;
             self.conn.execute(
                 "INSERT INTO issue_index
-                 (id, title, status, issue_type, priority, parent_id, created_at, updated_at, closed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                 (id, title, status, issue_type, priority, review_kind, review_id, review_provider,
+                  review_number, workflow_owner_issue_id, workflow_work_branch, workflow_branch_base,
+                  workflow_review_target, workflow_integration_target, workflow_owner_kind,
+                  workflow_merge_strategy, parent_id, created_at, updated_at, closed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
                 params![
                     issue.id,
                     issue.title,
                     issue.status,
                     issue.issue_type,
                     issue.priority,
+                    issue
+                        .fields
+                        .get("review")
+                        .and_then(|value| value.get("kind"))
+                        .and_then(serde_json::Value::as_str),
+                    issue
+                        .fields
+                        .get("review")
+                        .and_then(|value| value.get("id"))
+                        .and_then(serde_json::Value::as_str),
+                    issue
+                        .fields
+                        .get("review")
+                        .and_then(|value| value.get("provider"))
+                        .and_then(serde_json::Value::as_str),
+                    issue
+                        .fields
+                        .get("review")
+                        .and_then(|value| value.get("number"))
+                        .and_then(serde_json::Value::as_i64),
+                    field_str(&issue.fields, "workflow_branch", "owner_issue_id"),
+                    field_str(&issue.fields, "workflow_branch", "work_branch"),
+                    field_str(&issue.fields, "workflow_branch", "branch_base"),
+                    field_str(&issue.fields, "workflow_branch", "review_target"),
+                    field_str(&issue.fields, "workflow_branch", "integration_target"),
+                    field_str(&issue.fields, "workflow_branch", "owner_kind"),
+                    field_str(&issue.fields, "workflow_branch", "merge_strategy"),
                     issue.parent_id,
                     issue.created_at.to_rfc3339(),
                     issue.updated_at.to_rfc3339(),
@@ -348,8 +391,10 @@ impl Database {
     pub fn issue_cache_row(&self, id: &str) -> Result<Option<IssueCacheRow>> {
         self.conn
             .query_row(
-                "SELECT id, title, status, issue_type, priority, parent_id,
-                        created_at, updated_at, closed_at
+                "SELECT id, title, status, issue_type, priority, review_kind, review_id,
+                        review_provider, review_number, workflow_owner_issue_id, workflow_work_branch,
+                        workflow_branch_base, workflow_review_target, workflow_integration_target,
+                        workflow_owner_kind, workflow_merge_strategy, parent_id, created_at, updated_at, closed_at
                  FROM issue_index WHERE id = ?1",
                 [id],
                 issue_cache_row,
@@ -392,8 +437,11 @@ impl Database {
 
     pub fn query_issue_cache(&self, query: &IssueCacheQuery<'_>) -> Result<Vec<IssueCacheRow>> {
         let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.status, i.issue_type, i.priority, i.parent_id,
-                    i.created_at, i.updated_at, i.closed_at
+            "SELECT DISTINCT i.id, i.title, i.status, i.issue_type, i.priority, i.review_kind,
+                    i.review_id, i.review_provider, i.review_number, i.workflow_owner_issue_id,
+                    i.workflow_work_branch, i.workflow_branch_base, i.workflow_review_target,
+                    i.workflow_integration_target, i.workflow_owner_kind, i.workflow_merge_strategy,
+                    i.parent_id, i.created_at, i.updated_at, i.closed_at
              FROM issue_index i",
         );
         let mut clauses = Vec::new();
@@ -832,17 +880,69 @@ impl Database {
 }
 
 fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
+    let review_kind = row.get::<_, Option<String>>(5)?;
+    let mut fields = BTreeMap::new();
+    if let Some(kind) = review_kind {
+        let mut review = serde_json::Map::new();
+        review.insert("kind".to_string(), serde_json::Value::String(kind));
+        if let Some(id) = row.get::<_, Option<String>>(6)? {
+            review.insert("id".to_string(), serde_json::Value::String(id));
+        }
+        if let Some(provider) = row.get::<_, Option<String>>(7)? {
+            review.insert("provider".to_string(), serde_json::Value::String(provider));
+        }
+        if let Some(number) = row.get::<_, Option<i64>>(8)? {
+            review.insert(
+                "number".to_string(),
+                serde_json::Value::Number(number.into()),
+            );
+        }
+        fields.insert("review".to_string(), serde_json::Value::Object(review));
+    }
+    let workflow_values = [
+        ("owner_issue_id", 9),
+        ("work_branch", 10),
+        ("branch_base", 11),
+        ("review_target", 12),
+        ("integration_target", 13),
+        ("owner_kind", 14),
+        ("merge_strategy", 15),
+    ];
+    let mut workflow = serde_json::Map::new();
+    for (name, index) in workflow_values {
+        if let Some(value) = row.get::<_, Option<String>>(index)? {
+            workflow.insert(name.to_string(), serde_json::Value::String(value));
+        }
+    }
+    if !workflow.is_empty() {
+        fields.insert(
+            "workflow_branch".to_string(),
+            serde_json::Value::Object(workflow),
+        );
+    }
     Ok(IssueCacheRow {
         id: row.get(0)?,
         title: row.get(1)?,
         status: row.get(2)?,
         issue_type: row.get(3)?,
         priority: row.get(4)?,
-        parent_id: row.get(5)?,
-        created_at: parse_datetime(row.get(6)?),
-        updated_at: parse_datetime(row.get(7)?),
-        closed_at: row.get::<_, Option<String>>(8)?.map(parse_datetime),
+        fields,
+        parent_id: row.get(16)?,
+        created_at: parse_datetime(row.get(17)?),
+        updated_at: parse_datetime(row.get(18)?),
+        closed_at: row.get::<_, Option<String>>(19)?.map(parse_datetime),
     })
+}
+
+fn field_str<'a>(
+    fields: &'a BTreeMap<String, serde_json::Value>,
+    field: &str,
+    key: &str,
+) -> Option<&'a str> {
+    fields
+        .get(field)
+        .and_then(|value| value.get(key))
+        .and_then(serde_json::Value::as_str)
 }
 
 fn issue_relation_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRelationCacheRow> {
@@ -944,6 +1044,7 @@ mod tests {
             status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "P1".to_string(),
+            fields: BTreeMap::new(),
             parent_id: None,
             created_at: timestamp(1),
             updated_at: timestamp(revision),

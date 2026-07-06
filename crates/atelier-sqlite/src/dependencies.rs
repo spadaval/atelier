@@ -21,7 +21,7 @@ impl Database {
         }
 
         let result = self.conn.execute(
-            "INSERT OR IGNORE INTO dependencies (blocker_id, blocked_id) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO issue_block_index (blocker_id, blocked_id) VALUES (?1, ?2)",
             params![blocker_id, blocked_id],
         )?;
         Ok(result > 0)
@@ -59,7 +59,7 @@ impl Database {
         let blocked_id = blocked_id.to_string();
         let blocker_id = blocker_id.to_string();
         let rows = self.conn.execute(
-            "DELETE FROM dependencies WHERE blocker_id = ?1 AND blocked_id = ?2",
+            "DELETE FROM issue_block_index WHERE blocker_id = ?1 AND blocked_id = ?2",
             params![blocker_id, blocked_id],
         )?;
         Ok(rows > 0)

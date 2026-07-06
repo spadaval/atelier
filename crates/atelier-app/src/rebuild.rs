@@ -885,6 +885,7 @@ fn index_canonical_issue(
         status: issue.issue.status.clone(),
         issue_type: issue.issue.issue_type.clone(),
         priority: issue.issue.priority.clone(),
+        fields: issue.issue.fields.clone(),
         parent_id: parent_id.map(str::to_string),
         created_at: issue.issue.created_at,
         updated_at: issue.issue.updated_at,

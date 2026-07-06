@@ -28,7 +28,7 @@ impl Database {
         };
         let now = Utc::now().to_rfc3339();
         let result = self.conn.execute(
-            "INSERT OR IGNORE INTO relations (issue_id_1, issue_id_2, relation_type, created_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR IGNORE INTO issue_relation_index (source_issue_id, target_issue_id, relation_type, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![a, b, relation_type, now],
         )?;
         Ok(result > 0)
@@ -58,7 +58,7 @@ impl Database {
             (issue_id_2, issue_id_1)
         };
         let rows = self.conn.execute(
-            "DELETE FROM relations WHERE issue_id_1 = ?1 AND issue_id_2 = ?2 AND relation_type = ?3",
+            "DELETE FROM issue_relation_index WHERE source_issue_id = ?1 AND target_issue_id = ?2 AND relation_type = ?3",
             params![a, b, relation_type],
         )?;
         Ok(rows > 0)
