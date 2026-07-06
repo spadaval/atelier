@@ -67,7 +67,8 @@ allocator must not rely on a SQLite sequence as the source of durable identity.
 First-class non-issue record kinds are registered centrally in code with their
 record directory, schema, and schema version. Rebuild, cache indexing, and link
 validation consume that registry instead of carrying command-local record-kind
-lists. The active v1 non-issue kinds are missions and evidence. Plan,
+lists. The active v1 non-issue kinds are evidence and review. Missions use the
+issue record contract and are issue records with `issue_type: "mission"`. Plan,
 milestone/checkpoint, workflow validator, and session/run records are deferred
 until later contracts introduce them directly.
 
@@ -327,9 +328,11 @@ Ownership is intentionally split:
   events into sidecar events. Its cwd-based `.atelier` discovery is tolerated
   only at the command boundary for callers that do not already carry a
   `StorageLayout`.
-- `RecordStore` owns first-class issue, mission, and evidence records. It must
-  not absorb activity event payloads or project activity into record
-  `relationships`.
+- `RecordStore` owns first-class issue, evidence, and review record files;
+  mission objectives use the issue record contract with
+  `issue_type: "mission"`. Rebuild and cache-source coverage therefore spans
+  issue, evidence, and review. `RecordStore` must not absorb activity event
+  payloads or project activity into record `relationships`.
 - `rebuild`, `check`, `history`, import conversion, issue note commands, issue
   detail views, and tests consume sidecars through
   `atelier-records::activity` directly or through app-level workflows built on
