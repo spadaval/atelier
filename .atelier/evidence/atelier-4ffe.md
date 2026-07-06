@@ -86,4 +86,3 @@ Truncated: yes
         PASS [   0.029s] (29/75) atelier-cli::cli_integration setup_guidance::test_prune_apply_removes_only_expired_diagnostics_logs
         PASS [   0.340s]
 ```
-
