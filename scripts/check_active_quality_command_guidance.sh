@@ -6,6 +6,7 @@ docs_index="$repo_root/docs/index.md"
 quality_index="$repo_root/docs/architecture/quality/index.md"
 command_surface_source="$repo_root/crates/atelier-app/src/command_surface.rs"
 command_audit_index="$repo_root/docs/product/command-audit/index.md"
+category_review="$repo_root/docs/product/command-audit/category-review.md"
 
 rg -Fq 'docs/architecture/quality/index.md' "$docs_index"
 
@@ -18,18 +19,70 @@ mapfile -t quality_docs < <(
   exit 1
 }
 
+index_section_links() {
+  local start=$1
+  local end=$2
+  sed -n "/^## $start/,/^## $end/p" "$command_audit_index" |
+    rg -o '^[-] \[[^]]+\]' | sed -E 's/^- \[([^]]+)\]/\1/'
+}
+
+mapfile -t visible_roots < <(
+  index_section_links 'Current Help-Visible Root Command Files' 'Hidden Advanced Or Migration Command Notes'
+)
+
+mapfile -t hidden_index_roots < <(
+  index_section_links 'Hidden Advanced Or Migration Command Notes' 'Cross-Cutting Audit Artifacts'
+)
+
+mapfile -t retired_index_roots < <(
+  index_section_links 'Retired Or Deferred Notes' 'Summary'
+)
+
+mapfile -t verdict_removed_roots < <(
+  {
+    rg --no-filename '^# (Removed|Retired|Deferred) `atelier [a-z0-9-]+`' \
+      "$repo_root"/docs/product/command-audit/*.md |
+      sed -E 's/^# (Removed|Retired|Deferred) `atelier ([a-z0-9-]+)`.*/\2/'
+    awk -F'|' '
+      tolower($3) ~ /(remove|retire)/ {
+        surface = $2
+        if (match(surface, /`[^`]+`/)) {
+          surface = substr(surface, RSTART + 1, RLENGTH - 2)
+          split(surface, words, /[[:space:]\/]+/)
+          print words[1]
+        }
+      }
+    ' "$category_review"
+  } | sort -u
+)
+
 mapfile -t removed_roots < <(
   {
     sed -n '/^const REMOVED_ROOTS:/,/^];/p' "$command_surface_source" |
       rg -o '"[^"]+"' | tr -d '"'
-    sed -n '/^## Retired Or Deferred Notes/,/^## Summary/p' "$command_audit_index" |
-      rg -o '^[-] \[[^]]+\]' | sed -E 's/^- \[([^]]+)\]/\1/'
+    printf '%s\n' "${retired_index_roots[@]}" "${verdict_removed_roots[@]}"
     # Additional root aliases are recorded in cli-surface.md's Removed Behavior
     # section rather than represented as Rust root enum variants.
     printf '%s\n' \
       prime dep claim import create show list ready close update block unblock \
-      relate related tree cascade falsify finish current-work stop
+      relate related tree cascade falsify finish current-work stop worker orchestrator
   } | sort -u
+)
+
+array_contains() {
+  local needle=$1
+  shift
+  local value
+  for value in "$@"; do
+    [[ "$value" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+mapfile -t restricted_roots < <(
+  for root in "${hidden_index_roots[@]}"; do
+    array_contains "$root" "${verdict_removed_roots[@]}" || printf '%s\n' "$root"
+  done | sort -u
 )
 
 mapfile -t removed_paths < <(
@@ -51,6 +104,7 @@ join_alternatives() {
 
 root_alternatives=$(join_alternatives "${removed_roots[@]}")
 path_alternatives=$(join_alternatives "${removed_paths[@]}")
+restricted_root_alternatives=$(join_alternatives "${restricted_roots[@]}")
 atelier_prefix='(target/debug/)?atelier '
 command_boundary='([[:space:]`]|$)'
 
@@ -63,7 +117,7 @@ prohibited_command_pattern="$atelier_prefix((${root_alternatives})${command_boun
 # These commands can remain callable as hidden/admin implementation surfaces,
 # but active quality guidance may name them only with an explicit setup,
 # recovery, migration, historical, or diagnostic boundary.
-restricted_command_pattern="$atelier_prefix((lint|doctor|export|rebuild|import-beads)${command_boundary}|workflow check${command_boundary}|diagnostics slow${command_boundary}|branch${command_boundary}|forgejo${command_boundary})"
+restricted_command_pattern="$atelier_prefix((${restricted_root_alternatives})${command_boundary})"
 restricted_context_pattern='(^|[^[:alnum:]_-])(hidden|admin|setup|recovery|repair|migration|diagnostic|debug|historical|non-normative)([^[:alnum:]_-]|$)|implementation probe|not (a |the )?(normal|routine|workflow)'
 
 active_content() {
@@ -122,17 +176,88 @@ missing_index_entries() {
   done
 }
 
+run_inventory() {
+  local failures=0
+  local root
+  local -a help_roots=()
+  local -a audit_token_roots=()
+
+  mapfile -t help_roots < <(
+    target/debug/atelier --help |
+      awk '
+        /^Common commands:/ { exit }
+        /^[A-Za-z][^:]*:$/ { in_section = 1; next }
+        in_section && /^  [a-z][a-z0-9-]+[[:space:]]/ { print $1 }
+      ' | sort -u
+  )
+
+  for root in "${visible_roots[@]}"; do
+    if ! array_contains "$root" "${help_roots[@]}"; then
+      printf 'inventory: audit-visible root missing from current help: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+  for root in "${help_roots[@]}"; do
+    if ! array_contains "$root" "${visible_roots[@]}"; then
+      printf 'inventory: current help root missing from visible audit category: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for root in "${hidden_index_roots[@]}"; do
+    if array_contains "$root" "${verdict_removed_roots[@]}"; then
+      array_contains "$root" "${removed_roots[@]}" || {
+        printf 'inventory: Removed hidden-category root is not prohibited: %s\n' "$root" >&2
+        failures=$((failures + 1))
+      }
+    elif ! array_contains "$root" "${restricted_roots[@]}"; then
+      printf 'inventory: hidden-category root lacks context restriction: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for root in "${retired_index_roots[@]}" "${verdict_removed_roots[@]}"; do
+    if ! array_contains "$root" "${removed_roots[@]}"; then
+      printf 'inventory: authoritative Removed/Retired root is not prohibited: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  mapfile -t audit_token_roots < <(
+    rg -o --no-filename '`(target/debug/)?atelier [a-z0-9-]+' \
+      "$repo_root"/docs/product/command-audit/*.md |
+      sed -E 's/^`(target\/debug\/)?atelier //' | rg -v '^-' | sort -u
+  )
+  for root in "${audit_token_roots[@]}"; do
+    if ! array_contains "$root" "${visible_roots[@]}" &&
+      ! array_contains "$root" "${hidden_index_roots[@]}" &&
+      ! array_contains "$root" "${removed_roots[@]}" &&
+      [[ "$root" != help ]]; then
+      printf 'inventory: command-audit token root is outside categorized inventory: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  ((failures == 0)) || exit 1
+  printf 'command inventory passed: %d visible, %d hidden, %d removed, %d audit-token root(s)\n' \
+    "${#visible_roots[@]}" "${#hidden_index_roots[@]}" "${#removed_roots[@]}" "${#audit_token_roots[@]}"
+}
+
 run_self_test() {
   local failures=0
   local checked=0
+  local root
   local example
   local output
   local -a prohibited_examples=()
-  local -a restricted_examples=(
-    'atelier lint'
+  local -a restricted_examples=()
+
+  for root in "${restricted_roots[@]}"; do
+    restricted_examples+=("atelier $root")
+  done
+  restricted_examples+=(
     'atelier doctor --fix'
     'atelier export --check'
-    'atelier rebuild'
     'atelier import-beads backup.jsonl'
     'atelier workflow check'
     'atelier diagnostics slow'
@@ -147,6 +272,7 @@ run_self_test() {
     prohibited_examples+=("atelier $example")
   done
   prohibited_examples+=(
+    'atelier maintenance'
     'atelier issue close atelier-demo --reason done'
     'atelier issue claim atelier-demo'
     'atelier issue new demo'
@@ -181,6 +307,22 @@ run_self_test() {
     'atelier history --actor worker'
     'atelier history --since 2026-01-01'
   )
+
+  for root in "${retired_index_roots[@]}" "${verdict_removed_roots[@]}"; do
+    if ! array_contains "$root" "${removed_roots[@]}"; then
+      printf 'self-test missing authoritative removed root classification: %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+    if ! array_contains "atelier $root" "${prohibited_examples[@]}"; then
+      printf 'self-test missing generated prohibited fixture: atelier %s\n' "$root" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  if ! array_contains maintenance "${verdict_removed_roots[@]}"; then
+    printf 'self-test did not derive maintenance from a Removed verdict\n' >&2
+    failures=$((failures + 1))
+  fi
 
   for example in "${prohibited_examples[@]}" "${restricted_examples[@]}"; do
     checked=$((checked + 1))
@@ -228,8 +370,13 @@ if [[ ${1:-} == '--self-test' ]]; then
   exit 0
 fi
 
+if [[ ${1:-} == '--inventory' ]]; then
+  run_inventory
+  exit 0
+fi
+
 if (($# > 0)); then
-  printf 'usage: %s [--self-test]\n' "$0" >&2
+  printf 'usage: %s [--self-test|--inventory]\n' "$0" >&2
   exit 2
 fi
 
