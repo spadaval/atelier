@@ -371,8 +371,9 @@ record_graph_node_has_indented_relation() {
 inline_suffix_is_data_context() {
   local suffix=${1,,}
   local descriptor='((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?'
+  local descriptor_verb='(represent(ed|ing|ation)?|encod(e|ed|ing)|encoding|denot(e|ed|ing)|model(ed|ing)?|stor(e|ed|ing)|storage|set|setting|assign(ed|ing)?|treat(ed|ing)?|us(e|ed|ing)|usage)'
   local as_or_for_pattern="^[[:space:]]+(as|for)[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
-  local descriptor_usage_pattern="^[[:space:]]+(to|for|when)[[:space:]]+([[:alpha:]][[:alnum:]_-]*[[:space:]]+){1,3}(as[[:space:]]+)?(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
+  local descriptor_usage_pattern="^[[:space:]]+(to|for|when)[[:space:]]+((continue|remain)[[:space:]]+to[[:space:]]+)*(be[[:space:]]+)?$descriptor_verb([[:space:]]+as)?[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
   local immediate_descriptor_pattern='^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$)'
 
   [[ "$suffix" =~ $as_or_for_pattern ]] ||
@@ -385,7 +386,7 @@ inline_context_is_action() {
   local after=${2,,}
   local label_pattern='(^|[|])[[:space:]]*([[:alnum:]_-]+[[:space:]]+)*(command|workflow|route)[[:space:]]*((is|remains)[[:space:]]+|:[[:space:]]*|[|][[:space:]]*|$)'
   local directive_pattern='(^|.*[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|adopt|adopts|adopted|pick|picks|picked)([[:space:]]+(the|this|command))?[[:space:]]*$'
-  local migration_pattern='(^|.*[^[:alnum:]_-])((switch|migrate|move|transition|shift)(ed|s)?|fall(s|ing)?[[:space:]]+back|fell[[:space:]]+back|revert(ed|s)?)([[:space:]]+(from[[:space:]]+)?[[:alnum:]_.:/-]+){0,5}[[:space:]]+to[[:space:]]*$'
+  local migration_pattern='(^|.*[^[:alnum:]_-])((switch|migrate|move|transition|shift)(ed|s)?|fall(s|ing)?[[:space:]]+back|fell[[:space:]]+back|revert(ed|s)?)([[:space:]]+[^|]*)?[[:space:]]+to[[:space:]]*$'
   local ownership_pattern='(^|[^[:alnum:]_-])(owns?|handles?|serves?|validates|reports?|mutates?|((is|are|remains?)[[:space:]]+)?(responsible|accountable)[[:space:]]+for)([^[:alnum:]_-]|$)'
 
   [[ "$before" =~ $label_pattern ]] ||
@@ -418,14 +419,12 @@ scan_content() {
   local single_command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
   local inline_remaining
   local inline_before
-  local inline_before_window
   local inline_after
   local inline_after_segment
-  local inline_after_window
   local list_shape_regex
   local structural_kind
   local line_is_fence_data
-  local shell_prompt_pattern='^(\([^)]*\)[[:space:]]+)?[^[:space:]$#%]*[[:space:]]*[$#%][[:space:]]+(.*)$'
+  local shell_prompt_pattern='^.*[$#%][[:space:]]+(.*)$'
   local -a content_lines=()
   local line_index
   local next_hit
@@ -511,14 +510,8 @@ scan_content() {
         inline_before=${inline_remaining%%"$span"*}
         inline_after=${inline_remaining#*"$span"}
         inline_after_segment=${inline_after%%\`*}
-        inline_before_window=$inline_before
-        inline_after_window=$inline_after_segment
-        ((${#inline_before_window} <= 80)) ||
-          inline_before_window=${inline_before_window: -80}
-        ((${#inline_after_window} <= 160)) ||
-          inline_after_window=${inline_after_window:0:160}
         if ! inline_suffix_is_data_context "$inline_after" &&
-          inline_context_is_action "$inline_before_window" "$inline_after_window" &&
+          inline_context_is_action "$inline_before" "$inline_after_segment" &&
           bare_candidate_is_finding "$candidate" "$source" "$heading"; then
           finding=1
           break
@@ -537,7 +530,7 @@ scan_content() {
       if [[ "$structural_candidate" =~ $shell_prompt_pattern ]]; then
         structural_context=1
         structural_kind='shell'
-        structural_candidate=${BASH_REMATCH[2]}
+        structural_candidate=${BASH_REMATCH[1]}
       elif ((line_is_fence_data)); then
         structural_context=0
       else
@@ -1404,6 +1397,109 @@ run_self_test() {
     if [[ -z "$output" ]]; then
       printf 'self-test broadly allowed root+ID without graph structure:\n%s\n' \
         "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent atelier-sa0l declared-grammar cases.
+  example='Move from the old local operator workflow command to `mission show atelier-demo`.'
+  checked=$((checked + 1))
+  output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed exact atelier-sa0l unbounded action case: %s\n' \
+      "$example" >&2
+    failures=$((failures + 1))
+  fi
+
+  example='Use `mission` to continue to be used as the record type.'
+  checked=$((checked + 1))
+  output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+  if [[ -n "$output" ]]; then
+    printf 'self-test false-positive for exact atelier-sa0l passive data case: %s\n' \
+      "$example" >&2
+    failures=$((failures + 1))
+  fi
+
+  example='Use `mission` to show the transition status.'
+  checked=$((checked + 1))
+  output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+  if [[ -z "$output" ]]; then
+    printf 'self-test treated exact atelier-sa0l actionable suffix as data: %s\n' \
+      "$example" >&2
+    failures=$((failures + 1))
+  fi
+
+  for example in \
+    $'```console\n(py) (git:main) user@host$ lint --all\n```' \
+    $'```console\nuser@host ~/repo $ doctor --fix\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-sa0l prompt:\n%s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Neighboring variants prove line-bounded actions have no token cutoff,
+  # descriptor data uses semantic verbs, and prompt recognition is independent
+  # of environment/host/path shape without weakening bare shell lines.
+  for example in \
+    'Transition from the very old local operator workflow command with extra context to `mission show atelier-demo`.' \
+    'Fall back from the inherited local repair and validation route to `doctor --fix`.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed line-bounded action complement: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to represent the record type.' \
+    'Use `mission` to continue to remain to be encoded as the schema type.' \
+    'Select `close` when setting the transition status.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for semantic descriptor data: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to inspect the transition status.' \
+    'Prefer `worker` to show the role value.' \
+    'Select `list` to change the data label.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test treated actionable descriptor suffix as data: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\n(env-a) (env-b) user@host:/repo # doctor --fix\n```' \
+    $'```console\nuser@host ~/deep/path % lint --all\n```' \
+    $'```console\ndoctor --fix\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed generic prompt/non-prompt command:\n%s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\ncost: $5\n```' \
+    $'```console\nprogress: 100% complete\n```' \
+    $'```console\nvalue # comment\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for literal prompt marker:\n%s\n' "$example" >&2
       failures=$((failures + 1))
     fi
   done
