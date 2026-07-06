@@ -62,6 +62,17 @@ pub enum IncrementalRepair {
     NeedsFullRebuild,
 }
 
+#[derive(Debug)]
+struct NeedsFullRebuildAbort;
+
+impl std::fmt::Display for NeedsFullRebuildAbort {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("incremental repair requires a full rebuild")
+    }
+}
+
+impl std::error::Error for NeedsFullRebuildAbort {}
+
 pub fn repair_incremental(
     db: &Database,
     state_dir: &Path,
@@ -103,40 +114,52 @@ pub fn repair_incremental(
         }
     });
 
-    for problem in problems {
-        match problem {
-            source_freshness::SourceFreshnessProblem::MissingMetadata { .. } => {
-                return Ok(IncrementalRepair::NeedsFullRebuild);
-            }
-            source_freshness::SourceFreshnessProblem::MissingSource { path } => {
-                let Some(source) = stored_by_path.get(path.as_str()) else {
-                    return Ok(IncrementalRepair::NeedsFullRebuild);
-                };
-                if remove_missing_source(db, source)? == IncrementalRepair::NeedsFullRebuild {
-                    return Ok(IncrementalRepair::NeedsFullRebuild);
+    // One outer transaction owns the complete bounded candidate set. The
+    // per-domain indexers join it, so a later parse/index failure or a request
+    // for full rebuild cannot expose an earlier candidate's rows or metadata.
+    let result = db.transaction(|| {
+        for problem in problems {
+            match problem {
+                source_freshness::SourceFreshnessProblem::MissingMetadata { .. } => {
+                    return Err(NeedsFullRebuildAbort.into());
                 }
-            }
-            source_freshness::SourceFreshnessProblem::ChangedSource { path }
-            | source_freshness::SourceFreshnessProblem::UnindexedSource { path } => {
-                let Some(spec) = canonical_spec_for_path(path) else {
-                    return Ok(IncrementalRepair::NeedsFullRebuild);
-                };
-                let relative = Path::new(path);
-                let record = store.load_record_at(relative, spec).with_context(|| {
-                    format!(
-                        "Failed to parse changed record file {}",
-                        display_state_path(relative)
-                    )
-                })?;
-                if index_changed_record(db, state_dir, path, record)?
-                    == IncrementalRepair::NeedsFullRebuild
-                {
-                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                source_freshness::SourceFreshnessProblem::MissingSource { path } => {
+                    let Some(source) = stored_by_path.get(path.as_str()) else {
+                        return Err(NeedsFullRebuildAbort.into());
+                    };
+                    if remove_missing_source(db, source)? == IncrementalRepair::NeedsFullRebuild {
+                        return Err(NeedsFullRebuildAbort.into());
+                    }
+                }
+                source_freshness::SourceFreshnessProblem::ChangedSource { path }
+                | source_freshness::SourceFreshnessProblem::UnindexedSource { path } => {
+                    let Some(spec) = canonical_spec_for_path(path) else {
+                        return Err(NeedsFullRebuildAbort.into());
+                    };
+                    let relative = Path::new(path);
+                    let record = store.load_record_at(relative, spec).with_context(|| {
+                        format!(
+                            "Failed to parse changed record file {}",
+                            display_state_path(relative)
+                        )
+                    })?;
+                    if index_changed_record(db, state_dir, path, record)?
+                        == IncrementalRepair::NeedsFullRebuild
+                    {
+                        return Err(NeedsFullRebuildAbort.into());
+                    }
                 }
             }
         }
+        Ok(())
+    });
+    match result {
+        Ok(()) => Ok(IncrementalRepair::Repaired),
+        Err(error) if error.downcast_ref::<NeedsFullRebuildAbort>().is_some() => {
+            Ok(IncrementalRepair::NeedsFullRebuild)
+        }
+        Err(error) => Err(error),
     }
-    Ok(IncrementalRepair::Repaired)
 }
 
 struct CacheRebuildLock {
@@ -1810,6 +1833,31 @@ mod tests {
     }
 
     #[test]
+    fn more_than_32_candidates_fall_back_without_changing_cache() {
+        let (_directory, state_dir, db_path) = setup();
+        let ids = write_domain_set(&state_dir, "wide0", 1);
+        run(&state_dir, &db_path).unwrap();
+        let database = Database::open(&db_path).unwrap();
+        let before_rows = snapshot(&database);
+        let before_sources = database.record_source_cache_rows().unwrap();
+        let problems = (0..33)
+            .map(
+                |index| source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: format!("issues/atelier-wide{index}.md"),
+                },
+            )
+            .collect();
+
+        assert_eq!(
+            repair_incremental(&database, &state_dir, &report(problems)).unwrap(),
+            IncrementalRepair::NeedsFullRebuild
+        );
+        assert_eq!(snapshot(&database), before_rows);
+        assert_eq!(database.record_source_cache_rows().unwrap(), before_sources);
+        assert!(database.issue_cache_row(&ids[0]).unwrap().is_some());
+    }
+
+    #[test]
     fn cross_domain_graph_change_requests_one_safe_full_rebuild() {
         let (_directory, state_dir, db_path) = setup();
         let first = write_domain_set(&state_dir, "graph", 1);
@@ -1930,6 +1978,50 @@ mod tests {
                 .unwrap(),
             before_source
         );
+    }
+
+    #[test]
+    fn later_parse_failure_rolls_back_every_earlier_incremental_repair() {
+        let (_directory, state_dir, db_path) = setup();
+        let ids = write_domain_set(&state_dir, "bat0", 1);
+        run(&state_dir, &db_path).unwrap();
+        let database = Database::open(&db_path).unwrap();
+        let before_rows = snapshot(&database);
+        let before_sources = database.record_source_cache_rows().unwrap();
+
+        write_issue(
+            &state_dir,
+            &ids[0],
+            "Valid earlier update",
+            2,
+            vec!["changed"],
+            Relationships::default(),
+        );
+        let paths = domain_paths(&ids);
+        fs::write(state_dir.join(&paths[2]), "invalid review YAML").unwrap();
+
+        let error = repair_incremental(
+            &database,
+            &state_dir,
+            &report(vec![
+                source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: paths[0].clone(),
+                },
+                source_freshness::SourceFreshnessProblem::ChangedSource {
+                    path: paths[2].clone(),
+                },
+            ]),
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Failed to parse changed record file"),
+            "unexpected error: {error:#}"
+        );
+        assert_eq!(snapshot(&database), before_rows);
+        assert_eq!(database.record_source_cache_rows().unwrap(), before_sources);
     }
 
     #[test]

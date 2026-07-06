@@ -253,12 +253,17 @@ impl Database {
     }
 
     /// Execute a closure within a database transaction.
-    /// If the closure returns Ok, the transaction is committed.
-    /// If the closure returns Err, the transaction is rolled back.
+    /// If the closure returns Ok, the outermost transaction is committed.
+    /// If the closure returns Err, the outermost transaction is rolled back.
+    /// Nested calls join the existing transaction so a batch owner can compose
+    /// the per-domain cache indexers without allowing partial commits.
     pub fn transaction<T, F>(&self, f: F) -> Result<T>
     where
         F: FnOnce() -> Result<T>,
     {
+        if !self.conn.is_autocommit() {
+            return f();
+        }
         self.conn.execute("BEGIN TRANSACTION", [])?;
         match f() {
             Ok(result) => {

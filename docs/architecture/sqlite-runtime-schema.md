@@ -98,6 +98,14 @@ allows. Commands whose result controls orchestration, validation, or closeout
 must not answer from known-stale cache rows; they rebuild, report a record-file
 error, or fail with actionable repair guidance.
 
+A bounded incremental repair owns one outer SQLite transaction for the complete
+candidate set; the per-domain indexer transactions join that boundary. Any
+later parse/index failure or full-rebuild decision rolls back every earlier
+candidate row and `record_source_index` update before fallback starts. Full
+rebuild writes a temporary cache and swaps it into place only after success, so
+if incremental repair and full rebuild both fail, degraded orientation reopens
+the exact prior last-good cache rather than a partially repaired hybrid.
+
 ## Versioning And Migration
 
 The database has a cache schema version. A version mismatch, corrupt database,

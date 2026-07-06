@@ -332,10 +332,13 @@ pub fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atelier_core::{EvidenceRecordData, Record};
-    use atelier_records::RecordStore;
+    use atelier_core::{
+        EvidenceRecordData, Issue, IssueSections, Record, RecordHeader, ReviewRecord,
+    };
+    use atelier_records::{CanonicalIssueRecord, RecordStore, Relationships};
     use chrono::Utc;
     use rusqlite::Connection;
+    use std::collections::BTreeMap;
     use std::fs;
     use tempfile::TempDir;
 
@@ -379,6 +382,59 @@ mod tests {
             .unwrap()
             .header
             .id
+    }
+
+    fn write_issue(manager: &CacheManager, title: &str) -> String {
+        let id = "atelier-good1".to_string();
+        let now = Utc::now();
+        RecordStore::new(manager.state_dir())
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: Issue {
+                    id: id.clone(),
+                    title: title.to_string(),
+                    description: None,
+                    status: "todo".to_string(),
+                    issue_type: "task".to_string(),
+                    priority: "high".to_string(),
+                    fields: BTreeMap::new(),
+                    parent_id: None,
+                    created_at: now,
+                    updated_at: now,
+                    closed_at: None,
+                },
+                labels: vec!["cache-test".to_string()],
+                sections: IssueSections::unchecked_from_body(Some(
+                    "## Description\n\nFixture issue.\n\n## Outcome\n\nCache remains atomic.",
+                )),
+                relationships: Relationships::default(),
+            })
+            .unwrap();
+        id
+    }
+
+    fn create_review(manager: &CacheManager, issue_id: &str) -> String {
+        let id = "atelier-room1".to_string();
+        let now = Utc::now();
+        RecordStore::new(manager.state_dir())
+            .write_record_atomic(&Record::Review(ReviewRecord {
+                header: RecordHeader {
+                    kind: "review".to_string(),
+                    id: id.clone(),
+                    title: "Cache repair review".to_string(),
+                    status: "open".to_string(),
+                    labels: Vec::new(),
+                    relationships: Relationships::default(),
+                    created_at: now,
+                    updated_at: now,
+                },
+                mode: "room".to_string(),
+                issue_id: issue_id.to_string(),
+                source_branch: "codex/cache-repair".to_string(),
+                target_branch: "master".to_string(),
+                events: Vec::new(),
+            }))
+            .unwrap();
+        id
     }
 
     #[test]
@@ -511,11 +567,20 @@ mod tests {
     #[test]
     fn orientation_can_degrade_but_decision_queries_reject_known_stale_rows() {
         let (_dir, manager) = test_manager();
+        let issue_id = write_issue(&manager, "Last good issue");
+        let review_id = create_review(&manager, &issue_id);
         manager.get_cache(CacheUse::Decision).unwrap();
-        fs::create_dir_all(manager.state_dir().join("evidence")).unwrap();
+        let before_sources = Database::open(&manager.db_path())
+            .unwrap()
+            .record_source_cache_rows()
+            .unwrap();
+
+        write_issue(&manager, "Valid earlier update");
         fs::write(
-            manager.state_dir().join("evidence/atelier-bad1.md"),
-            "not an evidence record file",
+            manager
+                .state_dir()
+                .join(format!("reviews/{review_id}.yaml")),
+            "not valid review YAML",
         )
         .unwrap();
 
@@ -523,6 +588,19 @@ mod tests {
         assert_eq!(
             orientation.preparation(),
             &CachePreparation::OrientationDegraded
+        );
+        assert_eq!(
+            orientation
+                .db()
+                .issue_cache_row(&issue_id)
+                .unwrap()
+                .unwrap()
+                .title,
+            "Last good issue"
+        );
+        assert_eq!(
+            orientation.db().record_source_cache_rows().unwrap(),
+            before_sources
         );
         drop(orientation);
 
