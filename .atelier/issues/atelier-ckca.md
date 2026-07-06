@@ -48,5 +48,10 @@ Rewrite the SQLite cache schema and rebuild code to use domain-shaped tables ins
 
 ## Evidence
 
-- The cache schema contains domain query tables and cache source metadata.
-- The generic records table is removed or demoted from the target cache model.
+- Evidence `atelier-eoec`, `atelier-nixw`, and `atelier-4uqh` prove the domain
+  tables/source metadata, shared rebuild and incremental indexers, and command
+  query cutover through focused SQLite, app, and CLI tests.
+- Evidence `atelier-8szj` and `atelier-evxl` prove the completed hard cutover
+  with 90/90 app tests and 546/546 full SQLite/app/CLI tests; independent review
+  evidence `atelier-9isp` confirms generic tables, reverse export, and the
+  standalone `ProjectionIndex` are removed.
