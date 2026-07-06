@@ -11,6 +11,7 @@ pub mod health;
 pub mod init;
 pub mod issue_read;
 pub mod lint;
+pub mod mission_overview;
 pub mod objective_graph;
 pub mod pr;
 pub mod project_config;
