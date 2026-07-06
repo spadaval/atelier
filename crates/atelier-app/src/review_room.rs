@@ -3,14 +3,14 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
-use atelier_core::{Record, RecordHeader, Relationships, ReviewRecord};
+use atelier_core::{IssueReview, RecordHeader, Relationships, ReviewRecord};
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
 use serde_json::{json, Value};
 
 use crate::project_config::{ProjectConfig, ReviewConfig};
-use crate::workflow_policy::{self, REVIEW_FIELD};
+use crate::workflow_policy;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RoomOpenRequest<'a> {
@@ -183,16 +183,12 @@ pub fn open(db: &Database, request: RoomOpenRequest<'_>) -> Result<RoomOpenOutco
             None,
         )],
     };
-    store.write_record_atomic(&Record::Review(record))?;
+    store.write_review_atomic(&record)?;
 
     let mut owner = store.load_issue_by_id(&resolution.owner_id)?;
-    owner.issue.fields.insert(
-        REVIEW_FIELD.to_string(),
-        json!({
-            "kind": "room",
-            "id": review_id,
-        }),
-    );
+    owner
+        .issue
+        .set_review(IssueReview::room(review_id.clone())?);
     owner.issue.updated_at = Utc::now();
     store.write_issue_atomic(&owner)?;
 
@@ -418,18 +414,12 @@ fn append_decision(
 fn write_room(state_dir: &Path, _db_path: &Path, record: ReviewRecord) -> Result<()> {
     let mut record = record;
     record.header.updated_at = Utc::now();
-    RecordStore::new(state_dir).write_record_atomic(&Record::Review(record))
+    RecordStore::new(state_dir).write_review_atomic(&record)
 }
 
 fn linked_room(db: &Database, state_dir: &Path, issue_id: &str) -> Result<ReviewRecord> {
     let review_id = linked_room_id(db, issue_id)?;
-    match RecordStore::new(state_dir).load_record_by_id("review", &review_id)? {
-        Record::Review(record) => Ok(record),
-        other => bail!(
-            "review_room_invalid: expected review record, found {}",
-            other.kind()
-        ),
-    }
+    RecordStore::new(state_dir).load_review_by_id(&review_id)
 }
 
 fn linked_room_id(db: &Database, issue_id: &str) -> Result<String> {
@@ -440,13 +430,12 @@ fn linked_room_id(db: &Database, issue_id: &str) -> Result<String> {
             issue_id
         )
     })?;
-    field
-        .as_object()
-        .filter(|object| object.get("kind").and_then(Value::as_str) == Some("room"))
-        .and_then(|object| object.get("id"))
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| anyhow!("review_mode_invalid: linked review field is not a native room"))
+    match IssueReview::from_value(&field) {
+        Ok(IssueReview::Room { id }) => Ok(id),
+        Ok(IssueReview::ForgejoPullRequest { .. }) | Err(_) => Err(anyhow!(
+            "review_mode_invalid: linked review field is not a native room"
+        )),
+    }
 }
 
 fn status_for_record(issue_id: String, record: &ReviewRecord) -> RoomStatusOutcome {
@@ -815,6 +804,18 @@ mode = "room"
         )
         .unwrap();
         assert_eq!(open.status, "open");
+        let store = RecordStore::new(&state_dir);
+        let owner = store.load_issue_by_id("atelier-issue").unwrap();
+        assert_eq!(
+            owner.issue.review().unwrap(),
+            Some(IssueReview::Room {
+                id: open.review_id.clone()
+            })
+        );
+        assert_eq!(
+            store.load_review_by_id(&open.review_id).unwrap().issue_id,
+            "atelier-issue"
+        );
         drop(db);
         crate::rebuild::run(&state_dir, &db_path).unwrap();
         let db = Database::open(&db_path).unwrap();
