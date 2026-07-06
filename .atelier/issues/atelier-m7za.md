@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-07-06T21:01:57.029624179+00:00"
+status: "done"
 title: "Validate lazy cache behavior for batch writes"
-updated_at: "2026-07-06T20:57:19.010435831+00:00"
+updated_at: "2026-07-06T21:01:57.029624179+00:00"
 ---
 
 ## Description

@@ -33,9 +33,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-06T21:03:53.935922226+00:00"
+status: "done"
 title: "Epic: Validate and document cache architecture rewrite"
-updated_at: "2026-07-06T20:40:14.001900070+00:00"
+updated_at: "2026-07-06T21:03:53.935922226+00:00"
 ---
 
 ## Description
