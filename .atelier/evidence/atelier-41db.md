@@ -67,4 +67,3 @@ Truncated: no
 ```text
 bash: line 7: test: : integer expression expected
 ```
-

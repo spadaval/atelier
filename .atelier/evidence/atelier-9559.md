@@ -88,4 +88,3 @@ Truncated: yes
         PASS [   0.017s] ( 31/713) atelier-app project_config::tests::invalid_forgejo_config_names_and_legacy_role_authors
         PASS [   0.014s] ( 32/713) atelier-app project_config::tests::missing_forgejo_config_is_actionabl
 ```
-
