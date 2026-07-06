@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Implement domain-shaped cache tables"
-updated_at: "2026-06-23T16:21:20.080499829+00:00"
+updated_at: "2026-07-06T18:06:41.317193330+00:00"
 ---
 
 ## Description
