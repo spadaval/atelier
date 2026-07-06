@@ -389,7 +389,7 @@ than through Agent Factory prose alone.
   focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
-- Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
+- Hidden diagnostic JSON from commands such as `atelier diagnostics slow` is valid
   only for local Atelier performance and telemetry analysis. It is not proof of
   ready work, blockers, validation results, evidence coverage, or completion
   readiness.

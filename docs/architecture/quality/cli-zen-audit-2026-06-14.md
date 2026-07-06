@@ -1,4 +1,11 @@
-# CLI Zen Audit, 2026-06-14
+# Historical CLI Zen Audit, 2026-06-14 (Non-Normative)
+
+This document preserves a June 14 command-surface snapshot and the findings it
+generated. Command examples such as `atelier mission create --help` describe
+the surface observed during that audit; they are historical evidence, not
+current workflow guidance or compatibility aliases. Current operators use
+`atelier --help`, [CLI Surface Tiers](../../product/cli-surface.md), and
+workflow-backed issue commands.
 
 This audit compares Atelier's visible CLI surface with `docs/product/zen.md`.
 It uses current command help, the product CLI/work-model docs, and the command
