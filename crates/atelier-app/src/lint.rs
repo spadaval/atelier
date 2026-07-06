@@ -76,13 +76,14 @@ pub fn lint(
     request: crate::Request<LintRequest<'_>>,
 ) -> Result<crate::Outcome<crate::ViewModel<LintView>>> {
     let input = request.input;
-    let issues = if let Some(issue_ref) = input.issue_ref {
+    let mut issues: Vec<Issue> = if let Some(issue_ref) = input.issue_ref {
         let id = resolve_issue_id(input.db, issue_ref)?;
-        vec![input
+        input
             .db
             .issue_cache_row(&id)?
             .map(issue_from_cache)
-            .ok_or_else(|| anyhow!("Issue {id} was not found"))?]
+            .into_iter()
+            .collect()
     } else {
         input
             .db
@@ -151,6 +152,12 @@ pub fn lint(
     } else {
         (BTreeMap::new(), Vec::new())
     };
+
+    for record in canonical_issues.values() {
+        if !issues.iter().any(|issue| issue.id == record.issue.id) {
+            issues.push(record.issue.clone());
+        }
+    }
 
     let mut findings = canonical_findings;
     for issue in issues {
@@ -277,6 +284,14 @@ pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
             actual_kind,
             show_command_for_kind(actual_kind, issue_ref)
         );
+    }
+
+    if issue_ref.contains('-')
+        && issue_ref.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
+    {
+        return Ok(issue_ref.to_string());
     }
 
     Err(anyhow!("Issue {issue_ref} was not found"))

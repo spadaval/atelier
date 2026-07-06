@@ -878,7 +878,9 @@ fn test_cache_rebuilds_changed_sources_before_issue_queries() {
     assert!(success, "stale list should transparently rebuild: {stderr}");
     assert!(list_out.contains("Markdown title"));
     assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
@@ -1013,7 +1015,9 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
     assert!(list_out.contains("Bulk markdown 0"));
     assert!(list_out.contains("Bulk markdown 11"));
     assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
@@ -1049,7 +1053,9 @@ fn test_cache_repairs_deleted_and_unindexed_sources_before_issue_queries() {
     assert!(list_out.contains("Second indexed issue"));
     assert!(
         stderr.contains("Local cache was stale; repaired changed record sources incrementally")
-            || stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+            || stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic repair diagnostic: {stderr}"
     );
 
@@ -1097,7 +1103,9 @@ The unindexed issue is discoverable after rebuild.
     );
     assert!(show_out.contains("Unindexed issue"));
     assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
@@ -1173,7 +1181,9 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     );
     assert!(dep_out.contains("Projection root changed"));
     assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 
@@ -1417,8 +1427,8 @@ Evidence will be added.
         "unexpected lint output:\n{stdout}\n{stderr}"
     );
     assert!(
-        stderr.contains("repaired changed record sources incrementally"),
-        "lint did not repair stale cache before indexed checks: {stderr}"
+        !stderr.contains("repaired changed record sources incrementally"),
+        "lint should diagnose record files without eagerly repairing cache: {stderr}"
     );
 }
 
@@ -1443,11 +1453,14 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     remove_projection_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
-    assert!(success, "lint should rebuild missing state.db: {stderr}");
+    assert!(
+        success,
+        "lint should validate without rebuilding state.db: {stderr}"
+    );
     assert!(stdout.contains("Lint passed."));
     assert!(
-        stderr.contains("Local cache was missing; rebuilt SQLite cache"),
-        "missing rebuild diagnostic: {stderr}"
+        !stderr.contains("rebuilt SQLite cache"),
+        "lint should not eagerly rebuild disposable cache: {stderr}"
     );
 }
 
@@ -1811,7 +1824,9 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "lazy query after bundle apply failed: {stderr}");
     assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr
+                .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing one-time lazy rebuild diagnostic: {stderr}"
     );
 

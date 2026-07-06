@@ -831,6 +831,7 @@ mod tests {
     use atelier_records::{
         relationship_target, CanonicalIssueRecord, IssueSections, Relationships,
     };
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
     use chrono::Utc;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
@@ -965,8 +966,40 @@ repo = "atelier"
         parent_id: Option<&str>,
         fields: BTreeMap<String, Value>,
     ) {
-        db.insert_issue_rebuild(&fixture_issue(id, issue_type, status, parent_id, fields))
-            .unwrap();
+        index_fixture_issue(
+            db,
+            &fixture_issue(id, issue_type, status, parent_id, fields),
+        );
+    }
+
+    fn index_fixture_issue(db: &Database, issue: &Issue) {
+        db.index_issue(
+            &IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title.clone(),
+                status: issue.status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                fields: issue.fields.clone(),
+                parent_id: issue.parent_id.clone(),
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{}.md", issue.id),
+                record_kind: "issue".to_string(),
+                record_id: issue.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
+        .unwrap();
     }
 
     fn insert_record_issue(
@@ -999,7 +1032,7 @@ repo = "atelier"
                 .push(relationship_target("issue", id));
             store.write_issue_atomic(&parent).unwrap();
         }
-        db.insert_issue_rebuild(&issue).unwrap();
+        index_fixture_issue(db, &issue);
     }
 
     fn pull_request_fields(number: u64) -> BTreeMap<String, Value> {

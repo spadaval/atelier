@@ -21,6 +21,9 @@ use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
 
+const MAX_ISSUE_TITLE_LEN: usize = 512;
+const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
     pub id: String,
@@ -1869,6 +1872,12 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
+    if input.title.len() > MAX_ISSUE_TITLE_LEN {
+        bail!(
+            "Title exceeds maximum length of {} characters",
+            MAX_ISSUE_TITLE_LEN
+        );
+    }
     if input.issue_type != "mission"
         && (!input.constraints.is_empty()
             || !input.risks.is_empty()
@@ -1889,6 +1898,15 @@ pub fn create_lifecycle(
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
     let description = lifecycle_issue_description(&input);
+    if description
+        .as_ref()
+        .is_some_and(|description| description.len() > MAX_ISSUE_DESCRIPTION_LEN)
+    {
+        bail!(
+            "Description exceeds maximum length of {} bytes",
+            MAX_ISSUE_DESCRIPTION_LEN
+        );
+    }
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
@@ -2403,7 +2421,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     println!("State: {}", view.state_dir.display());
     if view.fix {
         println!("Repair:");
-        println!("  local_projection: repaired");
+        println!("  local_cache: repaired");
         println!("  canonical_records: unchanged");
     }
     println!("Install health:");
@@ -2518,6 +2536,7 @@ pub fn validate_priority(priority: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -2529,8 +2548,12 @@ mod tests {
     #[test]
     fn dependency_rows_include_context_and_open_blocker_marker() {
         let (db, _dir) = setup_test_db();
-        let blocked = db.create_issue("Blocked issue", None, "medium").unwrap();
-        let blocker = db.create_issue("Blocking issue", None, "high").unwrap();
+        let blocked = db
+            .cache_fixture_issue("Blocked issue", None, "medium")
+            .unwrap();
+        let blocker = db
+            .cache_fixture_issue("Blocking issue", None, "high")
+            .unwrap();
         db.add_dependency(&blocked, &blocker).unwrap();
 
         let rows = dependency_rows_for_text(&db, db.get_blockers(&blocked).unwrap(), true).unwrap();
@@ -2544,14 +2567,14 @@ mod tests {
     #[test]
     fn subissue_summary_counts_statuses_and_priorities() {
         let (db, _dir) = setup_test_db();
-        let parent = db.create_issue("Parent", None, "high").unwrap();
+        let parent = db.cache_fixture_issue("Parent", None, "high").unwrap();
         let child_a = db
-            .create_subissue(&parent, "First child", None, "high")
+            .cache_fixture_subissue(&parent, "First child", None, "high")
             .unwrap();
         let child_b = db
-            .create_subissue(&parent, "Second child", None, "low")
+            .cache_fixture_subissue(&parent, "Second child", None, "low")
             .unwrap();
-        db.close_issue(&child_b).unwrap();
+        db.cache_fixture_close(&child_b).unwrap();
 
         let subissues = db.get_subissues(&parent).unwrap();
         let summary = subissue_summary(&subissues);

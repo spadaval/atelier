@@ -690,6 +690,7 @@ fn current_actor() -> String {
 mod tests {
     use super::*;
     use atelier_core::{Issue, IssueSections};
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
     use tempfile::tempdir;
 
     fn setup_repo() -> (tempfile::TempDir, Database) {
@@ -740,7 +741,7 @@ mode = "room"
         parent_id: Option<&str>,
     ) {
         let now = Utc::now();
-        db.insert_issue_rebuild(&Issue {
+        let issue = Issue {
             id: id.to_string(),
             title: id.to_string(),
             description: Some("body".to_string()),
@@ -752,10 +753,36 @@ mode = "room"
             created_at: now,
             updated_at: now,
             closed_at: None,
-        })
+        };
+        db.index_issue(
+            &IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title.clone(),
+                status: issue.status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                fields: issue.fields.clone(),
+                parent_id: issue.parent_id.clone(),
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{id}.md"),
+                record_kind: "issue".to_string(),
+                record_id: id.to_string(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
+        )
         .unwrap();
         let record = atelier_records::CanonicalIssueRecord {
-            issue: db.require_issue(id).unwrap(),
+            issue,
             labels: Vec::new(),
             sections: IssueSections::unchecked_from_body(Some(
                 "## Description\n\nbody\n\n## Outcome\n\nworks\n\n## Evidence\n\nproof",

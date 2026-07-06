@@ -118,10 +118,11 @@ pub fn branch_decision_cache() -> Result<CacheAccess> {
     cache(CacheUse::Decision)
 }
 
-/// Lint combines canonical diagnostics with indexed cross-record rules, so it
-/// must never inspect those rules through a known-stale cache.
+/// Lint owns canonical parse diagnostics and must be able to report malformed
+/// record files before cache repair is possible. It opens the last cache state
+/// without repairing it, then validates record files directly.
 pub fn lint_cache() -> Result<CacheAccess> {
-    cache(CacheUse::Decision)
+    CacheManager::discover()?.open_cache_for_health()
 }
 
 pub fn open_database(db_path: &Path) -> Result<Database> {

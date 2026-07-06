@@ -865,7 +865,7 @@ fn run() -> Result<()> {
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
-            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+            let storage = CacheManager::discover()?.open_cache_for_health()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -884,16 +884,12 @@ fn run() -> Result<()> {
         }
 
         Commands::ImportBeads { input, output } => {
-            let storage = use_cases::mutation_cache()?;
+            let storage = CacheManager::discover()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
-            commands::import::run_beads_jsonl(
-                storage.db(),
-                std::path::Path::new(&input),
-                &state_dir,
-            )
+            commands::import::run_beads_jsonl(std::path::Path::new(&input), &state_dir)
         }
 
         Commands::Bundle { action } => match action {

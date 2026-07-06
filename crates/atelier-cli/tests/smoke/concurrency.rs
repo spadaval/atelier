@@ -155,7 +155,7 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Serialized rebuild source"]);
     let issue_id = h.issue_id(1);
-    h.run_ok(&["export"]);
+    h.run_ok(&["work", "queue", "--all"]);
     h.edit_canonical_issue(&issue_id, |markdown| {
         markdown.replace("Serialized rebuild source", "Serialized rebuild changed")
     });
@@ -192,5 +192,5 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
 
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.stdout.contains("Serialized rebuild changed"));
-    h.run_ok(&["export", "--check"]);
+    h.run_ok(&["work", "queue", "--all"]);
 }

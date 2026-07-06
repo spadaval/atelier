@@ -1,9 +1,6 @@
 use anyhow::{bail, Result};
-use chrono::{DateTime, Utc};
-use rusqlite::params;
 
-use super::{validate_issue_type, validate_priority, validate_status, Database, IssueCacheQuery};
-use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
+use super::{validate_status, Database, IssueCacheQuery};
 use crate::record_id;
 use atelier_core::{Issue, IssuePriority};
 
@@ -24,115 +21,6 @@ fn issue_from_cache(row: super::IssueCacheRow) -> Issue {
 }
 
 impl Database {
-    pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
-        validate_priority(&issue.priority)?;
-        validate_status(&issue.status)?;
-        validate_issue_type(&issue.issue_type)?;
-        if issue.title.len() > MAX_TITLE_LEN {
-            anyhow::bail!(
-                "Title exceeds maximum length of {} characters",
-                MAX_TITLE_LEN
-            );
-        }
-
-        self.index_issue(
-            &super::IssueCacheRow {
-                id: issue.id.clone(),
-                title: issue.title.clone(),
-                status: issue.status.clone(),
-                issue_type: issue.issue_type.clone(),
-                priority: issue.priority.clone(),
-                fields: issue.fields.clone(),
-                parent_id: issue.parent_id.clone(),
-                created_at: issue.created_at,
-                updated_at: issue.updated_at,
-                closed_at: issue.closed_at,
-            },
-            &[],
-            &[],
-            &[],
-            &super::RecordSourceCacheRow {
-                path: format!("issues/{}.md", issue.id),
-                record_kind: "issue".to_string(),
-                record_id: issue.id.clone(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: Utc::now(),
-            },
-        )
-    }
-
-    pub fn insert_issue_import(&self, issue: &Issue) -> Result<()> {
-        if let Some(description) = &issue.description {
-            validate_description_length(description)?;
-        }
-        self.insert_issue_rebuild(issue)?;
-        Ok(())
-    }
-    pub fn create_issue(
-        &self,
-        title: &str,
-        description: Option<&str>,
-        priority: &str,
-    ) -> Result<String> {
-        self.create_issue_with_parent(title, description, priority, "task", None)
-    }
-    pub fn create_subissue(
-        &self,
-        parent_id: &str,
-        title: &str,
-        description: Option<&str>,
-        priority: &str,
-    ) -> Result<String> {
-        self.create_issue_with_parent(title, description, priority, "task", Some(parent_id))
-    }
-    pub fn create_issue_with_type(
-        &self,
-        title: &str,
-        description: Option<&str>,
-        priority: &str,
-        issue_type: &str,
-    ) -> Result<String> {
-        self.create_issue_with_parent(title, description, priority, issue_type, None)
-    }
-    fn create_issue_with_parent(
-        &self,
-        title: &str,
-        description: Option<&str>,
-        priority: &str,
-        issue_type: &str,
-        parent_id: Option<&str>,
-    ) -> Result<String> {
-        validate_priority(priority)?;
-        validate_issue_type(issue_type)?;
-        if title.len() > MAX_TITLE_LEN {
-            anyhow::bail!(
-                "Title exceeds maximum length of {} characters",
-                MAX_TITLE_LEN
-            );
-        }
-        if let Some(d) = description {
-            if d.len() > MAX_DESCRIPTION_LEN {
-                anyhow::bail!(
-                    "Description exceeds maximum length of {} bytes",
-                    MAX_DESCRIPTION_LEN
-                );
-            }
-        }
-        if let Some(parent_id) = parent_id {
-            record_id::validate_record_id(parent_id)?;
-        }
-        let id =
-            record_id::allocate_issue_id(|candidate| Ok(self.get_issue(candidate)?.is_some()))?;
-        let now = Utc::now().to_rfc3339();
-        self.conn.execute(
-            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, fields_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', '{}', ?7, ?7)",
-            params![id, title, description, priority, issue_type, parent_id, now],
-        )?;
-        Ok(id)
-    }
-
     pub fn get_subissues(&self, parent_id: impl ToString) -> Result<Vec<Issue>> {
         let parent_id = parent_id.to_string();
         Ok(self
@@ -214,112 +102,6 @@ impl Database {
             .map(issue_from_cache)
             .collect())
     }
-    pub fn update_issue(
-        &self,
-        id: impl ToString,
-        title: Option<&str>,
-        description: Option<&str>,
-        priority: Option<&str>,
-    ) -> Result<bool> {
-        if let Some(t) = title {
-            if t.len() > MAX_TITLE_LEN {
-                anyhow::bail!(
-                    "Title exceeds maximum length of {} characters",
-                    MAX_TITLE_LEN
-                );
-            }
-        }
-        if let Some(d) = description {
-            if d.len() > MAX_DESCRIPTION_LEN {
-                anyhow::bail!(
-                    "Description exceeds maximum length of {} bytes",
-                    MAX_DESCRIPTION_LEN
-                );
-            }
-        }
-        if let Some(p) = priority {
-            validate_priority(p)?;
-        }
-
-        let now = Utc::now().to_rfc3339();
-        let mut updates = vec!["updated_at = ?1".to_string()];
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(now)];
-
-        if let Some(t) = title {
-            updates.push(format!("title = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(t.to_string()));
-        }
-
-        if let Some(d) = description {
-            updates.push(format!("description = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(d.to_string()));
-        }
-
-        if let Some(p) = priority {
-            updates.push(format!("priority = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(p.to_string()));
-        }
-
-        params_vec.push(Box::new(id.to_string()));
-        let sql = format!(
-            "UPDATE issues SET {} WHERE id = ?{}",
-            updates.join(", "),
-            params_vec.len()
-        );
-
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = self.conn.execute(&sql, params_refs.as_slice())?;
-        Ok(rows > 0)
-    }
-    pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
-        let id = id.to_string();
-        let now = Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE issues SET status = 'done', closed_at = ?1, updated_at = ?1 WHERE id = ?2",
-            params![now, id],
-        )?;
-        Ok(rows > 0)
-    }
-    pub fn reopen_issue(&self, id: impl ToString) -> Result<bool> {
-        let id = id.to_string();
-        let now = Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE issues SET status = 'todo', closed_at = NULL, updated_at = ?1 WHERE id = ?2",
-            params![now, id],
-        )?;
-        Ok(rows > 0)
-    }
-    pub fn delete_issue(&self, id: impl ToString) -> Result<bool> {
-        let id = id.to_string();
-        let rows = self
-            .conn
-            .execute("DELETE FROM issues WHERE id = ?1", [id])?;
-        Ok(rows > 0)
-    }
-    pub fn update_parent(&self, id: impl ToString, parent_id: Option<&str>) -> Result<bool> {
-        let id = id.to_string();
-        let now = chrono::Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
-            params![parent_id, now, id],
-        )?;
-        Ok(rows > 0)
-    }
-
-    pub fn update_parent_import(
-        &self,
-        id: impl ToString,
-        parent_id: Option<&str>,
-        updated_at: &DateTime<Utc>,
-    ) -> Result<bool> {
-        let id = id.to_string();
-        let rows = self.conn.execute(
-            "UPDATE issue_index SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
-            params![parent_id, updated_at.to_rfc3339(), id],
-        )?;
-        Ok(rows > 0)
-    }
 
     /// Search issues by query string across titles and descriptions.
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
@@ -334,17 +116,6 @@ impl Database {
 
 fn format_issue_id(id: &str) -> String {
     id.to_string()
-}
-
-fn validate_description_length(description: &str) -> Result<()> {
-    if description.len() <= MAX_DESCRIPTION_LEN {
-        return Ok(());
-    }
-
-    bail!(
-        "Description exceeds maximum length of {} bytes",
-        MAX_DESCRIPTION_LEN
-    )
 }
 
 fn is_partial_issue_key(value: &str) -> bool {
