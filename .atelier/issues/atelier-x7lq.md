@@ -33,9 +33,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-06T20:08:06.231758785+00:00"
+status: "done"
 title: "Epic: Lazy cache access and freshness"
-updated_at: "2026-07-06T20:08:01.231069603+00:00"
+updated_at: "2026-07-06T20:08:06.231758785+00:00"
 ---
 
 ## Description
