@@ -10,7 +10,14 @@ closeout. It is a map for closeout auditors, not a repair patch: failed or
 partial classifications name owner issues that must close or explicitly defer
 the work before `atelier-man9` can close.
 
-## Command Surface Inventory
+The command inventories and transcripts below are historical observations from
+2026-06-13. Sections labeled **Historical** are non-normative evidence of the
+surface that existed during that audit; they are not current command guidance
+or compatibility aliases. Current committed-state validation uses
+`atelier check`, and explicit ignored local-state repair uses
+`atelier check --fix`.
+
+## Historical Command Surface Inventory (Non-Normative)
 
 Observed transcript: `target/debug/atelier --help`.
 
@@ -93,9 +100,11 @@ started.
 | `atelier-cve1` | `atelier-c9ej`, `atelier-gzel`, `atelier-4ykl` |
 | `atelier-foy0` | `atelier-3iom`; `atelier-bk6n` remains blocked by this audit until `atelier-ngat` closes |
 
-## Health Transcript
+## Historical Health Transcript (Non-Normative)
 
-Commands run after removing local root `state.db` residue and rebuilding:
+The following commands were run after removing local root `state.db` residue
+during the 2026-06-13 audit. They preserve the historical result only and must
+not be copied as a current health or handoff recipe:
 
 ```bash
 target/debug/atelier rebuild
@@ -112,6 +121,15 @@ Observed results:
 | `lint` | Pass. |
 | `export --check` | Pass. Canonical export is current. |
 | `doctor` | Pass. Config, ignored runtime paths, rebuild readiness, projection freshness, runtime tables, and legacy health all report ok. |
+
+Current equivalent health workflow:
+
+```bash
+target/debug/atelier check
+# Only when ignored local runtime, projection, or cache state is degraded:
+target/debug/atelier check --fix
+target/debug/atelier check
+```
 
 ## Closeout Guidance
 
