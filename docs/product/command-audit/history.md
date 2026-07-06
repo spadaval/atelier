@@ -22,6 +22,16 @@ Primary question: "What happened on this repo, mission, issue, or epic?"
 | `history --issue <id>` | Reviewer | Review issue activity and handoff trail. | Good. |
 | `history --epic <id>` | Reviewer | Review epic activity and descendants. | Good. |
 
+## Complexity Budget
+
+`history` should remain a bounded activity reader, not a second search or query
+language. The root timeline can stay if it is concise. Scoped issue, mission,
+and epic history flags need an explicit value check against recent activity in
+`issue show`, `work mission`, and validation/evidence records.
+
+Verdict for scoped flags: simplify or fold unless full activity trails prove
+necessary for review.
+
 ## Human Output Debt
 
 Current history rows are dense pipe-delimited transcripts. They preserve the

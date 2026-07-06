@@ -24,8 +24,9 @@ the dry run.
 
 ## Command Contract
 
-`atelier prune` reports candidates and protected records. It must not delete
-anything.
+`atelier prune` reports candidates, protected items, and any deferred class. It
+must not delete anything. It is the dry-run command; there is no `--dry-run`
+flag.
 
 `atelier prune --apply` removes eligible candidates from implemented cleanup
 classes. Apply output must name each affected class, removed count, skipped
@@ -40,18 +41,21 @@ do so without reading or mutating tracked records.
 
 Quiet output may collapse paths and record titles to counts and stable tokens,
 but normal output must give enough IDs or paths to inspect the candidate set.
+For every class, the report distinguishes `eligible`, `protected`, `removed`,
+`skipped`, `failed`, and `deferred` as applicable. A deferred class is visible
+but is never removed by `--apply`.
 
 ## Retention Classes
 
-| Class | Default policy | Apply behavior |
+| Class | Default policy | Observable prune behavior and apply safety |
 | --- | --- | --- |
-| Local diagnostics logs | Retain command diagnostics for 30 UTC days unless the operator supplies a command override. | Delete expired ignored diagnostics log files. |
-| Ignored runtime, cache, and projection artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable projections are disposable. | Delete only ignored local files that are not locked and are safe to rebuild; print `doctor --fix` guidance when cleanup affects projection state. |
-| Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Remove eligible terminal records from the active tree. Recovery uses Git history for the removed path or ID. |
-| Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | Remove only evidence metadata records pruned with their sole terminal dependents; do not delete external payloads. |
-| Native review rooms | Keep while the branch owner is open, under review, or has unmerged branch state. | Prune only with the terminal branch owner after review completion and branch integration are proven. |
-| Git branches | Keep base, current, protected, unmerged, unpushed, or owner-active branches. | Delete only non-current owner branches whose owner records are terminal and whose commits are already integrated according to branch policy. |
-| Git worktrees | Keep current, dirty, locked, owner-active, or unmerged worktrees. | Remove only clean non-current worktrees whose owner records are terminal and whose branch state is integrated or separately preserved. |
+| Local diagnostics logs | Retain command diagnostics for 30 UTC days unless the operator supplies a command override. | Reports the UTC cutoff and each expired ignored log; `--apply` deletes only those logs. Failure leaves the log in place and reports its path. |
+| Ignored runtime, cache, and projection artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable projections are disposable. | Reports ignored candidates separately from canonical state. `--apply` deletes only unlocked, rebuildable local files and then names `check --fix` or rebuild recovery when projection state changed. It never treats an ignored file as canonical input. |
+| Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Reports each candidate with an ID/path and protection reason. `--apply` removes only eligible terminal records and their eligible sidecars from a clean tracked checkout, then refreshes the projection. Recovery uses Git history for the removed path or ID. |
+| Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | May remove eligible metadata only with its sole terminal dependents; never deletes an external payload. |
+| Native review rooms | Keep while the branch owner is open, under review, or has unmerged branch state. | Reports owner/review protection. `--apply` prunes only with the terminal owner after review completion and branch integration are proven. |
+| Git branches | Keep base, current, protected, unmerged, unpushed, or owner-active branches. | Reports the branch and its protection reason. `--apply` deletes only non-current owner branches whose terminal owner is eligible and whose commits are already integrated according to branch policy. |
+| Git worktrees | Keep current, dirty, locked, owner-active, or unmerged worktrees. | Reports the worktree and protection reason. `--apply` removes only clean non-current worktrees whose terminal owner and branch state are safe to remove or separately preserved. |
 
 The canonical record retention window defaults to 7 days from the later of the
 record's terminal transition time and its latest activity sidecar. Projects may
@@ -86,6 +90,31 @@ checkout, match the configured base branch, contain commits not integrated into
 the configured base/review target, have a dirty worktree, or are associated with
 active workflow state.
 
+Runtime/cache cleanup is additionally protected when a command lock, active
+rebuild, or current runtime ownership makes deletion unsafe. Diagnostics are
+local-only and may be cleaned independently; a failure to inspect canonical or
+Git state must not turn a local cleanup into a canonical or Git mutation.
+
+## Apply And Recovery Sequence
+
+Before applying cleanup, inspect the dry-run report and resolve every protected
+or failed item that the operator expected to remove. Apply does not force past a
+protection rule. Canonical removal requires a clean tracked checkout; branch
+and worktree removal requires the corresponding Git safety checks; local cleanup
+requires only the class-specific ignored-state safety checks.
+
+After an interrupted or partial apply, rerun `atelier prune` to obtain the new
+candidate set, then use the recovery surface named for the affected class:
+
+- canonical records: inspect the removed path in Git history and restore it if
+  needed;
+- runtime/cache or projection state: run `atelier check --fix` and rerun the
+  original command;
+- Git branches/worktrees: inspect Git state before recreating a checkout or
+  restoring a branch;
+- diagnostics: the reported path is local-only; recovery is not a canonical
+  record restore.
+
 ## Git-History Recovery
 
 Canonical pruning does not write a tracked prune manifest. The active tree
@@ -110,4 +139,4 @@ records by force.
 Exceptional destructive surgery stays under explicit maintenance commands, not
 routine pruning. Operators who need to delete a protected or malformed record
 must use the destructive maintenance surface with force/confirmation semantics
-and then run `atelier lint` plus the recovery commands it names.
+and then run `atelier check` plus the recovery commands it names.

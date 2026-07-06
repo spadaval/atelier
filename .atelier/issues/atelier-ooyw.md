@@ -42,7 +42,7 @@ Update the target-state product contract for removing closeout as a product conc
 
 ## Outcome
 
-- `docs/product/zen.md`, `docs/product/work-model.md`, `docs/product/cli-surface.md`, `docs/product/validation.md`, `docs/architecture/quality/validation.md`, `SPEC.md`, `CONTEXT.md`, and `AGENTFACTORY.md` agree on the new model.
+- `docs/product/zen.md`, `docs/product/work-model.md`, `docs/product/cli-surface.md`, `docs/product/validation.md`, `docs/architecture/quality/validation.md`, `PRODUCT_INTENT.md`, `CONTEXT.md`, and `AGENTFACTORY.md` agree on the new model.
 - The model says issues and epics use normal issue workflow transitions for terminal work.
 - The model says missions keep a simple built-in lifecycle and use shared terminal checks rather than a configurable mission workflow graph.
 - The docs do not introduce readiness as a vague replacement term.
@@ -50,5 +50,5 @@ Update the target-state product contract for removing closeout as a product conc
 ## Evidence
 
 - `git diff` shows the terminology and model changes in the named docs.
-- Command transcript from `rg -n "closeout|Closeout|--closeout" docs/product docs/architecture/quality SPEC.md CONTEXT.md AGENTFACTORY.md` shows no live closeout guidance except intentional historical references.
+- Command transcript from `rg -n "closeout|Closeout|--closeout" docs/product docs/architecture/quality PRODUCT_INTENT.md CONTEXT.md AGENTFACTORY.md` shows no live closeout guidance except intentional historical references.
 - `atelier lint` and `git diff --check` pass.

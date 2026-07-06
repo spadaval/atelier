@@ -49,7 +49,7 @@ implementation slices choose deletion or compaction behavior.
 
 ## Evidence
 
-- File changes in `SPEC.md`, `docs/product/`, `docs/architecture/`, or
+- File changes in `PRODUCT_INTENT.md`, `docs/product/`, `docs/architecture/`, or
   `docs/adr/` demonstrate the contract and link back to the mission validation
   criteria.
 - `rg` or equivalent transcript shows old ambiguous cleanup guidance is not

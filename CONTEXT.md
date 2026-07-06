@@ -37,6 +37,10 @@
   use-case orchestration, and `atelier-cli` for the public `atelier` binary.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
+- Evidence validates relationship: the proof relationship from an evidence
+  record to the issue, mission, epic, or other record whose claim it supports.
+  `validates` is reserved for evidence links; issue-to-issue mission scope uses
+  `advances`.
 - Strong proof: claim-specific evidence that is reproducible from durable
   repository state or recorded transcripts, attached to the accountable work,
   classified with a result, scoped to the claim being made, and independently
@@ -73,6 +77,24 @@
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
+- Base branch: the named integration branch from `branch_policy.base_branch`.
+  It is the repository default target for owner-branch integration unless an
+  explicit mission or epic branch base is recorded by workflow actions.
+- Work branch: the Git branch that owns mutation and review for a branch-owning
+  record. Its canonical name is `<issue_type>/<issue_id>`, such as
+  `epic/atelier-li5h` or `mission/atelier-sszj`; the issue type is the
+  registry key and the issue ID is the canonical record ID.
+- Branch base: the recorded branch/ref and commit from which a work branch was
+  prepared. Review targets, sync, and integration checks use the recorded
+  branch base instead of recomputing a target from the current parent graph.
+- Mission integration branch: the mission work branch named
+  `mission/<issue_id>`. Mission workflows prepare it explicitly with branch
+  actions, and mission scope is still defined by direct `advances` links.
+- Mission publish review: the mission workflow state where mission-scoped work
+  is complete enough to open a review artifact from `mission/<issue_id>` to the
+  configured base branch. This is the explicit handoff to base-branch
+  publication; normal mission execution and scoped work closeout happen on
+  mission-derived branches before this state.
 - Review artifact action: the v1 transition action that opens or links the
   configured review artifact for the branch-owning issue or epic and writes the
   canonical `review` field. It follows the active review mode and must not
@@ -129,7 +151,7 @@
   confirmation to the configured provider. In both modes it does not transition
   Atelier issue workflow.
 - Provider terminal actions: provider-backed workflow actions such as
-  `tracker.commit`, `branch.push`, `review.merge`, and `base.sync` that make
+  `tracker.commit`, `git.push`, `review.merge`, and `git.sync` that make
   the provider review artifact and remote base branch the integration
   authority. They are not aliases for local `branch_integrate`.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
@@ -217,7 +239,7 @@
   epics own reviewable branches, and ordinary issues own local implementation
   proof. Per-issue worktrees or branches are exceptional isolation tools, not
   the default assignment model.
-- Mission lifecycle and closeout policy is workflow-owned. The CLI may provide
+- Mission lifecycle and publish policy is workflow-owned. The CLI may provide
   objective graph summaries and migration helpers, but the valid statuses,
   transitions, validators, and evidence requirements for mission-shaped work
   come from `.atelier/workflow.yaml`.
@@ -229,8 +251,11 @@
   owner branch; standalone issues and epics use provider terminal actions in
   provider mode or explicit `branch_integrate` in local room mode. Squash merge
   is the default local integration strategy, with repository policy able to
-  select alternatives and branch naming templates. A failed close-time
-  commit or merge must not leave the item closed in the integration branch.
+  select merge alternatives but not configurable branch-name templates. Owner
+  branches use canonical `<issue_type>/<issue_id>` names, and optional mission
+  integration branches are created only by configured workflow actions. A failed
+  close-time commit or merge must not leave the item closed in the integration
+  branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic
   modules under `crates/atelier-cli/src/` are migration input for lower crates,

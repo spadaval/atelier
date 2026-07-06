@@ -30,7 +30,7 @@ updated_at: "2026-06-08T21:38:57+00:00"
 ## Description
 
 Close out canonical export/rebuild by proving the runtime-store and repo-state contract works end to end.
-Classify each Milestone 2 criterion from SPEC.md; provide evidence for deterministic export, stale export --check, rebuild from clean checkout-like state, and normal test coverage; name any deferred record families explicitly.
+Classify each Milestone 2 criterion from PRODUCT_INTENT.md; provide evidence for deterministic export, stale export --check, rebuild from clean checkout-like state, and normal test coverage; name any deferred record families explicitly.
 Evidence was not specified in the legacy issue record.
 
 ## Outcome

@@ -35,7 +35,7 @@
 
 ## Documentation
 
-- Update `SPEC.md` when product intent changes.
+- Update `PRODUCT_INTENT.md` when product intent changes.
 - Update `CONTEXT.md` when terminology or model choices change.
 - Add ADRs for costly, surprising, or repeatedly relevant architecture choices.
 - Keep current target-state docs separate from historical rationale.

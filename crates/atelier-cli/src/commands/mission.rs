@@ -27,7 +27,7 @@ pub fn transition_options(db: &Database, id: &str) -> Result<()> {
     if issue.issue_type != "mission" {
         bail!("{id} is not a mission objective issue");
     }
-    crate::commands::issue::transition_options(db, id)
+    crate::commands::issue::transition_options(db, id, false)
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -99,10 +99,10 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     print_mission_heading("Next Commands");
     if let Some(row) = rows.first() {
-        println!("  atelier issue status {}", row.record.id);
+        println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier issue list --status all");
-    println!("  atelier issue list --ready");
+    println!("  atelier issue list --issue-type mission");
+    println!("  atelier work ready");
     Ok(())
 }
 
@@ -194,6 +194,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 crate::commands::objective_status::proof_context(db, &issue.id)?
             );
         }
+        if summary.selectable_work.len() > 5 {
+            println!(
+                "  {} more ready work item(s) omitted",
+                summary.selectable_work.len() - 5
+            );
+        }
     }
 
     print_mission_heading("Blocked Work");
@@ -202,14 +208,25 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     } else {
         for blocked in summary.blocked_work.iter().take(5) {
             println!(
-                "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}; {}; {}",
+                "  blocked {} - {} | {} blocker{}; {}; {}",
                 blocked.issue.id,
                 blocked.issue.title,
                 blocked.blockers.len(),
                 plural_suffix(blocked.blockers.len()),
-                blocked.issue.id,
                 crate::commands::objective_status::parent_context(&blocked.issue),
                 crate::commands::objective_status::proof_context(db, &blocked.issue.id)?
+            );
+        }
+        if summary.blocked_work.len() > 5 {
+            println!(
+                "  {} more blocked work item(s) omitted",
+                summary.blocked_work.len() - 5
+            );
+        }
+        if let Some(blocked) = summary.blocked_work.first() {
+            println!(
+                "  Inspect blockers: atelier issue show {}",
+                blocked.issue.id
             );
         }
     }
@@ -269,8 +286,6 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         }
     }
 
-    print_mission_branch_lifecycle(db, &summary, &active_work)?;
-
     print_mission_heading("Active Work");
     if active_work.is_empty() {
         println!("(none)");
@@ -281,107 +296,6 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     }
 
     print_status_next_commands(&mission, &summary, &terminal);
-    Ok(())
-}
-
-fn print_mission_branch_lifecycle(
-    db: &Database,
-    summary: &MissionListSummary,
-    active_work: &[Issue],
-) -> Result<()> {
-    print_mission_heading("Branch Policy");
-    let current_branch = crate::commands::workflow::current_git_branch()?;
-    println!(
-        "Current branch: {}",
-        current_branch.as_deref().unwrap_or("(detached)")
-    );
-    println!(
-        "Base branch:    {}",
-        crate::commands::workflow::configured_base_branch()?
-    );
-
-    let mut owner_branches = BTreeMap::new();
-    for epic in &summary.epics {
-        if let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, &epic.issue.id)
-        {
-            owner_branches.insert(context.resolution.owner_id.clone(), context);
-        }
-    }
-    for issue in active_work {
-        if let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, &issue.id) {
-            owner_branches.insert(context.resolution.owner_id.clone(), context);
-        }
-    }
-
-    if owner_branches.is_empty() {
-        println!("Owner branches: none");
-    } else {
-        println!("Owner branches:");
-        for context in owner_branches.values() {
-            let ahead = crate::commands::workflow::branch_ahead_count(
-                &context.resolution.expected_branch,
-                &context.resolution.base_branch,
-            )?
-            .map(|count| {
-                if count == 0 {
-                    "merged".to_string()
-                } else {
-                    format!("unmerged ({count} commit(s) ahead of base)")
-                }
-            })
-            .unwrap_or_else(|| "missing".to_string());
-            let current =
-                if current_branch.as_deref() == Some(context.resolution.expected_branch.as_str()) {
-                    "current"
-                } else {
-                    "not current"
-                };
-            println!(
-                "  {} {} ({}) -> {} | {current} | {ahead}",
-                crate::commands::workflow::branch_owner_label(&context.resolution.owner_kind),
-                context.resolution.owner_id,
-                context.resolution.owner_issue_type,
-                context.resolution.expected_branch
-            );
-        }
-    }
-
-    let dirty_entries = active_work
-        .iter()
-        .find_map(|issue| {
-            crate::commands::workflow::branch_lifecycle_context(db, &issue.id)
-                .ok()
-                .map(|context| context.dirty_entries)
-        })
-        .unwrap_or_default();
-    if dirty_entries.is_empty() {
-        println!("Dirty state: clean");
-    } else {
-        println!("Dirty state: dirty ({} entries)", dirty_entries.len());
-    }
-
-    let mismatches = active_work
-        .iter()
-        .filter_map(|issue| {
-            let context =
-                crate::commands::workflow::branch_lifecycle_context(db, &issue.id).ok()?;
-            (context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str()))
-                .then(|| {
-                    format!(
-                        "{} expected {}; inspect `atelier issue transition {} --options` and `atelier status`",
-                        issue.id, context.resolution.expected_branch, issue.id
-                    )
-                })
-        })
-        .collect::<Vec<_>>();
-    if mismatches.is_empty() {
-        println!("Branch mismatches: none");
-    } else {
-        println!("Branch mismatches:");
-        for mismatch in mismatches {
-            println!("  {mismatch}");
-        }
-    }
     Ok(())
 }
 
@@ -412,26 +326,26 @@ fn print_status_next_commands(
         }
         _ => {
             println!(
-                "  Refresh mission status (current blockers and terminal checks): atelier issue status {}",
-                mission.id
-            );
+            "  Refresh mission status (current blockers and terminal checks): atelier issue show {}",
+            mission.id
+        );
         }
     }
     if terminal.ready() {
         println!(
-            "  Close mission (all terminal checks pass): atelier issue transition {} close --reason \"...\"",
+            "  Request mission publish review (all terminal checks pass): atelier issue transition {} request_publish",
             mission.id
         );
     } else {
         println!(
-            "  Inspect terminal check detail: atelier issue status {} --verbose",
+            "  Inspect terminal check detail: atelier issue transition {}",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
             println!("  Resolve open blockers before assigning more implementation work");
         } else if let Some(issue) = summary.selectable_work.first() {
             println!(
-                "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
+                "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {}",
                 summary.selectable_work.len(),
                 issue.id
             );
@@ -488,14 +402,24 @@ fn issue_mission_summary(issue: Issue) -> RecordSummary {
     }
 }
 
-fn normalize_mission_status(status: &str) -> Result<&str> {
-    match status {
-        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(status),
-        _ => bail!(
-            "Invalid mission status '{}'. Must be one of: draft, ready, active, superseded, closed",
-            status
-        ),
+fn normalize_mission_status(status: &str) -> Result<String> {
+    if let Some(policy) = crate::commands::issue_workflow::load_issue_workflow_policy()? {
+        if policy.statuses.contains_key(status) {
+            return Ok(status.to_string());
+        }
+        let valid = policy
+            .statuses
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "Invalid mission status '{}'. Must be one of: {}",
+            status,
+            valid
+        );
     }
+    Ok(status.to_string())
 }
 
 fn mission_lifecycle_status(record: &RecordSummary) -> String {
@@ -503,7 +427,7 @@ fn mission_lifecycle_status(record: &RecordSummary) -> String {
 }
 
 fn is_current_mission_status(status: &str) -> bool {
-    !matches!(status, "closed" | "superseded")
+    mission_status_category(status).as_deref() != Some("done")
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
@@ -604,7 +528,7 @@ fn print_reliability_summary(
                 compact_strings(&section_gaps.malformed)
             };
             println!("Malformed Work: found - {reason}");
-            println!("  Next: atelier lint");
+            println!("  Next: atelier check");
         }
     }
 
@@ -640,8 +564,8 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier issue status {} --verbose", mission.id);
-    println!("  atelier lint");
+    println!("  atelier issue transition {}", mission.id);
+    println!("  atelier check");
     Ok(())
 }
 
@@ -671,7 +595,7 @@ fn print_section_gap_signal(label: &str, ids: &[String]) {
         println!("{label}: none");
     } else {
         println!("{label}: {} issue(s) - {}", ids.len(), compact_strings(ids));
-        println!("  Next: atelier lint");
+        println!("  Next: atelier check");
     }
 }
 
@@ -774,14 +698,13 @@ fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "tracker.current" => Some(("Tracker State", "current", "stale", "atelier doctor --fix")),
         "issue.sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",
             "malformed",
-            "atelier lint",
+            "atelier check",
         )),
-        "lint.none_blocking" => Some(("Blocking Lints", "clear", "failing", "atelier lint")),
+        "lint.none_blocking" => Some(("Blocking Lints", "clear", "failing", "atelier check")),
         "command_surface_current" => Some((
             "Docs/Help Drift",
             "clear",
@@ -798,7 +721,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier issue status {mission}",
+            "atelier issue show {mission}",
         )),
         "objective.work_present" => Some((
             "Linked Work",
@@ -810,13 +733,13 @@ fn terminal_validator_user_text(
             "Linked Work Terminal",
             "closed",
             "open",
-            "atelier issue status {mission}",
+            "atelier issue show {mission}",
         )),
         "objective.blockers_none_open" => Some((
             "Direct Objective Blockers",
             "clear",
             "open",
-            "atelier issue blocked {mission}",
+            "atelier issue show {mission}",
         )),
         "git.worktree_clean" => Some((
             "Checkout",
@@ -829,45 +752,9 @@ fn terminal_validator_user_text(
             "Additional Terminal Check",
             "passed",
             "failed",
-            "atelier issue status {mission}",
+            "atelier issue transition {mission}",
         )),
     }
-}
-
-pub(crate) fn mission_validation_criteria_gate(
-    db: &Database,
-    mission_id: &str,
-) -> Result<(bool, String)> {
-    let approval = mission_workflow_approval(db, mission_id)?;
-    if approval.is_empty() {
-        return Ok((
-            true,
-            "no explicit linked terminal validation work requires workflow approval".to_string(),
-        ));
-    }
-    if approval.open.is_empty() && approval.blocked.is_empty() {
-        return Ok((
-            true,
-            format!(
-                "workflow approval complete via linked terminal validation work: {}",
-                compact_strings(&approval.issue_ids())
-            ),
-        ));
-    }
-    let mut pending = approval
-        .open
-        .iter()
-        .map(|issue| issue.id.clone())
-        .collect::<Vec<_>>();
-    pending.extend(approval.blocked.iter().map(|issue| issue.id.clone()));
-    pending.sort();
-    Ok((
-        false,
-        format!(
-            "workflow approval is still pending on linked terminal validation work: {}",
-            compact_strings(&pending)
-        ),
-    ))
 }
 
 fn validating_evidence_records(
@@ -904,56 +791,6 @@ fn validating_evidence_ids(
         .into_iter()
         .map(|record| record.id)
         .collect())
-}
-
-#[derive(Default)]
-struct MissionWorkflowApproval {
-    done: Vec<Issue>,
-    open: Vec<Issue>,
-    blocked: Vec<Issue>,
-}
-
-impl MissionWorkflowApproval {
-    fn is_empty(&self) -> bool {
-        self.done.is_empty() && self.open.is_empty() && self.blocked.is_empty()
-    }
-
-    fn issue_ids(&self) -> Vec<String> {
-        let mut ids = self
-            .done
-            .iter()
-            .chain(self.open.iter())
-            .chain(self.blocked.iter())
-            .map(|issue| issue.id.clone())
-            .collect::<Vec<_>>();
-        ids.sort();
-        ids
-    }
-}
-
-fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionWorkflowApproval> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut approval = MissionWorkflowApproval::default();
-    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
-        let issue = db.require_issue(&issue_id)?;
-        if issue.issue_type != "validation" {
-            continue;
-        }
-        match crate::commands::issue_workflow::issue_status_category(
-            workflow_policy.as_ref(),
-            &issue.status,
-        )
-        .as_deref()
-        {
-            Some("done") => approval.done.push(issue),
-            Some("blocked") => approval.blocked.push(issue),
-            _ => approval.open.push(issue),
-        }
-    }
-    approval.done.sort_by(|a, b| a.id.cmp(&b.id));
-    approval.open.sort_by(|a, b| a.id.cmp(&b.id));
-    approval.blocked.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(approval)
 }
 
 fn compact_strings(values: &[String]) -> String {
@@ -1007,7 +844,7 @@ fn mission_terminal_status(
             transition: MISSION_TERMINAL_TRANSITION.to_string(),
             validator: "workflow_policy".to_string(),
             passed: false,
-            reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
+            reason: format!("{error:#}; run `atelier check` for workflow/config diagnostics"),
             help: None,
             elapsed_ms: 0,
         }],
@@ -1205,8 +1042,10 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
     mission_status_rank(&mission_lifecycle_status(&a.record))
         .cmp(&mission_status_rank(&mission_lifecycle_status(&b.record)))
         .then_with(|| {
-            if mission_lifecycle_status(&a.record) != "ready"
-                && mission_lifecycle_status(&b.record) != "ready"
+            if mission_status_category(&mission_lifecycle_status(&a.record)).as_deref()
+                != Some("todo")
+                && mission_status_category(&mission_lifecycle_status(&b.record)).as_deref()
+                    != Some("todo")
             {
                 mission_lifecycle_status(&a.record).cmp(&mission_lifecycle_status(&b.record))
             } else {
@@ -1218,14 +1057,20 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
 }
 
 fn mission_status_rank(status: &str) -> u8 {
-    match status {
-        "active" => 0,
-        "ready" => 1,
-        "draft" => 2,
-        "superseded" => 3,
-        "closed" => 5,
+    match mission_status_category(status).as_deref() {
+        Some("active") => 0,
+        Some("todo") => 1,
+        Some("blocked") => 2,
+        Some("done") => 5,
         _ => 4,
     }
+}
+
+fn mission_status_category(status: &str) -> Option<String> {
+    crate::commands::issue_workflow::load_issue_workflow_policy()
+        .ok()
+        .flatten()
+        .and_then(|policy| policy.status_category(status).map(str::to_string))
 }
 
 fn mission_status_summary_text(total: usize, statuses: BTreeMap<String, usize>) -> String {

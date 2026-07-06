@@ -3,10 +3,12 @@
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
 use tempfile::tempdir;
 
 static TEST_ISSUE_IDS: OnceLock<Mutex<HashMap<PathBuf, Vec<String>>>> = OnceLock::new();
@@ -127,9 +129,6 @@ fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
     if needs_git && !dir.join(".git").exists() {
         init_git_repo(dir);
         commit_if_dirty(dir, "test fixture state before workflow command");
-    }
-    if matches!(args, ["issue", "transition", _, "--options"]) && dir.join(".git").exists() {
-        commit_if_dirty(dir, "test fixture state before workflow options");
     }
     if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
         commit_if_dirty(dir, "test fixture state before transition close");
@@ -455,6 +454,21 @@ fn set_prune_canonical_retention_days(dir: &Path, days: u64) {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
+fn append_custom_issue_links(dir: &Path, roles: &[&str]) {
+    let path = dir.join(".atelier/config.toml");
+    let values = roles
+        .iter()
+        .map(|role| format!("\"{role}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|error| panic!("failed to open {}: {error}", path.display()));
+    writeln!(file, "\n[issue_links]\ncustom_context_types = [{values}]")
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
 fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
     if description.trim().is_empty() {
         return;
@@ -565,10 +579,6 @@ fn canonical_record_front_matter(
     serde_json::to_value(yaml).unwrap()
 }
 
-fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
-    format!("#[test]\n#[{ignore_attribute}]\nfn {test_name}() {{}}\n")
-}
-
 fn valid_command_surface_doc() -> &'static str {
     r#"# CLI Surface Tiers
 
@@ -577,28 +587,30 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier init`
 - `atelier man`
 - `atelier status`
+- `atelier work ready`
+- `atelier work blocked`
+- `atelier check`
 - `atelier issue ...`
 - `atelier issue transition <issue-id> start`
 - `atelier issue create "..." --issue-type mission`
 - `atelier issue show <objective-id>`
-- `atelier issue status <objective-id>`
 - `atelier issue link <objective-id> <issue-id> --role advances`
-- `atelier issue block <objective-id> <issue-id>`
-- `atelier search <query>`
+- `atelier issue unlink <objective-id> <issue-id> --role advances`
+- `atelier issue transition <objective-id>`
 - `atelier issue note`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier review open/status/show/comments/comment/approve/request-changes`
-- `atelier forgejo roles check`
 - `atelier history`
 - `atelier prune`
-- `atelier maintenance delete`
-- `atelier lint`
 
-## Advanced Repair
+## Advanced Diagnostics
 
-- `atelier branch for-epic/status/merge`
-- `atelier doctor`
+- hidden/advanced `atelier forgejo roles check`
+- hidden/advanced `atelier maintenance delete`
+- hidden/advanced `atelier lint`
+- hidden/advanced `atelier branch for-epic/status/merge`
+- hidden/advanced `atelier doctor`
 "#
 }
 
@@ -612,7 +624,7 @@ fn write_valid_command_guidance(dir: &Path) {
     write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier lint`\n",
+        "# Agent Instructions\n\n- `atelier work queue --ready`\n- `atelier check`\n",
     )
     .unwrap();
 }
@@ -802,8 +814,7 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
     migrate_default_issue_workflow(dir);
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     for transition in ["start", "request_review", "request_validation"] {
-        let (success, options, stderr) =
-            run_atelier(dir, &["issue", "transition", &issue_id, "--options"]);
+        let (success, options, stderr) = run_atelier(dir, &["issue", "transition", &issue_id]);
         assert!(
             success,
             "transition options failed for {issue_id}: {stderr}"
@@ -844,10 +855,15 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
 }
 
 fn write_provider_config_without_role_authors(dir: &Path) {
+    write_provider_config_with_host(dir, "https://forge.example.test");
+}
+
+fn write_provider_config_with_host(dir: &Path, host: &str) {
     fs::create_dir_all(dir.join(".atelier")).unwrap();
     fs::write(
         dir.join(".atelier/config.toml"),
-        r#"schema = "atelier.project_config"
+        format!(
+            r#"schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier-test"
 
@@ -859,49 +875,179 @@ mode = "provider"
 provider = "forgejo"
 
 [review.providers.forgejo]
-host = "https://forge.example.test"
+host = "{host}"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
-"#,
+"#
+        ),
+    )
+    .unwrap();
+}
+
+fn write_user_forgejo_token(home: &Path, token: &str) {
+    let config_dir = home.join(".config");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("atelier.toml"),
+        format!(
+            r#"schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = "{token}"
+"#
+        ),
     )
     .unwrap();
 }
 
 fn write_provider_review_action_workflow(dir: &Path) {
     let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
+        "        actions:\n          - review.open: { role: worker }",
+        "        validators:\n          - git.worktree_clean\n        actions:\n          - git.push\n          - review.open: { role: worker }",
+    );
+    let workflow = workflow.replace(
         "          - review.open: { role: worker }",
         "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
 
+fn add_origin_remote(dir: &Path, remote: &Path) {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["remote", "add", "origin", remote.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git remote add failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_push(dir: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_rev_parse_in_git_dir(git_dir: &Path, rev: &str) -> Option<String> {
+    let output = Command::new("git")
+        .arg("--git-dir")
+        .arg(git_dir)
+        .args(["rev-parse", rev])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn read_http_request(mut stream: &TcpStream) -> String {
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    let mut content_length = None;
+    loop {
+        let read = stream.read(&mut chunk).unwrap();
+        assert!(read > 0, "connection closed before request was complete");
+        buffer.extend_from_slice(&chunk[..read]);
+        if content_length.is_none() {
+            if let Some(header_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+                content_length = headers.lines().find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    if name.eq_ignore_ascii_case("content-length") {
+                        value.trim().parse::<usize>().ok()
+                    } else {
+                        None
+                    }
+                });
+                if content_length.unwrap_or(0) == 0 {
+                    break;
+                }
+            }
+        }
+        if let (Some(header_end), Some(length)) = (
+            buffer.windows(4).position(|window| window == b"\r\n\r\n"),
+            content_length,
+        ) {
+            if buffer.len() >= header_end + 4 + length {
+                break;
+            }
+        }
+    }
+    String::from_utf8_lossy(&buffer).to_string()
+}
+
+fn spawn_forgejo_open_server(
+    remote_git_dir: PathBuf,
+    source_branch: String,
+    target_branch: String,
+) -> (
+    String,
+    Arc<Mutex<Vec<String>>>,
+    Arc<Mutex<Option<bool>>>,
+    thread::JoinHandle<()>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let host = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let pushed_before_open = Arc::new(Mutex::new(None));
+    let requests_for_thread = Arc::clone(&requests);
+    let pushed_for_thread = Arc::clone(&pushed_before_open);
+    let host_for_thread = host.clone();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&stream);
+        let remote_head = git_rev_parse_in_git_dir(&remote_git_dir, &source_branch);
+        *pushed_for_thread.lock().unwrap() = Some(remote_head.is_some());
+        requests_for_thread.lock().unwrap().push(request);
+        let body = format!(
+            r#"{{"number":42,"url":"{host_for_thread}/tools/atelier/pulls/42","state":"open","merged":false,"head":{{"ref":"{source_branch}"}},"base":{{"ref":"{target_branch}"}}}}"#
+        );
+        let response = format!(
+            "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+    });
+    (host, requests, pushed_before_open, handle)
+}
+
 fn write_branch_action_workflow(dir: &Path) {
-    let task_start_without_actions =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n";
-    let task_start_with_prepare =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        actions:\n          - branch_prepare\n";
-    let epic_start_without_actions = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n";
-    let epic_start_with_prepare = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n        actions:\n          - branch_prepare\n";
-    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
-        task_start_without_actions,
-        task_start_with_prepare,
-        1,
-    );
-    workflow = workflow.replace(epic_start_without_actions, epic_start_with_prepare);
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
-        "          - tracker.current\n\n  epic_delivery:",
-        "          - tracker.current\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",
+        "          - lint.none_blocking\n\n  epic:",
+        "          - lint.none_blocking\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic:",
     );
     workflow = workflow.replace(
-        "          - tracker.commit\n          - branch.push\n          - review.merge\n          - base.sync",
+        "          - tracker.commit\n          - git.push\n          - review.merge\n          - git.sync",
         "          - tracker.commit\n          - branch_integrate",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
 
+fn write_mission_branch_workflow(dir: &Path) {
+    fs::write(
+        dir.join(".atelier/workflow.yaml"),
+        atelier_workflow::STARTER_POLICY_YAML,
+    )
+    .unwrap();
+}
+
 #[test]
-fn provider_review_open_action_reads_workflow_config_and_env_secret() {
+fn provider_review_open_action_reads_workflow_config_and_global_secret() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     write_provider_config_without_role_authors(dir.path());
@@ -919,17 +1065,122 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
     assert!(success, "start failed: {stderr}");
 
     let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(stdout.contains("request_review [blocked]"), "{stdout}");
     assert!(stdout.contains("review.open"), "{stdout}");
     assert!(stdout.contains("provider=forgejo"), "{stdout}");
     assert!(stdout.contains("role=worker"), "{stdout}");
-    assert!(
-        stdout.contains("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"),
-        "{stdout}"
-    );
+    assert!(stdout.contains(".config/atelier.toml"), "{stdout}");
     assert!(!stdout.contains("role_authors"), "{stdout}");
+}
+
+#[test]
+fn provider_request_review_pushes_source_before_opening_pr() {
+    let dir = tempdir().unwrap();
+    let remote = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_provider_review_action_workflow(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "initial provider workflow fixture");
+
+    let output = Command::new("git")
+        .current_dir(remote.path())
+        .args(["init", "--bare", "-q"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git init --bare failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    add_origin_remote(dir.path(), remote.path());
+    git_push(dir.path(), &["push", "-u", "origin", "main"]);
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Provider ordered epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Provider ordered epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+    fs::write(dir.path().join("work.txt"), "provider review work\n").unwrap();
+    commit_all(dir.path(), "provider review work");
+
+    let source_branch = git_current_branch(dir.path());
+    let target_branch = "main".to_string();
+    let (host, requests, pushed_before_open, server) = spawn_forgejo_open_server(
+        remote.path().to_path_buf(),
+        source_branch.clone(),
+        target_branch,
+    );
+    write_provider_config_with_host(dir.path(), &host);
+    write_user_forgejo_token(dir.path(), "test-token");
+    commit_all(dir.path(), "provider review config");
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_review"],
+        &[("HOME", dir.path().to_str().unwrap())],
+    );
+    assert!(success, "request_review failed: {stderr}");
+    server.join().unwrap();
+
+    let push_idx = stdout
+        .find("Action:   git.push pushed")
+        .unwrap_or_else(|| panic!("missing git.push action in stdout:\n{stdout}"));
+    let open_idx = stdout
+        .find("Action:   review.open opened provider review")
+        .unwrap_or_else(|| panic!("missing review.open action in stdout:\n{stdout}"));
+    assert!(push_idx < open_idx, "{stdout}");
+    assert_eq!(*pushed_before_open.lock().unwrap(), Some(true));
+    let remote_head = git_rev_parse_in_git_dir(remote.path(), &source_branch)
+        .expect("source branch should be pushed to origin");
+    assert_eq!(remote_head, git_rev_parse(dir.path(), "HEAD"));
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 1, "{requests:#?}");
+    assert!(
+        requests[0].starts_with("POST /api/v1/repos/tools/atelier/pulls "),
+        "{}",
+        requests[0]
+    );
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    let push_activity = activities
+        .iter()
+        .position(|text| {
+            text.contains("transition: request_review")
+                && text.contains("action: git.push")
+                && text.contains("order: 1")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing request_review git.push activity order:\n{}",
+                activities.join("\n--- activity ---\n")
+            )
+        });
+    let open_activity = activities
+        .iter()
+        .position(|text| {
+            text.contains("transition: request_review")
+                && text.contains("action: review.open")
+                && text.contains("order: 2")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing request_review review.open activity order:\n{}",
+                activities.join("\n--- activity ---\n")
+            )
+        });
+    assert!(push_activity < open_activity);
 }
 
 #[test]

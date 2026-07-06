@@ -1,4 +1,4 @@
-# `atelier doctor`
+# `atelier check`
 
 Primary role: Admin.
 
@@ -18,5 +18,5 @@ can safe ignored-state repairs be applied?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `doctor` | Admin | Inspect runtime/projection/install health. | Good. |
-| `doctor --fix` | Admin | Repair ignored local runtime/cache/projection state. | Good. |
+| `check` | Admin | Inspect runtime/projection/install health. | Good. |
+| `check --fix` | Admin | Repair ignored local runtime/cache/projection state. | Good. |

@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T23:20:40.899266622+00:00"
+status: "done"
 title: "Refresh role-guide, review, and admin command output"
-updated_at: "2026-06-23T21:05:33.035541958+00:00"
+updated_at: "2026-06-23T23:20:40.899266622+00:00"
 ---
 
 ## Description

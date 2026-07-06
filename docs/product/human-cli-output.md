@@ -44,6 +44,116 @@ identity line, metadata rows, section headings, hierarchy, blockers, subissues,
 recent activity, and next commands. New surfaces should reuse that shape instead
 of inventing command-specific tables.
 
+## Workflow Vocabulary
+
+Human output must distinguish four concepts that are easy to flatten in code but
+different to operators:
+
+- Workflow state is the durable issue status, such as `todo`, `in_progress`,
+  `review`, `validation`, `blocked`, or `done`.
+- Blocker state explains whether the row can move now, is blocked directly, or
+  is blocked because an owning parent is blocked.
+- Display role explains why the row is visible in this command output.
+- Next action names the command that can usefully change or inspect the state.
+
+Use these display roles consistently:
+
+| Role | Meaning | Row behavior |
+| --- | --- | --- |
+| `executable` | The row is the current work or an action can be taken immediately. | Put it in the primary section and include the next lifecycle command nearby. |
+| `selectable` | The row can be started or selected by an operator, but it is not yet active. | Put it in ready/selectable sections and show blocker count as zero. |
+| `blocked` | The row itself has open blockers. | Put it in blocked sections and summarize the most important blocker titles or counts. |
+| `blocked-through-parent` | The row may be otherwise ready, but a parent or owning objective blocks it. | Keep it out of selectable work; show the parent blocker once and route drill-down to the parent. |
+| `context-only` | The row explains surrounding state but is not next work. | Use quieter row styling and clear text such as `shown for context`. |
+| `omitted` | Matching rows exist but are hidden by list budgets. | Print the omitted count and the focused command that reveals them. |
+
+Rows may use shorter text than the role token, but the meaning must remain
+visible in colorless output. Do not use implementation labels such as
+`context; parent blocked`, `projection`, or `derived` as normal operator
+language.
+
+## Summaries, Budgets, And Footers
+
+Default human output should be bounded. Commands that may return many records
+must choose a budget, state when it was applied, and provide one focused
+drill-down command. Repeated per-row commands are not allowed in the normal
+view.
+
+Preferred list budget behavior:
+
+- show the most actionable rows first, then the most severe blockers, then
+  context rows;
+- keep short fields such as ID, type, status, priority, and blocker count in
+  columns or row prefixes;
+- make title and free-form text the final field so it can wrap;
+- state omitted counts with the reason, for example `12 more blocked issues
+  omitted`;
+- put the command for the full list in `Next Commands` or `Drill-downs`, not on
+  every row.
+
+Footers are intent-labeled. Use labels such as `Start ready work`,
+`Inspect blocker`, `Repair tracker state`, `Show full history`, or `Validate
+record`, followed by the exact command. Command code chooses the available
+actions; shared formatters only render and deduplicate them.
+
+## Responsibility Boundary
+
+The shared formatter owns presentation mechanics:
+
+- section headings, identity lines, aligned metadata, row prefixes, indentation,
+  bounded-list rendering, omitted-count messages, footer rendering, style tokens,
+  color enablement, and colorless fallbacks;
+- reusable labels for workflow state, blocker state, display role, evidence
+  state, and public recovery callouts;
+- dirty-path summaries and path samples once command/app code supplies the
+  classified state.
+
+Command and app logic own state correctness:
+
+- deciding whether an issue is executable, selectable, blocked,
+  blocked-through-parent, context-only, or omitted;
+- refreshing or rejecting stale projections before a status-like view claims
+  current state;
+- checking Git state, workflow validators, configured policy, permissions, and
+  provider review state;
+- choosing the exact next commands and public recovery path.
+
+Command-specific renderers may still own domain-specific body text, prose order,
+and specialized sections. They must not create one-off color policy, duplicate
+footer ranking rules, or private workflow vocabulary.
+
+### Domain Facts Versus Rendered Explanations
+
+Domain and workflow services should not return UI annotations, section plans,
+or command strings. They return typed facts and rule evaluations: current
+workflow status, available transitions, unsatisfied requirements, observed
+evidence counts, open blockers, review state, projection health, and checkout
+facts.
+
+Application/read-model code assembles those facts for a particular command.
+For example, the status read model may combine checkout changes, active work,
+transition evaluations, review state, and health checks. It should preserve the
+typed facts rather than flattening them into prewritten display messages.
+
+Renderers translate typed facts into human output. If a transition evaluation
+says `close` is blocked by an unsatisfied evidence requirement with zero
+matching validation records, the renderer may print:
+
+```text
+  in progress  atelier-1234  Simplify status output
+      -> close blocked: needs linked validation evidence
+```
+
+That wording belongs to the renderer. The fact that the `close` transition is
+blocked by an unsatisfied evidence requirement belongs to the domain/app
+services. Renderers must not rediscover that fact by directly scanning evidence
+records or duplicating workflow validators.
+
+The same split applies to footer commands. Domain/app services may return an
+actionable state such as an unsatisfied evidence requirement for an issue
+target. The CLI adapter owns the exact command spelling, such as
+`atelier evidence record --target issue/<id> --kind validation "..."`.
+
 ## Detail Views
 
 Use a detail view when the command focuses on one record, such as
@@ -82,6 +192,12 @@ Required sections for mission detail views:
   policy requires them;
 - next commands for likely coordination steps.
 
+Mission-shaped reports belong on the read-only mission report surface once it
+exists. Issue/workflow commands continue to own creation, linking, mutation,
+transitions, and closeout. Root `atelier status` remains checkout/work
+orientation and may signpost a mission report, but it should not become the full
+mission health report.
+
 Do not hide empty sections when their absence is operationally meaningful.
 For example, `Mission blockers: 0` and failed configured validator messages are
 useful during closeout. Long free-form bodies may be printed as text blocks, but lists of
@@ -115,14 +231,15 @@ Next Commands
 Setup and health commands should name only the next command that can succeed in
 the current state. A fresh `atelier init` checkout creates tracker directories,
 runtime state, and starter workflow policy. Its default next steps point to
-`atelier lint` before issue creation. Health commands may name low-level repair
+`atelier check` before issue creation. Health commands may name low-level repair
 commands only when the checked state is actually stale, invalid, missing, or
-otherwise degraded; `doctor --fix` is the admin explicit local repair path.
+otherwise degraded; `check --fix` is the admin explicit local repair path.
 
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
-`atelier issue list`, `atelier issue list --ready`, and `atelier search`.
+`atelier work ready`, `atelier work blocked`, and bounded `atelier work`
+dashboards.
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -137,8 +254,14 @@ group, title, and compact blocker or parent cues when available. Use fixed-width
 columns only for short fields. Titles and other free text should be the final
 column so they can wrap or truncate consistently.
 
+Queue and objective-status views must not imply that all visible rows are next
+work. Ready/selectable rows, blocked rows, blocked-through-parent rows,
+context-only parent rows, and omitted rows need distinct text. Parent rows shown
+only to explain child work are context-only unless the parent itself is the
+action target.
+
 Empty queue output should say what was searched and what to try next. For
-example, `issue list --ready` may include the blocked count, while
+example, `work ready` may include the blocked count, while
 `issue search` should echo the search query.
 
 Quiet mode remains the terse path for strict composition values only. Quiet
@@ -179,7 +302,7 @@ their need:
   for issues, missions, evidence, and activity sidecars. Planning and
   checkpoint intent lives in the accountable record prose or referenced
   repository Markdown artifacts until first-class records are reintroduced.
-- Use committed-state commands for handoff gates. `atelier lint` is the
+- Use committed-state commands for handoff gates. `atelier check` is the
   supported noninteractive check for invalid tracker state. Local runtime repair
   commands are admin repair tools, not normal script workflow.
 - Preserve blocked-command and record context in stale projection or invalid
@@ -187,9 +310,8 @@ their need:
   record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier issue show <objective-id>`,
-  `atelier issue status <objective-id>`, `atelier issue list --ready`,
-  `atelier issue list --blocked`, and issue blocker commands over scraping
-  broad human reports.
+  `atelier work ready`, `atelier work blocked`, and issue linker commands over
+  scraping broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
@@ -237,6 +359,25 @@ Color is optional hierarchy, never the only carrier of meaning.
 Until shared color helpers exist, output changes should focus on layout and text
 structure. Downstream implementation may add color behind a single formatter
 boundary.
+
+## Zen Alignment
+
+This output contract exists to make the product principles visible:
+
+- The repository remains the source of truth: human output summarizes committed
+  record state and points to the canonical record or recovery command when state
+  is stale.
+- Proof stands on its own: validation and evidence sections name attached proof
+  and the command that inspects it instead of relying on chat context.
+- Output models the domain instead of flattening it: missions, epics, issues,
+  blockers, evidence, and review artifacts keep distinct labels and sections.
+- Coordination is visible: blockers, owners, parent context, and next commands
+  are first-class output, not implied by row order or color.
+- Every formatting feature must justify its cost: add shared helpers only when
+  they remove duplicated policy or make repeated operator decisions clearer.
+- Obsolete output paths are removed once replaced: retired, hidden, admin, and
+  replacement commands are described as such and are not polished back into
+  normal workflow.
 
 ## Width And Wrapping
 
@@ -290,10 +431,10 @@ unless the test is specifically for a formatter primitive.
 ## Operator Output Audit
 
 The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
-stabilization mission: `status`, `issue status <objective-id>`, `issue show`,
-`issue list --ready`, `evidence record`, `evidence show/list`, dependency and
-link list output, issue impact rendered by `issue show`, `lint`, and admin
-repair commands when local state is degraded.
+stabilization mission: `status`, `issue show <objective-id>`, `issue show`,
+ready-work output, `evidence record`, `evidence show/list`, dependency and link
+list output, issue impact rendered by `issue show`, `check`, and admin repair
+commands when local state is degraded.
 
 Classification:
 
@@ -301,11 +442,11 @@ Classification:
   health-check views have concise default answers and explicit drill-down
   commands in existing focused tests.
 - Degraded orientation and objective status output keeps ordinary reads usable
-  while routing repair to `atelier lint` or admin repair commands only when
+  while routing repair to `atelier check` or admin repair commands only when
   committed records or local state are degraded.
 - Fresh `atelier init` previously suggested `atelier issue create "Task"` before
   workflow setup, which produced an immediate workflow-policy error. The default
-  setup output now creates workflow policy and routes through `atelier lint`
+  setup output now creates workflow policy and routes through `atelier check`
   before issue creation.
 - No additional failed output classifications were found in the sampled common
   operator workflows; future failures should become follow-up implementation

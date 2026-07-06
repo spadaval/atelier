@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use crate::human_output;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
@@ -12,6 +13,7 @@ use atelier_sqlite::{validate_record_kind, Database};
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
+const EVIDENCE_LIST_LIMIT: usize = 20;
 const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
@@ -283,11 +285,16 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     }
     print_heading("Evidence");
     println!("{} total", records.len());
-    for record in records {
+    println!(
+        "Showing: {} of {}",
+        records.len().min(EVIDENCE_LIST_LIMIT),
+        records.len()
+    );
+    for record in records.iter().take(EVIDENCE_LIST_LIMIT) {
         let record = canonical_evidence_record(&record.id)?;
         let data = evidence_record_data(&record);
         let kind = data.evidence_type.as_str();
-        let command = data.command.as_deref().unwrap_or("(manual)");
+        let command = evidence_list_command(data.command.as_deref());
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
         let targets = format_targets(db, &record.header.id, &data)?;
         let target = if targets.is_empty() {
@@ -296,7 +303,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
             targets.join(", ")
         };
         println!(
-            "  {:<14} {:<13} {:<10} exit={} target={} command={} {}",
+            "  {:<14} {:<13} {:<10} exit {} target {} command {} - {}",
             record.header.id,
             record.header.status,
             kind,
@@ -306,7 +313,32 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
             record.header.title
         );
     }
+    if records.len() > EVIDENCE_LIST_LIMIT {
+        println!(
+            "Omitted: {} older evidence record(s) hidden by default limit {}",
+            records.len() - EVIDENCE_LIST_LIMIT,
+            EVIDENCE_LIST_LIMIT
+        );
+    }
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Show proof detail: atelier evidence show <evidence-id>");
+    println!("  Filter by status: atelier evidence list --status <status>");
     Ok(())
+}
+
+fn evidence_list_command(command: Option<&str>) -> String {
+    let Some(command) = command else {
+        return "(manual)".to_string();
+    };
+    let parts = command.split_whitespace().collect::<Vec<_>>();
+    let summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
+    if parts.len() > 3 {
+        format!("{summary} ...")
+    } else {
+        summary
+    }
 }
 
 pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
@@ -356,8 +388,7 @@ pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
 }
 
 fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
+    human_output::print_section_heading(title);
 }
 
 fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {

@@ -17,7 +17,7 @@ fn test_create_issue() {
     );
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
+    assert!(stdout.contains(&format!("atelier check {issue_id}")));
     assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
     assert!(issue_text.contains("## Description\n\nNo description provided."));
@@ -45,7 +45,7 @@ fn test_create_issue_with_priority() {
     assert!(success);
 
     // Verify it was created with correct priority
-    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(list_out.contains("high"));
 }
 
@@ -100,7 +100,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
         )
         .replace(
             "Outcome was not specified.",
-            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier lint <id>` passes after section edits.",
+            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier check <id>` passes after section edits.",
         );
     std::fs::write(&path, text).unwrap();
 
@@ -110,7 +110,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
     assert!(success, "issue show failed: {stderr}");
     assert!(show.contains("Describe the markdown-first issue."));
     assert!(show.contains("Issue sections are populated by editing canonical Markdown."));
-    assert!(show.contains("atelier lint <id>"));
+    assert!(show.contains("atelier check <id>"));
 }
 
 #[test]
@@ -118,7 +118,10 @@ fn test_create_subissue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent issue", "--issue-type", "epic"],
+    );
     let parent_id = issue_ref(dir.path(), 1);
     let (success, stdout, _) = run_atelier(
         dir.path(),
@@ -133,11 +136,121 @@ fn test_create_subissue() {
     );
     let child_id = issue_id_by_title(dir.path(), "Child issue");
     assert!(stdout.contains(&format!(".atelier/issues/{child_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {child_id}")));
+    assert!(stdout.contains(&format!("atelier check {child_id}")));
 
     // Verify parent-child relationship in show
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
     assert!(show_out.contains("Child") || show_out.contains("subissue"));
+}
+
+#[test]
+fn test_issue_create_rejects_invalid_hierarchy_shapes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Parent epic");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Mission child",
+            "--issue-type",
+            "mission",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(!success, "mission child should be rejected");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("mission issue")
+            && stderr.contains("cannot have parent"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Epic child",
+            "--issue-type",
+            "epic",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(!success, "epic child should be rejected");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("epic issue")
+            && stderr.contains("cannot have parent"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Task parent"]);
+    assert!(success, "task parent create failed: {stderr}");
+    let task_id = issue_id_by_title(dir.path(), "Task parent");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Task child", "--parent", &task_id],
+    );
+    assert!(!success, "task parent should be rejected");
+    assert!(stderr.contains("only epics can own child work"), "{stderr}");
+}
+
+#[test]
+fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let parent_id = issue_id_by_title(dir.path(), "Parent epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Child work", "--parent", &parent_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &parent_id, "--issue-type", "task"],
+    );
+    assert!(!success, "parent with children should not become task");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("cannot own child work"),
+        "{stderr}"
+    );
+
+    let parent_path = canonical_issue_path(dir.path(), &parent_id);
+    let parent_markdown = std::fs::read_to_string(&parent_path).unwrap();
+    std::fs::write(
+        &parent_path,
+        parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\""),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(!success, "lint should reject corrupted parent type");
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        transcript.contains("workflow_issue_hierarchy_invalid")
+            && transcript.contains("only epics can own child work"),
+        "{transcript}"
+    );
 }
 
 #[test]
@@ -153,6 +266,137 @@ fn test_create_issue_rejects_work_flag() {
     assert!(stderr.contains("unexpected argument '--work'"));
 }
 
+#[test]
+fn test_configured_custom_issue_link_is_context_only() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    append_custom_issue_links(dir.path(), &["informs"]);
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Context mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Context mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mission work"]);
+    assert!(success, "work create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Mission work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Context note"]);
+    assert!(success, "context create failed: {stderr}");
+    let context_id = issue_id_by_title(dir.path(), "Context note");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &work_id, "--role", "advances"],
+    );
+    assert!(success, "advances link failed: {stderr}");
+    let (success, link_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom link failed: {stderr}");
+    assert!(link_out.contains("Linked"));
+
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(mission_markdown.contains("type: \"advances\""));
+    assert!(mission_markdown.contains("type: \"informs\""));
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    assert!(success, "show failed: {stderr}");
+    assert!(show_out.contains("informs"), "{show_out}");
+    assert!(show_out.contains("Context note"), "{show_out}");
+
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(mission_out.contains("Mission work"), "{mission_out}");
+    assert!(
+        !mission_out.contains("Context note"),
+        "custom context links must not count as mission work:\n{mission_out}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom unlink failed: {stderr}");
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(!mission_markdown.contains("type: \"informs\""));
+}
+
+#[test]
+fn test_unconfigured_custom_issue_link_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Target issue"]);
+    let source_id = issue_id_by_title(dir.path(), "Source issue");
+    let target_id = issue_id_by_title(dir.path(), "Target issue");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &source_id, &target_id, "--role", "informs"],
+    );
+
+    assert!(!success, "unconfigured custom role should be rejected");
+    assert!(
+        stderr.contains("Invalid issue link role 'informs'")
+            && stderr.contains("Configured custom context-only roles: (none)")
+            && stderr.contains("[issue_links].custom_context_types"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_issue_to_issue_validates_link_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Validation source"]);
+    run_atelier(dir.path(), &["issue", "create", "Validation target"]);
+    let source_id = issue_id_by_title(dir.path(), "Validation source");
+    let target_id = issue_id_by_title(dir.path(), "Validation target");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &source_id,
+            &target_id,
+            "--role",
+            "validates",
+        ],
+    );
+
+    assert!(!success, "issue-to-issue validates should be rejected");
+    assert!(
+        stderr.contains("Proof roles are reserved for evidence links")
+            && stderr.contains("atelier evidence record"),
+        "{stderr}"
+    );
+}
+
 // ==================== Issue Listing Tests ====================
 
 #[test]
@@ -160,7 +404,7 @@ fn test_list_empty() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
 
     assert!(success);
     assert!(
@@ -175,7 +419,10 @@ fn test_list_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Issue 1", "--issue-type", "epic"],
+    );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),
@@ -184,22 +431,53 @@ fn test_list_issues() {
         ],
     );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
 
     assert!(success);
-    assert!(stdout.contains("Issue Queue"));
+    assert!(stdout.contains("Work Queue"));
     assert!(stdout.contains("2 total"));
     assert!(stdout.contains("atelier-"));
     assert!(stdout.contains("[task] atelier-"));
     assert!(stdout.contains("Issue 1"));
     assert!(stdout.contains("Issue 2"));
 
-    let (success, quiet_out, stderr) = run_atelier(dir.path(), &["--quiet", "issue", "list"]);
-    assert!(success, "quiet issue list failed: {stderr}");
-    assert!(!quiet_out.contains("Issue Queue"));
+    let (success, quiet_out, stderr) = run_atelier(dir.path(), &["--quiet", "work", "queue"]);
+    assert!(success, "quiet work queue failed: {stderr}");
+    assert!(!quiet_out.contains("Work Queue"));
     assert!(!quiet_out.contains("Issue 1"));
     assert_eq!(quiet_out.lines().count(), 2);
     assert!(quiet_out.lines().all(|line| line.starts_with("atelier-")));
+}
+
+#[test]
+fn test_panel_surfaces_are_complete_without_terminal_color() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Colorless issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Colorless issue");
+
+    for args in [
+        vec!["status"],
+        vec!["work"],
+        vec!["work", "queue", "--ready"],
+        vec!["issue", "show", &issue_id],
+    ] {
+        let (success, stdout, stderr) =
+            run_atelier_with_env(dir.path(), &args, &[("NO_COLOR", "1")]);
+        assert!(success, "{args:?} failed: {stderr}");
+        assert!(
+            !stdout.contains("\u{1b}["),
+            "NO_COLOR/non-terminal output must not contain ANSI escapes:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("Next Commands")
+                || stdout.contains("Dashboards")
+                || stdout.contains("Work Queue")
+                || stdout.contains("Current Work"),
+            "colorless output must retain structural text:\n{stdout}"
+        );
+    }
 }
 
 #[test]
@@ -217,12 +495,21 @@ fn test_issue_list_orders_visible_blockers_before_blocked_rows() {
     );
     let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
     let blocker_id = issue_id_by_title(dir.path(), "Direct blocker");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
-    assert!(success, "issue list failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue"]);
+    assert!(success, "work queue failed: {stderr}");
     let blocker_pos = stdout.find("Direct blocker").unwrap_or(usize::MAX);
     let blocked_pos = stdout.find("Blocked work").unwrap_or(usize::MAX);
     assert!(
@@ -232,7 +519,9 @@ fn test_issue_list_orders_visible_blockers_before_blocked_rows() {
     assert!(stdout.contains("ready [task]"), "{stdout}");
     assert!(stdout.contains("blocked [task]"), "{stdout}");
     assert!(!stdout.contains("todo/todo"), "{stdout}");
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains(&format!(
+        "Inspect blockers for {blocked_id}: atelier issue show {blocked_id}"
+    )));
 }
 
 #[test]
@@ -254,12 +543,21 @@ fn test_issue_list_ready_excludes_blocked_and_quiet_matches_human_order() {
     let high_id = issue_id_by_title(dir.path(), "High ready");
     let blocked_id = issue_id_by_title(dir.path(), "Blocked ready");
     let blocker_id = issue_id_by_title(dir.path(), "Ready blocker");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(success, "issue list --ready failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    assert!(success, "work queue --ready failed: {stderr}");
     assert!(stdout.contains("High ready"), "{stdout}");
     assert!(stdout.contains("Low ready"), "{stdout}");
     assert!(stdout.contains("Ready blocker"), "{stdout}");
@@ -270,8 +568,8 @@ fn test_issue_list_ready_excludes_blocked_and_quiet_matches_human_order() {
     );
 
     let (success, quiet, stderr) =
-        run_atelier(dir.path(), &["--quiet", "issue", "list", "--ready"]);
-    assert!(success, "quiet issue list --ready failed: {stderr}");
+        run_atelier(dir.path(), &["--quiet", "work", "queue", "--ready"]);
+    assert!(success, "quiet work queue --ready failed: {stderr}");
     let quiet_ids = quiet.lines().collect::<Vec<_>>();
     assert!(!quiet_ids.contains(&blocked_id.as_str()), "{quiet}");
     assert_eq!(
@@ -324,11 +622,25 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     let external_blocker_id = issue_ref(dir.path(), 5);
     run_atelier(
         dir.path(),
-        &["issue", "block", &implementation_id, &contract_id],
+        &[
+            "issue",
+            "link",
+            &implementation_id,
+            &contract_id,
+            "--role",
+            "blocked_by",
+        ],
     );
     run_atelier(
         dir.path(),
-        &["issue", "block", &external_child_id, &external_blocker_id],
+        &[
+            "issue",
+            "link",
+            &external_child_id,
+            &external_blocker_id,
+            "--role",
+            "blocked_by",
+        ],
     );
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
@@ -349,7 +661,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     );
     assert!(
         stdout.contains(&format!(
-            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker; details: atelier issue blocked {external_child_id})"
+            "blocked {external_child_id} [todo] medium - External blocked child | 1 blocker"
         )),
         "{stdout}"
     );
@@ -366,11 +678,11 @@ fn test_list_filter_by_status() {
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
     close_issue_with_evidence(dir.path(), "2", None);
 
-    let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "todo"]);
+    let (_, open_list, _) = run_atelier(dir.path(), &["work", "queue", "-s", "todo"]);
     assert!(open_list.contains("Open issue"));
     assert!(!open_list.contains("Closed issue"));
 
-    let (_, closed_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "done"]);
+    let (_, closed_list, _) = run_atelier(dir.path(), &["work", "queue", "-s", "done"]);
     assert!(closed_list.contains("Closed issue"));
     assert!(!closed_list.contains("Open issue"));
 }
@@ -390,7 +702,7 @@ fn test_list_filter_by_label() {
         &["issue", "update", &feature_id, "--label", "feature"],
     );
 
-    let (_, bug_list, _) = run_atelier(dir.path(), &["issue", "list", "-l", "bug"]);
+    let (_, bug_list, _) = run_atelier(dir.path(), &["work", "queue", "-l", "bug"]);
     assert!(bug_list.contains("Bug issue"));
     assert!(!bug_list.contains("Feature issue"));
 }
@@ -453,7 +765,7 @@ fn test_issue_show_surfaces_evidence_status() {
 
     move_issue_to_validation(dir.path(), &issue_id);
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(
         success,
         "transition options without evidence failed: {stderr}"
@@ -487,7 +799,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(!stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options with evidence failed: {stderr}");
     assert!(transitions.contains("pass  evidence.attached"));
 }
@@ -513,7 +825,16 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent key issue"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Parent key issue",
+            "--issue-type",
+            "epic",
+        ],
+    );
     run_atelier(dir.path(), &["issue", "create", "Related key issue"]);
     let parent_id = issue_id_by_title(dir.path(), "Parent key issue");
     let related_id = issue_id_by_title(dir.path(), "Related key issue");
@@ -530,20 +851,17 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     assert!(!child_id.is_empty());
 
     let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "block", parent_key, related_key]);
+        run_atelier(dir.path(), &["issue", "link", parent_key, related_key]);
     assert!(success, "relate by partial keys failed: {stderr}");
     assert!(stdout.contains(&parent_id));
     assert!(stdout.contains(&related_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", parent_key]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", parent_key]);
     assert!(success, "related by partial key failed: {stderr}");
     assert!(stdout.contains(&related_id));
 
     migrate_default_issue_workflow(dir.path());
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", parent_key, "--options"],
-    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "transition", parent_key]);
     assert!(
         success,
         "transition options by partial key failed: {stderr}"
@@ -594,8 +912,8 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
     assert!(stdout.contains("Bundle applied."));
 
     let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &dependent_id]);
-    assert!(success, "issue blocked failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
+    assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains(&issue_id));
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
     assert!(success, "issue show failed: {stderr}");
@@ -708,7 +1026,7 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
     assert!(success, "declared mission issue show failed: {stderr}");
     assert!(show.contains("Type:     mission"), "{show}");
     assert!(
-        show.contains("Status:   ready"),
+        show.contains("Status:   draft"),
         "declared mission should use its configured initial status: {show}"
     );
 }
@@ -1007,22 +1325,17 @@ fn test_show_issue_rich_human_output() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent issue", "-p", "high"],
-    );
-    let parent_id = issue_ref(dir.path(), 1);
-    run_atelier(
-        dir.path(),
         &[
             "issue",
             "create",
             "Target issue",
-            "--parent",
-            &parent_id,
+            "--issue-type",
+            "epic",
             "-p",
             "medium",
         ],
     );
-    let target_id = issue_ref(dir.path(), 2);
+    let target_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),
         &[
@@ -1039,14 +1352,34 @@ fn test_show_issue_rich_human_output() {
         dir.path(),
         &["issue", "create", "Blocking issue", "-p", "high"],
     );
-    let blocking_id = issue_ref(dir.path(), 4);
+    let blocking_id = issue_ref(dir.path(), 3);
     run_atelier(
         dir.path(),
         &["issue", "create", "Downstream issue", "-p", "low"],
     );
-    let downstream_id = issue_ref(dir.path(), 5);
-    run_atelier(dir.path(), &["issue", "block", &target_id, &blocking_id]);
-    run_atelier(dir.path(), &["issue", "block", &downstream_id, &target_id]);
+    let downstream_id = issue_ref(dir.path(), 4);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &target_id,
+            &blocking_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &downstream_id,
+            &target_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
     run_atelier(dir.path(), &["issue", "note", &target_id, "Recent note"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &target_id]);
@@ -1057,7 +1390,6 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
-    assert!(stdout.contains("Parent issue"));
     assert!(stdout.contains("1 total | status: todo=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
@@ -1068,6 +1400,58 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("atelier issue note"));
     assert!(!stdout.contains("atelier issue com"));
     assert!(stdout.contains("atelier issue transition"));
+}
+
+#[test]
+fn test_issue_show_recent_activity_humanizes_structured_bodies() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Recent Activity"), "{stdout}");
+    assert!(
+        stdout.contains("Transition start: todo -> in_progress"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("transition: \"start\""), "{stdout}");
+}
+
+#[test]
+fn test_issue_show_summarizes_dirty_checkout_state() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Dirty checkout issue",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    let issue_id = issue_id_by_title(dir.path(), "Dirty checkout issue");
+    std::fs::write(dir.path().join("tracked.txt"), "clean").unwrap();
+    commit_all(dir.path(), "baseline");
+    std::fs::write(dir.path().join("tracked.txt"), "dirty").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Checkout"), "{stdout}");
+    assert!(
+        stdout.contains("State  : dirty checkout: 1 path:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("tracked.txt"), "{stdout}");
 }
 
 #[test]
@@ -1149,11 +1533,6 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     assert!(stdout.contains(edited_body), "{stdout}");
     assert!(stdout.contains(edited_outcome), "{stdout}");
     assert!(stdout.contains(edited_evidence), "{stdout}");
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["search", "projected from issue body"]);
-    assert!(success, "search failed: {stderr}");
-    assert!(stdout.contains(&issue_id), "{stdout}");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let projected_text: String = conn
@@ -1258,46 +1637,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
 }
 
 #[test]
-fn test_issue_search_reads_payloads_from_record_store_and_activity() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Canonical search issue"]);
-    assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Canonical search issue");
-    set_issue_description(dir.path(), &issue_id, "canonical body needle");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after description edit failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "note", &issue_id, "canonical activity needle"],
-    );
-    assert!(success, "issue note failed: {stderr}");
-
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    conn.execute(
-        "UPDATE issues SET description = 'sqlite body needle' WHERE id = ?1",
-        [&issue_id],
-    )
-    .unwrap();
-
-    let (success, body_out, stderr) = run_atelier(dir.path(), &["search", "canonical body needle"]);
-    assert!(success, "canonical body search failed: {stderr}");
-    assert!(body_out.contains("Canonical search issue"));
-
-    let (success, activity_out, stderr) =
-        run_atelier(dir.path(), &["search", "canonical activity needle"]);
-    assert!(success, "canonical activity search failed: {stderr}");
-    assert!(activity_out.contains("Canonical search issue"));
-
-    let (success, shadow_body_out, stderr) =
-        run_atelier(dir.path(), &["search", "sqlite body needle"]);
-    assert!(success, "sqlite shadow body search failed: {stderr}");
-    assert!(shadow_body_out.contains("No issues found"));
-}
-
-#[test]
 fn test_show_closed_issue_includes_close_reason() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1393,8 +1732,10 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     assert!(stdout.contains("Scope:          repository"));
     assert!(stdout.contains("Source:         canonical .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
+    assert!(stdout.contains("Filters:        event kind evidence_attached"));
     assert!(stdout.contains("Showing:        1 of 1 matching events"));
-    assert!(stdout.contains("Evidence attached"));
+    assert!(stdout.contains("Second issue: Evidence attached"));
+    assert!(stdout.contains(&format!("evidence_attached | tester | issue/{second}")));
     assert!(!stdout.contains("First comment"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue show <id>"));
@@ -1413,6 +1754,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
         ],
     );
     assert!(success, "filtered history failed: {stderr}");
+    assert!(stdout.contains("Filters:        event kind comment, since 2026-06-10T00:00:00+00:00"));
     assert!(stdout.contains("First comment"));
     assert!(!stdout.contains("Evidence attached"));
 
@@ -1529,7 +1871,10 @@ fn test_history_issue_scope_defaults_single_issue_and_can_include_descendants() 
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent history"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent history", "--issue-type", "epic"],
+    );
     let parent_id = issue_id_by_title(dir.path(), "Parent history");
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1777,7 +2122,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
         .join("atelier-0001.md")
         .exists());
 
-    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(list_out.contains("Mission: Replace Beads"));
     assert!(list_out.contains("Dogfood Atelier"));
 
@@ -2116,9 +2461,9 @@ fn test_issue_mutations_are_durable_without_manual_export() {
         vec!["issue", "update", &source_id, "--label", "remove-me"],
         vec!["issue", "update", &source_id, "--remove-label", "remove-me"],
         vec!["issue", "update", &source_id, "--label", "keep-me"],
-        vec!["issue", "block", &source_id, &target_id],
-        vec!["issue", "unblock", &source_id, &target_id],
-        vec!["issue", "block", &source_id, &target_id],
+        vec!["issue", "link", &source_id, &target_id],
+        vec!["issue", "unlink", &source_id, &target_id],
+        vec!["issue", "link", &source_id, &target_id],
     ] {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
@@ -2153,11 +2498,21 @@ fn test_block_issue() {
     run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
     let blocked_id = issue_ref(dir.path(), 1);
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
     assert!(blocked_out.contains("Blocked issue"));
 }
 
@@ -2170,22 +2525,115 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
     run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
     let blocked_id = issue_ref(dir.path(), 1);
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
-    assert!(success, "issue list --blocked failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--blocked"]);
+    assert!(success, "work queue --blocked failed: {stderr}");
     assert!(stdout.contains("Blocked issue"));
     assert!(stdout.contains("blocked"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(stdout.contains(&format!(
+        "Inspect blockers for {blocked_id}: atelier issue show {blocked_id}"
+    )));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
 
     let (success, quiet, stderr) =
-        run_atelier(dir.path(), &["--quiet", "issue", "list", "--blocked"]);
-    assert!(success, "quiet issue list --blocked failed: {stderr}");
+        run_atelier(dir.path(), &["--quiet", "work", "queue", "--blocked"]);
+    assert!(success, "quiet work queue --blocked failed: {stderr}");
     assert_eq!(quiet.trim(), blocked_id);
+}
+
+#[test]
+fn test_issue_list_inventory_filters_across_status_type_and_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Todo task"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Mission record",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    run_atelier(dir.path(), &["issue", "create", "Done task"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked task"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker task"]);
+    let done_id = issue_id_by_title(dir.path(), "Done task");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked task");
+    let blocker_id = issue_id_by_title(dir.path(), "Blocker task");
+    set_issue_status(dir.path(), &done_id, "done");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "blocker link failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, all, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(success, "issue list failed: {stderr}");
+    assert!(all.contains("Issue List"), "{all}");
+    assert!(all.contains("Todo task"), "{all}");
+    assert!(all.contains("Done task"), "{all}");
+    assert!(all.contains("Mission record"), "{all}");
+
+    let (success, todo, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
+    assert!(success, "status filter failed: {stderr}");
+    assert!(todo.contains("Todo task"), "{todo}");
+    assert!(!todo.contains("Done task"), "{todo}");
+
+    let (success, done, stderr) = run_atelier(dir.path(), &["issue", "list", "--category", "done"]);
+    assert!(success, "category filter failed: {stderr}");
+    assert!(done.contains("Done task"), "{done}");
+    assert!(!done.contains("Todo task"), "{done}");
+
+    let (success, missions, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--issue-type", "mission"]);
+    assert!(success, "issue type filter failed: {stderr}");
+    assert!(missions.contains("Mission record"), "{missions}");
+    assert!(!missions.contains("Todo task"), "{missions}");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "ready filter failed: {stderr}");
+    assert!(ready.contains("Todo task"), "{ready}");
+    assert!(ready.contains("Blocker task"), "{ready}");
+    assert!(!ready.contains("Blocked task"), "{ready}");
+    assert!(!ready.contains("Done task"), "{ready}");
+
+    let (success, blocked, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+    assert!(success, "blocked filter failed: {stderr}");
+    assert!(blocked.contains("Blocked task"), "{blocked}");
+    assert!(!blocked.contains("Blocker task"), "{blocked}");
+
+    let (success, quiet, stderr) = run_atelier(
+        dir.path(),
+        &["--quiet", "issue", "list", "--issue-type", "mission"],
+    );
+    assert!(success, "quiet issue type filter failed: {stderr}");
+    assert_eq!(quiet.lines().count(), 1, "{quiet}");
+    assert!(quiet.trim().starts_with("atelier-"), "{quiet}");
 }
 
 #[test]
@@ -2197,13 +2645,34 @@ fn test_unblock_issue() {
     run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
     let blocked_id = issue_ref(dir.path(), 1);
     let blocker_id = issue_ref(dir.path(), 2);
-    run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "unblock", &blocked_id, &blocker_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
-    assert!(!blocked_out.contains("Blocked issue"));
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    assert!(blocked_out.contains("Blocked by"));
+    assert!(blocked_out.contains("(none)"));
 }
 
 #[test]
@@ -2218,35 +2687,50 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    assert!(success, "issue block failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue link failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after issue block: {stderr}");
+    assert!(success, "export check failed after issue link: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after issue block failed: {stderr}");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &blocked_id]);
-    assert!(success, "issue blocked after issue block failed: {stderr}");
+    assert!(success, "rebuild after issue link failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    assert!(success, "issue show after issue link failed: {stderr}");
     assert!(stdout.contains(&blocker_id), "{stdout}");
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "unblock", &blocked_id, &blocker_id]);
-    assert!(success, "issue unblock failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "issue unlink failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after issue unblock: {stderr}");
+    assert!(success, "export check failed after issue unlink: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after issue unblock failed: {stderr}");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &blocked_id]);
+    assert!(success, "rebuild after issue unlink failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    assert!(success, "issue show after issue unlink failed: {stderr}");
     assert!(
-        success,
-        "issue blocked after issue unblock failed: {stderr}"
-    );
-    assert!(
-        stdout.contains("No dependencies found."),
+        stdout.contains("Blocked by") && stdout.contains("(none)"),
         "dependency should be removed after rebuild: {stdout}"
     );
 }
@@ -2261,9 +2745,19 @@ fn test_ready_issues() {
     run_atelier(dir.path(), &["issue", "create", "Ready issue"]);
     let blocked_id = issue_ref(dir.path(), 1);
     let blocker_id = issue_ref(dir.path(), 2);
-    run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
 
     assert!(success);
     assert!(stdout.contains("2 total"));
@@ -2294,7 +2788,7 @@ fn test_quiet_issue_list_ready_outputs_ids_only() {
     run_atelier(dir.path(), &["issue", "create", "Ready issue"]);
 
     let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--quiet", "issue", "list", "--ready"]);
+        run_atelier(dir.path(), &["--quiet", "work", "queue", "--ready"]);
 
     assert!(success, "quiet ready list failed: {stderr}");
     assert_eq!(stdout.lines().count(), 1);
@@ -2309,7 +2803,7 @@ fn test_issue_list_ready_rejects_closed_status() {
 
     let (success, stdout, _stderr) = run_atelier(
         dir.path(),
-        &["issue", "list", "--ready", "--status", "closed"],
+        &["work", "queue", "--ready", "--status", "closed"],
     );
 
     assert!(!success);
@@ -2335,9 +2829,19 @@ fn test_issue_list_ready_treats_internal_epic_blockers_as_ready() {
     );
     let ready_id = issue_ref(dir.path(), 2);
     let sequenced_id = issue_ref(dir.path(), 3);
-    run_atelier(dir.path(), &["issue", "block", &sequenced_id, &ready_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &sequenced_id,
+            &ready_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
 
     assert!(success, "ready list failed: {stderr}");
     assert!(stdout.contains("Parent epic"));
@@ -2365,7 +2869,17 @@ fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active
     );
     let ready_id = issue_ref(dir.path(), 2);
     let sequenced_id = issue_ref(dir.path(), 3);
-    run_atelier(dir.path(), &["issue", "block", &sequenced_id, &ready_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &sequenced_id,
+            &ready_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
     run_atelier(dir.path(), &["issue", "create", "Active item"]);
     let active_id = issue_ref(dir.path(), 4);
 
@@ -2377,10 +2891,10 @@ fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active
     assert!(success, "status failed: {stderr}");
     assert!(
         status_out.contains("Ready work:    2"),
-        "status should still count the parent epic and ready child:\n{status_out}"
+        "status should keep ready work visible while active work is present:\n{status_out}"
     );
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(ready_out.contains("Parent epic"), "{ready_out}");
     assert!(ready_out.contains("Ready child"), "{ready_out}");
@@ -2411,20 +2925,32 @@ fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
     run_atelier(dir.path(), &["issue", "create", "Outside blocker"]);
     let child_id = issue_ref(dir.path(), 2);
     let blocker_id = issue_ref(dir.path(), 3);
-    run_atelier(dir.path(), &["issue", "block", &parent_id, &blocker_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &parent_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(
-        ready_out.contains("Blocked parent epic (context; parent blocked)"),
+        ready_out.contains("Blocked parent epic (shown for context; blocked through parent)"),
         "{ready_out}"
     );
     assert!(ready_out.contains("blocked by 1 external blocker"));
-    assert!(ready_out.contains(&format!("details: atelier issue blocked {parent_id}")));
+    assert!(ready_out.contains(&format!(
+        "Inspect blockers for {parent_id}: atelier issue show {parent_id}"
+    )));
     assert!(!ready_out.contains(&format!("blocked by {blocker_id}")));
     assert!(ready_out.contains(&format!("{child_id} - Ready child")));
 
-    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "blocked", &parent_id]);
+    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
     assert!(success, "blocked detail failed: {stderr}");
     assert!(blocked_out.contains(&blocker_id), "{blocked_out}");
 }
@@ -2446,16 +2972,61 @@ fn test_issue_list_marks_external_epic_blockers_by_id() {
     run_atelier(dir.path(), &["issue", "create", "Outside blocker"]);
     let child_id = issue_ref(dir.path(), 2);
     let blocker_id = issue_ref(dir.path(), 3);
-    run_atelier(dir.path(), &["issue", "block", &child_id, &blocker_id]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &child_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue"]);
 
-    assert!(success, "issue list failed: {stderr}");
+    assert!(success, "work queue failed: {stderr}");
     assert!(stdout.contains("Parent epic"));
     assert!(stdout.contains("1 blocker"));
-    assert!(stdout.contains("details: atelier issue blocked"));
+    assert!(stdout.contains("Inspect blockers for"));
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
     assert!(!stdout.contains("open blocker"));
+}
+
+#[test]
+fn test_issue_list_bounds_blocker_footer_actions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Shared blocker"]);
+    let blocker_id = issue_ref(dir.path(), 1);
+    for index in 0..7 {
+        run_atelier(
+            dir.path(),
+            &["issue", "create", &format!("Blocked row {index}")],
+        );
+        let blocked_id = issue_id_by_title(dir.path(), &format!("Blocked row {index}"));
+        run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "link",
+                &blocked_id,
+                &blocker_id,
+                "--role",
+                "blocked_by",
+            ],
+        );
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--blocked"]);
+
+    assert!(success, "work queue --blocked failed: {stderr}");
+    assert_eq!(stdout.matches("Blocked row").count(), 5, "{stdout}");
+    assert_eq!(stdout.matches("atelier issue show ").count(), 5, "{stdout}");
+    assert!(stdout.contains("2 more blocked issues omitted"), "{stdout}");
+    assert!(!stdout.contains("details: atelier issue show"), "{stdout}");
 }
 
 #[test]
@@ -2528,6 +3099,127 @@ fn test_removed_issue_type_is_rejected() {
     }
 }
 
+#[test]
+fn test_work_mission_dashboard_is_scoped_and_operational() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Mission: Dashboard cleanup",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Mission: Dashboard cleanup");
+    run_atelier(dir.path(), &["issue", "create", "Ready mission work"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked mission work"]);
+    run_atelier(dir.path(), &["issue", "create", "Mission blocker"]);
+    let ready_id = issue_id_by_title(dir.path(), "Ready mission work");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked mission work");
+    let blocker_id = issue_id_by_title(dir.path(), "Mission blocker");
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &ready_id,
+            "--role",
+            "advances",
+        ],
+    );
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &blocked_id,
+            "--role",
+            "advances",
+        ],
+    );
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &blocked_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+
+    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(dashboard.contains(&format!("{mission_id} [mission] draft - Dashboard cleanup")));
+    assert!(!dashboard.contains("Work Mission"), "{dashboard}");
+    assert!(!dashboard.contains("Proof gaps"), "{dashboard}");
+    assert!(!dashboard.contains("Health"), "{dashboard}");
+    assert!(!dashboard.contains("Close readiness"), "{dashboard}");
+    assert!(!dashboard.contains("Closeout"), "{dashboard}");
+    assert!(dashboard.contains("Ready mission work"), "{dashboard}");
+    assert!(dashboard.contains("Blocked mission work"), "{dashboard}");
+    assert!(
+        dashboard.contains(&format!("blockers: {blocker_id}")),
+        "{dashboard}"
+    );
+    assert!(
+        !dashboard.contains("atelier work queue --all"),
+        "{dashboard}"
+    );
+
+    let (success, ready, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission_id, "--ready"]);
+    assert!(success, "work mission --ready failed: {stderr}");
+    assert!(ready.contains("Ready mission work"), "{ready}");
+    assert!(!ready.contains("Blocked mission work"), "{ready}");
+
+    let (success, blocked, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission_id, "--blocked"]);
+    assert!(success, "work mission --blocked failed: {stderr}");
+    assert!(!blocked.contains("Ready mission work"), "{blocked}");
+    assert!(blocked.contains("Blocked mission work"), "{blocked}");
+    assert!(blocked.contains(&blocker_id), "{blocked}");
+
+    set_issue_status(dir.path(), &mission_id, "ready");
+    set_issue_status(dir.path(), &ready_id, "done");
+    set_issue_status(dir.path(), &blocked_id, "done");
+    set_issue_status(dir.path(), &blocker_id, "done");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after status setup failed: {stderr}");
+    let (success, closeout_ready, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "closeout-ready work mission failed: {stderr}");
+    assert!(closeout_ready.contains("Publish"), "{closeout_ready}");
+
+    let (success, transition, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id]);
+    assert!(success, "issue transition failed: {stderr}");
+    assert!(
+        transition.contains("request_publish [allowed]"),
+        "{transition}"
+    );
+    assert!(transition.contains("To:   publish_review"), "{transition}");
+    assert!(transition.contains(&format!(
+        "atelier issue transition {mission_id} request_publish"
+    )));
+
+    let (success, verbose, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "verbose issue transition failed: {stderr}");
+    assert!(verbose.contains("Validators"), "{verbose}");
+    assert!(verbose.contains("Description"), "{verbose}");
+}
+
 fn write_incident_issue_type_workflow(dir: &std::path::Path) {
     let workflow_path = dir.join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path)
@@ -2549,34 +3241,65 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
         .expect("failed to read workflow policy")
         .replace("  mission: { label: Mission }\n", "")
         .replace(
-            r#"  mission_delivery:
+            r#"  mission:
     applies_to: [mission]
-    initial_status: ready
-    done_statuses: [closed]
+    initial_status: draft
+    done_statuses: [publish_review, closed]
     transitions:
-      close:
+      ready:
+        from: [draft]
+        to: ready
+        description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
+        validators:
+          - issue.sections_parseable
+      start:
+        from: [ready]
+        to: in_progress
+        description: "Start mission execution after the configured repository baseline is green or explicitly waived."
+        validators:
+          - baseline.default_checks
+        actions:
+          - git.prepare_branch
+      request_publish:
         from: [ready, in_progress, validation]
-        to: closed
-        required_fields: [close_reason]
-        description: "Closing requires configured objective validators to pass."
+        to: publish_review
+        description: "Open the mission publish review from the mission branch to the configured base branch."
         validators:
           - objective.work_present
           - objective.work_terminal
           - objective.blockers_none_open
           - issue.sections_parseable
-          - evidence.attached: { min_count: 1 }
           - validation.criteria_satisfied
+          - closeout.failures_classified
           - lint.none_blocking
           - command_surface_current
           - ignored_tests_reviewed
-          - tracker.current
-          - git.on_base_branch
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - review.open: { role: manager }
 
 "#,
             "",
         );
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
+}
+
+fn set_issue_status(dir: &std::path::Path, issue_id: &str, status: &str) {
+    let path = canonical_issue_path(dir, issue_id);
+    let text = std::fs::read_to_string(&path).expect("failed to read issue record");
+    let updated = text
+        .lines()
+        .map(|line| {
+            if line.starts_with("status: ") {
+                format!("status: \"{status}\"")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(path, format!("{updated}\n")).expect("failed to write issue record");
 }
 
 // ==================== Session Tests ====================

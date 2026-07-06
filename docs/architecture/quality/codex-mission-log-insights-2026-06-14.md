@@ -93,7 +93,7 @@ were removed, not yet implemented, or belonged to another model:
 - `atelier work start`;
 - `atelier history`;
 - `atelier prime`;
-- `atelier issue list --blocked`.
+- `atelier work queue --blocked`.
 
 Some of this was caused by active migration, but the repeated pattern suggests
 that current help and docs do not make the supported command taxonomy obvious

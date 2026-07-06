@@ -17,7 +17,7 @@ Verify or create concise repository instructions that name:
   the tracker.
 
 For Atelier repositories, `AGENTS.md` and `docs/index.md` are the map, while
-`atelier man`, `atelier status`, focused `atelier issue status <objective-id>`,
+`atelier man`, `atelier status`, focused `atelier issue show <objective-id>`,
 command help, product docs, workflow policy, and validation docs own tactical
 operation.
 

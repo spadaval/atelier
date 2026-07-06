@@ -3,10 +3,13 @@ use atelier_app::project_config::DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS;
 use atelier_core::{Issue, RecordLink};
 use atelier_sqlite::{Database, RecordSummary};
 use chrono::{DateTime, Days, NaiveDate, Utc};
+use fs2::FileExt;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, SystemTime};
 
 use crate::telemetry::{self, DiagnosticsPruneSummary};
 
@@ -46,6 +49,46 @@ struct CanonicalCandidate {
 struct CanonicalRemoval {
     kind: &'static str,
     id: String,
+    activity_removed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct LocalCandidate {
+    class: &'static str,
+    path: PathBuf,
+    protection: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct LocalPruneSummary {
+    candidates: Vec<LocalCandidate>,
+    removed: Vec<PathBuf>,
+    failures: Vec<(PathBuf, String)>,
+    unavailable: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GitCandidate {
+    class: &'static str,
+    label: String,
+    path: Option<PathBuf>,
+    protection: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct GitPruneSummary {
+    candidates: Vec<GitCandidate>,
+    removed: Vec<(String, String)>,
+    failures: Vec<(String, String)>,
+    unavailable: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GitWorktree {
+    path: PathBuf,
+    branch: Option<String>,
+    locked: bool,
+    prunable: bool,
 }
 
 impl CanonicalCandidate {
@@ -60,6 +103,11 @@ pub fn run(
     retention_days: Option<u64>,
 ) -> Result<()> {
     let diagnostics = telemetry::prune_diagnostics_logs(retention_days, apply)?;
+    // Local artifacts are explicitly independent of canonical health.  Do this
+    // before opening or validating canonical state so a broken projection never
+    // prevents removal of an abandoned temporary file.
+    let local = prune_local_artifacts(tracker.as_ref(), retention_days, apply)?;
+    let git = prune_git_artifacts(tracker.as_ref(), apply)?;
     let canonical = prune_canonical_records(tracker, retention_days, apply)?;
 
     println!("Prune");
@@ -68,6 +116,10 @@ pub fn run(
     println!();
 
     print_diagnostics(&diagnostics, apply);
+    println!();
+    print_local(&local, apply);
+    println!();
+    print_git(&git, apply);
     println!();
     print_canonical(&canonical, apply);
     println!();
@@ -79,6 +131,515 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn prune_git_artifacts(tracker: Option<&TrackerContext>, apply: bool) -> Result<GitPruneSummary> {
+    let Some(tracker) = tracker else {
+        return Ok(GitPruneSummary {
+            unavailable: Some("tracker unavailable in this directory".to_string()),
+            ..Default::default()
+        });
+    };
+    let git_repository = Command::new("git")
+        .current_dir(&tracker.repo_root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .context("failed to inspect Git repository for prune")?;
+    if !git_repository.status.success() {
+        return Ok(GitPruneSummary {
+            unavailable: Some("not a Git checkout; Git cleanup is unavailable".to_string()),
+            ..Default::default()
+        });
+    }
+    let policy = match atelier_app::workflow_policy::load(&tracker.repo_root) {
+        Ok(policy) => policy,
+        Err(error) => {
+            return Ok(GitPruneSummary {
+                unavailable: Some(format!(
+                    "workflow policy unavailable; Git cleanup is protected ({error})"
+                )),
+                ..Default::default()
+            })
+        }
+    };
+    let base = policy.branch_policy.base_branch.clone();
+    let mut terminal_branch_owners = BTreeMap::new();
+    for issue in tracker.db.list_issues(Some("all"), None, None)? {
+        if !crate::commands::issue_workflow::issue_is_done(Some(&policy), &issue) {
+            continue;
+        }
+        if let Ok(resolution) =
+            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
+        {
+            if resolution.owner_id == issue.id {
+                terminal_branch_owners.insert(resolution.expected_branch, resolution.base_branch);
+            }
+        }
+    }
+    let current = git_stdout_trimmed(&tracker.repo_root, &["branch", "--show-current"])?;
+    let worktrees = git_worktrees(&tracker.repo_root)?;
+    let mut worktree_branch_blockers = BTreeMap::new();
+    for worktree in &worktrees {
+        if worktree.prunable || worktree.branch.is_none() {
+            continue;
+        }
+        let reason = if worktree.path == tracker.repo_root {
+            Some("current checkout".to_string())
+        } else if worktree.locked {
+            Some("locked worktree".to_string())
+        } else if !git_stdout_trimmed(&worktree.path, &["status", "--porcelain"])?.is_empty() {
+            Some("checked out by a dirty worktree".to_string())
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            worktree_branch_blockers
+                .insert(worktree.branch.clone().expect("checked above"), reason);
+        }
+    }
+    let mut summary = GitPruneSummary::default();
+    let branches = git_stdout_trimmed(
+        &tracker.repo_root,
+        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )?;
+    for branch in branches.lines().filter(|branch| !branch.is_empty()) {
+        let protection = if branch == current {
+            Some("current checkout".to_string())
+        } else if branch == base {
+            Some("configured base branch".to_string())
+        } else if let Some(reason) = worktree_branch_blockers.get(branch) {
+            Some(reason.clone())
+        } else if let Some(owner_base) = terminal_branch_owners.get(branch) {
+            if !branch_is_merged(&tracker.repo_root, branch, owner_base)? {
+                Some(format!(
+                    "contains commits not integrated into owner base {owner_base}"
+                ))
+            } else if let Some(reason) = branch_push_protection(&tracker.repo_root, branch)? {
+                Some(reason)
+            } else {
+                None
+            }
+        } else {
+            Some("no terminal owner record association".to_string())
+        };
+        summary.candidates.push(GitCandidate {
+            class: "branch",
+            label: branch.to_string(),
+            path: None,
+            protection,
+        });
+    }
+    for worktree in &worktrees {
+        if worktree.prunable {
+            summary.candidates.push(GitCandidate {
+                class: "worktree-registration",
+                label: worktree
+                    .branch
+                    .clone()
+                    .unwrap_or_else(|| "detached HEAD".to_string()),
+                path: Some(worktree.path.clone()),
+                protection: if worktree.locked {
+                    Some("locked stale worktree registration".to_string())
+                } else {
+                    None
+                },
+            });
+            continue;
+        }
+        let is_current = worktree.path == tracker.repo_root;
+        let dirty = !git_stdout_trimmed(&worktree.path, &["status", "--porcelain"])?.is_empty();
+        let protection = if is_current {
+            Some("current checkout".to_string())
+        } else if worktree.locked {
+            Some("locked worktree".to_string())
+        } else if dirty {
+            Some("dirty worktree".to_string())
+        } else if let Some(branch) = &worktree.branch {
+            if branch == &base {
+                Some("configured base branch".to_string())
+            } else if let Some(owner_base) = terminal_branch_owners.get(branch) {
+                if !branch_is_merged(&tracker.repo_root, branch, owner_base)? {
+                    Some(format!(
+                        "branch commits are not integrated into owner base {owner_base}"
+                    ))
+                } else if let Some(reason) = branch_push_protection(&tracker.repo_root, branch)? {
+                    Some(reason)
+                } else {
+                    None
+                }
+            } else {
+                Some("no terminal owner record association".to_string())
+            }
+        } else {
+            Some("detached worktree has no safely removable owner branch".to_string())
+        };
+        summary.candidates.push(GitCandidate {
+            class: "worktree",
+            label: worktree
+                .branch
+                .clone()
+                .unwrap_or_else(|| "detached HEAD".to_string()),
+            path: Some(worktree.path.clone()),
+            protection,
+        });
+    }
+    summary.candidates.sort_by(|left, right| {
+        (left.class, &left.label, &left.path).cmp(&(right.class, &right.label, &right.path))
+    });
+    if apply {
+        let prune_registrations = summary.candidates.iter().any(|candidate| {
+            candidate.class == "worktree-registration" && candidate.protection.is_none()
+        });
+        if prune_registrations {
+            match git_run(&tracker.repo_root, &["worktree", "prune"]) {
+                Ok(()) => {
+                    for candidate in summary.candidates.iter().filter(|candidate| {
+                        candidate.class == "worktree-registration" && candidate.protection.is_none()
+                    }) {
+                        let path = candidate.path.as_ref().expect("worktree registration path");
+                        summary
+                            .removed
+                            .push((candidate.class.to_string(), path.display().to_string()));
+                    }
+                }
+                Err(error) => summary
+                    .failures
+                    .push(("worktree registrations".to_string(), error.to_string())),
+            }
+        }
+        // Worktrees must go first; Git refuses to delete their checked-out branch.
+        for candidate in summary
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.class == "worktree" && candidate.protection.is_none())
+        {
+            let path = candidate.path.as_ref().expect("worktree candidate path");
+            match git_run(
+                &tracker.repo_root,
+                &["worktree", "remove", path.to_string_lossy().as_ref()],
+            ) {
+                Ok(()) => summary
+                    .removed
+                    .push((candidate.class.to_string(), path.display().to_string())),
+                Err(error) => summary
+                    .failures
+                    .push((path.display().to_string(), error.to_string())),
+            }
+        }
+        for candidate in summary
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.class == "branch" && candidate.protection.is_none())
+        {
+            match git_run(&tracker.repo_root, &["branch", "-d", &candidate.label]) {
+                Ok(()) => summary
+                    .removed
+                    .push((candidate.class.to_string(), candidate.label.clone())),
+                Err(error) => summary
+                    .failures
+                    .push((candidate.label.clone(), error.to_string())),
+            }
+        }
+    }
+    Ok(summary)
+}
+
+fn git_worktrees(repo_root: &Path) -> Result<Vec<GitWorktree>> {
+    let output = git_stdout_trimmed(repo_root, &["worktree", "list", "--porcelain"])?;
+    let mut worktrees = Vec::new();
+    let mut path = None;
+    let mut branch = None;
+    let mut locked = false;
+    let mut prunable = false;
+    let finish = |worktrees: &mut Vec<GitWorktree>,
+                  path: &mut Option<PathBuf>,
+                  branch: &mut Option<String>,
+                  locked: &mut bool,
+                  prunable: &mut bool| {
+        if let Some(path) = path.take() {
+            worktrees.push(GitWorktree {
+                path,
+                branch: branch.take(),
+                locked: std::mem::take(locked),
+                prunable: std::mem::take(prunable),
+            });
+        }
+    };
+    for line in output.lines().chain(std::iter::once("")) {
+        if line.is_empty() {
+            finish(
+                &mut worktrees,
+                &mut path,
+                &mut branch,
+                &mut locked,
+                &mut prunable,
+            );
+        } else if let Some(value) = line.strip_prefix("worktree ") {
+            path = Some(PathBuf::from(value));
+        } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
+            branch = Some(value.to_string());
+        } else if line.starts_with("locked") {
+            locked = true;
+        } else if line.starts_with("prunable") {
+            prunable = true;
+        }
+    }
+    Ok(worktrees)
+}
+
+fn branch_is_merged(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["merge-base", "--is-ancestor", branch, base])
+        .output()
+        .context("failed to inspect Git branch integration for prune candidate")?;
+    Ok(output.status.success())
+}
+
+fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<String>> {
+    let upstream = Command::new("git")
+        .current_dir(repo_root)
+        .args([
+            "rev-parse",
+            "--abbrev-ref",
+            &format!("{branch}@{{upstream}}"),
+        ])
+        .output()
+        .context("failed to inspect Git upstream for prune candidate")?;
+    if !upstream.status.success() {
+        return Ok(Some(
+            "has no upstream; push or preserve it before pruning".to_string(),
+        ));
+    }
+    let upstream = String::from_utf8_lossy(&upstream.stdout).trim().to_string();
+    let unpushed = git_stdout_trimmed(repo_root, &["rev-list", &format!("{upstream}..{branch}")])?;
+    if unpushed.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "contains commits not present in upstream {upstream}"
+        )))
+    }
+}
+
+fn git_stdout_trimmed(repo_root: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(args)
+        .output()
+        .context("failed to inspect Git state for prune")?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed while inspecting prune candidates",
+            args.join(" ")
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn git_run(repo_root: &Path, args: &[&str]) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(args)
+        .output()
+        .context("failed to remove Git prune candidate")?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+fn prune_local_artifacts(
+    tracker: Option<&TrackerContext>,
+    retention_days: Option<u64>,
+    apply: bool,
+) -> Result<LocalPruneSummary> {
+    let Some(tracker) = tracker else {
+        return Ok(LocalPruneSummary {
+            unavailable: Some("tracker unavailable in this directory".to_string()),
+            ..Default::default()
+        });
+    };
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(
+            retention_days.unwrap_or(30).saturating_mul(86_400),
+        ))
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    let mut summary = LocalPruneSummary::default();
+    for root in [
+        tracker.state_dir.join("runtime"),
+        tracker.state_dir.join("cache"),
+        tracker.state_dir.join(".cache"),
+    ] {
+        collect_local_candidates(
+            &tracker.repo_root,
+            &tracker.state_dir,
+            &root,
+            cutoff,
+            &mut summary.candidates,
+        )?;
+    }
+    summary.candidates.sort_by(|a, b| a.path.cmp(&b.path));
+    if apply {
+        for candidate in summary.candidates.iter().filter(|c| c.protection.is_none()) {
+            let absolute = tracker.state_dir.join(&candidate.path);
+            match fs::remove_file(&absolute) {
+                Ok(()) => summary.removed.push(candidate.path.clone()),
+                Err(error) => summary
+                    .failures
+                    .push((candidate.path.clone(), error.to_string())),
+            }
+        }
+    }
+    Ok(summary)
+}
+
+fn collect_local_candidates(
+    repo_root: &Path,
+    state_dir: &Path,
+    root: &Path,
+    cutoff: SystemTime,
+    candidates: &mut Vec<LocalCandidate>,
+) -> Result<()> {
+    if !root.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(root)
+        .with_context(|| format!("failed to inspect local prune directory {}", root.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_local_candidates(repo_root, state_dir, &path, cutoff, candidates)?;
+            continue;
+        }
+        let relative = match path.strip_prefix(state_dir) {
+            Ok(path) => path.to_path_buf(),
+            Err(_) => continue,
+        };
+        if !is_ignored_local_path(repo_root, &path)? {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let is_lock = name.ends_with(".lock");
+        let is_temp = name.ends_with(".tmp")
+            || name.contains(".rebuild-tmp")
+            || name.ends_with("-journal")
+            || name.ends_with("-wal")
+            || name.ends_with("-shm")
+            || name.ends_with(".journal");
+        let is_cache = relative
+            .components()
+            .next()
+            .map(|part| part.as_os_str() == "cache" || part.as_os_str() == ".cache")
+            .unwrap_or(false);
+        if !is_temp && !is_cache && !is_lock {
+            continue;
+        }
+        let stale = entry
+            .metadata()?
+            .modified()
+            .map(|modified| modified < cutoff)
+            .unwrap_or(true);
+        if !is_temp && !is_lock && !stale {
+            continue;
+        }
+        let class = if is_cache {
+            "stale-cache"
+        } else if is_temp {
+            "orphaned-temp"
+        } else {
+            "runtime-lock"
+        };
+        let protection = if is_lock {
+            Some("locked by a running or interrupted command; inspect before removal".to_string())
+        } else if is_runtime_projection_artifact(&relative) {
+            projection_artifact_protection(state_dir, &path)?
+        } else {
+            None
+        };
+        candidates.push(LocalCandidate {
+            class,
+            path: relative,
+            protection,
+        });
+    }
+    Ok(())
+}
+
+fn is_runtime_projection_artifact(relative: &Path) -> bool {
+    relative
+        .components()
+        .next()
+        .map(|part| part.as_os_str() == "runtime")
+        .unwrap_or(false)
+}
+
+fn projection_artifact_protection(state_dir: &Path, artifact: &Path) -> Result<Option<String>> {
+    let name = artifact
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    // SQLite sidecars are tied to an open projection database. They cannot be
+    // distinguished safely from live state without coordinating with SQLite.
+    if name.ends_with("-wal")
+        || name.ends_with("-shm")
+        || name.ends_with("-journal")
+        || name.ends_with(".journal")
+    {
+        return Ok(Some(
+            "runtime projection sidecar may belong to an open database".to_string(),
+        ));
+    }
+    if !name.contains(".rebuild-tmp") {
+        return Ok(None);
+    }
+    let lock = state_dir.join("runtime/.state.db.rebuild.lock");
+    let file = match OpenOptions::new().read(true).write(true).open(&lock) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to inspect projection rebuild lock {}",
+                    lock.display()
+                )
+            })
+        }
+    };
+    match file.try_lock_exclusive() {
+        Ok(()) => {
+            let _ = file.unlock();
+            Ok(Some(
+                "projection rebuild artifact is protected outside a coordinated rebuild; run `atelier check --fix`"
+                    .to_string(),
+            ))
+        }
+        Err(_) => Ok(Some(
+            "projection rebuild lock is active; rebuild artifact may be live".to_string(),
+        )),
+    }
+}
+
+fn is_ignored_local_path(repo_root: &Path, path: &Path) -> Result<bool> {
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args([
+            "check-ignore",
+            "--quiet",
+            "--",
+            path.to_string_lossy().as_ref(),
+        ])
+        .output()
+        .context("failed to inspect Git ignore state for local prune candidate")?;
+    Ok(output.status.success())
 }
 
 fn prune_canonical_records(
@@ -439,19 +1000,25 @@ fn remove_candidate(
     let absolute = state_dir.join(&candidate.path);
     match fs::remove_file(&absolute) {
         Ok(()) => {
+            let mut activity_removed = false;
             if candidate.kind == "issue" {
                 let activity_dir = state_dir
                     .join("issues")
                     .join(format!("{}.activity", candidate.id));
                 if activity_dir.exists() {
-                    if let Err(error) = fs::remove_dir_all(&activity_dir) {
-                        failures.push((activity_dir, error.to_string()));
+                    match fs::remove_dir_all(&activity_dir) {
+                        Ok(()) => activity_removed = true,
+                        Err(error) => failures.push((
+                            PathBuf::from("issues").join(format!("{}.activity", candidate.id)),
+                            error.to_string(),
+                        )),
                     }
                 }
             }
             removed.push(CanonicalRemoval {
                 kind: candidate.kind,
                 id: candidate.id.clone(),
+                activity_removed,
             });
         }
         Err(error) => failures.push((candidate.path.clone(), error.to_string())),
@@ -498,6 +1065,98 @@ fn print_diagnostics(summary: &DiagnosticsPruneSummary, apply: bool) {
     }
 }
 
+fn print_local(summary: &LocalPruneSummary, apply: bool) {
+    println!("Ignored Runtime, Cache, And Projection Artifacts");
+    println!("-----------------------------------------------");
+    if let Some(reason) = &summary.unavailable {
+        println!("Status:    unavailable - {reason}");
+        return;
+    }
+    if summary.candidates.is_empty() {
+        println!("Candidates: none");
+    } else {
+        println!("Candidates: {}", summary.candidates.len());
+        for candidate in &summary.candidates {
+            let removed = summary.removed.contains(&candidate.path);
+            if let Some(reason) = &candidate.protection {
+                println!(
+                    "  protected {} {} - {}",
+                    candidate.class,
+                    display_state_path(&candidate.path),
+                    reason
+                );
+            } else if removed {
+                println!(
+                    "  removed {} {}",
+                    candidate.class,
+                    display_state_path(&candidate.path)
+                );
+            } else if apply {
+                println!(
+                    "  failed {} {}",
+                    candidate.class,
+                    display_state_path(&candidate.path)
+                );
+            } else {
+                println!(
+                    "  eligible {} {}",
+                    candidate.class,
+                    display_state_path(&candidate.path)
+                );
+            }
+        }
+    }
+    if !summary.removed.is_empty() {
+        println!("Projection: local state changed; run `atelier check --fix` if projection health is stale");
+    }
+    if !summary.failures.is_empty() {
+        println!("Failures:");
+        for (path, error) in &summary.failures {
+            println!("  {} - {}", display_state_path(path), error);
+        }
+    }
+}
+
+fn print_git(summary: &GitPruneSummary, apply: bool) {
+    println!("Git Branches And Worktrees");
+    println!("--------------------------");
+    if let Some(reason) = &summary.unavailable {
+        println!("Status:    unavailable - {reason}");
+        return;
+    }
+    if summary.candidates.is_empty() {
+        println!("Candidates: none");
+    } else {
+        println!("Candidates: {}", summary.candidates.len());
+        for candidate in &summary.candidates {
+            let target = candidate
+                .path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| candidate.label.clone());
+            if let Some(reason) = &candidate.protection {
+                println!("  protected {} {} - {}", candidate.class, target, reason);
+            } else if summary
+                .removed
+                .iter()
+                .any(|(class, removed)| class == candidate.class && removed == &target)
+            {
+                println!("  removed {} {}", candidate.class, target);
+            } else if apply {
+                println!("  failed {} {}", candidate.class, target);
+            } else {
+                println!("  eligible {} {}", candidate.class, target);
+            }
+        }
+    }
+    if !summary.failures.is_empty() {
+        println!("Failures:");
+        for (target, error) in &summary.failures {
+            println!("  {target} - {error}");
+        }
+    }
+}
+
 fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
     println!("Canonical Records");
     println!("-----------------");
@@ -539,8 +1198,14 @@ fn print_canonical_candidate(
         .removed
         .iter()
         .any(|removed| removed.kind == candidate.kind && removed.id == candidate.id);
+    let failed = summary
+        .failures
+        .iter()
+        .any(|(path, _)| path == &candidate.path);
     let status = if removed {
         "removed"
+    } else if failed {
+        "failed"
     } else if let Some(reason) = &candidate.protection {
         println!(
             "  protected {} {} ({}, latest {}, path {}) - {}",
@@ -567,12 +1232,7 @@ fn print_canonical_candidate(
         display_state_path(&candidate.path)
     );
     if candidate.activity_count > 0 {
-        let activity_status = if removed { "removed" } else { "eligible" };
-        println!(
-            "    {activity_status} activity-sidecars {} ({} file(s))",
-            display_state_path(&PathBuf::from("issues").join(format!("{}.activity", candidate.id))),
-            candidate.activity_count
-        );
+        println!("{}", canonical_activity_line(candidate, summary));
     }
     println!(
         "    recover: git log --all -- {}; git show <commit>:{}",
@@ -584,13 +1244,39 @@ fn print_canonical_candidate(
     }
 }
 
+fn canonical_activity_line(
+    candidate: &CanonicalCandidate,
+    summary: &CanonicalPruneSummary,
+) -> String {
+    let activity_path = PathBuf::from("issues").join(format!("{}.activity", candidate.id));
+    let activity_removed = summary
+        .removed
+        .iter()
+        .find(|removal| removal.kind == candidate.kind && removal.id == candidate.id)
+        .map(|removal| removal.activity_removed)
+        .unwrap_or(false);
+    let activity_failed = summary
+        .failures
+        .iter()
+        .any(|(path, _)| path == &activity_path);
+    let activity_status = if activity_removed {
+        "removed"
+    } else if activity_failed {
+        "failed"
+    } else {
+        "eligible"
+    };
+    format!(
+        "    {activity_status} activity-sidecars {} ({} file(s))",
+        display_state_path(&activity_path),
+        candidate.activity_count
+    )
+}
+
 fn print_deferred_classes() {
     println!("Deferred Cleanup Classes");
     println!("------------------------");
-    println!(
-        "  report-only ignored runtime/cache projection artifacts - local safety contract pending"
-    );
-    println!("  report-only branches and worktrees - Git safety contract pending");
+    println!("  none");
 }
 
 fn display_state_path(path: &Path) -> String {
@@ -604,4 +1290,110 @@ fn display_git_path(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("/");
     format!(".atelier/{relative}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn branch_with_unpushed_commits_is_protected() {
+        let repo = tempdir().unwrap();
+        let remote = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::write(repo.path().join("base"), "base").unwrap();
+        git(repo.path(), &["add", "base"]);
+        git(repo.path(), &["commit", "-m", "base"]);
+        git(remote.path(), &["init", "--bare"]);
+        git(
+            repo.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git(repo.path(), &["push", "-u", "origin", "main"]);
+        git(repo.path(), &["checkout", "-b", "task/owner"]);
+        git(repo.path(), &["push", "-u", "origin", "task/owner"]);
+        fs::write(repo.path().join("unpushed"), "work").unwrap();
+        git(repo.path(), &["add", "unpushed"]);
+        git(repo.path(), &["commit", "-m", "unpushed"]);
+
+        let reason = branch_push_protection(repo.path(), "task/owner").unwrap();
+        assert!(reason
+            .unwrap()
+            .contains("not present in upstream origin/task/owner"));
+    }
+
+    #[test]
+    fn branch_without_upstream_is_protected() {
+        let repo = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::write(repo.path().join("base"), "base").unwrap();
+        git(repo.path(), &["add", "base"]);
+        git(repo.path(), &["commit", "-m", "base"]);
+
+        let reason = branch_push_protection(repo.path(), "main").unwrap();
+        assert!(reason.unwrap().contains("has no upstream"));
+    }
+
+    #[test]
+    fn failed_activity_sidecar_removal_is_not_reported_as_removed() {
+        let state = tempdir().unwrap();
+        let issues = state.path().join("issues");
+        fs::create_dir_all(&issues).unwrap();
+        let id = "atelier-sidecar";
+        fs::write(issues.join(format!("{id}.md")), "record").unwrap();
+        // A file at the activity-directory path makes remove_dir_all fail on
+        // every platform, exercising the independent sidecar failure state.
+        let activity = issues.join(format!("{id}.activity"));
+        fs::write(&activity, "not a directory").unwrap();
+        let candidate = CanonicalCandidate {
+            kind: "issue",
+            id: id.to_string(),
+            title: String::new(),
+            status: "done".to_string(),
+            path: PathBuf::from("issues").join(format!("{id}.md")),
+            latest_at: Utc::now(),
+            activity_count: 1,
+            protection: None,
+        };
+        let mut removed = Vec::new();
+        let mut failures = Vec::new();
+
+        remove_candidate(state.path(), &candidate, &mut removed, &mut failures);
+
+        assert_eq!(removed.len(), 1);
+        assert!(!removed[0].activity_removed);
+        let relative_activity = PathBuf::from("issues").join(format!("{id}.activity"));
+        assert!(failures.iter().any(|(path, _)| path == &relative_activity));
+        let summary = CanonicalPruneSummary {
+            retention_days: 7,
+            cutoff: Utc::now().date_naive(),
+            issues: vec![candidate.clone()],
+            evidence: Vec::new(),
+            removed,
+            failures,
+            unavailable: None,
+            rebuilt_projection: false,
+        };
+        assert!(canonical_activity_line(&candidate, &summary)
+            .contains("failed activity-sidecars .atelier/issues/atelier-sidecar.activity"));
+    }
 }

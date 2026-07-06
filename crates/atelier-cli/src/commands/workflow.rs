@@ -1,44 +1,29 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
-use serde::Serialize;
 use std::collections::BTreeSet;
 use std::env;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
 
-use crate::commands::issue::issue_evidence_gate_status;
+use crate::human_output::{self, DecisionState, StylePolicy};
 use atelier_app::forgejo::{ForgejoClient, UreqForgejoTransport};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use atelier_app::review_room;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
-use atelier_core::{EvidenceRecord, Issue, Record};
-use atelier_records::{CanonicalIssueRecord, IssueSections};
+use atelier_core::Issue;
+use atelier_records::CanonicalIssueRecord;
 use atelier_sqlite::Database;
 use serde_json::Value;
 
 pub(crate) use crate::commands::workflow_actions::action_preflight_blockers;
 pub(crate) use crate::commands::workflow_planning::{
-    branch_ahead_count, branch_lifecycle_context, branch_lifecycle_scope_line,
-    branch_lifecycle_state_line, branch_owner_label, configured_base_branch, current_git_branch,
-    issue_transition_options, known_branch_owner, plan_transition_actions, IssueTransitionOption,
-    PlannedAction,
+    branch_lifecycle_context, branch_lifecycle_state_line, branch_owner_label,
+    issue_transition_options, plan_transition_actions, IssueTransitionOption, PlannedAction,
 };
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ValidatorResult {
-    pub target_kind: String,
-    pub target_id: String,
-    pub transition: String,
-    pub validator: String,
-    pub passed: bool,
-    pub reason: String,
-    pub help: Option<String>,
-    pub elapsed_ms: u128,
-}
+pub use atelier_app::workflow_validation::ValidatorResult;
 
 pub fn check(db: &Database) -> Result<()> {
     let repo_root = repo_root()?;
@@ -59,7 +44,7 @@ pub fn check(db: &Database) -> Result<()> {
     println!("Record Health:  pass");
     println!("Issues Checked: {}", report.issue_count);
     let (command_surface_passed, command_surface_reason) =
-        crate::command_surface::status_reason(&repo_root)?;
+        atelier_app::command_surface::status_reason(&repo_root)?;
     if command_surface_passed {
         println!("Docs/Help Drift: clear");
     } else {
@@ -86,7 +71,8 @@ pub fn transition_issue(
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
-    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let pre_transition_record = record.clone();
     let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
@@ -115,36 +101,30 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
-    let mut action_results = execute_pre_transition_actions(
+    let action_results = match execute_transition_actions(
         db,
         state_dir,
         db_path,
         &repo_root,
         &before,
         transition_name,
+        &policy,
+        transition,
         &planned_actions,
-    )?;
-    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
-    apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
-    record_applied_actions(&before.id, transition_name, &planned_actions)?;
-    record_applied_transition(&before, transition_name, transition)?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    match execute_post_transition_actions(
-        &repo_root,
-        state_dir,
-        db_path,
-        &before,
-        transition_name,
-        &planned_actions,
+        close_reason,
+        git_rollback.as_ref(),
+        &pre_transition_record,
     ) {
-        Ok(mut results) => action_results.append(&mut results),
+        Ok(results) => results,
         Err(error) => {
-            if let Some(rollback) = git_rollback {
+            if let Some(rollback) = git_rollback.as_ref() {
                 rollback.rollback_after_post_action_failure(state_dir, db_path)?;
             }
+            app_use_cases::write_canonical_issue(state_dir, &pre_transition_record)?;
+            app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
             bail!("{error:#}");
         }
-    }
+    };
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     if transition_name == "start" {
@@ -160,10 +140,10 @@ pub fn transition_issue(
     if transition_name == "start" {
         println!("  Inspect checkout status: atelier status");
         if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
-            println!("  Inspect mission selection and blockers: atelier issue status {mission_id}");
+            println!("  Inspect objective selection and blockers: atelier issue show {mission_id}");
         }
         println!(
-            "  Inspect work transitions: atelier issue transition {} --options",
+            "  Inspect work transitions: atelier issue transition {}",
             issue.id
         );
         println!(
@@ -172,7 +152,7 @@ pub fn transition_issue(
         );
     } else {
         println!("  atelier issue show {}", issue.id);
-        println!("  atelier issue transition {} --options", issue.id);
+        println!("  atelier issue transition {}", issue.id);
     }
     Ok(())
 }
@@ -190,8 +170,9 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
             context.resolution.owner_id,
             context.resolution.owner_issue_type
         );
-        println!("Effective branch: {}", context.resolution.expected_branch);
+        println!("Source branch: {}", context.resolution.expected_branch);
         println!("Base branch: {}", context.resolution.base_branch);
+        println!("Target branch: {}", context.resolution.base_branch);
     }
     if let Some(branch) = branch {
         println!("Branch: {branch}");
@@ -347,27 +328,107 @@ struct AppliedAction {
     detail: String,
 }
 
-fn execute_pre_transition_actions(
+struct TransitionApply<'a> {
+    state_dir: &'a Path,
+    db_path: &'a Path,
+    issue: &'a Issue,
+    transition_name: &'a str,
+    policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &'a atelier_app::workflow_policy::TransitionDefinition,
+    planned_actions: &'a [PlannedAction],
+    close_reason: Option<&'a str>,
+}
+
+impl TransitionApply<'_> {
+    fn apply(&self) -> Result<()> {
+        let mut record = app_use_cases::load_canonical_issue(self.state_dir, &self.issue.id)?;
+        apply_transition_record(
+            self.policy,
+            self.state_dir,
+            &mut record,
+            self.transition,
+            self.close_reason,
+        )?;
+        record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
+        record_applied_transition(self.issue, self.transition_name, self.transition)?;
+        app_use_cases::refresh_after_canonical_write(self.state_dir, self.db_path)
+    }
+}
+
+fn execute_transition_actions(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
     transition_name: &str,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     planned_actions: &[PlannedAction],
+    close_reason: Option<&str>,
+    git_rollback: Option<&TransitionGitRollback>,
+    pre_transition_record: &CanonicalIssueRecord,
 ) -> Result<Vec<AppliedAction>> {
+    let transition_apply = TransitionApply {
+        state_dir,
+        db_path,
+        issue,
+        transition_name,
+        policy,
+        transition,
+        planned_actions,
+        close_reason,
+    };
     let mut applied = Vec::new();
+    let mut transition_applied = false;
     for action in planned_actions {
-        match action.name.as_str() {
-            "branch_prepare" => {
-                let detail = prepare_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
+        if action_requires_applied_transition(action.name.as_str()) && !transition_applied {
+            transition_apply.apply()?;
+            transition_applied = true;
+        }
+        let result = match action.name.as_str() {
+            "git.prepare_branch" => {
+                let detail = prepare_branch_action(state_dir, repo_root, issue, action)?;
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
-            | "branch_integrate" => {}
+            "tracker.commit" => {
+                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.push" => {
+                let detail = push_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "review.merge" => {
+                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "git.sync" => {
+                let detail = sync_base_action(repo_root, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
+            "branch_integrate" => {
+                let detail = integrate_branch_action(repo_root, issue, action)?;
+                Ok(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                })
+            }
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -378,72 +439,45 @@ fn execute_pre_transition_actions(
                     transition_name,
                     action,
                 )?;
-                applied.push(AppliedAction {
+                Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
-                });
+                })
             }
-            other => bail!(
-                "action {other} failed: action execution is not implemented; status was not changed"
-            ),
-        }
+            other => Err(anyhow!(
+                "action {other} failed: action execution is not implemented; status was {}changed",
+                if transition_applied { "" } else { "not " }
+            )),
+        };
+        match result {
+            Ok(result) => applied.push(result),
+            Err(error) => {
+                if transition_applied {
+                    if let Some(rollback) = git_rollback {
+                        rollback.rollback_after_post_action_failure(state_dir, db_path)?;
+                    }
+                    app_use_cases::write_canonical_issue(state_dir, pre_transition_record)?;
+                    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+                }
+                bail!("{error:#}");
+            }
+        };
+    }
+    if !transition_applied {
+        transition_apply.apply()?;
     }
     Ok(applied)
 }
 
-fn execute_post_transition_actions(
-    repo_root: &Path,
-    state_dir: &Path,
-    db_path: &Path,
-    issue: &Issue,
-    transition_name: &str,
-    planned_actions: &[PlannedAction],
-) -> Result<Vec<AppliedAction>> {
-    let mut applied = Vec::new();
-    for action in planned_actions {
-        match action.name.as_str() {
-            "tracker.commit" => {
-                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "branch.push" => {
-                let detail = push_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "review.merge" => {
-                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "base.sync" => {
-                let detail = sync_base_action(repo_root, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            "branch_integrate" => {
-                let detail = integrate_branch_action(repo_root, issue, action)?;
-                applied.push(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                });
-            }
-            _ => {}
-        }
-    }
-    Ok(applied)
+fn action_requires_applied_transition(name: &str) -> bool {
+    matches!(
+        name,
+        "tracker.commit" | "review.merge" | "git.sync" | "branch_integrate"
+    )
 }
 
 fn prepare_branch_action(
+    state_dir: &Path,
     repo_root: &Path,
     issue: &Issue,
     action: &PlannedAction,
@@ -451,6 +485,7 @@ fn prepare_branch_action(
     ensure_non_tracker_clean_for_action(repo_root, action, issue, "before workflow transition")?;
     let current = git_current_branch(repo_root).unwrap_or_default();
     if current == action.expected_branch {
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
@@ -461,6 +496,7 @@ fn prepare_branch_action(
                     action.name, action.expected_branch, issue.id
                 )
             })?;
+        persist_workflow_branch_field(state_dir, action)?;
         return Ok(format!("checked out branch {}", action.expected_branch));
     }
     ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
@@ -480,10 +516,48 @@ fn prepare_branch_action(
             action.name, action.expected_branch, action.base_branch, issue.id
         )
     })?;
+    persist_workflow_branch_field(state_dir, action)?;
     Ok(format!(
         "created branch {} from {}",
         action.expected_branch, action.base_branch
     ))
+}
+
+fn persist_workflow_branch_field(state_dir: &Path, action: &PlannedAction) -> Result<()> {
+    let mut owner = app_use_cases::load_canonical_issue(state_dir, &action.branch_owner_id)
+        .with_context(|| {
+            format!(
+                "action {} failed while loading branch owner {} to record workflow_branch",
+                action.name, action.branch_owner_id
+            )
+        })?;
+    owner.issue.fields.insert(
+        atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+        serde_json::json!({
+            "owner_issue_id": action.branch_owner_id.clone(),
+            "work_branch": action.expected_branch.clone(),
+            "branch_base": action.base_branch.clone(),
+            "review_target": action.base_branch.clone(),
+            "integration_target": action.base_branch.clone(),
+            "owner_kind": workflow_branch_owner_kind(&owner.issue.issue_type),
+            "merge_strategy": action.merge_strategy.as_str(),
+        }),
+    );
+    owner.issue.updated_at = Utc::now();
+    app_use_cases::write_canonical_issue(state_dir, &owner).with_context(|| {
+        format!(
+            "action {} failed while recording workflow_branch on {}",
+            action.name, action.branch_owner_id
+        )
+    })
+}
+
+fn workflow_branch_owner_kind(issue_type: &str) -> &'static str {
+    match issue_type {
+        "epic" => "epic",
+        "mission" => "mission",
+        _ => "issue",
+    }
 }
 
 fn commit_branch_action(
@@ -546,11 +620,7 @@ fn integrate_branch_action(
             action.name, action.base_branch, issue.id
         )
     })?;
-    git_checked(
-        repo_root,
-        &["switch", &action.base_branch],
-        "checkout action integration target",
-    )
+    git_switch_checked(repo_root, &action.base_branch, "checkout action integration target")
     .with_context(|| {
         format!(
             "action {} failed while switching to base branch '{}'.\nRecovery: source branch '{}' contains transition work; inspect `git status --short --branch`, switch to the base branch, and retry integration or the transition after repair.",
@@ -678,32 +748,85 @@ fn merge_review_action(
 }
 
 fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
-    git_checked(repo_root, &["fetch", "origin", &action.base_branch], "fetch base branch")
-        .with_context(|| {
+    let remote_ref = format!("origin/{}", action.base_branch);
+    let remote_tracking_ref = format!("refs/remotes/{remote_ref}");
+    let fetch_refspec = format!("refs/heads/{}:{remote_tracking_ref}", action.base_branch);
+    git_checked(repo_root, &["fetch", "origin", &fetch_refspec], "fetch base branch")
+    .with_context(|| {
             format!(
                 "action {} failed while fetching base branch '{}'.\nRecovery: inspect the configured provider remote and retry the transition.",
                 action.name, action.base_branch
             )
         })?;
-    git_checked(repo_root, &["switch", &action.base_branch], "checkout base branch")
+    let current = git_current_branch(repo_root).unwrap_or_default();
+    if current == action.base_branch {
+        git_checked(
+            repo_root,
+            &["merge", "--ff-only", &remote_ref],
+            "fast-forward checked-out base branch",
+        )
         .with_context(|| {
             format!(
-                "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                "action {} failed while syncing checked-out base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
                 action.name, action.base_branch
             )
         })?;
+        return Ok(format!("synced {}", action.base_branch));
+    }
+    if let Some(worktree_path) = branch_checked_out_worktree(repo_root, &action.base_branch)? {
+        bail!(
+            "action {} failed because target branch '{}' is checked out in another worktree at {}.\nRecovery: close or switch that worktree, then retry the transition.",
+            action.name,
+            action.base_branch,
+            worktree_path
+        );
+    }
+    ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
+        format!(
+            "action {} failed because target branch '{}' is missing.\nRecovery: create or fetch the target branch, then retry the transition.",
+            action.name, action.base_branch
+        )
+    })?;
     git_checked(
         repo_root,
-        &["merge", "--ff-only", &format!("origin/{}", action.base_branch)],
-        "fast-forward base branch",
+        &["merge-base", "--is-ancestor", &action.base_branch, &remote_ref],
+        "verify base branch fast-forward",
     )
     .with_context(|| {
         format!(
-            "action {} failed while syncing base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
+            "action {} failed because target branch '{}' cannot fast-forward to '{}'.\nRecovery: inspect local/remote divergence before retrying.",
+            action.name, action.base_branch, remote_ref
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["update-ref", &format!("refs/heads/{}", action.base_branch), &remote_tracking_ref],
+        "fast-forward base branch ref",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while updating target branch '{}'.\nRecovery: inspect local refs and retry the transition.",
             action.name, action.base_branch
         )
     })?;
     Ok(format!("synced {}", action.base_branch))
+}
+
+fn branch_checked_out_worktree(repo_root: &Path, branch: &str) -> Result<Option<String>> {
+    let output = git_stdout(
+        repo_root,
+        &["worktree", "list", "--porcelain"],
+        "inspect worktrees",
+    )?;
+    let mut current_path: Option<String> = None;
+    for line in output.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            current_path = Some(path.to_string());
+        } else if line == format!("branch refs/heads/{branch}") {
+            return Ok(current_path);
+        }
+    }
+    Ok(None)
 }
 
 fn ensure_expected_branch_checked_out(
@@ -717,7 +840,7 @@ fn ensure_expected_branch_checked_out(
     }
     ensure_branch_exists(repo_root, &action.expected_branch).with_context(|| {
         format!(
-            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `branch_prepare` first, then retry the transition for {}.",
+            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `git.prepare_branch` first, then retry the transition for {}.",
             action.name, action.expected_branch, issue.id
         )
     })?;
@@ -798,12 +921,8 @@ fn open_review_artifact_action(
                         action.name
                     )
                 })?);
-                let token = env::var(&forgejo.admin_token_env).with_context(|| {
-                    format!(
-                        "action {} failed: environment variable {} is required for provider review open",
-                        action.name, forgejo.admin_token_env
-                    )
-                })?;
+                let token = atelier_app::project_config::load_forgejo_admin_token()
+                    .with_context(|| format!("action {} failed", action.name))?;
                 let client = ForgejoClient::new(
                     forgejo.clone(),
                     UreqForgejoTransport::new(&forgejo.host, token),
@@ -871,12 +990,16 @@ fn record_applied_actions(
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_target: {}\nintegration_target: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
                 transition_name,
                 action.name,
                 action.order,
                 action.target_issue_id,
                 action.branch_owner_id,
+                action.expected_branch,
+                action.base_branch,
+                action.base_branch,
+                action.base_branch,
                 action
                     .review_artifact_target
                     .as_deref()
@@ -949,7 +1072,7 @@ pub fn close_issue(
 
     if candidates.is_empty() {
         bail!(
-            "Issue {} has no terminal done-category transitions from status '{}'; inspect `atelier issue transition {} --options`",
+            "Issue {} has no terminal done-category transitions from status '{}'; inspect `atelier issue transition {}`",
             issue.id,
             issue.status,
             issue.id
@@ -1035,7 +1158,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
         )
     })
 }
@@ -1043,7 +1166,7 @@ fn transition_declares_branch_git_actions(
 fn transition_git_action_names(name: &str) -> bool {
     matches!(
         name,
-        "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+        "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
     )
 }
 
@@ -1121,13 +1244,17 @@ impl TransitionGitRollback {
                 "reset failed action merge state",
             )?;
         }
-        if branch_exists_at(&self.repo_root, &self.expected_branch)? {
-            git_checked(
-                &self.repo_root,
-                &["switch", &self.expected_branch],
-                "return to action source branch for rollback",
-            )?;
-        }
+        git_checked(
+            &self.repo_root,
+            &["switch", "--force", &self.expected_branch],
+            "return to action source branch for rollback",
+        )
+        .with_context(|| {
+            format!(
+                "action rollback failed for {} {} while returning to source branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                self.issue_id, self.transition_name, self.expected_branch
+            )
+        })?;
         git_checked(
             &self.repo_root,
             &["reset", "--hard", &self.source_pre_head],
@@ -1296,9 +1423,9 @@ impl CloseGitIntegration {
     }
 
     fn merge_to_base(&self) -> Result<String> {
-        git_checked(
+        git_switch_checked(
             &self.repo_root,
-            &["switch", &self.resolution.base_branch],
+            &self.resolution.base_branch,
             "checkout base branch before merge",
         )
         .with_context(|| {
@@ -1579,6 +1706,18 @@ fn git_checked(root: &Path, args: &[&str], action: &str) -> Result<()> {
     )
 }
 
+fn git_switch_checked(root: &Path, branch: &str, action: &str) -> Result<()> {
+    match git_checked(root, &["switch", branch], action) {
+        Ok(()) => Ok(()),
+        Err(error) if error.to_string().contains("is already used by worktree") => git_checked(
+            root,
+            &["switch", "--ignore-other-worktrees", branch],
+            action,
+        ),
+        Err(error) => Err(error),
+    }
+}
+
 pub(crate) fn git_stdout(root: &Path, args: &[&str], action: &str) -> Result<String> {
     let output = Command::new("git")
         .current_dir(root)
@@ -1613,47 +1752,116 @@ pub fn print_issue_transition_options(
     db: &Database,
     issue: &Issue,
     options: &[IssueTransitionOption],
+    verbose: bool,
 ) {
-    println!("Issue Transitions {} - {}", issue.id, issue.title);
-    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
-    print_heading("State");
-    println!("Status:   {}", issue.status);
-    println!("Type:     {}", issue.issue_type);
-    println!("Options:  {}", options.len());
-    if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
-        print_heading("Branch Context");
-        println!(
-            "Owner:    {} {} ({})",
-            branch_owner_label(&context.resolution.owner_kind),
-            context.resolution.owner_id,
-            context.resolution.owner_issue_type
-        );
-        println!("Expected: {}", context.resolution.expected_branch);
-        println!("Base:     {}", context.resolution.base_branch);
-        println!(
-            "Current:  {}",
-            context.current_branch.as_deref().unwrap_or("(detached)")
-        );
-        println!("State:    {}", branch_lifecycle_state_line(&context));
+    println!(
+        "{}",
+        render_issue_transition_options(db, issue, options, StylePolicy::for_stdout(), verbose)
+    );
+}
+
+fn render_issue_transition_options(
+    db: &Database,
+    issue: &Issue,
+    options: &[IssueTransitionOption],
+    style_policy: StylePolicy,
+    verbose: bool,
+) -> String {
+    let mut lines = vec![
+        human_output::heading(&format!("Issue Transitions {} - {}", issue.id, issue.title)),
+        human_output::section_heading("State"),
+        format!("Status:   {}", issue.status),
+        format!("Type:     {}", issue.issue_type),
+        format!("Options:  {}", options.len()),
+    ];
+    let needs_branch_context = verbose
+        && options.iter().any(|option| {
+            crate::commands::workflow_planning::planned_actions_need_branch_context(
+                &option.planned_actions,
+            )
+        });
+    if needs_branch_context {
+        if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
+            lines.push(human_output::section_heading("Branch Context"));
+            lines.push(format!(
+                "Owner:    {} {} ({})",
+                branch_owner_label(&context.resolution.owner_kind),
+                context.resolution.owner_id,
+                context.resolution.owner_issue_type
+            ));
+            lines.push(format!("Source:   {}", context.resolution.expected_branch));
+            lines.push(format!("Base:     {}", context.resolution.base_branch));
+            lines.push(format!("Target:   {}", context.resolution.base_branch));
+            lines.push(format!(
+                "Current:  {}",
+                context.current_branch.as_deref().unwrap_or("(detached)")
+            ));
+            lines.push(format!(
+                "State:    {}",
+                branch_lifecycle_state_line(&context)
+            ));
+        }
     }
     for option in options {
-        println!();
-        println!(
+        let decision = if option.allowed {
+            DecisionState::Allowed
+        } else {
+            DecisionState::Blocked
+        };
+        lines.push(String::new());
+        lines.push(format!(
             "{} [{}]",
             option.name,
-            if option.allowed { "allowed" } else { "blocked" }
-        );
-        println!("  From: {}", option.from.join(", "));
-        println!("  To:   {}", option.to);
-        println!("  Command: {}", option.command);
-        print_transition_detail("Validators", &option.validator_results);
-        print_text_list("Blockers", &option.blockers);
-        print_text_list(
-            "Planned Actions",
-            &planned_action_lines(&option.planned_actions),
-        );
-        print_text_list("Description", &option.descriptions);
+            decision.render(style_policy)
+        ));
+        lines.push(format!("  From: {}", option.from.join(", ")));
+        lines.push(format!("  To:   {}", option.to));
+        if option.allowed {
+            lines.push("  Requirements: satisfied".to_string());
+        } else {
+            lines.extend(render_text_list(
+                "Failed Requirements",
+                &failed_requirement_lines(&option.blockers),
+            ));
+        }
+        if verbose {
+            lines.push(format!("  Decision: {}", decision.render(style_policy)));
+            lines.extend(render_transition_detail(
+                "Validators",
+                &option.validator_results,
+                style_policy,
+            ));
+            lines.extend(render_text_list(
+                "Planned Actions",
+                &planned_action_lines(&option.planned_actions),
+            ));
+            lines.extend(render_text_list("Description", &option.descriptions));
+        }
+        lines.extend(render_text_list("Commands", &[option.command.clone()]));
     }
+    lines.join("\n")
+}
+
+fn failed_requirement_lines(blockers: &[String]) -> Vec<String> {
+    blockers
+        .iter()
+        .map(|blocker| {
+            if let Some(rest) = blocker.strip_prefix("validator ") {
+                if let Some((name, _)) = rest.split_once(" failed:") {
+                    return format!("validator {name}");
+                }
+            }
+            if let Some(rest) = blocker.strip_prefix("missing required field ") {
+                if let Some((field, _)) = rest.split_once(';') {
+                    return format!("required field {field}");
+                }
+            }
+            if let Some((requirement, _)) = blocker.split_once(':') {
+                return requirement.to_string();
+            }
+            blocker.clone()
+        })
+        .collect()
 }
 
 pub fn evaluate(
@@ -1715,102 +1923,6 @@ fn default_validator_definitions(
         .collect()
 }
 
-fn objective_work_ids(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<BTreeSet<String>> {
-    match target_kind {
-        "mission" => mission_issue_ids(db, target_id),
-        "issue" => crate::commands::objective_status::issue_descendant_ids(db, target_id),
-        _ => Ok(BTreeSet::new()),
-    }
-}
-
-fn objective_work_present(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    let work = objective_work_ids(db, target_kind, target_id)?;
-    if work.is_empty() {
-        Ok((
-            false,
-            format!(
-                "no advancing work linked to {target_kind} {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
-            ),
-        ))
-    } else {
-        Ok((
-            true,
-            format!(
-                "advancing work linked via advances: {}",
-                work.into_iter().collect::<Vec<_>>().join(", ")
-            ),
-        ))
-    }
-}
-
-fn objective_work_terminal(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    let mut open = objective_work_ids(db, target_kind, target_id)?
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-            Ok(true) => Some(Ok(issue.id)),
-            Ok(false) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>>>()?;
-    open.sort();
-    if open.is_empty() {
-        Ok((true, "all advancing work is terminal".to_string()))
-    } else {
-        Ok((
-            false,
-            format!(
-                "open advancing work via advances: {}; inspect `atelier issue transition {} --options`",
-                open.join(", "),
-                open.first().cloned().unwrap_or_else(|| "<issue-id>".to_string())
-            ),
-        ))
-    }
-}
-
-fn objective_direct_blockers_none_open(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    let mut open =
-        crate::commands::objective_status::direct_blocker_ids(db, target_kind, target_id)?
-            .into_iter()
-            .filter_map(|id| db.get_issue(&id).ok().flatten())
-            .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-                Ok(true) => Some(Ok(issue.id)),
-                Ok(false) => None,
-                Err(error) => Some(Err(error)),
-            })
-            .collect::<Result<Vec<_>>>()?;
-    open.sort();
-    if open.is_empty() {
-        Ok((true, "no open direct objective blockers".to_string()))
-    } else {
-        Ok((
-            false,
-            format!(
-                "open direct objective blockers via blocked_by: {}; inspect `atelier issue blocked {target_id}`",
-                open.join(", ")
-            ),
-        ))
-    }
-}
-
 fn print_transition_attempt(
     issue: &Issue,
     transition_name: &str,
@@ -1838,8 +1950,14 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
         .iter()
         .map(|action| {
             let mut line = format!(
-                "{}. {} target={} owner={}",
-                action.order, action.name, action.target_issue_id, action.branch_owner_id
+                "{}. {} target={} owner={} source={} base={} integration_target={}",
+                action.order,
+                action.name,
+                action.target_issue_id,
+                action.branch_owner_id,
+                action.expected_branch,
+                action.base_branch,
+                action.base_branch
             );
             if let Some(review_target) = &action.review_artifact_target {
                 line.push_str(&format!(" review_target={review_target}"));
@@ -1865,70 +1983,82 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
-    print_heading(title);
-    if results.is_empty() {
-        println!("(none)");
-        return;
-    }
-    for result in results {
-        println!(
-            "  {}  {}",
-            if result.passed { "pass" } else { "fail" },
-            result.validator
-        );
-        println!("      {}", result.reason);
-        if let Some(help) = &result.help {
-            println!("      Hint: {help}");
-        }
+    for line in render_transition_detail(title, results, StylePolicy::for_stdout()) {
+        println!("{line}");
     }
 }
 
+fn render_transition_detail(
+    title: &str,
+    results: &[ValidatorResult],
+    style_policy: StylePolicy,
+) -> Vec<String> {
+    let mut lines = vec![human_output::section_heading(title)];
+    if results.is_empty() {
+        lines.push("(none)".to_string());
+        return lines;
+    }
+    for result in results {
+        let decision = if result.passed {
+            DecisionState::Pass
+        } else {
+            DecisionState::Fail
+        };
+        lines.push(format!(
+            "  {}  {}",
+            decision.render(style_policy),
+            result.validator
+        ));
+        lines.push(format!("      {}", result.reason));
+        if let Some(help) = &result.help {
+            lines.push(format!("      Hint: {help}"));
+        }
+    }
+    lines
+}
+
 fn print_text_list(title: &str, values: &[String]) {
-    print_heading(title);
+    for line in render_text_list(title, values) {
+        println!("{line}");
+    }
+}
+
+fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
+    let mut lines = vec![human_output::section_heading(title)];
     if values.is_empty() {
-        println!("(none)");
-        return;
+        lines.push("(none)".to_string());
+        return lines;
     }
     for value in values {
-        println!("  {value}");
+        lines.push(format!("  {value}"));
     }
+    lines
 }
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
-        ("issue", "start") => &[
-            "tracker.current",
-            "issue.sections_parseable",
-            "blockers.none_open",
-        ],
+        ("issue", "start") => &["issue.sections_parseable", "blockers.none_open"],
         ("issue", "close") => &[
-            "tracker.current",
             "issue.sections_parseable",
             "blockers.none_open",
             "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
-        ("mission", _) => &[
-            "tracker.current",
-            "issue.sections_parseable",
-            "blockers.none_open",
-        ],
-        ("evidence", _) => &["tracker.current"],
+        ("mission", _) => &["issue.sections_parseable", "blockers.none_open"],
+        ("evidence", _) => &[],
         ("tracker", "health") => &[
-            "tracker.current",
             "lint.none_blocking",
             "command_surface_current",
             "ignored_tests_reviewed",
             "git.worktree_clean",
         ],
-        _ => &["tracker.current"],
+        _ => &[],
     };
     names.iter().map(|name| (*name).to_string()).collect()
 }
 
 pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
     &[
-        "tracker.current",
         "issue.sections_parseable",
         "no_open_work",
         "blockers.none_open",
@@ -1936,14 +2066,13 @@ pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
         "lint.none_blocking",
         "command_surface_current",
         "ignored_tests_reviewed",
-        "git.on_base_branch",
+        "git.on_base",
         "git.worktree_clean",
     ]
 }
 
 fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
+    human_output::print_section_heading(title);
 }
 
 pub(crate) fn ensure_transitionable_status(
@@ -2009,31 +2138,17 @@ pub(crate) fn evaluate_policy_transition(
     transition: &str,
     validators: &[atelier_app::workflow_policy::ValidatorDefinition],
 ) -> Result<Vec<ValidatorResult>> {
-    ensure_target_exists(db, target_kind, target_id)?;
-    let mut results = Vec::new();
-    for definition in validators {
-        let started = Instant::now();
-        let (passed, reason, help) = evaluate_builtin_with_params(
+    atelier_app::workflow_validation::evaluate_policy_transition(
+        atelier_app::workflow_validation::ValidatorRequest {
             db,
+            repo_root: &repo_root()?,
             policy,
             target_kind,
             target_id,
             transition,
-            &definition.builtin,
-            definition.params.as_ref(),
-        )?;
-        results.push(ValidatorResult {
-            target_kind: target_kind.to_string(),
-            target_id: target_id.to_string(),
-            transition: transition.to_string(),
-            validator: definition.builtin.clone(),
-            passed,
-            reason,
-            help,
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    }
-    Ok(results)
+            validators,
+        },
+    )
 }
 
 fn transition_descriptions(
@@ -2064,874 +2179,6 @@ fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_builtin_with_params(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-    transition: &str,
-    validator: &str,
-    params: Option<&atelier_app::workflow_policy::ValidatorParams>,
-) -> Result<(bool, String, Option<String>)> {
-    match validator {
-        "tracker.current" => {
-            let state_dir =
-                atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-            let stale = atelier_app::export::canonical_stale_entries(db, &state_dir)?;
-            if stale.is_empty() {
-                Ok((true, "canonical export is current".to_string(), None))
-            } else {
-                Ok((
-                    false,
-                    format!("canonical export is stale: {}", stale.join("; ")),
-                    None,
-                ))
-            }
-        }
-        "evidence.attached" => {
-            if target_kind == "issue" {
-                let issue = db.require_issue(target_id)?;
-                let state_dir =
-                    atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-                let record = app_use_cases::load_canonical_issue(&state_dir, target_id)?;
-                let gate = issue_evidence_gate_status(db, &issue, Some(&record.sections))?;
-                if let Some(atelier_app::workflow_policy::ValidatorParams::EvidenceAttached {
-                    min_count,
-                    kind,
-                }) = params
-                {
-                    let linked = linked_evidence_records(db, target_id, kind.as_deref())?;
-                    let validating_count = linked.len();
-                    if validating_count < *min_count as usize {
-                        return Ok((
-                            false,
-                            format!(
-                                "expected at least {} validating evidence record(s){}; found {}",
-                                min_count,
-                                kind.as_deref()
-                                    .map(|value| format!(" of kind {}", value))
-                                    .unwrap_or_default(),
-                                validating_count
-                            ),
-                            Some(crate::commands::issue::evidence_help_hint()),
-                        ));
-                    }
-                }
-                return Ok((gate.passed, gate.reason, gate.help));
-            }
-            let attached = db
-                .list_record_links(target_kind, target_id)?
-                .into_iter()
-                .any(|link| {
-                    link.relation_type == "validates"
-                        && (link.source_kind == "evidence" || link.target_kind == "evidence")
-                });
-            if attached {
-                Ok((true, "validating evidence is linked".to_string(), None))
-            } else {
-                Ok((
-                    false,
-                    "no validating evidence link found".to_string(),
-                    Some(crate::commands::issue::evidence_help_hint()),
-                ))
-            }
-        }
-        "blockers.none_open" => {
-            let open = open_blockers(db, policy, target_kind, target_id)?;
-            if open.is_empty() {
-                Ok((true, "no open blockers".to_string(), None))
-            } else {
-                Ok((false, format!("open blockers: {}", open.join(", ")), None))
-            }
-        }
-        "no_open_work" => {
-            let open = open_work(db, policy, target_kind, target_id)?;
-            if open.is_empty() {
-                Ok((true, "no open linked work".to_string(), None))
-            } else {
-                Ok((
-                    false,
-                    format!("open linked work: {}", open.join(", ")),
-                    None,
-                ))
-            }
-        }
-        "git.on_base_branch" => git_on_base_branch().map(without_validator_help),
-        "git.worktree_clean" => git_worktree_clean().map(without_validator_help),
-        "lint.none_blocking" => {
-            let status = Command::new(std::env::current_exe()?)
-                .arg("lint")
-                .status()?;
-            if status.success() {
-                Ok((true, "lint passed".to_string(), None))
-            } else {
-                Ok((false, "atelier lint failed".to_string(), None))
-            }
-        }
-        "ignored_tests_reviewed" => ignored_tests_reviewed().map(without_validator_help),
-        "command_surface_current" => command_surface_current().map(without_validator_help),
-        "issue.sections_parseable" => {
-            issue_sections_parseable(db, target_kind, target_id).map(without_validator_help)
-        }
-        "validation.criteria_satisfied" => {
-            validation_criteria_satisfied(db, target_kind, target_id).map(without_validator_help)
-        }
-        "objective.work_present" => {
-            objective_work_present(db, target_kind, target_id).map(without_validator_help)
-        }
-        "objective.work_terminal" => {
-            objective_work_terminal(db, policy, target_kind, target_id).map(without_validator_help)
-        }
-        "objective.blockers_none_open" => {
-            objective_direct_blockers_none_open(db, policy, target_kind, target_id)
-                .map(without_validator_help)
-        }
-        "review.linked_pr_merged" => {
-            linked_pr_merged(db, target_kind, target_id).map(without_validator_help)
-        }
-        "review.complete" => review_complete(db, policy, target_kind, target_id, transition)
-            .map(without_validator_help),
-        "children.proof_complete" => epic_child_proof_complete(db, policy, target_kind, target_id)
-            .map(without_validator_help),
-        other => Ok((
-            false,
-            format!("unsupported builtin validator: {other}"),
-            None,
-        )),
-    }
-}
-
-fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
-    (passed, reason, None)
-}
-
-fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result<(bool, String)> {
-    if target_kind != "issue" {
-        return Ok((
-            true,
-            format!("linked PR merge state does not apply to {target_kind} records"),
-        ));
-    }
-
-    let repo_root = repo_root()?;
-    let config_path = repo_root.join(".atelier/config.toml");
-    let forgejo = match ProjectConfig::load(&repo_root)
-        .and_then(|config| config.require_forgejo(&config_path).cloned())
-    {
-        Ok(forgejo) => forgejo,
-        Err(error) => {
-            return Ok((
-                false,
-                format!(
-                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
-                    error,
-                    target_id,
-                    target_id
-                ),
-            ));
-        }
-    };
-    let token = match std::env::var(&forgejo.admin_token_env) {
-        Ok(token) => token,
-        Err(_) => {
-            return Ok((
-                false,
-                format!(
-                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
-                    forgejo.admin_token_env,
-                    target_id
-                ),
-            ));
-        }
-    };
-    let client = ForgejoClient::new(
-        forgejo.clone(),
-        UreqForgejoTransport::new(&forgejo.host, token),
-    );
-    app_pr::linked_pull_request_merge_status_with_client(db, &repo_root, target_id, &client)
-}
-
-fn epic_child_proof_complete(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    if target_kind != "issue" {
-        return Ok((
-            true,
-            format!("epic child proof does not apply to {target_kind} records"),
-        ));
-    }
-    let issue = db.require_issue(target_id)?;
-    if issue.issue_type != "epic" {
-        return Ok((
-            true,
-            "epic child proof does not apply to non-epic issues".to_string(),
-        ));
-    }
-    let mut missing = Vec::new();
-    for child in db.get_subissues(target_id)? {
-        collect_missing_child_proof(db, policy, &child.id, &mut missing)?;
-    }
-    if missing.is_empty() {
-        Ok((
-            true,
-            "all epic child issues are closed with validating proof".to_string(),
-        ))
-    } else {
-        Ok((
-            false,
-            format!("epic child proof incomplete: {}", missing.join(", ")),
-        ))
-    }
-}
-
-fn collect_missing_child_proof(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    issue_id: &str,
-    missing: &mut Vec<String>,
-) -> Result<()> {
-    let issue = db.require_issue(issue_id)?;
-    if issue_is_open_for_workflow(policy, &issue)? {
-        missing.push(format!("{issue_id} open"));
-    } else if linked_evidence_records(db, issue_id, None)?.is_empty() {
-        missing.push(format!("{issue_id} missing validating proof"));
-    }
-    for child in db.get_subissues(issue_id)? {
-        collect_missing_child_proof(db, policy, &child.id, missing)?;
-    }
-    Ok(())
-}
-
-fn validation_criteria_satisfied(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    if target_kind == "mission" {
-        return crate::commands::mission::mission_validation_criteria_gate(db, target_id);
-    }
-    Ok((
-        true,
-        format!("validation criteria closeout does not apply to {target_kind} records"),
-    ))
-}
-
-fn issue_sections_parseable(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    let issue_ids = match target_kind {
-        "issue" => {
-            let mut ids = BTreeSet::new();
-            ids.insert(target_id.to_string());
-            ids
-        }
-        "mission" => mission_issue_ids(db, target_id)?,
-        _ => {
-            return Ok((
-                true,
-                format!("issue sections do not apply to {target_kind} records"),
-            ))
-        }
-    };
-    if issue_ids.is_empty() {
-        return Ok((true, "no linked issues require section checks".to_string()));
-    }
-
-    let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-    let mut checked = 0;
-    for issue_id in issue_ids {
-        let record = match app_use_cases::load_canonical_issue(&state_dir, &issue_id) {
-            Ok(record) => record,
-            Err(error) => return Ok((false, error.to_string())),
-        };
-        let invalid = record
-            .sections
-            .section_states()
-            .into_iter()
-            .filter(|state| state.required && (!state.present || state.empty))
-            .map(|state| state.name.title().to_string())
-            .collect::<Vec<_>>();
-        if !invalid.is_empty() {
-            let path = state_dir.join("issues").join(format!("{issue_id}.md"));
-            return Ok((
-                false,
-                format!(
-                    "issue {issue_id} has invalid sections {} in {}",
-                    invalid.join(", "),
-                    path.display()
-                ),
-            ));
-        }
-        checked += 1;
-    }
-
-    Ok((
-        true,
-        format!(
-            "parsed required sections {} are present and non-empty for {checked} issue(s)",
-            IssueSections::REQUIRED_NAMES
-                .into_iter()
-                .map(|name| name.title())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    ))
-}
-
-fn linked_evidence_records(
-    db: &Database,
-    issue_id: &str,
-    required_kind: Option<&str>,
-) -> Result<Vec<EvidenceRecord>> {
-    let mut records = Vec::new();
-    for link in db.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        let evidence_id = if link.source_kind == "evidence" {
-            Some(link.source_id)
-        } else if link.target_kind == "evidence" {
-            Some(link.target_id)
-        } else {
-            None
-        };
-        let Some(evidence_id) = evidence_id else {
-            continue;
-        };
-        db.require_record("evidence", &evidence_id)?;
-        let Some(record) = canonical_evidence_record(&evidence_id)? else {
-            continue;
-        };
-        if let Some(required_kind) = required_kind {
-            if record.data.evidence_type != required_kind {
-                continue;
-            }
-        }
-        records.push(record);
-    }
-    Ok(records)
-}
-
-fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
-    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
-        return Ok(None);
-    };
-    Ok(
-        match app_use_cases::load_canonical_record(&state_dir, "evidence", id) {
-            Ok(Record::Evidence(record)) => Some(record),
-            Ok(_) | Err(_) => None,
-        },
-    )
-}
-
-fn review_complete(
-    db: &Database,
-    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-    _transition: &str,
-) -> Result<(bool, String)> {
-    if target_kind != "issue" {
-        return Ok((
-            true,
-            format!("review completion does not apply to {target_kind}"),
-        ));
-    }
-    let repo_root = repo_root()?;
-    match ProjectConfig::load(&repo_root) {
-        Ok(ProjectConfig {
-            review: ReviewConfig::Room,
-            ..
-        }) => room_review_complete(db, &repo_root, target_id),
-        Ok(ProjectConfig {
-            review:
-                ReviewConfig::Provider(atelier_app::project_config::ReviewProviderConfig {
-                    provider: ReviewProviderKind::Forgejo(_),
-                }),
-            ..
-        }) => linked_pr_merged(db, target_kind, target_id),
-        Err(error) => Ok((
-            false,
-            format!(
-                "{}; run `atelier review status --issue {}`",
-                error, target_id
-            ),
-        )),
-    }
-}
-
-fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
-    let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let outcome = match review_room::status(
-        db,
-        review_room::RoomStatusRequest {
-            repo_root,
-            state_dir: &state_dir,
-            issue_ref: Some(issue_id),
-        },
-    ) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            return Ok((
-                false,
-                format!(
-                    "{}; run `atelier review status --issue {}`",
-                    error, issue_id
-                ),
-            ))
-        }
-    };
-
-    if outcome.status == "merged" {
-        Ok((true, format!("review room {} is merged", outcome.review_id)))
-    } else {
-        Ok((
-            false,
-            format!(
-                "review room {} is {}; run `atelier review status --issue {}`",
-                outcome.review_id, outcome.status, issue_id
-            ),
-        ))
-    }
-}
-
-fn issue_is_open_for_workflow(
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    issue: &Issue,
-) -> Result<bool> {
-    ensure_transitionable_status(policy, issue)?;
-    Ok(policy.status_category(&issue.status) != Some("done"))
-}
-
-fn open_blockers(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<Vec<String>> {
-    let mut blocker_ids = BTreeSet::new();
-    match target_kind {
-        "issue" => {
-            for blocker in db.get_blockers(target_id)? {
-                blocker_ids.insert(blocker);
-            }
-        }
-        "mission" => {
-            for blocker in mission_direct_blockers(db, target_id)? {
-                blocker_ids.insert(blocker);
-            }
-            for issue_id in mission_issue_ids(db, target_id)? {
-                for blocker in db.get_blockers(&issue_id)? {
-                    blocker_ids.insert(blocker);
-                }
-            }
-        }
-        _ => return Ok(Vec::new()),
-    }
-    let mut open = blocker_ids
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-            Ok(true) => Some(Ok(issue.id)),
-            Ok(false) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>>>()?;
-    open.sort();
-    Ok(open)
-}
-
-fn open_work(
-    db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<Vec<String>> {
-    if target_kind != "mission" {
-        return Ok(Vec::new());
-    }
-    let mut open = mission_issue_ids(db, target_id)?
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-            Ok(true) => Some(Ok(issue.id)),
-            Ok(false) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>>>()?;
-    open.sort();
-    Ok(open)
-}
-
-fn mission_direct_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let objective_kind = crate::commands::objective_status::mission_objective_kind(db, mission_id)?;
-    crate::commands::objective_status::direct_blocker_ids(db, objective_kind, mission_id)
-}
-
-fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    crate::commands::objective_status::mission_issue_ids(db, mission_id)
-}
-
-fn git_worktree_clean() -> Result<(bool, String)> {
-    let root = repo_root()?;
-    let output = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=all"])
-        .current_dir(&root)
-        .output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if stderr.contains("not a git repository") {
-            return Ok((
-                true,
-                "not a git repository; git checkout check skipped".to_string(),
-            ));
-        }
-        let message = if stderr.is_empty() {
-            "git status failed".to_string()
-        } else {
-            format!("git status failed: {stderr}")
-        };
-        return Ok((false, message));
-    }
-    let dirty = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .filter_map(parse_git_dirty_entry)
-        .collect::<Vec<_>>();
-    if dirty.is_empty() {
-        Ok((true, "git checkout is clean".to_string()))
-    } else {
-        let classified = classify_git_dirty_entries(&root, &dirty)?;
-        if classified.blocking_entries.is_empty() {
-            if classified.tracker_generated_entries.is_empty() {
-                return Ok((true, "git checkout is clean".to_string()));
-            }
-            return Ok((
-                true,
-                format!(
-                    "ignored {} tracker-generated canonical {}: {}",
-                    classified.tracker_generated_entries.len(),
-                    if classified.tracker_generated_entries.len() == 1 {
-                        "entry"
-                    } else {
-                        "entries"
-                    },
-                    summarize_git_dirty_entries(&classified.tracker_generated_entries)
-                ),
-            ));
-        }
-        let sample = summarize_git_dirty_entries(&classified.blocking_entries);
-        let suffix = if classified.blocking_entries.len() > 8 {
-            format!("; ... and {} more", classified.blocking_entries.len() - 8)
-        } else {
-            String::new()
-        };
-        Ok((
-            false,
-            format!(
-                "git checkout has {} dirty {}: {sample}{suffix}",
-                classified.blocking_entries.len(),
-                if classified.blocking_entries.len() == 1 {
-                    "entry"
-                } else {
-                    "entries"
-                }
-            ),
-        ))
-    }
-}
-
-fn git_on_base_branch() -> Result<(bool, String)> {
-    let expected = configured_base_branch()?;
-    match current_git_branch()? {
-        Some(current) if current == expected => Ok((
-            true,
-            format!("current branch is configured base branch {expected}"),
-        )),
-        Some(current) => Ok((
-            false,
-            format!("current branch is {current}; expected configured base branch {expected}"),
-        )),
-        None => Ok((
-            false,
-            format!("detached HEAD; expected configured base branch {expected}"),
-        )),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct GitDirtyEntry {
-    raw: String,
-    repo_path: String,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-struct ClassifiedGitDirtyEntries {
-    blocking_entries: Vec<String>,
-    tracker_generated_entries: Vec<String>,
-}
-
-fn parse_git_dirty_entry(line: &str) -> Option<GitDirtyEntry> {
-    let raw = line.trim_end();
-    if raw.trim().is_empty() || raw.len() < 4 {
-        return None;
-    }
-    let repo_path = raw
-        .get(3..)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    let repo_path = repo_path
-        .rsplit_once(" -> ")
-        .map(|(_, target)| target)
-        .unwrap_or(repo_path)
-        .to_string();
-    Some(GitDirtyEntry {
-        raw: raw.to_string(),
-        repo_path,
-    })
-}
-
-fn summarize_git_dirty_entries(entries: &[String]) -> String {
-    entries
-        .iter()
-        .take(8)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("; ")
-}
-
-fn classify_git_dirty_entries(
-    repo_root: &Path,
-    entries: &[GitDirtyEntry],
-) -> Result<ClassifiedGitDirtyEntries> {
-    let tracker_activity_issue_ids = entries
-        .iter()
-        .filter_map(|entry| atelier_relative_path(&entry.repo_path))
-        .filter(|relative| is_tracker_generated_activity_path(relative))
-        .filter_map(issue_id_from_activity_path)
-        .collect::<BTreeSet<_>>();
-
-    let mut blocking_entries = Vec::new();
-    let mut tracker_generated_entries = Vec::new();
-    for entry in entries {
-        let Some(relative) = atelier_relative_path(&entry.repo_path) else {
-            blocking_entries.push(entry.raw.clone());
-            continue;
-        };
-        if atelier_app::storage_layout::is_local_atelier_path(relative) {
-            continue;
-        }
-        if is_tracker_generated_evidence_path(relative) {
-            tracker_generated_entries.push(entry.raw.clone());
-            continue;
-        }
-        if is_tracker_generated_activity_path(relative) {
-            tracker_generated_entries.push(entry.raw.clone());
-            continue;
-        }
-        if is_tracker_generated_issue_bookkeeping(
-            repo_root,
-            relative,
-            &entry.repo_path,
-            &tracker_activity_issue_ids,
-        )? {
-            tracker_generated_entries.push(entry.raw.clone());
-            continue;
-        }
-        blocking_entries.push(entry.raw.clone());
-    }
-    Ok(ClassifiedGitDirtyEntries {
-        blocking_entries,
-        tracker_generated_entries,
-    })
-}
-
-fn atelier_relative_path(repo_path: &str) -> Option<&Path> {
-    repo_path
-        .strip_prefix(".atelier/")
-        .map(|relative| Path::new(relative))
-}
-
-fn is_tracker_generated_evidence_path(relative: &Path) -> bool {
-    let mut components = relative.components();
-    let Some(std::path::Component::Normal(root)) = components.next() else {
-        return false;
-    };
-    if root != "evidence" {
-        return false;
-    }
-    let Some(std::path::Component::Normal(file)) = components.next() else {
-        return false;
-    };
-    components.next().is_none() && file.to_string_lossy().ends_with(".md")
-}
-
-fn is_tracker_generated_activity_path(relative: &Path) -> bool {
-    let mut components = relative.components();
-    let Some(std::path::Component::Normal(root)) = components.next() else {
-        return false;
-    };
-    if root != "issues" {
-        return false;
-    }
-    let Some(std::path::Component::Normal(dir)) = components.next() else {
-        return false;
-    };
-    if !dir.to_string_lossy().ends_with(".activity") {
-        return false;
-    }
-    let Some(std::path::Component::Normal(file)) = components.next() else {
-        return false;
-    };
-    components.next().is_none() && file.to_string_lossy().ends_with(".md")
-}
-
-fn issue_id_from_activity_path(relative: &Path) -> Option<String> {
-    let mut components = relative.components();
-    let root = components.next()?.as_os_str();
-    if root != "issues" {
-        return None;
-    }
-    let dir = components.next()?.as_os_str().to_string_lossy();
-    dir.strip_suffix(".activity").map(ToOwned::to_owned)
-}
-
-fn is_tracker_generated_issue_bookkeeping(
-    repo_root: &Path,
-    relative: &Path,
-    repo_path: &str,
-    tracker_activity_issue_ids: &BTreeSet<String>,
-) -> Result<bool> {
-    let Some(issue_id) = issue_id_from_canonical_issue_path(relative) else {
-        return Ok(false);
-    };
-    if !tracker_activity_issue_ids.contains(&issue_id) {
-        return Ok(false);
-    }
-    let current_text = fs::read_to_string(repo_root.join(repo_path))?;
-    let Some(front_matter_end_line) = front_matter_end_line(&current_text) else {
-        return Ok(false);
-    };
-    let diff = git_diff_against_head(repo_root, repo_path)?;
-    if diff.trim().is_empty() {
-        return Ok(false);
-    }
-    let mut saw_allowed_change = false;
-    let mut current_line = None;
-    for line in diff.lines() {
-        if line.starts_with("diff --git")
-            || line.starts_with("index ")
-            || line.starts_with("--- ")
-            || line.starts_with("+++ ")
-        {
-            continue;
-        }
-        if line.starts_with("@@ ") {
-            current_line = parse_new_hunk_start(line);
-            continue;
-        }
-        let Some(line_no) = current_line.as_mut() else {
-            continue;
-        };
-        match line.chars().next() {
-            Some('+') => {
-                saw_allowed_change = true;
-                if *line_no > front_matter_end_line
-                    || !is_allowed_issue_bookkeeping_line(&line[1..])
-                {
-                    return Ok(false);
-                }
-                *line_no += 1;
-            }
-            Some('-') => {
-                saw_allowed_change = true;
-                if *line_no > front_matter_end_line
-                    || !is_allowed_issue_bookkeeping_line(&line[1..])
-                {
-                    return Ok(false);
-                }
-            }
-            Some(' ') => *line_no += 1,
-            _ => {}
-        }
-    }
-    Ok(saw_allowed_change)
-}
-
-fn issue_id_from_canonical_issue_path(relative: &Path) -> Option<String> {
-    let mut components = relative.components();
-    let root = components.next()?.as_os_str();
-    if root != "issues" {
-        return None;
-    }
-    let file = components.next()?.as_os_str().to_string_lossy();
-    if components.next().is_some() || !file.ends_with(".md") || file.ends_with(".activity") {
-        return None;
-    }
-    file.strip_suffix(".md").map(ToOwned::to_owned)
-}
-
-fn front_matter_end_line(text: &str) -> Option<usize> {
-    let mut fence_count = 0;
-    for (index, line) in text.lines().enumerate() {
-        if line == "---" {
-            fence_count += 1;
-            if fence_count == 2 {
-                return Some(index + 1);
-            }
-        }
-    }
-    None
-}
-
-fn parse_new_hunk_start(line: &str) -> Option<usize> {
-    let (_, rest) = line.split_once('+')?;
-    let digits = rest
-        .chars()
-        .take_while(|char| char.is_ascii_digit())
-        .collect::<String>();
-    digits.parse().ok()
-}
-
-fn is_allowed_issue_bookkeeping_line(line: &str) -> bool {
-    line.starts_with("status: ")
-        || line.starts_with("updated_at: ")
-        || line.starts_with("closed_at: ")
-}
-
-fn git_diff_against_head(repo_root: &Path, repo_path: &str) -> Result<String> {
-    let output = Command::new("git")
-        .args([
-            "diff",
-            "--no-ext-diff",
-            "--unified=0",
-            "HEAD",
-            "--",
-            repo_path,
-        ])
-        .current_dir(repo_root)
-        .output()?;
-    if output.status.success() {
-        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    bail!("git diff HEAD -- {repo_path} failed: {}", stderr.trim())
-}
-
-fn ignored_tests_reviewed() -> Result<(bool, String)> {
-    let inventory = crate::test_inventory::IgnoredTestInventory::scan_repo(&repo_root()?)?;
-    Ok(inventory.status_reason())
-}
-
-fn command_surface_current() -> Result<(bool, String)> {
-    crate::command_surface::status_reason(&repo_root()?)
-}
-
 pub(crate) fn repo_root() -> Result<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
@@ -2947,10 +2194,11 @@ pub(crate) fn repo_root() -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::commands::workflow_planning::plan_actions_for_resolution;
+    use crate::human_output::ColorChoice;
     use atelier_app::workflow_policy::{
         ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
     };
-    use atelier_records::{RecordStore, Relationships};
+    use atelier_records::{IssueSections, Record, RecordStore, Relationships};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
@@ -2969,6 +2217,94 @@ mod tests {
             updated_at: Utc::now(),
             closed_at: None,
         }
+    }
+
+    fn setup_test_db() -> (Database, TempDir) {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("test.db")).unwrap();
+        (db, dir)
+    }
+
+    fn transition_option(allowed: bool, passed: bool) -> IssueTransitionOption {
+        IssueTransitionOption {
+            name: "start".to_string(),
+            from: vec!["todo".to_string()],
+            to: "in_progress".to_string(),
+            allowed,
+            blockers: Vec::new(),
+            validator_results: vec![ValidatorResult {
+                target_kind: "issue".to_string(),
+                target_id: "atelier-test".to_string(),
+                transition: "start".to_string(),
+                validator: "issue.sections_parseable".to_string(),
+                passed,
+                reason: "sections are parseable".to_string(),
+                help: None,
+                elapsed_ms: 1,
+            }],
+            planned_actions: Vec::new(),
+            descriptions: vec!["Begin work.".to_string()],
+            command: "atelier issue transition atelier-test start".to_string(),
+        }
+    }
+
+    #[test]
+    fn transition_options_use_color_when_interactive_context_allows_it() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, true, false);
+
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(true, true)],
+            policy,
+            true,
+        );
+
+        assert!(output.contains("\u{1b}[32mallowed\u{1b}[0m"));
+        assert!(output.contains("Decision: \u{1b}[32mallowed\u{1b}[0m"));
+        assert!(output.contains("issue.sections_parseable"));
+    }
+
+    #[test]
+    fn transition_options_stay_plain_when_no_color_is_set() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, true, true);
+
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(false, false)],
+            policy,
+            true,
+        );
+
+        assert!(!output.contains("\u{1b}["));
+        assert!(output.contains("start [blocked]"));
+        assert!(output.contains("Decision: blocked"));
+        assert!(output.contains("fail  issue.sections_parseable"));
+    }
+
+    #[test]
+    fn transition_options_stay_plain_when_stdout_is_not_interactive() {
+        let (db, _dir) = setup_test_db();
+        let issue = test_issue("atelier-test");
+        let policy = StylePolicy::from_context(ColorChoice::Auto, false, false);
+
+        let output = render_issue_transition_options(
+            &db,
+            &issue,
+            &[transition_option(true, true)],
+            policy,
+            true,
+        );
+
+        assert!(!output.contains("\u{1b}["));
+        assert!(output.contains("start [allowed]"));
+        assert!(output.contains("Decision: allowed"));
+        assert!(output.contains("pass  issue.sections_parseable"));
     }
 
     fn action(name: &str) -> atelier_app::workflow_policy::ActionDefinition {
@@ -3048,7 +2384,6 @@ provider = "forgejo"
 host = "https://forge.example.test"
 owner = "tools"
 repo = "atelier"
-admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
 "#,
         )
         .unwrap();
@@ -3111,20 +2446,96 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         (dir, db)
     }
 
+    fn setup_sync_repo() -> (TempDir, TempDir, PlannedAction) {
+        let repo = tempdir().unwrap();
+        let remote = tempdir().unwrap();
+        git_ok(remote.path(), &["init", "-q", "--bare"]);
+        git_ok(repo.path(), &["init", "-q"]);
+        git_ok(
+            repo.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(repo.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(repo.path().join("README.md"), "initial\n").unwrap();
+        git_ok(repo.path(), &["add", "README.md"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "initial"]);
+        git_ok(repo.path(), &["branch", "-M", "main"]);
+        git_ok(repo.path(), &["switch", "-c", "mission/atelier-sync"]);
+        std::fs::write(repo.path().join("mission.txt"), "local\n").unwrap();
+        git_ok(repo.path(), &["add", "mission.txt"]);
+        git_ok(repo.path(), &["commit", "-q", "-m", "mission local"]);
+        git_ok(
+            repo.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git_ok(
+            repo.path(),
+            &["push", "-u", "origin", "mission/atelier-sync"],
+        );
+        git_ok(repo.path(), &["switch", "-c", "epic/atelier-sync"]);
+
+        let remote_work = tempdir().unwrap();
+        git_ok(
+            remote_work.path(),
+            &["clone", "-q", remote.path().to_str().unwrap(), "."],
+        );
+        git_ok(remote_work.path(), &["switch", "mission/atelier-sync"]);
+        git_ok(
+            remote_work.path(),
+            &["config", "user.email", "atelier-test@example.com"],
+        );
+        git_ok(remote_work.path(), &["config", "user.name", "Atelier Test"]);
+        std::fs::write(remote_work.path().join("remote.txt"), "remote\n").unwrap();
+        git_ok(remote_work.path(), &["add", "remote.txt"]);
+        git_ok(
+            remote_work.path(),
+            &["commit", "-q", "-m", "remote advance"],
+        );
+        git_ok(
+            remote_work.path(),
+            &["push", "origin", "mission/atelier-sync"],
+        );
+
+        let issue = test_issue("atelier-sync");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-sync".to_string(),
+            owner_id: "atelier-sync".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-sync".to_string(),
+            base_branch: "mission/atelier-sync".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let action =
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.sync")], 1).remove(0);
+        (repo, remote, action)
+    }
+
+    fn git_ok(repo: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
             default_validators("issue", "start"),
-            vec![
-                "tracker.current",
-                "issue.sections_parseable",
-                "blockers.none_open"
-            ]
+            vec!["issue.sections_parseable", "blockers.none_open"]
         );
         assert_eq!(
             default_validators("issue", "close"),
             vec![
-                "tracker.current",
                 "issue.sections_parseable",
                 "blockers.none_open",
                 "evidence.attached"
@@ -3139,12 +2550,11 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         );
         assert_eq!(
             default_validators("evidence", "attach"),
-            vec!["tracker.current"]
+            Vec::<String>::new()
         );
         assert_eq!(
             default_validators("tracker", "health"),
             vec![
-                "tracker.current",
                 "lint.none_blocking",
                 "command_surface_current",
                 "ignored_tests_reviewed",
@@ -3209,9 +2619,9 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         };
         let actions = vec![
             action("tracker.commit"),
-            action("branch.push"),
+            action("git.push"),
             action("review.merge"),
-            action("base.sync"),
+            action("git.sync"),
         ];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
@@ -3220,10 +2630,78 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "branch_integrate"));
+    }
+
+    #[test]
+    fn action_transition_barrier_preserves_configured_push_before_review_open() {
+        assert!(!action_requires_applied_transition("git.prepare_branch"));
+        assert!(!action_requires_applied_transition("git.push"));
+        assert!(!action_requires_applied_transition("review.open"));
+        assert!(action_requires_applied_transition("tracker.commit"));
+        assert!(action_requires_applied_transition("review.merge"));
+        assert!(action_requires_applied_transition("git.sync"));
+        assert!(action_requires_applied_transition("branch_integrate"));
+    }
+
+    #[test]
+    fn git_sync_fast_forwards_target_without_checkout() {
+        let (repo, _remote, action) = setup_sync_repo();
+
+        let detail = sync_base_action(repo.path(), &action).unwrap();
+
+        assert_eq!(detail, "synced mission/atelier-sync");
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
+        let local = git_stdout(
+            repo.path(),
+            &["rev-parse", "mission/atelier-sync"],
+            "read local target",
+        )
+        .unwrap();
+        let remote = git_stdout(
+            repo.path(),
+            &["rev-parse", "origin/mission/atelier-sync"],
+            "read remote target",
+        )
+        .unwrap();
+        assert_eq!(local, remote);
+    }
+
+    #[test]
+    fn git_sync_rejects_target_checked_out_in_other_worktree() {
+        let (repo, _remote, action) = setup_sync_repo();
+        let other = tempdir().unwrap();
+        git_ok(
+            repo.path(),
+            &[
+                "worktree",
+                "add",
+                other.path().to_str().unwrap(),
+                "mission/atelier-sync",
+            ],
+        );
+
+        let error = sync_base_action(repo.path(), &action)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("target branch 'mission/atelier-sync' is checked out"));
+        assert!(error.contains(other.path().to_str().unwrap()));
+        assert!(error.contains("Recovery:"));
+        assert_eq!(
+            git_stdout(repo.path(), &["branch", "--show-current"], "read branch")
+                .unwrap()
+                .trim(),
+            "epic/atelier-sync"
+        );
     }
 
     #[test]
@@ -3252,7 +2730,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn provider_review_action_preflight_uses_workflow_role_authors_and_env_secret() {
+    fn provider_review_action_preflight_uses_workflow_role_authors_and_global_secret() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -3273,7 +2751,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let blockers = action_preflight_blockers(dir.path(), &actions);
 
         assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("ATELIER_TEST_FORGEJO_TOKEN"));
+        assert!(blockers[0].contains(".config/atelier.toml"));
         assert!(!blockers[0].contains("role_authors"));
         assert_eq!(
             actions[0].review_artifact_provider.as_deref(),
@@ -3293,7 +2771,19 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let state_dir = dir.path().join(".atelier");
         let db_path = dir.path().join(".atelier/runtime/state.db");
         let db = Database::open(&db_path).unwrap();
-        let issue = test_issue("atelier-epic1");
+        let mut issue = test_issue("atelier-epic1");
+        issue.fields.insert(
+            atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-epic1",
+                "work_branch": "epic/atelier-epic1",
+                "branch_base": "mission/atelier-miss",
+                "review_target": "mission/atelier-miss",
+                "integration_target": "mission/atelier-miss",
+                "owner_kind": "epic",
+                "merge_strategy": "squash",
+            }),
+        );
         insert_canonical_issue(&db, &state_dir, issue.clone());
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -3301,7 +2791,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             owner_issue_type: "epic".to_string(),
             owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
             expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "master".to_string(),
+            base_branch: "mission/atelier-miss".to_string(),
             merge_strategy: MergeStrategy::Squash,
             merge_owned: true,
             nested_under_epic: false,
@@ -3325,6 +2815,14 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let review = owner.issue.fields.get("review").unwrap();
         assert_eq!(review["kind"], "room");
         assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
+        let Record::Review(review_record) = RecordStore::new(&state_dir)
+            .load_record_by_id("review", review["id"].as_str().unwrap())
+            .unwrap()
+        else {
+            panic!("expected review record");
+        };
+        assert_eq!(review_record.source_branch, "epic/atelier-epic1");
+        assert_eq!(review_record.target_branch, "mission/atelier-miss");
 
         let second_detail = open_review_artifact_action(
             &db,
@@ -3420,7 +2918,26 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         drop(db);
         let db = Database::open(&db_path).unwrap();
 
-        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let validators = vec![atelier_app::workflow_policy::ValidatorDefinition {
+            builtin: "review.complete".to_string(),
+            params: None,
+        }];
+        let results = atelier_app::workflow_validation::evaluate_policy_transition(
+            atelier_app::workflow_validation::ValidatorRequest {
+                db: &db,
+                repo_root: dir.path(),
+                policy: &policy,
+                target_kind: "issue",
+                target_id: "atelier-epic1",
+                transition: "close",
+                validators: &validators,
+            },
+        )
+        .unwrap();
+        let result = results.first().unwrap();
+        let passed = result.passed;
+        let reason = result.reason.clone();
         assert!(!passed);
         assert!(
             reason.contains(&format!("review room {}", outcome.review_id)),
@@ -3455,7 +2972,21 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         )
         .unwrap();
 
-        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        let results = atelier_app::workflow_validation::evaluate_policy_transition(
+            atelier_app::workflow_validation::ValidatorRequest {
+                db: &db,
+                repo_root: dir.path(),
+                policy: &policy,
+                target_kind: "issue",
+                target_id: "atelier-epic1",
+                transition: "close",
+                validators: &validators,
+            },
+        )
+        .unwrap();
+        let result = results.first().unwrap();
+        let passed = result.passed;
+        let reason = result.reason.clone();
         assert!(passed);
         assert_eq!(
             reason,

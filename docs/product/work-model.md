@@ -7,10 +7,12 @@ separate issue hierarchy.
 ## Concepts
 
 - Mission: a long-running objective declared through issue/workflow policy. It
-  carries intent, scope, constraints, current health, active epics, risks, and
-  validation expectations through normal objective fields, sections, and typed
-  relationships. It may be the shared background workspace boundary when the
-  repository workflow and assignment model choose that coordination shape.
+  carries a target `Outcome`, explicit non-scope, current health, active root
+  work, risks, and validation links through normal objective fields, sections,
+  and typed relationships. Its scope is the direct `advances` links plus the
+  descendants of those linked roots. It may be the shared background workspace
+  boundary when the repository workflow and assignment model choose that
+  coordination shape.
 - Status role: optional workflow policy on an active status that names the role
   currently responsible for that work state. Status roles are displayed by
   status/man surfaces and used as the default role for review attribution.
@@ -33,11 +35,11 @@ separate issue hierarchy.
   integrate owner branches, or open/link review artifacts. Intrinsic workflow
   status and transition activity writes are engine behavior, not configurable
   action authority, and actions do not replace explicit review or issue commands.
-- Evidence: durable proof that accountable work, review, validation, or completion
-  happened. Normal evidence attaches to issue-shaped work because issues own
-  accountability. Parent completion is derived from linked implementation,
-  review, validation, and completion evidence rather than from direct proof pasted
-  onto the parent objective.
+- Evidence: a durable receipt from a check that actually ran. Normal evidence
+  attaches to issue-shaped work because issues own accountability. Parent
+  completion is derived from linked implementation, review, validation, and
+  completion evidence rather than from direct proof pasted onto the parent
+  objective.
 
 Sessions and attempts are not separate work queues or workflow records. Current
 work, role ownership, and completion remain derived from canonical issue status,
@@ -56,7 +58,7 @@ Required or expected fields are:
 | --- | --- |
 | `id` | Canonical evidence ID. |
 | `targets` | Accountable target IDs. Version 1 normally uses `issue/<id>` for implementation, review, validation, or validation work. |
-| `proof_scope` | The local Outcome line, parent validation criterion, workflow validator, audit row, or review claim being proven. |
+| `proof_scope` | The local Outcome line, parent outcome claim, workflow validator, audit row, or review claim being checked. |
 | `kind` | Evidence type such as `test`, `validation`, `review`, `audit`, `transcript`, `artifact`, or `migration`. |
 | `result` | `pass`, `fail`, `blocked`, `deferred`, or `not-applicable`. |
 | `summary` | Human-readable result summary. |
@@ -71,15 +73,17 @@ Required or expected fields are:
 Manual summaries and command transcripts use the same record shape. A transcript
 record fills `commands`; an audit table or screenshot fills `artifacts`; a
 manual review fills `summary`, `proof_scope`, `independence_level`, and
-`residual_risks`.
+`residual_risks`. Bare summaries are context unless they identify the claim
+checked, action taken, result, and inspectable artifact or rationale.
 
 ## Proof Routing
 
 Atelier routes proof by risk and scope. Ordinary executable issues prove their
-own Outcome on the issue: the `Evidence` section names the proof, the worker
-runs the narrowest checks that support the claim, and the result is recorded
-before completion. Ordinary implementation issues do not require a separate
-independent review by default; the parent epic supplies the review and
+own `Outcome` on the issue: the worker runs the narrowest checks that support
+the claim and records the result before completion. An `Evidence` section may
+name a specific expected check when the issue contract needs it, but it is not
+default planning paperwork. Ordinary implementation issues do not require a
+separate independent review by default; the parent epic supplies the review and
 validation boundary for the coherent changeset.
 
 Durable issue notes are for handoff context, caveats, skipped optional checks,
@@ -98,13 +102,14 @@ claims.
 
 Missions are coordination objectives by default, not work logs. A mission may
 retain direct evidence links only when the configured workflow or migration
-contract requires them. Normal mission completion is derived from the workflow
-declared for the mission-shaped issue type: closed linked work, clear blockers,
-configured validators, transition actions, and validation approval apply only
-when `.atelier/workflow.yaml` declares them for that objective type or
-transition. Mission `Validation` prose guides human completion and validation
-but is not parsed as a coded evidence contract unless a configured validator
-does that work.
+contract requires them. Normal mission publish readiness is derived from the workflow
+declared for the mission-shaped issue type: direct `advances` roots and their
+descendants are terminal, blockers are clear, configured validators pass,
+transition actions run, and explicit validation approval applies only when
+`.atelier/workflow.yaml` declares it for that objective type or transition.
+Mission `Outcome` prose is the target state validators read; planner-authored
+validation scenarios are optional and reserved for explicit product contracts
+or known risks.
 
 Missions do not have a hidden built-in lifecycle. If a repository wants
 mission-shaped work, it declares the issue type, statuses, done statuses,
@@ -124,11 +129,11 @@ Choose the proof surface by the claim being closed:
 | Claim | Enough proof | Command shape | Completion implication |
 | --- | --- | --- | --- |
 | Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier issue note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
-| Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
-| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
+| Manual validation of an issue Outcome or explicit proof claim | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
+| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier check <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
 | Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent completion should map the parent claim to the independent validation issue and its evidence ID. |
-| Epic or mission completion | Validation issue that maps parent claims to child proof | Record evidence on the validation issue. | Mission completion comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
+| Epic completion or mission publish readiness | Validation issue that maps parent `Outcome` claims to child proof | Record evidence on the validation issue. | Mission publish readiness comes from terminal linked root work plus descendants, clear blockers, configured health gates, and workflow approval on accountable child work. |
 
 Example for ordinary documentation work:
 
@@ -141,14 +146,14 @@ atelier issue transition atelier-isd5 request_validation
 Example for command-backed validation:
 
 ```text
-atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/atelier lint atelier-zrqa
+atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/atelier check atelier-zrqa
 ```
 
 Example for independent completion proof:
 
 ```text
-atelier evidence record --target issue/<validation-issue-id> --kind validation "mission completion validation maps mission expectations to closed linked work and evidence IDs"
-atelier issue transition <mission-id> close --reason "linked work closed and completion proof attached"
+atelier evidence record --target issue/<validation-issue-id> --kind validation "mission publish validation maps mission expectations to terminal linked work and evidence IDs"
+atelier issue transition <mission-id> request_publish
 ```
 
 ## Parent Coverage Summaries
@@ -164,7 +169,7 @@ residual risks plus follow-up IDs. It may use stable claim anchors for
 automation-heavy, high-risk, or repeated audit work, but ordinary issues should
 not need line-level claim plumbing.
 
-A mission completion summary, when the mission needs one, lives on explicit
+A mission publish summary, when the mission needs one, lives on explicit
 validation issue-shaped work. It maps explicit approval work and linked
 execution status to implementation, review, and validation issues. The mission
 derives completion from closed linked work, clear blockers, configured health
@@ -181,9 +186,9 @@ artifact, or independent reviewer identity.
 
 Missions are goal records, not task records. A mission should describe the
 desired end state and the durable context needed to coordinate work toward that
-state: intent, constraints, risks, validation expectations, evidence, linked
-work, optional checkpoint prose, and the shared workspace/background checkout
-where the mission is executed.
+state: `Outcome`, constraints, risks, linked root work, explicit validation work
+when required, optional checkpoint prose, and the shared workspace/background
+checkout where the mission is executed.
 
 A mission is large enough to require at least one epic. If the work can be
 planned, claimed, implemented, validated, and closed as a single accountable
@@ -275,29 +280,32 @@ Objective work and objective blockers are distinct. `objective advances issue`
 means the issue or epic is part of the objective's execution/progress graph.
 `objective blocked_by issue` means the issue, artifact update, or validation
 item is gating the objective but is not necessarily ordinary objective scope.
+Repositories may configure additional issue link types for local vocabulary.
+Those custom roles are context-only: they are stored, displayed, searched, and
+preserved as typed issue relationships, but they do not change mission progress,
+readiness, blockers, branch selection, review ownership, or transition
+validation unless promoted to a built-in semantic.
 
 ## Readable Objective Records
 
 Mission-shaped objective records are meant to be reviewed by operators and
 agents in normal Markdown diffs. The product contract is not an escaped `data`
 object in YAML. Objective front matter carries compact identity, workflow
-status, labels, and typed relationships. Objective narrative, constraints,
-risks, validation expectations, and terminal notes live in ordered Markdown
-sections chosen by the record contract:
+status, labels, and typed relationships. Objective narrative lives in normal
+issue Markdown. The required target-state section is `Outcome`; additional
+sections such as `Description`, `Notes`, `Constraints`, or `Risks` are present
+only when they add useful context:
 
 ```text
-## Intent
-## Constraints
-## Risks
-## Validation
+## Description
+## Outcome
 ## Notes
 ```
 
-`Intent`, `Constraints`, `Risks`, and `Validation` are required. `Notes` is
-optional. Linked work, blockers, evidence, and other supporting records are
-typed links, not prose-only lists. Checkpoint or plan references are prose or
-repository paths inside those sections, not v1 relationship tables.
-`atelier issue show <objective-id>` and `atelier issue status <objective-id>`
+Linked work, blockers, evidence, and other supporting records are typed links,
+not prose-only lists. Checkpoint or plan references are prose or repository
+paths inside those sections, not v1 relationship tables.
+`atelier issue show <objective-id>` and `atelier issue transition <objective-id>`
 render objective work, blockers, and evidence from canonical relationships.
 They count only configured work relationships such as `advances` issue links as
 objective work and only direct blocker links as objective blockers; other
@@ -328,10 +336,15 @@ declared by repository policy:
 ```bash
 atelier issue create "Repair CLI workflow rework and validation gaps" \
   --issue-type mission \
-  --body "Repair the CLI workflow and validation gaps." \
-  --constraint "Use sectioned issue Markdown." \
-  --risk "Large rework can sprawl." \
-  --validation "Completion requires linked work closed and validation evidence attached."
+  --body "## Description
+
+Repair the CLI workflow and validation gaps.
+
+## Outcome
+
+CLI workflow records use sectioned issue Markdown, linked root work carries
+detailed implementation, and mission publish readiness derives from terminal linked work
+plus explicit validation evidence when configured."
 ```
 
 ```markdown
@@ -352,21 +365,15 @@ status: "ready"
 title: "Repair CLI workflow rework and validation gaps"
 ---
 
-## Intent
+## Description
 
 Repair the CLI workflow and validation gaps.
 
-## Constraints
+## Outcome
 
-- Use sectioned issue Markdown.
-
-## Risks
-
-- Large rework can sprawl.
-
-## Validation
-
-- Completion requires linked work closed and validation evidence attached.
+CLI workflow records use sectioned issue Markdown, linked root work carries
+detailed implementation, and mission publish readiness derives from terminal linked work
+plus explicit validation evidence when configured.
 ```
 
 When configured proof is required, the validating evidence itself is a separate
@@ -377,8 +384,8 @@ with `role: validates`; it is not copied into the objective body.
 
 An agent tasked with a mission-shaped objective should be able to:
 
-1. Read the objective for intent, constraints, current risks, validation
-   expectations, and any checkpoint or plan prose.
+1. Read the objective for target `Outcome`, constraints, current risks, explicit
+   validation work, and any checkpoint or plan prose.
 2. Inspect linked epics, issues, and evidence to understand what has already
    been proven and what remains.
 3. Select a ready issue or epic slice that advances the objective.
@@ -386,7 +393,7 @@ An agent tasked with a mission-shaped objective should be able to:
    status, show the relevant issue, preview transitions, then follow the
    command and recovery guidance printed for the current item.
 5. Leave enough evidence that another agent can verify what changed, which
-   criteria it supports, and what remains.
+   claim it supports, and what remains.
 
 `atelier status` is the normal current-work orientation surface. In a checkout,
 current work is the set of canonical issue records in that checkout's tracked
@@ -439,7 +446,7 @@ Action failure handling must be explicit:
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
 required. If the work state changed, the operator should record a note when
-useful, inspect `atelier issue transition <id> --options`, and move the issue
+useful, inspect `atelier issue transition <id>`, and move the issue
 to the next canonical workflow status instead of clearing hidden runtime state.
 The former root abandon and repair cleanup flows have therefore been removed
 rather than kept as target-state workflow guidance.
@@ -449,26 +456,27 @@ because each checkout carries its own tracked `.atelier/` record copy on its
 branch. Reconciliation happens through normal Git review and merge of the
 canonical Markdown records, not by sharing runtime work-association rows across
 checkouts. When more than one issue is `in_progress` in the same checkout,
-`atelier status` and `atelier issue status <mission-id>` should render that set directly
-rather than nominate one hidden active issue.
+`atelier status` and `atelier work ready`/`atelier work blocked` should render that
+set directly rather than nominate one hidden active issue.
 
-The visible worktree command surface is removed pending redesign. Explicit
-branch helpers such as `atelier branch for-epic <epic-id>` create or locate
-reviewable branches for diagnostics, advanced repair, or manual recovery.
+The visible worktree command surface is removed pending redesign. Hidden branch
+helpers may create or locate reviewable branches for diagnostics, advanced
+repair, or manual recovery.
 Routine worker guidance should come from `atelier status`, issue detail,
-transition options, and any recovery text they print. Workflow-defined general
+transition output, and any recovery text they print. Workflow-defined general
 hooks are deferred in v1; transition actions are the narrow configured
 integration points described by workflow policy.
 
 ## Deferred Checkpoints And Validators
 
-Checkpoint prose may describe validation criteria. Workflows own validators.
+Checkpoint prose may describe target-state checkpoints or explicit validation
+claims. Workflows own validators.
 
 A mission, epic, issue, or evidence body may say:
 
 ```yaml
 desired_state: "CLI surface is agent-native"
-validation_criteria:
+target_claims:
   - "Primary help only shows core commands"
   - "Legacy commands fail as unknown commands"
   - "Full test suite passes"

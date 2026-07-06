@@ -2,10 +2,11 @@
 
 This map covers implementation architecture for Atelier's target layered Cargo
 workspace: crate ownership, persistence boundaries, local projection state, and
-inherited Chainlink structure being migrated out of the root package. Product behavior lives in
-[Product](../product/index.md), product intent lives in [SPEC.md](../../SPEC.md),
-domain language lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is
-documented in [Chainlink Provenance](provenance.md).
+inherited Chainlink structure being migrated out of the root package. Product
+behavior lives in [Product](../product/index.md), product direction lives in
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), domain language lives in
+[CONTEXT.md](../../CONTEXT.md), and fork provenance is documented in
+[Chainlink Provenance](provenance.md).
 
 ## Target Workspace
 
@@ -60,8 +61,8 @@ Accepted ADRs record cross-cutting product choices:
 
 ## Target Architecture
 
-[SPEC.md](../../SPEC.md) defines the target architecture, using the vocabulary in
-[CONTEXT.md](../../CONTEXT.md):
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md) summarizes target architecture
+principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 
 - `.atelier/` is the single project state root. It contains deterministic,
   mergeable Markdown records and tracked project config.
@@ -76,9 +77,9 @@ Accepted ADRs record cross-cutting product choices:
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
 - The root package is being deleted in favor of a virtual workspace root; all
   executable ownership moves to `crates/atelier-cli`.
-- `doctor` and `lint` detect stale, invalid, or missing tracker state through
+- `check` and `check` detect stale, invalid, or missing tracker state through
   operator-facing health checks.
-- `doctor --fix` repairs ignored local projection/cache state from committed
+- `check --fix` repairs ignored local projection/cache state from committed
   Markdown records when it is safe to do so.
 - First-class concepts include missions, issues, evidence, typed links,
   workflows, workflow validators, status roles, review artifacts, and deferred

@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "human-output"
 - "ux"
+review:
+  kind: pull_request
+  number: 24
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -33,9 +37,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T23:47:29.431290556+00:00"
+status: "done"
 title: "Epic: Refresh human CLI output surfaces"
-updated_at: "2026-06-23T21:04:40.288555502+00:00"
+updated_at: "2026-06-23T23:47:29.431290556+00:00"
 ---
 
 ## Description

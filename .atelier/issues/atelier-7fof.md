@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T23:32:50.686219553+00:00"
+status: "done"
 title: "Refresh evidence and history browse output"
-updated_at: "2026-06-23T20:25:02.599533005+00:00"
+updated_at: "2026-06-23T23:32:50.686219553+00:00"
 ---
 
 ## Description

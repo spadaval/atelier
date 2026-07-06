@@ -3,14 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use atelier_sqlite::Database;
-use std::env;
 
 use crate::forgejo::{
     ForgejoClient, ForgejoRequest, ForgejoResponse, ForgejoTransport, UreqForgejoTransport,
 };
 use crate::project_config::{
-    workflow_forgejo_role_authors, ForgejoConfig, ProjectConfig, ReviewConfig,
-    ReviewProviderConfig, ReviewProviderKind,
+    load_forgejo_admin_token, user_config_path, workflow_forgejo_role_authors, ForgejoConfig,
+    ProjectConfig, ReviewConfig, ReviewProviderConfig, ReviewProviderKind,
 };
 
 pub struct DoctorRequest<'a> {
@@ -45,7 +44,7 @@ pub struct ReviewBackendView {
     pub mode: String,
     pub provider: Option<String>,
     pub status: &'static str,
-    pub token_env: Option<String>,
+    pub token_config: Option<String>,
     pub detail: String,
 }
 
@@ -132,7 +131,7 @@ fn review_backend_health(repo_root: &Path) -> ReviewBackendView {
                 mode: "unknown".to_string(),
                 provider: None,
                 status: "not ok",
-                token_env: None,
+                token_config: None,
                 detail: format!("project config is invalid: {error:#}"),
             };
         }
@@ -148,7 +147,7 @@ fn review_backend_health(repo_root: &Path) -> ReviewBackendView {
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
-                    token_env: Some(forgejo.admin_token_env.clone()),
+                    token_config: user_config_path().ok().map(|path| path.display().to_string()),
                     detail: format!(
                         "{error:#}; define role_authors on Forgejo review.open actions in .atelier/workflow.yaml, then run `atelier workflow check`"
                     ),
@@ -156,11 +155,9 @@ fn review_backend_health(repo_root: &Path) -> ReviewBackendView {
             }
         }
     }
-    review_backend_health_from_config(
-        &config,
-        |name| env::var(name).ok(),
-        |forgejo, token| probe_forgejo_readiness(forgejo, token),
-    )
+    review_backend_health_from_config(&config, load_forgejo_admin_token, |forgejo, token| {
+        probe_forgejo_readiness(forgejo, token)
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -175,7 +172,7 @@ fn review_backend_health_from_config<TokenLookup, Probe>(
     probe: Probe,
 ) -> ReviewBackendView
 where
-    TokenLookup: FnOnce(&str) -> Option<String>,
+    TokenLookup: FnOnce() -> Result<String>,
     Probe: FnOnce(&ForgejoConfig, &str) -> Result<ForgejoReadiness>,
 {
     match &config.review {
@@ -183,34 +180,38 @@ where
             mode: "room".to_string(),
             provider: None,
             status: "skipped",
-            token_env: None,
+            token_config: None,
             detail: "native review rooms do not require provider credentials".to_string(),
         },
         ReviewConfig::Provider(ReviewProviderConfig {
             provider: ReviewProviderKind::Forgejo(forgejo),
         }) => {
-            let token_env = forgejo.admin_token_env.clone();
+            let token_config = user_config_path()
+                .ok()
+                .map(|path| path.display().to_string());
             if forgejo.role_authors.is_none() {
                 return ReviewBackendView {
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
-                    token_env: Some(token_env.clone()),
+                    token_config: token_config.clone(),
                     detail: "missing Forgejo role author configuration; define role_authors on Forgejo review.open actions in .atelier/workflow.yaml, then run `atelier workflow check`".to_string(),
                 };
             }
-            let Some(token) = token_lookup(&token_env).filter(|value| !value.trim().is_empty())
-            else {
-                return ReviewBackendView {
-                    mode: "provider".to_string(),
-                    provider: Some("forgejo".to_string()),
-                    status: "not ok",
-                    token_env: Some(token_env.clone()),
-                    detail: format!(
-                        "missing token environment variable {}; set it before running provider review commands",
-                        token_env
-                    ),
-                };
+            let token = match token_lookup() {
+                Ok(token) => token,
+                Err(error) => {
+                    return ReviewBackendView {
+                        mode: "provider".to_string(),
+                        provider: Some("forgejo".to_string()),
+                        status: "not ok",
+                        token_config: token_config.clone(),
+                        detail: format!(
+                            "{error:#}; create [review.providers.forgejo] admin_token in {} before running provider review commands",
+                            token_config.as_deref().unwrap_or("~/.config/atelier.toml")
+                        ),
+                    };
+                }
             };
             match probe(forgejo, &token) {
                 Ok(readiness)
@@ -221,7 +222,7 @@ where
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "ok",
-                    token_env: Some(token_env),
+                    token_config,
                     detail: format!(
                         "Forgejo repository {}/{} is reachable and role authors have write access plus sudo verification",
                         forgejo.owner, forgejo.repo
@@ -232,7 +233,7 @@ where
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
-                    token_env: Some(token_env),
+                    token_config,
                     detail: format!(
                         "Forgejo role author readiness failed: {}; run `atelier forgejo roles check` or `atelier forgejo roles provision`",
                         readiness.role_failures.join("; ")
@@ -242,14 +243,14 @@ where
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
-                    token_env: Some(token_env),
+                    token_config,
                     detail: forgejo_status_detail(readiness.repo.status, &readiness.repo.body),
                 },
                 Err(error) => ReviewBackendView {
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
-                    token_env: Some(token_env),
+                    token_config,
                     detail: format!("Forgejo provider is unreachable: {error:#}"),
                 },
             }
@@ -340,7 +341,8 @@ fn optional_dir_status(path: &Path) -> &'static str {
 mod tests {
     use super::*;
     use crate::project_config::{
-        ForgejoRoleAuthors, ProjectPaths, PruneConfig, DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS,
+        ForgejoRoleAuthors, IssueLinkConfig, ProjectPaths, PruneConfig,
+        DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS,
     };
 
     fn room_config() -> ProjectConfig {
@@ -348,6 +350,9 @@ mod tests {
             project_slug: "atelier".to_string(),
             paths: ProjectPaths {
                 state_root: ".atelier".to_string(),
+            },
+            issue_links: IssueLinkConfig {
+                custom_context_types: Vec::new(),
             },
             prune: PruneConfig {
                 canonical_retention_days: DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS,
@@ -361,7 +366,6 @@ mod tests {
             host: "https://forge.example.test".to_string(),
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
-            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
             role_authors: Some(ForgejoRoleAuthors {
                 worker: "atelier-worker".to_string(),
                 reviewer: "atelier-reviewer".to_string(),
@@ -384,24 +388,32 @@ mod tests {
     fn review_backend_health_skips_room_mode() {
         let view = review_backend_health_from_config(
             &room_config(),
-            |_| Some("unused".to_string()),
+            || Ok("unused".to_string()),
             |_, _| unreachable!("room mode must not probe providers"),
         );
         assert_eq!(view.status, "skipped");
         assert_eq!(view.mode, "room");
-        assert!(view.token_env.is_none());
+        assert!(view.token_config.is_none());
     }
 
     #[test]
     fn review_backend_health_reports_missing_provider_token_without_secret() {
         let view = review_backend_health_from_config(
             &provider_config(),
-            |_| None,
+            || {
+                anyhow::bail!(
+                    "forgejo_config_missing_token: failed to read /home/alice/.config/atelier.toml"
+                )
+            },
             |_, _| unreachable!("missing token must not probe providers"),
         );
         assert_eq!(view.status, "not ok");
-        assert_eq!(view.token_env.as_deref(), Some("FORGEJO_ADMIN_TOKEN"));
-        assert!(view.detail.contains("missing token"));
+        assert!(view
+            .token_config
+            .as_deref()
+            .is_some_and(|path| path.ends_with(".config/atelier.toml")));
+        assert!(view.detail.contains("forgejo_config_missing_token"));
+        assert!(view.detail.contains(".config/atelier.toml"));
         assert!(!view.detail.contains("secret-token"));
     }
 
@@ -409,7 +421,7 @@ mod tests {
     fn review_backend_health_reports_provider_success() {
         let view = review_backend_health_from_config(
             &provider_config(),
-            |_| Some("secret-token".to_string()),
+            || Ok("secret-token".to_string()),
             |forgejo, token| {
                 assert_eq!(forgejo.repo, "atelier");
                 assert_eq!(token, "secret-token");
@@ -430,7 +442,7 @@ mod tests {
     fn review_backend_health_reports_provider_auth_and_missing_repo() {
         let unauthorized = review_backend_health_from_config(
             &provider_config(),
-            |_| Some("secret-token".to_string()),
+            || Ok("secret-token".to_string()),
             |_, _| {
                 Ok(ForgejoReadiness {
                     repo: ForgejoResponse {
@@ -447,7 +459,7 @@ mod tests {
 
         let missing_repo = review_backend_health_from_config(
             &provider_config(),
-            |_| Some("secret-token".to_string()),
+            || Ok("secret-token".to_string()),
             |_, _| {
                 Ok(ForgejoReadiness {
                     repo: ForgejoResponse {
@@ -466,7 +478,7 @@ mod tests {
     fn review_backend_health_reports_unreachable_provider() {
         let view = review_backend_health_from_config(
             &provider_config(),
-            |_| Some("secret-token".to_string()),
+            || Ok("secret-token".to_string()),
             |_, _| anyhow::bail!("connection refused"),
         );
         assert_eq!(view.status, "not ok");
@@ -487,7 +499,7 @@ mod tests {
 
         let view = review_backend_health_from_config(
             &config,
-            |_| panic!("role author failures should not require a token"),
+            || panic!("role author failures should not require a token"),
             |_, _| unreachable!("role author failures must not probe providers"),
         );
 
@@ -499,7 +511,7 @@ mod tests {
     fn review_backend_health_reports_role_author_readiness_failures() {
         let view = review_backend_health_from_config(
             &provider_config(),
-            |_| Some("secret-token".to_string()),
+            || Ok("secret-token".to_string()),
             |_, _| {
                 Ok(ForgejoReadiness {
                     repo: ForgejoResponse {

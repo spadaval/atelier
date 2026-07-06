@@ -12,7 +12,7 @@ exactly one Agent Factory subskill to each.
 
 Use the repository's executable guidance for tactical details. In Atelier
 repositories, start from `atelier man manager`, `atelier status`, focused
-`atelier issue status <objective-id>`, and focused record drill-down commands.
+`atelier issue show <objective-id>`, and focused record drill-down commands.
 
 ## Orchestrator Responsibilities
 

@@ -226,7 +226,7 @@ impl Database {
         if let Some(status) = status {
             let mut stmt = self.conn.prepare(
                 "SELECT kind, id, title, status, created_at, updated_at, source_path
-                 FROM records WHERE kind = ?1 AND status = ?2 ORDER BY id",
+                 FROM records WHERE kind = ?1 AND status = ?2 ORDER BY updated_at DESC, id DESC",
             )?;
             let rows = stmt.query_map(params![kind, status], record_from_row)?;
             for row in rows {
@@ -235,7 +235,7 @@ impl Database {
         } else {
             let mut stmt = self.conn.prepare(
                 "SELECT kind, id, title, status, created_at, updated_at, source_path
-                 FROM records WHERE kind = ?1 ORDER BY id",
+                 FROM records WHERE kind = ?1 ORDER BY updated_at DESC, id DESC",
             )?;
             let rows = stmt.query_map(params![kind], record_from_row)?;
             for row in rows {

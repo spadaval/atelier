@@ -80,6 +80,12 @@ fn print_ready_work(
             commands::objective_status::proof_context(db, &issue.id)?
         );
     }
+    if snapshot.ready_issues.len() > 5 {
+        println!(
+            "  {} more ready work item(s) omitted",
+            snapshot.ready_issues.len() - 5
+        );
+    }
     Ok(())
 }
 
@@ -97,12 +103,17 @@ fn print_blocked_work(
     for issue in snapshot.blocked_issues.iter().take(5) {
         let blockers = commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?;
         println!(
-            "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}",
+            "  blocked {} - {} | {} blocker{}",
             issue.id,
             issue.title,
             blockers.len(),
             plural_suffix(blockers.len()),
-            issue.id
+        );
+    }
+    if snapshot.blocked_issues.len() > 5 {
+        println!(
+            "  {} more blocked work item(s) omitted",
+            snapshot.blocked_issues.len() - 5
         );
     }
     Ok(())
@@ -121,6 +132,9 @@ fn print_blockers(snapshot: &commands::objective_status::ObjectiveStatusSnapshot
             compact_strings(&snapshot.open_blockers)
         );
         println!("  Next: close or unblock listed blockers");
+        if let Some(issue) = snapshot.blocked_issues.first() {
+            println!("  Inspect blockers: atelier issue show {}", issue.id);
+        }
     }
 }
 
@@ -162,20 +176,18 @@ fn print_next_commands(
     println!("  Open objective record: atelier issue show {issue_id}");
     if let Some(issue) = snapshot.active_issues.first() {
         println!(
-            "  Inspect current work transitions: atelier issue transition {} --options",
+            "  Inspect current work transitions: atelier issue transition {}",
             issue.id
         );
     } else if let Some(issue) = snapshot.selectable_issues.first() {
         println!(
-            "  Inspect ready work transitions: atelier issue transition {} --options",
+            "  Inspect ready work transitions: atelier issue transition {}",
             issue.id
         );
     } else if let Some(issue_id) = open_work.first() {
-        println!("  Close or defer open work: atelier issue transition {issue_id} --options");
+        println!("  Close or defer open work: atelier issue transition {issue_id}");
     } else {
-        println!(
-            "  Inspect objective close readiness: atelier issue transition {issue_id} --options"
-        );
+        println!("  Inspect objective close readiness: atelier issue transition {issue_id}");
     }
 }
 
@@ -185,27 +197,8 @@ fn open_work_ids(snapshot: &commands::objective_status::ObjectiveStatusSnapshot)
         .iter()
         .chain(snapshot.ready_issues.iter())
         .chain(snapshot.blocked_issues.iter())
+        .chain(snapshot.backlog_issues.iter())
         .map(|issue| issue.id.clone())
-        .chain(
-            snapshot
-                .issue_ids
-                .iter()
-                .filter(|id| {
-                    !snapshot
-                        .active_issues
-                        .iter()
-                        .any(|issue| issue.id.as_str() == id.as_str())
-                        && !snapshot
-                            .ready_issues
-                            .iter()
-                            .any(|issue| issue.id.as_str() == id.as_str())
-                        && !snapshot
-                            .blocked_issues
-                            .iter()
-                            .any(|issue| issue.id.as_str() == id.as_str())
-                })
-                .cloned(),
-        )
         .collect()
 }
 

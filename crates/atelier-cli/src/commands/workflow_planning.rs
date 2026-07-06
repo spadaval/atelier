@@ -1,12 +1,14 @@
 use anyhow::{bail, Result};
 use atelier_app::project_config;
 use atelier_app::workflow_policy::{
-    BranchLifecycleResolution, MergeStrategy, WorkflowForgejoRoleAuthors,
+    ActionParams, BranchLifecycleResolution, GitPrepareBranchBase, MergeStrategy,
+    WorkflowForgejoRoleAuthors,
 };
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 use crate::commands::workflow::ValidatorResult;
+use crate::human_output;
 
 #[derive(Debug, Clone)]
 pub struct IssueTransitionOption {
@@ -47,6 +49,7 @@ pub(crate) struct BranchLifecycleContext {
     pub expected_branch_exists: bool,
     pub base_branch_exists: bool,
     pub dirty_entries: Vec<String>,
+    pub non_tracker_dirty_entries: Vec<String>,
 }
 
 pub fn issue_transition_options(
@@ -65,7 +68,14 @@ pub fn issue_transition_options(
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let mut blockers =
             crate::commands::workflow::required_field_failures(&record, transition, None)?;
-        blockers.extend(branch_context_blockers(db, &issue, name, transition)?);
+        let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
+        blockers.extend(branch_context_blockers(
+            db,
+            &issue,
+            name,
+            transition,
+            &planned_actions,
+        )?);
         let validator_results = crate::commands::workflow::evaluate_policy_transition(
             db,
             &policy,
@@ -81,8 +91,7 @@ pub fn issue_transition_options(
                 .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
         );
         let mut descriptions = transition_descriptions(transition);
-        descriptions.extend(branch_context_guidance(db, &issue, name)?);
-        let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
+        descriptions.extend(branch_context_guidance(db, &issue, name, &planned_actions)?);
         blockers.extend(crate::commands::workflow::action_preflight_blockers(
             &repo_root,
             &planned_actions,
@@ -117,26 +126,31 @@ pub(crate) fn plan_transition_actions(
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<Vec<PlannedAction>> {
+    if transition.actions.is_empty() {
+        return Ok(Vec::new());
+    }
     let repo_root = crate::commands::workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-    let mut actions = Vec::new();
-    if transition_name == "start"
-        && !transition
-            .actions
-            .iter()
-            .any(|action| action.builtin == "branch_prepare")
+    let _ = transition_name;
+    let mut planned = plan_actions_for_resolution(issue, &resolution, &transition.actions, 1);
+    if transition
+        .actions
+        .iter()
+        .any(action_uses_current_branch_base)
     {
-        actions.push(branch_prepare_plan(issue, &resolution, 1));
+        let current_branch = crate::commands::workflow::git_current_branch(&repo_root)?;
+        if current_branch.trim().is_empty() {
+            bail!("git.prepare_branch: current requires an attached current branch");
+        }
+        for action in &mut planned {
+            if action.name == "git.prepare_branch" {
+                action.base_branch = current_branch.clone();
+            }
+        }
     }
-    actions.extend(plan_actions_for_resolution(
-        issue,
-        &resolution,
-        &transition.actions,
-        actions.len() + 1,
-    ));
-    Ok(actions)
+    Ok(planned)
 }
 
 pub(crate) fn plan_actions_for_resolution(
@@ -175,27 +189,16 @@ pub(crate) fn plan_actions_for_resolution(
         .collect()
 }
 
-fn branch_prepare_plan(
-    issue: &Issue,
-    resolution: &BranchLifecycleResolution,
-    order: usize,
-) -> PlannedAction {
-    PlannedAction {
-        order,
-        name: "branch_prepare".to_string(),
-        target_issue_id: issue.id.clone(),
-        branch_owner_id: resolution.owner_id.clone(),
-        expected_branch: resolution.expected_branch.clone(),
-        base_branch: resolution.base_branch.clone(),
-        merge_strategy: resolution.merge_strategy,
-        merge_owned: resolution.merge_owned,
-        review_artifact_target: None,
-        review_artifact_provider: None,
-        review_artifact_role: None,
-        forgejo_role_authors: None,
-        confirmation_required: false,
-        skip_reason: None,
-        block_reason: None,
+fn action_uses_current_branch_base(
+    action: &atelier_app::workflow_policy::ActionDefinition,
+) -> bool {
+    match action.params.as_ref() {
+        Some(ActionParams::GitPrepareBranch(params))
+            if params.base == GitPrepareBranchBase::Current =>
+        {
+            true
+        }
+        _ => false,
     }
 }
 
@@ -258,31 +261,11 @@ pub(crate) fn branch_lifecycle_context(
             &resolution.base_branch,
         )?,
         dirty_entries: crate::commands::workflow::git_dirty_entries(&repo_root)?,
+        non_tracker_dirty_entries: crate::commands::workflow::non_tracker_dirty_entries(
+            &repo_root,
+        )?,
         resolution,
     })
-}
-
-pub(crate) fn known_branch_owner(
-    db: &Database,
-    branch: &str,
-) -> Result<Option<BranchLifecycleResolution>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let mut owner_ids = std::collections::BTreeSet::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let resolution =
-            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-        if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
-            return Ok(Some(resolution));
-        }
-    }
-    Ok(None)
-}
-
-pub(crate) fn configured_base_branch() -> Result<String> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    Ok(policy.branch_policy.base_branch)
 }
 
 pub(crate) fn current_git_branch() -> Result<Option<String>> {
@@ -297,34 +280,28 @@ pub(crate) fn current_git_branch() -> Result<Option<String>> {
     .filter(|value| !value.is_empty()))
 }
 
-pub(crate) fn branch_ahead_count(branch: &str, base_branch: &str) -> Result<Option<usize>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    if !crate::commands::workflow::branch_exists_at(&repo_root, branch)?
-        || !crate::commands::workflow::branch_exists_at(&repo_root, base_branch)?
-    {
-        return Ok(None);
-    }
-    let range = format!("{base_branch}..{branch}");
-    let count = crate::commands::workflow::git_stdout(
-        &repo_root,
-        &["rev-list", "--count", &range],
-        "count branch commits",
-    )?;
-    Ok(count.trim().parse::<usize>().ok())
-}
-
 pub(crate) fn branch_owner_label(
     owner_kind: &atelier_app::workflow_policy::BranchOwnerKind,
 ) -> &'static str {
     match owner_kind {
         atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
+        atelier_app::workflow_policy::BranchOwnerKind::Mission => "mission",
         atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
     }
 }
 
 pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> String {
+    if !context.non_tracker_dirty_entries.is_empty() {
+        return format!(
+            "dirty checkout: {}",
+            human_output::path_summary(&context.non_tracker_dirty_entries, 3)
+        );
+    }
     if !context.dirty_entries.is_empty() {
-        return format!("dirty checkout: {}", context.dirty_entries.join("; "));
+        return format!(
+            "tracker changes present: {}",
+            human_output::path_summary(&context.dirty_entries, 3)
+        );
     }
     match context.current_branch.as_deref() {
         Some(current) if current == context.resolution.expected_branch => {
@@ -348,28 +325,21 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
     }
 }
 
-pub(crate) fn branch_lifecycle_scope_line(context: &BranchLifecycleContext) -> &'static str {
-    if context.resolution.merge_owned {
-        "owns its merge branch"
-    } else {
-        "nested under epic; merge is deferred to epic close"
-    }
-}
-
 fn branch_context_blockers(
     db: &Database,
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
+    planned_actions: &[PlannedAction],
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
-    if !matches!(transition_name, "start" | "close") {
+    if !planned_actions_need_branch_context(planned_actions) {
         return Ok(blockers);
     }
     let context = branch_lifecycle_context(db, &issue.id)?;
-    if !context.dirty_entries.is_empty() {
+    if !context.non_tracker_dirty_entries.is_empty() {
         blockers.push(format!(
-            "branch context: checkout has uncommitted changes; inspect `git status --short --branch`, then rerun `{}`",
+            "branch context: checkout has uncommitted non-tracker changes; inspect `git status --short --branch`, then rerun `{}`",
             transition_command(&issue.id, transition_name, transition)
         ));
         return Ok(blockers);
@@ -397,8 +367,9 @@ fn branch_context_guidance(
     db: &Database,
     issue: &Issue,
     transition_name: &str,
+    planned_actions: &[PlannedAction],
 ) -> Result<Vec<String>> {
-    if !matches!(transition_name, "start" | "close") {
+    if !planned_actions_need_branch_context(planned_actions) {
         return Ok(Vec::new());
     }
     let context = branch_lifecycle_context(db, &issue.id)?;
@@ -412,10 +383,11 @@ fn branch_context_guidance(
         context.resolution.owner_issue_type
     ));
     guidance.push(format!(
-        "Expected branch: {}",
+        "Source branch: {}",
         context.resolution.expected_branch
     ));
     guidance.push(format!("Base branch: {}", context.resolution.base_branch));
+    guidance.push(format!("Target branch: {}", context.resolution.base_branch));
     guidance.push(branch_lifecycle_state_line(&context));
     if is_start {
         guidance.push(format!(
@@ -430,6 +402,21 @@ fn branch_context_guidance(
         ));
     }
     Ok(guidance)
+}
+
+pub(crate) fn planned_actions_need_branch_context(planned_actions: &[PlannedAction]) -> bool {
+    planned_actions.iter().any(|action| {
+        matches!(
+            action.name.as_str(),
+            "git.prepare_branch"
+                | "tracker.commit"
+                | "git.push"
+                | "review.merge"
+                | "git.sync"
+                | "branch_integrate"
+                | "review.open"
+        )
+    })
 }
 
 pub(crate) fn transition_descriptions(
@@ -542,6 +529,100 @@ mod tests {
     }
 
     #[test]
+    fn branch_prepare_is_explicit_planned_action() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+
+        let empty_plan = plan_actions_for_resolution(&issue, &resolution, &[], 1);
+        assert!(empty_plan.is_empty());
+        assert!(!planned_actions_need_branch_context(&empty_plan));
+
+        let plan =
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.prepare_branch")], 1);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].name, "git.prepare_branch");
+        assert!(planned_actions_need_branch_context(&plan));
+    }
+
+    #[test]
+    fn branch_lifecycle_state_bounds_dirty_path_summary() {
+        let context = BranchLifecycleContext {
+            resolution: BranchLifecycleResolution {
+                issue_id: "atelier-epic1".to_string(),
+                owner_id: "atelier-epic1".to_string(),
+                owner_issue_type: "epic".to_string(),
+                owner_kind: BranchOwnerKind::Epic,
+                expected_branch: "epic/atelier-epic1".to_string(),
+                base_branch: "master".to_string(),
+                merge_strategy: MergeStrategy::Squash,
+                merge_owned: true,
+                nested_under_epic: false,
+            },
+            current_branch: Some("master".to_string()),
+            expected_branch_exists: false,
+            base_branch_exists: true,
+            dirty_entries: vec![
+                "M first.txt".to_string(),
+                "M second.txt".to_string(),
+                "M third.txt".to_string(),
+                "M fourth.txt".to_string(),
+                "M fifth.txt".to_string(),
+            ],
+            non_tracker_dirty_entries: vec![
+                "M first.txt".to_string(),
+                "M second.txt".to_string(),
+                "M third.txt".to_string(),
+                "M fourth.txt".to_string(),
+                "M fifth.txt".to_string(),
+            ],
+        };
+
+        let summary = branch_lifecycle_state_line(&context);
+
+        assert!(summary.contains("dirty checkout: 5 paths:"));
+        assert!(summary.contains("M first.txt"));
+        assert!(summary.contains("2 more omitted"));
+        assert!(!summary.contains("M fifth.txt"));
+    }
+
+    #[test]
+    fn branch_lifecycle_state_reports_tracker_only_changes_without_dirty_blocker_language() {
+        let context = BranchLifecycleContext {
+            resolution: BranchLifecycleResolution {
+                issue_id: "atelier-epic1".to_string(),
+                owner_id: "atelier-epic1".to_string(),
+                owner_issue_type: "epic".to_string(),
+                owner_kind: BranchOwnerKind::Epic,
+                expected_branch: "epic/atelier-epic1".to_string(),
+                base_branch: "mission/atelier-mission".to_string(),
+                merge_strategy: MergeStrategy::Squash,
+                merge_owned: true,
+                nested_under_epic: false,
+            },
+            current_branch: Some("mission/atelier-mission".to_string()),
+            expected_branch_exists: false,
+            base_branch_exists: true,
+            dirty_entries: vec!["M .atelier/issues/atelier-mission.md".to_string()],
+            non_tracker_dirty_entries: Vec::new(),
+        };
+
+        let summary = branch_lifecycle_state_line(&context);
+
+        assert!(summary.contains("tracker changes present"));
+        assert!(!summary.contains("dirty checkout"));
+    }
+
+    #[test]
     fn provider_terminal_actions_plan_without_local_branch_integrate() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
@@ -557,9 +638,9 @@ mod tests {
         };
         let actions = vec![
             action("tracker.commit"),
-            action("branch.push"),
+            action("git.push"),
             action("review.merge"),
-            action("base.sync"),
+            action("git.sync"),
         ];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
@@ -568,7 +649,7 @@ mod tests {
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "branch_integrate"));

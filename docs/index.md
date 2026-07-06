@@ -6,7 +6,8 @@
 - `AGENTS.md`: concise entry point and repository reference map for agents
   working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
-- [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
+- [PRODUCT_INTENT.md](../PRODUCT_INTENT.md): product direction, principles, and
+  target-state constraints for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
   canonical `.atelier/` record file, ignored projection/cache, compatibility, and
   rebuild layout.
@@ -32,6 +33,10 @@
   accepted choice that transition actions replace effects, branch mutation is
   declared transition work, and v1 rejects generic capabilities, separate
   branch lifecycles, mission-only branching, and arbitrary hooks.
+- [docs/adr/0016-canonical-work-branches-and-mission-integration.md](adr/0016-canonical-work-branches-and-mission-integration.md):
+  accepted choice that work branch names use `<issue_type>/<issue_id>`,
+  mission integration branches are opt-in through workflow policy, branch base
+  is recorded context, and projection freshness is not workflow policy.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required

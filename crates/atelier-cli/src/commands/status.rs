@@ -1,168 +1,139 @@
 use anyhow::Result;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
 use crate::commands;
+use crate::human_output::{
+    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
+};
 use crate::utils::format_issue_id;
+use atelier_app::read_pipeline::{StatusNextAction, StatusView};
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
-use atelier_sqlite::{Database, RecordSummary};
+use atelier_sqlite::Database;
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let active_issues = current_work_issues(db, workflow_policy.as_ref())?;
-    let active_issue_ids = active_issues
-        .iter()
-        .map(|issue| issue.id.as_str())
-        .collect::<BTreeSet<_>>();
-    let active_role_counts = active_role_counts(&active_issues, workflow_policy.as_ref());
-    let current_missions = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| issue.issue_type == "mission")
-        .map(mission_summary_from_issue)
-        .filter(|mission| mission.status != "closed")
-        .filter(|mission| mission.status != "superseded")
-        .collect::<Vec<_>>();
-    let ready = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| !active_issue_ids.contains(issue.id.as_str()))
-        .filter_map(|issue| {
-            match commands::objective_status::issue_state(db, workflow_policy.as_ref(), &issue) {
-                Ok("ready") => Some(Ok(issue)),
-                Ok(_) => None,
-                Err(error) => Some(Err(error)),
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let ready =
-        commands::objective_status::order_issues_by_work(db, workflow_policy.as_ref(), ready)?;
-    let export_stale = atelier_app::export::canonical_stale_entries(db, state_dir)?;
-    let tracker_state = if export_stale.is_empty() {
-        "current"
-    } else {
-        "stale"
-    };
+    let view = atelier_app::read_pipeline::status_view(db, state_dir, workflow_policy.as_ref())?;
 
     if quiet {
         println!(
             "work={} current_missions={} ready={} tracker={}",
-            if active_issues.is_empty() {
+            if view.work.active.is_empty() {
                 "none".to_string()
             } else {
-                active_issues.len().to_string()
+                view.work.active.len().to_string()
             },
-            current_missions.len(),
-            ready.len(),
-            tracker_state
+            view.current_missions.len(),
+            view.work.ready.len(),
+            view.tracker_state
         );
         return Ok(());
     }
 
-    println!("Atelier Status");
-    println!("==============");
-    println!("Tracker:       {tracker_state}");
-    println!("Ready work:    {}", ready.len());
-
-    if active_issues.is_empty() {
-        println!("Current work:  none");
-    } else {
-        println!("Current work:  {} issue(s)", active_issues.len());
-        for issue in &active_issues {
-            let state =
-                commands::objective_status::issue_state(db, workflow_policy.as_ref(), issue)?;
-            println!(
-                "  {state} {} - {} [{}]",
-                issue.id,
-                issue.title,
-                issue_status_role(issue, workflow_policy.as_ref()).unwrap_or("role:unconfigured")
-            );
-        }
-    }
-
-    println!("Current missions: {}", current_missions.len());
-    if active_role_counts.is_empty() {
-        println!("Active roles:   none");
-    } else {
-        println!(
-            "Active roles:   {}",
-            render_role_counts(&active_role_counts)
-        );
-    }
-
-    if !export_stale.is_empty() {
-        println!("Local state issues: {}", export_stale.len());
-    }
-
-    println!();
-    println!("Local State");
-    println!("-----------");
-    print_git_state();
-    println!("Tracker:  {tracker_state}");
-
-    println!();
-    println!("Branch Policy");
-    println!("----------------");
-    print_branch_lifecycle_state(db, &active_issues)?;
-
-    println!();
-    println!("Evidence Status");
-    println!("---------------");
-    print_evidence_status(db, &active_issues, None, None, &ready)?;
-
-    println!();
-    println!("Recent Activity");
-    println!("---------------");
-    println!("(no active mission focus)");
-
-    println!();
-    println!("Next Actions");
-    println!("------------");
-    if current_missions.is_empty() {
-        println!("  Inspect objective readiness: atelier issue status <id>");
-    } else {
-        println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier issue table --kind mission",
-            current_missions.len()
-        );
-    }
-    if ready.is_empty() {
-        println!(
-            "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
-        );
-    } else {
-        println!(
-            "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
-            ready.len()
-        );
-        println!(
-            "  Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
-        );
-    }
-    if !export_stale.is_empty() {
-        println!(
-            "  Repair local Atelier state ({} stale record(s)): atelier doctor --fix",
-            export_stale.len()
-        );
-        println!("  Check committed tracker records after repair: atelier lint");
-    }
-    Ok(())
+    print_status_view(db, &view)
 }
 
-fn mission_summary_from_issue(issue: Issue) -> RecordSummary {
-    let id = issue.id.clone();
-    RecordSummary {
-        kind: "issue".to_string(),
-        id: id.clone(),
-        title: issue.title,
-        status: issue.status,
-        created_at: issue.created_at,
-        updated_at: issue.updated_at,
-        source_path: format!("issues/{id}.md"),
+fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
+    let current_work = if view.work.active.is_empty() {
+        "none".to_string()
+    } else {
+        format!("{} issue(s)", view.work.active.len())
+    };
+    let active_roles = if view.active_role_counts.is_empty() {
+        "none".to_string()
+    } else {
+        render_role_counts(&view.active_role_counts)
+    };
+    let mut summary_lines = vec![
+        format!("Tracker:       {}", view.tracker_state),
+        format!("Ready work:    {}", view.work.ready.len()),
+        format!("Current work:  {current_work}"),
+        format!("Current missions: {}", view.current_missions.len()),
+        format!("Active roles:   {active_roles}"),
+    ];
+    if view.stale_records > 0 {
+        summary_lines.push(format!("Local state issues: {}", view.stale_records));
     }
+
+    let active_rows = view
+        .work
+        .active
+        .iter()
+        .map(|issue| IssueListRow {
+            role: crate::human_output::DisplayRole::Executable,
+            id: issue.id.clone(),
+            status: issue.status_category.clone(),
+            priority: issue.priority.clone(),
+            title: issue.title.clone(),
+            blockers: 0,
+            depth: 1,
+        })
+        .collect::<Vec<_>>();
+
+    let git = git_state();
+    let local_state = match git {
+        Ok(state) => {
+            let mut panel = MetadataPanel::new("Local State");
+            if let Some(branch) = state.branch {
+                panel = panel.row("Branch", branch);
+            }
+            if state.dirty_entries.is_empty() {
+                panel = panel.row("Checkout", "clean");
+            } else {
+                panel = panel.row(
+                    "Checkout",
+                    format!(
+                        "dirty ({})",
+                        crate::human_output::path_summary(&state.dirty_entries, 3)
+                    ),
+                );
+            }
+            panel.row("Tracker", view.tracker_state.clone())
+        }
+        Err(error) => MetadataPanel::new("Local State")
+            .row("Checkout", format!("unavailable - {error}"))
+            .row("Tracker", view.tracker_state.clone()),
+    };
+
+    let next_actions = match view.next_action {
+        StatusNextAction::InspectReadyWork { count } => {
+            vec![
+                format!(
+                    "  Choose ready work ({count} ready issue(s) available): atelier work ready"
+                ),
+                "  Inspect selected work transitions: atelier issue transition <issue-id>"
+                    .to_string(),
+            ]
+        }
+        StatusNextAction::InspectBlockedWork => {
+            vec![
+                "  Inspect blocked work (no ready work is available): atelier work blocked"
+                    .to_string(),
+            ]
+        }
+        StatusNextAction::InspectHealth { stale_records } => {
+            vec![
+                format!(
+                    "  Repair local Atelier state ({stale_records} stale record(s)): atelier check --fix"
+                ),
+                "  Check committed tracker records after repair: atelier check".to_string(),
+            ]
+        }
+        StatusNextAction::NoSpecificAction => {
+            vec!["  No specific next action is available from checkout state.".to_string()]
+        }
+    };
+
+    Page::new("Atelier Status")
+        .panel(LinesPanel::new("", summary_lines))
+        .panel(IssueListPanel::new("Current Work", active_rows).limit(8))
+        .panel(local_state)
+        .panel(LinesPanel::new("Next Actions", next_actions))
+        .print(RenderContext::for_stdout());
+    Ok(())
 }
 
 pub(crate) fn current_work_issues(
@@ -188,160 +159,12 @@ pub(crate) fn issue_status_role<'a>(
     workflow_policy.and_then(|policy| policy.status_role(&issue.status))
 }
 
-fn active_role_counts(
-    issues: &[Issue],
-    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for issue in issues {
-        let role = issue_status_role(issue, workflow_policy)
-            .unwrap_or("unconfigured")
-            .to_string();
-        *counts.entry(role).or_insert(0) += 1;
-    }
-    counts
-}
-
 fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
     counts
         .iter()
         .map(|(role, count)| format!("{role}={count}"))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn print_evidence_status(
-    db: &Database,
-    active_issues: &[Issue],
-    active_mission: Option<&RecordSummary>,
-    mission_snapshot: Option<&commands::objective_status::ObjectiveStatusSnapshot>,
-    ready: &[Issue],
-) -> Result<()> {
-    let proof_issue_ids = if let Some(snapshot) = mission_snapshot {
-        active_issues
-            .iter()
-            .chain(snapshot.selectable_issues.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    } else {
-        active_issues
-            .iter()
-            .chain(ready.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    };
-
-    if proof_issue_ids.is_empty() {
-        if active_mission.is_some() {
-            println!("Attached Proof: irrelevant - no current or selectable mission work");
-        } else {
-            println!("Attached Proof: irrelevant - no current or ready work");
-        }
-        return Ok(());
-    }
-
-    let mut attached = 0usize;
-    let mut missing = Vec::new();
-    for issue_id in &proof_issue_ids {
-        if commands::objective_status::has_validating_evidence(db, issue_id)? {
-            attached += 1;
-        } else {
-            missing.push((*issue_id).to_string());
-        }
-    }
-
-    if missing.is_empty() {
-        println!("Attached Proof: attached - {attached} issue(s) have validating evidence");
-    } else {
-        println!(
-            "Attached Proof: missing - {} issue(s) without validating evidence; {attached} attached",
-            missing.len()
-        );
-        for issue_id in missing.iter().take(3) {
-            println!("  Missing: {issue_id}");
-        }
-        if missing.len() > 3 {
-            println!("  Missing: {} more issue(s)", missing.len() - 3);
-        }
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
-    }
-
-    Ok(())
-}
-
-fn print_git_state() {
-    match git_state() {
-        Ok(state) => {
-            if let Some(branch) = state.branch {
-                println!("Branch:   {branch}");
-            }
-            if state.dirty_entries.is_empty() {
-                println!("Checkout: clean");
-            } else {
-                println!("Checkout: dirty ({} entries)", state.dirty_entries.len());
-                for entry in state.dirty_entries.iter().take(3) {
-                    println!("  {entry}");
-                }
-            }
-        }
-        Err(error) => println!("Checkout: unavailable - {error}"),
-    }
-}
-
-fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Result<()> {
-    let current_branch = commands::workflow::current_git_branch()?;
-    let base_branch = commands::workflow::configured_base_branch()?;
-    println!(
-        "Current branch: {}",
-        current_branch.as_deref().unwrap_or("(detached)")
-    );
-    println!("Base branch:    {base_branch}");
-    match current_branch.as_deref() {
-        Some(branch) => match commands::workflow::known_branch_owner(db, branch)? {
-            Some(owner) => println!(
-                "Branch owner:   {} {} ({})",
-                commands::workflow::branch_owner_label(&owner.owner_kind),
-                owner.owner_id,
-                owner.owner_issue_type
-            ),
-            None => println!("Branch owner:   (unknown)"),
-        },
-        None => println!("Branch owner:   (unknown)"),
-    }
-
-    if active_issues.is_empty() {
-        println!("Active work:    none");
-        return Ok(());
-    }
-
-    println!("Active work:");
-    for issue in active_issues {
-        match commands::workflow::branch_lifecycle_context(db, &issue.id) {
-            Ok(context) => {
-                let state = if context.current_branch.as_deref()
-                    == Some(context.resolution.expected_branch.as_str())
-                {
-                    "ok".to_string()
-                } else {
-                    format!(
-                        "mismatch; inspect `atelier issue transition {} --options` and `atelier status`",
-                        issue.id
-                    )
-                };
-                println!(
-                    "  {} - owner {} {} ({}) | expected {} | {state}",
-                    issue.id,
-                    commands::workflow::branch_owner_label(&context.resolution.owner_kind),
-                    context.resolution.owner_id,
-                    context.resolution.owner_issue_type,
-                    context.resolution.expected_branch
-                );
-            }
-            Err(error) => println!("  {} - branch context unavailable: {error}", issue.id),
-        }
-    }
-    Ok(())
 }
 
 struct GitState {

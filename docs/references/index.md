@@ -2,7 +2,7 @@
 
 This directory holds notes on external projects and prior art that inform
 Atelier design. Reference notes are not target-state requirements by
-themselves; promote a choice to `SPEC.md`, `CONTEXT.md`, or an ADR when it
+themselves; promote a choice to `PRODUCT_INTENT.md`, `CONTEXT.md`, or an ADR when it
 becomes part of Atelier's intended design.
 
 - `braid.md`: Braid reference notes.

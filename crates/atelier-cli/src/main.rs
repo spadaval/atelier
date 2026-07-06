@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
-    lint_db, state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
+    CommandStorageAccess,
 };
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
@@ -23,10 +23,10 @@ mod issue_cli;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
+  work          Show operational multi-issue work views
 
 Issues:
-  issue         Create, list, show, update, close, and manage blockers
-  search        Search issue text
+  issue         Create, list, show, update, transition, note, and manage links
 
 Planning:
   bundle        Preview and apply one-shot graph bundle files
@@ -34,17 +34,11 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
-Advanced work:
-  branch        Inspect and repair epic review branches
-
 Maintenance:
+  check         Validate tracker health; use --fix for local repair
   prune         Prune accumulated artifacts safely
-  maintenance   Run explicit destructive maintenance commands
-  lint          Validate tracker records
-  doctor        Check runtime and derived-state health; use --fix for local repair
 
 Common commands:
   atelier man
@@ -54,25 +48,27 @@ Common commands:
   atelier man manager
   atelier man admin
   atelier status
+  atelier work ready
+  atelier work blocked
+  atelier work missions
   atelier issue list
-  atelier issue list --ready
-  atelier issue list --blocked
+  atelier work mission <mission-id>
+  atelier work epic <epic-id>
   atelier issue show <id>
-  atelier issue block <blocked-id> <blocker-id>
-  atelier issue unblock <blocked-id> <blocker-id>
-  atelier issue blocked [<id>]
+  atelier issue link <blocked-id> <blocker-id> --role blocked_by
+  atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
-  atelier issue table --kind mission
-  atelier issue transition <mission-id> close --reason \"...\"
+  atelier issue transition <mission-id> request_publish
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
-  atelier forgejo roles check
-  atelier history --mission <id>
-  atelier history --issue <id>
-  atelier issue transition <issue-id> --options
+  atelier history
+  atelier issue transition <issue-id>
   atelier issue transition <issue-id> start
   atelier issue transition <issue-id> close --reason \"...\"
+  atelier check
+  atelier check <issue-id>
+  atelier check --fix
   atelier prune
   atelier prune --apply
   atelier help <command>
@@ -121,16 +117,16 @@ enum Commands {
     /// Show checkout, mission, work, and tracker signposts
     Status,
 
-    /// Issue lifecycle commands (create, show, list, transition, ...)
+    /// Operational multi-issue work views
+    Work {
+        #[command(subcommand)]
+        action: Option<WorkCommands>,
+    },
+
+    /// Issue lifecycle commands (create, show, transition, note, link, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
-    },
-
-    /// Search issue text
-    Search {
-        /// Search query
-        query: String,
     },
 
     /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
@@ -181,6 +177,7 @@ enum Commands {
     },
 
     /// Configure and verify Forgejo integration
+    #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]
         action: ForgejoCommands,
@@ -222,6 +219,7 @@ enum Commands {
     },
 
     /// Git branch helpers for epic review branches
+    #[command(hide = true)]
     Branch {
         #[command(subcommand)]
         action: BranchCommands,
@@ -235,6 +233,7 @@ enum Commands {
     },
 
     /// Destructive maintenance commands
+    #[command(hide = true)]
     Maintenance {
         #[command(subcommand)]
         action: MaintenanceCommands,
@@ -245,18 +244,29 @@ enum Commands {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
         apply: bool,
-        /// Retain diagnostics logs for this many UTC days
+        /// Override diagnostics and canonical record retention for this prune pass
         #[arg(long)]
         retention_days: Option<u64>,
     },
 
+    /// Validate tracker health; repair ignored local runtime state with --fix
+    Check {
+        /// Optional issue ID or imported source ID
+        id: Option<String>,
+        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        #[arg(long)]
+        fix: bool,
+    },
+
     /// Validate tracker records
+    #[command(hide = true)]
     Lint {
         /// Optional issue ID or imported source ID
         id: Option<String>,
     },
 
     /// Check tracker runtime and derived-state health
+    #[command(hide = true)]
     Doctor {
         /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
         #[arg(long)]
@@ -269,6 +279,71 @@ enum Commands {
 // ============================================================================
 
 #[derive(Subcommand)]
+enum WorkCommands {
+    /// Show the legacy repo-wide operational queue
+    Queue {
+        /// Filter by exact workflow status, or all
+        #[arg(short, long, default_value = "todo")]
+        status: String,
+        /// Filter by derived workflow category
+        #[arg(long)]
+        category: Option<String>,
+        /// Filter by label
+        #[arg(short, long)]
+        label: Option<String>,
+        /// Filter by priority
+        #[arg(short, long)]
+        priority: Option<String>,
+        /// Show only ready work
+        #[arg(long)]
+        ready: bool,
+        /// Show active-category work
+        #[arg(long)]
+        active: bool,
+        /// Show blocked-category work
+        #[arg(long)]
+        blocked: bool,
+        /// Show backlog-category work
+        #[arg(long)]
+        backlog: bool,
+        /// Show all statuses
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show one mission dashboard
+    Mission {
+        id: String,
+        /// Show mission-scoped ready work only
+        #[arg(long)]
+        ready: bool,
+        /// Show mission-scoped blocked work only
+        #[arg(long)]
+        blocked: bool,
+        /// Show mission-scoped active work only
+        #[arg(long)]
+        active: bool,
+        /// Show mission-scoped done work only
+        #[arg(long)]
+        done: bool,
+        /// Show all mission-scoped work
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show one epic dashboard
+    Epic { id: String },
+    /// Show ready work
+    Ready,
+    /// Show blocked work
+    Blocked,
+    /// Show active work
+    Active,
+    /// Show all operational work buckets
+    All,
+    /// List mission records by issue_type
+    Missions,
+}
+
+#[derive(Subcommand)]
 enum IssueCommands {
     /// Create a new issue
     Create {
@@ -277,17 +352,17 @@ enum IssueCommands {
         /// Initial Markdown description/body text
         #[arg(long)]
         description: Option<String>,
-        /// Mission intent/body text; requires --issue-type mission
+        /// Plain mission Markdown centered on Outcome; requires --issue-type mission
         #[arg(long)]
         body: Option<String>,
-        /// Add one mission Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Constraints section bullet
+        #[arg(long, hide = true)]
         constraint: Vec<String>,
-        /// Add one mission Risks section bullet; repeat for multiple risks
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Risks section bullet
+        #[arg(long, hide = true)]
         risk: Vec<String>,
-        /// Add one mission Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Validation section bullet
+        #[arg(long, hide = true)]
         validation: Vec<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
@@ -306,68 +381,49 @@ enum IssueCommands {
         parent: Option<String>,
     },
 
-    /// List issues
-    List {
-        /// Filter by exact workflow status, or all
-        #[arg(short, long, default_value = "todo")]
-        status: String,
-        /// Filter by derived workflow category
-        #[arg(long)]
-        category: Option<String>,
-        /// Filter by label
-        #[arg(short, long)]
-        label: Option<String>,
-        /// Filter by priority
-        #[arg(short, long)]
-        priority: Option<String>,
-        /// Show only ready work
-        #[arg(long)]
-        ready: bool,
-        /// Show only blocked work
-        #[arg(long)]
-        blocked: bool,
-    },
-
-    /// Show a homogeneous objective inventory table
-    Table {
-        /// Record kind to inventory: mission or issue
-        #[arg(long, default_value = "mission")]
-        kind: String,
-        /// Filter by exact record/workflow status, or all
-        #[arg(long, default_value = "current")]
-        status: String,
-        /// Filter issue rows by issue type, such as epic
-        #[arg(long)]
-        issue_type: Option<String>,
-    },
-
     /// Show issue details
     Show {
         /// Issue ID
         id: String,
     },
 
-    /// Show type-aware issue status for objective records
-    Status {
-        /// Issue ID
-        id: String,
-        /// Show verbose validator detail for mission objective records
+    /// List issue records as generic inventory
+    List {
+        /// Filter by exact workflow status, or all
+        #[arg(short, long, default_value = "all")]
+        status: String,
+        /// Filter by derived workflow category
         #[arg(long)]
-        verbose: bool,
+        category: Option<String>,
+        /// Filter by issue type from .atelier/workflow.yaml
+        #[arg(long = "issue-type")]
+        issue_type: Option<String>,
+        /// Filter by label
+        #[arg(short, long)]
+        label: Option<String>,
+        /// Filter by priority
+        #[arg(short, long)]
+        priority: Option<String>,
+        /// Show only ready todo-category issue records
+        #[arg(long)]
+        ready: bool,
+        /// Show blocked issue records
+        #[arg(long)]
+        blocked: bool,
     },
 
-    /// Show issue transition options and blockers
+    /// Show or execute issue transitions
     Transition {
         /// Issue ID
         id: String,
-        /// Transition name to execute
+        /// Transition name to execute; omit to inspect options and blockers
         transition: Option<String>,
-        /// Show the full option list
-        #[arg(long)]
-        options: bool,
         /// Close reason used by transitions that require it
         #[arg(long = "reason")]
         close_reason: Option<String>,
+        /// Show validator passes, action preflight detail, descriptions, and debug context
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Update an issue
@@ -386,17 +442,17 @@ enum IssueCommands {
         /// New status for mission objective records
         #[arg(long)]
         status: Option<String>,
-        /// Mission intent/body text; requires a mission objective record
+        /// Plain mission Markdown centered on Outcome; requires a mission objective record
         #[arg(long)]
         body: Option<String>,
-        /// Add one mission Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Constraints section bullet
+        #[arg(long, hide = true)]
         constraint: Vec<String>,
-        /// Add one mission Risks section bullet; repeat for multiple risks
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Risks section bullet
+        #[arg(long, hide = true)]
         risk: Vec<String>,
-        /// Add one mission Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
+        /// Deprecated compatibility: add one mission Validation section bullet
+        #[arg(long, hide = true)]
         validation: Vec<String>,
         /// Add labels to the issue
         #[arg(short, long)]
@@ -444,28 +500,6 @@ enum IssueCommands {
         #[arg(long, default_value = "advances")]
         role: String,
     },
-
-    /// Mark an issue as blocked by another
-    Block {
-        /// Issue ID that is blocked
-        id: String,
-        /// Issue ID that is blocking
-        blocker: String,
-    },
-
-    /// Remove a blocking relationship
-    Unblock {
-        /// Issue ID that was blocked
-        id: String,
-        /// Issue ID that was blocking
-        blocker: String,
-    },
-
-    /// List blocked issues, or show blockers for one issue
-    Blocked {
-        /// Issue ID to inspect instead of the blocked-work queue
-        id: Option<String>,
-    },
 }
 
 #[derive(Subcommand)]
@@ -496,7 +530,7 @@ enum BundleCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation \"summary\"
+  atelier evidence record --target issue/<id> --kind validation \"checked claim X; result pass\"
   atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
@@ -772,12 +806,66 @@ fn run() -> Result<()> {
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
-        Commands::Issue { action } => issue_cli::dispatch(action, quiet),
-
-        Commands::Search { query } => {
-            let db = degraded_projection_query_db()?;
-            commands::issue::search(&db, &query, quiet)
+        Commands::Work { action } => {
+            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            match action {
+                None => commands::work::dashboards(quiet),
+                Some(WorkCommands::Queue {
+                    status,
+                    category,
+                    label,
+                    priority,
+                    ready,
+                    active,
+                    blocked,
+                    backlog,
+                    all,
+                }) => commands::work::queue(
+                    storage.db(),
+                    commands::work::QueueOptions {
+                        status: &status,
+                        category: category.as_deref(),
+                        label: label.as_deref(),
+                        priority: priority.as_deref(),
+                        ready,
+                        active,
+                        blocked,
+                        backlog,
+                        all,
+                    },
+                    quiet,
+                ),
+                Some(WorkCommands::Mission {
+                    id,
+                    ready,
+                    blocked,
+                    active,
+                    done,
+                    all,
+                }) => commands::work::mission_dashboard(
+                    storage.db(),
+                    &id,
+                    commands::work::MissionDashboardOptions {
+                        ready,
+                        blocked,
+                        active,
+                        done,
+                        all,
+                    },
+                    quiet,
+                ),
+                Some(WorkCommands::Epic { id }) => {
+                    commands::work::epic_dashboard(storage.db(), &id, quiet)
+                }
+                Some(WorkCommands::Ready) => commands::work::list(storage.db(), "ready", quiet),
+                Some(WorkCommands::Blocked) => commands::work::list(storage.db(), "blocked", quiet),
+                Some(WorkCommands::Active) => commands::work::list(storage.db(), "active", quiet),
+                Some(WorkCommands::All) => commands::work::list(storage.db(), "all", quiet),
+                Some(WorkCommands::Missions) => commands::work::missions(storage.db(), quiet),
+            }
         }
+
+        Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
@@ -1179,6 +1267,26 @@ fn run() -> Result<()> {
             commands::prune::run(tracker, apply, retention_days)
         }
 
+        Commands::Check { id, fix } => {
+            if fix {
+                if id.is_some() {
+                    bail!("atelier check --fix cannot be scoped to one issue");
+                }
+                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+                commands::issue::doctor(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    storage.projection_db_existed,
+                    true,
+                )
+            } else {
+                let db = lint_db()?;
+                commands::issue::lint(&db, id.as_deref())
+            }
+        }
+
         Commands::Lint { id } => {
             let db = lint_db()?;
             commands::issue::lint(&db, id.as_deref())
@@ -1226,22 +1334,27 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Init { .. } => "init",
         Commands::Man { .. } => "man",
         Commands::Status => "status",
+        Commands::Work { action } => match action {
+            None => "work",
+            Some(WorkCommands::Queue { .. }) => "work queue",
+            Some(WorkCommands::Mission { .. }) => "work mission",
+            Some(WorkCommands::Epic { .. }) => "work epic",
+            Some(WorkCommands::Ready) => "work ready",
+            Some(WorkCommands::Blocked) => "work blocked",
+            Some(WorkCommands::Active) => "work active",
+            Some(WorkCommands::All) => "work all",
+            Some(WorkCommands::Missions) => "work missions",
+        },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
-            IssueCommands::Table { .. } => "issue table",
             IssueCommands::Show { .. } => "issue show",
-            IssueCommands::Status { .. } => "issue status",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Link { .. } => "issue link",
             IssueCommands::Unlink { .. } => "issue unlink",
-            IssueCommands::Block { .. } => "issue block",
-            IssueCommands::Unblock { .. } => "issue unblock",
-            IssueCommands::Blocked { .. } => "issue blocked",
         },
-        Commands::Search { .. } => "search",
         Commands::Export { check, .. } => {
             if *check {
                 "export --check"
@@ -1299,6 +1412,13 @@ fn command_identity(command: &Commands) -> &'static str {
                 "prune --apply"
             } else {
                 "prune"
+            }
+        }
+        Commands::Check { fix, .. } => {
+            if *fix {
+                "check --fix"
+            } else {
+                "check"
             }
         }
         Commands::Lint { .. } => "lint",

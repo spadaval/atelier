@@ -1,10 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, projection_query_db,
-    state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, degraded_projection_query_db, state_and_db_paths,
 };
 use atelier_core::IssuePriority;
-use atelier_records::RecordStore;
 
 use crate::commands;
 
@@ -117,9 +115,15 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             )
         }
 
+        super::IssueCommands::Show { id } => {
+            let db = degraded_projection_query_db()?;
+            commands::issue::show(&db, &id)
+        }
+
         super::IssueCommands::List {
             status,
             category,
+            issue_type,
             label,
             priority,
             ready,
@@ -127,18 +131,22 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         } => {
             let db = degraded_projection_query_db()?;
             if blocked {
-                if ready {
-                    bail!("--blocked cannot be combined with --ready");
+                if ready || status != "all" || category.is_some() {
+                    bail!("--blocked cannot be combined with --ready, --status, or --category");
                 }
-                if status != "todo" || category.is_some() || label.is_some() || priority.is_some() {
-                    bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
-                }
-                commands::deps::list_blocked(&db, quiet)
+                commands::issue::list_blocked_inventory(
+                    &db,
+                    issue_type.as_deref(),
+                    label.as_deref(),
+                    priority.as_deref(),
+                    quiet,
+                )
             } else {
-                commands::issue::list(
+                commands::issue::list_inventory(
                     &db,
                     Some(&status),
                     category.as_deref(),
+                    issue_type.as_deref(),
                     label.as_deref(),
                     priority.as_deref(),
                     ready,
@@ -147,52 +155,13 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             }
         }
 
-        super::IssueCommands::Table {
-            kind,
-            status,
-            issue_type,
-        } => {
-            let db = degraded_projection_query_db()?;
-            commands::issue::table(&db, &kind, &status, issue_type.as_deref(), quiet)
-        }
-
-        super::IssueCommands::Show { id } => {
-            let db = degraded_projection_query_db()?;
-            commands::issue::show(&db, &id)
-        }
-
-        super::IssueCommands::Status { id, verbose } => {
-            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-            let db = storage.db();
-            if is_mission_objective(db, &id)? {
-                commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
-            } else {
-                if verbose {
-                    bail!("--verbose is only available for mission objective records");
-                }
-                commands::issue_status::run(db, &id, quiet)
-            }
-        }
-
         super::IssueCommands::Transition {
             id,
             transition,
-            options,
             close_reason,
+            verbose,
         } => {
-            if options {
-                if transition.is_some() {
-                    bail!("--options cannot be combined with a transition name");
-                }
-                let db = degraded_projection_query_db()?;
-                commands::issue::transition_options(&db, &id)
-            } else {
-                let transition = transition.ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Specify a transition name or rerun with `atelier issue transition {} --options`",
-                        id
-                    )
-                })?;
+            if let Some(transition) = transition {
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
                 commands::workflow::transition_issue(
@@ -203,6 +172,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     &transition,
                     close_reason.as_deref(),
                 )
+            } else {
+                let db = degraded_projection_query_db()?;
+                commands::issue::transition_options(&db, &id, verbose)
             }
         }
 
@@ -269,38 +241,5 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::relate::unlink_issue(&state_dir, &db_path, &id, &target, &role)
         }
-
-        super::IssueCommands::Block { id, blocker } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
-            drop(db);
-            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
-        super::IssueCommands::Unblock { id, blocker } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
-            drop(db);
-            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
-        super::IssueCommands::Blocked { id } => {
-            let db = projection_query_db()?;
-            if let Some(id) = id {
-                commands::issue::dep_list(&db, Some(&id))
-            } else {
-                commands::deps::list_blocked(&db, quiet)
-            }
-        }
     }
-}
-
-fn is_mission_objective(db: &atelier_sqlite::Database, id: &str) -> Result<bool> {
-    Ok(db
-        .get_issue(id)?
-        .is_some_and(|issue| issue.issue_type == "mission"))
 }

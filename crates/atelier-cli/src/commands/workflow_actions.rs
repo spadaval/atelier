@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
@@ -12,8 +11,8 @@ pub(crate) fn action_preflight_blockers(
     planned_actions
         .iter()
         .filter_map(|action| match action.name.as_str() {
-            "branch_prepare" => branch_prepare_preflight(repo_root, action),
-            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
+            "git.prepare_branch" => branch_prepare_preflight(repo_root, action),
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync"
             | "branch_integrate" => branch_post_action_preflight(repo_root, action),
             "review.open" => review_open_preflight(repo_root, action),
             other => Some(format!(
@@ -98,7 +97,7 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
 }
 
 fn provider_action_names(name: &str) -> bool {
-    matches!(name, "branch.push" | "review.merge" | "base.sync")
+    matches!(name, "git.push" | "review.merge" | "git.sync")
 }
 
 fn review_config_is_provider(repo_root: &Path) -> bool {
@@ -147,7 +146,7 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
             None
         }
         Ok(ReviewConfig::Provider(provider)) => match provider.provider {
-            ReviewProviderKind::Forgejo(forgejo) => {
+            ReviewProviderKind::Forgejo(_forgejo) => {
                 if action.review_artifact_provider.as_deref() != Some("forgejo") {
                     return Some(format!(
                         "action {} failed preflight: provider review open requires workflow action provider: forgejo",
@@ -160,12 +159,9 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
                         action.name
                     ));
                 }
-                env::var(&forgejo.admin_token_env).err().map(|_| {
-                    format!(
-                        "action {} failed preflight: environment variable {} is required for provider review open",
-                        action.name, forgejo.admin_token_env
-                    )
-                })
+                atelier_app::project_config::load_forgejo_admin_token()
+                    .err()
+                    .map(|error| format!("action {} failed preflight: {error:#}", action.name))
             }
         },
         Err(error) => Some(format!(

@@ -55,7 +55,7 @@ defaults, not committed project policy.
 Review provider integration is optional tracked project configuration. The
 current implementation ships a Forgejo provider, so repositories that use
 `atelier review` commands or review validators with Forgejo configure the
-remote and token environment variable name in `.atelier/config.toml`:
+remote identity in `.atelier/config.toml`:
 
 ```toml
 [review]
@@ -66,13 +66,22 @@ provider = "forgejo"
 host = "forge.example.test"
 owner = "workspace"
 repo = "atelier"
-admin_token_env = "FORGEJO_ADMIN_TOKEN"
+# token lives in ~/.config/atelier.toml
 ```
 
-The admin token value stays in the named environment variable. The config parser
-rejects missing Forgejo remote fields, empty values, obsolete sudo-user
-mappings, and invalid token environment variable names with errors that name
-the required key. Workflow action role attribution, including Forgejo
+The admin token value stays in the user-global config file:
+
+```toml
+schema = "atelier.user_config"
+schema_version = 1
+
+[review.providers.forgejo]
+admin_token = "..."
+```
+
+The project config parser rejects missing Forgejo remote fields, empty values,
+obsolete sudo-user mappings, and committed provider secrets with errors that
+name the required key. Workflow action role attribution, including Forgejo
 role-author mappings used by review artifact actions, belongs in
 `.atelier/workflow.yaml`.
 
@@ -161,6 +170,8 @@ stores peer semantic relationships with a `type`; mission work and direct
 mission blockers use this typed relationship surface. Rebuild derives issue
 readiness, hierarchy, and runtime relation indexes from these buckets;
 `depends_on` is a query/display concept derived as the inverse of `blocks`.
+Proof roles such as `validates` are reserved for evidence attachments and are
+not valid issue-to-issue `relates` types.
 
 ## Direct Edit Contract
 
@@ -271,7 +282,7 @@ standard recovery loop is:
 2. Run `atelier lint`.
 3. Use focused drill-down commands such as `atelier issue show <id>`,
    `atelier issue status <objective-id>`, `atelier evidence show <id>`, or
-   `atelier issue list --ready` to inspect the affected records.
+   `atelier work queue --ready` to inspect the affected records.
 4. Run `atelier doctor --fix` if ignored local projection/runtime state is
    stale or was rebuilt from invalid intermediate files.
 5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
@@ -299,7 +310,7 @@ For relationship conflicts:
 - Do not author `depends_on`; express sequencing in `blocks` and let commands
   derive inverse display.
 - After resolving dependency changes, inspect readiness with
-  `atelier issue list --ready` and targeted issue `show` output.
+  `atelier work queue --ready` and targeted issue `show` output.
 
 For activity sidecar conflicts:
 
@@ -401,12 +412,16 @@ Mission relationship semantics are explicit:
 | Checkpoints | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 milestone relationship table exists. |
 | Plans | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 plan relationship table exists. |
 | Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission issue with a `relationships.attachments[]` entry using `kind: issue`, the mission ID, and `role: validates`. Objective status derives incoming evidence links instead of storing evidence summaries in the mission body. |
-| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission issue `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
+| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission issue `relationships.relates[]` entries with a precise built-in or configured custom context `type` such as `related`, `derived_from`, `supersedes`, or a project-specific context role; they are not counted as linked work by default. |
 | Terminal notes | Workflow transition activity and optional issue notes; terminal proof remains evidence records plus workflow validation output. |
 
 Mission work is not issue hierarchy. `relationships.blocks` keeps its common
 meaning: the source record blocks the target. It is not the mission's
 `blocked_by` list.
+Configured custom issue link types are display/search context only. Rebuild and
+lint preserve them when listed in `.atelier/config.toml`
+`issue_links.custom_context_types`, and reject unconfigured custom types with
+public recovery guidance.
 
 Rejected escaped-JSON mission authoring:
 
@@ -615,6 +630,6 @@ individual command handlers.
 
 ## Deferred Or Future Paths
 
-All paths listed in `SPEC.md` are covered above. `mission-control.json` is
+All paths listed in `PRODUCT_INTENT.md` are covered above. `mission-control.json` is
 explicitly deferred as a derived projection until Milestone 6; its presence must
 not be required to rebuild SQLite during Milestone 2.

@@ -54,7 +54,7 @@ Replace closeout with workflow-owned completion semantics without adding a confi
 
 ## Evidence
 
-- `rg` over crates, docs, specs, `AGENTFACTORY.md`, `/root/.agents/skills/agent-factory`, `SPEC.md`, `CONTEXT.md`, and `.atelier/workflow.yaml` shows no live closeout vocabulary or obsolete evidence-result examples except explicitly retained historical references.
+- `rg` over crates, docs, specs, `AGENTFACTORY.md`, `/root/.agents/skills/agent-factory`, `PRODUCT_INTENT.md`, `CONTEXT.md`, and `.atelier/workflow.yaml` shows no live closeout vocabulary or obsolete evidence-result examples except explicitly retained historical references.
 - `atelier help`, `atelier mission --help`, and `atelier mission status --help` show no `--closeout` flag or `Closeout` headings.
 - Focused tests cover issue type removal, mission terminal checks, status next actions, and blocked terminal transitions.
 - `atelier lint`, `atelier export --check`, `cargo fmt -- --check`, and relevant `cargo nextest` or `cargo test` runs pass.

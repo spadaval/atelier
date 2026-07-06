@@ -184,41 +184,41 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 .unwrap_or(false)
             {
                 println!("  1. atelier status - Review the checkout's current-work set.");
-                println!("  2. atelier issue transition <id> --options - Review status-specific role guidance.");
+                println!(
+                    "  2. atelier issue transition <id> - Review status-specific role guidance."
+                );
                 println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
-                println!("  1. atelier issue list --ready - Find executable work.");
+                println!("  1. atelier work ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier issue transition <id> --options - Follow current lifecycle guidance.");
+                println!("  3. atelier issue transition <id> - Follow current lifecycle guidance.");
             }
         }
         Role::Reviewer => {
-            println!("  1. atelier issue transition <id> --options - Inspect workflow gates.");
+            println!("  1. atelier issue transition <id> - Inspect workflow gates.");
             println!("  2. atelier evidence show <evidence-id> - Inspect attached proof.");
             println!(
                 "  3. atelier history --issue <id> - Inspect recorded proof and review activity."
             );
         }
         Role::Validator => {
-            println!(
-                "  1. atelier issue show <id> - Read the validation target and proof contract."
-            );
+            println!("  1. atelier issue show <id> - Read the target Outcome and linked proof.");
             println!("  2. atelier evidence record --target issue/<id> --kind validation -- <command> - Attach validation proof.");
-            println!(
-                "  3. atelier issue transition <id> --options - Follow current workflow guidance."
-            );
+            println!("  3. atelier issue transition <id> - Follow current workflow guidance.");
         }
         Role::Manager => {
+            println!("  1. atelier work ready - Choose executable work explicitly.");
             println!(
-                "  1. atelier issue table --kind mission - Choose a mission to inspect explicitly."
+                "  2. atelier issue show <objective-id> - Review objective readiness and blockers."
             );
-            println!("  2. atelier issue status <id> - Review objective readiness and blockers.");
             println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
         }
         Role::Admin => {
-            println!("  1. atelier init - Create tracker scaffolding when missing.");
-            println!("  2. atelier doctor - Inspect runtime and projection health.");
-            println!("  3. atelier doctor --fix - Repair ignored local state when safe.");
+            println!("  1. atelier check - Validate committed tracker state and workflow policy.");
+            println!("  2. atelier check --fix - Repair ignored runtime and projection health.");
+            println!(
+                "  3. atelier issue transition <id> - Inspect live validators and planned actions."
+            );
         }
     }
 }
@@ -229,16 +229,15 @@ fn print_normal_loop(role: Role) {
     match role {
         Role::Worker => {
             println!("  atelier status");
-            println!("  atelier issue list --ready");
+            println!("  atelier work ready");
             println!("  atelier issue show <id>");
-            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue transition <id>");
             println!("  atelier issue note <id> \"...\"");
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
         }
         Role::Reviewer => {
-            println!("  atelier issue status <id>");
             println!("  atelier issue show <id>");
-            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue transition <id>");
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
@@ -246,28 +245,31 @@ fn print_normal_loop(role: Role) {
         }
         Role::Validator => {
             println!("  atelier issue show <id>");
-            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue transition <id>");
             println!("  atelier evidence show <evidence-id>");
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
         }
         Role::Manager => {
-            println!("  atelier issue table --kind mission");
-            println!("  atelier issue status <id>");
+            println!("  atelier work ready");
+            println!("  atelier work blocked");
+            println!("  atelier issue show <objective-id>");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
             println!("  atelier issue link <mission-id> <issue-id> --role advances");
-            println!("  atelier issue block <blocked-id> <blocker-id>");
+            println!("  atelier issue link <blocked-id> <blocker-id> --role blocked_by");
             println!("  atelier status");
         }
         Role::Admin => {
             println!("  atelier init");
-            println!("  atelier lint");
-            println!("  atelier doctor");
-            println!("  atelier doctor --fix");
-            println!("  atelier branch status");
+            println!("  atelier check");
+            println!("  atelier check --fix");
+            println!("  atelier workflow check");
+            println!("  atelier prune");
+            println!("  docs/product/workflow-configuration.md");
+            println!("  docs/product/work-model.md");
         }
     }
 }
@@ -292,6 +294,9 @@ fn print_not_usually(role: Role) {
         }
         Role::Admin => {
             println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");
+            println!(
+                "  validator/action encyclopedia detail; use workflow docs and `atelier issue transition <id>` instead"
+            );
         }
     }
 }

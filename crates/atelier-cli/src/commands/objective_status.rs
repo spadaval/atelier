@@ -23,6 +23,7 @@ pub(crate) struct ObjectiveStatusSnapshot {
     pub(crate) ready_issues: Vec<Issue>,
     pub(crate) selectable_issues: Vec<Issue>,
     pub(crate) blocked_issues: Vec<Issue>,
+    pub(crate) backlog_issues: Vec<Issue>,
     pub(crate) open_blockers: Vec<String>,
     pub(crate) active: usize,
     pub(crate) ready: usize,
@@ -80,7 +81,10 @@ pub(crate) fn snapshot_for_issue_objective(
                 snapshot.blocked_issues.push(issue);
             }
             ObjectiveIssueBucket::Done => snapshot.done += 1,
-            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
+            ObjectiveIssueBucket::Backlog => {
+                snapshot.backlog += 1;
+                snapshot.backlog_issues.push(issue);
+            }
         }
     }
 
@@ -92,55 +96,8 @@ pub(crate) fn snapshot_for_issue_objective(
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
     snapshot.blocked_issues =
         order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
-    Ok(snapshot)
-}
-
-pub(crate) fn snapshot_for_mission(
-    db: &Database,
-    mission_id: &str,
-    active_issue_ids: &BTreeSet<&str>,
-) -> Result<ObjectiveStatusSnapshot> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let objective_kind = mission_objective_kind(db, mission_id)?;
-    let mut snapshot = ObjectiveStatusSnapshot {
-        issue_ids: mission_issue_ids(db, mission_id)?,
-        open_blockers: open_objective_blockers(db, objective_kind, mission_id)?,
-        ..ObjectiveStatusSnapshot::default()
-    };
-
-    for issue_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(issue_id)? else {
-            continue;
-        };
-        match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
-            ObjectiveIssueBucket::Active => {
-                snapshot.active += 1;
-                snapshot.active_issues.push(issue);
-            }
-            ObjectiveIssueBucket::Ready => {
-                snapshot.ready += 1;
-                if is_selectable_work(db, &issue)? {
-                    snapshot.selectable_issues.push(issue.clone());
-                }
-                snapshot.ready_issues.push(issue);
-            }
-            ObjectiveIssueBucket::Blocked => {
-                snapshot.blocked += 1;
-                snapshot.blocked_issues.push(issue);
-            }
-            ObjectiveIssueBucket::Done => snapshot.done += 1,
-            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
-        }
-    }
-
-    snapshot.active_issues =
-        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.active_issues)?;
-    snapshot.ready_issues =
-        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.ready_issues)?;
-    snapshot.selectable_issues =
-        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
-    snapshot.blocked_issues =
-        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
+    snapshot.backlog_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.backlog_issues)?;
     Ok(snapshot)
 }
 
@@ -383,18 +340,6 @@ pub(crate) fn parent_context(issue: &Issue) -> String {
 
 pub(crate) fn proof_context(_db: &Database, _issue_id: &str) -> Result<&'static str> {
     Ok("proof checked by workflow validators")
-}
-
-pub(crate) fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
-    for link in db.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        if link.source_kind == "evidence" || link.target_kind == "evidence" {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn collect_issue_and_descendants(

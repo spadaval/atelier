@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-13T20:37:13.456958042+00:00"
 id: "atelier-yqj6"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "architecture"
 - "cleanup"

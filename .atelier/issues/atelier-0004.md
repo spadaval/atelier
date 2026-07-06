@@ -25,7 +25,7 @@ updated_at: "2026-06-10T14:51:19.776106093+00:00"
 
 ## Description
 
-Resolve the SPEC.md open question about artifact storage. Specify what evidence artifacts live in the repo, what may live externally, and which backend is first.
+Resolve the PRODUCT_INTENT.md open question about artifact storage. Specify what evidence artifacts live in the repo, what may live externally, and which backend is first.
 Outcome was not specified in the legacy issue record.
 Evidence was not specified in the legacy issue record.
 ### Resolution

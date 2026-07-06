@@ -12,7 +12,7 @@ the issue is done?"
   pointer cleanup.
 - Documentation: Removed. It should not appear in normal worker guidance.
 - Design: Removed. When the durable state changed, use `issue note`
-  plus `atelier issue transition <id> --options` to move the canonical issue
+  plus `atelier issue transition <id>` to move the canonical issue
   record out of `in_progress`; when the durable state did not change, no extra
   cleanup command is required.
 - Output hierarchy: Invoking `atelier abandon` rejects as an unrecognized

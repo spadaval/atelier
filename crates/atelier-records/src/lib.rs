@@ -89,6 +89,17 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "related",
 ];
 
+pub fn validate_issue_relation_type(relation_type: &str) -> Result<()> {
+    validate_relation_type(relation_type)?;
+    if matches!(relation_type, "validates" | "evidenced_by") {
+        bail!(
+            "Issue-to-issue relationship '{}' is not supported; use 'advances' for mission scope or attach evidence with role 'validates'",
+            relation_type
+        );
+    }
+    Ok(())
+}
+
 pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 pub const VALID_ISSUE_TYPES: &[&str] = &[
     "bug",
@@ -138,6 +149,28 @@ pub fn validate_relation_type(relation_type: &str) -> Result<()> {
     if relation_type.is_empty() {
         bail!("Relation type cannot be empty");
     }
+    validate_relation_type_syntax(relation_type)
+}
+
+fn validate_relation_type_syntax(relation_type: &str) -> Result<()> {
+    let mut chars = relation_type.chars();
+    let Some(first) = chars.next() else {
+        bail!("Relation type cannot be empty");
+    };
+    if !first.is_ascii_lowercase() {
+        bail!(
+            "Invalid relation type '{}'. Values must start with a lowercase ASCII letter",
+            relation_type
+        );
+    }
+    if !chars
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-' | '.'))
+    {
+        bail!(
+            "Invalid relation type '{}'. Values may contain only lowercase ASCII letters, digits, '_', '-', or '.'",
+            relation_type
+        );
+    }
     Ok(())
 }
 
@@ -148,11 +181,7 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
         Ok(())
     } else {
-        bail!(
-            "Invalid link type '{}'. Valid values: {}",
-            relation_type,
-            WELL_KNOWN_LINK_TYPES.join(", ")
-        )
+        validate_relation_type_syntax(relation_type)
     }
 }
 
@@ -608,7 +637,7 @@ impl RecordStore {
         related_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
-        validate_relation_type(relation_type)?;
+        validate_issue_relation_type(relation_type)?;
         if issue_id == related_id {
             bail!("Cannot relate an issue to itself");
         }
@@ -3430,6 +3459,26 @@ Legacy evidence summary.
             .relationships
             .relates
             .is_empty());
+    }
+
+    #[test]
+    fn record_store_rejects_issue_to_issue_validates_relation() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        let mut first = issue_record("atelier-abcd");
+        first.relationships = Relationships::default();
+        let mut second = issue_record("atelier-efgh");
+        second.relationships = Relationships::default();
+        store.write_issue_atomic(&first).unwrap();
+        store.write_issue_atomic(&second).unwrap();
+
+        let error = store
+            .add_issue_relation("atelier-abcd", "atelier-efgh", "validates")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("Issue-to-issue relationship 'validates' is not supported"));
+        assert!(error.contains("attach evidence"));
     }
 
     #[test]

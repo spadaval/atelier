@@ -44,7 +44,7 @@ schema intent, v1 built-ins, failure semantics, and the relationship to ADR
 
 ## Evidence
 
-- Documentation diff covers `SPEC.md`, `CONTEXT.md`, product workflow/review
+- Documentation diff covers `PRODUCT_INTENT.md`, `CONTEXT.md`, product workflow/review
   docs, and any needed ADR update.
 - Search transcript proves review commands are not described as workflow
   transition authority.

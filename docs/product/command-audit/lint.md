@@ -1,4 +1,4 @@
-# `atelier lint`
+# `atelier check`
 
 Primary role: Reviewer.
 
@@ -12,11 +12,11 @@ valid?"
 - Design: Correct if it validates canonical state and does not silently repair
   tracked records.
 - Output hierarchy: Pass/fail summary, offending record/config path, actionable
-  repair guidance, next `doctor` only when runtime state is implicated.
+  repair guidance, next `check` only when runtime state is implicated.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `lint` | Reviewer | Validate committed tracker state before handoff or terminal validation. | Good. |
+| `check` | Reviewer | Validate committed tracker state before handoff or terminal validation. | Good. |
 | `lint <id>` | Reviewer | Validate a focused record. | Good. |

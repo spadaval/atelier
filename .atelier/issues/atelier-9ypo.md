@@ -32,7 +32,7 @@ that issue lifecycle is driven by `.atelier/workflow.yaml`.
   `atelier issue transition`.
 - Tests prove active workflow behavior without command-absence coverage for
   removed migrate commands.
-- `rg -n "migrate-statuses|migrate_status|workflow migrate|record_status_changed|input.status|pub status: Option|issue update .*--status|--status open|--status closed|status: \"open\"|status: \"closed\"|Some\\(\"open\"\\)|Some\\(\"closed\"\\)" src tests AGENTFACTORY.md CONTEXT.md SPEC.md docs` leaves only mission-status/current-external-import references.
+- `rg -n "migrate-statuses|migrate_status|workflow migrate|record_status_changed|input.status|pub status: Option|issue update .*--status|--status open|--status closed|status: \"open\"|status: \"closed\"|Some\\(\"open\"\\)|Some\\(\"closed\"\\)" src tests AGENTFACTORY.md CONTEXT.md PRODUCT_INTENT.md docs` leaves only mission-status/current-external-import references.
 - `cargo fmt -- --check`
 - `cargo build`
 - Focused workflow integration tests:

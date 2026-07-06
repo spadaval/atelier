@@ -121,11 +121,34 @@ pub fn validate_relation_type(relation_type: &str) -> Result<()> {
     if relation_type.is_empty() {
         anyhow::bail!("Relation type cannot be empty");
     }
+    validate_relation_type_syntax(relation_type)?;
     if !WELL_KNOWN_RELATION_TYPES.contains(&relation_type) {
         tracing::warn!(
             "Unknown relation type '{}'. Known types: {}",
             relation_type,
             WELL_KNOWN_RELATION_TYPES.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn validate_relation_type_syntax(relation_type: &str) -> Result<()> {
+    let mut chars = relation_type.chars();
+    let Some(first) = chars.next() else {
+        anyhow::bail!("Relation type cannot be empty");
+    };
+    if !first.is_ascii_lowercase() {
+        anyhow::bail!(
+            "Invalid relation type '{}'. Values must start with a lowercase ASCII letter",
+            relation_type
+        );
+    }
+    if !chars
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-' | '.'))
+    {
+        anyhow::bail!(
+            "Invalid relation type '{}'. Values may contain only lowercase ASCII letters, digits, '_', '-', or '.'",
+            relation_type
         );
     }
     Ok(())
@@ -142,11 +165,7 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
         Ok(())
     } else {
-        anyhow::bail!(
-            "Invalid link type '{}'. Valid values: {}",
-            relation_type,
-            WELL_KNOWN_LINK_TYPES.join(", ")
-        )
+        validate_relation_type_syntax(relation_type)
     }
 }
 

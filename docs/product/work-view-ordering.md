@@ -6,9 +6,9 @@ records.
 
 This contract applies to issue-like row sets in:
 
-- `atelier issue list`
+- `atelier work queue`
 - `atelier issue show` subissues
-- `atelier issue status <objective-id>`
+- `atelier issue show <objective-id>`
 - explicit objective browsing or inventory views
 - root `atelier status`
 

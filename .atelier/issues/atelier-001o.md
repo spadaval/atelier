@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-09T19:46:37.730769567+00:00"
 id: "atelier-001o"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "feature"
 - "mission-control"

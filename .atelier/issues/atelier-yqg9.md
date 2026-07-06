@@ -30,8 +30,6 @@ relationships:
     id: "atelier-kpm8"
   - kind: "issue"
     id: "atelier-wj05"
-  - kind: "issue"
-    id: "atelier-yqj6"
   attachments: []
   relates: []
 schema: "atelier.issue"

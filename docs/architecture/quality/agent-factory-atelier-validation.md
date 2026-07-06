@@ -15,10 +15,10 @@ and skill bindings were updated.
   `atelier-z1p.6`; `atelier issue note 43 ...` annotated it;
   `atelier start 43` established active local work; `atelier issue close 43
   --reason ...` closed it after this note was added.
-- Ready discovery: `atelier issue list --ready` listed `atelier-z1p.6` as ready after
+- Ready discovery: `atelier work queue --ready` listed `atelier-z1p.6` as ready after
   its blockers were closed.
-- Dependency workflow: `atelier issue block 43 44` added a blocker; `atelier
-  issue show 43` displayed `Blocked by: #44`; `atelier issue unblock 43 44`
+- Dependency workflow: `atelier issue link 43 44` added a blocker; `atelier
+  issue show 43` displayed `Blocked by: #44`; `atelier issue unlink 43 44`
   removed the edge; a follow-up `show` displayed no blockers.
 - Close workflow: `atelier issue close 44 --reason ...` closed the dependency
   fixture task; `atelier issue close 43 --reason ...` closed the docs task.
@@ -48,7 +48,7 @@ and skill bindings were updated.
 - Deferred with owner: `atelier` was not on PATH in the shell; validation used
   `/root/atelier/target/debug` on PATH. Owner: repository operator or install
   story follow-up.
-- Deferred with owner: `atelier issue unblock` removed the dependency edge but
+- Deferred with owner: `atelier issue unlink` removed the dependency edge but
   printed the same wording as `block` (`#43 is blocked by #44 (changed)`).
   Owner: `#45` under `atelier-z1p.7` (`supadava@cisco.com`).
 - Not applicable: direct Beads validation; this scenario intentionally used

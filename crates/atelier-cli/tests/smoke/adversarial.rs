@@ -48,7 +48,7 @@ fn test_boundary_title_null_bytes() {
     match output {
         Ok(o) => {
             if o.status.success() {
-                let list = h.run_ok(&["issue", "list", "-s", "all"]);
+                let list = h.run_ok(&["work", "queue", "--all"]);
                 assert!(list.success);
             }
         }
@@ -129,7 +129,7 @@ fn test_removed_description_flag_rejects_oversized_value() {
 fn test_boundary_empty_title() {
     let h = SmokeHarness::new();
     let _result = h.run(&["issue", "create", ""]);
-    let list = h.run_ok(&["issue", "list", "-s", "all"]);
+    let list = h.run_ok(&["work", "queue", "--all"]);
     assert!(list.success);
 }
 
@@ -137,7 +137,7 @@ fn test_boundary_empty_title() {
 fn test_boundary_whitespace_title() {
     let h = SmokeHarness::new();
     let _result = h.run(&["issue", "create", "   "]);
-    let list = h.run_ok(&["issue", "list", "-s", "all"]);
+    let list = h.run_ok(&["work", "queue", "--all"]);
     assert!(list.success);
 }
 
@@ -172,7 +172,7 @@ fn test_boundary_status_invalid() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Test issue"]);
 
-    let result = h.run(&["issue", "list", "-s", "bogus"]);
+    let result = h.run(&["work", "queue", "-s", "bogus"]);
     if result.success {
         assert!(
             !result.stdout.contains("Test issue"),
@@ -205,7 +205,7 @@ fn test_inject_sql_title() {
 
     h.run_ok(&["issue", "create", "Normal issue after injection"]);
 
-    let list = h.run_ok(&["issue", "list", "-s", "all"]);
+    let list = h.run_ok(&["work", "queue", "--all"]);
     // Both issues should exist
     assert!(list.stdout.contains("Normal issue after injection"));
     assert!(list.stdout.contains(payload) || list.stdout.contains("DROP TABLE"));
@@ -217,9 +217,11 @@ fn test_inject_sql_search() {
     h.run_ok(&["issue", "create", "Findable issue"]);
     h.run_ok(&["issue", "create", "Another issue"]);
 
-    let _result = h.run_ok(&["search", "% OR 1=1 --"]);
+    let result = h.run(&["search", "% OR 1=1 --"]);
+    assert!(!result.success);
+    assert!(result.stderr.contains("unrecognized subcommand 'search'"));
     // DB should remain intact
-    let list = h.run_ok(&["issue", "list", "-s", "all"]);
+    let list = h.run_ok(&["work", "queue", "--all"]);
     assert!(list.stdout.contains("Findable issue"));
     assert!(list.stdout.contains("Another issue"));
 }
@@ -364,11 +366,11 @@ fn test_corrupt_missing_db() {
     let h = SmokeHarness::new();
     std::fs::remove_file(h.db_path()).unwrap();
 
-    let result = h.run(&["issue", "list"]);
+    let result = h.run(&["work", "queue"]);
     // Whether it succeeds (recreates DB) or fails (reports missing DB),
     // it should not panic.
     if result.success {
-        let list = h.run_ok(&["issue", "list", "-s", "all"]);
+        let list = h.run_ok(&["work", "queue", "--all"]);
         assert!(list.success);
     }
 }
@@ -410,6 +412,6 @@ fn test_concurrent_creates_5() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    let result = h.run_ok(&["issue", "list", "-s", "all"]);
+    let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }

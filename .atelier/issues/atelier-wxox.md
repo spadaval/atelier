@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T23:02:41.543550918+00:00"
+status: "done"
 title: "Refresh issue detail and transition-option output"
-updated_at: "2026-06-23T20:24:41.702962062+00:00"
+updated_at: "2026-06-23T23:02:41.543550918+00:00"
 ---
 
 ## Description

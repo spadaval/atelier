@@ -2,8 +2,9 @@
 
 Atelier begins as a fork of `dollspace-gay/chainlink`. This provenance is part
 of the inherited architecture baseline, not the target product definition.
-Target behavior is defined by [SPEC.md](../../SPEC.md), and target terminology
-is defined by [CONTEXT.md](../../CONTEXT.md).
+Target direction is described by
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), and target terminology is defined
+by [CONTEXT.md](../../CONTEXT.md).
 
 ## Inherited Baseline
 
@@ -34,18 +35,18 @@ Atelier target state.
 
 ## Target Atelier Direction
 
-Atelier is not a thin rename. The target architecture in [SPEC.md](../../SPEC.md)
-keeps useful Chainlink runtime machinery while changing the durable product
-model:
+Atelier is not a thin rename. The product direction in
+[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md) keeps useful Chainlink runtime
+machinery while changing the durable product model:
 
 - Markdown records under `.atelier/` become the deterministic, mergeable
   repository record store that can rebuild local SQLite projections.
 - SQLite remains the fast local ProjectionIndex and RuntimeState store for
   queries, locks, sessions, workflow checks, and Mission Control inputs.
 - Mutating commands are migrating toward Markdown-first writes, and normal
-  health is reported through `lint` and `doctor`.
+  health is reported through `check` and `check`.
 - Hidden/admin projection diagnostics may verify deterministic rendered output,
-  and `doctor --fix` owns explicit ignored-state repair from committed Markdown
+  and `check --fix` owns explicit ignored-state repair from committed Markdown
   records after checkout, pull, merge, or clone.
 - Missions, issues, evidence, workflow validators, runs, typed links, and
   workflows become first-class Atelier concepts instead of only inherited

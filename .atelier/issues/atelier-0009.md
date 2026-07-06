@@ -35,7 +35,7 @@ updated_at: "2026-06-11T14:41:57.657636476+00:00"
 
 ## Description
 
-Build the storage contract from SPEC.md: SQLite is runtime state, `.atelier-state/` is deterministic mergeable repo state, export freshness is checkable, and SQLite can be rebuilt after checkout, merge, pull, or clone.
+Build the storage contract from PRODUCT_INTENT.md: SQLite is runtime state, `.atelier-state/` is deterministic mergeable repo state, export freshness is checkable, and SQLite can be rebuilt after checkout, merge, pull, or clone.
 Outcome was not specified in the legacy issue record.
 Evidence was not specified in the legacy issue record.
 ### Success Criteria

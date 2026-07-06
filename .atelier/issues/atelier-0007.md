@@ -27,7 +27,7 @@ updated_at: "2026-06-11T21:18:40.832966369+00:00"
 ## Description
 
 Close out workflows and rules by proving risk-scaled process, validator-backed closure, severities, waivers, and action-aware guidance.
-Classify each Milestone 5 criterion from SPEC.md; include scenario evidence for tiny task flow, stricter epic flow, waiver flow, stale durable-state projection validator, and JSON lint/validator output.
+Classify each Milestone 5 criterion from PRODUCT_INTENT.md; include scenario evidence for tiny task flow, stricter epic flow, waiver flow, stale durable-state projection validator, and JSON lint/validator output.
 Evidence was not specified in the legacy issue record.
 
 ## Outcome

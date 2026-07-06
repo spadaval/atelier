@@ -35,7 +35,7 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  atelier lint                     # Verify tracker records and workflow setup");
+    println!("  atelier check                     # Verify tracker records and workflow setup");
     println!("  atelier issue create \"Task\"     # Create the first tracked issue");
     println!("  atelier man admin                # Review setup and repair guidance");
 
@@ -94,10 +94,10 @@ mod tests {
         assert!(workflow.contains("schema: atelier.workflow"));
         assert!(workflow.contains("schema_version: 3"));
         assert!(workflow.contains("branch_policy:"));
-        assert!(workflow.contains("  task_delivery:"));
-        assert!(workflow.contains("  epic_delivery:"));
-        assert!(workflow.contains("  validation_delivery:"));
-        assert!(workflow.contains("  spike_review:"));
+        assert!(workflow.contains("  task:"));
+        assert!(workflow.contains("  epic:"));
+        assert!(workflow.contains("  validation:"));
+        assert!(workflow.contains("  spike:"));
         assert!(workflow.contains("applies_to:"));
     }
 

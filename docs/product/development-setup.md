@@ -31,7 +31,7 @@ From the repository root:
 cargo fmt -- --check
 cargo nextest run
 atelier man admin
-atelier doctor
+atelier check
 ```
 
 Use the installed `atelier` command for normal tracker work. Use
@@ -52,13 +52,13 @@ Optional environment variables are limited to local behavior overrides:
   retention.
 - `ATELIER_AGENT` and `ATELIER_AGENT_ID` can label local activity/diagnostic
   records.
-- Provider admin token variables named by tracked project config, such as
-  `FORGEJO_ADMIN_TOKEN`, are required only for commands that mutate the
-  configured provider review artifact. The token value is local secret material
-  and must not be committed.
 
-These variables are optional local overrides, not required setup inputs. Keep
-secrets out of committed files.
+These variables are optional local overrides, not required setup inputs.
+
+`~/.config/atelier.toml` is required only for commands that mutate the
+configured provider review artifact. Store the Forgejo admin token there as
+`review.providers.forgejo.admin_token`. The token value is local secret
+material and must not be committed.
 
 ## Local Runtime And Cache
 
@@ -70,7 +70,7 @@ SQLite projections, locks, diagnostics, identity hints, or UI caches, but they
 must not be treated as durable project policy or committed work records.
 
 If runtime or cache state is missing or stale, prefer normal Atelier health and
-repair surfaces such as `atelier doctor` and commands named by `atelier status`.
+repair surfaces such as `atelier check` and commands named by `atelier status`.
 Do not edit ignored runtime/cache files as a substitute for updating tracked
 Markdown records, `.atelier/config.toml`, or `.atelier/workflow.yaml`.
 

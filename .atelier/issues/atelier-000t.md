@@ -24,7 +24,7 @@ updated_at: "2026-06-10T14:51:19.805241515+00:00"
 
 ## Description
 
-Resolve the SPEC.md open question about Chainlink lock/sync behavior. Specify what becomes claim/worktree association, what remains as lock coordination, and what is removed or deferred.
+Resolve the PRODUCT_INTENT.md open question about Chainlink lock/sync behavior. Specify what becomes claim/worktree association, what remains as lock coordination, and what is removed or deferred.
 Outcome was not specified in the legacy issue record.
 Evidence was not specified in the legacy issue record.
 ### Resolution

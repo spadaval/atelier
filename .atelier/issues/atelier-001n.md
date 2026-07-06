@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-09T19:46:28.279451320+00:00"
 id: "atelier-001n"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "bulk"
 - "domain-model"

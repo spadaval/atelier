@@ -1,4 +1,4 @@
-# `atelier search`
+# `atelier work queue`
 
 Primary role: Worker.
 

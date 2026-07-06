@@ -24,7 +24,7 @@ updated_at: "2026-06-11T20:42:33.793331698+00:00"
 
 ## Description
 
-Resolve the SPEC.md open question about how much process ordinary single-issue
+Resolve the PRODUCT_INTENT.md open question about how much process ordinary single-issue
 tasks should have by default when they are not part of a mission. Missions are
 for work too large for a single agent context; this resolution defines the
 lightweight issue workflow that keeps small tasks out of mission ceremony while

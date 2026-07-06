@@ -14,7 +14,7 @@ issue, relationship, and evidence records?"
 - Design: Correct if `preview` remains deterministic and non-mutating, and
   `apply` continues to require explicit `--yes`.
 - Output hierarchy: Bundle validity, created or referenced records, relationship
-  counts, evidence links, then `lint` or focused show commands.
+  counts, evidence links, then `check` or focused show commands.
 
 ## Subcommands
 
@@ -27,3 +27,16 @@ issue, relationship, and evidence records?"
 
 The implementation is owned by `commands::bundle`; it no longer delegates to a
 plan-named module.
+
+## Complexity Budget
+
+`bundle` is allowed because bulk graph creation is a real manager job and shell
+loops over `issue create`/`issue link` are worse. It must stay one-shot and
+bounded:
+
+- preview before mutation;
+- explicit apply;
+- issue/link/evidence graph records only;
+- no plan database;
+- no generic import/export namespace;
+- no replacement for ordinary single-record issue commands.

@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-23T22:53:57.591231777+00:00"
+status: "done"
 title: "Add read-only mission report namespace"
-updated_at: "2026-06-23T21:05:33.035541958+00:00"
+updated_at: "2026-06-23T22:53:57.591231777+00:00"
 ---
 
 ## Description

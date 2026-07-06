@@ -267,7 +267,7 @@ fn imported_description(record: &BeadsIssue) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("Imported Beads issue did not include acceptance criteria.");
     format!(
-        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier lint` validates canonical Markdown."
+        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier check` validates canonical Markdown."
     )
 }
 

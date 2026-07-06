@@ -99,7 +99,7 @@ treated as empty arrays. Version 1 supports these resource keys:
 | Key | Record kind | Notes |
 | --- | --- | --- |
 | `issues` | Issue | Required implementation target for v1 apply. |
-| `missions` | Mission | May be implemented after issue creation, using the same create-only operation contract. |
+| `missions` | Deferred alias | Rejected in the fixed domain model; author mission-shaped objectives as `issues` with `issue_type: "mission"`. |
 | `evidence` | Evidence | May be implemented after issue creation, using the same create-only operation contract. |
 
 First-class plans and milestones are not legal v1 bundle resources. Plans are
@@ -154,16 +154,24 @@ Notes use this shape:
 
 ### Missions
 
-Mission resources use:
+Missions are issue resources whose `issue_type` is `mission`. Bundles must not
+use a separate mission resource shape or express mission execution work through
+issue `parent`. Mission scope is authored through typed relationship fields
+that normalize to issue `relates` entries with `type: "advances"`.
+
+The fixed mission shape is:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `operation` | string | Omitted or `create`; any other value is rejected in v1. |
 | `client_ref` | string | Unique local reference. |
 | `title` | string | Mission title. |
-| `body` | string or null | Mission intent and constraints. |
+| `issue_type` | string | Must be `mission`. |
+| `description` | string or null | Mission intent/body text. |
+| `outcome` | array of strings or string | Mission outcome section. |
 | `labels` | array of strings | Stored sorted lexically. |
-| `work` | array of references | Issues or epics included as mission work. |
+| `blocks` | array of references | Direct mission blockers, normalized as direct blocker relationships. |
+| `advances` | array of references | Issues or epics included as mission execution work. |
+| `parent` | null | Missions cannot have parents. Any non-null parent is rejected. |
 
 ### Evidence
 
@@ -183,7 +191,7 @@ Evidence resources describe proof:
 ## Relationships
 
 Bundles do not accept a top-level generic `links` array. Relationship intent is
-authored through domain fields: issue `blocks`/`depends_on`, mission `work`, and
+authored through domain fields: issue `blocks`/`depends_on`/`advances` and
 evidence `validates`. Apply normalizes those fields into canonical `.atelier/`
 relationship buckets.
 
@@ -205,6 +213,11 @@ Required validation checks:
 - Every `client_ref` reference resolves inside the file.
 - Every `id` reference resolves in current tracker state when required.
 - Issue hierarchy does not create a parent cycle.
+- Mission resources are authored as issue records with `issue_type:
+  "mission"`, no parent, no children, and execution scope through `advances`
+  links rather than `parent`.
+- Epics have no parent; ordinary issue types may be standalone or direct
+  children of epics; ordinary issue types cannot own children.
 - Issue dependencies do not create a forbidden cycle.
 - `depends_on`, `blocks`, and relationship fields do not create duplicate edges after normalization.
 - Labels, priorities, issue types, statuses, evidence types, and relationship roles are accepted by repository policy.

@@ -2,11 +2,13 @@
 
 ## Proof Routing Policy
 
-Proof starts on the work item that made the claim. The issue `Evidence`
-section names the expected proof, and the worker records that proof before
-completion. Escalate by risk and scope: ordinary local implementation work proves
-itself on the issue, while risky, broad, review-boundary, or parent-level
-claims require independent validation and first-class evidence.
+Proof starts on the work item that made the claim. The `Outcome` names the
+target state; an `Evidence` section, workflow validator, or validation issue may
+name a specific check when the contract needs it. The worker or validator
+records proof after running the check. Escalate by risk and scope: ordinary
+local implementation work proves itself on the issue, while risky, broad,
+review-boundary, or parent-level claims require independent validation and
+first-class evidence.
 
 Strong proof is claim-specific, reproducible, attached, classified, scoped, and
 independent when required by risk. Weak proof is broad, summary-only,
@@ -14,16 +16,18 @@ unattached, unverifiable, stale, or not mapped to a claim. A full test suite,
 lint run, or objective status page can support proof, but it is weak by itself
 when it does not show the exact changed behavior, file content, command result,
 rejected command, help text, benchmark, or evidence record named by the claim.
-Workers should quote or paraphrase the exact `Outcome` or `Evidence` line they
-proved when they close work or hand it off, especially for parent-level,
-process-policy, and other broad claims.
+Workers and validators should quote or paraphrase the exact `Outcome`, explicit
+proof claim, or workflow gate they checked when they close work or hand it off,
+especially for parent-level, process-policy, and other broad claims.
 
 Epics and missions coordinate work; they are not the normal executable proof
-surface. A mission is the shared workspace/background checkout boundary, and an
-epic is the branch and review boundary. Their claims are proven by evidence on
-accountable child work plus a validation item that audits the parent outcome.
-Direct evidence on a mission is legacy or migration-only; it is not the normal
-way to satisfy mission proof.
+surface. A mission is the target-state and optional shared workspace/background
+checkout boundary, and an epic is the branch and review boundary. Mission scope
+is the direct `advances` links plus descendants of those roots. Parent claims
+are proven by evidence on accountable child work plus validation work when
+independent judgment is required. Direct evidence on a mission is legacy,
+migration-only, or explicitly workflow-configured; it is not the normal way to
+satisfy mission proof.
 
 Session `show` and `list` are read-only inspection surfaces over derived issue
 activity. They can support attribution proof, but they do not create, end, or
@@ -36,10 +40,10 @@ detail at every parent layer.
 
 | Layer | Owns | Avoid |
 | --- | --- | --- |
-| Mission `Validation` | Mission-level target state, shared workspace confidence, completion confidence, required independent or adversarial review, and the evidence classes needed to trust the whole mission. | Child implementation steps, exact file lists, or every command each issue must run. |
-| Epic `Outcome`/`Evidence` | Cohesive product, process, or architecture result, branch/review scope, plus how child work or a validation item will prove the parent claim. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
-| Executable issue `Outcome`/`Evidence` | The local observable result and proof for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
-| Dedicated validation issue `Outcome`/`Evidence` | Independent review scenarios, claim classification, evaluator context, baseline or scenario setup, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |
+| Mission `Outcome` | Mission-level target state, explicit non-scope, and the root work directly linked by `advances`; descendants of those roots carry detailed work. | Child implementation steps, exact file lists, every command each issue must run, or prewritten validation paperwork. |
+| Epic `Outcome` | Cohesive product, process, or architecture result and branch/review scope. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
+| Executable issue `Outcome`/explicit `Evidence` | The local observable result and any named check for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
+| Dedicated validation issue `Outcome` | Independent judgment derived from the target Outcome, claim classification, evaluator context, baseline or scenario setup when needed, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |
 
 Anti-red-tape rule: add detail to a higher layer only when it changes scope,
 risk, sequencing, or parent-level confidence. Otherwise, keep detail at the
@@ -85,10 +89,10 @@ full Atelier command or workflow contract.
 | Source locations; tracker identity; durable `.atelier/` state; ignored runtime/cache state | Repository instructions | `AGENTS.md`, `docs/index.md` | Keep concise so a fresh worker can locate authoritative docs and tracker shape. |
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
-| Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
-| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue status <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
-| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue status <mission-id>`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue status <mission-id> --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; objective status and completion surface docs/help drift validators when a mission-typed issue is being closed. |
+| Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition <id>` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
+| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue show <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue show <mission-id>`, `atelier check`; admin repair uses `atelier check --fix` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier check`, `atelier issue show <mission-id>`, mission publish readiness | Routine handoff uses visible lint/status surfaces; objective detail and publish-readiness surfaces docs/help drift validators when a mission-typed issue requests publish review. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 This means source locations and tracker shape belong in repository instructions
@@ -99,7 +103,7 @@ audit, lint, admin repair, and workflow-policy surfaces.
 ## Stale-State Preflight
 
 Before mutating workflow state, trust normal Atelier-owned health surfaces
-first. If `atelier lint`, `atelier status`, `atelier issue status <mission-id>`, or another
+first. If `atelier check`, `atelier status`, `atelier issue show <mission-id>`, or another
 normal tracker read reports invalid canonical Markdown, blocked readiness, or
 unreadable tracker state, stop workflow mutation until the state is repaired.
 
@@ -107,11 +111,11 @@ Use this recovery order:
 
 1. Read the named error and rerun the failing command without adding nearby
    command guesses.
-2. Repair tracked canonical Markdown or workflow config when `atelier lint`
+2. Repair tracked canonical Markdown or workflow config when `atelier check`
    names them.
 3. Use `atelier man admin` and the named admin repair command only when Atelier
    reports degraded local runtime, cache, or derived state.
-4. Return to `atelier status`, `atelier issue status <mission-id>`, or the relevant
+4. Return to `atelier status`, `atelier issue show <mission-id>`, or the relevant
    `issue show` command after the reported check passes.
 
 Do not edit `.atelier/runtime/`, `.atelier/cache/`, local locks, or identity
@@ -135,7 +139,7 @@ claim without private context.
 
 | Destination | Use when | Not enough for |
 | --- | --- | --- |
-| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where the issue Evidence section explicitly says no separate proof artifact is meaningful. | Required proof for behavior changes, parent completion, validation items, process-policy changes, or workflow validators that require evidence. |
+| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where no separate proof artifact is meaningful. | Required proof for behavior changes, parent completion, validation items, process-policy changes, or workflow validators that require evidence. |
 | First-class evidence record | Any non-trivial proof: command transcripts, focused tests, migration results, docs/help parity, workflow validation, validation audit tables, screenshots, or `fail`, `blocked`, `deferred`, and `not-applicable` classifications that should survive handoff. Attach it to the accountable issue-shaped work that produced or validated the proof. Parent completion reads those child links through implementation, review, and validation issues. | Proof that must be performed independently by another worker, or unresolved defects that need their own owner. |
 | Separate validation issue | Independent judgment is required, proof is broad enough to be its own work, or the implementer should not validate their own claim. Link it as validation or a blocker before relying on its result. | Tiny local checks where the issue worker can produce objective proof directly on the implementing issue. |
 
@@ -158,7 +162,8 @@ Evidence records should include accountable targets, proof scope, kind, result,
 commands or artifacts, agent identity, independence level, residual risks, and
 follow-up IDs. Capture mode preserves command, exit status, success, timestamp,
 and bounded stdout/stderr summaries. Manual mode stores the same classification
-fields without command output.
+fields without command output. Bare summaries are context unless they name the
+claim checked, action taken, result, and an inspectable rationale or artifact.
 
 Examples:
 
@@ -184,7 +189,7 @@ Create or use a separate validation issue when any of these apply:
 - stale-test, ignored-test, fixture drift, or broad-green-test risk;
 - irreversible, security-sensitive, data-loss, or hard-to-reproduce behavior;
 - subjective process claims where the implementer has a conflict of interest;
-- any case where the Evidence section says a different role must validate the
+- any case where the issue contract says a different role must validate the
   result.
 
 When validation discovers a real defect, create or identify a follow-up issue
@@ -206,10 +211,10 @@ the metric, baseline when available, measurement command or fixture, observed
 result, and acceptable threshold or reason a hard threshold is not practical.
 
 Do not over-specify subjective output before implementation. For example, an
-information-hierarchy issue for `issue table --kind mission` should name the user task,
+information-hierarchy issue for `atelier work mission <mission-id>` should name the user task,
 important information to surface, and evaluator context; it should not mandate
 the final row layout unless that layout is the contract. A performance issue
-should be concrete: "reduce `issue status <mission-id>` wall time on fixture X from about
+should be concrete: "reduce `work mission <mission-id>` wall time on fixture X from about
 1.2s to under 500ms, proven by the benchmark command transcript" is stronger
 than "make objective status faster."
 
@@ -217,12 +222,12 @@ than "make objective status faster."
 
 | Work item | Proof on the implementing item | Evidence destination | Independent validation |
 | --- | --- | --- | --- |
-| Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier lint <id>` or repo-wide `atelier lint` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, completion, public contracts, docs/help parity, or epic/mission review boundaries. |
+| Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier check <id>` or repo-wide `atelier check` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, completion, public contracts, docs/help parity, or epic/mission review boundaries. |
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTS.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
 | Crate migration root-deletion completion | Crate-migration guard script, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before root deletion, run the guard self-test if one exists. | First-class evidence attached to the root-deletion or validation issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission completion. |
-| Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
+| Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id>`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
 | Mission completion | Mission status synthesizes linked work state, clear blockers, committed tracker health, configured gates, and explicit validation work when parent-level judgment is required. It does not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation issue when one exists. | Required for explicit mission-level validation work, adversarial validation, or cross-cutting mission claims; routine mission shell completion stays a thin synthesis over proved child work and health gates. |
 
 Unavailable optional tooling should not be converted into an implicit failure.
@@ -232,14 +237,15 @@ environment-specific tool is unavailable, record `deferred` evidence that names
 the missing tool, the reason it is not required for the current slice, and any
 follow-up owner.
 
-Parent coverage summaries should classify each parent Outcome or validation
-line as `covered`, `missing`, `failed`, `blocked`, `deferred`, or
-`not-applicable`, then cite the accountable child issue IDs and evidence IDs.
+Parent coverage summaries should classify each parent `Outcome` line or
+explicit validation claim as `covered`, `missing`, `failed`, `blocked`,
+`deferred`, or `not-applicable`, then cite the accountable child issue IDs and
+evidence IDs.
 Stable claim anchors are optional and reserved for high-risk or
 automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
 
-`atelier issue status <mission-id>` is the normal operator surface for mission
+`atelier issue show <mission-id>` is the normal operator surface for mission
 state, blockers, configured validator failures, next actions, and completion
 status. Verbose issue status is completion drill-down: it reports mission shell
 completion and any explicit linked validation work that supplies workflow
@@ -253,20 +259,20 @@ accountable issue that performed the check.
 
 For a subjective mission table information-hierarchy task:
 
-- Mission validation says the mission operator can identify state, blockers,
+- Mission `Outcome` says the mission operator can identify state, blockers,
   configured proof validator failures, and next action without private context.
 - Epic outcome says the mission operator CLI presents a concise default view
   with drill-down available for audit detail.
-- Executable issue outcome says `issue table --kind mission` output groups active missions by
-  status and exposes blockers and configured validator failures in the default
-  human output.
+- Executable issue outcome says `atelier work mission <mission-id>` output
+  groups active mission work by status and exposes blockers and configured
+  validator failures in the default human output.
 - The validation issue says an independent evaluator reviews the default output
   for a representative mission fixture, classifies the information hierarchy,
   records rationale, and attaches the transcript or screenshot.
 
 For a quantitative performance task:
 
-- Mission validation says operator commands remain fast enough for routine
+- Mission `Outcome` says operator commands remain fast enough for routine
   mission work.
 - Epic outcome names the affected command family and delegates proof to
   benchmarked child issues.
@@ -277,7 +283,7 @@ For a quantitative performance task:
 
 For a canonical write or projection-refresh issue:
 
-- Mission validation says canonical Markdown remains the durable source of
+- Mission `Outcome` says canonical Markdown remains the durable source of
   truth and rebuildable projections stay current.
 - Epic outcome names the write/rebuild boundary and delegates proof to child
   round-trip and concurrency scenarios.
@@ -305,8 +311,8 @@ command forms:
 | Cargo nextest expression | `cargo nextest run -E 'test(test_ready_issues) or test(test_mission_status_cli_reports_control_state)'` |
 | Search with literal shell metacharacters | `rg -n 'cargo test|cargo nextest run -E|python3' docs/architecture/quality/validation.md` |
 | Formatting check | `cargo fmt -- --check` |
-| Tracker lint | `atelier lint` |
-| Admin local-state health check | `atelier doctor` |
+| Tracker lint | `atelier check` |
+| Admin local-state health check | `atelier check --fix` |
 | Deterministic export/projection diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
 | Python invocation | `python3 -c 'print("validation ok")'` |
 | Crate migration completion guard | `python3 scripts/check_crate_migration_completion.py` |
@@ -325,7 +331,7 @@ when the command already accepts the direct value you want to inspect.
 After the first clear unrecognized command or wrong command-family error, stop
 and consult the repository-owned command map instead of probing neighboring
 names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier man <role>`,
-`atelier status`, or `atelier issue status <mission-id>` to recover the correct surface
+`atelier status`, or `atelier issue show <mission-id>` to recover the correct surface
 for the current job.
 
 The stop rule exists to avoid retry loops around removed commands, hidden
@@ -343,23 +349,23 @@ diagnostics, or command families that belong to a different record kind.
 | `cargo test --test smoke_tests` | smoke scenarios |
 | `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` | warning-free workspace completion |
 | `python3 scripts/check_crate_migration_completion.py` | crate migration root-deletion guard |
-| `atelier lint` | tracker structure |
-| `atelier doctor` | admin setup and explicit ignored local-state repair |
+| `atelier check` | tracker structure |
+| `atelier check --fix` | admin setup and explicit ignored local-state repair |
 
 Rust hazard scan classifications live in
 `docs/architecture/quality/rust-quality-hazard-scans.md`.
 
 Workflow and completion validation failures are command failures by default.
-Mission completion is valid only when all linked work is closed, mission
-blockers are clear, required evidence is attached to accountable child work,
-configured transition gates pass, docs/help/Agent Factory command guidance has
-no drift, stale obsolete-command tests are explicitly owned or deferred, and
-the Git worktree is clean. Routine mission completion does not require a second
-direct mission evidence record when those child and health gates already prove
-the mission shell.
+Mission publish readiness is valid only when all linked work is terminal,
+mission blockers are clear, required evidence is attached to accountable child
+work, configured transition gates pass, docs/help/Agent Factory command
+guidance has no drift, stale obsolete-command tests are explicitly owned or
+deferred, and the Git worktree is clean. Routine mission publish readiness does
+not require a second direct mission evidence record when those child and health
+gates already prove the mission shell.
 The `validation.criteria_satisfied` completion gate is Atelier-owned: for mission
-completion it checks configured workflow approval on explicit validation or
-validation work when parent-level judgment is required. Missing parent coverage,
+publish readiness it checks configured workflow approval on explicit validation
+or validation work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through
 objective status, validation issue output, and completion failure output rather
 than through Agent Factory prose alone.
@@ -379,8 +385,8 @@ than through Agent Factory prose alone.
   state.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
-  validate durable state with tracked `.atelier/` records, `atelier lint`,
-  focused `show` commands, `issue transition --options`, and objective status or
+  validate durable state with tracked `.atelier/` records, `atelier check`,
+  focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
 - Diagnostics JSON from commands such as `atelier diagnostics slow` is valid

@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-08T17:33:27+00:00"
 id: "atelier-000u"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "domain-model"
 - "feature"

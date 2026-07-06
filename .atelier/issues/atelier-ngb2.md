@@ -18,13 +18,9 @@ relationships:
     id: "atelier-p7oa"
   children:
   - kind: "issue"
-    id: "atelier-5k7k"
-  - kind: "issue"
     id: "atelier-7ssp"
   - kind: "issue"
     id: "atelier-hzo7"
-  - kind: "issue"
-    id: "atelier-jdvz"
   - kind: "issue"
     id: "atelier-lvgo"
   attachments: []

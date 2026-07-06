@@ -22,7 +22,7 @@ fn test_unicode_arrows_in_title() {
     assert!(success);
 
     // List should not panic
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(success);
     assert!(stdout.contains("←") || stdout.contains("...")); // Either shows or truncates
 }
@@ -62,7 +62,7 @@ fn test_unicode_variety_in_titles() {
     }
 
     // List all - tests truncation on long Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(success);
 }
 
@@ -107,28 +107,6 @@ fn test_unicode_in_descriptions_and_comments() {
 }
 
 /// Test search with Unicode queries
-#[test]
-fn test_unicode_search() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "日本語のテスト"]);
-    run_atelier(dir.path(), &["issue", "create", "Test with arrows ← →"]);
-    run_atelier(dir.path(), &["issue", "create", "Emoji test 🎉"]);
-
-    // Search for Japanese
-    let (success, _, _) = run_atelier(dir.path(), &["search", "日本"]);
-    assert!(success);
-
-    // Search for emoji
-    let (success, _, _) = run_atelier(dir.path(), &["search", "🎉"]);
-    assert!(success);
-
-    // Search for arrow
-    let (success, _, _) = run_atelier(dir.path(), &["search", "←"]);
-    assert!(success);
-}
-
 /// Test very long Unicode strings (stress test truncation)
 #[test]
 fn test_unicode_long_string_truncation() {
@@ -145,7 +123,7 @@ fn test_unicode_long_string_truncation() {
     assert!(success);
 
     // List must not panic on truncation
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(success);
     assert!(stdout.contains("...") || stdout.contains("Long:"));
 
@@ -154,7 +132,7 @@ fn test_unicode_long_string_truncation() {
     let (success, _, _) = run_atelier(dir.path(), &["issue", "create", &mixed]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(success);
 }
 
@@ -166,14 +144,17 @@ fn test_unicode_in_dependencies() {
 
     run_atelier(dir.path(), &["issue", "create", "ブロッカー (blocker) ←"]);
     run_atelier(dir.path(), &["issue", "create", "待機中 (waiting) →"]);
-    run_atelier(dir.path(), &["issue", "block", "2", "1"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "link", "2", "1", "--role", "blocked_by"],
+    );
 
     // Blocked list with Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "blocked"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "queue", "--blocked"]);
     assert!(success);
 
     // Ready list
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success);
 }
 
@@ -207,6 +188,6 @@ fn test_unicode_special_characters() {
     assert!(success);
 
     // All should list without panic
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
     assert!(success);
 }
