@@ -12,14 +12,15 @@ use atelier_core::{
     ISSUE_PRIORITY_LABELS,
 };
 pub use atelier_core::{
-    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, Record,
-    RecordHeader, ReviewRecord,
+    EvidenceRecord, IssueFieldError, IssueRecord, IssueReview, IssueSectionName, IssueSectionState,
+    IssueSections, Record, RecordHeader, ReviewRecord,
 };
 
 pub mod activity;
 pub mod document;
 pub mod evidence;
 pub mod issue;
+pub mod review;
 pub mod store;
 pub mod validation;
 
@@ -255,26 +256,35 @@ impl RecordStore {
     }
 
     pub fn discover_issue_paths(&self) -> Result<Vec<PathBuf>> {
-        let issue_dir = self.state_dir.join("issues");
-        if !issue_dir.exists() {
+        self.discover_record_paths(ISSUE_KIND.kind)
+    }
+
+    /// Discover record files for one concrete kind using the shared directory
+    /// and extension contract.
+    pub fn discover_record_paths(&self, kind: &str) -> Result<Vec<PathBuf>> {
+        let spec = canonical_record_kind(kind)?;
+        let directory = spec
+            .canonical_dir
+            .ok_or_else(|| anyhow!("Record kind '{}' has no record-file directory", spec.kind))?;
+        let record_dir = self.state_dir.join(directory);
+        if !record_dir.exists() {
             return Ok(Vec::new());
         }
 
         let mut records = Vec::new();
-        collect_issue_record_paths(&self.state_dir, &issue_dir, &mut records)?;
+        collect_record_paths(
+            &self.state_dir,
+            &record_dir,
+            spec.extension,
+            spec.kind,
+            &mut records,
+        )?;
         records.sort();
         Ok(records)
     }
 
     pub fn load_issue(&self, relative: &Path) -> Result<CanonicalIssueRecord> {
-        let bytes = fs::read(self.state_dir.join(relative))
-            .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
-        let text = String::from_utf8(bytes).with_context(|| {
-            format!(
-                "Projection file {} is not UTF-8",
-                display_state_path(relative)
-            )
-        })?;
+        let text = self.read_record_file(relative)?;
         parse_issue_record(&text, relative)
     }
 
@@ -291,15 +301,24 @@ impl RecordStore {
     }
 
     pub fn load_record_at(&self, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
-        let bytes = fs::read(self.state_dir.join(relative))
-            .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
-        let text = String::from_utf8(bytes).with_context(|| {
-            format!(
-                "Projection file {} is not UTF-8",
-                display_state_path(relative)
-            )
-        })?;
+        let text = self.read_record_file(relative)?;
         parse_record(&text, relative, spec)
+    }
+
+    pub fn load_evidence_by_id(&self, id: &str) -> Result<EvidenceRecord> {
+        record_id::validate_record_id(id)?;
+        let spec = canonical_record_kind("evidence")?;
+        let relative = canonical_record_path(spec, id)?;
+        let text = self.read_record_file(&relative)?;
+        parse_evidence_record_file(&text, &relative)
+    }
+
+    pub fn load_review_by_id(&self, id: &str) -> Result<ReviewRecord> {
+        record_id::validate_record_id(id)?;
+        let spec = canonical_record_kind("review")?;
+        let relative = canonical_record_path(spec, id)?;
+        let text = self.read_record_file(&relative)?;
+        parse_review_record_file(&text, &relative)
     }
 
     pub fn load_issues(&self) -> Result<Vec<CanonicalIssueRecord>> {
@@ -366,8 +385,20 @@ impl RecordStore {
             data,
             summary: summary.to_string(),
         };
-        self.write_record_atomic(&Record::Evidence(record.clone()))?;
+        self.write_evidence_atomic(&record)?;
         Ok(record)
+    }
+
+    pub fn write_evidence_atomic(&self, record: &EvidenceRecord) -> Result<()> {
+        let spec = canonical_record_kind("evidence")?;
+        let relative = canonical_record_path(spec, &record.header.id)?;
+        self.write_atomic(&relative, render_evidence_record_file(record)?)
+    }
+
+    pub fn write_review_atomic(&self, record: &ReviewRecord) -> Result<()> {
+        let spec = canonical_record_kind("review")?;
+        let relative = canonical_record_path(spec, &record.header.id)?;
+        self.write_atomic(&relative, render_review_record_file(record)?)
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
@@ -722,6 +753,13 @@ impl RecordStore {
         Ok(())
     }
 
+    fn read_record_file(&self, relative: &Path) -> Result<String> {
+        let bytes = fs::read(self.state_dir.join(relative))
+            .with_context(|| format!("Missing record file {}", display_state_path(relative)))?;
+        String::from_utf8(bytes)
+            .with_context(|| format!("Record file {} is not UTF-8", display_state_path(relative)))
+    }
+
     fn delete_atomic(&self, relative: &Path) -> Result<()> {
         let path = self.state_dir.join(relative);
         if path.exists() {
@@ -796,8 +834,14 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     let mut fields = record.issue.fields.clone();
-    if let Some(review) = fields.remove("review") {
-        write_yaml_value(&mut output, "review", &review)?;
+    if let Some(review) = fields.remove(atelier_core::ISSUE_REVIEW_FIELD) {
+        let review = IssueReview::from_value(&review)
+            .context("Invalid issue review field while rendering record file")?;
+        write_yaml_value(
+            &mut output,
+            atelier_core::ISSUE_REVIEW_FIELD,
+            &review.to_value(),
+        )?;
     }
     write_yaml_map_if_not_empty(&mut output, "fields", &fields)?;
     write_yaml_scalar(
@@ -895,6 +939,44 @@ pub fn render_record(record: &Record) -> Result<String> {
     )
 }
 
+/// Render a concrete evidence record through its record-file codec.
+pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
+    render_record(&Record::Evidence(record.clone()))
+}
+
+/// Parse a concrete evidence record without exposing mixed-kind dispatch to
+/// callers that already know the domain type.
+pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<EvidenceRecord> {
+    let spec = canonical_record_kind("evidence")?;
+    match parse_record(text, relative, spec)? {
+        Record::Evidence(record) => Ok(record),
+        other => bail!(
+            "Expected evidence record in {}, found {}",
+            display_state_path(relative),
+            other.kind()
+        ),
+    }
+}
+
+/// Render a concrete native review-room record through its YAML file codec.
+pub fn render_review_record_file(record: &ReviewRecord) -> Result<String> {
+    render_record(&Record::Review(record.clone()))
+}
+
+/// Parse a concrete native review-room record without exposing mixed-kind
+/// dispatch to review services.
+pub fn parse_review_record_file(text: &str, relative: &Path) -> Result<ReviewRecord> {
+    let spec = canonical_record_kind("review")?;
+    match parse_record(text, relative, spec)? {
+        Record::Review(record) => Ok(record),
+        other => bail!(
+            "Expected review record in {}, found {}",
+            display_state_path(relative),
+            other.kind()
+        ),
+    }
+}
+
 pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueRecord> {
     let (front_matter, body) = split_front_matter(text, relative)?;
 
@@ -949,33 +1031,47 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
-    let mut fields = optional_object(&front_matter, "fields", relative)?;
+    let fields = optional_object(&front_matter, "fields", relative)?;
     if front_matter.contains_key("pull_request") {
         bail!(
             "Legacy pull_request field in {}; use structured review field",
             display_state_path(relative)
         );
     }
-    if let Some(review) = front_matter.get("review") {
-        fields.insert("review".to_string(), review.clone());
-    }
+    let review = front_matter
+        .get(atelier_core::ISSUE_REVIEW_FIELD)
+        .map(IssueReview::from_value)
+        .transpose()
+        .map_err(|error| {
+            anyhow!(
+                "workflow_issue_field_invalid: issue {} has an invalid review field in {}: {}",
+                id,
+                display_state_path(relative),
+                error
+            )
+        })?;
     let sections = parse_issue_sections(body, relative)?;
 
+    let mut issue = Issue {
+        id,
+        title: require_scalar(&front_matter, "title", relative)?,
+        description: None,
+        status: status.clone(),
+        issue_type,
+        priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
+            .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
+        fields,
+        parent_id: None,
+        created_at: require_datetime(&front_matter, "created_at", relative)?,
+        updated_at,
+        closed_at: closed_at.or((status == "closed").then_some(updated_at)),
+    };
+    if let Some(review) = review {
+        issue.set_review(review);
+    }
+
     Ok(CanonicalIssueRecord {
-        issue: Issue {
-            id,
-            title: require_scalar(&front_matter, "title", relative)?,
-            description: None,
-            status: status.clone(),
-            issue_type,
-            priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
-                .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
-            fields,
-            parent_id: None,
-            created_at: require_datetime(&front_matter, "created_at", relative)?,
-            updated_at,
-            closed_at: closed_at.or((status == "closed").then_some(updated_at)),
-        },
+        issue,
         labels: string_array(&front_matter, "labels", relative)?,
         sections,
         relationships,
@@ -1466,10 +1562,6 @@ fn add_relationship_to_bucket(
         relationships.relates.push(relation);
     }
     true
-}
-
-fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
-    collect_record_paths(root, dir, "md", "issue", records)
 }
 
 fn collect_record_paths(
@@ -2718,7 +2810,7 @@ mod tests {
         }
     }
 
-    fn evidence_record(id: &str) -> Record {
+    fn evidence_record(id: &str) -> EvidenceRecord {
         let data = EvidenceRecordData {
             evidence_type: "validation".to_string(),
             captured_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 30, 0).unwrap(),
@@ -2738,7 +2830,7 @@ mod tests {
             output: None,
             target: None,
         };
-        Record::Evidence(EvidenceRecord {
+        EvidenceRecord {
             header: record_header(
                 "evidence",
                 id,
@@ -2758,7 +2850,30 @@ mod tests {
             ),
             data,
             summary: "RecordStore evidence proof summary.".to_string(),
-        })
+        }
+    }
+
+    fn review_record(id: &str) -> ReviewRecord {
+        ReviewRecord {
+            header: record_header(
+                "review",
+                id,
+                "Review room",
+                "open",
+                vec!["review".to_string()],
+                Relationships::default(),
+            ),
+            mode: "room".to_string(),
+            issue_id: "atelier-epic".to_string(),
+            source_branch: "epic/atelier-epic".to_string(),
+            target_branch: "master".to_string(),
+            events: vec![serde_json::json!({
+                "id": "evt-0001",
+                "kind": "comment",
+                "actor": "reviewer",
+                "body": "Looks good"
+            })],
+        }
     }
 
     fn sectioned_issue_text(id: &str, body: &str) -> String {
@@ -2870,15 +2985,20 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn issue_record_round_trips_review_link() {
         let mut record = issue_record("atelier-flds");
-        record.issue.fields.insert(
-            "review".to_string(),
-            serde_json::json!({"kind": "room", "id": "atelier-rvw1"}),
-        );
+        record
+            .issue
+            .set_review(IssueReview::room("atelier-rvw1").unwrap());
 
         let text = render_issue_record(&record).unwrap();
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-flds")).unwrap();
 
         assert_eq!(parsed.issue.fields, record.issue.fields);
+        assert_eq!(
+            parsed.issue.review().unwrap(),
+            Some(IssueReview::Room {
+                id: "atelier-rvw1".to_string()
+            })
+        );
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
         assert!(text.contains("review:\n"));
         assert!(text.contains("kind: room"));
@@ -2902,41 +3022,66 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn review_room_record_renders_and_parses_yaml() {
-        let record = Record::Review(ReviewRecord {
-            header: record_header(
-                "review",
-                "atelier-rvw1",
-                "Review room",
-                "open",
-                vec!["review".to_string()],
-                Relationships::default(),
-            ),
-            mode: "room".to_string(),
-            issue_id: "atelier-epic".to_string(),
-            source_branch: "epic/atelier-epic".to_string(),
-            target_branch: "master".to_string(),
-            events: vec![serde_json::json!({
-                "id": "evt-0001",
-                "kind": "comment",
-                "actor": "reviewer",
-                "body": "Looks good"
-            })],
-        });
-        let spec = canonical_record_kind("review").unwrap();
-        let text = render_record(&record).unwrap();
-        let parsed = parse_record(
-            &text,
-            &canonical_record_path(spec, "atelier-rvw1").unwrap(),
-            spec,
+    fn issue_record_rejects_invalid_typed_review_field() {
+        let text = sectioned_issue_text(
+            "atelier-flds",
+            "## Description\n\nBody\n\n## Outcome\n\nDone\n\n## Evidence\n\nProof",
         )
-        .unwrap();
+        .replace(
+            "priority: \"P1\"\n",
+            "priority: \"P1\"\nreview:\n  kind: room\n  id: \"\"\n",
+        );
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-flds"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_issue_field_invalid"));
+        assert!(error.contains("room review id"));
+    }
+
+    #[test]
+    fn review_room_record_renders_and_parses_yaml() {
+        let record = review_record("atelier-rvw1");
+        let spec = canonical_record_kind("review").unwrap();
+        let path = canonical_record_path(spec, "atelier-rvw1").unwrap();
+        let text = render_review_record_file(&record).unwrap();
+        let parsed = parse_review_record_file(&text, &path).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_record(&parsed).unwrap(), text);
+        assert_eq!(render_review_record_file(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.review\""));
         assert!(text.contains("events:\n"));
         assert!(!text.starts_with("---"));
+    }
+
+    #[test]
+    fn record_store_concrete_services_round_trip_and_discover_domain_files() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        let issue = issue_record("atelier-iss1");
+        let evidence = evidence_record("atelier-evd1");
+        let review = review_record("atelier-rvw1");
+
+        store.write_issue_atomic(&issue).unwrap();
+        store.write_evidence_atomic(&evidence).unwrap();
+        store.write_review_atomic(&review).unwrap();
+
+        assert_eq!(store.load_issue_by_id("atelier-iss1").unwrap(), issue);
+        assert_eq!(store.load_evidence_by_id("atelier-evd1").unwrap(), evidence);
+        assert_eq!(store.load_review_by_id("atelier-rvw1").unwrap(), review);
+        assert_eq!(
+            store.discover_record_paths("issue").unwrap(),
+            vec![PathBuf::from("issues/atelier-iss1.md")]
+        );
+        assert_eq!(
+            store.discover_record_paths("evidence").unwrap(),
+            vec![PathBuf::from("evidence/atelier-evd1.md")]
+        );
+        assert_eq!(
+            store.discover_record_paths("review").unwrap(),
+            vec![PathBuf::from("reviews/atelier-rvw1.yaml")]
+        );
     }
 
     #[test]
@@ -3020,9 +3165,9 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let mut issue = issue_record("atelier-iss1");
         issue.relationships = Relationships::default();
         let mut evidence = evidence_record("atelier-evd1");
-        evidence.header_mut().relationships = Relationships::default();
+        evidence.header.relationships = Relationships::default();
         store.write_issue_atomic(&issue).unwrap();
-        store.write_record_atomic(&evidence).unwrap();
+        store.write_evidence_atomic(&evidence).unwrap();
 
         assert!(store
             .add_record_relationship(
@@ -3045,11 +3190,11 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let record = evidence_record("atelier-evdn");
         let spec = canonical_record_kind("evidence").unwrap();
         let path = canonical_record_path(spec, "atelier-evdn").unwrap();
-        let text = render_record(&record).unwrap();
-        let parsed = parse_record(&text, &path, spec).unwrap();
+        let text = render_evidence_record_file(&record).unwrap();
+        let parsed = parse_evidence_record_file(&text, &path).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_record(&parsed).unwrap(), text);
+        assert_eq!(render_evidence_record_file(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.evidence\""));
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("evidence_type: \"validation\""));

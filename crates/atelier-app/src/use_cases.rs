@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use std::path::Path;
 
 use crate::command_storage::{command_storage, CommandStorage, CommandStorageAccess};
-use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
+use atelier_core::{EvidenceRecord, EvidenceRecordData, ReviewRecord};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 use atelier_sqlite::Database;
 
@@ -59,15 +59,8 @@ pub fn refresh_after_canonical_write(state_dir: &Path, db_path: &Path) -> Result
     crate::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
-pub fn load_canonical_record(state_dir: &Path, kind: &str, id: &str) -> Result<Record> {
-    RecordStore::new(state_dir).load_record_by_id(kind, id)
-}
-
 pub fn load_canonical_evidence(state_dir: &Path, id: &str) -> Result<EvidenceRecord> {
-    match load_canonical_record(state_dir, "evidence", id)? {
-        Record::Evidence(record) => Ok(record),
-        other => bail!("Expected evidence record {id}, found {}", other.kind()),
-    }
+    RecordStore::new(state_dir).load_evidence_by_id(id)
 }
 
 pub fn load_canonical_issue(state_dir: &Path, id: &str) -> Result<CanonicalIssueRecord> {
@@ -78,8 +71,16 @@ pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) ->
     RecordStore::new(state_dir).write_issue_atomic(record)
 }
 
-pub fn write_canonical_record(state_dir: &Path, record: &Record) -> Result<()> {
-    RecordStore::new(state_dir).write_record_atomic(record)
+pub fn write_canonical_evidence(state_dir: &Path, record: &EvidenceRecord) -> Result<()> {
+    RecordStore::new(state_dir).write_evidence_atomic(record)
+}
+
+pub fn load_review(state_dir: &Path, id: &str) -> Result<ReviewRecord> {
+    RecordStore::new(state_dir).load_review_by_id(id)
+}
+
+pub fn write_review(state_dir: &Path, record: &ReviewRecord) -> Result<()> {
+    RecordStore::new(state_dir).write_review_atomic(record)
 }
 
 pub fn create_evidence_record(
@@ -221,7 +222,10 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_evidence_target_arg;
+    use super::*;
+    use atelier_core::{RecordHeader, Relationships};
+    use chrono::Utc;
+    use tempfile::tempdir;
 
     #[test]
     fn use_case_storage_selectors_are_named_for_target_workflows() {
@@ -246,5 +250,62 @@ mod tests {
 
         assert!(parse_evidence_target_arg("atelier-1234").is_err());
         assert!(parse_evidence_target_arg("issue/").is_err());
+    }
+
+    #[test]
+    fn concrete_evidence_and_review_services_round_trip_domain_types() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let now = Utc::now();
+        let evidence = create_evidence_record(
+            &state_dir,
+            "Typed evidence",
+            "recorded",
+            "Concrete evidence service proof.",
+            EvidenceRecordData {
+                evidence_type: "test".to_string(),
+                captured_at: now,
+                command: None,
+                path: None,
+                uri: None,
+                producer: None,
+                proof_scope: None,
+                agent_identity: None,
+                independence_level: None,
+                residual_risks: Vec::new(),
+                follow_up_ids: Vec::new(),
+                exit_code: None,
+                exit_status: None,
+                success: None,
+                spawn_error: None,
+                output: None,
+                target: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            load_canonical_evidence(&state_dir, &evidence.header.id).unwrap(),
+            evidence
+        );
+
+        let review = ReviewRecord {
+            header: RecordHeader {
+                kind: "review".to_string(),
+                id: "atelier-rvw1".to_string(),
+                title: "Typed review".to_string(),
+                status: "open".to_string(),
+                labels: vec!["review".to_string()],
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            mode: "room".to_string(),
+            issue_id: "atelier-issue".to_string(),
+            source_branch: "feature/atelier-issue".to_string(),
+            target_branch: "main".to_string(),
+            events: Vec::new(),
+        };
+        write_review(&state_dir, &review).unwrap();
+        assert_eq!(load_review(&state_dir, "atelier-rvw1").unwrap(), review);
     }
 }

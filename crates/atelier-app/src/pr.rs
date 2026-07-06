@@ -3,20 +3,20 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
+use atelier_core::IssueReview;
 use atelier_records::activity::{
     create_issue_activity_with_metadata, ActivityEventType, ActivityPrAttribution,
 };
 use atelier_records::{issue_record_path, RecordStore};
 use atelier_sqlite::Database;
 use chrono::Utc;
-use serde_json::{json, Value};
 
 use crate::forgejo::{
     ForgejoClient, ForgejoComment, ForgejoPullRequest, ForgejoReview, ForgejoReviewComment,
     ForgejoTransport, ReviewEvent,
 };
 use crate::project_config::{load_forgejo_with_workflow_role_authors, ForgejoConfig};
-use crate::workflow_policy::{self, REVIEW_FIELD};
+use crate::workflow_policy;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrOpenRequest<'a> {
@@ -442,12 +442,14 @@ pub fn persist_pull_request(
             resolution.base_branch
         );
     }
-    let value = pull_request_field_value(pull.number);
+    let review = IssueReview::ForgejoPullRequest {
+        number: pull.number,
+    };
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
     let mut record = store.load_issue(&path)?;
-    if let Some(existing) = record.issue.fields.get(REVIEW_FIELD) {
-        if existing == &value {
+    if let Some(existing) = record.issue.review()? {
+        if existing == review {
             return Ok(owner_id);
         }
         bail!(
@@ -456,7 +458,7 @@ pub fn persist_pull_request(
             owner_id
         );
     }
-    record.issue.fields.insert(REVIEW_FIELD.to_string(), value);
+    record.issue.set_review(review);
     store.write_issue_atomic(&record)?;
     crate::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
@@ -481,14 +483,14 @@ pub fn confirm_pull_request_merged(
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
     let record = store.load_issue(&path)?;
-    let field = record.issue.fields.get(REVIEW_FIELD).ok_or_else(|| {
+    let review = record.issue.review()?.ok_or_else(|| {
         anyhow!(
             "pull_request_missing: issue {} has no linked review field; run `atelier review open --issue {}` first",
             owner_id,
             owner_id
         )
     })?;
-    let number = pull_request_number(field)?;
+    let number = pull_request_number(&review)?;
     if pull.number != number {
         bail!(
             "pull_request_mismatch: linked pull_request number is {}, but Forgejo returned {}; run `atelier review status --issue {}`",
@@ -515,7 +517,8 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
             format!("no linked review field; run `atelier review open --issue {issue_id}`"),
         ));
     };
-    let number = pull_request_number(&field)?;
+    let review = provider_review_from_value(&field)?;
+    let number = pull_request_number(&review)?;
     let pull = client.show_pull(number)?;
     let policy = workflow_policy::load(repo_root)?;
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
@@ -548,37 +551,37 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
     }
 }
 
-fn linked_pull_request(db: &Database, issue_id: &str) -> Result<Value> {
-    workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
+fn linked_pull_request(db: &Database, issue_id: &str) -> Result<IssueReview> {
+    let field = workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
         anyhow!(
             "pull_request_missing: issue {} has no linked review field; run `atelier review open --issue {}` first",
             issue_id,
             issue_id
         )
-    })
+    })?;
+    provider_review_from_value(&field)
 }
 
-fn pull_request_number(value: &Value) -> Result<u64> {
-    value
-        .as_object()
-        .filter(|object| {
-            object.get("kind").and_then(Value::as_str) == Some("pull_request")
-                && object.get("provider").and_then(Value::as_str) == Some("forgejo")
-        })
-        .and_then(|object| object.get("number"))
-        .and_then(Value::as_u64)
-        .filter(|number| *number > 0)
-        .ok_or_else(|| {
+fn provider_review_from_value(value: &serde_json::Value) -> Result<IssueReview> {
+    IssueReview::from_value(value)
+        .map_err(|_| {
             anyhow!("pull_request_invalid: field review must be a provider pull_request object")
         })
+        .and_then(|review| match review {
+            IssueReview::ForgejoPullRequest { .. } => Ok(review),
+            IssueReview::Room { .. } => Err(anyhow!(
+                "pull_request_invalid: field review must be a provider pull_request object"
+            )),
+        })
 }
 
-fn pull_request_field_value(number: u64) -> Value {
-    json!({
-        "kind": "pull_request",
-        "provider": "forgejo",
-        "number": number,
-    })
+fn pull_request_number(review: &IssueReview) -> Result<u64> {
+    match review {
+        IssueReview::ForgejoPullRequest { number } => Ok(*number),
+        IssueReview::Room { .. } => Err(anyhow!(
+            "pull_request_invalid: field review must be a provider pull_request object"
+        )),
+    }
 }
 
 fn pull_request_url_path<'a>(input: &'a str, forgejo: &ForgejoConfig) -> Result<&'a str> {
@@ -828,9 +831,11 @@ mod tests {
     use super::*;
     use crate::forgejo::{ForgejoRequest, ForgejoResponse};
     use crate::project_config::ForgejoRoleAuthors;
+    use crate::workflow_policy::REVIEW_FIELD;
     use atelier_core::Issue;
     use atelier_records::activity::list_issue_activities;
     use chrono::Utc;
+    use serde_json::Value;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -960,7 +965,10 @@ repo = "atelier"
 
     fn pull_request_fields(number: u64) -> BTreeMap<String, Value> {
         let mut fields = BTreeMap::new();
-        fields.insert(REVIEW_FIELD.to_string(), pull_request_field_value(number));
+        fields.insert(
+            REVIEW_FIELD.to_string(),
+            IssueReview::ForgejoPullRequest { number }.to_value(),
+        );
         fields
     }
 
@@ -1111,9 +1119,19 @@ repo = "atelier"
         let inherited = workflow_policy::effective_pull_request_field(&refreshed, &child)
             .unwrap()
             .unwrap();
+        let owner_record = RecordStore::new(dir.path().join(".atelier"))
+            .load_issue_by_id(&epic)
+            .unwrap();
 
         assert_eq!(owner, epic);
-        assert_eq!(inherited, pull_request_field_value(42));
+        assert_eq!(
+            owner_record.issue.review().unwrap(),
+            Some(IssueReview::ForgejoPullRequest { number: 42 })
+        );
+        assert_eq!(
+            inherited,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]
@@ -1222,7 +1240,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
         let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
@@ -1283,7 +1304,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]
@@ -1482,7 +1506,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-child")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
         let activities = list_issue_activities(&state_dir, "atelier-epic").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
@@ -1558,7 +1585,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]

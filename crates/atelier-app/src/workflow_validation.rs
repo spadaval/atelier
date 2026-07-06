@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use atelier_core::{EvidenceRecord, Issue, Record};
+use atelier_core::{EvidenceRecord, Issue};
 use atelier_records::IssueSections;
 use atelier_sqlite::Database;
 use serde::Serialize;
@@ -325,12 +325,7 @@ fn linked_evidence_records(
 
 fn canonical_evidence_record(repo_root: &Path, id: &str) -> Result<Option<EvidenceRecord>> {
     let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    Ok(
-        match crate::use_cases::load_canonical_record(&state_dir, "evidence", id) {
-            Ok(Record::Evidence(record)) => Some(record),
-            Ok(_) | Err(_) => None,
-        },
-    )
+    Ok(crate::use_cases::load_canonical_evidence(&state_dir, id).ok())
 }
 
 fn lint_none_blocking(db: &Database) -> Result<(bool, String)> {
