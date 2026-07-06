@@ -33,7 +33,6 @@ Full Atelier CLI command regression suite
 ```console
 cargo nextest run -p atelier-cli --status-level fail --final-status-level fail
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -58,4 +57,3 @@ Truncated: no
 ────────────
      Summary [   9.647s] 448 tests run: 448 passed, 0 skipped
 ```
-

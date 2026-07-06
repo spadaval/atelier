@@ -33,7 +33,6 @@ Focused cache regression suite
 ```console
 cargo nextest run -p atelier-cli cache --status-level fail --final-status-level fail
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -58,4 +57,3 @@ Truncated: no
 ────────────
      Summary [   3.812s] 67 tests run: 67 passed, 381 skipped
 ```
-
