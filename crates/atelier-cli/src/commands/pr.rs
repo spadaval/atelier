@@ -17,11 +17,8 @@ pub fn open(
     db_path: &Path,
     issue_ref: Option<&str>,
     role: Option<&str>,
-    title: &str,
-    body: &str,
-    source_branch: &str,
-    target_branch: &str,
 ) -> Result<()> {
+    let context = app_pr::derive_review_open_context(db, repo_root, issue_ref)?;
     let role = resolve_review_role(db, repo_root, issue_ref, role)?;
     if review_mode(repo_root)? == ReviewMode::Room {
         let outcome = review_room::open(
@@ -32,10 +29,10 @@ pub fn open(
                 db_path,
                 issue_ref,
                 role: role.role.as_str(),
-                title,
-                body,
-                source_branch,
-                target_branch,
+                title: &context.title,
+                body: &context.body,
+                source_branch: &context.source_branch,
+                target_branch: &context.target_branch,
             },
         )?;
         println!("Review: {}", outcome.review_id);
@@ -59,10 +56,10 @@ pub fn open(
             db_path,
             issue_ref,
             role: role.role.as_str(),
-            title,
-            body,
-            source_branch,
-            target_branch,
+            title: &context.title,
+            body: &context.body,
+            source_branch: &context.source_branch,
+            target_branch: &context.target_branch,
         },
         &forgejo,
         &client,
@@ -84,7 +81,7 @@ pub fn link(
     pull_request: &str,
 ) -> Result<()> {
     if review_mode(repo_root)? == ReviewMode::Room {
-        bail!("review_mode_invalid: `atelier review link` is only available when review.mode = \"provider\"");
+        bail!("review_mode_invalid: `atelier review open --existing` is only available when review.mode = \"provider\"");
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = load_forgejo_admin_token()?;
@@ -111,40 +108,6 @@ pub fn link(
     Ok(())
 }
 
-pub fn status(
-    db: &Database,
-    repo_root: &Path,
-    state_dir: &Path,
-    issue_ref: Option<&str>,
-) -> Result<()> {
-    if review_mode(repo_root)? == ReviewMode::Room {
-        let outcome = review_room::status(
-            db,
-            review_room::RoomStatusRequest {
-                repo_root,
-                state_dir,
-                issue_ref,
-            },
-        )?;
-        for line in room_review_status_lines(&outcome) {
-            println!("{line}");
-        }
-        return Ok(());
-    }
-    let outcome = app_pr::status(
-        db,
-        app_pr::PrStatusRequest {
-            repo_root,
-            state_dir,
-            issue_ref,
-        },
-    )?;
-    for line in provider_review_status_lines(&outcome) {
-        println!("{line}");
-    }
-    Ok(())
-}
-
 pub fn show(
     db: &Database,
     repo_root: &Path,
@@ -160,23 +123,26 @@ pub fn show(
                 issue_ref,
             },
         )?;
-        println!("Review: {}", outcome.status.review_id);
-        println!("Issue:   {}", outcome.status.issue_id);
-        println!("Title:   {}", outcome.title);
-        println!("State:   {}", outcome.status.status);
+        println!("Review");
+        println!("======");
+        println!("Authority:            native review room");
+        println!("State:                {}", outcome.status.status);
+        println!("Issue:                {}", outcome.status.issue_id);
+        println!("Room:                 {}", outcome.status.review_id);
+        println!("Title:                {}", outcome.title);
         println!(
-            "Branch:  {} -> {}",
+            "Branch:               {} -> {}",
             outcome.source_branch, outcome.target_branch
         );
-        println!("Events:");
-        for event in outcome.events {
-            println!(
-                "  {} {}{}",
-                event.id,
-                event.kind,
-                render_event_suffix(&event)
-            );
-        }
+        println!("Current Approvals:    {}", outcome.status.approvals);
+        println!(
+            "Unresolved Blocking:  {}",
+            outcome.status.unresolved_blocking
+        );
+        println!(
+            "Unresolved Findings:  {}",
+            outcome.status.unresolved_nonblocking
+        );
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
@@ -194,11 +160,14 @@ pub fn show(
         },
         &client,
     )?;
-    println!("Review: {}", outcome.pull.url);
-    println!("Issue:   {}", outcome.issue_id);
-    println!("Number:  {}", outcome.pull.number);
-    println!("State:   {}", outcome.pull.state);
-    println!("Merged:  {}", outcome.pull.merged);
+    println!("Review");
+    println!("======");
+    println!("Authority: configured provider review");
+    println!("State:     {}", outcome.pull.state);
+    println!("Issue:     {}", outcome.issue_id);
+    println!("URL:       {}", outcome.pull.url);
+    println!("Number:    {}", outcome.pull.number);
+    println!("Merged:    {}", outcome.pull.merged);
     Ok(())
 }
 
@@ -352,7 +321,7 @@ pub fn comment(
         println!("Review:  {}", outcome.review_id);
         println!("Role:    {} ({})", role.role, role.source);
         println!(
-            "Next:    atelier review comments --issue {}",
+            "Next:    atelier review show --issue {} --comments",
             outcome.issue_id
         );
         return Ok(());
@@ -382,7 +351,7 @@ pub fn comment(
     println!("Issue:   {}", outcome.issue_id);
     println!("Role:    {} ({})", role.role, role.source);
     println!(
-        "Next:    atelier review comments --issue {}",
+        "Next:    atelier review show --issue {} --comments",
         outcome.issue_id
     );
     Ok(())
@@ -550,33 +519,6 @@ fn validate_review_role(role: &str) -> Result<()> {
     }
 }
 
-fn room_review_status_lines(outcome: &review_room::RoomStatusOutcome) -> Vec<String> {
-    vec![
-        "Review Status".to_string(),
-        "=============".to_string(),
-        "Authority:            native review room".to_string(),
-        format!("State:                {}", outcome.status),
-        format!("Issue:                {}", outcome.issue_id),
-        format!("Room:                 {}", outcome.review_id),
-        format!("Current Approvals:    {}", outcome.approvals),
-        format!("Unresolved Blocking:  {}", outcome.unresolved_blocking),
-        format!("Unresolved Findings:  {}", outcome.unresolved_nonblocking),
-    ]
-}
-
-fn provider_review_status_lines(outcome: &app_pr::PrStatusOutcome) -> Vec<String> {
-    vec![
-        "Review Status".to_string(),
-        "=============".to_string(),
-        "Authority: configured provider review".to_string(),
-        "State:     provider-linked".to_string(),
-        format!("Issue:     {}", outcome.issue_id),
-        format!("URL:       {}", outcome.url),
-        format!("Number:    {}", outcome.number),
-        format!("Repo:      {}", outcome.repo),
-    ]
-}
-
 fn render_event_suffix(event: &review_room::RoomEventView) -> String {
     let mut parts = Vec::new();
     if let Some(actor) = &event.actor {
@@ -720,33 +662,6 @@ mod tests {
 
         assert!(error.contains("review_role_missing"));
         assert!(error.contains("statuses.todo.role"));
-    }
-
-    #[test]
-    fn review_status_lines_lead_with_authority_and_state() {
-        let room = review_room::RoomStatusOutcome {
-            issue_id: "atelier-role".to_string(),
-            review_id: "room-1".to_string(),
-            status: "open".to_string(),
-            approvals: 1,
-            unresolved_blocking: 2,
-            unresolved_nonblocking: 3,
-        };
-        let room_lines = room_review_status_lines(&room);
-
-        assert_eq!(room_lines[2], "Authority:            native review room");
-        assert_eq!(room_lines[3], "State:                open");
-
-        let provider = app_pr::PrStatusOutcome {
-            issue_id: "atelier-role".to_string(),
-            number: 42,
-            url: "https://forgejo.local/pulls/42".to_string(),
-            repo: "owner/repo".to_string(),
-        };
-        let provider_lines = provider_review_status_lines(&provider);
-
-        assert_eq!(provider_lines[2], "Authority: configured provider review");
-        assert_eq!(provider_lines[3], "State:     provider-linked");
     }
 
     #[test]

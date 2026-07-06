@@ -223,16 +223,20 @@ fn complete_room_review(dir: &Path, issue_id: &str) {
         dir,
         &[
             "review",
-            "approve",
+            "submit",
             "--issue",
             issue_id,
             "--role",
             "reviewer",
+            "--approve",
             "--body",
             "fixture approval",
         ],
     );
-    assert!(success, "review approve failed for {issue_id}: {stderr}");
+    assert!(
+        success,
+        "review submit --approve failed for {issue_id}: {stderr}"
+    );
     let (success, _, stderr) = run_atelier(
         dir,
         &["review", "merge", "--issue", issue_id, "--role", "manager"],
@@ -600,7 +604,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier issue note`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
-- `atelier review open/status/show/comments/comment/approve/request-changes`
+- `atelier review open/show/submit/resolve/merge`
 - `atelier history`
 - `atelier prune`
 
@@ -1024,6 +1028,39 @@ fn spawn_forgejo_open_server(
     (host, requests, pushed_before_open, handle)
 }
 
+fn spawn_forgejo_approval_server() -> (String, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let host = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let requests_for_thread = Arc::clone(&requests);
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&stream);
+        let approved = request.contains(r#""event":"APPROVED""#);
+        requests_for_thread.lock().unwrap().push(request);
+        let (status, reason, body) = if approved {
+            (
+                201,
+                "Created",
+                r#"{"id":43,"state":"APPROVED","body":"Approved"}"#.to_string(),
+            )
+        } else {
+            (
+                422,
+                "Unprocessable Entity",
+                r#"{"message":"event must be the official APPROVED state"}"#.to_string(),
+            )
+        };
+        let response = format!(
+            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+    });
+    (host, requests, handle)
+}
+
 fn write_branch_action_workflow(dir: &Path) {
     let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
@@ -1180,6 +1217,39 @@ fn provider_request_review_pushes_source_before_opening_pr() {
             )
         });
     assert!(push_activity < open_activity);
+
+    let (approval_host, approval_requests, approval_server) = spawn_forgejo_approval_server();
+    write_provider_config_with_host(dir.path(), &approval_host);
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &[
+            "review",
+            "submit",
+            "--issue",
+            &issue_id,
+            "--role",
+            "reviewer",
+            "--approve",
+            "--body",
+            "Approved",
+        ],
+        &[("HOME", dir.path().to_str().unwrap())],
+    );
+    assert!(success, "provider review submit --approve failed: {stderr}");
+    assert!(stdout.contains("State:  APPROVED"), "{stdout}");
+    approval_server.join().unwrap();
+    let approval_requests = approval_requests.lock().unwrap();
+    assert_eq!(approval_requests.len(), 1, "{approval_requests:#?}");
+    assert!(
+        approval_requests[0].starts_with("POST /api/v1/repos/tools/atelier/pulls/42/reviews "),
+        "{}",
+        approval_requests[0]
+    );
+    assert!(
+        approval_requests[0].contains(r#""event":"APPROVED""#),
+        "{}",
+        approval_requests[0]
+    );
 }
 
 #[test]
@@ -1218,6 +1288,170 @@ fn request_review_preserves_review_artifact_field() {
             .is_some_and(|id| id.starts_with("atelier-")),
         "{front_matter:#}"
     );
+}
+
+#[test]
+fn review_surface_derives_open_context_and_uses_submit_and_show() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Review surface epic",
+            "--issue-type",
+            "epic",
+            "--description",
+            "Derive the review artifact from this issue.",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Review surface epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["review", "open", "--issue", &issue_id]);
+    assert!(success, "derived review open failed: {stderr}");
+    assert!(stdout.contains(&format!("Issue:   {issue_id}")), "{stdout}");
+    assert!(
+        stdout.contains("Role:    worker (status in_progress"),
+        "{stdout}"
+    );
+
+    let issue_front = canonical_record_front_matter(dir.path(), "issues", &issue_id);
+    let review_id = issue_front["review"]["id"].as_str().unwrap();
+    let review_path = dir
+        .path()
+        .join(".atelier/reviews")
+        .join(format!("{review_id}.yaml"));
+    let review_record = fs::read_to_string(&review_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", review_path.display()));
+    let review_yaml: serde_yaml::Value = serde_yaml::from_str(&review_record).unwrap();
+    let review_front = serde_json::to_value(review_yaml).unwrap();
+    assert_eq!(
+        review_front["title"].as_str(),
+        Some(format!("{issue_id}: Review surface epic").as_str())
+    );
+    assert_eq!(
+        review_front["source_branch"].as_str(),
+        Some(format!("epic/{issue_id}").as_str())
+    );
+    assert_eq!(review_front["target_branch"].as_str(), Some("main"));
+    assert!(
+        review_record.contains("Derive the review artifact from this issue."),
+        "{review_record}"
+    );
+    assert!(
+        review_record.contains(&format!("atelier issue show {issue_id}")),
+        "{review_record}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "review",
+            "submit",
+            "--issue",
+            &issue_id,
+            "--role",
+            "reviewer",
+            "--comment",
+            "Focused review note",
+        ],
+    );
+    assert!(success, "review submit comment failed: {stderr}");
+    assert!(
+        stdout.contains("Role:    reviewer (explicit --role)"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "atelier review show --issue {issue_id} --comments"
+        )),
+        "{stdout}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["review", "show", "--issue", &issue_id, "--comments"],
+    );
+    assert!(success, "review show comments failed: {stderr}");
+    assert!(
+        stdout.contains("Authority:            native review room"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Focused review note"), "{stdout}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "review",
+            "submit",
+            "--issue",
+            &issue_id,
+            "--role",
+            "reviewer",
+            "--approve",
+            "--body",
+            "Ready",
+        ],
+    );
+    assert!(success, "review submit approval failed: {stderr}");
+    assert!(stdout.contains("State:  open"), "{stdout}");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["review", "submit", "--issue", &issue_id]);
+    assert!(!success, "submit without an action should fail");
+    assert!(stderr.contains("review_submit_action_required"), "{stderr}");
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "review",
+            "submit",
+            "--issue",
+            &issue_id,
+            "--approve",
+            "--request-changes",
+        ],
+    );
+    assert!(!success, "submit with multiple actions should fail");
+    assert!(stderr.contains("review_submit_action_conflict"), "{stderr}");
+}
+
+#[test]
+fn review_help_exposes_only_the_collapsed_public_contract() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["review", "--help"]);
+    assert!(success, "review help failed: {stderr}");
+    for command in ["open", "show", "submit", "resolve", "merge"] {
+        assert!(stdout.contains(command), "missing {command} in:\n{stdout}");
+    }
+    for removed in [
+        "status",
+        "link",
+        "comments",
+        "comment",
+        "approve",
+        "request-changes",
+    ] {
+        let (success, _stdout, stderr) =
+            run_atelier_raw(dir.path(), &["review", removed, "--help"]);
+        assert!(!success, "removed review verb {removed} still parses");
+        assert!(stderr.contains("unrecognized subcommand"), "{stderr}");
+    }
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["review", "open", "--help"]);
+    assert!(success, "review open help failed: {stderr}");
+    assert!(stdout.contains("--existing"), "{stdout}");
+    assert!(!stdout.contains("--title"), "{stdout}");
+    assert!(!stdout.contains("--source-branch"), "{stdout}");
+    assert!(!stdout.contains("--target-branch"), "{stdout}");
 }
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {

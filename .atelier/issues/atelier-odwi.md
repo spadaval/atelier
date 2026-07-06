@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T17:59:31.754858827+00:00"
+status: "done"
 title: "Make review open derive routine provider fields from issue context"
-updated_at: "2026-06-29T20:12:16.280861616+00:00"
+updated_at: "2026-07-06T17:59:31.754858827+00:00"
 ---
 
 ## Description

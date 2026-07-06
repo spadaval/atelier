@@ -550,7 +550,7 @@ Failure semantics are explicit:
   tracker commit and continue without duplicating records.
 - Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
-  `atelier issue transition <id>`, `atelier review status <id>`, or
+  `atelier issue transition <id>`, `atelier review show --issue <id>`, or
   `atelier check <id>`.
 
 This contract blocks implementation work that adds workflow schema support,

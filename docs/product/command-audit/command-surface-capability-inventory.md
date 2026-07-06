@@ -120,12 +120,12 @@ slice so it does not preserve removed names.
 | List evidence records | `evidence list` | `evidence list` | bounded list with filters | Low | Needs default limit; capability is distinct from work queue. |
 | Attach existing evidence to issue | `evidence attach` | `evidence attach` | typed cross-kind proof reuse with role validation and activity | Medium | Keep as a secondary evidence-domain verb; issue linking intentionally remains issue-to-issue. |
 | Show evidence for an issue | `issue show`, `evidence list`, `history` | `issue show` plus evidence list filter if needed | `issue show <id>`; maybe `evidence list --target issue/<id>` | Medium | Avoid overloading issue show with huge evidence transcripts. |
-| Open review artifact | `review open` | `review open` | infer title/body/branches from issue when possible | Medium | Current command exposes too much provider plumbing. |
-| Link existing review artifact | `review link` | `review open` or `review attach` style | `review open --existing <url>` | Low | Fold into open if possible. |
-| Show review status/detail | `review status`, `review show`, issue/history references | `review show` | `review show [--issue <id>]` | Low | Remove separate status if show can be concise by default. |
-| Show review comments/findings | `review comments`, `review show`, provider UI | `review show` | `review show --comments [--unresolved]` | Medium | Preserve unresolved filtering. |
-| Add review comment/finding | `review comment` | `review submit` | `review submit --comment "..." [--finding]` | Medium | Collapse submit-like actions. |
-| Approve/request changes | `review approve`, `review request-changes` | `review submit` | `review submit --approve`, `review submit --request-changes` | Low | Avoid one command per review outcome. |
+| Open review artifact | `review open` | `review open` | `review open [--issue <id>]` | Medium | Title, body, branches, owner, role, and review mode/provider are issue/workflow-derived. |
+| Link existing review artifact | `review open --existing` | `review open` | `review open --existing <url-or-number>` | Low | Explicit provider recovery/import path on the open job. |
+| Show review status/detail | `review show` and issue/history references | `review show` | `review show [--issue <id>]` | Low | Concise authority and state lead the default view. |
+| Show review comments/findings | `review show --comments`, provider UI | `review show` | `review show --comments [--unresolved]` | Medium | Unresolved filtering remains available without a second inspection verb. |
+| Add review comment/finding | `review submit --comment` | `review submit` | `review submit --comment "..." [--finding]` | Medium | One submit owner handles mutations. |
+| Approve/request changes | `review submit` | `review submit` | `review submit --approve`, `review submit --request-changes` | Low | Exactly one submit action is required. |
 | Resolve review finding | `review resolve` | `review resolve` | unchanged | Low | Specific mutation may earn its keep. |
 | Merge review artifact | `review merge`, workflow close actions | `review merge` or workflow transition | undecided | Medium | Keep only if merging review artifact is separate from Atelier workflow transition. |
 | Configure/check review provider | `forgejo roles check/provision` | `review provider ...` or admin docs | `review provider check/provision` | Medium | Provider-specific root commands should go away. |

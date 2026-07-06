@@ -44,7 +44,7 @@ or mission:
 - `atelier issue link/unlink <objective-id> <issue-id> --role advances`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list`
-- `atelier review open/show/comment/approve/request-changes/resolve/merge`
+- `atelier review open/show/submit/resolve/merge`
 - `atelier history`
 - `atelier issue note <id> "..."`
 - `atelier check`
@@ -130,7 +130,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `issue` | Create, list, show, update, transition, note, and manage typed links. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work blocked`, edit the Markdown record, `history`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
-| `review` | Manage the configured review artifact for issue or epic work. | `open`, `status`, `show`, `merge`, `comments`, `comment`, `approve`, `request-changes`, and `resolve` operate on the configured review mode. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
+| `review` | Manage the configured review artifact for issue or epic work. | `open` derives routine artifact fields from issue and workflow state; `show` owns status/detail and optional comments; `submit` owns exactly one comment, approval, or change request; `resolve` and `merge` keep their distinct jobs. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
 | `history` | Inspect canonical repo activity. | Newest-first bounded activity feed with broad project context. | Event counts and timestamps only. | Return to `issue show` or `issue transition <id>` for current state. |
 ### Specialized But Visible Surfaces
 
@@ -508,9 +508,11 @@ product workflow or root help. Public orientation commands such as
 absorb routine cache recovery, naming admin repair only when local state is
 degraded.
 
-Review commands are visible only for review artifacts. They may create,
-inspect, merge or confirm merge state for, comment on, approve, request
-changes, and resolve review artifacts owned by the configured review mode.
+Review commands are visible only for review artifacts. They may create or link,
+inspect, merge or confirm merge state for, submit comments or decisions on, and
+resolve review artifacts owned by the configured review mode. Routine creation
+derives title, body, source branch, target branch, issue owner, role context,
+and provider/mode context; manual provider plumbing is not a public fallback.
 Static docs should not tell agents which review mode, provider, artifact shape,
 or role applies to a work item. Atelier configuration and command output own
 that routing. Mutating review commands must print whether their role was

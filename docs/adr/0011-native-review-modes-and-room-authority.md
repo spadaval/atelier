@@ -24,10 +24,11 @@ room summaries that drift from their event history.
    provider implemented in this mission.
 
 2. The public command surface is `atelier review`.
-   `atelier review open/status/show/comments/comment/approve/request-changes/resolve/merge`
-   operate in the configured mode. `link` is provider-only because native rooms
-   are created by Atelier. The old `atelier pr` command surface is removed
-   instead of kept as an alias.
+   `atelier review open/show/submit/resolve/merge`
+   operate in the configured mode. `review open --existing <url-or-number>` is
+   the provider-only recovery/import path because native rooms are created by
+   Atelier. The old `review link` and `atelier pr` command surfaces are removed
+   instead of kept as aliases.
 
 3. Native rooms are canonical tracked records.
    A room is stored under `.atelier/reviews/<id>.yaml`. Current room state is
