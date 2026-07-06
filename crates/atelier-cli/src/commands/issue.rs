@@ -16,7 +16,7 @@ use crate::human_output::{
 use crate::utils::format_issue_id;
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
+use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
@@ -867,10 +867,7 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
         return Ok(None);
     };
     let store = RecordStore::new(state_dir);
-    Ok(match store.load_record_by_id("evidence", id) {
-        Ok(Record::Evidence(record)) => Some(record),
-        Ok(_) | Err(_) => None,
-    })
+    Ok(store.load_evidence_by_id(id).ok())
 }
 
 pub(crate) fn evidence_help_hint() -> String {
