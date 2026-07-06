@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "artifact-update"
 - "prune"
+review:
+  kind: pull_request
+  number: 45
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
