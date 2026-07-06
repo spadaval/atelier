@@ -3,6 +3,10 @@ created_at: "2026-06-23T16:21:20.079723985+00:00"
 id: "atelier-ckca"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 52
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-mska
@@ -29,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Rewrite domain-shaped cache schema"
-updated_at: "2026-07-06T20:10:14.955269742+00:00"
+updated_at: "2026-07-06T20:10:49.903381056+00:00"
 ---
 
 ## Description
