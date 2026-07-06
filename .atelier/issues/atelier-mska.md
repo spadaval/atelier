@@ -3,6 +3,15 @@ created_at: "2026-06-23T16:13:40.066192089+00:00"
 id: "atelier-mska"
 issue_type: "mission"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-mska
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-mska
 priority: "P1"
 relationships:
   blocks: []
@@ -26,9 +35,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Mission: Unify record storage and lazy domain cache"
-updated_at: "2026-06-23T16:13:40.066192089+00:00"
+updated_at: "2026-07-06T17:46:19.151940330+00:00"
 ---
 
 ## Description
