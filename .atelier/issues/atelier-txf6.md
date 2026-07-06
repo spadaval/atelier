@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "artifact-update"
 - "prune"
+review:
+  kind: pull_request
+  number: 45
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-txf6
+    owner_kind: epic
+    review_target: master
+    work_branch: epic/atelier-txf6
 priority: "P1"
 relationships:
   blocks:
@@ -21,7 +34,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Retention and prune contract"
-updated_at: "2026-06-19T19:39:24.710266179+00:00"
+updated_at: "2026-07-06T17:48:04.764142495+00:00"
 ---
 
 ## Description
