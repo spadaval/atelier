@@ -76,8 +76,8 @@ Hide it, fold it into the owner command, or remove it.
 | `work mission` | Current dashboard prints proof/closeout/ready-work noise before useful mission coordination. | Epic-first, mission-scoped, bounded, with drill-down flags. |
 | `issue transition` | Default output leaks validators, action preflights, dirty-path dumps, descriptions, and commands with equal weight. | Default shows transitions and failed requirements only; verbose keeps full machinery. |
 | `review` | Too many verbs mirror provider operations. | Collapse submit-like actions and infer issue/provider context where possible. |
-| `evidence attach` | Separate verb for a relationship mutation. | Fold into the general relationship model unless reuse proves worth the extra verb. |
-| scoped `history` flags | Can become a second query language. | Keep only if bounded issue/objective activity in `issue show` is insufficient. |
+| `evidence attach` | Separate verb for a typed cross-kind proof relationship. | Keep as the secondary reuse path; `record --target` remains the taught first step and generic issue links do not own evidence. |
+| scoped `history` flags | Can become a second query language. | Keep only `--issue` and `--limit`; fold objective scope into `work mission`/`work epic` and remove query filters. |
 | provider, branch, maintenance, diagnostics roots | Expose recovery or implementation machinery. | Hide unless explicitly needed for admin recovery. |
 
 ## Output Budget

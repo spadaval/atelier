@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:00:39.591871976+00:00"
+status: "done"
 title: "Bound evidence list and elide transcript firehoses"
-updated_at: "2026-06-29T20:13:19.532733179+00:00"
+updated_at: "2026-07-06T18:00:39.591871976+00:00"
 ---
 
 ## Description
