@@ -33,8 +33,8 @@
   not a root `atelier` library or binary package.
 - Atelier crate layers: the target internal Rust crates under `crates/`:
   `atelier-core` for pure domain types, `atelier-workflow` for workflow policy,
-  `atelier-records` for canonical Markdown storage, `atelier-sqlite` for
-  rebuildable projection SQLite state, `atelier-app` for
+  `atelier-records` for record-file storage, `atelier-sqlite` for the
+  rebuildable SQLite domain cache, `atelier-app` for
   use-case orchestration, and `atelier-cli` for the public `atelier` binary.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
@@ -117,7 +117,7 @@
   intermediate target states. Checkpoint intent may be described in mission,
   epic, issue, or evidence bodies, but there is no active first-class
   `.atelier/milestones/` record table or milestone command surface.
-- Mission Control: the target projection or UI surface that summarizes active
+- Mission Control: the target query or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
 - Status role: optional workflow policy on an active issue status that names
@@ -170,8 +170,9 @@
 - Abandon: a legacy active-pointer cleanup concept that should not remain the
   normal way to leave current work once status-derived current work replaces
   runtime work associations.
-- SQLite state: fast local projection state, currently living at ignored
-  `.atelier/runtime/state.db`.
+- SQLite domain-cache state: selected query facts and source-freshness metadata
+  in ignored `.atelier/runtime/state.db`. It is opened and repaired lazily by
+  commands that need cache-backed access.
 - Doctor: an operator health surface that reports whether the repository and
   local runtime are usable and may perform safe repair when explicitly asked.
 
@@ -181,22 +182,23 @@
   behavior that is still intentionally documented as source history; use Atelier
   for the current package, binary, runtime directory, resources, and target-state
   product design.
-- Export/import in the inherited code is backup-oriented. The target
-  architecture needs canonical projection and rebuild semantics instead.
-- Export and rebuild are low-level diagnostic mechanics, not normal operator
-  workflow. Cache and projection state should be transparent and repaired by
-  ordinary commands or by an explicit doctor repair path.
+- Export/import in the inherited code is backup-oriented historical behavior,
+  not part of the target persistence path. The target architecture rebuilds its
+  disposable domain cache from record files.
+- Cache rebuild is a low-level diagnostic and recovery mechanic, not normal
+  operator workflow. Ordinary cache-backed commands detect and repair stale
+  sources lazily; an explicit doctor repair path handles broader local damage.
 - Beads migration is explicit during setup. `atelier init` may detect the
   standard repo-local Beads migration input, but import requires an explicit
   setup option rather than a silent automatic conversion.
-- Doctor repair may change ignored projection/cache state but must not edit
-  tracked `.atelier/` canonical records.
+- Doctor repair may change ignored domain-cache state but must not edit tracked
+  `.atelier/` record files.
 - Graph commands should inspect cross-record relationships, including missions
   and issues. If a view is issue-only, its help should say so explicitly.
-- The canonical-state target is Markdown-first in a single `.atelier/` tree:
-  successful durable mutations should write record files through RecordStore,
-  then refresh ProjectionIndex. SQLite is not the destination source of truth
-  for canonical records.
+- The project-state target is Markdown-first in a single `.atelier/` tree:
+  successful durable mutations write record files through `RecordStore` and
+  invalidate affected cache facts. `CacheManager` repairs those facts lazily
+  before a cache-backed query; SQLite is never the durable source of truth.
 - Blocking relationships represent issue readiness, not a separate dependency
   domain. Canonical state groups record relationships under `relationships`:
   use `blocks` for issue-owned blockers, `children` for hierarchy and mission

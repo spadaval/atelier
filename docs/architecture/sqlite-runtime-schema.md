@@ -25,7 +25,7 @@ same physical index.
 | `evidence_index` | evidence ID, status, evidence type, captured time, and other explicitly query-worthy evidence metadata | Evidence coverage and closeout/validation lookup. |
 | `evidence_target_index` | evidence ID, target kind/ID, and attachment role | Reverse evidence coverage for issues, epics, and missions. |
 | `review_room_index` | native room ID, owning issue ID, and normalized room state facts required by workflow validation | Native-room review/validation lookup rebuilt from tracked `.atelier/reviews/<id>.yaml` files. |
-| `record_source_index` | relative record-file path, record kind/ID, size hint, modified-time hint, content hash, and indexed time | Freshness detection, deleted-source repair, and targeted reindexing. |
+| `record_source_index` | relative record-file path, record kind/ID, size hint, modified-time hint, optional content hash, and indexed time | Freshness detection, deleted-source repair, and targeted reindexing. |
 
 The index may add normal relational indexes for those access paths. It must not
 introduce a universal `records` table, generic JSON payload column, generic
@@ -83,8 +83,11 @@ record-file sources and compares that set with `record_source_index` before
 choosing candidates for targeted reindexing. This comparison detects added
 sources with no row and indexed sources whose files were deleted; it must not
 depend only on already-indexed candidates. Size and modified time are cheap
-hints; a changed candidate is verified by content hash. Missing, unknown,
-changed, deleted, corrupt, or schema-incompatible cache state is not a
+hints for selecting candidates. A candidate whose hints changed is parsed and
+reindexed without requiring a content hash first. Implementations may retain or
+compute a hash to suppress reparsing caused by noisy metadata, but hashing is
+an optional optimization rather than a freshness precondition. Missing,
+unknown, changed, deleted, corrupt, or schema-incompatible cache state is not a
 user-managed workflow condition.
 
 Commands repair the smallest safe unit lazily: reindex the affected record

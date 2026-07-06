@@ -1,7 +1,7 @@
 # Architecture
 
 This map covers implementation architecture for Atelier's target layered Cargo
-workspace: crate ownership, persistence boundaries, local projection state, and
+workspace: crate ownership, persistence boundaries, local domain-cache state, and
 inherited Chainlink structure being migrated out of the root package. Product
 behavior lives in [Product](../product/index.md), product direction lives in
 [PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), domain language lives in
@@ -26,7 +26,7 @@ Atelier is migrating to a virtual-root Cargo workspace:
 - `crates/atelier-sqlite`: owns rebuildable SQLite domain-cache schema/query
   code.
 - `crates/atelier-records`, `crates/atelier-workflow`, and
-  `crates/atelier-core`: own canonical Markdown storage, workflow policy, and
+  `crates/atelier-core`: own record-file storage, workflow policy, and
   pure domain types.
 - `crates/atelier-cli/tests` and `fuzz/`: migrate toward the crate that owns
   the invariant under test while preserving CLI integration coverage for
@@ -74,8 +74,9 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 - Command diagnostics are local-only telemetry outside record-file directories
   and do not create exported run/session records until a later contract
   explicitly opts in.
-- Mutating commands write durable record files through `RecordStore` and may
-  refresh the lazy SQLite domain cache afterwards.
+- Mutating commands write durable record files through `RecordStore` and
+  invalidate affected cache facts; `CacheManager` repairs them lazily before a
+  cache-backed query.
 - The root package is being deleted in favor of a virtual workspace root; all
   executable ownership moves to `crates/atelier-cli`.
 - `check` detects stale, invalid, or missing tracker state through
