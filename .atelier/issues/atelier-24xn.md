@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Prune stale Atelier artifacts and branches"
-updated_at: "2026-07-01T05:53:15.967613504+00:00"
+updated_at: "2026-07-06T17:44:10.806301462+00:00"
 ---
 
 ## Description
