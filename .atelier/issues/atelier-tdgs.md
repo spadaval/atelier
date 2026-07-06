@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "blocked"
 title: "Build the mission-to-epic overview projection"
-updated_at: "2026-07-06T17:57:59.639254569+00:00"
+updated_at: "2026-07-06T18:13:41.018622062+00:00"
 ---
 
 ## Description
@@ -35,4 +35,5 @@ Add a dedicated overview model that selects non-done missions by default, resolv
 ## Evidence
 
 - Partial implementation evidence `atelier-mvt3` records 5 passing directed membership, descendant collapse, overlap/shared-scope, exceptional-work, ordering, budget, and cycle-safety projection tests.
+- Independent review evidence `atelier-nm2w` records a pass with no severity findings for checkpoint `0fd1e8ee` and names the intentionally unclaimed adapter, renderer, and CLI risks.
 - Final cache acquisition and CLI transcript proof remain pending the `atelier-mska` directed relation/query interface.
