@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::record_id;
 use crate::utils::format_issue_id;
@@ -214,7 +214,6 @@ fn parse_beads_jsonl(input_path: &Path) -> Result<BeadsImportPlan> {
 }
 
 fn write_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
-    let store = RecordStore::new(state_dir);
     for record in &plan.records {
         let relative = issue_record_path(&record.issue.id);
         if state_dir.join(&relative).exists() {
@@ -225,6 +224,27 @@ fn write_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
             );
         }
     }
+
+    let stage = create_import_stage_dir(state_dir)?;
+    let result = (|| {
+        copy_issue_tree(state_dir, &stage)?;
+        apply_import_plan(&stage, plan)?;
+        install_import_stage(state_dir, &stage)
+    })();
+    if let Err(error) = fs::remove_dir_all(&stage) {
+        if result.is_ok() {
+            tracing::warn!(
+                "failed to remove completed Beads import stage {}: {}",
+                stage.display(),
+                error
+            );
+        }
+    }
+    result
+}
+
+fn apply_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
+    let store = RecordStore::new(state_dir);
     for record in &plan.records {
         store.write_issue_atomic(record)?;
     }
@@ -241,6 +261,122 @@ fn write_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
             },
             &activity.body,
         )?;
+    }
+    Ok(())
+}
+
+fn create_import_stage_dir(state_dir: &Path) -> Result<PathBuf> {
+    let runtime_dir = state_dir.join("runtime");
+    fs::create_dir_all(&runtime_dir)
+        .with_context(|| format!("Failed to create {}", runtime_dir.display()))?;
+    let base = format!(
+        ".beads-import-stage-{}-{}",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    for suffix in 0..=99 {
+        let candidate = if suffix == 0 {
+            runtime_dir.join(&base)
+        } else {
+            runtime_dir.join(format!("{base}-{suffix:02}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Failed to create {}", candidate.display()))
+            }
+        }
+    }
+    bail!(
+        "Failed to allocate Beads import staging directory in {}",
+        runtime_dir.display()
+    )
+}
+
+fn copy_issue_tree(state_dir: &Path, stage: &Path) -> Result<()> {
+    let source = state_dir.join("issues");
+    let destination = stage.join("issues");
+    if !source.exists() {
+        fs::create_dir_all(&destination)
+            .with_context(|| format!("Failed to create {}", destination.display()))?;
+        return Ok(());
+    }
+    copy_dir_recursive(&source, &destination)
+}
+
+fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination)
+        .with_context(|| format!("Failed to create {}", destination.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &destination_path)?;
+        } else {
+            fs::copy(&source_path, &destination_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    destination_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn install_import_stage(state_dir: &Path, stage: &Path) -> Result<()> {
+    let staged_issues = stage.join("issues");
+    let issues = state_dir.join("issues");
+    let backup = stage.with_file_name(format!(
+        ".beads-import-backup-{}-{}",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    let had_issues = issues.exists();
+
+    // Portable filesystems do not expose an atomic directory exchange. Keep
+    // the previous tree beside the stage until the prepared tree is installed;
+    // any in-process install failure restores it before returning an error.
+    if had_issues {
+        fs::rename(&issues, &backup).with_context(|| {
+            format!(
+                "Failed to prepare Beads import by moving {} to {}",
+                issues.display(),
+                backup.display()
+            )
+        })?;
+    }
+    if let Err(error) = fs::rename(&staged_issues, &issues) {
+        if had_issues {
+            fs::rename(&backup, &issues).with_context(|| {
+                format!(
+                    "Failed to install staged Beads import ({error}) and failed to restore {} from {}",
+                    issues.display(),
+                    backup.display()
+                )
+            })?;
+        }
+        return Err(error).with_context(|| {
+            format!(
+                "Failed to install staged Beads import at {}",
+                issues.display()
+            )
+        });
+    }
+    if had_issues {
+        if let Err(error) = fs::remove_dir_all(&backup) {
+            tracing::warn!(
+                "Beads import committed but its ignored backup {} could not be removed: {}",
+                backup.display(),
+                error
+            );
+        }
     }
     Ok(())
 }
@@ -500,6 +636,42 @@ mod tests {
         path
     }
 
+    fn write_jsonl(dir: &tempfile::TempDir, records: &[serde_json::Value]) -> PathBuf {
+        let path = dir.path().join("import.jsonl");
+        let content = records
+            .iter()
+            .map(serde_json::Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&path, format!("{content}\n")).unwrap();
+        path
+    }
+
+    fn beads_issue(id: &str, issue_type: &str, notes: Option<&str>) -> serde_json::Value {
+        serde_json::json!({
+            "_type": "issue",
+            "id": id,
+            "title": format!("Imported {id}"),
+            "status": "open",
+            "priority": 2,
+            "issue_type": issue_type,
+            "notes": notes,
+        })
+    }
+
+    fn assert_no_import_artifacts(state_dir: &Path) {
+        let runtime_dir = state_dir.join("runtime");
+        if !runtime_dir.exists() {
+            return;
+        }
+        let artifacts = fs::read_dir(runtime_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with(".beads-import-"))
+            .collect::<Vec<_>>();
+        assert!(artifacts.is_empty(), "left import artifacts: {artifacts:?}");
+    }
+
     #[test]
     fn test_import_beads_fixture_preserves_counts_and_links() {
         let dir = tempdir().unwrap();
@@ -645,5 +817,71 @@ mod tests {
                 .len(),
             3
         );
+    }
+
+    #[test]
+    fn test_import_rejects_late_invalid_record_without_partial_files_and_allows_retry() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let import_path = write_jsonl(
+            &dir,
+            &[
+                beads_issue("first", "task", Some("first note")),
+                beads_issue("second", "invalid type", None),
+            ],
+        );
+
+        let error = run_beads_jsonl(&import_path, &state_dir).unwrap_err();
+        assert!(error.to_string().contains("Invalid issue_type"));
+        for index in 1..=2 {
+            let id = record_id::legacy_issue_id(index);
+            assert!(!state_dir.join(issue_record_path(&id)).exists());
+            assert!(
+                atelier_records::activity::list_issue_activities(&state_dir, &id)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        assert_no_import_artifacts(&state_dir);
+
+        write_jsonl(
+            &dir,
+            &[
+                beads_issue("first", "task", Some("first note")),
+                beads_issue("second", "task", None),
+            ],
+        );
+        run_beads_jsonl(&import_path, &state_dir).unwrap();
+        assert!(state_dir
+            .join(issue_record_path(&record_id::legacy_issue_id(1)))
+            .exists());
+        assert!(state_dir
+            .join(issue_record_path(&record_id::legacy_issue_id(2)))
+            .exists());
+    }
+
+    #[test]
+    fn test_import_staging_failure_leaves_no_records_or_activities_and_allows_retry() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let import_path = write_jsonl(&dir, &[beads_issue("first", "task", Some("first note"))]);
+        let id = record_id::legacy_issue_id(1);
+        let activity_blocker = state_dir.join("issues").join(format!("{id}.activity"));
+        fs::create_dir_all(activity_blocker.parent().unwrap()).unwrap();
+        fs::write(&activity_blocker, "blocks activity directory creation").unwrap();
+
+        let error = run_beads_jsonl(&import_path, &state_dir).unwrap_err();
+        assert!(error.to_string().contains("Failed to create"));
+        assert!(!state_dir.join(issue_record_path(&id)).exists());
+        assert!(activity_blocker.is_file());
+        assert_no_import_artifacts(&state_dir);
+
+        fs::remove_file(&activity_blocker).unwrap();
+        run_beads_jsonl(&import_path, &state_dir).unwrap();
+        assert!(state_dir.join(issue_record_path(&id)).exists());
+        let activities = atelier_records::activity::list_issue_activities(&state_dir, &id).unwrap();
+        assert_eq!(activities.len(), 1);
+        assert_eq!(activities[0].body, "first note");
+        assert_no_import_artifacts(&state_dir);
     }
 }

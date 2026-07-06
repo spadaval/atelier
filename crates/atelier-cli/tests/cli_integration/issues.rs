@@ -2168,6 +2168,44 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     );
 }
 
+#[test]
+fn test_import_beads_late_invalid_record_is_failure_atomic_and_retryable() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let import_path = dir.path().join("late-invalid.jsonl");
+    let invalid = concat!(
+        r#"{"_type":"issue","id":"first","title":"First","status":"open","priority":2,"issue_type":"task","notes":"first note"}"#,
+        "\n",
+        r#"{"_type":"issue","id":"second","title":"Second","status":"open","priority":2,"issue_type":"invalid type"}"#,
+        "\n"
+    );
+    std::fs::write(&import_path, invalid).unwrap();
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
+    assert!(!success, "late-invalid import unexpectedly succeeded");
+    assert!(stderr.contains("Invalid issue_type"), "{stderr}");
+    for id in ["atelier-0001", "atelier-0002"] {
+        assert!(!dir.path().join(format!(".atelier/issues/{id}.md")).exists());
+        assert!(!dir
+            .path()
+            .join(format!(".atelier/issues/{id}.activity"))
+            .exists());
+    }
+
+    std::fs::write(&import_path, invalid.replace("invalid type", "task")).unwrap();
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
+    assert!(success, "clean retry failed: {stderr}");
+    assert!(stdout.contains("imported issues: 2"), "{stdout}");
+    assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
+    assert!(dir.path().join(".atelier/issues/atelier-0002.md").exists());
+    assert!(dir
+        .path()
+        .join(".atelier/issues/atelier-0001.activity")
+        .is_dir());
+}
+
 // ==================== Issue Delete Tests ====================
 
 // ==================== Labels Tests ====================
