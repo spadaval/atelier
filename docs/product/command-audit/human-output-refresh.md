@@ -118,12 +118,12 @@ app logic supplies them.
 | Surface | Complaint | Target behavior |
 | --- | --- | --- |
 | `status` | Output is mostly useful but still uses dense labels and a long generic evidence warning. | Keep it compact, color status/health in interactive terminals, and keep next actions ranked by the current checkout state. |
-| `work queue` and `search` | Repeated blocker drill-downs, `key=value` summaries, heavy context headings, and opaque labels. | Use grouped rows with readable summaries, one blocker drill-down footer, clear parent/context labels, and bounded child rows. |
+| Legacy `work queue` and removed search | Repeated blocker drill-downs, `key=value` summaries, heavy context headings, and opaque labels. | Do not polish them into replacement dashboards. Route inventory to `issue list`, Mission Overview to `work missions`, and operational decisions to focused work views. |
 | `issue show` | Dirty checkout state and recent activity are too raw and verbose. | Summarize dirty state, wrap or bound path samples, render recent activity as sentences, and move raw fields to history or verbose output. |
 | `work mission <objective-id>` | Current ready work is a flat sample of child tasks without enough workstream context. | Default should be epic-first and mission-scoped. Child tasks appear when active, blocked, or requested by drill-down flags. |
 | `issue transition` | Repeats dirty state and mixes validators, blockers, branch context, commands, and descriptions with equal visual weight. | Show transition names and failed requirements by default. Hide passing validators, messages, action preflight detail, descriptions, and dirty path firehoses behind verbose output. |
 | `issue show` | Repeats detail commands and does not prioritize blocker meaning. | Show blocker counts and human titles first; put `atelier issue show <id>` once in a footer. |
-| `issue list` | Simple inventory is missing today even though root help claims listing. | Add bounded inventory output with simple filters; do not turn it into `work queue` or search. |
+| `issue list` | Queue-shaped output obscures simple record inventory. | Render one bounded, neutral ID-ordered row per matching record with metadata filters; do not add hierarchy, ready/blocked selection, or search. |
 | `history` | The former pipe-delimited rows were hard to scan and query flags exceeded the command budget. | Implemented: wrapped event rows, de-emphasized metadata, a 20-event default, and only issue/limit scope controls. |
 | `evidence list` | The former default was unbounded and swamped the terminal. | Implemented: 20-record default limit, omitted count, status hint, quiet ID composition, and command transcript elision. |
 | `man` | Role guides are readable but still use raw command lists and stale objective wording in places. | Keep guides terse, use objective terminology, and color only headings/roles/health when interactive. |

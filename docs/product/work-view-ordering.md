@@ -9,8 +9,12 @@ This contract applies to issue-like row sets in:
 - `atelier work queue`
 - `atelier issue show` subissues
 - `atelier issue show <objective-id>`
-- explicit objective browsing or inventory views
+- explicit objective browsing views
 - root `atelier status`
+
+It does not apply to the neutral ID ordering of `atelier issue list` or the
+mission/epic ordering of `atelier work missions`; those contracts live in
+[Issue Inventory And Mission Overview](issue-inventory-and-mission-overview.md).
 
 ## Blocker Order
 

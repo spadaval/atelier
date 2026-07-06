@@ -71,8 +71,9 @@ Hide it, fold it into the owner command, or remove it.
 
 | Surface | Pressure | Target |
 | --- | --- | --- |
-| `issue list` | A simple generic inventory is now available; it must not grow into a dashboard. | Keep it inventory-shaped and route operational decisions to `work` views. |
-| `work queue` | Being asked to cover generic inventory, mission discovery, top-level work selection, and operational queues. Its current repo-wide nested output does not clearly belong to one Agent Factory role. | Simplify or fold. Keep only if it has a crisp repo-wide operational job that reduces scanning and command stitching more than `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, and `issue list` already do. |
+| `issue list` | Queue-shaped flags and hierarchy obscure the generic inventory job. | Keep flat, all-status inventory with metadata filters, neutral ordering, and a default limit. |
+| `work missions` | A thin mission-type list cannot answer cross-mission coordination. | Use the bounded Mission Overview: current missions, directly advanced epics, collapsed progress, and exceptional-work facts. |
+| `work queue` | Generic inventory, mission discovery, top-level selection, and operational queues now have distinct owners. | Retire from normal guidance after callers migrate; do not alias it to the new read models. |
 | `work mission` | Current dashboard prints proof/closeout/ready-work noise before useful mission coordination. | Epic-first, mission-scoped, bounded, with drill-down flags. |
 | `issue transition` | Default output leaks validators, action preflights, dirty-path dumps, descriptions, and commands with equal weight. | Default shows transitions and failed requirements only; verbose keeps full machinery. |
 | `review` | Too many verbs mirror provider operations. | Collapse submit-like actions and infer issue/provider context where possible. |
