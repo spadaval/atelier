@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "complexity"
 - "review"
+review:
+  kind: pull_request
+  number: 47
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-durs
@@ -32,9 +36,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Simplify review command surface"
-updated_at: "2026-07-06T17:46:23.699371547+00:00"
+updated_at: "2026-07-06T18:01:43.190397768+00:00"
 ---
 
 ## Description
