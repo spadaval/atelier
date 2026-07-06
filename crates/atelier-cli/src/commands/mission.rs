@@ -313,7 +313,7 @@ fn print_status_next_commands(
     match lifecycle.as_str() {
         "closed" => {
             println!(
-                "  Inspect mission history: atelier history --mission {}",
+                "  Inspect mission activity: atelier history --issue {}",
                 mission.id
             );
             return;

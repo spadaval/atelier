@@ -33,7 +33,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  history       Inspect canonical repo, mission, issue, or epic activity
+  history       Inspect bounded canonical repository or issue activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -182,29 +182,11 @@ enum Commands {
         action: ForgejoCommands,
     },
 
-    /// Inspect canonical repo, mission, issue, or epic activity
+    /// Inspect bounded canonical repository or issue activity
     History {
-        /// Scope to one mission and linked work
-        #[arg(long)]
-        mission: Option<String>,
-        /// Scope to one issue
+        /// Scope to one issue record; mission and epic dashboards own descendant views
         #[arg(long)]
         issue: Option<String>,
-        /// Scope to one epic and its descendants
-        #[arg(long)]
-        epic: Option<String>,
-        /// Include subissues when using --issue
-        #[arg(long)]
-        include_descendants: bool,
-        /// Filter by event kind, such as note or evidence_attached
-        #[arg(long)]
-        event_kind: Option<String>,
-        /// Filter by actor exactly as recorded
-        #[arg(long)]
-        actor: Option<String>,
-        /// Filter to events since a duration like 7d, a YYYY-MM-DD date, or RFC3339
-        #[arg(long)]
-        since: Option<String>,
         /// Maximum number of matching events to print
         #[arg(long, default_value_t = commands::history::DEFAULT_LIMIT)]
         limit: usize,
@@ -941,7 +923,7 @@ fn run() -> Result<()> {
                         }),
                     )?;
                     if let Some((kind, id)) = parsed_target {
-                        commands::evidence::attach(
+                        commands::evidence::attach_silently(
                             &storage.state_dir(),
                             &storage.db_path(),
                             &evidence_id,
@@ -951,7 +933,7 @@ fn run() -> Result<()> {
                         )?;
                     }
                     let db = use_cases::refreshed_mutation_db(&storage)?;
-                    commands::evidence::show(&db, &evidence_id)
+                    commands::evidence::show(&db, &evidence_id, quiet)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -973,6 +955,7 @@ fn run() -> Result<()> {
                             target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
                             role: &role,
                             command: &command,
+                            quiet,
                         },
                     )
                 }
@@ -980,7 +963,7 @@ fn run() -> Result<()> {
             EvidenceCommands::Show { id } => {
                 let storage = use_cases::evidence_query_storage()?;
                 let db = storage.db();
-                commands::evidence::show(&db, &id)
+                commands::evidence::show(&db, &id, quiet)
             }
             EvidenceCommands::Attach {
                 id,
@@ -998,12 +981,13 @@ fn run() -> Result<()> {
                     &target_kind,
                     &target_id,
                     &role,
+                    quiet,
                 )
             }
             EvidenceCommands::List { status } => {
                 let storage = use_cases::evidence_query_storage()?;
                 let db = storage.db();
-                commands::evidence::list(&db, status.as_deref())
+                commands::evidence::list(&db, status.as_deref(), quiet)
             }
         },
 
@@ -1127,26 +1111,9 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::History {
-            mission,
-            issue,
-            epic,
-            include_descendants,
-            event_kind,
-            actor,
-            since,
-            limit,
-        } => {
+        Commands::History { issue, limit } => {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
-            let mission = mission
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
             let issue = issue
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
-            let epic = epic
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
                 .transpose()?;
@@ -1154,14 +1121,9 @@ fn run() -> Result<()> {
                 storage.db(),
                 &storage.state_dir(),
                 commands::history::HistoryOptions {
-                    mission,
                     issue,
-                    epic,
-                    include_descendants,
-                    event_kind,
-                    actor,
-                    since,
                     limit,
+                    quiet,
                 },
             )
         }

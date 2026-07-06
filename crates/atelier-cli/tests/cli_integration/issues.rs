@@ -1684,7 +1684,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 }
 
 #[test]
-fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
+fn test_history_repo_wide_is_bounded_and_routes_to_issue_drill_downs() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1695,7 +1695,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     write_activity_fixture(
         dir.path(),
         &first,
-        "20260610T181920123456Z",
+        "20990610T181920123456Z",
         "comment",
         "First comment",
         "First body",
@@ -1703,7 +1703,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     write_activity_fixture(
         dir.path(),
         &second,
-        "20260610T181921123456Z",
+        "20990610T181921123456Z",
         "evidence_attached",
         "Evidence attached",
         "evidence_id: \"ev-1\"\nresult: \"pass\"",
@@ -1711,104 +1711,58 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     write_activity_fixture(
         dir.path(),
         &second,
-        "20260610T181922123456Z",
+        "20990610T181922123456Z",
         "comment",
         "Second comment",
         "Second body",
     );
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--event-kind",
-            "evidence_attached",
-            "--limit",
-            "1",
-        ],
-    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--limit", "1"]);
     assert!(success, "history failed: {stderr}");
     assert!(stdout.contains("History"));
     assert!(stdout.contains("Scope:          repository"));
     assert!(stdout.contains("Source:         canonical .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
-    assert!(stdout.contains("Filters:        event kind evidence_attached"));
-    assert!(stdout.contains("Showing:        1 of 1 matching events"));
-    assert!(stdout.contains("Second issue: Evidence attached"));
-    assert!(stdout.contains(&format!("evidence_attached | tester | issue/{second}")));
+    assert!(!stdout.contains("Filters:"));
+    assert!(stdout.contains("Showing:        1 of"));
+    assert!(stdout.contains("Second issue: Second comment"));
+    assert!(stdout.contains(&format!("comment | tester | issue/{second}")));
     assert!(!stdout.contains("First comment"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue show <id>"));
-    assert!(stdout.contains("atelier history --mission <id>"));
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--issue",
-            first.as_str(),
-            "--event-kind",
-            "comment",
-            "--since",
-            "2026-06-10",
-        ],
-    );
-    assert!(success, "filtered history failed: {stderr}");
-    assert!(stdout.contains("Filters:        event kind comment, since 2026-06-10T00:00:00+00:00"));
-    assert!(stdout.contains("First comment"));
-    assert!(!stdout.contains("Evidence attached"));
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["history", "--event-kind", "comment", "--limit", "1"],
-    );
-    assert!(success, "history failed: {stderr}");
-    assert!(stdout.contains("Second comment"));
-    assert!(!stdout.contains("First comment"));
+    assert!(stdout.contains("atelier history --issue <id>"));
     assert!(stdout.contains("Omitted:"));
 }
 
 #[test]
-fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
+fn test_history_issue_scope_stays_on_one_record_and_includes_linked_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "History mission",
-            "--issue-type",
-            "mission",
-        ],
+        &["issue", "create", "Parent history", "--issue-type", "epic"],
     );
-    assert!(success, "mission create failed: {stderr}");
-    let mission_id = issue_id_by_title(dir.path(), "History mission");
-
-    run_atelier(
-        dir.path(),
-        &["issue", "create", "History epic", "--issue-type", "epic"],
-    );
-    let epic_id = issue_id_by_title(dir.path(), "History epic");
+    assert!(success, "parent create failed: {stderr}");
+    let parent_id = issue_id_by_title(dir.path(), "Parent history");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "History child", "--parent", &epic_id],
+        &["issue", "create", "Child history", "--parent", &parent_id],
     );
     assert!(success, "child create failed: {stderr}");
-    let child_id = issue_id_by_title(dir.path(), "History child");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &epic_id]);
-    assert!(success, "mission add-work failed: {stderr}");
-    let (success, note_out, stderr) = run_atelier(
+    let child_id = issue_id_by_title(dir.path(), "Child history");
+    write_activity_fixture(
         dir.path(),
-        &["issue", "note", &mission_id, "Mission note body"],
+        &parent_id,
+        "20260610T191920123456Z",
+        "note",
+        "Parent note",
+        "Parent body",
     );
-    assert!(success, "mission note failed: {stderr}");
-    assert!(note_out.contains("Added note to issue"));
     write_activity_fixture(
         dir.path(),
         &child_id,
-        "20260610T191920123456Z",
+        "20260610T191921123456Z",
         "note",
         "Child note",
         "Child body",
@@ -1827,110 +1781,87 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
             "attach",
             &evidence_id,
             "issue",
-            child_id.as_str(),
+            parent_id.as_str(),
         ],
     );
     assert!(success, "evidence attach failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--mission",
-            mission_id.as_str(),
-            "--event-kind",
-            "evidence_attached",
-        ],
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["history", "--issue", parent_id.as_str()]);
 
     assert!(success, "history failed: {stderr}");
-    assert!(stdout.contains(&format!("Scope:          mission {mission_id}")));
+    assert!(stdout.contains(&format!("Scope:          issue {parent_id}")));
     assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
-    assert!(stdout.contains(&child_id));
-    assert!(stdout.contains(&format!("atelier issue show {mission_id}")));
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--mission",
-            mission_id.as_str(),
-            "--event-kind",
-            "note",
-        ],
-    );
-    assert!(success, "mission note history failed: {stderr}");
-    assert!(stdout.contains("Mission note body"));
-    assert!(stdout.contains(&mission_id));
-    assert!(stdout.contains("Child note"));
-    assert!(stdout.contains(&child_id));
+    assert!(stdout.contains("Parent note"));
+    assert!(!stdout.contains("Child note"));
+    assert!(stdout.contains(&format!("atelier issue show {parent_id}")));
 }
 
 #[test]
-fn test_history_issue_scope_defaults_single_issue_and_can_include_descendants() {
+fn test_history_issue_scope_excludes_other_targets_of_reused_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
+    run_atelier(dir.path(), &["issue", "create", "History issue A"]);
+    run_atelier(dir.path(), &["issue", "create", "History issue B"]);
+    let issue_a = issue_id_by_title(dir.path(), "History issue A");
+    let issue_b = issue_id_by_title(dir.path(), "History issue B");
+    write_activity_fixture(
         dir.path(),
-        &["issue", "create", "Parent history", "--issue-type", "epic"],
+        &issue_b,
+        "20990610T191920123456Z",
+        "note",
+        "Issue B private activity",
+        "Must stay out of issue A history",
     );
-    let parent_id = issue_id_by_title(dir.path(), "Parent history");
+
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Child history", "--parent", &parent_id],
+        &["evidence", "record", "--kind", "test", "Shared proof"],
     );
-    assert!(success, "child create failed: {stderr}");
-    let child_id = issue_id_by_title(dir.path(), "Child history");
-    write_activity_fixture(
-        dir.path(),
-        &parent_id,
-        "20260610T181920123456Z",
-        "note",
-        "Parent note",
-        "Parent body",
-    );
-    write_activity_fixture(
-        dir.path(),
-        &child_id,
-        "20260610T181921123456Z",
-        "note",
-        "Child note",
-        "Child body",
-    );
+    assert!(success, "evidence record failed: {stderr}");
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "Shared proof");
+    for issue_id in [&issue_a, &issue_b] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["evidence", "attach", &evidence_id, "issue", issue_id],
+        );
+        assert!(success, "evidence reuse failed for {issue_id}: {stderr}");
+    }
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--issue",
-            parent_id.as_str(),
-            "--event-kind",
-            "note",
-        ],
-    );
-    assert!(success, "issue history failed: {stderr}");
-    assert!(stdout.contains(&format!("Scope:          issue {parent_id}")));
-    assert!(stdout.contains("Parent note"));
-    assert!(!stdout.contains("Child note"));
-    assert!(stdout.contains(&format!(
-        "atelier history --issue {parent_id} --include-descendants"
-    )));
+    let (success, history_a, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_a]);
+    assert!(success, "issue A history failed: {stderr}");
+    assert!(history_a.contains(&issue_a));
+    assert!(history_a.contains(&evidence_id));
+    assert!(!history_a.contains(&issue_b));
+    assert!(!history_a.contains("Issue B private activity"));
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "history",
-            "--issue",
-            parent_id.as_str(),
-            "--include-descendants",
-            "--event-kind",
-            "note",
-        ],
-    );
-    assert!(success, "descendant issue history failed: {stderr}");
-    assert!(stdout.contains("Parent note"));
-    assert!(stdout.contains("Child note"));
+    let (success, history_b, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_b]);
+    assert!(success, "issue B history failed: {stderr}");
+    assert!(history_b.contains(&issue_b));
+    assert!(history_b.contains("Issue B private activity"));
+}
+
+#[test]
+fn test_history_rejects_removed_query_and_objective_scope_flags() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for args in [
+        vec!["history", "--mission", "atelier-test"],
+        vec!["history", "--epic", "atelier-test"],
+        vec!["history", "--include-descendants"],
+        vec!["history", "--event-kind", "note"],
+        vec!["history", "--actor", "tester"],
+        vec!["history", "--since", "7d"],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(!success, "removed history flag should fail: {args:?}");
+        assert!(
+            stderr.contains("unexpected argument"),
+            "removed flag should be rejected by help: {stderr}"
+        );
+    }
 }
 
 #[test]
@@ -1944,29 +1875,25 @@ fn test_history_empty_states_and_invalid_limit() {
     assert!(stdout.contains("Source:"));
     assert!(stdout.contains("Next Commands"));
 
-    run_atelier(dir.path(), &["issue", "create", "Filtered history"]);
-    let issue_id = issue_id_by_title(dir.path(), "Filtered history");
+    run_atelier(dir.path(), &["issue", "create", "Quiet history"]);
+    let issue_id = issue_id_by_title(dir.path(), "Quiet history");
     write_activity_fixture(
         dir.path(),
         &issue_id,
         "20260610T181920123456Z",
         "note",
-        "Filter note",
-        "Filter body",
+        "Quiet note",
+        "Quiet body",
     );
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "history",
-            "--issue",
-            issue_id.as_str(),
-            "--event-kind",
-            "evidence_attached",
-        ],
+        &["--quiet", "history", "--issue", issue_id.as_str()],
     );
-    assert!(success, "filtered empty history failed: {stderr}");
-    assert!(stdout.contains("History exists for"));
-    assert!(stdout.contains("no events matched the current filters"));
+    assert!(success, "quiet history failed: {stderr}");
+    assert!(stdout.starts_with("events "));
+    assert!(stdout.contains("2026-06-10T18:19:20.123456+00:00"));
+    assert!(!stdout.contains("Quiet note"));
+    assert!(!stdout.contains("History\n"));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["history", "--limit", "0"]);
     assert!(!success, "zero limit should fail");

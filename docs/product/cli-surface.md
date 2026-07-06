@@ -357,15 +357,15 @@ The predecessor evidence add/capture shapes split one operator job into two
 verbs. New help and Agent Factory guidance should teach `evidence record`;
 implementation may keep old entrypoints only as internal migration scaffolding
 until the unified surface is shipped.
-`atelier history` is the canonical project-history view. Repo-wide history and
-scoped forms such as `atelier history --mission <id>`, `atelier history --issue
-<id>`, and `atelier history --epic <id>` read canonical activity sidecars,
-first-class records, evidence, and record links. History defaults to newest
-first with bounded output, supports event kind, actor, time, and scope filters,
-and separates canonical tracker history from local runtime diagnostics. Issue
-and issue show <objective-id> surfaces may include compact recent activity or record context,
-but they point to scoped history for full activity instead of expanding
-unbounded logs.
+`atelier history` is the canonical high-level project-history view. Repo-wide
+history and the focused `atelier history --issue <id>` form read canonical
+activity sidecars, first-class records, evidence, and record links. History
+defaults to newest first with a 20-event budget; `--limit` is its only breadth
+control. It does not expose actor, event-kind, time-window, descendant, mission,
+or epic query flags. `issue show <id>` owns current record context,
+`work mission <id>` and `work epic <id>` own descendant objective state, and
+`evidence show <id>` owns full proof inspection. This keeps history a bounded
+activity reader rather than a second tracker query language.
 Issue workflow commands mutate the canonical Markdown tracker copy. They must
 not create a second durable active-work pointer in runtime state. Current-work
 orientation is derived from the set of canonical `in_progress` issues in that

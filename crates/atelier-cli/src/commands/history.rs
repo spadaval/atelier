@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
+use chrono::{DateTime, Local, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -14,14 +14,9 @@ const SOURCE_BOUNDARY: &str =
 
 #[derive(Debug, Clone)]
 pub struct HistoryOptions {
-    pub mission: Option<String>,
     pub issue: Option<String>,
-    pub epic: Option<String>,
-    pub include_descendants: bool,
-    pub event_kind: Option<String>,
-    pub actor: Option<String>,
-    pub since: Option<String>,
     pub limit: usize,
+    pub quiet: bool,
 }
 
 #[derive(Debug)]
@@ -56,122 +51,26 @@ pub fn run(db: &Database, state_dir: &Path, options: HistoryOptions) -> Result<(
         bail!("--limit must be greater than 0");
     }
     let scope = HistoryScope::build(db, &options)?;
-    let since = parse_since(options.since.as_deref())?;
-    let all_rows = collect_rows(db, state_dir, &scope)?;
-    let unfiltered_count = all_rows.len();
-    let filtered_rows = all_rows
-        .into_iter()
-        .filter(|row| {
-            options
-                .event_kind
-                .as_ref()
-                .is_none_or(|kind| row.event_kind == *kind)
-        })
-        .filter(|row| {
-            options
-                .actor
-                .as_ref()
-                .is_none_or(|actor| row.actor.as_deref() == Some(actor.as_str()))
-        })
-        .filter(|row| since.is_none_or(|since| row.timestamp >= since))
-        .collect::<Vec<_>>();
-
-    render_history(&scope, &options, since, unfiltered_count, filtered_rows)
+    let rows = collect_rows(db, state_dir, &scope)?;
+    render_history(&scope, &options, rows)
 }
 
 impl HistoryScope {
     fn build(db: &Database, options: &HistoryOptions) -> Result<Self> {
-        let selected = [
-            options.mission.is_some(),
-            options.issue.is_some(),
-            options.epic.is_some(),
-        ]
-        .into_iter()
-        .filter(|selected| *selected)
-        .count();
-        if selected > 1 {
-            bail!("Choose only one history scope: --mission, --issue, or --epic");
-        }
-
-        if let Some(mission_id) = options.mission.as_deref() {
-            let mission = db.require_issue(mission_id)?;
-            if mission.issue_type != "mission" {
-                bail!("{} is not a mission issue", mission.id);
-            }
-            let mut issue_ids = BTreeSet::from([mission.id.clone()]);
-            issue_ids.extend(crate::commands::objective_status::mission_issue_ids(
-                db,
-                &mission.id,
-            )?);
-            let mut record_ids = BTreeSet::new();
-            collect_linked_evidence_records(db, &issue_ids, &mut record_ids)?;
-            return Ok(Self {
-                label: format!("mission {} - {}", mission.id, mission.title),
-                source_boundary: SOURCE_BOUNDARY,
-                issue_ids: Some(issue_ids),
-                record_ids: Some(record_ids),
-                next_commands: vec![
-                    format!("atelier issue show {}", mission.id),
-                    format!(
-                        "atelier history --mission {} --limit {}",
-                        mission.id, options.limit
-                    ),
-                    "atelier history --event-kind <kind>".to_string(),
-                ],
-            });
-        }
-
         if let Some(issue_id) = options.issue.as_deref() {
             let issue = db.require_issue(issue_id)?;
-            let mut issue_ids = BTreeSet::new();
-            if options.include_descendants {
-                collect_issue_and_descendants(db, &issue.id, &mut issue_ids)?;
-            } else {
-                issue_ids.insert(issue.id.clone());
-            }
-            collect_linked_evidence_records(db, &issue_ids, &mut BTreeSet::new())?;
-            let mut next_commands = vec![
-                format!("atelier issue show {}", issue.id),
-                format!(
-                    "atelier history --issue {} --limit {}",
-                    issue.id, options.limit
-                ),
-            ];
-            if !options.include_descendants {
-                next_commands.push(format!(
-                    "atelier history --issue {} --include-descendants",
-                    issue.id
-                ));
-            }
-            next_commands.push("atelier history --event-kind <kind>".to_string());
+            let issue_ids = BTreeSet::from([issue.id.clone()]);
             return Ok(Self {
                 label: format!("issue {} - {}", issue.id, issue.title),
                 source_boundary: SOURCE_BOUNDARY,
                 issue_ids: Some(issue_ids),
                 record_ids: Some(records_linked_to_issues(db, &[issue.id.as_str()])?),
-                next_commands,
-            });
-        }
-
-        if let Some(epic_id) = options.epic.as_deref() {
-            let epic = db.require_issue(epic_id)?;
-            if epic.issue_type != "epic" {
-                bail!("{} is not an epic issue", epic.id);
-            }
-            let mut issue_ids = BTreeSet::new();
-            collect_issue_and_descendants(db, &epic.id, &mut issue_ids)?;
-            return Ok(Self {
-                label: format!("epic {} - {} (including descendants)", epic.id, epic.title),
-                source_boundary: SOURCE_BOUNDARY,
-                issue_ids: Some(issue_ids),
-                record_ids: Some(records_linked_to_issues(db, &[epic.id.as_str()])?),
                 next_commands: vec![
-                    format!("atelier issue show {}", epic.id),
+                    format!("atelier issue show {}", issue.id),
                     format!(
-                        "atelier history --epic {} --limit {}",
-                        epic.id, options.limit
+                        "atelier history --issue {} --limit {}",
+                        issue.id, options.limit
                     ),
-                    "atelier history --event-kind <kind>".to_string(),
                 ],
             });
         }
@@ -185,9 +84,7 @@ impl HistoryScope {
                 "atelier issue show <id>".to_string(),
                 "atelier issue show <mission-id>".to_string(),
                 format!("atelier history --limit {}", options.limit),
-                "atelier history --mission <id>".to_string(),
                 "atelier history --issue <id>".to_string(),
-                "atelier history --event-kind <kind>".to_string(),
             ],
         })
     }
@@ -207,6 +104,10 @@ impl HistoryScope {
     fn includes_link(&self, link: &RecordLink) -> bool {
         if self.record_ids.is_none() && self.issue_ids.is_none() {
             return true;
+        }
+        if self.issue_ids.is_some() {
+            return (link.source_kind == "issue" && self.includes_issue(&link.source_id))
+                || (link.target_kind == "issue" && self.includes_issue(&link.target_id));
         }
         (link.source_kind == "issue" && self.includes_issue(&link.source_id))
             || (link.target_kind == "issue" && self.includes_issue(&link.target_id))
@@ -438,58 +339,35 @@ fn records_linked_to_issues(
     Ok(records)
 }
 
-fn collect_issue_and_descendants(
-    db: &Database,
-    issue_id: &str,
-    issue_ids: &mut BTreeSet<String>,
-) -> Result<()> {
-    if !issue_ids.insert(issue_id.to_string()) {
-        return Ok(());
-    }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
-    }
-    Ok(())
-}
-
 fn render_history(
     scope: &HistoryScope,
     options: &HistoryOptions,
-    since: Option<DateTime<Utc>>,
-    unfiltered_count: usize,
     rows: Vec<HistoryRow>,
 ) -> Result<()> {
+    if options.quiet {
+        println!("events {}", rows.len());
+        for row in rows.iter().take(options.limit) {
+            println!("{}", row.timestamp.to_rfc3339());
+        }
+        return Ok(());
+    }
+
     println!("History");
     println!("=======");
     println!("Scope:          {}", scope.label);
     println!("Source:         {}", scope.source_boundary);
     println!("Ordering:       newest first, timestamp then record/path");
     println!("Limit:          {}", options.limit);
-    println!("Filters:        {}", filter_summary(options, since));
 
-    if unfiltered_count == 0 {
+    if rows.is_empty() {
         println!("\nNo canonical history found for {}.", scope.label);
         println!("This scope has no canonical activity, records, evidence, or links yet.");
         print_next_commands(&scope.next_commands);
         return Ok(());
     }
 
-    if rows.is_empty() {
-        println!(
-            "\nHistory exists for {}, but no events matched the current filters.",
-            scope.label
-        );
-        println!("Widen the filters or inspect the unfiltered scope.");
-        print_next_commands(&scope.next_commands);
-        return Ok(());
-    }
-
     let visible_count = rows.len().min(options.limit);
-    println!(
-        "Showing:        {} of {} matching events",
-        visible_count,
-        rows.len()
-    );
+    println!("Showing:        {} of {} events", visible_count, rows.len());
     println!("\nEvents");
     println!("------");
     for row in rows.iter().take(options.limit) {
@@ -505,31 +383,13 @@ fn render_history(
     }
     if rows.len() > options.limit {
         println!(
-            "Omitted:        {} older matching events hidden by --limit {}",
+            "Omitted:        {} older events hidden by --limit {}",
             rows.len() - options.limit,
             options.limit
         );
     }
     print_next_commands(&scope.next_commands);
     Ok(())
-}
-
-fn filter_summary(options: &HistoryOptions, since: Option<DateTime<Utc>>) -> String {
-    let mut filters = Vec::new();
-    if let Some(event_kind) = options.event_kind.as_deref() {
-        filters.push(format!("event kind {event_kind}"));
-    }
-    if let Some(actor) = options.actor.as_deref() {
-        filters.push(format!("actor {actor}"));
-    }
-    if let Some(since) = since {
-        filters.push(format!("since {}", since.to_rfc3339()));
-    }
-    if filters.is_empty() {
-        "(none)".to_string()
-    } else {
-        filters.join(", ")
-    }
 }
 
 fn event_sentence(row: &HistoryRow) -> String {
@@ -547,43 +407,6 @@ fn print_next_commands(commands: &[String]) {
     println!("-------------");
     for command in commands {
         println!("  {command}");
-    }
-}
-
-fn parse_since(value: Option<&str>) -> Result<Option<DateTime<Utc>>> {
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        bail!("--since cannot be empty");
-    }
-    if let Some(duration) = parse_duration(value) {
-        return Ok(Some(Utc::now() - duration));
-    }
-    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-        return Ok(Some(DateTime::<Utc>::from_naive_utc_and_offset(
-            date.and_hms_opt(0, 0, 0).expect("midnight is a valid time"),
-            Utc,
-        )));
-    }
-    if let Ok(timestamp) = DateTime::parse_from_rfc3339(value) {
-        return Ok(Some(timestamp.with_timezone(&Utc)));
-    }
-    bail!("--since must be a duration like 7d/12h/30m, a YYYY-MM-DD date, or an RFC3339 timestamp")
-}
-
-fn parse_duration(value: &str) -> Option<Duration> {
-    let (number, unit) = value.split_at(value.len().checked_sub(1)?);
-    let amount = number.parse::<i64>().ok()?;
-    if amount <= 0 {
-        return None;
-    }
-    match unit {
-        "d" => Some(Duration::days(amount)),
-        "h" => Some(Duration::hours(amount)),
-        "m" => Some(Duration::minutes(amount)),
-        _ => None,
     }
 }
 

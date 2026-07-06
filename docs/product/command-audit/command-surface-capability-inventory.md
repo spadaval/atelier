@@ -111,14 +111,14 @@ slice so it does not preserve removed names.
 | Add issue note/activity | `issue note`, old root note docs | `issue note` or `issue update --note` | likely keep `issue note <id> "..."` | Low | This may be first-class enough to keep. |
 | Inspect recent issue activity | `issue show` recent activity, `history --issue` | `issue show` | default bounded recent activity | Low | Default issue detail should not dump raw timelines. |
 | Inspect high-level project history | root `history` | `history` | `atelier history` | Medium | Keep only if it remains bounded and does not become search. |
-| Inspect full issue history | root `history --issue`, `issue show` recent activity | budget review needed | maybe `issue show <id>` recent activity; maybe `history --issue` if full audit trail earns its keep | Medium | Specific history is useful, but scoped variants should justify themselves. |
-| Inspect mission/epic history including scoped work | `history --mission`, `history --epic` | budget review needed | likely objective activity in `work mission` or `issue show` | High | Avoid a second objective query system. |
-| Filter history by event kind/actor/since/limit | root `history` flags | high-level `history` only | bounded flags on `history` | Medium | Keep only filters needed for a high-level timeline. Specific record filters should not become a second query system. |
+| Inspect full issue history | `history --issue`, `issue show` recent activity | `history --issue` | bounded one-record activity reader | Medium | Keep one record scope without descendant traversal. |
+| Inspect mission/epic history including scoped work | removed mission/epic history flags | `work mission`, `work epic`, and `issue show` | objective dashboard plus bounded current-record activity | High | Fold descendant state into objective owners instead of adding a second objective query system. |
+| Filter history by event kind/actor/since/limit | former root `history` filters | `history --limit` only | bounded newest-first timeline | Medium | Remove actor/event/time query syntax; retain only the output budget control. |
 | Record manual evidence | `evidence record` | `evidence record` | unchanged | Low | Core proof surface. |
 | Capture command-backed evidence | `evidence record -- <command>` | `evidence record` | unchanged | Low | Core proof surface. |
 | Show evidence record | `evidence show` | `evidence show` | unchanged | Low | Evidence is a first-class record. |
 | List evidence records | `evidence list` | `evidence list` | bounded list with filters | Low | Needs default limit; capability is distinct from work queue. |
-| Attach existing evidence to issue | `evidence attach`, maybe `issue link` | relationship owner | `issue link <issue> <evidence> --role validates` or keep attach only if cross-kind link is not ergonomic | Medium | Separate attach verb is over budget unless it proves clearer than relationship mutation. |
+| Attach existing evidence to issue | `evidence attach` | `evidence attach` | typed cross-kind proof reuse with role validation and activity | Medium | Keep as a secondary evidence-domain verb; issue linking intentionally remains issue-to-issue. |
 | Show evidence for an issue | `issue show`, `evidence list`, `history` | `issue show` plus evidence list filter if needed | `issue show <id>`; maybe `evidence list --target issue/<id>` | Medium | Avoid overloading issue show with huge evidence transcripts. |
 | Open review artifact | `review open` | `review open` | infer title/body/branches from issue when possible | Medium | Current command exposes too much provider plumbing. |
 | Link existing review artifact | `review link` | `review open` or `review attach` style | `review open --existing <url>` | Low | Fold into open if possible. |
@@ -175,11 +175,9 @@ Do not add many scoped flags piecemeal.
 Root `history` stays as a high-level timeline view. The risk is not that history
 exists; the risk is scoped variants spreading across every record type.
 
-Implementation should decide:
-
-- which high-level filters are necessary for project timeline browsing;
-- whether issue-specific history earns a focused `issue show` mode;
-- which mission/epic scoped history modes should simply be removed.
+The implemented boundary keeps root history, one-record `--issue`, and
+`--limit`. Mission/epic descendant scope belongs to objective dashboards;
+actor, event-kind, time-window, and descendant filters are removed.
 
 ### Bulk Graph Apply
 
