@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "command-audit"
 - "validation"
+review:
+  kind: pull_request
+  number: 50
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-durs
@@ -26,9 +30,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate command complexity budget cleanup"
-updated_at: "2026-07-06T18:41:17.622793671+00:00"
+updated_at: "2026-07-06T18:57:20.070749363+00:00"
 ---
 
 ## Description
