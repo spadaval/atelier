@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate command behavior after cache rewrite"
-updated_at: "2026-07-06T20:57:58.256528023+00:00"
+updated_at: "2026-07-06T21:01:42.016723483+00:00"
 ---
 
 ## Description
