@@ -974,8 +974,9 @@ fn run() -> Result<()> {
                             &role,
                         )?;
                     }
-                    let db = use_cases::refreshed_mutation_db(&storage)?;
-                    commands::evidence::show(&db, &evidence_id)
+                    let evidence =
+                        use_cases::load_canonical_evidence(&storage.state_dir(), &evidence_id)?;
+                    commands::evidence::print_record_without_cache(&evidence)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -1470,5 +1471,28 @@ mod cache_acquisition_tests {
         let issue_dispatch = include_str!("issue_cli.rs");
         assert!(issue_dispatch.contains("issue_detail_cache()"));
         assert!(issue_dispatch.contains("issue_query_cache()"));
+    }
+
+    #[test]
+    fn mutation_paths_have_no_eager_cache_refresh_helper() {
+        let sources = [
+            include_str!("issue_cli.rs"),
+            include_str!("commands/issue.rs"),
+            include_str!("commands/evidence.rs"),
+            include_str!("commands/workflow.rs"),
+            include_str!("commands/relate.rs"),
+            include_str!("commands/bundle.rs"),
+            include_str!("../../atelier-app/src/pr.rs"),
+            include_str!("../../atelier-app/src/review_room.rs"),
+        ];
+        let eager_helper = ["refresh_after_", "canonical_write"].concat();
+
+        for source in sources {
+            assert!(
+                !source.contains(&eager_helper),
+                "mutation path retained eager cache refresh"
+            );
+        }
+        assert!(include_str!("issue_cli.rs").contains("mutation_cache()"));
     }
 }

@@ -130,16 +130,8 @@ pub fn lint_cache() -> Result<CacheAccess> {
     }
 }
 
-pub fn refreshed_mutation_db(storage: &CacheAccess) -> Result<Database> {
-    open_database(&storage.db_path())
-}
-
 pub fn open_database(db_path: &Path) -> Result<Database> {
     Database::open(db_path).map_err(Into::into)
-}
-
-pub fn refresh_after_canonical_write(state_dir: &Path, db_path: &Path) -> Result<()> {
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 pub fn load_canonical_record(state_dir: &Path, kind: &str, id: &str) -> Result<Record> {

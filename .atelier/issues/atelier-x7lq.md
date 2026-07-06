@@ -31,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Lazy cache access and freshness"
-updated_at: "2026-07-06T18:22:28.420793366+00:00"
+updated_at: "2026-07-06T18:33:50.491132919+00:00"
 ---
 
 ## Description

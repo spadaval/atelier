@@ -121,14 +121,13 @@ pub fn transition_issue(
                 rollback.rollback_after_post_action_failure(state_dir, db_path)?;
             }
             app_use_cases::write_canonical_issue(state_dir, &pre_transition_record)?;
-            app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
             bail!("{error:#}");
         }
     };
-    let refreshed = app_use_cases::open_database(db_path)?;
-    let issue = refreshed.require_issue(&before.id)?;
+    let refreshed = app_use_cases::work_query_cache()?;
+    let issue = refreshed.db().require_issue(&before.id)?;
     if transition_name == "start" {
-        print_start_context_and_record(&refreshed, &issue)?;
+        print_start_context_and_record(refreshed.db(), &issue)?;
     }
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
@@ -139,7 +138,7 @@ pub fn transition_issue(
     print_heading("Next Commands");
     if transition_name == "start" {
         println!("  Inspect checkout status: atelier status");
-        if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
+        if let Some(mission_id) = containing_mission(refreshed.db(), &issue.id)? {
             println!("  Inspect objective selection and blockers: atelier issue show {mission_id}");
         }
         println!(
@@ -330,7 +329,6 @@ struct AppliedAction {
 
 struct TransitionApply<'a> {
     state_dir: &'a Path,
-    db_path: &'a Path,
     issue: &'a Issue,
     transition_name: &'a str,
     policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
@@ -350,8 +348,7 @@ impl TransitionApply<'_> {
             self.close_reason,
         )?;
         record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
-        record_applied_transition(self.issue, self.transition_name, self.transition)?;
-        app_use_cases::refresh_after_canonical_write(self.state_dir, self.db_path)
+        record_applied_transition(self.issue, self.transition_name, self.transition)
     }
 }
 
@@ -371,7 +368,6 @@ fn execute_transition_actions(
 ) -> Result<Vec<AppliedAction>> {
     let transition_apply = TransitionApply {
         state_dir,
-        db_path,
         issue,
         transition_name,
         policy,
@@ -457,7 +453,6 @@ fn execute_transition_actions(
                         rollback.rollback_after_post_action_failure(state_dir, db_path)?;
                     }
                     app_use_cases::write_canonical_issue(state_dir, pre_transition_record)?;
-                    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
                 }
                 bail!("{error:#}");
             }
@@ -1230,7 +1225,7 @@ impl TransitionGitRollback {
         }))
     }
 
-    fn rollback_after_post_action_failure(&self, state_dir: &Path, db_path: &Path) -> Result<()> {
+    fn rollback_after_post_action_failure(&self, _state_dir: &Path, _db_path: &Path) -> Result<()> {
         if git_checked(
             &self.repo_root,
             &["merge", "--abort"],
@@ -1288,7 +1283,6 @@ impl TransitionGitRollback {
                 bail!("failed to restore pre-transition tracker changes after action rollback");
             }
         }
-        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
         Ok(())
     }
 }
@@ -1530,7 +1524,7 @@ impl CloseGitIntegration {
         self.rollback_tracker_state(state_dir, db_path)
     }
 
-    fn rollback_tracker_state(&self, state_dir: &Path, db_path: &Path) -> Result<()> {
+    fn rollback_tracker_state(&self, _state_dir: &Path, _db_path: &Path) -> Result<()> {
         git_checked(
             &self.repo_root,
             &["reset", "--hard", &self.source_pre_head],
@@ -1556,7 +1550,6 @@ impl CloseGitIntegration {
                 bail!("failed to restore pre-close tracker changes after rollback");
             }
         }
-        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
         Ok(())
     }
 }

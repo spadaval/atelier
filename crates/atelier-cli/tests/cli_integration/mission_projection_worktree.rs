@@ -1685,7 +1685,17 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     let mission_id = issue_id_by_title(dir.path(), "Bundle mission");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check after bundle apply failed: {stderr}");
+    assert!(!success, "bundle apply should leave cache detectably stale");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "lazy query after bundle apply failed: {stderr}");
+    assert!(
+        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
+        "missing one-time lazy rebuild diagnostic: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check after lazy rebuild failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);

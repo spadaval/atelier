@@ -417,7 +417,7 @@ pub fn review_owner_id(db: &Database, repo_root: &Path, issue_id: &str) -> Resul
 pub fn persist_pull_request(
     db: &Database,
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     issue_id: &str,
     pull: &ForgejoPullRequest,
 ) -> Result<String> {
@@ -458,14 +458,13 @@ pub fn persist_pull_request(
     }
     record.issue.fields.insert(REVIEW_FIELD.to_string(), value);
     store.write_issue_atomic(&record)?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
 }
 
 pub fn confirm_pull_request_merged(
     db: &Database,
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     issue_id: &str,
     pull: &ForgejoPullRequest,
 ) -> Result<String> {
@@ -499,7 +498,6 @@ pub fn confirm_pull_request_merged(
     }
     validate_remote_pull_matches_policy(db, repo_root, pull, &owner_id)?;
     store.write_issue_atomic(&record)?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
 }
 
@@ -1107,6 +1105,8 @@ repo = "atelier"
         let owner =
             persist_pull_request(&db, &dir.path().join(".atelier"), &db_path, &child, &pull)
                 .unwrap();
+        drop(db);
+        crate::rebuild::run(&dir.path().join(".atelier"), &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let inherited = workflow_policy::effective_pull_request_field(&refreshed, &child)
             .unwrap()
@@ -1218,6 +1218,8 @@ repo = "atelier"
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].method, "POST");
         assert_eq!(requests[0].path, "/api/v1/repos/tools/atelier/pulls");
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
@@ -1279,6 +1281,8 @@ repo = "atelier"
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].path, "/api/v1/repos/tools/atelier/pulls/42");
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
@@ -1440,6 +1444,8 @@ repo = "atelier"
             target_branch: "master".to_string(),
         };
         persist_pull_request(&db, &state_dir, &db_path, "atelier-child", &pull).unwrap();
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let merge_db = Database::open(&db_path).unwrap();
         let before_status = merge_db.get_issue("atelier-epic").unwrap().unwrap().status;
         let transport = MockTransport::new(vec![

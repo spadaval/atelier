@@ -1918,17 +1918,13 @@ pub fn create_lifecycle(
         store.add_issue_child(parent_id, &id)?;
     }
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let refreshed = Database::open(db_path)?;
-    let issue = refreshed.require_issue(&id)?;
-    let object = issue_object(&refreshed, issue)?;
     let file_path = canonical_issue_path_from_state(state_dir, &id);
     if input.quiet {
-        println!("{}", object.id);
+        println!("{}", record.issue.id);
     } else if parent_id.is_some() {
         println!(
             "Created subissue {} under {}",
-            object.id,
+            record.issue.id,
             format_issue_id(parent_id.as_deref().unwrap_or_default())
         );
         println!("File: {}", file_path.display());
@@ -1936,30 +1932,39 @@ pub fn create_lifecycle(
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", object.id);
-        println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Validate this issue: atelier check {}", record.issue.id);
+        println!(
+            "  Inspect this issue: atelier issue show {}",
+            record.issue.id
+        );
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
-            object.id
+            record.issue.id
         );
     } else {
-        if object.issue_type == "mission" {
-            println!("Created mission objective {} - {}", object.id, object.title);
+        if record.issue.issue_type == "mission" {
+            println!(
+                "Created mission objective {} - {}",
+                record.issue.id, record.issue.title
+            );
         } else {
-            println!("Created issue {} - {}", object.id, object.title);
+            println!("Created issue {} - {}", record.issue.id, record.issue.title);
         }
-        println!("Type:     {}", object.issue_type);
-        println!("Priority: {}", object.priority);
+        println!("Type:     {}", record.issue.issue_type);
+        println!("Priority: {}", record.issue.priority);
         println!("File:     {}", file_path.display());
         println!();
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", object.id);
-        println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Validate this issue: atelier check {}", record.issue.id);
+        println!(
+            "  Inspect this issue: atelier issue show {}",
+            record.issue.id
+        );
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
-            object.id
+            record.issue.id
         );
     }
     Ok(())
@@ -2170,30 +2175,26 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     }
     store.write_issue_atomic(&record)?;
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
     changed_fields.sort_unstable();
     changed_fields.dedup();
-    let issue = db.require_issue(&id)?;
-    let object = issue_object(&db, issue)?;
     println!(
         "Updated issue {} ({})",
-        object.id,
+        record.issue.id,
         changed_fields.join(", ")
     );
-    println!("Status:   {}", object.status);
-    println!("Priority: {}", object.priority);
-    println!("Type:     {}", object.issue_type);
-    if let Some(assignee) = &object.assignee {
+    println!("Status:   {}", record.issue.status);
+    println!("Priority: {}", record.issue.priority);
+    println!("Type:     {}", record.issue.issue_type);
+    if let Some(assignee) = label_value(&record.labels, "assignee:") {
         println!("Assignee: {assignee}");
     }
-    if let Some(parent) = &object.parent {
-        println!("Parent:   {parent}");
+    if let Some(parent) = parent_id {
+        println!("Parent:   {}", format_issue_id(&parent));
     }
     println!();
     println!("Next Commands");
     println!("-------------");
-    println!("  atelier issue show {}", object.id);
+    println!("  atelier issue show {}", record.issue.id);
     Ok(())
 }
 
@@ -2209,7 +2210,6 @@ pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Re
     for issue_id in &descendants {
         store.delete_issue_atomic(issue_id)?;
     }
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 

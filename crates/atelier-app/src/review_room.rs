@@ -195,7 +195,6 @@ pub fn open(db: &Database, request: RoomOpenRequest<'_>) -> Result<RoomOpenOutco
     );
     owner.issue.updated_at = Utc::now();
     store.write_issue_atomic(&owner)?;
-    crate::projection::refresh_after_canonical_write(request.state_dir, request.db_path)?;
 
     Ok(RoomOpenOutcome {
         issue_id,
@@ -416,11 +415,10 @@ fn append_decision(
     })
 }
 
-fn write_room(state_dir: &Path, db_path: &Path, record: ReviewRecord) -> Result<()> {
+fn write_room(state_dir: &Path, _db_path: &Path, record: ReviewRecord) -> Result<()> {
     let mut record = record;
     record.header.updated_at = Utc::now();
-    RecordStore::new(state_dir).write_record_atomic(&Record::Review(record))?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)
+    RecordStore::new(state_dir).write_record_atomic(&Record::Review(record))
 }
 
 fn linked_room(db: &Database, state_dir: &Path, issue_id: &str) -> Result<ReviewRecord> {
@@ -790,6 +788,8 @@ mode = "room"
         )
         .unwrap();
         assert_eq!(open.status, "open");
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let db = Database::open(&db_path).unwrap();
         let finding = comment(
             &db,

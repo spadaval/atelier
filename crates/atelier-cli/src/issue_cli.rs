@@ -87,6 +87,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             issue_type,
             parent,
         } => {
+            let cache = use_cases::mutation_cache()?;
+            drop(cache);
             let (state_dir, db_path) = state_and_db_paths()?;
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
@@ -193,6 +195,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             parent,
             no_parent,
         } => {
+            let cache = use_cases::mutation_cache()?;
+            drop(cache);
             let (state_dir, db_path) = state_and_db_paths()?;
             if status.is_some() {
                 bail!(
@@ -233,11 +237,15 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Link { id, target, role } => {
+            let cache = use_cases::mutation_cache()?;
+            drop(cache);
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::relate::link_issue(&state_dir, &db_path, &id, &target, &role)
         }
 
         super::IssueCommands::Unlink { id, target, role } => {
+            let cache = use_cases::mutation_cache()?;
+            drop(cache);
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::relate::unlink_issue(&state_dir, &db_path, &id, &target, &role)
         }

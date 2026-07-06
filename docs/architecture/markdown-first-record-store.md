@@ -52,6 +52,13 @@ links, and mission/evidence commands follow this order:
    information for `CacheManager` to detect the change on the next cache-backed
    query.
 
+Mutation handlers do not call a refresh-after-write helper. They render
+confirmation from the record they just wrote and leave `state.db` detectably
+stale. A mutation that needs indexed preconditions obtains a fresh cache before
+writing; only output that genuinely needs cache-derived graph context performs
+an explicit CacheManager read afterward. Multi-record bundle, relationship,
+review, and evidence writes therefore complete before one later lazy repair.
+
 New-record creation allocates a project-scoped random ID through `RecordStore`,
 checks for local file collisions across all record kinds, writes the Markdown
 record, and leaves it discoverable by the next lazy cache-freshness check. The

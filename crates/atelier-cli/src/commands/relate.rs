@@ -3,7 +3,6 @@ use std::path::Path;
 
 use crate::utils::format_issue_id;
 use atelier_app::project_config::ProjectConfig;
-use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
 use atelier_sqlite::{
     validate_relation_type, Database, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
@@ -102,7 +101,6 @@ pub fn link_issue(
         bail!("issue link only supports issue records");
     };
     drop(db);
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
         println!("Linked {} -> {} ({role})", source.id, target.id);
     } else {
@@ -199,7 +197,6 @@ pub fn unlink_issue(
         bail!("issue unlink only supports issue records");
     };
     drop(db);
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
         println!("Unlinked {} -> {} ({role})", source.id, target.id);
     } else {

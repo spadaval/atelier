@@ -956,6 +956,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stdout"));
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
+    let (fresh, _, _) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(!fresh, "evidence create+attach should leave cache stale");
+    let (success, shown, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
+    assert!(success, "lazy evidence query failed: {stderr}");
+    assert!(shown.contains("issue command proof"));
+    assert!(
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr.contains("Local cache was stale; repaired changed record sources"),
+        "missing lazy evidence repair diagnostic: {stderr}"
+    );
+    let (fresh, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(
+        fresh,
+        "cache should be fresh after evidence query: {stderr}"
+    );
     let issue_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
     assert!(issue_evidence_front_matter["proof_scope"].is_null());
