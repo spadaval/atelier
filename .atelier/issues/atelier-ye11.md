@@ -36,9 +36,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Simplify review command surface"
-updated_at: "2026-07-06T18:01:43.190397768+00:00"
+updated_at: "2026-07-06T18:29:00.574373106+00:00"
 ---
 
 ## Description
