@@ -341,13 +341,11 @@ bare_candidate_is_finding() {
 
 fence_line_is_data() {
   local candidate=$1
-  local fence_kind=${2:-0}
   local yaml_key_pattern='^[-]?[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*:[[:space:]]*([^[:space:]].*)?$'
   local quoted_yaml_key_pattern='^[-]?[[:space:]]*["'"'][^"'"']+["'"']:[[:space:]]*.*$'
   local yaml_scalar_list_pattern='^-[[:space:]]+([A-Za-z0-9_.-]+|"[^"]*"|'"'"'[^'"'"']*'"'"')$'
   local structured_literal_pattern='^[[{].*[]}][,]?$'
   local structured_close_pattern='^[]}][,]?$'
-  local record_graph_node_pattern='^(mission|epic|task|issue|validation[[:space:]]+issue)[[:space:]]+atelier-[a-z0-9-]+$'
 
   candidate=${candidate#"${candidate%%[![:space:]]*}"}
   candidate=${candidate%"${candidate##*[![:space:]]}"}
@@ -358,23 +356,27 @@ fence_line_is_data() {
   [[ "$candidate" =~ $yaml_scalar_list_pattern ]] && return 0
   [[ "$candidate" =~ $structured_literal_pattern ]] && return 0
   [[ "$candidate" =~ $structured_close_pattern ]] && return 0
-  if ((fence_kind == 3)) && [[ "$candidate" =~ $record_graph_node_pattern ]]; then
-    return 0
-  fi
   return 1
+}
+
+record_graph_node_has_indented_relation() {
+  local node=$1
+  local next_line=$2
+  local node_pattern='^(mission|epic|task|issue|validation[[:space:]]+issue)[[:space:]]+atelier-[a-z0-9-]+$'
+  local relation_pattern='^[[:space:]]+(advances|child|blocks|relates|contains|depends)([[:space:]]+[[:alnum:]_-]+){0,3}[[:space:]]+atelier-[a-z0-9-]+$'
+
+  [[ "$node" =~ $node_pattern ]] && [[ "$next_line" =~ $relation_pattern ]]
 }
 
 inline_suffix_is_data_context() {
   local suffix=${1,,}
   local descriptor='((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?'
   local as_or_for_pattern="^[[:space:]]+(as|for)[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
-  local representation_pattern="^[[:space:]]+to[[:space:]]+[[:alpha:]][[:alnum:]_-]*([[:space:]]+[[:alpha:]][[:alnum:]_-]*)?[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
-  local assignment_pattern="^[[:space:]]+when[[:space:]]+[[:alpha:]][[:alnum:]_-]*ing[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
+  local descriptor_usage_pattern="^[[:space:]]+(to|for|when)[[:space:]]+([[:alpha:]][[:alnum:]_-]*[[:space:]]+){1,3}(as[[:space:]]+)?(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
   local immediate_descriptor_pattern='^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$)'
 
   [[ "$suffix" =~ $as_or_for_pattern ]] ||
-    [[ "$suffix" =~ $representation_pattern ]] ||
-    [[ "$suffix" =~ $assignment_pattern ]] ||
+    [[ "$suffix" =~ $descriptor_usage_pattern ]] ||
     [[ "$suffix" =~ $immediate_descriptor_pattern ]]
 }
 
@@ -383,8 +385,8 @@ inline_context_is_action() {
   local after=${2,,}
   local label_pattern='(^|[|])[[:space:]]*([[:alnum:]_-]+[[:space:]]+)*(command|workflow|route)[[:space:]]*((is|remains)[[:space:]]+|:[[:space:]]*|[|][[:space:]]*|$)'
   local directive_pattern='(^|.*[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|adopt|adopts|adopted|pick|picks|picked)([[:space:]]+(the|this|command))?[[:space:]]*$'
-  local migration_pattern='(^|.*[^[:alnum:]_-])((switch|migrate|move|transition|shift)(ed|s)?|fall(s|ing)?[[:space:]]+back|fell[[:space:]]+back|revert(ed|s)?)[[:space:]]+to[[:space:]]*$'
-  local ownership_pattern='(^|[^[:alnum:]_-])(owns?|handles?|serves?|validates|reports?|mutates?)([^[:alnum:]_-]|$)'
+  local migration_pattern='(^|.*[^[:alnum:]_-])((switch|migrate|move|transition|shift)(ed|s)?|fall(s|ing)?[[:space:]]+back|fell[[:space:]]+back|revert(ed|s)?)([[:space:]]+(from[[:space:]]+)?[[:alnum:]_.:/-]+){0,5}[[:space:]]+to[[:space:]]*$'
+  local ownership_pattern='(^|[^[:alnum:]_-])(owns?|handles?|serves?|validates|reports?|mutates?|((is|are|remains?)[[:space:]]+)?(responsible|accountable)[[:space:]]+for)([^[:alnum:]_-]|$)'
 
   [[ "$before" =~ $label_pattern ]] ||
     [[ "$before" =~ $directive_pattern ]] ||
@@ -423,10 +425,19 @@ scan_content() {
   local list_shape_regex
   local structural_kind
   local line_is_fence_data
-  local shell_prompt_pattern='^([^[:space:]]*[$#%]|\([^)]*\)[[:space:]]+[$#%])[[:space:]]+(.*)$'
+  local shell_prompt_pattern='^(\([^)]*\)[[:space:]]+)?[^[:space:]$#%]*[[:space:]]*[$#%][[:space:]]+(.*)$'
+  local -a content_lines=()
+  local line_index
+  local next_hit
+  local next_text
+  local next_metadata
+  local next_location
+  local next_fenced
   content=$(cat)
+  mapfile -t content_lines <<< "$content"
 
-  while IFS= read -r hit; do
+  for ((line_index = 0; line_index < ${#content_lines[@]}; line_index++)); do
+    hit=${content_lines[$line_index]}
     [[ -n "$hit" ]] || continue
 
     if [[ "$hit" == *' :: '* ]]; then
@@ -446,8 +457,25 @@ scan_content() {
     fi
 
     line_is_fence_data=0
-    if ((fenced == 2 || fenced == 3)) && fence_line_is_data "$text" "$fenced"; then
-      line_is_fence_data=1
+    if ((fenced == 2 || fenced == 3)); then
+      if fence_line_is_data "$text"; then
+        line_is_fence_data=1
+      elif ((line_index + 1 < ${#content_lines[@]})); then
+        next_hit=${content_lines[$((line_index + 1))]}
+        next_text=$next_hit
+        next_fenced=0
+        if [[ "$next_hit" == *' :: '* ]]; then
+          next_metadata=${next_hit%% :: *}
+          next_text=${next_hit#* :: }
+          next_location=${next_metadata#*|}
+          next_location=${next_location#*|}
+          next_fenced=${next_location%%|*}
+        fi
+        if [[ "$next_fenced" == "$fenced" ]] &&
+          record_graph_node_has_indented_relation "$text" "$next_text"; then
+          line_is_fence_data=1
+        fi
+      fi
     fi
 
     remaining=$text
@@ -538,7 +566,7 @@ scan_content() {
     if ((finding)); then
       printf '%s\n' "$hit"
     fi
-  done <<< "$content"
+  done
 }
 
 missing_quality_index_entries() {
@@ -1271,6 +1299,110 @@ run_self_test() {
     output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
     if [[ -z "$output" ]]; then
       printf 'self-test missed command-shaped non-shell fence variant:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent atelier-ypbt category-invariant cases.
+  for example in \
+    'Migrate from check to `dep add atelier-demo atelier-blocker`.' \
+    'Switch the workflow to `mission show atelier-demo`.' \
+    'Fall back from check to `doctor --fix`.' \
+    '`lint --all` is responsible for normal validation.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-ypbt action/ownership case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to be used as the record type.' \
+    'Prefer `worker` for use as the role label.' \
+    'Select `close` when used as the transition value.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for exact atelier-ypbt data case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\n(venv) user@host$ doctor --fix\n```' \
+    $'```console\nroot@host # lint --all\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-ypbt prompt case:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  example=$'```\nmission atelier-demo\n  advances epic atelier-child\n```'
+  checked=$((checked + 1))
+  output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+  if [[ -n "$output" ]]; then
+    printf 'self-test false-positive for exact atelier-ypbt record graph:\n%s\n' \
+      "$example" >&2
+    failures=$((failures + 1))
+  fi
+
+  # Neighboring variants exercise bounded complements, responsibility forms,
+  # passive descriptor use, composite prompts, and graph adjacency.
+  for example in \
+    'Move from the old workflow to `dep add atelier-demo atelier-blocker`.' \
+    'Transition this operator workflow to `mission show atelier-demo`.' \
+    'Revert from doctor to `lint --all`.' \
+    '`doctor --fix` is accountable for local repair.' \
+    '`lint --all` remains responsible for validation.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed bounded complement/responsibility variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to be treated as the schema type.' \
+    'Prefer `worker` for storage as the role value.' \
+    'Select `close` when encoded as the transition label.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for passive descriptor variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\n(dev) user@host:~/repo # doctor --fix\n```' \
+    $'```console\n(test) root@host% lint --all\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed composite prompt variant:\n%s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```\nmission atelier-demo\n```' \
+    $'```text\nmission atelier-demo\nadvances epic atelier-child\n```' \
+    $'```\nmission atelier-demo\n  narrative without a relation\n```' \
+    $'```console\nmission atelier-demo\n  advances epic atelier-child\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test broadly allowed root+ID without graph structure:\n%s\n' \
         "$example" >&2
       failures=$((failures + 1))
     fi
