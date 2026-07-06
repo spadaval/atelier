@@ -33,9 +33,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-07-06T20:15:50.302874073+00:00"
+status: "done"
 title: "Epic: Rewrite domain-shaped cache schema"
-updated_at: "2026-07-06T20:10:49.903381056+00:00"
+updated_at: "2026-07-06T20:15:50.302874073+00:00"
 ---
 
 ## Description
