@@ -45,6 +45,7 @@ pub fn validate_record_id(id: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 pub fn legacy_issue_id(number: i64) -> String {
     format!(
         "{}-{}",

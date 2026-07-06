@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-06T18:20:43.376126974+00:00"
+status: "done"
 title: "Implement domain-shaped cache tables"
-updated_at: "2026-07-06T18:06:41.317193330+00:00"
+updated_at: "2026-07-06T18:20:43.376126974+00:00"
 ---
 
 ## Description
@@ -28,4 +29,5 @@ Implement the new cache schema with domain tables for issues, evidence, reviews,
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- `cargo nextest run -p atelier-sqlite` proves the domain schema, forbidden-layout assertions, cache-version classification, and atomic add/replace/delete behavior.
+- `cargo fmt --all -- --check` and `git diff --check` prove formatting and whitespace integrity.
