@@ -76,11 +76,10 @@ migration keeps the same responsibilities while moving the target path to
 schema and front matter parsing, deterministic rendering, ID collision checks
 across canonical directories, and atomic issue file replacement.
 
-Hidden/admin `atelier export` remains a compatibility and
-deterministic-rendering command during migration. Its target role is to
-re-render canonical records, remove obsolete derived files, and check
-deterministic output, not to be the normal path that makes a mutation durable
-or to own ignored runtime/projection repair.
+Hidden/admin deterministic-rendering tooling remains available during
+migration. Its target role is to re-render canonical records, remove obsolete
+derived files, and check deterministic output, not to be the normal path that
+makes a mutation durable or to own ignored runtime/projection repair.
 
 ## Canonical Field Ownership
 
@@ -258,16 +257,16 @@ and `evidence/`. Unchanged size and mtime are accepted
 as the fast path; when either stat changes, Atelier hashes only that candidate.
 If the hash still matches, the source metadata row is refreshed without
 reindexing the record. The table is projection metadata, not canonical state,
-and is recreated by the hidden repair primitive `atelier rebuild`. Root-level
-derived compatibility files such as `manifest.json` and `graph.json` are not
+and is recreated by the hidden projection repair primitive. Root-level derived
+compatibility files such as `manifest.json` and `graph.json` are not
 query-projection sources.
 Issue activity sidecars are not indexed in this table because recent activity
 previews read those canonical files directly; rebuild still validates sidecar
 schema and subject references.
 
-During the staged migration, `atelier export` also refreshes this metadata after
-it writes canonical Markdown from SQLite so compatibility workflows remain
-queryable. Ordinary projection-backed read surfaces (`atelier work ready`,
+During the staged migration, hidden export compatibility tooling also refreshes
+this metadata after it writes canonical Markdown from SQLite so compatibility
+workflows remain queryable. Ordinary projection-backed read surfaces (`atelier work ready`,
 `atelier work blocked`, `atelier work missions`, `atelier work mission <id>`,
 `atelier work epic <id>`, `atelier issue list`, `atelier issue show <id>`, and
 dependency detail) check the metadata before reading SQLite whenever
@@ -427,7 +426,7 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 | Evidence add/attach | RecordStore-owned Markdown-first | Evidence records and attachment links write canonical evidence Markdown and relationships before projection refresh. Issue evidence attachments also write issue activity sidecars. |
 | Typed record links, labels, and dependencies | RecordStore-owned Markdown-first | Rebuild derives labels, dependency edges, typed relations, hierarchy, and record links from canonical relationship front matter. |
 | Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |
-| Issue transitions and branch recovery | Canonical records plus activity sidecars | `atelier issue transition <id>` exposes readiness and executes configured lifecycle actions. Runtime state may cache checkout context in `.atelier/runtime/`, but canonical issue status remains the durable current-work source of truth. Manual `atelier branch` commands are recovery-only after failed transition actions. |
+| Issue transitions and branch recovery | Canonical records plus activity sidecars | `atelier issue transition <id>` exposes readiness and executes configured lifecycle actions. Runtime state may cache checkout context in `.atelier/runtime/`, but canonical issue status remains the durable current-work source of truth. Manual owner-branch commands are recovery-only after failed transition actions. |
 | Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, import, or repair | Telemetry and work markers are local/runtime. `import-beads` is an external import bridge that still renders canonical state from imported SQLite rows. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
 
 The remaining compatibility residue is internal: several inherited SQLite
@@ -469,7 +468,7 @@ canonical write, the canonical files remain durable and ordinary query commands
 can recover through the transparent projection repair path once the reported
 record or workflow problem is fixed.
 
-Hidden/admin `atelier export` remains available for migration compatibility and
+Hidden/admin export compatibility tooling remains available for migration and
 deterministic-renderer testing. New durable mutation paths must not use export
 as the normal step that makes command output recoverable, and normal ignored
 runtime/projection repair belongs to `check --fix`.
@@ -488,8 +487,8 @@ local derived state is degraded, but a repository can still have healthy runtime
 state when canonical Markdown needs lint repair, and optional runtime or cache
 directories may be absent.
 
-The hidden migration diagnostic `atelier export --check` verifies deterministic
-rendering of canonical Markdown and known derived projections. In the
+The hidden migration deterministic-renderer diagnostic verifies canonical
+Markdown and known derived projections. In the
 Markdown-first model, it should not depend
 on SQLite being the freshest source of record facts. During migration it may
 compare SQLite-derived rendering against Markdown, but any such comparison is a
@@ -539,9 +538,8 @@ The migration proceeded in small slices:
 
 Each slice that touches storage internals must preserve `atelier check`,
 `atelier check`, the agent-facing issue workflow, and any explicitly retained
-hidden/admin projection diagnostics such as `atelier rebuild` or
-`atelier export --check`; otherwise it must state the temporary breakage and the
-reconnect item that owns it.
+hidden/admin projection diagnostics; otherwise it must state the temporary
+breakage and the reconnect item that owns it.
 
 ## Non-Goals
 

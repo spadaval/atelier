@@ -127,9 +127,8 @@ where work should happen and where proof should be reviewed.
 - Epic closeout becomes the normal review artifact for grouped implementation
   work. It must map child issue proof to epic outcomes and record residual
   risks.
-- Advanced recovery commands such as `atelier branch for-epic` remain internal,
-  diagnostic, or advanced repair surfaces for inspecting or recovering owner
-  branch state.
+- Advanced owner-branch recovery commands remain internal diagnostic or repair
+  surfaces for inspecting or recovering owner branch state.
 - Per-issue isolation remains available but must be explicit, justified, and
   visible in handoff notes or assignment context.
 

@@ -675,9 +675,8 @@ per epic, lifecycle-owned branch
 preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
 `atelier issue transition <id> close --reason "..."`,
 and `atelier check` health checks. Explicit ignored-state repair uses
-`atelier check --fix`. Advanced repair commands such as `atelier branch for-epic`
-are internal, diagnostic, or advanced repair surfaces; they are not the normal
-mutating-subagent default.
+`atelier check --fix`. Advanced owner-branch repair commands are internal
+diagnostic surfaces; they are not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 

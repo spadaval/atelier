@@ -594,15 +594,16 @@ defines its durable layout.
 
 ## Mutating Command Rollout
 
-Hidden/admin `atelier export` remains the deterministic check surface for
-canonical records during migration or targeted maintenance, and normal durable
-writes target `.atelier/` directly.
+The hidden/admin deterministic renderer remains available for canonical-record
+migration or targeted maintenance, and normal durable writes target
+`.atelier/` directly.
 
-Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
-tracked `.atelier/` canonical records and may create ignored runtime/cache
-directories in a fresh checkout. Normal operators use `atelier check --fix` for
-explicit ignored-state repair. Backup export formats are no longer command
-surfaces; standard predecessor imports use `atelier init --import-beads`.
+The hidden/admin projection rebuild primitive recreates
+`.atelier/runtime/state.db` from tracked `.atelier/` canonical records and may
+create ignored runtime/cache directories in a fresh checkout. Normal operators
+use `atelier check --fix` for explicit ignored-state repair. Backup export
+formats are no longer command surfaces; standard predecessor imports use
+`atelier init --import-beads`.
 
 Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
 write to a unique temporary database before atomically replacing `state.db`.

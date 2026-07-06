@@ -187,16 +187,18 @@ prohibited_command_core="atelier ((${root_alternatives})${command_boundary}|(${p
 # it is not a Removed/Retired root. Its named section-level boundary remains
 # distinct from the strict no-mention rule for removed commands.
 legacy_callable_command_core="atelier work queue${command_boundary}"
-legacy_callable_context_pattern='## legacy queue boundary'
+legacy_callable_document='docs/product/issue-inventory-and-mission-overview.md'
+legacy_callable_heading='## legacy queue boundary'
 
 # These commands can remain callable as hidden/admin implementation surfaces,
 # but indexed active guidance may name them only with an explicit setup,
 # recovery, migration, historical, or diagnostic boundary.
 restricted_command_core="atelier ((${restricted_root_alternatives})${command_boundary})"
-restricted_context_pattern='(^|[^[:alnum:]_-])(hidden|advanced|admin|maintenance|setup|recovery|repair|migration|diagnostic|debug|historical|non-normative)([^[:alnum:]_-]|$)|implementation probe|not (part of )?(a |the )?(normal|routine|workflow)'
 
 active_content() {
-  awk '
+  local source=${1:-}
+  source=${source#"$repo_root/"}
+  awk -v source="$source" '
     function heading_level(line, marks) {
       marks = line
       sub(/[^#].*$/, "", marks)
@@ -222,7 +224,7 @@ active_content() {
         heading = tolower($0)
       }
     }
-    !excluded { print FNR ":" heading " :: " $0 }
+    !excluded { print source "|" FNR ":" heading " :: " $0 }
   '
 }
 
@@ -236,31 +238,32 @@ document_is_non_normative() {
     rg -q '^# (Removed|Retired|Deferred) `atelier [a-z0-9-]+`'
 }
 
-document_is_restricted_command_audit() {
-  local path=$1
-  local root
-  [[ "$path" == "$repo_root"/docs/product/command-audit/*.md ]] || return 1
-  root=$(head -n 1 "$path" |
-    sed -nE 's/^# `atelier ([a-z0-9-]+)`.*/\1/p')
-  [[ -n "$root" ]] || return 1
-  array_contains "$root" "${restricted_roots[@]}"
-}
-
 guidance_content() {
   local path=$1
   document_is_non_normative "$path" && return 0
-  if document_is_restricted_command_audit "$path"; then
-    active_content < "$path" |
-      sed 's/^/hidden diagnostic, recovery, or migration command audit: /'
-  else
-    active_content < "$path"
-  fi
+  active_content "$path" < "$path"
+}
+
+restricted_occurrence_has_explicit_context() {
+  local source=$1
+  local heading=$2
+
+  case "$source" in
+    docs/product/command-audit/branch.md | docs/product/command-audit/diagnostics.md | docs/product/command-audit/doctor.md | docs/product/command-audit/export.md | docs/product/command-audit/forgejo.md | docs/product/command-audit/import-beads.md | docs/product/command-audit/lint.md | docs/product/command-audit/rebuild.md | docs/product/command-audit/workflow.md)
+      return 0
+      ;;
+  esac
+
+  [[ "$heading" =~ ^#{1,6}[[:space:]]+(setup[[:space:]]+and[[:space:]]+recovery|recovery|admin[[:space:]]+setup|diagnostics|merge[[:space:]]+conflict[[:space:]]+and[[:space:]]+recovery[[:space:]]+guidance|hidden[[:space:]]+diagnostic:[[:space:]]+slow[[:space:]]+command[[:space:]]+query[[:space:]]+defaults|hidden[[:space:]]+rebuild[[:space:]]+diagnostic[[:space:]]+and[[:space:]]+freshness)$ ]]
 }
 
 scan_content() {
   local content
   local hit
   local text
+  local metadata
+  local source
+  local heading
   local remaining
   local before
   local full_before
@@ -275,9 +278,16 @@ scan_content() {
     [[ "$hit" == *'atelier '* ]] || continue
 
     if [[ "$hit" == *' :: '* ]]; then
+      metadata=${hit%% :: *}
       text=${hit#* :: }
+      source=${metadata%%|*}
+      heading=${metadata#*|}
+      heading=${heading#*:}
     else
+      metadata=''
       text=$hit
+      source=''
+      heading=''
     fi
 
     remaining=$text
@@ -292,13 +302,14 @@ scan_content() {
 
       if [[ -z "$previous" || ! "$previous" =~ [[:alnum:]_-] ]]; then
         if printf '%s\n' "$candidate" | rg -q "^$legacy_callable_command_core" &&
-          printf '%s\n' "$hit" | rg -q -i "$legacy_callable_context_pattern"; then
+          [[ "$source" == "$legacy_callable_document" ]] &&
+          [[ "$heading" == "$legacy_callable_heading" ]]; then
           : # The callable legacy queue is not a Removed/Retired command.
         elif printf '%s\n' "$candidate" | rg -q "^$prohibited_command_core"; then
           finding=1
           break
         elif printf '%s\n' "$candidate" | rg -q "^$restricted_command_core" &&
-          ! printf '%s\n' "$hit" | rg -q -i "$restricted_context_pattern"; then
+          ! restricted_occurrence_has_explicit_context "$source" "$heading"; then
           finding=1
           break
         fi
@@ -466,6 +477,13 @@ run_self_test() {
   local -a required_restricted_examples=(
     'atelier doctor --fix'
   )
+  local -a restricted_adversarial_examples=(
+    'The hidden API is gone; use atelier doctor --fix now.'
+    'This is not a recovery command; use atelier export --check now.'
+    'The admin path differed; invoke atelier rebuild now.'
+    'Diagnostics changed; run atelier workflow check now.'
+    'Recovery is unrelated; use atelier branch merge atelier-demo now.'
+  )
   local -a adversarial_prohibited_examples=(
     '- atelier start'
     '* atelier start'
@@ -524,6 +542,7 @@ run_self_test() {
     'atelier branch merge atelier-demo'
     'atelier forgejo status'
   )
+  restricted_examples+=("${restricted_adversarial_examples[@]}")
 
   for example in "${removed_roots[@]}"; do
     prohibited_examples+=("atelier $example")
@@ -682,7 +701,101 @@ run_self_test() {
       printf 'self-test rejected context-bounded hidden/admin command: %s\n' "$example" >&2
       failures=$((failures + 1))
     fi
+
+    output=$(
+      printf '%s\n' \
+        '# Setup And Recovery' \
+        "$example" \
+        '# Live Guidance' \
+        "$example" |
+        active_content | scan_content
+    )
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed restricted-command live re-entry: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
   done
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'Use `atelier work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected exact c0mp legacy-callable boundary\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary Extended' \
+      'Use `atelier work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted extended c0mp legacy heading spoof\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'Use `atelier work queue` now.' |
+      active_content "$repo_root/docs/product/work-view-ordering.md" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted c0mp legacy heading in the wrong document\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '## Legacy Queue Boundary' \
+      'The legacy `atelier work queue` is bounded here.' \
+      '## Live Guidance' \
+      'Use `atelier work queue` now.' |
+      active_content "$repo_root/$legacy_callable_document" | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test missed live re-entry after exact c0mp legacy boundary\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Diagnostics Extended' \
+      'Use atelier doctor --fix now.' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted extended restricted-context heading spoof\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Unrelated' \
+      'Use atelier export --check now.' |
+      active_content "$repo_root/docs/product/command-audit/export.md" |
+      scan_content
+  )
+  if [[ -n "$output" ]]; then
+    printf 'self-test rejected exact restricted-command audit document\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Unrelated' \
+      'Use atelier export --check now.' |
+      active_content "$repo_root/docs/product/command-audit/export.md.extended" |
+      scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test accepted restricted-audit document path spoof\n' >&2
+    failures=$((failures + 1))
+  fi
 
   output=$(missing_quality_index_entries '__guard-self-test-missing__.md')
   if [[ -z "$output" ]]; then
@@ -715,7 +828,7 @@ run_self_test() {
 
   ((failures == 0)) || exit 1
   printf 'active command guidance self-test passed: %d prohibited/context-restricted example(s), including %d adversarial occurrence fixture(s) and all prior quality cases\n' \
-    "$checked" "$(( ${#adversarial_prohibited_examples[@]} + ${#local_negative_examples[@]} ))"
+    "$checked" "$(( ${#adversarial_prohibited_examples[@]} + ${#local_negative_examples[@]} + ${#restricted_adversarial_examples[@]} ))"
 }
 
 if [[ ${1:-} == '--self-test' ]]; then

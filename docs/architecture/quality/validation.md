@@ -313,7 +313,7 @@ command forms:
 | Formatting check | `cargo fmt -- --check` |
 | Tracker lint | `atelier check` |
 | Admin local-state health check | `atelier check --fix` |
-| Deterministic export/projection diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
+| Deterministic export/projection diagnostic | Use the hidden deterministic-renderer probe only for storage-rendering, migration, or debug claims. |
 | Python invocation | `python3 -c 'print("validation ok")'` |
 | Crate migration completion guard | `python3 scripts/check_crate_migration_completion.py` |
 | Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_completion.py --self-test` |
@@ -389,7 +389,7 @@ than through Agent Factory prose alone.
   focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
-- Hidden diagnostic JSON from commands such as `atelier diagnostics slow` is valid
+- Hidden diagnostic JSON from local telemetry queries is valid
   only for local Atelier performance and telemetry analysis. It is not proof of
   ready work, blockers, validation results, evidence coverage, or completion
   readiness.
