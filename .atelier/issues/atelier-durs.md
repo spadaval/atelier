@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "command-audit"
 - "complexity"
+review:
+  kind: pull_request
+  number: 51
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
