@@ -18,6 +18,7 @@ pub enum CacheUse {
 pub enum CachePreparation {
     Current,
     RebuiltMissing,
+    RebuiltApplicationIdMismatch { found: i32, expected: i32 },
     RebuiltVersionMismatch { found: i32, expected: i32 },
     RebuiltCorrupt,
     RepairedIncrementally,
@@ -122,6 +123,22 @@ impl CacheManager {
                 );
                 (db, CachePreparation::RebuiltMissing)
             }
+            CacheFileState::ApplicationIdMismatch { found, expected } => {
+                let db = self.rebuild_unusable_cache("local cache application identity changed")?;
+                tracing::warn!(
+                    "Local cache application identity changed from {} to {}; rebuilt SQLite cache from {}",
+                    found,
+                    expected,
+                    self.state_dir().display()
+                );
+                (
+                    db,
+                    CachePreparation::RebuiltApplicationIdMismatch {
+                        found: *found,
+                        expected: *expected,
+                    },
+                )
+            }
             CacheFileState::VersionMismatch { found, expected } => {
                 let db = self.rebuild_unusable_cache("local cache schema version changed")?;
                 tracing::warn!(
@@ -165,6 +182,9 @@ impl CacheManager {
                     preparation: CachePreparation::Current,
                 })
             }
+            CacheFileState::ApplicationIdMismatch { found, expected } => bail!(
+                "Local cache application id {found} does not match {expected}; run `atelier check --fix` to rebuild disposable cache state"
+            ),
             CacheFileState::VersionMismatch { found, expected } => bail!(
                 "Local cache schema version {found} does not match {expected}; run `atelier check --fix` to rebuild disposable cache state"
             ),
@@ -406,6 +426,31 @@ mod tests {
     }
 
     #[test]
+    fn application_id_mismatch_is_discarded_and_rebuilt() {
+        let (_dir, manager) = test_manager();
+        manager.get_cache(CacheUse::Decision).unwrap();
+        let connection = Connection::open(manager.db_path()).unwrap();
+        connection
+            .pragma_update(None, "application_id", 42)
+            .unwrap();
+        drop(connection);
+
+        let cache = manager.get_cache(CacheUse::Decision).unwrap();
+
+        assert_eq!(
+            cache.preparation(),
+            &CachePreparation::RebuiltApplicationIdMismatch {
+                found: 42,
+                expected: atelier_sqlite::CACHE_APPLICATION_ID,
+            }
+        );
+        assert!(matches!(
+            manager.inspect_cache(),
+            CacheFileState::Ready { .. }
+        ));
+    }
+
+    #[test]
     fn corrupt_cache_is_discarded_and_rebuilt() {
         let (_dir, manager) = test_manager();
         fs::create_dir_all(manager.db_path().parent().unwrap()).unwrap();
@@ -425,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn bounded_changed_record_requests_incremental_then_falls_back_safely() {
+    fn bounded_changed_record_is_repaired_incrementally() {
         let (_dir, manager) = test_manager();
         let evidence_id = create_evidence(&manager);
         crate::rebuild::run(&manager.state_dir(), &manager.db_path()).unwrap();
@@ -444,7 +489,7 @@ mod tests {
 
         assert_eq!(
             cache.preparation(),
-            &CachePreparation::RebuiltAfterIncrementalFailure
+            &CachePreparation::RepairedIncrementally
         );
     }
 
@@ -453,8 +498,10 @@ mod tests {
         let (_dir, manager) = test_manager();
         create_evidence(&manager);
         let db = Database::open(&manager.db_path()).unwrap();
-        db.replace_projection_sources(&[]).unwrap();
         drop(db);
+        let raw = Connection::open(manager.db_path()).unwrap();
+        raw.execute("DELETE FROM record_source_index", []).unwrap();
+        drop(raw);
 
         let cache = manager.get_cache(CacheUse::Decision).unwrap();
 

@@ -11,7 +11,7 @@ use std::path::Path;
 use crate::cache_manager::{CacheAccess, CacheManager, CacheUse};
 use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
-use atelier_sqlite::{CacheFileState, Database};
+use atelier_sqlite::Database;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceTargetArg {
@@ -118,16 +118,10 @@ pub fn branch_decision_cache() -> Result<CacheAccess> {
     cache(CacheUse::Decision)
 }
 
-/// Lint owns canonical diagnostics, so it opens existing cache state without
-/// freshness rejection. A missing cache is rebuilt first so lint can still run
-/// whole-project rules that require indexed facts.
+/// Lint combines canonical diagnostics with indexed cross-record rules, so it
+/// must never inspect those rules through a known-stale cache.
 pub fn lint_cache() -> Result<CacheAccess> {
-    let manager = CacheManager::discover()?;
-    if matches!(manager.inspect_cache(), CacheFileState::Missing) {
-        manager.get_cache(CacheUse::Decision)
-    } else {
-        manager.open_cache_for_health()
-    }
+    cache(CacheUse::Decision)
 }
 
 pub fn open_database(db_path: &Path) -> Result<Database> {

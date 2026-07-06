@@ -1243,12 +1243,45 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
 fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let issue_id = "atelier-lint1".to_string();
+    write_canonical_record(
+        dir.path(),
+        "issues",
+        &issue_id,
+        r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-lint1"
+issue_type: "task"
+labels: []
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "todo"
+title: "Lint canonical source"
+updated_at: "2026-06-10T12:00:00+00:00"
+---
 
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Lint canonical source"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
+## Description
+
+Lint source fixture.
+
+## Outcome
+
+Lint rejects malformed canonical state.
+
+## Evidence
+
+- Command transcript from `atelier lint` reports the malformed record.
+"#
+        .to_string(),
+    );
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "fixture rebuild failed: {stderr}");
 
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = read_canonical_record(dir.path(), "issues", &issue_id);
@@ -1260,16 +1293,23 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
     write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     let metadata = std::fs::metadata(&issue_path).unwrap();
+    let modified_micros = metadata
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as i64;
     let mut hasher = Sha256::new();
     hasher.update(invalid_markdown.as_bytes());
     let invalid_hash = format!("{:x}", hasher.finalize());
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
-        "UPDATE projection_sources
-         SET size_bytes = ?1, sha256 = ?2
-         WHERE path = ?3",
+        "UPDATE record_source_index
+         SET size_bytes = ?1, modified_micros = ?2, content_hash = ?3
+         WHERE path = ?4",
         rusqlite::params![
             i64::try_from(metadata.len()).unwrap(),
+            modified_micros,
             invalid_hash,
             format!("issues/{issue_id}.md")
         ],
@@ -1298,6 +1338,87 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
     assert!(
         !stdout.contains("Lint passed."),
         "lint must not pass from stale SQLite rows: {stdout}"
+    );
+}
+
+#[test]
+fn test_lint_repairs_unindexed_issue_before_indexed_rules_run() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    std::fs::create_dir_all(dir.path().join(".atelier/issues")).unwrap();
+    std::fs::write(
+        dir.path().join(".atelier/issues/atelier-base1.md"),
+        r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-base1"
+issue_type: "task"
+labels: []
+priority: "P1"
+relationships: { blocks: [], children: [], attachments: [], relates: [] }
+schema: "atelier.issue"
+schema_version: 1
+status: "todo"
+title: "Indexed lint base"
+updated_at: "2026-06-10T12:00:00+00:00"
+---
+
+## Description
+
+Base record.
+
+## Outcome
+
+Base record is indexed.
+
+## Evidence
+
+- Command transcript from `atelier lint` passes.
+"#,
+    )
+    .unwrap();
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "fixture rebuild failed: {stderr}");
+
+    std::fs::write(
+        dir.path().join(".atelier/issues/atelier-new1.md"),
+        r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-new1"
+issue_type: "task"
+labels: []
+priority: "P1"
+relationships: { blocks: [], children: [], attachments: [], relates: [] }
+schema: "atelier.issue"
+schema_version: 1
+status: "todo"
+title: "Unindexed invalid issue"
+updated_at: "2026-06-10T12:00:00+00:00"
+---
+
+## Description
+
+This new record is absent from the stale cache.
+
+## Outcome
+
+Lint must repair the cache before checking this scoped record.
+
+## Evidence
+
+Evidence will be added.
+"#,
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", "atelier-new1"]);
+    assert!(!success, "lint must reject the unindexed invalid issue");
+    assert!(
+        stdout.contains("atelier-new1") && stdout.contains("section Evidence"),
+        "unexpected lint output:\n{stdout}\n{stderr}"
+    );
+    assert!(
+        stderr.contains("repaired changed record sources incrementally"),
+        "lint did not repair stale cache before indexed checks: {stderr}"
     );
 }
 

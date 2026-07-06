@@ -865,7 +865,7 @@ fn run() -> Result<()> {
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
-            let storage = CacheManager::discover()?.open_cache_for_health()?;
+            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)

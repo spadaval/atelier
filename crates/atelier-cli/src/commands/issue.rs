@@ -2416,7 +2416,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
             "not ok"
         }
     );
-    println!("Projection rebuild:");
+    println!("Cache rebuild:");
     println!(
         "  state_dir: {}",
         if view.state_dir_ok { "ok" } else { "not ok" }
@@ -2426,7 +2426,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         if view.rebuild_ready { "ok" } else { "not ok" }
     );
     println!(
-        "  projection_fresh: {}",
+        "  cache_fresh: {}",
         if view.projection_fresh {
             "ok"
         } else {
@@ -2435,12 +2435,12 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     );
     println!(
         "  tables: {}",
-        atelier_sqlite::CANONICAL_PROJECTION_TABLES.join(", ")
+        atelier_sqlite::DOMAIN_CACHE_TABLES.join(", ")
     );
     println!("Cache health:");
     println!("  cache_dir: {}", view.cache_dir_status);
     println!(
-        "  projection_metadata: {}",
+        "  source_metadata: {}",
         if view.projection_fresh { "ok" } else { "stale" }
     );
     println!("Review backend:");
@@ -2454,7 +2454,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         println!("  token_config: {}", token_config);
     }
     println!("  detail: {}", view.review_backend.detail);
-    println!("Projection database:");
+    println!("Cache database:");
     println!(
         "  database: {}",
         if view.runtime_db_available {
@@ -2464,11 +2464,6 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         }
     );
     println!("  diagnostics: {}", view.diagnostics);
-    println!("Compatibility:");
-    println!(
-        "  tables: {}",
-        atelier_sqlite::COMPATIBILITY_TABLES.join(", ")
-    );
     println!("Legacy health:");
     for (key, value) in view.health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });

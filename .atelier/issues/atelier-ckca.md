@@ -3,6 +3,15 @@ created_at: "2026-06-23T16:21:20.079723985+00:00"
 id: "atelier-ckca"
 issue_type: "epic"
 labels: []
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-mska
+    integration_target: mission/atelier-mska
+    merge_strategy: squash
+    owner_issue_id: atelier-ckca
+    owner_kind: epic
+    review_target: mission/atelier-mska
+    work_branch: epic/atelier-ckca
 priority: "P1"
 relationships:
   blocks: []
@@ -22,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Rewrite domain-shaped cache schema"
-updated_at: "2026-06-23T16:21:20.582583953+00:00"
+updated_at: "2026-07-06T18:22:19.261233034+00:00"
 ---
 
 ## Description

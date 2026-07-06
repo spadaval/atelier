@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:31:54.767293671+00:00"
+status: "done"
 title: "Rewrite cache rebuild for domain schema"
-updated_at: "2026-06-23T16:21:20.081249084+00:00"
+updated_at: "2026-07-06T18:31:54.767293671+00:00"
 ---
 
 ## Description
@@ -28,4 +29,6 @@ Rewrite cache rebuild logic to load typed record files and populate the new doma
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- `cargo nextest run -p atelier-app rebuild::tests` proves full/incremental equivalence, bounded repair, broad fallback, rollback safety, nested-transaction regression, and schema mismatch rebuild.
+- `cargo nextest run -p atelier-sqlite` proves the domain indexer transaction and schema invariants used by rebuild.
+- `cargo fmt --all -- --check`, `git diff --check`, and `atelier check` prove repository integrity.

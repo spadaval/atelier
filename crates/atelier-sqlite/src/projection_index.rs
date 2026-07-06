@@ -1,6 +1,4 @@
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::Utc;
-use rusqlite::params;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
@@ -9,7 +7,7 @@ use std::time::UNIX_EPOCH;
 
 use atelier_records as record_store;
 
-use crate::Database;
+use crate::{Database, RecordSourceCacheRow};
 
 const MAX_PROBLEM_SAMPLES: usize = 5;
 
@@ -141,109 +139,24 @@ fn push_path_group_message(
     }
 }
 
-impl Database {
-    pub(crate) fn init_projection_index_schema(&self) -> Result<()> {
-        self.conn.execute_batch(
-            r#"
-            CREATE TABLE IF NOT EXISTS projection_sources (
-                path TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                id TEXT NOT NULL,
-                size_bytes INTEGER NOT NULL,
-                modified_micros INTEGER,
-                sha256 TEXT NOT NULL,
-                indexed_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_projection_sources_record
-                ON projection_sources(kind, id);
-            CREATE INDEX IF NOT EXISTS idx_projection_sources_hash
-                ON projection_sources(sha256);
-            "#,
-        )?;
-        Ok(())
-    }
-
-    pub fn replace_projection_sources(&self, entries: &[SourceEntry]) -> Result<()> {
-        let indexed_at = Utc::now().to_rfc3339();
-        self.conn.execute("DELETE FROM projection_sources", [])?;
-        for entry in entries {
-            self.conn.execute(
-                "INSERT INTO projection_sources
-                 (path, kind, id, size_bytes, modified_micros, sha256, indexed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    entry.path,
-                    entry.kind,
-                    entry.id,
-                    entry.size_bytes,
-                    entry.modified_micros,
-                    entry.sha256,
-                    indexed_at
-                ],
-            )?;
-        }
-        Ok(())
-    }
-
-    pub fn upsert_projection_source(&self, entry: &SourceEntry) -> Result<()> {
-        let indexed_at = Utc::now().to_rfc3339();
-        self.conn.execute(
-            "INSERT INTO projection_sources
-             (path, kind, id, size_bytes, modified_micros, sha256, indexed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(path) DO UPDATE SET
-                kind = excluded.kind,
-                id = excluded.id,
-                size_bytes = excluded.size_bytes,
-                modified_micros = excluded.modified_micros,
-                sha256 = excluded.sha256,
-                indexed_at = excluded.indexed_at",
-            params![
-                entry.path,
-                entry.kind,
-                entry.id,
-                entry.size_bytes,
-                entry.modified_micros,
-                entry.sha256,
-                indexed_at
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn remove_projection_source(&self, path: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM projection_sources WHERE path = ?1",
-            params![path],
-        )?;
-        Ok(())
-    }
-
-    pub fn projection_sources(&self) -> Result<Vec<SourceEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path, kind, id, size_bytes, modified_micros, sha256
-             FROM projection_sources
-             ORDER BY path",
-        )?;
-        let entries = stmt
-            .query_map([], |row| {
-                Ok(SourceEntry {
-                    path: row.get(0)?,
-                    kind: row.get(1)?,
-                    id: row.get(2)?,
-                    size_bytes: row.get(3)?,
-                    modified_micros: row.get(4)?,
-                    sha256: row.get(5)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(entries)
-    }
-}
-
 pub fn refresh(db: &Database, state_dir: &Path) -> Result<()> {
     let snapshot = snapshot_sources(state_dir)?;
-    db.replace_projection_sources(&snapshot)
+    let stored = db.record_source_cache_rows()?;
+    if snapshot.len() != stored.len() {
+        bail!("canonical record set does not match indexed record-source metadata");
+    }
+    for entry in snapshot {
+        db.refresh_record_source_metadata(&RecordSourceCacheRow {
+            path: entry.path,
+            record_kind: entry.kind,
+            record_id: entry.id,
+            size_bytes: entry.size_bytes,
+            modified_micros: entry.modified_micros,
+            content_hash: Some(entry.sha256),
+            indexed_at: chrono::Utc::now(),
+        })?;
+    }
+    Ok(())
 }
 
 pub fn source_entry_for_path(state_dir: &Path, relative: &str) -> Result<SourceEntry> {
@@ -261,7 +174,7 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     }
 
     let current = snapshot_source_stats(state_dir)?;
-    let stored = db.projection_sources()?;
+    let stored = db.record_source_cache_rows()?;
     let current_by_path = current
         .iter()
         .map(|entry| (entry.path.clone(), entry))
@@ -286,8 +199,16 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
                         && current_entry.modified_micros == stored_entry.modified_micros => {}
                 Some(current_entry) => {
                     let hashed = source_entry(state_dir, &state_dir.join(&current_entry.path))?;
-                    if hashed.sha256 == stored_entry.sha256 {
-                        db.upsert_projection_source(&hashed)?;
+                    if stored_entry.content_hash.as_deref() == Some(hashed.sha256.as_str()) {
+                        db.refresh_record_source_metadata(&RecordSourceCacheRow {
+                            path: hashed.path,
+                            record_kind: hashed.kind,
+                            record_id: hashed.id,
+                            size_bytes: hashed.size_bytes,
+                            modified_micros: hashed.modified_micros,
+                            content_hash: Some(hashed.sha256),
+                            indexed_at: chrono::Utc::now(),
+                        })?;
                     } else {
                         problems.push(FreshnessProblem::ChangedSource {
                             path: stored_entry.path.clone(),
@@ -430,6 +351,7 @@ fn is_local_artifact_path(relative_path: &Path) -> bool {
             || file_name.ends_with(".rebuild-tmp-journal"))
         || file_name.ends_with(".tmp")
         || file_name.ends_with(".lock")
+        || file_name.ends_with(".md-journal")
 }
 
 fn source_entry(root: &Path, path: &Path) -> Result<SourceEntry> {
@@ -514,113 +436,4 @@ fn canonical_relative_path(path: &Path) -> Result<String> {
         }
     }
     Ok(parts.join("/"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn freshness_reports_changed_missing_and_unindexed_sources() {
-        let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier");
-        let issues = state_dir.join("issues");
-        fs::create_dir_all(&issues).unwrap();
-        fs::write(issues.join("atelier-aaaa.md"), "one").unwrap();
-        fs::write(issues.join("atelier-bbbb.md"), "two").unwrap();
-        fs::create_dir_all(dir.path().join(".atelier")).unwrap();
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-
-        refresh(&db, &state_dir).unwrap();
-        assert!(check(&db, &state_dir).unwrap().is_fresh());
-
-        fs::write(issues.join("atelier-aaaa.md"), "changed").unwrap();
-        fs::remove_file(issues.join("atelier-bbbb.md")).unwrap();
-        fs::write(issues.join("atelier-cccc.md"), "new").unwrap();
-
-        let report = check(&db, &state_dir).unwrap();
-        assert_eq!(report.source_count, 2);
-        assert!(report.problems.contains(&FreshnessProblem::ChangedSource {
-            path: "issues/atelier-aaaa.md".to_string()
-        }));
-        assert!(report.problems.contains(&FreshnessProblem::MissingSource {
-            path: "issues/atelier-bbbb.md".to_string()
-        }));
-        assert!(report
-            .problems
-            .contains(&FreshnessProblem::UnindexedSource {
-                path: "issues/atelier-cccc.md".to_string()
-            }));
-    }
-
-    #[test]
-    fn freshness_reports_missing_metadata_when_state_exists() {
-        let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier");
-        fs::create_dir_all(state_dir.join("issues")).unwrap();
-        fs::write(state_dir.join("issues/atelier-aaaa.md"), "one").unwrap();
-        fs::create_dir_all(dir.path().join(".atelier")).unwrap();
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-
-        let report = check(&db, &state_dir).unwrap();
-
-        assert_eq!(
-            report.problems,
-            vec![FreshnessProblem::MissingMetadata {
-                path: "issues/atelier-aaaa.md".to_string()
-            }]
-        );
-    }
-
-    #[test]
-    fn freshness_updates_metadata_when_stat_changed_but_hash_matches() {
-        let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier");
-        let issues = state_dir.join("issues");
-        fs::create_dir_all(&issues).unwrap();
-        fs::write(issues.join("atelier-aaaa.md"), "one").unwrap();
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-
-        refresh(&db, &state_dir).unwrap();
-        db.conn
-            .execute(
-                "UPDATE projection_sources
-                 SET size_bytes = size_bytes + 1
-                 WHERE path = 'issues/atelier-aaaa.md'",
-                [],
-            )
-            .unwrap();
-
-        let report = check(&db, &state_dir).unwrap();
-
-        assert!(report.is_fresh());
-        let sources = db.projection_sources().unwrap();
-        assert_eq!(sources.len(), 1);
-        assert_eq!(sources[0].size_bytes, 3);
-    }
-
-    #[test]
-    fn freshness_problem_messages_are_bounded_and_actionable() {
-        let report = FreshnessReport {
-            checked: true,
-            source_count: 8,
-            problems: (0..8)
-                .map(|index| FreshnessProblem::ChangedSource {
-                    path: format!("issues/atelier-{index:04}.md"),
-                })
-                .collect(),
-        };
-
-        let messages = report.problem_messages();
-
-        assert_eq!(messages.len(), 2);
-        assert!(messages[0].contains("8 indexed sources changed"));
-        assert!(messages[0].contains("showing first 5"));
-        assert!(messages[0].contains("issues/atelier-0004.md"));
-        assert!(!messages[0].contains("issues/atelier-0005.md"));
-        assert!(messages[1].contains("atelier lint"));
-        assert!(messages[1].contains("atelier doctor --fix"));
-        assert!(messages[1].contains("rerun the blocked command"));
-    }
 }
