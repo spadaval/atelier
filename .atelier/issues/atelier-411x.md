@@ -38,9 +38,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-07-01T15:35:24.772065670+00:00"
+status: "done"
 title: "Epic: Collapse retired command audit and stale guidance"
-updated_at: "2026-07-01T06:08:10.907891408+00:00"
+updated_at: "2026-07-01T15:35:24.772065670+00:00"
 ---
 
 ## Description

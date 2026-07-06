@@ -40,7 +40,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Mission: Apply command complexity budget to remaining CLI surfaces"
-updated_at: "2026-07-01T05:52:04.477244238+00:00"
+updated_at: "2026-07-06T17:43:56.173732904+00:00"
 ---
 
 ## Description
