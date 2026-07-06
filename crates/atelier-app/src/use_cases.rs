@@ -1,14 +1,14 @@
 //! App-layer use-case entrypoints for command families that still render in CLI.
 //!
-//! These functions centralize storage-mode selection and record argument
+//! These functions centralize cache-use selection and record argument
 //! resolution for migrated dispatch paths. CLI code may still render command
-//! outcomes, but it should ask this module for the app-owned storage context
-//! instead of choosing storage access modes or interpreting record ids itself.
+//! outcomes, but it should ask this module for the app-owned cache boundary
+//! instead of choosing freshness policy or interpreting record ids itself.
 
 use anyhow::{bail, Result};
 use std::path::Path;
 
-use crate::command_storage::{command_storage, CommandStorage, CommandStorageAccess};
+use crate::cache_manager::{CacheAccess, CacheManager, CacheUse};
 use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 use atelier_sqlite::Database;
@@ -19,35 +19,35 @@ pub struct EvidenceTargetArg {
     pub id: String,
 }
 
-pub fn status_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::DegradedProjectionQuery)
+pub fn status_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Orientation)
 }
 
-pub fn mission_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::DegradedProjectionQuery)
+pub fn mission_query_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Orientation)
 }
 
-pub fn mission_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn mission_mutation_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Decision)
 }
 
-pub fn evidence_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::ProjectionQuery)
+pub fn evidence_query_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Decision)
 }
 
-pub fn evidence_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn evidence_mutation_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Decision)
 }
 
-pub fn plan_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn plan_mutation_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Decision)
 }
 
-pub fn workflow_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::ProjectionQuery)
+pub fn workflow_query_storage() -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(CacheUse::Decision)
 }
 
-pub fn refreshed_mutation_db(storage: &CommandStorage) -> Result<Database> {
+pub fn refreshed_mutation_db(storage: &CacheAccess) -> Result<Database> {
     open_database(&storage.db_path())
 }
 
@@ -143,7 +143,7 @@ pub fn add_attachment_relationship(
     )
 }
 
-pub fn resolve_issue_ref(storage: &CommandStorage, issue_ref: &str) -> Result<String> {
+pub fn resolve_issue_ref(storage: &CacheAccess, issue_ref: &str) -> Result<String> {
     let db = storage.db();
     if let Some(id) = db.resolve_issue_ref(issue_ref)? {
         return Ok(id);
@@ -156,7 +156,7 @@ pub fn resolve_issue_ref(storage: &CommandStorage, issue_ref: &str) -> Result<St
     bail!("Issue {issue_ref} was not found")
 }
 
-pub fn resolve_record_ref(storage: &CommandStorage, kind: &str, id: &str) -> Result<String> {
+pub fn resolve_record_ref(storage: &CacheAccess, kind: &str, id: &str) -> Result<String> {
     let db = storage.db();
     if kind == "issue" {
         resolve_issue_ref(storage, id)
@@ -170,7 +170,7 @@ pub fn resolve_record_ref(storage: &CommandStorage, kind: &str, id: &str) -> Res
 }
 
 pub fn resolve_optional_record_ref(
-    storage: &CommandStorage,
+    storage: &CacheAccess,
     kind: &str,
     id: Option<String>,
 ) -> Result<Option<String>> {
@@ -191,11 +191,7 @@ pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
     })
 }
 
-pub fn resolve_evidence_target_ref(
-    storage: &CommandStorage,
-    kind: &str,
-    id: &str,
-) -> Result<String> {
+pub fn resolve_evidence_target_ref(storage: &CacheAccess, kind: &str, id: &str) -> Result<String> {
     if matches!(kind, "issue" | "epic") {
         resolve_issue_ref(storage, id)
     } else {
@@ -224,7 +220,7 @@ mod tests {
     use super::parse_evidence_target_arg;
 
     #[test]
-    fn use_case_storage_selectors_are_named_for_target_workflows() {
+    fn use_case_cache_selectors_are_named_for_target_workflows() {
         let selectors = [
             "status",
             "mission_query",

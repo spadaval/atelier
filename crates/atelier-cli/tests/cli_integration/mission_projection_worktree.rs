@@ -852,7 +852,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
 }
 
 #[test]
-fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
+fn test_cache_rebuilds_changed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -878,13 +878,13 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     assert!(success, "stale list should transparently rebuild: {stderr}");
     assert!(list_out.contains("Markdown title"));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
 
 #[test]
-fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
+fn test_cache_bounds_many_changed_sources_and_rebuilds() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -932,13 +932,13 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
     assert!(list_out.contains("Bulk markdown 0"));
     assert!(list_out.contains("Bulk markdown 11"));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
 
 #[test]
-fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_queries() {
+fn test_cache_repairs_deleted_and_unindexed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -967,9 +967,8 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     assert!(!list_out.contains("First indexed issue"));
     assert!(list_out.contains("Second indexed issue"));
     assert!(
-        stderr
-            .contains("Projection index was stale; repaired local SQLite projection incrementally")
-            || stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was stale; repaired changed record sources incrementally")
+            || stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic repair diagnostic: {stderr}"
     );
 
@@ -1017,13 +1016,13 @@ The unindexed issue is discoverable after rebuild.
     );
     assert!(show_out.contains("Unindexed issue"));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 }
 
 #[test]
-fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
+fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
@@ -1093,7 +1092,7 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     );
     assert!(dep_out.contains("Projection root changed"));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
 

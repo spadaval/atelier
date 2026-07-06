@@ -1,7 +1,5 @@
 use anyhow::{bail, Result};
-use atelier_app::command_storage::{
-    canonical_mutation_db, degraded_projection_query_db, state_and_db_paths,
-};
+use atelier_app::cache_manager::{decision_cache_db, orientation_cache_db, state_and_db_paths};
 use atelier_core::IssuePriority;
 
 use crate::commands;
@@ -116,7 +114,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Show { id } => {
-            let db = degraded_projection_query_db()?;
+            let db = orientation_cache_db()?;
             commands::issue::show(&db, &id)
         }
 
@@ -129,7 +127,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             ready,
             blocked,
         } => {
-            let db = degraded_projection_query_db()?;
+            let db = orientation_cache_db()?;
             if blocked {
                 if ready || status != "all" || category.is_some() {
                     bail!("--blocked cannot be combined with --ready, --status, or --category");
@@ -163,7 +161,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         } => {
             if let Some(transition) = transition {
                 let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
+                let db = decision_cache_db()?;
                 commands::workflow::transition_issue(
                     &db,
                     &state_dir,
@@ -173,7 +171,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     close_reason.as_deref(),
                 )
             } else {
-                let db = degraded_projection_query_db()?;
+                let db = orientation_cache_db()?;
                 commands::issue::transition_options(&db, &id, verbose)
             }
         }
@@ -227,7 +225,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Note { id, text, kind } => {
-            let db = canonical_mutation_db()?;
+            let db = decision_cache_db()?;
             let id = super::resolve_issue_arg(&db, &id)?;
             commands::comment::run_issue_note(&db, &id, &text, &kind)
         }

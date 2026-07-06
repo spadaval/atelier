@@ -3,7 +3,7 @@
 //! Command orchestration moves here as request, outcome, and view-model APIs
 //! that do not write directly to stdout or stderr.
 
-pub mod command_storage;
+pub mod cache_manager;
 pub mod command_surface;
 pub mod export;
 pub mod forgejo;

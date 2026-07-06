@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 
 use crate::commands;
-use atelier_app::command_storage::{command_storage, CommandStorageAccess};
+use atelier_app::cache_manager::{CacheManager, CacheUse};
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
@@ -55,11 +55,13 @@ struct Snapshot {
 }
 
 fn run_stateful(role: Role) -> Result<()> {
-    let storage = command_storage(CommandStorageAccess::ProjectionQuery).map_err(|error| {
-        anyhow::anyhow!(
-            "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
-        )
-    })?;
+    let storage = CacheManager::discover()
+        .and_then(|manager| manager.get_cache(CacheUse::Decision))
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
+            )
+        })?;
     let repo = storage.repo_root().display().to_string();
     let snapshot = snapshot(storage.db(), &storage.state_dir(), &repo)?;
     print_role_guide(role, Some(&snapshot), None);
@@ -67,7 +69,7 @@ fn run_stateful(role: Role) -> Result<()> {
 }
 
 fn run_admin() -> Result<()> {
-    match command_storage(CommandStorageAccess::HealthRepair) {
+    match CacheManager::discover().and_then(|manager| manager.open_cache_for_health()) {
         Ok(storage) => {
             let repo = storage.repo_root().display().to_string();
             let snapshot = snapshot(storage.db(), &storage.state_dir(), &repo)?;

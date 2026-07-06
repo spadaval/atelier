@@ -10,14 +10,69 @@ mod relations;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{Issue, IssuePriority, ISSUE_PRIORITY_LABELS};
 use atelier_records as record_store;
 
-const SCHEMA_VERSION: i32 = 21;
+pub const CACHE_SCHEMA_VERSION: i32 = 21;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum CacheFileState {
+    Missing,
+    Ready { version: i32 },
+    VersionMismatch { found: i32, expected: i32 },
+    Corrupt { detail: String },
+}
+
+/// Inspect an existing cache without creating it or running schema migrations.
+///
+/// CacheManager uses this narrow health boundary before opening SQLite. Cache
+/// files are disposable, so incompatible versions and corruption are rebuild
+/// signals rather than durable migration inputs.
+pub fn inspect_cache_file(path: &Path) -> CacheFileState {
+    if !path.exists() {
+        return CacheFileState::Missing;
+    }
+
+    let connection = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(connection) => connection,
+        Err(error) => {
+            return CacheFileState::Corrupt {
+                detail: error.to_string(),
+            };
+        }
+    };
+    let version = match connection.query_row("PRAGMA user_version", [], |row| row.get(0)) {
+        Ok(version) => version,
+        Err(error) => {
+            return CacheFileState::Corrupt {
+                detail: error.to_string(),
+            };
+        }
+    };
+    let integrity =
+        match connection.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)) {
+            Ok(integrity) => integrity,
+            Err(error) => {
+                return CacheFileState::Corrupt {
+                    detail: error.to_string(),
+                };
+            }
+        };
+    if integrity != "ok" {
+        return CacheFileState::Corrupt { detail: integrity };
+    }
+    if version != CACHE_SCHEMA_VERSION {
+        return CacheFileState::VersionMismatch {
+            found: version,
+            expected: CACHE_SCHEMA_VERSION,
+        };
+    }
+    CacheFileState::Ready { version }
+}
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -248,7 +303,7 @@ impl Database {
     fn init_schema(&self) -> Result<()> {
         let version = self.current_schema_version();
 
-        if version < SCHEMA_VERSION {
+        if version < CACHE_SCHEMA_VERSION {
             self.install_core_schema()?;
             self.apply_schema_migrations(version)?;
             self.set_schema_version()?;
@@ -530,8 +585,10 @@ impl Database {
     }
 
     fn set_schema_version(&self) -> Result<()> {
-        self.conn
-            .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
+        self.conn.execute(
+            &format!("PRAGMA user_version = {}", CACHE_SCHEMA_VERSION),
+            [],
+        )?;
         Ok(())
     }
 

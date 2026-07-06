@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
-use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
-    CommandStorageAccess,
+use atelier_app::cache_manager::{
+    decision_cache_db, lint_cache_db, state_and_db_paths, CacheManager, CacheUse,
 };
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
@@ -807,7 +806,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Work { action } => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
             match action {
                 None => commands::work::dashboards(quiet),
                 Some(WorkCommands::Queue {
@@ -868,7 +867,7 @@ fn run() -> Result<()> {
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?.open_cache_for_health()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -877,7 +876,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Rebuild { input } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?;
             let state_dir = input
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -887,7 +886,7 @@ fn run() -> Result<()> {
         }
 
         Commands::ImportBeads { input, output } => {
-            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -901,11 +900,11 @@ fn run() -> Result<()> {
 
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
-                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
                 commands::bundle::preview(storage.db(), &input)
             }
             BundleCommands::Apply { input, yes } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
                 commands::bundle::apply(
                     storage.db(),
                     &storage.state_dir(),
@@ -1035,7 +1034,7 @@ fn run() -> Result<()> {
         },
 
         Commands::Review { action } => {
-            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
             match action {
                 ReviewCommands::Open {
                     issue,
@@ -1164,7 +1163,7 @@ fn run() -> Result<()> {
             since,
             limit,
         } => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
             let mission = mission
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
@@ -1202,7 +1201,7 @@ fn run() -> Result<()> {
         },
 
         Commands::Branch { action } => {
-            let db = existing_projection_db()?;
+            let db = decision_cache_db()?;
             match action {
                 BranchCommands::ForEpic { id } => {
                     let id = resolve_issue_arg(&db, &id)?;
@@ -1232,7 +1231,7 @@ fn run() -> Result<()> {
             } => {
                 require_issue_kind(&target_kind, "atelier maintenance delete")?;
                 let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
+                let db = decision_cache_db()?;
                 let target_id = resolve_issue_arg(&db, &target_id)?;
                 drop(db);
                 commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
@@ -1243,7 +1242,9 @@ fn run() -> Result<()> {
             apply,
             retention_days,
         } => {
-            let tracker = match command_storage(CommandStorageAccess::CanonicalMutation) {
+            let tracker = match CacheManager::discover()
+                .and_then(|manager| manager.get_cache(CacheUse::Decision))
+            {
                 Ok(storage) => {
                     let repo_root = storage.repo_root().to_path_buf();
                     let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
@@ -1258,7 +1259,7 @@ fn run() -> Result<()> {
                     })
                 }
                 Err(error) => {
-                    if atelier_app::command_storage::find_atelier_dir().is_ok() {
+                    if atelier_app::cache_manager::find_atelier_dir().is_ok() {
                         return Err(error);
                     }
                     None
@@ -1272,34 +1273,34 @@ fn run() -> Result<()> {
                 if id.is_some() {
                     bail!("atelier check --fix cannot be scoped to one issue");
                 }
-                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
                 commands::issue::doctor(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     &storage.db_path(),
-                    storage.projection_db_existed,
+                    storage.cache_existed(),
                     true,
                 )
             } else {
-                let db = lint_db()?;
+                let db = lint_cache_db()?;
                 commands::issue::lint(&db, id.as_deref())
             }
         }
 
         Commands::Lint { id } => {
-            let db = lint_db()?;
+            let db = lint_cache_db()?;
             commands::issue::lint(&db, id.as_deref())
         }
 
         Commands::Doctor { fix } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?.open_cache_for_health()?;
             commands::issue::doctor(
                 storage.db(),
                 storage.repo_root(),
                 &storage.state_dir(),
                 &storage.db_path(),
-                storage.projection_db_existed,
+                storage.cache_existed(),
                 fix,
             )
         }

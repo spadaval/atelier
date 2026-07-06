@@ -236,6 +236,17 @@ records:
 - Mission Control and terminal UI inputs;
 - lint rules that need reverse links or whole-project consistency.
 
+The application boundary separates discovery from access. Constructing a
+`CacheManager`, asking for repository/cache paths, or inspecting cache health
+does not create or open SQLite. `get_cache(Decision)` is the only normal path
+for decision-bearing reads and returns only after freshness repair or rebuild;
+`get_cache(Orientation)` may return the last good cache solely for read-only
+orientation when canonical records are invalid, and must name that degraded
+state. Health commands use the explicit raw inspection/open boundary when they
+own repair policy. Missing cache files, cache schema-version mismatches, and
+corrupt cache files are disposable-state rebuild signals, not migrations or
+operator-managed errors.
+
 `CacheManager` discovers supported record-file sources and compares them with
 `record_source_index`. File size and modified time are candidate-selection
 hints. A candidate whose hints changed is parsed directly; an implementation
