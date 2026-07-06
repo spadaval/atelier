@@ -126,19 +126,19 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     run_atelier(dir.path(), &["issue", "create", "Health check"]);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
     assert!(stdout.contains("Install health:"));
     assert!(stdout.contains("ignored_runtime_paths: ok"));
-    assert!(stdout.contains("Projection rebuild:"));
+    assert!(stdout.contains("Cache rebuild:"));
     assert!(stdout.contains("rebuild_ready: ok"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("Cache health:"));
-    assert!(stdout.contains("projection_metadata: ok"));
-    assert!(stdout.contains("Projection database:"));
+    assert!(stdout.contains("source_metadata: ok"));
+    assert!(stdout.contains("Cache database:"));
     assert!(stdout.contains("database: ok"));
     assert!(stdout.contains("diagnostics:"));
 }
@@ -150,18 +150,18 @@ fn test_doctor_distinguishes_missing_runtime_projection_database() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Missing projection db"]);
     assert!(success, "issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
-    assert!(stdout.contains("Projection rebuild:"));
-    assert!(stdout.contains("projection_fresh: not ok"));
-    assert!(stdout.contains("Projection database:"));
+    assert!(stdout.contains("Cache rebuild:"));
+    assert!(stdout.contains("cache_fresh: not ok"));
+    assert!(stdout.contains("Cache database:"));
     assert!(stdout.contains("database: missing"));
-    assert!(stdout.contains("projection_metadata: stale"));
+    assert!(stdout.contains("source_metadata: stale"));
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn test_doctor_help_documents_fix_boundary() {
 }
 
 #[test]
-fn test_doctor_fix_repairs_missing_and_stale_local_projection_state() {
+fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, issue_out, stderr) =
@@ -183,16 +183,16 @@ fn test_doctor_fix_repairs_missing_and_stale_local_projection_state() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
     assert!(success, "doctor --fix failed for missing db: {stderr}");
     assert!(stdout.contains("Repair:"));
-    assert!(stdout.contains("local_projection: repaired"));
+    assert!(stdout.contains("local_cache: repaired"));
     assert!(stdout.contains("canonical_records: unchanged"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("database: ok"));
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
@@ -203,8 +203,8 @@ fn test_doctor_fix_repairs_missing_and_stale_local_projection_state() {
         success,
         "doctor --fix failed for stale projection: {stderr}"
     );
-    assert!(stdout.contains("local_projection: repaired"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("local_cache: repaired"));
+    assert!(stdout.contains("cache_fresh: ok"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed after doctor --fix: {stderr}");
@@ -250,9 +250,9 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
         doctor_success,
         "doctor should continue reporting health: {doctor_stderr}"
     );
-    assert!(doctorstdout.contains("Projection rebuild:"));
+    assert!(doctorstdout.contains("Cache rebuild:"));
     assert!(doctorstdout.contains("rebuild_ready: not ok"));
-    assert!(doctorstdout.contains("Projection database:"));
+    assert!(doctorstdout.contains("Cache database:"));
     assert!(doctorstdout.contains("database: ok"));
 }
 

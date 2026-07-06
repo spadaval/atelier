@@ -4,15 +4,27 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
+mod support;
 
 #[derive(Arbitrary, Debug, Clone)]
 enum DependencyOp {
-    CreateIssue { title: String },
-    AddDependency { blocked_idx: usize, blocker_idx: usize },
-    RemoveDependency { blocked_idx: usize, blocker_idx: usize },
-    CloseIssue { idx: usize },
-    ReopenIssue { idx: usize },
+    CreateIssue {
+        title: String,
+    },
+    AddDependency {
+        blocked_idx: usize,
+        blocker_idx: usize,
+    },
+    RemoveDependency {
+        blocked_idx: usize,
+        blocker_idx: usize,
+    },
+    CloseIssue {
+        idx: usize,
+    },
+    ReopenIssue {
+        idx: usize,
+    },
     CheckReady,
     CheckBlocked,
 }
@@ -29,9 +41,9 @@ fuzz_target!(|input: DependencyGraphInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match ProjectionIndex::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
+    let db = match support::open_cache(&db_path) {
+        Some(db) => db,
+        None => return,
     };
 
     // Track created issue IDs
@@ -42,10 +54,7 @@ fuzz_target!(|input: DependencyGraphInput| {
         match op {
             DependencyOp::CreateIssue { title } => {
                 let id = format!("atelier-fuzz-{}", issue_ids.len());
-                if db
-                    .insert_issue(&fuzz_issue(&id, title, None, "medium"))
-                    .is_ok()
-                {
+                if support::index_issue(&db, &id, title, "todo", "medium") {
                     issue_ids.push(id);
                 }
             }
@@ -96,9 +105,5 @@ fuzz_target!(|input: DependencyGraphInput| {
     // Final verification - these should never panic
     let _ = db.list_ready_issues();
     let _ = db.list_blocked_issues();
-    let _ = db.list_issues(None, None);
+    let _ = db.list_issues(None, None, None);
 });
-
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
-    ProjectionIssue::new(id, title, description, priority)
-}

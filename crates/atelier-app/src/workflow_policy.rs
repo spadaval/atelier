@@ -340,6 +340,7 @@ fn missing_parent_epic_branch_owner_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -359,7 +360,7 @@ mod tests {
         fields: BTreeMap<String, Value>,
     ) {
         let now = Utc::now();
-        db.insert_issue_rebuild(&Issue {
+        let issue = Issue {
             id: id.to_string(),
             title: id.to_string(),
             description: None,
@@ -371,7 +372,34 @@ mod tests {
             created_at: now,
             updated_at: now,
             closed_at: None,
-        })
+        };
+        let row = IssueCacheRow {
+            id: issue.id.clone(),
+            title: issue.title,
+            status: issue.status,
+            issue_type: issue.issue_type,
+            priority: issue.priority,
+            fields: issue.fields,
+            parent_id: issue.parent_id,
+            created_at: issue.created_at,
+            updated_at: issue.updated_at,
+            closed_at: issue.closed_at,
+        };
+        db.index_issue(
+            &row,
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{}.md", row.id),
+                record_kind: "issue".to_string(),
+                record_id: row.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
         .unwrap();
     }
 

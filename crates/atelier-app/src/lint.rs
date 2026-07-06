@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Result};
 use atelier_core::Issue;
 use atelier_records::{issue_record_path, issue_section_diagnostic, IssueSectionName, RecordStore};
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, IssueCacheQuery, IssueCacheRow};
 
 pub struct LintRequest<'a> {
     pub db: &'a Database,
@@ -76,11 +76,21 @@ pub fn lint(
     request: crate::Request<LintRequest<'_>>,
 ) -> Result<crate::Outcome<crate::ViewModel<LintView>>> {
     let input = request.input;
-    let issues = if let Some(issue_ref) = input.issue_ref {
+    let mut issues: Vec<Issue> = if let Some(issue_ref) = input.issue_ref {
         let id = resolve_issue_id(input.db, issue_ref)?;
-        vec![input.db.require_issue(&id)?]
+        input
+            .db
+            .issue_cache_row(&id)?
+            .map(issue_from_cache)
+            .into_iter()
+            .collect()
     } else {
-        input.db.list_issues(Some("all"), None, None)?
+        input
+            .db
+            .query_issue_cache(&IssueCacheQuery::default())?
+            .into_iter()
+            .map(issue_from_cache)
+            .collect()
     };
     let canonical_state_dir = crate::storage_layout::find_canonical_dir_from_cwd()?;
     let workflow_policy = canonical_state_dir
@@ -143,8 +153,18 @@ pub fn lint(
         (BTreeMap::new(), Vec::new())
     };
 
+    for record in canonical_issues.values() {
+        if !issues.iter().any(|issue| issue.id == record.issue.id) {
+            issues.push(record.issue.clone());
+        }
+    }
+
     let mut findings = canonical_findings;
     for issue in issues {
+        let issue = canonical_issues
+            .get(&issue.id)
+            .map(|record| record.issue.clone())
+            .unwrap_or(issue);
         if issue.title.trim().is_empty() {
             findings.push(LintFinding {
                 id: issue_id_for_agent(&issue),
@@ -161,8 +181,8 @@ pub fn lint(
                 });
             }
         }
-        for blocker_id in input.db.get_blockers(&issue.id)? {
-            if input.db.get_issue(&blocker_id)?.is_none() {
+        for blocker_id in input.db.issue_cache_blockers(&issue.id)? {
+            if input.db.issue_cache_row(&blocker_id)?.is_none() {
                 findings.push(LintFinding {
                     id: issue_id_for_agent(&issue),
                     message: format!("Dependency references missing issue {blocker_id}"),
@@ -246,20 +266,51 @@ fn issue_section_placeholder(name: IssueSectionName, value: &str) -> bool {
 }
 
 pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
-    if let Some(id) = db.resolve_issue_ref(issue_ref)? {
+    if let Some(id) = db.resolve_issue_cache_ref(issue_ref)? {
         return Ok(id);
     }
 
-    if let Some(actual_kind) = db.record_kind_for_id(issue_ref)? {
+    let actual_kind = if db.evidence_cache_row(issue_ref)?.is_some() {
+        Some("evidence")
+    } else if db.review_room_cache_row(issue_ref)?.is_some() {
+        Some("review")
+    } else {
+        None
+    };
+    if let Some(actual_kind) = actual_kind {
         bail!(
             "{} is a {} record, not an issue record. Use `{}`.",
             issue_ref,
             actual_kind,
-            show_command_for_kind(&actual_kind, issue_ref)
+            show_command_for_kind(actual_kind, issue_ref)
         );
     }
 
+    if issue_ref.contains('-')
+        && issue_ref.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
+    {
+        return Ok(issue_ref.to_string());
+    }
+
     Err(anyhow!("Issue {issue_ref} was not found"))
+}
+
+fn issue_from_cache(row: IssueCacheRow) -> Issue {
+    Issue {
+        id: row.id,
+        title: row.title,
+        description: None,
+        status: row.status,
+        issue_type: row.issue_type,
+        priority: row.priority,
+        fields: BTreeMap::new(),
+        parent_id: row.parent_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        closed_at: row.closed_at,
+    }
 }
 
 fn show_command_for_kind(kind: &str, id: &str) -> String {

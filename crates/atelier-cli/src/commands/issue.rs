@@ -21,6 +21,9 @@ use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
 
+const MAX_ISSUE_TITLE_LEN: usize = 512;
+const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
     pub id: String,
@@ -1866,6 +1869,12 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
+    if input.title.len() > MAX_ISSUE_TITLE_LEN {
+        bail!(
+            "Title exceeds maximum length of {} characters",
+            MAX_ISSUE_TITLE_LEN
+        );
+    }
     if input.issue_type != "mission"
         && (!input.constraints.is_empty()
             || !input.risks.is_empty()
@@ -1886,6 +1895,15 @@ pub fn create_lifecycle(
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
     let description = lifecycle_issue_description(&input);
+    if description
+        .as_ref()
+        .is_some_and(|description| description.len() > MAX_ISSUE_DESCRIPTION_LEN)
+    {
+        bail!(
+            "Description exceeds maximum length of {} bytes",
+            MAX_ISSUE_DESCRIPTION_LEN
+        );
+    }
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
@@ -1915,17 +1933,13 @@ pub fn create_lifecycle(
         store.add_issue_child(parent_id, &id)?;
     }
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let refreshed = Database::open(db_path)?;
-    let issue = refreshed.require_issue(&id)?;
-    let object = issue_object(&refreshed, issue)?;
     let file_path = canonical_issue_path_from_state(state_dir, &id);
     if input.quiet {
-        println!("{}", object.id);
+        println!("{}", record.issue.id);
     } else if parent_id.is_some() {
         println!(
             "Created subissue {} under {}",
-            object.id,
+            record.issue.id,
             format_issue_id(parent_id.as_deref().unwrap_or_default())
         );
         println!("File: {}", file_path.display());
@@ -1933,30 +1947,39 @@ pub fn create_lifecycle(
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", object.id);
-        println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Validate this issue: atelier check {}", record.issue.id);
+        println!(
+            "  Inspect this issue: atelier issue show {}",
+            record.issue.id
+        );
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
-            object.id
+            record.issue.id
         );
     } else {
-        if object.issue_type == "mission" {
-            println!("Created mission objective {} - {}", object.id, object.title);
+        if record.issue.issue_type == "mission" {
+            println!(
+                "Created mission objective {} - {}",
+                record.issue.id, record.issue.title
+            );
         } else {
-            println!("Created issue {} - {}", object.id, object.title);
+            println!("Created issue {} - {}", record.issue.id, record.issue.title);
         }
-        println!("Type:     {}", object.issue_type);
-        println!("Priority: {}", object.priority);
+        println!("Type:     {}", record.issue.issue_type);
+        println!("Priority: {}", record.issue.priority);
         println!("File:     {}", file_path.display());
         println!();
         println!("Next Commands");
         println!("-------------");
         println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", object.id);
-        println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Validate this issue: atelier check {}", record.issue.id);
+        println!(
+            "  Inspect this issue: atelier issue show {}",
+            record.issue.id
+        );
         println!(
             "  Inspect tracked work transitions: atelier issue transition {}",
-            object.id
+            record.issue.id
         );
     }
     Ok(())
@@ -2167,30 +2190,26 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     }
     store.write_issue_atomic(&record)?;
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
     changed_fields.sort_unstable();
     changed_fields.dedup();
-    let issue = db.require_issue(&id)?;
-    let object = issue_object(&db, issue)?;
     println!(
         "Updated issue {} ({})",
-        object.id,
+        record.issue.id,
         changed_fields.join(", ")
     );
-    println!("Status:   {}", object.status);
-    println!("Priority: {}", object.priority);
-    println!("Type:     {}", object.issue_type);
-    if let Some(assignee) = &object.assignee {
+    println!("Status:   {}", record.issue.status);
+    println!("Priority: {}", record.issue.priority);
+    println!("Type:     {}", record.issue.issue_type);
+    if let Some(assignee) = label_value(&record.labels, "assignee:") {
         println!("Assignee: {assignee}");
     }
-    if let Some(parent) = &object.parent {
-        println!("Parent:   {parent}");
+    if let Some(parent) = parent_id {
+        println!("Parent:   {}", format_issue_id(&parent));
     }
     println!();
     println!("Next Commands");
     println!("-------------");
-    println!("  atelier issue show {}", object.id);
+    println!("  atelier issue show {}", record.issue.id);
     Ok(())
 }
 
@@ -2206,7 +2225,6 @@ pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Re
     for issue_id in &descendants {
         store.delete_issue_atomic(issue_id)?;
     }
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 
@@ -2400,7 +2418,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     println!("State: {}", view.state_dir.display());
     if view.fix {
         println!("Repair:");
-        println!("  local_projection: repaired");
+        println!("  local_cache: repaired");
         println!("  canonical_records: unchanged");
     }
     println!("Install health:");
@@ -2413,7 +2431,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
             "not ok"
         }
     );
-    println!("Projection rebuild:");
+    println!("Cache rebuild:");
     println!(
         "  state_dir: {}",
         if view.state_dir_ok { "ok" } else { "not ok" }
@@ -2423,7 +2441,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         if view.rebuild_ready { "ok" } else { "not ok" }
     );
     println!(
-        "  projection_fresh: {}",
+        "  cache_fresh: {}",
         if view.projection_fresh {
             "ok"
         } else {
@@ -2432,12 +2450,12 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     );
     println!(
         "  tables: {}",
-        atelier_sqlite::CANONICAL_PROJECTION_TABLES.join(", ")
+        atelier_sqlite::DOMAIN_CACHE_TABLES.join(", ")
     );
     println!("Cache health:");
     println!("  cache_dir: {}", view.cache_dir_status);
     println!(
-        "  projection_metadata: {}",
+        "  source_metadata: {}",
         if view.projection_fresh { "ok" } else { "stale" }
     );
     println!("Review backend:");
@@ -2451,7 +2469,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         println!("  token_config: {}", token_config);
     }
     println!("  detail: {}", view.review_backend.detail);
-    println!("Projection database:");
+    println!("Cache database:");
     println!(
         "  database: {}",
         if view.runtime_db_available {
@@ -2461,11 +2479,6 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         }
     );
     println!("  diagnostics: {}", view.diagnostics);
-    println!("Compatibility:");
-    println!(
-        "  tables: {}",
-        atelier_sqlite::COMPATIBILITY_TABLES.join(", ")
-    );
     println!("Legacy health:");
     for (key, value) in view.health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });
@@ -2473,6 +2486,11 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
 }
 
 pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
+    if !check {
+        bail!(
+            "SQLite-to-record export has been removed; use `atelier export --check` only for targeted freshness diagnostics"
+        );
+    }
     let outcome = atelier_app::export::canonical_export(atelier_app::Request {
         input: atelier_app::export::CanonicalExportRequest {
             db,
@@ -2481,25 +2499,15 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         },
     })?;
     let view = outcome.value.data;
-    if view.check {
-        if view.stale_entries.is_empty() {
-            println!("Canonical export is current");
-            println!("State: {}", view.state_dir.display());
-            Ok(())
-        } else {
-            bail!(
-                "Canonical export is stale:\n{}",
-                view.stale_entries.join("\n")
-            )
-        }
-    } else {
-        println!("Canonical export written");
+    if view.stale_entries.is_empty() {
+        println!("Canonical record cache is current");
         println!("State: {}", view.state_dir.display());
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier check");
         Ok(())
+    } else {
+        bail!(
+            "Canonical record cache is stale:\n{}",
+            view.stale_entries.join("\n")
+        )
     }
 }
 
@@ -2525,6 +2533,7 @@ pub fn validate_priority(priority: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -2536,8 +2545,12 @@ mod tests {
     #[test]
     fn dependency_rows_include_context_and_open_blocker_marker() {
         let (db, _dir) = setup_test_db();
-        let blocked = db.create_issue("Blocked issue", None, "medium").unwrap();
-        let blocker = db.create_issue("Blocking issue", None, "high").unwrap();
+        let blocked = db
+            .cache_fixture_issue("Blocked issue", None, "medium")
+            .unwrap();
+        let blocker = db
+            .cache_fixture_issue("Blocking issue", None, "high")
+            .unwrap();
         db.add_dependency(&blocked, &blocker).unwrap();
 
         let rows = dependency_rows_for_text(&db, db.get_blockers(&blocked).unwrap(), true).unwrap();
@@ -2551,14 +2564,14 @@ mod tests {
     #[test]
     fn subissue_summary_counts_statuses_and_priorities() {
         let (db, _dir) = setup_test_db();
-        let parent = db.create_issue("Parent", None, "high").unwrap();
+        let parent = db.cache_fixture_issue("Parent", None, "high").unwrap();
         let child_a = db
-            .create_subissue(&parent, "First child", None, "high")
+            .cache_fixture_subissue(&parent, "First child", None, "high")
             .unwrap();
         let child_b = db
-            .create_subissue(&parent, "Second child", None, "low")
+            .cache_fixture_subissue(&parent, "Second child", None, "low")
             .unwrap();
-        db.close_issue(&child_b).unwrap();
+        db.cache_fixture_close(&child_b).unwrap();
 
         let subissues = db.get_subissues(&parent).unwrap();
         let summary = subissue_summary(&subissues);

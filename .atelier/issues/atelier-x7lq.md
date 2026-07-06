@@ -3,6 +3,19 @@ created_at: "2026-06-23T16:21:20.076733281+00:00"
 id: "atelier-x7lq"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 49
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-mska
+    integration_target: mission/atelier-mska
+    merge_strategy: squash
+    owner_issue_id: atelier-x7lq
+    owner_kind: epic
+    review_target: mission/atelier-mska
+    work_branch: epic/atelier-x7lq
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Lazy cache access and freshness"
-updated_at: "2026-06-23T16:21:20.371126304+00:00"
+updated_at: "2026-07-06T18:45:28.057653335+00:00"
 ---
 
 ## Description
