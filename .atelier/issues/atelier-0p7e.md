@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Update command queries for new cache schema"
-updated_at: "2026-06-23T16:21:20.082011829+00:00"
+updated_at: "2026-07-06T19:06:02.729180702+00:00"
 ---
 
 ## Description
