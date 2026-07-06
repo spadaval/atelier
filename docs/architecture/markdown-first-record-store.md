@@ -479,7 +479,7 @@ The explicit one-off migration path for old local SQLite comments is
 `--repo <path>` and may use `--dry-run` before writing. The script migrates
 comments and close reasons only, refuses to overwrite existing activity IDs,
 skips equivalent already-migrated entries on repeated runs, and prints a
-conversion summary. It is intentionally not a normal `atelier migrate` command.
+conversion summary. It is intentionally not a normal CLI migration command.
 
 `atelier check` reports install, local runtime, diagnostics, and workflow
 health without acting as the canonical durability gate. `atelier check` owns

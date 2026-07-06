@@ -183,13 +183,17 @@ command_boundary='([^[:alnum:]_-]|$)'
 # The remaining forms are subcommand/option cuts recorded by the issue, review,
 # history, work, maintenance, and migration audits.
 prohibited_command_core="atelier ((${root_alternatives})${command_boundary}|(${path_alternatives})${command_boundary}|issue (close|claim|new|quick|subissue|search|relate|tree|tested)${command_boundary}|issue update[^\x60]*--claim|issue list[^\x60]*(--ready|--blocked)|work (start|status|queue)${command_boundary}|maintenance delete${command_boundary}|export[^\x60]*--format|review (link|status|comments|comment|approve|request-changes)${command_boundary}|review open[^\x60]*--(title|body|source-branch|target-branch)|history[^\x60]*--(mission|epic|include-descendants|event-kind|actor|since)${command_boundary})"
+# `work queue` is still callable and explicitly bounded by the c0mp contract;
+# it is not a Removed/Retired root. Its named section-level boundary remains
+# distinct from the strict no-mention rule for removed commands.
+legacy_callable_command_core="atelier work queue${command_boundary}"
+legacy_callable_context_pattern='## legacy queue boundary'
 
 # These commands can remain callable as hidden/admin implementation surfaces,
 # but indexed active guidance may name them only with an explicit setup,
 # recovery, migration, historical, or diagnostic boundary.
 restricted_command_core="atelier ((${restricted_root_alternatives})${command_boundary})"
 restricted_context_pattern='(^|[^[:alnum:]_-])(hidden|advanced|admin|maintenance|setup|recovery|repair|migration|diagnostic|debug|historical|non-normative)([^[:alnum:]_-]|$)|implementation probe|not (part of )?(a |the )?(normal|routine|workflow)'
-recommendation_pattern='(^|[^[:alnum:]_-])(run|use|execute|invoke|try|continue|now|current|currently|recommend|recommended)([^[:alnum:]_-]|$)'
 
 active_content() {
   awk '
@@ -253,63 +257,6 @@ guidance_content() {
   fi
 }
 
-prohibited_occurrence_is_negated() {
-  local before=$1
-  local after=$2
-  local before_clause=${before##*[.;|]}
-  local after_clause=${after%%[.;|]*}
-  local lower_before
-  local lower_after
-  local trailing
-  local surrounding
-
-  lower_before=$(printf '%s' "$before_clause" | tr '[:upper:]' '[:lower:]')
-  lower_after=$(printf '%s' "$after_clause" | tr '[:upper:]' '[:lower:]')
-
-  # Direct negation stays local to this occurrence. A later contrasting
-  # recommendation in the same clause cancels the allowance.
-  if printf '%s\n' "$lower_before" |
-    rg -q '(^|[^[:alnum:]_-])((do|does|did|must|should|can|could|would)[[:space:]]+not|never)([^[:alnum:]_-]|$)' &&
-    ! printf '%s\n' "$lower_before" |
-      rg -q '(but|then|instead)[^.;|]*(run|use|execute|invoke|try)([^[:alnum:]_-]|$)'; then
-    return 0
-  fi
-
-  # Classification words before the command apply only when no imperative or
-  # current-routing marker appears after the closest classification word.
-  if [[ "$lower_before" =~ ^(.*[^[:alnum:]_-]|)(legacy|retired|removed|obsolete|superseded|gone|no|not)([^[:alnum:]_-])(.*)$ ]]; then
-    trailing=${BASH_REMATCH[4]}
-    if ! printf '%s\n' "$trailing" | rg -q "$recommendation_pattern"; then
-      return 0
-    fi
-  fi
-
-  # Negative grammar after the occurrence is also local. Recommendation words
-  # elsewhere in that clause make the line live guidance instead.
-  if [[ "$lower_after" =~ ^(.*)((does|do)[[:space:]]+not[[:space:]]+exist|(is|are|was|were)[[:space:]]+not[[:space:]]+(a[[:space:]]+)?(current|live|normal|supported)[[:space:]]+command|no[[:space:]]+longer[[:space:]]+exists)(.*)$ ]]; then
-    surrounding="${BASH_REMATCH[1]}${BASH_REMATCH[7]}"
-    if ! printf '%s\n' "$surrounding" | rg -q "$recommendation_pattern"; then
-      return 0
-    fi
-  fi
-
-  if [[ "$lower_after" =~ ^(.*)(removed|retired|obsolete|superseded|gone)(.*)$ ]]; then
-    surrounding="${BASH_REMATCH[1]}${BASH_REMATCH[3]}"
-    if ! printf '%s\n' "$surrounding" | rg -q "$recommendation_pattern"; then
-      return 0
-    fi
-  fi
-
-  if printf '%s\n' "$lower_after" |
-    rg -q '^[^.;|]*([^[:alnum:]_-]|^)(must|should|do|does)[[:space:]]+not([^[:alnum:]_-]|$)' &&
-    ! printf '%s\n' "$lower_after" |
-      rg -q '(but|then|instead)[^.;|]*(run|use|execute|invoke|try)([^[:alnum:]_-]|$)'; then
-    return 0
-  fi
-
-  return 1
-}
-
 scan_content() {
   local content
   local hit
@@ -318,8 +265,6 @@ scan_content() {
   local before
   local full_before
   local candidate
-  local matched
-  local after
   local previous
   local consumed
   local finding
@@ -346,13 +291,12 @@ scan_content() {
       [[ -z "$full_before" ]] || previous=${full_before: -1}
 
       if [[ -z "$previous" || ! "$previous" =~ [[:alnum:]_-] ]]; then
-        if matched=$(printf '%s\n' "$candidate" |
-          rg -o -m 1 "^$prohibited_command_core"); then
-          after=${candidate:${#matched}}
-          if ! prohibited_occurrence_is_negated "$full_before" "$after"; then
-            finding=1
-            break
-          fi
+        if printf '%s\n' "$candidate" | rg -q "^$legacy_callable_command_core" &&
+          printf '%s\n' "$hit" | rg -q -i "$legacy_callable_context_pattern"; then
+          : # The callable legacy queue is not a Removed/Retired command.
+        elif printf '%s\n' "$candidate" | rg -q "^$prohibited_command_core"; then
+          finding=1
+          break
         elif printf '%s\n' "$candidate" | rg -q "^$restricted_command_core" &&
           ! printf '%s\n' "$hit" | rg -q -i "$restricted_context_pattern"; then
           finding=1
@@ -554,6 +498,10 @@ run_self_test() {
     '`atelier issue close demo` is not a current command.'
     'There is no `atelier worktree` command.'
     'The legacy `atelier work queue` command is gone.'
+    'Do not forget to run atelier start now.'
+    'You must not avoid atelier start.'
+    'Never skip atelier start.'
+    'atelier start must not be skipped; use it now.'
   )
   local -a required_guidance_docs=(
     'docs/product/work-view-ordering.md'
@@ -621,6 +569,7 @@ run_self_test() {
     'atelier history --since 2026-01-01'
   )
   prohibited_examples+=("${adversarial_prohibited_examples[@]}")
+  prohibited_examples+=("${local_negative_examples[@]}")
 
   for example in "${required_prohibited_examples[@]}"; do
     if ! array_contains "$example" "${prohibited_examples[@]}"; then
@@ -661,10 +610,24 @@ run_self_test() {
   done
 
   for example in "${local_negative_examples[@]}"; do
-    output=$(printf '# Live Negative Classification\n%s\n' "$example" |
+    output=$(printf '## Historical Commands (Non-Normative)\n%s\n' "$example" |
       active_content | scan_content)
     if [[ -n "$output" ]]; then
-      printf 'self-test rejected command-local negative classification: %s\n' \
+      printf 'self-test rejected explicit section-level historical classification: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+
+    output=$(
+      printf '%s\n' \
+        '## Historical Commands (Non-Normative)' \
+        "$example" \
+        '## Live Guidance' \
+        "$example" |
+        active_content | scan_content
+    )
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed live re-entry for negative-language command: %s\n' \
         "$example" >&2
       failures=$((failures + 1))
     fi
@@ -752,7 +715,7 @@ run_self_test() {
 
   ((failures == 0)) || exit 1
   printf 'active command guidance self-test passed: %d prohibited/context-restricted example(s), including %d adversarial occurrence fixture(s) and all prior quality cases\n' \
-    "$checked" "${#adversarial_prohibited_examples[@]}"
+    "$checked" "$(( ${#adversarial_prohibited_examples[@]} + ${#local_negative_examples[@]} ))"
 }
 
 if [[ ${1:-} == '--self-test' ]]; then
