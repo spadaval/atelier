@@ -226,7 +226,7 @@ active_content() {
             fence_kind = 1
           } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*$/) {
             fence_kind = 2
-          } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*(yaml|yml|json|toml)[[:space:]]*$/) {
+          } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*[^[:space:]]+[[:space:]]*$/) {
             fence_kind = 3
           } else {
             fence_kind = 0
@@ -339,13 +339,15 @@ bare_candidate_is_finding() {
   return 1
 }
 
-untyped_fence_line_is_data() {
+fence_line_is_data() {
   local candidate=$1
+  local fence_kind=${2:-0}
   local yaml_key_pattern='^[-]?[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*:[[:space:]]*([^[:space:]].*)?$'
   local quoted_yaml_key_pattern='^[-]?[[:space:]]*["'"'][^"'"']+["'"']:[[:space:]]*.*$'
   local yaml_scalar_list_pattern='^-[[:space:]]+([A-Za-z0-9_.-]+|"[^"]*"|'"'"'[^'"'"']*'"'"')$'
   local structured_literal_pattern='^[[{].*[]}][,]?$'
   local structured_close_pattern='^[]}][,]?$'
+  local record_graph_node_pattern='^(mission|epic|task|issue|validation[[:space:]]+issue)[[:space:]]+atelier-[a-z0-9-]+$'
 
   candidate=${candidate#"${candidate%%[![:space:]]*}"}
   candidate=${candidate%"${candidate##*[![:space:]]}"}
@@ -356,7 +358,38 @@ untyped_fence_line_is_data() {
   [[ "$candidate" =~ $yaml_scalar_list_pattern ]] && return 0
   [[ "$candidate" =~ $structured_literal_pattern ]] && return 0
   [[ "$candidate" =~ $structured_close_pattern ]] && return 0
+  if ((fence_kind == 3)) && [[ "$candidate" =~ $record_graph_node_pattern ]]; then
+    return 0
+  fi
   return 1
+}
+
+inline_suffix_is_data_context() {
+  local suffix=${1,,}
+  local descriptor='((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?'
+  local as_or_for_pattern="^[[:space:]]+(as|for)[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
+  local representation_pattern="^[[:space:]]+to[[:space:]]+[[:alpha:]][[:alnum:]_-]*([[:space:]]+[[:alpha:]][[:alnum:]_-]*)?[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
+  local assignment_pattern="^[[:space:]]+when[[:space:]]+[[:alpha:]][[:alnum:]_-]*ing[[:space:]]+(a|an|the)?[[:space:]]*$descriptor([^[:alnum:]_-]|$)"
+  local immediate_descriptor_pattern='^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$)'
+
+  [[ "$suffix" =~ $as_or_for_pattern ]] ||
+    [[ "$suffix" =~ $representation_pattern ]] ||
+    [[ "$suffix" =~ $assignment_pattern ]] ||
+    [[ "$suffix" =~ $immediate_descriptor_pattern ]]
+}
+
+inline_context_is_action() {
+  local before=${1,,}
+  local after=${2,,}
+  local label_pattern='(^|[|])[[:space:]]*([[:alnum:]_-]+[[:space:]]+)*(command|workflow|route)[[:space:]]*((is|remains)[[:space:]]+|:[[:space:]]*|[|][[:space:]]*|$)'
+  local directive_pattern='(^|.*[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|adopt|adopts|adopted|pick|picks|picked)([[:space:]]+(the|this|command))?[[:space:]]*$'
+  local migration_pattern='(^|.*[^[:alnum:]_-])((switch|migrate|move|transition|shift)(ed|s)?|fall(s|ing)?[[:space:]]+back|fell[[:space:]]+back|revert(ed|s)?)[[:space:]]+to[[:space:]]*$'
+  local ownership_pattern='(^|[^[:alnum:]_-])(owns?|handles?|serves?|validates|reports?|mutates?)([^[:alnum:]_-]|$)'
+
+  [[ "$before" =~ $label_pattern ]] ||
+    [[ "$before" =~ $directive_pattern ]] ||
+    [[ "$before" =~ $migration_pattern ]] ||
+    [[ "$after" =~ $ownership_pattern ]]
 }
 
 scan_content() {
@@ -379,8 +412,6 @@ scan_content() {
   local structural_candidate
   local structural_context
   local inline_code_pattern='`([^`]*)`'
-  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|adopt|adopts|adopted|pick|picks|picked|switch to|switched to|owns?|handles?|serves?|validates|reports?|mutates?|current command|default command|standard command|supported command|preferred command|recommended command|current route|default route|standard route|normal repair|normal workflow|standard workflow)([^[:alnum:]_-]|$)'
-  local inline_data_context_pattern='^[[:space:]]+(as|for)[[:space:]]+(a|an|the)?[[:space:]]*((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?([^[:alnum:]_-]|$)'
   local list_command_shape_pattern="^(((${path_alternatives})${command_boundary})|(dep (add|remove)${command_boundary})|(issue (close|claim|new|quick|subissue|search|relate|tree|tested|update|list)${command_boundary})|(work (start|status|queue)${command_boundary})|(maintenance delete${command_boundary})|(review (link|status|comments|comment|approve|request-changes|open)${command_boundary})|(history[[:space:]]+--)|(worktree (create|for|list|remove)${command_boundary})|(mission (atelier-|--|<|create|show|start|status|close|list|update|note|add-work|unlink|add-blocker))|((${root_alternatives}|${restricted_root_alternatives})[[:space:]]+(--|atelier-|<)))"
   local single_command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
   local inline_remaining
@@ -389,12 +420,10 @@ scan_content() {
   local inline_after
   local inline_after_segment
   local inline_after_window
-  local inline_context
   local list_shape_regex
   local structural_kind
-  local inline_data_regex
-  local user_prompt_pattern='^[[:alnum:]_.-]+@[^[:space:]$]+[$][[:space:]]+(.*)$'
-  local environment_prompt_pattern='^\([^)]*\)[[:space:]]+[$][[:space:]]+(.*)$'
+  local line_is_fence_data
+  local shell_prompt_pattern='^([^[:space:]]*[$#%]|\([^)]*\)[[:space:]]+[$#%])[[:space:]]+(.*)$'
   content=$(cat)
 
   while IFS= read -r hit; do
@@ -414,6 +443,11 @@ scan_content() {
       source=''
       heading=''
       fenced=0
+    fi
+
+    line_is_fence_data=0
+    if ((fenced == 2 || fenced == 3)) && fence_line_is_data "$text" "$fenced"; then
+      line_is_fence_data=1
     fi
 
     remaining=$text
@@ -441,7 +475,7 @@ scan_content() {
     # structure makes the text command-shaped: inline code, fenced code,
     # prompts, block quotes, and list items. Ordinary prose words remain out of
     # scope even when they happen to equal a retired root such as "mission".
-    if ((!finding)) && ((fenced != 3)) && [[ "$text" == *\`* ]]; then
+    if ((!finding)) && ((!line_is_fence_data)) && [[ "$text" == *\`* ]]; then
       inline_remaining=$text
       while [[ "$inline_remaining" =~ $inline_code_pattern ]]; do
         span=${BASH_REMATCH[0]}
@@ -455,11 +489,8 @@ scan_content() {
           inline_before_window=${inline_before_window: -80}
         ((${#inline_after_window} <= 160)) ||
           inline_after_window=${inline_after_window:0:160}
-        inline_context="$inline_before_window $inline_after_window"
-        inline_data_regex=$inline_data_context_pattern
-        if [[ ! "${inline_after,,}" =~ $inline_data_regex ]] &&
-          [[ ! "${inline_after,,}" =~ ^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$) ]] &&
-          [[ "${inline_context,,}" =~ $inline_command_context_pattern ]] &&
+        if ! inline_suffix_is_data_context "$inline_after" &&
+          inline_context_is_action "$inline_before_window" "$inline_after_window" &&
           bare_candidate_is_finding "$candidate" "$source" "$heading"; then
           finding=1
           break
@@ -474,28 +505,17 @@ scan_content() {
       structural_kind=''
       ((fenced == 1)) && structural_kind='shell'
       ((fenced == 2)) && structural_kind='untyped'
-      ((fenced == 3)) && structural_kind='data'
-      if [[ "$structural_kind" == data ]]; then
-        structural_context=0
-      elif [[ "$structural_candidate" =~ $user_prompt_pattern ]]; then
+      ((fenced == 3)) && structural_kind='non_shell'
+      if [[ "$structural_candidate" =~ $shell_prompt_pattern ]]; then
         structural_context=1
         structural_kind='shell'
-        structural_candidate=${BASH_REMATCH[1]}
-      elif [[ "$structural_candidate" =~ $environment_prompt_pattern ]]; then
-        structural_context=1
-        structural_kind='shell'
-        structural_candidate=${BASH_REMATCH[1]}
-      elif [[ "$structural_candidate" =~ ^\$[[:space:]]+(.*)$ ]]; then
-        structural_context=1
-        structural_kind='shell'
-        structural_candidate=${BASH_REMATCH[1]}
-      elif [[ "$structural_kind" == untyped ]] &&
-        untyped_fence_line_is_data "$structural_candidate"; then
+        structural_candidate=${BASH_REMATCH[2]}
+      elif ((line_is_fence_data)); then
         structural_context=0
       else
         while [[ "$structural_candidate" =~ ^(\>|-|\*|\+|[0-9]+\.)[[:space:]]+(.*)$ ]]; do
           structural_context=1
-          [[ "$structural_kind" == shell || "$structural_kind" == untyped ]] ||
+          [[ "$structural_kind" == shell || "$structural_kind" == untyped || "$structural_kind" == non_shell ]] ||
             structural_kind='list'
           structural_candidate=${BASH_REMATCH[2]}
         done
@@ -504,7 +524,7 @@ scan_content() {
         if [[ "$structural_kind" == shell ]] &&
           bare_candidate_is_finding "$structural_candidate" "$source" "$heading"; then
           finding=1
-        elif [[ "$structural_kind" == list || "$structural_kind" == untyped ]]; then
+        elif [[ "$structural_kind" == list || "$structural_kind" == untyped || "$structural_kind" == non_shell ]]; then
           list_shape_regex=$list_command_shape_pattern
           if [[ "$structural_candidate" =~ $single_command_token_pattern ||
             "$structural_candidate" =~ $list_shape_regex ]] &&
@@ -1121,6 +1141,136 @@ run_self_test() {
     output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
     if [[ -n "$output" ]]; then
       printf 'self-test false-positive for systematic YAML scalar variant:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent atelier-xs4r command-label and migration cases.
+  for example in \
+    'Canonical command: `lint --all`.' \
+    'Primary command: `doctor --fix`.' \
+    'Migrate to `dep add atelier-demo atelier-blocker`.' \
+    'Fall back to `mission show atelier-demo`.' \
+    '| Primary command | `lint --all` |'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-xs4r label/migration case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to represent the record type.' \
+    'Select `close` when setting the transition name.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for exact atelier-xs4r data case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\nhost$ doctor --fix\n```' \
+    $'```console\n% lint --all\n```' \
+    $'```console\nroot@host# doctor --fix\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-xs4r console prompt:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```text\n- mission\n- task\n```' \
+    $'```markdown\n- mission\n- task\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for exact atelier-xs4r scalar-list fence:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Category-level variants prove labels are adjective-independent, migration
+  # is grammatical, prompts use recognizable markers, and all non-shell fence
+  # labels share the same data-vs-command classifier.
+  for example in \
+    'Authoritative command: `lint --all`.' \
+    'The selected operator command is `doctor --fix`.' \
+    '| Recovery command | `lint --all` |' \
+    'Operator workflow: `mission show atelier-demo`.' \
+    'Fallback route: `mission show atelier-demo`.' \
+    'Move to `dep add atelier-demo atelier-blocker`.' \
+    'Transition to `mission show atelier-demo`.' \
+    'Shift to `mission show atelier-demo`.' \
+    'Revert to `doctor --fix`.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed structural label/migration category variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` to encode the schema type.' \
+    'Prefer `worker` to denote the role label.' \
+    'Select `close` when assigning the transition value.' \
+    'Use `list` when storing the data label.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for structural data-precedence variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\ndevbox# doctor --fix\n```' \
+    $'```console\noperator% lint --all\n```' \
+    $'```console\n(test-env) # doctor --fix\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed structural prompt category variant:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```plaintext\n- mission\n- task\n```' \
+    $'```md\n- "mission"\n- task\n```' \
+    $'```rst\n- mission\n- 42\n```' \
+    $'```text\nmission atelier-demo\n  advances epic atelier-child\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for non-shell fence data variant:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```text\ndoctor --fix\n```' \
+    $'```markdown\nmission show atelier-demo\n```' \
+    $'```plaintext\n$ lint --all\n```' \
+    $'```console\nmission atelier-demo\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed command-shaped non-shell fence variant:\n%s\n' \
         "$example" >&2
       failures=$((failures + 1))
     fi
