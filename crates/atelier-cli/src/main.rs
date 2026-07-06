@@ -128,7 +128,7 @@ enum Commands {
         action: IssueCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
+    /// Advanced deterministic-renderer diagnostic; normal health uses check
     #[command(hide = true)]
     Export {
         /// State directory for canonical export diagnostics
@@ -139,7 +139,7 @@ enum Commands {
         check: bool,
     },
 
-    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
+    /// Advanced projection diagnostic; explicit local repair uses check --fix
     #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from
@@ -217,7 +217,7 @@ enum Commands {
         action: WorkflowCommands,
     },
 
-    /// Git branch helpers for epic review branches
+    /// Manual owner-branch recovery after workflow transition failures
     #[command(hide = true)]
     Branch {
         #[command(subcommand)]
@@ -659,17 +659,17 @@ enum ForgejoRolesCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
+    /// Run raw workflow-policy diagnostics; normal operator checks use check
     Check,
 }
 
 #[derive(Subcommand)]
 enum BranchCommands {
-    /// Create or switch to the review branch for an epic
+    /// Recover a missing epic review branch after a failed start transition
     ForEpic { id: String },
-    /// Show local epic review branches
+    /// Inspect local epic review branches during transition recovery
     Status,
-    /// Merge the review branch for an epic into the current branch
+    /// Recover integration after a failed close transition
     Merge { id: String },
 }
 

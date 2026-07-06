@@ -6,6 +6,10 @@ labels:
 - "admin"
 - "cli"
 - "complexity"
+review:
+  kind: pull_request
+  number: 44
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-durs
@@ -36,9 +40,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Hide or remove provider and recovery escape hatches"
-updated_at: "2026-07-01T15:41:42.864561453+00:00"
+updated_at: "2026-07-06T17:56:33.289081502+00:00"
 ---
 
 ## Description

@@ -59,4 +59,3 @@ Truncated: no
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.87s
      Running tests/cli_integration.rs (target/debug/deps/cli_integration-55f33c0e51df1ecf)
 ```
-

@@ -1054,6 +1054,61 @@ fn test_forgejo_role_setup_is_hidden_from_normal_guidance_but_callable_for_recov
 }
 
 #[test]
+fn test_branch_recovery_is_hidden_from_routine_work_but_callable_explicitly() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Recovery epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Recovery epic");
+
+    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "epic", &epic_id]);
+    assert!(success, "work epic failed: {stderr}");
+    assert!(
+        dashboard.contains(&format!("atelier issue transition {epic_id}")),
+        "routine epic guidance should route through lifecycle transitions:\n{dashboard}"
+    );
+    assert!(
+        !dashboard.contains("atelier branch"),
+        "routine epic guidance must not promote branch recovery:\n{dashboard}"
+    );
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["branch", "for-epic", "--help"]);
+    assert!(success, "branch recovery help failed: {stderr}");
+    assert!(recovery_help.contains("failed start transition"));
+}
+
+#[test]
+fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
+    let dir = tempdir().unwrap();
+
+    for (args, expected) in [
+        (vec!["export", "--help"], "normal health uses check"),
+        (
+            vec!["rebuild", "--help"],
+            "explicit local repair uses check --fix",
+        ),
+        (
+            vec!["workflow", "check", "--help"],
+            "normal operator checks use check",
+        ),
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(success, "{args:?} help failed: {stderr}");
+        assert!(
+            stdout.contains(expected),
+            "{args:?} help was stale:\n{stdout}"
+        );
+        assert!(!stdout.contains("normal health uses lint"), "{stdout}");
+        assert!(!stdout.contains("repair uses doctor"), "{stdout}");
+    }
+}
+
+#[test]
 fn test_obsolete_command_surfaces_are_removed_without_aliases() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1168,7 +1223,7 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     assert!(stdout.contains("Advanced/debug workflow policy diagnostics"));
     assert!(!stdout.contains("\n  init"));
     assert!(stdout.contains("check"));
-    assert!(stdout.contains("normal operator checks use lint and status surfaces"));
+    assert!(stdout.contains("normal operator checks use check"));
     assert!(!stdout.contains("validate"));
 }
 

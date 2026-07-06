@@ -2,7 +2,7 @@
 
 This audit classifies remaining `export --check`, `atelier export`, and
 export/rebuild references after routine Agent Factory proof guidance moved to
-claim-specific evidence, `lint`, focused tests, transcripts, and evidence
+claim-specific evidence, `atelier check`, focused tests, transcripts, and evidence
 records. `export --check` is maintenance/debug proof and should not be used as a
 normal handoff or completion check.
 
@@ -19,7 +19,7 @@ rg -n 'export --check|atelier export|export/rebuild|lint/export|export check' \
 
 | Reference area | Classification | Reason |
 | --- | --- | --- |
-| `docs/product/command-audit/export.md` | Migration/debug | The file audits the export command itself and states that normal operators use `lint`; admin repair is only for degraded local state. |
+| `docs/product/command-audit/export.md` | Migration/debug | The file audits the export command itself and states that normal operators use `atelier check`; explicit ignored-state repair uses `atelier check --fix`. |
 | `docs/product/command-audit/category-review.md` | Migration/debug | The category table explicitly keeps export/rebuild outside normal workflow and classifies `export --check` as hidden/advanced. |
 | `docs/architecture/quality/validation.md` deterministic export/projection diagnostic row | Storage-rendering-specific | The validation router names `export --check` only for storage-rendering, migration, or debug claims. |
 | `.agents/skills/agent-factory` | No current reference expected | Agent Factory guidance now routes normal proof and command choice to Atelier-owned surfaces instead of naming export diagnostics. |
