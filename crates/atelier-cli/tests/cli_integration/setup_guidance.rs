@@ -1318,7 +1318,7 @@ fn test_product_intent_representative_commands_match_signpost_surfaces() {
 }
 
 #[test]
-fn test_man_lists_roles() {
+fn test_man_lists_roles_and_topics() {
     let dir = tempdir().unwrap();
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man"]);
@@ -1329,6 +1329,26 @@ fn test_man_lists_roles() {
     assert!(stdout.contains("manager"));
     assert!(stdout.contains("admin"));
     assert!(stdout.contains("atelier man worker"));
+    assert!(stdout.contains("Topics"));
+    assert!(stdout.contains("work-model"));
+    assert!(stdout.contains("atelier man work-model"));
+}
+
+#[test]
+fn test_man_work_model_explains_scope_and_runs_without_tracker_state() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "work-model"]);
+    assert!(success, "man work-model failed: {stderr}");
+    assert!(stdout.contains("Atelier Man: Work Model"));
+    assert!(stdout.contains("Mission"));
+    assert!(stdout.contains("Epic"));
+    assert!(stdout.contains("Issue"));
+    assert!(stdout.contains("mission --advances--> epic --children--> issue"));
+    assert!(stdout.contains("A mission is not the hierarchy parent of its work"));
+    assert!(stdout.contains("Dependencies and `blocked_by` links"));
+    assert!(stdout.contains("atelier issue link <mission-id> <work-id> --role advances"));
+    assert!(stdout.contains("atelier work mission <mission-id>"));
 }
 
 #[test]
@@ -1376,14 +1396,15 @@ fn test_man_worker_names_current_work() {
 }
 
 #[test]
-fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
+fn test_man_rejects_unknown_pages_and_admin_degrades_before_init() {
     let dir = tempdir().unwrap();
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "bogus"]);
-    assert!(!success, "unknown role should fail");
+    assert!(!success, "unknown page should fail");
     assert!(stdout.is_empty());
-    assert!(stderr.contains("unknown man role 'bogus'"));
+    assert!(stderr.contains("unknown man page 'bogus'"));
     assert!(stderr.contains("Valid roles: worker, reviewer, validator, manager, admin"));
+    assert!(stderr.contains("Valid topics: work-model"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);
     assert!(!success, "worker guide should require tracker state");
