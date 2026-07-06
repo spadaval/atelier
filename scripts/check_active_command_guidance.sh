@@ -226,6 +226,8 @@ active_content() {
             fence_kind = 1
           } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*$/) {
             fence_kind = 2
+          } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*(yaml|yml|json|toml)[[:space:]]*$/) {
+            fence_kind = 3
           } else {
             fence_kind = 0
           }
@@ -341,6 +343,7 @@ untyped_fence_line_is_data() {
   local candidate=$1
   local yaml_key_pattern='^[-]?[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*:[[:space:]]*([^[:space:]].*)?$'
   local quoted_yaml_key_pattern='^[-]?[[:space:]]*["'"'][^"'"']+["'"']:[[:space:]]*.*$'
+  local yaml_scalar_list_pattern='^-[[:space:]]+([A-Za-z0-9_.-]+|"[^"]*"|'"'"'[^'"'"']*'"'"')$'
   local structured_literal_pattern='^[[{].*[]}][,]?$'
   local structured_close_pattern='^[]}][,]?$'
 
@@ -350,6 +353,7 @@ untyped_fence_line_is_data() {
   [[ "$candidate" == '---' || "$candidate" == '...' ]] && return 0
   [[ "$candidate" =~ $yaml_key_pattern ]] && return 0
   [[ "$candidate" =~ $quoted_yaml_key_pattern ]] && return 0
+  [[ "$candidate" =~ $yaml_scalar_list_pattern ]] && return 0
   [[ "$candidate" =~ $structured_literal_pattern ]] && return 0
   [[ "$candidate" =~ $structured_close_pattern ]] && return 0
   return 1
@@ -375,8 +379,8 @@ scan_content() {
   local structural_candidate
   local structural_context
   local inline_code_pattern='`([^`]*)`'
-  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|owns?|handles?|serves?|validates|reports?|mutates?|current command|supported command|preferred command|recommended command|current route|normal repair|normal workflow)([^[:alnum:]_-]|$)'
-  local inline_data_context_pattern='^[[:space:]]+as[[:space:]]+(a|an|the)?[[:space:]]*((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?([^[:alnum:]_-]|$)'
+  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|adopt|adopts|adopted|pick|picks|picked|switch to|switched to|owns?|handles?|serves?|validates|reports?|mutates?|current command|default command|standard command|supported command|preferred command|recommended command|current route|default route|standard route|normal repair|normal workflow|standard workflow)([^[:alnum:]_-]|$)'
+  local inline_data_context_pattern='^[[:space:]]+(as|for)[[:space:]]+(a|an|the)?[[:space:]]*((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?([^[:alnum:]_-]|$)'
   local list_command_shape_pattern="^(((${path_alternatives})${command_boundary})|(dep (add|remove)${command_boundary})|(issue (close|claim|new|quick|subissue|search|relate|tree|tested|update|list)${command_boundary})|(work (start|status|queue)${command_boundary})|(maintenance delete${command_boundary})|(review (link|status|comments|comment|approve|request-changes|open)${command_boundary})|(history[[:space:]]+--)|(worktree (create|for|list|remove)${command_boundary})|(mission (atelier-|--|<|create|show|start|status|close|list|update|note|add-work|unlink|add-blocker))|((${root_alternatives}|${restricted_root_alternatives})[[:space:]]+(--|atelier-|<)))"
   local single_command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
   local inline_remaining
@@ -389,6 +393,8 @@ scan_content() {
   local list_shape_regex
   local structural_kind
   local inline_data_regex
+  local user_prompt_pattern='^[[:alnum:]_.-]+@[^[:space:]$]+[$][[:space:]]+(.*)$'
+  local environment_prompt_pattern='^\([^)]*\)[[:space:]]+[$][[:space:]]+(.*)$'
   content=$(cat)
 
   while IFS= read -r hit; do
@@ -435,7 +441,7 @@ scan_content() {
     # structure makes the text command-shaped: inline code, fenced code,
     # prompts, block quotes, and list items. Ordinary prose words remain out of
     # scope even when they happen to equal a retired root such as "mission".
-    if ((!finding)) && [[ "$text" == *\`* ]]; then
+    if ((!finding)) && ((fenced != 3)) && [[ "$text" == *\`* ]]; then
       inline_remaining=$text
       while [[ "$inline_remaining" =~ $inline_code_pattern ]]; do
         span=${BASH_REMATCH[0]}
@@ -468,7 +474,18 @@ scan_content() {
       structural_kind=''
       ((fenced == 1)) && structural_kind='shell'
       ((fenced == 2)) && structural_kind='untyped'
-      if [[ "$structural_candidate" =~ ^\$[[:space:]]+(.*)$ ]]; then
+      ((fenced == 3)) && structural_kind='data'
+      if [[ "$structural_kind" == data ]]; then
+        structural_context=0
+      elif [[ "$structural_candidate" =~ $user_prompt_pattern ]]; then
+        structural_context=1
+        structural_kind='shell'
+        structural_candidate=${BASH_REMATCH[1]}
+      elif [[ "$structural_candidate" =~ $environment_prompt_pattern ]]; then
+        structural_context=1
+        structural_kind='shell'
+        structural_candidate=${BASH_REMATCH[1]}
+      elif [[ "$structural_candidate" =~ ^\$[[:space:]]+(.*)$ ]]; then
         structural_context=1
         structural_kind='shell'
         structural_candidate=${BASH_REMATCH[1]}
@@ -995,6 +1012,115 @@ run_self_test() {
     output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
     if [[ -z "$output" ]]; then
       printf 'self-test missed command-shaped untyped fence line:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent atelier-igno action/table cases.
+  for example in \
+    'Adopt `lint --all` for validation.' \
+    'Pick `doctor --fix` for repair.' \
+    'Switch to `dep add atelier-demo atelier-blocker`.' \
+    'Default command: `mission show atelier-demo`.' \
+    'Standard workflow: `mission show atelier-demo`.' \
+    '| Default command | `lint --all` |'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-igno action/table case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact independent atelier-igno `for the ...` data cases.
+  for example in \
+    'Use `mission` for the record type.' \
+    'Use `close` for the transition name.' \
+    'Select `worker` for the role value.' \
+    'Prefer `list` for the data label.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for exact atelier-igno data case: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\nuser@host$ doctor --fix\n```' \
+    $'```console\n(venv) $ lint --all\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed exact atelier-igno console prompt:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```yaml\n- mission\n- task\n```' \
+    $'```\n- mission\n- task\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for exact atelier-igno YAML scalar list:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Systematic inflection/prompt/scalar variants retain the same bounded
+  # classification without weakening shell subcommand or option recognition.
+  for example in \
+    'We adopted `lint --all` for validation.' \
+    'They picked `doctor --fix` for repair.' \
+    'The team switched to `dep add atelier-demo atelier-blocker`.' \
+    'Default route: `mission show atelier-demo`.' \
+    'Standard command: `mission show atelier-demo`.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed systematic atelier-igno action variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    'Use `mission` for a schema type.' \
+    'Prefer `list` for the data value.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for systematic `for ...` data variant: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```console\ndev.user@host:~/repo$ doctor --fix\n```' \
+    $'```console\n(atelier-dev) $ lint --all\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed systematic console prompt variant:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```yaml\n- "mission"\n- task\n```' \
+    $'```\n- mission\n- 42\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for systematic YAML scalar variant:\n%s\n' \
         "$example" >&2
       failures=$((failures + 1))
     fi
