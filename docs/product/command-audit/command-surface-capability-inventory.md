@@ -56,7 +56,7 @@ slice so it does not preserve removed names.
 | Agent Factory job | Required CLI capability | Proposed owner |
 | --- | --- | --- |
 | Find current repository/tracker state | checkout orientation and health | `status`, health command |
-| Choose and scope work | issue inventory, operational views, objective detail, blocker visibility | `issue list`, `work ready`, `work blocked`, `issue show`, `work mission`, `work epic` |
+| Choose and scope work | issue inventory, Mission Overview, operational views, objective detail, blocker visibility | `issue list`, `work missions`, `work ready`, `work blocked`, `issue show`, `work mission`, `work epic` |
 | Plan missions/epics/issues | create typed work and relationships | `issue create`, `issue link`, `bundle` |
 | Delegate implementation | inspect issue contract, readiness, branch/worktree state, expected proof | `issue show`, `issue transition`, `status` |
 | Execute implementation | start/close workflow, leave notes, record proof | `issue transition`, `issue note`, `evidence record` |
@@ -80,12 +80,13 @@ slice so it does not preserve removed names.
 | Create mission/objective record | `issue create --issue-type mission`, old/retired mission create docs | `issue create` | `atelier issue create "..." --type mission` | Low | Mission is an issue type, not a namespace. |
 | Create epic/typed work | `issue create --issue-type ...` | `issue create` | `atelier issue create "..." --type epic` | Low | Use configured issue types. |
 | Bulk create or apply authored work graph | `bundle preview`, `bundle apply` | `bundle` for now | `bundle preview <file>`, `bundle apply <file>` | Medium | Capability is real. Root `bundle` is imperfect, but `issue apply` is not clearly better. Keep it bounded until a better owner is proven. |
-| List generic issue inventory | missing `issue list`; root help currently claims listing | `issue list` | `atelier issue list` plus simple filters | Low | Inventory is not an operational dashboard. |
-| List global work queue | `work queue` | unresolved | under audit | Medium | Current output is a repo-wide nested dump with no clear Agent Factory role. Keep only if a distinct operator question remains after `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, and `issue list`. |
+| List generic issue inventory | queue-shaped `issue list` behavior | `issue list` | `atelier issue list` plus simple metadata and limit filters | Low | Inventory is flat, all-status by default, and not an operational dashboard. |
+| Compare current missions | thin mission-type inventory and legacy broad queue | `work missions` | bounded Mission Overview with directly advanced epic rows and collapsed summaries | Medium | Done missions require `--all`; direct and outside-visible-mission work remain explicit facts. |
+| List global work queue | `work queue` | no distinct owner job remains | retire | Medium | Inventory, Mission Overview, scoped dashboards, selection, and blocker triage now have separate owners. Do not add an alias or fallback renderer. |
 | List ready work | `work ready`, `work queue --ready`, `status` signpost, mission selectable work | `work ready` | `atelier work ready` | Low | Ready work is the small picker. `work queue --ready` should fold here unless quiet leaf IDs prove a separate automation need. |
 | List blocked work | `work blocked`, old blocked-work shortcut, `work queue --blocked`, queue footers | `work blocked` | `atelier work blocked` | Low | Blocked triage is a distinct manager job; blocker detail belongs in `issue show`. |
 | Filter by workflow status | `work queue --status`, `issue list --status` | `issue list` for inventory; scoped work dashboards for operational state | `atelier issue list --status <status>` | Medium | Status filtering is useful, but adding it to every work view can recreate a query language. |
-| Filter by issue type | planned `issue list --issue-type`, older `work queue --type mission`, ad hoc mission list | `issue list` for inventory; `work queue` only for operational queues | `atelier issue list --issue-type mission` | Low | Do not make `work queue` the generic inventory owner. |
+| Filter by issue type | `issue list --issue-type`, older `work queue --type mission`, ad hoc mission list | `issue list` for inventory; `work missions` for mission coordination | `atelier issue list --issue-type mission` | Low | Flat mission records and the Mission Overview answer different questions; the legacy queue owns neither. |
 | Filter by label/priority | `work queue --label`, `work queue --priority`, issue inventory filters | `issue list` unless a work-view job proves otherwise | inventory filters | Low | Metadata filters belong to inventory by default. Work views should gain filters only when they reduce a real coordination decision. |
 | Search issue text when ID is unknown | root `work queue`, maybe work queue/search behavior | none in this cut | none | Medium | Remove search entirely for now. Do not create `work queue --query` as a quieter replacement. A future search design must prove a stronger cross-record job. |
 | Show issue record detail | `issue show` | `issue show` | `atelier issue show <id>` | Low | Core durable record view. |
@@ -245,8 +246,8 @@ passes the complexity budget.
    `issue show`.
 4. Remove the old blocked-work shortcut after blocker detail in `issue show` is
    adequate.
-5. Add `issue list` for generic issue inventory; keep only the `work` views
-   that pass the complexity budget.
+5. Keep `issue list` as generic issue inventory, add `work missions` as the
+   Mission Overview, and retire the legacy broad queue after callers migrate.
 6. Remove root `search` entirely rather than replacing it with `work queue
    --query`.
 7. Keep high-level `history`, and remove or fold specific scoped history

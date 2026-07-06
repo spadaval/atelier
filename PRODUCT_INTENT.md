@@ -734,7 +734,8 @@ atelier init
 atelier prime
 atelier status
 atelier work ready
-atelier issue list --ready
+atelier work missions
+atelier issue list
 atelier issue show atelier-z1p8
 atelier issue create
 atelier issue transition atelier-z1p8

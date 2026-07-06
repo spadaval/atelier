@@ -86,6 +86,9 @@
 - [docs/product/human-cli-output.md](product/human-cli-output.md):
   human-readable CLI output grammar, formatter boundaries, color/width policy,
   and test expectations.
+- [docs/product/issue-inventory-and-mission-overview.md](product/issue-inventory-and-mission-overview.md):
+  flat issue inventory and cross-mission Mission Overview membership, limits,
+  exceptional-work, quiet-output, and color contracts.
 - `docs/architecture/quality/index.md`: quality documentation index.
 - `docs/architecture/quality/architecture-quality.md`: vocabulary for
   architecture review.

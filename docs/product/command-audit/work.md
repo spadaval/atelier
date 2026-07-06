@@ -24,9 +24,11 @@ not a data view.
 - `work blocked`: manager triage for work stopped by open blockers.
 - `work active`: in-flight work surface when the operator needs to see what is
   already moving.
-- `work queue`: unresolved pressure point. If kept, it must be a bounded
-  repo-wide operational overview, not generic inventory and not a replacement
-  for scoped dashboards.
+- `work missions`: the cross-mission Mission Overview. It shows current
+  missions and directly advanced epics with collapsed descendant state, plus
+  direct and outside-visible-mission summaries.
+- `work queue`: legacy repo-wide output. It owns neither inventory nor Mission
+  Overview and should leave normal guidance once its remaining callers move.
 - `work mission <mission-id>`: live mission orchestration dashboard with
   mission-scoped progress, ready/active/blocked/done workstreams, blockers,
   closeout only when relevant, and next actions.
@@ -47,7 +49,8 @@ the behavior belongs in `work mission`, `work epic`, or `issue list`.
 | `work blocked` | Manager/orchestrator | Triage blocked work across the repo. | Keep if terse. It has a distinct interruption/removal job. |
 | `work active` | Manager/orchestrator | See work already in motion. | Keep only if it answers in-flight coordination better than `status`. |
 | `work all` | Manager/orchestrator | Inspect all operational buckets at once. | Questionable. High cognitive load; prefer scoped dashboards unless a clear all-buckets job is proven. |
-| `work queue` | Unclear | Browse repo-wide actionable work. | Simplify or fold. Current output is a nested repo-wide dump that overlaps `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, and `issue list`. |
+| `work missions` | Manager/orchestrator | Compare current missions and their directly advanced epics. | Keep as the bounded, epic-first Mission Overview; use `--all` to include done missions. |
+| `work queue` | Legacy | Browse the old repo-wide nested dump. | Remove from normal guidance and migrate remaining callers; do not alias it to inventory or Mission Overview. |
 | `work queue --ready` | Worker/scripts | Choose selectable leaf work. | Fold toward `work ready` unless quiet leaf IDs are a proven automation need. |
 | `work queue --blocked` | Manager/orchestrator | Inspect work with open blockers. | Fold toward `work blocked` unless the broader queue adds distinct context. |
 | `work mission <id>` | Manager/orchestrator | Coordinate one live mission. | Keep. It avoids stitching issue detail, blockers, and child state across commands. |
@@ -68,7 +71,7 @@ blocker count, omitted-row count, and next command needed to act.
 `issue list`, record detail in `issue show`, and lifecycle gates in
 `issue transition`.
 
-The current `work queue` identity is too broad. Its output shows repo-wide
+The legacy `work queue` identity is too broad. Its output shows repo-wide
 mission, epic, task, blocker, validation, and standalone context in one view.
 That increases product complexity because the operator has to decide whether
 they are choosing a mission, selecting a leaf task, triaging blockers, or
@@ -85,10 +88,17 @@ survives only when it removes command stitching for a real role decision:
 - `work epic <id>` answers the epic execution-boundary question.
 - `issue list` answers the inventory question.
 
-Anything left for `work queue` must be named explicitly. If no distinct
-operator question remains, remove it from normal guidance and fold its useful
-behavior into the commands above.
+No distinct operator question remains for `work queue` after the split. Remove
+it from normal guidance and migrate useful behavior to the commands above
+without a compatibility alias or fallback renderer.
 
 `work mission` should be epic-first by default. Child tasks appear when they are
 active, blocked, or specifically requested by a scoped drill-down flag. Default
 ready work should not be a random flat list of leaf tasks.
+
+The plural `work missions` is also epic-first, but more collapsed: directly
+advanced epic rows are visible, leaf tasks never expand in the default, and
+direct non-epic roots are summarized rather than presented as epic children.
+See [Issue Inventory And Mission Overview](../issue-inventory-and-mission-overview.md)
+for membership, shared work, done inclusion, exceptional-work accounting,
+ordering, budgets, quiet output, and color behavior.

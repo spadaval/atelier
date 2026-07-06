@@ -6,6 +6,15 @@ labels:
 - "cli"
 - "docs"
 - "product-contract"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-c0mp
+    integration_target: mission/atelier-c0mp
+    merge_strategy: squash
+    owner_issue_id: atelier-vgqe
+    owner_kind: issue
+    review_target: mission/atelier-c0mp
+    work_branch: task/atelier-vgqe
 priority: "P1"
 relationships:
   blocks:
@@ -22,9 +31,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T17:55:18.230078638+00:00"
+status: "done"
 title: "Define the issue inventory and Mission Overview contract"
-updated_at: "2026-07-06T17:20:25.688108164+00:00"
+updated_at: "2026-07-06T17:55:18.230078638+00:00"
 ---
 
 ## Description
@@ -38,4 +48,5 @@ Update the durable CLI and human-output contracts before implementation. Specify
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Evidence `atelier-x12a` records a passing `git diff --check -- PRODUCT_INTENT.md docs/index.md docs/product` transcript for the contract and guidance changes.
+- `docs/product/issue-inventory-and-mission-overview.md` is the durable contract that settles the issue Outcome and downstream implementation policy.

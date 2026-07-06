@@ -126,8 +126,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `check`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
-| `work` | Show bounded operational multi-issue views. | Ready, blocked, active, mission, or epic views from the shared read pipeline, with issue IDs, titles, status, priority, and blocker context at the detail level the view owns. `work queue` remains under audit until it has a distinct repo-wide job. | Bucket IDs only. | `issue show <id>`, `issue transition <id>`, `issue link <blocked-id> <blocker-id> --role blocked_by`, `issue unlink <blocked-id> <blocker-id> --role blocked_by`. |
-| `issue` | Create, list, show, update, transition, note, and manage typed links. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work blocked`, edit the Markdown record, `history`. |
+| `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy `work queue` owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
+| `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `review` | Manage the configured review artifact for issue or epic work. | `open`, `status`, `show`, `merge`, `comments`, `comment`, `approve`, `request-changes`, and `resolve` operate on the configured review mode. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
@@ -234,18 +234,19 @@ direct status update does not run completion validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
-such as work queue, ready queues, search, issue detail/status, lint, and
-Mission Control views may use SQLite after freshness checks.
+such as issue inventory, work views, issue detail/status, lint, and Mission
+Control views may use SQLite after freshness checks.
 Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier check <id>`, and focused
 drill-down commands rather than generic command dumps.
-`atelier work queue --status <status>` filters by exact configured workflow
-status only, with `all` as the only special token. Derived status categories
-are a separate concept and use `atelier work queue --category <category>`.
-Category values are the exact category names from `.atelier/workflow.yaml`
-such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
-tokens such as `in_progress` are not category aliases.
+`atelier issue list --status <status>` filters by exact configured workflow
+status only, with `all` as the no-restriction default. Derived status
+categories are a separate concept and use `atelier issue list --category
+<category>`. Ready and blocked selection belongs to `atelier work ready` and
+`atelier work blocked`, not inventory flags. The complete inventory and plural
+Mission Overview contracts are in [Issue Inventory And Mission
+Overview](issue-inventory-and-mission-overview.md).
 `atelier issue create` has one work-type decision. Use `--issue-type` for the
 canonical type (`bug`, `completion`, `epic`, `feature`, `spike`, `task`, or
 `validation`) or use a template preset whose default type is documented by the
@@ -317,7 +318,8 @@ are diagnostic detail; normal completion output names the operator-facing
 blocker class and the next domain command.
 `atelier check` owns committed
 workflow/config validity, `issue transition` owns issue-level
-readiness inspection, and `mission status <objective-id>` owns mission publish-readiness inspection;
+readiness inspection, and `issue transition <objective-id>` owns mission
+publish-readiness inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier check` or an explicitly
