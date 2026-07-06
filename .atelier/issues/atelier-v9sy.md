@@ -39,9 +39,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Persistence architecture contract"
-updated_at: "2026-07-01T06:03:09.931411901+00:00"
+updated_at: "2026-07-06T18:04:07.312307633+00:00"
 ---
 
 ## Description
