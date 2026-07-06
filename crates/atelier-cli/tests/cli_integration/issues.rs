@@ -1798,6 +1798,51 @@ fn test_history_issue_scope_stays_on_one_record_and_includes_linked_evidence() {
 }
 
 #[test]
+fn test_history_issue_scope_excludes_other_targets_of_reused_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "History issue A"]);
+    run_atelier(dir.path(), &["issue", "create", "History issue B"]);
+    let issue_a = issue_id_by_title(dir.path(), "History issue A");
+    let issue_b = issue_id_by_title(dir.path(), "History issue B");
+    write_activity_fixture(
+        dir.path(),
+        &issue_b,
+        "20990610T191920123456Z",
+        "note",
+        "Issue B private activity",
+        "Must stay out of issue A history",
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "record", "--kind", "test", "Shared proof"],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "Shared proof");
+    for issue_id in [&issue_a, &issue_b] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["evidence", "attach", &evidence_id, "issue", issue_id],
+        );
+        assert!(success, "evidence reuse failed for {issue_id}: {stderr}");
+    }
+
+    let (success, history_a, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_a]);
+    assert!(success, "issue A history failed: {stderr}");
+    assert!(history_a.contains(&issue_a));
+    assert!(history_a.contains(&evidence_id));
+    assert!(!history_a.contains(&issue_b));
+    assert!(!history_a.contains("Issue B private activity"));
+
+    let (success, history_b, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_b]);
+    assert!(success, "issue B history failed: {stderr}");
+    assert!(history_b.contains(&issue_b));
+    assert!(history_b.contains("Issue B private activity"));
+}
+
+#[test]
 fn test_history_rejects_removed_query_and_objective_scope_flags() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

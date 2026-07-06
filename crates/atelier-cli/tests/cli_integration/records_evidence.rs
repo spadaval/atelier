@@ -1216,6 +1216,39 @@ fn test_evidence_list_elides_command_transcripts() {
 }
 
 #[test]
+fn test_evidence_list_bounds_no_summary_command_capture() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let long_command = format!("printf proof # {}", "x".repeat(5_200));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--",
+            "sh",
+            "-c",
+            &long_command,
+        ],
+    );
+    assert!(success, "no-summary command capture failed: {stderr}");
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains("command sh -c 'printf ..."));
+    assert!(evidence_list.contains("(command-backed proof)"));
+    assert!(!evidence_list.contains(&"x".repeat(256)));
+    assert!(
+        evidence_list.len() < 1_024,
+        "one no-summary record must not create a list firehose ({} bytes):\n{evidence_list}",
+        evidence_list.len()
+    );
+}
+
+#[test]
 fn test_evidence_list_bounds_default_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

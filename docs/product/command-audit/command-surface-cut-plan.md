@@ -54,7 +54,7 @@ Removed commands must have replacement capability, not replacement spellings:
 | `issue table` | `issue list` for inventory; scoped operational work in `work ready`, `work blocked`, `work mission`, and `work epic` |
 | separate block/unblock verbs | typed `issue link` / `issue unlink --role blocked_by` |
 | root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
-| scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
+| scoped `history --mission/--epic` variants | `work mission` / `work epic` for descendant objective state; retained `history --issue <id>` for one-record activity; high-level timeline in `history` |
 | provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
 | visible branch repair | workflow transitions, with hidden/admin recovery only when needed |
 | `lint` / `doctor` / `workflow check` / `rebuild` as separate normal surfaces | one `check` health and repair surface |

@@ -14,6 +14,7 @@ use atelier_sqlite::{validate_record_kind, Database};
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
 const EVIDENCE_LIST_LIMIT: usize = 20;
+const EVIDENCE_LIST_TEXT_LIMIT: usize = 96;
 const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
@@ -339,6 +340,7 @@ pub fn list(db: &Database, status: Option<&str>, quiet: bool) -> Result<()> {
         let data = evidence_record_data(&record);
         let kind = data.evidence_type.as_str();
         let command = evidence_list_command(data.command.as_deref());
+        let title = evidence_list_title(&record.header.title, data.command.as_deref());
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
         let targets = format_targets(db, &record.header.id, &data)?;
         let target = if targets.is_empty() {
@@ -348,13 +350,7 @@ pub fn list(db: &Database, status: Option<&str>, quiet: bool) -> Result<()> {
         };
         println!(
             "  {:<14} {:<13} {:<10} exit {} target {} command {} - {}",
-            record.header.id,
-            record.header.status,
-            kind,
-            exit_status,
-            target,
-            command,
-            record.header.title
+            record.header.id, record.header.status, kind, exit_status, target, command, title
         );
     }
     if records.len() > EVIDENCE_LIST_LIMIT {
@@ -378,12 +374,35 @@ fn evidence_list_command(command: Option<&str>) -> String {
         return "(manual)".to_string();
     };
     let parts = command.split_whitespace().collect::<Vec<_>>();
-    let summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
-    if parts.len() > 3 {
+    let raw_summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
+    let truncated = parts.len() > 3 || raw_summary.chars().count() > EVIDENCE_LIST_TEXT_LIMIT;
+    let summary = bounded_list_text(&raw_summary);
+    if truncated {
         format!("{summary} ...")
     } else {
         summary
     }
+}
+
+fn evidence_list_title(title: &str, command: Option<&str>) -> String {
+    if command == Some(title) {
+        "(command-backed proof)".to_string()
+    } else {
+        bounded_list_text(title)
+    }
+}
+
+fn bounded_list_text(value: &str) -> String {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= EVIDENCE_LIST_TEXT_LIMIT {
+        return normalized;
+    }
+    let mut output = normalized
+        .chars()
+        .take(EVIDENCE_LIST_TEXT_LIMIT - 3)
+        .collect::<String>();
+    output.push_str("...");
+    output
 }
 
 pub fn print_record(db: &Database, record: &EvidenceRecord, quiet: bool) -> Result<()> {

@@ -105,6 +105,10 @@ impl HistoryScope {
         if self.record_ids.is_none() && self.issue_ids.is_none() {
             return true;
         }
+        if self.issue_ids.is_some() {
+            return (link.source_kind == "issue" && self.includes_issue(&link.source_id))
+                || (link.target_kind == "issue" && self.includes_issue(&link.target_id));
+        }
         (link.source_kind == "issue" && self.includes_issue(&link.source_id))
             || (link.target_kind == "issue" && self.includes_issue(&link.target_id))
             || self.includes_record(&link.source_kind, &link.source_id)
