@@ -327,10 +327,7 @@ impl RecordStore {
         for relative in self.discover_issue_paths()? {
             let record = self.load_issue(&relative)?;
             if !ids.insert(record.issue.id.clone()) {
-                bail!(
-                    "Duplicate issue ID in canonical records: {}",
-                    record.issue.id
-                );
+                bail!("Duplicate issue ID in record files: {}", record.issue.id);
             }
             records.push(record);
         }
@@ -934,7 +931,7 @@ pub fn render_record(record: &Record) -> Result<String> {
         _ => {}
     }
     bail!(
-        "Unsupported canonical record kind '{}' for typed rendering",
+        "Unsupported record kind '{}' for typed rendering",
         spec.kind
     )
 }
@@ -1013,7 +1010,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     let expected = issue_record_path(&id);
     if relative != expected {
         bail!(
-            "Issue id {} in {} does not match canonical path {}",
+            "Issue id {} in {} does not match record-file path {}",
             id,
             display_state_path(relative),
             display_state_path(&expected)
@@ -1119,7 +1116,7 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
     let expected = canonical_record_path(spec, &id)?;
     if relative != expected {
         bail!(
-            "{} id {} in {} does not match canonical path {}",
+            "{} id {} in {} does not match record-file path {}",
             spec.kind,
             id,
             display_state_path(relative),
@@ -1132,7 +1129,7 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
         _ => {}
     }
     bail!(
-        "Unsupported canonical record kind '{}' in {}",
+        "Unsupported record kind '{}' in {}",
         spec.kind,
         display_state_path(relative)
     )
@@ -1269,7 +1266,7 @@ fn parse_review_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Re
     let expected = canonical_record_path(spec, &id)?;
     if relative != expected {
         bail!(
-            "review id {} in {} does not match canonical path {}",
+            "review id {} in {} does not match record-file path {}",
             id,
             display_state_path(relative),
             display_state_path(&expected)
@@ -1586,14 +1583,14 @@ fn collect_record_paths(
         } else if path.is_file() {
             let relative = path
                 .strip_prefix(root)
-                .context("Failed to relativize canonical record path")?
+                .context("Failed to relativize record-file path")?
                 .to_path_buf();
             if is_local_atelier_path(&relative) {
                 continue;
             }
             if relative.extension().and_then(|ext| ext.to_str()) != Some(extension) {
                 bail!(
-                    "Unsupported canonical {} file {}; expected .{} record",
+                    "Unsupported {} record file {}; expected .{} record",
                     kind_name,
                     display_state_path(&relative),
                     extension
@@ -3258,7 +3255,7 @@ Legacy evidence summary.
         let path_error = parse_issue_record(&text, &issue_record_path("atelier-wxyz")).unwrap_err();
         assert!(path_error
             .to_string()
-            .contains("does not match canonical path .atelier/issues/atelier-abcd.md"));
+            .contains("does not match record-file path .atelier/issues/atelier-abcd.md"));
     }
 
     #[test]
@@ -3429,7 +3426,7 @@ Legacy evidence summary.
         let error = store.load_issues().unwrap_err();
         assert!(error
             .to_string()
-            .contains("does not match canonical path .atelier/issues/atelier-abcd.md"));
+            .contains("does not match record-file path .atelier/issues/atelier-abcd.md"));
     }
 
     #[test]

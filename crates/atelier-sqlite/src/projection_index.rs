@@ -82,12 +82,12 @@ impl FreshnessReport {
         push_path_group_message(
             &mut messages,
             &unindexed_sources,
-            "canonical source is not indexed",
-            "canonical sources are not indexed",
+            "record-file source is not cached",
+            "record-file sources are not cached",
         );
         if !messages.is_empty() {
             messages.push(
-                "recovery: 1. run `atelier lint`; 2. fix any named canonical Markdown records; 3. run `atelier doctor --fix` to repair local runtime/projection state; 4. rerun the blocked command"
+                "recovery: 1. run `atelier check`; 2. fix any named record files; 3. run `atelier check --fix` to repair local runtime/cache state; 4. rerun the blocked command"
                     .to_string(),
             );
         }
@@ -99,10 +99,10 @@ fn push_missing_metadata_message(messages: &mut Vec<String>, paths: &[&str]) {
     match paths {
         [] => {}
         [path] => messages.push(format!(
-            "runtime projection metadata is missing for canonical source: {path}"
+            "domain-cache metadata is missing for record-file source: {path}"
         )),
         _ => messages.push(format!(
-            "runtime projection metadata is missing for {} canonical sources (showing first {}): {}",
+            "domain-cache metadata is missing for {} record-file sources (showing first {}): {}",
             paths.len(),
             paths.len().min(MAX_PROBLEM_SAMPLES),
             paths
@@ -143,7 +143,7 @@ pub fn refresh(db: &Database, state_dir: &Path) -> Result<()> {
     let snapshot = snapshot_sources(state_dir)?;
     let stored = db.record_source_cache_rows()?;
     if snapshot.len() != stored.len() {
-        bail!("canonical record set does not match indexed record-source metadata");
+        bail!("record-file set does not match domain-cache source metadata");
     }
     for entry in snapshot {
         db.refresh_record_source_metadata(&RecordSourceCacheRow {
@@ -407,16 +407,16 @@ fn source_identity(relative: &str) -> Result<(String, String)> {
         .components()
         .next()
         .and_then(|component| component.as_os_str().to_str())
-        .ok_or_else(|| anyhow!("canonical source path has no directory: {relative}"))?;
+        .ok_or_else(|| anyhow!("record-file source path has no directory: {relative}"))?;
     let kind = record_store::CANONICAL_RECORD_KINDS
         .iter()
         .find(|spec| spec.canonical_dir == Some(dir))
         .map(|spec| spec.kind.to_string())
-        .ok_or_else(|| anyhow!("canonical source path has unknown directory: {relative}"))?;
+        .ok_or_else(|| anyhow!("record-file source path has unknown directory: {relative}"))?;
     let id = path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .ok_or_else(|| anyhow!("canonical source path has no record id: {relative}"))?
+        .ok_or_else(|| anyhow!("record-file source path has no record id: {relative}"))?
         .to_string();
     Ok((kind, id))
 }
@@ -427,12 +427,10 @@ fn canonical_relative_path(path: &Path) -> Result<String> {
         match component {
             std::path::Component::Normal(part) => parts.push(
                 part.to_str()
-                    .ok_or_else(|| {
-                        anyhow!("canonical state path is not UTF-8: {}", path.display())
-                    })?
+                    .ok_or_else(|| anyhow!("record-file path is not UTF-8: {}", path.display()))?
                     .to_string(),
             ),
-            _ => bail!("canonical state path is not relative: {}", path.display()),
+            _ => bail!("record-file path is not relative: {}", path.display()),
         }
     }
     Ok(parts.join("/"))

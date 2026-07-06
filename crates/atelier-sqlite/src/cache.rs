@@ -791,7 +791,7 @@ impl Database {
         Ok(rows)
     }
 
-    /// Refresh filesystem metadata for an already indexed canonical record.
+    /// Refresh filesystem metadata for an already cached record file.
     ///
     /// This deliberately cannot create a source row: the corresponding domain
     /// indexer remains the sole owner of adding records to the cache.

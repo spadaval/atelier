@@ -170,8 +170,8 @@ fn test_doctor_help_documents_fix_boundary() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["doctor", "--help"]);
     assert!(success, "doctor help failed: {stderr}");
     assert!(stdout.contains("--fix"));
-    assert!(stdout.contains("Repair ignored local runtime/cache/projection state"));
-    assert!(stdout.contains("never edits tracked canonical records"));
+    assert!(stdout.contains("Repair ignored local runtime/cache state"));
+    assert!(stdout.contains("never edits tracked record files"));
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     assert!(success, "doctor --fix failed for missing db: {stderr}");
     assert!(stdout.contains("Repair:"));
     assert!(stdout.contains("local_cache: repaired"));
-    assert!(stdout.contains("canonical_records: unchanged"));
+    assert!(stdout.contains("record_files: unchanged"));
     assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("database: ok"));
 
@@ -1269,7 +1269,7 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
     assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("Projection freshness is an"));
+    assert!(docs.contains("Domain-cache freshness is an"));
     assert!(docs.contains("internal command-storage health concern"));
     assert!(!docs.contains("| `tracker.current` |"));
 }

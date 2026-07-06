@@ -531,7 +531,7 @@ fn render_issue_show_human(
         println!("Tracker Degraded");
         println!("----------------");
         println!("{degraded}");
-        println!("Fallback: showing the last valid local projection for orientation only.");
+        println!("Fallback: showing the last valid cache-backed view for orientation only.");
         println!("Next: atelier check {}", object.id);
     }
 
@@ -2395,7 +2395,7 @@ pub fn doctor(
     repo_root: &Path,
     state_dir: &Path,
     db_path: &Path,
-    projection_db_existed: bool,
+    cache_db_existed: bool,
     fix: bool,
 ) -> Result<()> {
     let outcome = atelier_app::health::doctor(atelier_app::Request {
@@ -2404,7 +2404,7 @@ pub fn doctor(
             repo_root: repo_root.to_path_buf(),
             state_dir: state_dir.to_path_buf(),
             db_path: db_path.to_path_buf(),
-            projection_db_existed,
+            cache_db_existed,
             fix,
             diagnostics_enabled: crate::telemetry::diagnostics_enabled(),
         },
@@ -2419,7 +2419,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     if view.fix {
         println!("Repair:");
         println!("  local_cache: repaired");
-        println!("  canonical_records: unchanged");
+        println!("  record_files: unchanged");
     }
     println!("Install health:");
     println!("  config: {}", if view.config_ok { "ok" } else { "not ok" });
@@ -2442,11 +2442,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     );
     println!(
         "  cache_fresh: {}",
-        if view.projection_fresh {
-            "ok"
-        } else {
-            "not ok"
-        }
+        if view.cache_fresh { "ok" } else { "not ok" }
     );
     println!(
         "  tables: {}",
@@ -2456,7 +2452,7 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
     println!("  cache_dir: {}", view.cache_dir_status);
     println!(
         "  source_metadata: {}",
-        if view.projection_fresh { "ok" } else { "stale" }
+        if view.cache_fresh { "ok" } else { "stale" }
     );
     println!("Review backend:");
     println!("  mode: {}", view.review_backend.mode);

@@ -216,7 +216,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
-            println!("  2. atelier check --fix - Repair ignored runtime and projection health.");
+            println!("  2. atelier check --fix - Repair ignored runtime and cache health.");
             println!(
                 "  3. atelier issue transition <id> - Inspect live validators and planned actions."
             );

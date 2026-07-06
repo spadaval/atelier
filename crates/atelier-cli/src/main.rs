@@ -126,26 +126,26 @@ enum Commands {
         action: IssueCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
+    /// Advanced deterministic-renderer diagnostic; normal health uses check
     #[command(hide = true)]
     Export {
-        /// State directory for canonical export diagnostics
+        /// Record-file directory for export diagnostics
         #[arg(short, long)]
         output: Option<String>,
-        /// Check deterministic renderer/projection freshness without writing tracked records
+        /// Check deterministic renderer/cache freshness without writing tracked records
         #[arg(long)]
         check: bool,
     },
 
-    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
+    /// Advanced domain-cache diagnostic; explicit local repair uses check --fix
     #[command(hide = true)]
     Rebuild {
-        /// Canonical state directory to rebuild from
+        /// Record-file directory to rebuild from
         #[arg(short, long)]
         input: Option<String>,
     },
 
-    /// Import Beads JSONL backup into Atelier runtime and canonical state
+    /// Import Beads JSONL backup into Atelier record files and local runtime
     #[command(hide = true)]
     ImportBeads {
         /// Beads JSONL backup path from an external source
@@ -180,7 +180,7 @@ enum Commands {
         action: ForgejoCommands,
     },
 
-    /// Inspect canonical repo, mission, issue, or epic activity
+    /// Inspect durable repo, mission, issue, or epic activity
     History {
         /// Scope to one mission and linked work
         #[arg(long)]
@@ -250,7 +250,7 @@ enum Commands {
     Check {
         /// Optional issue ID or imported source ID
         id: Option<String>,
-        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        /// Repair ignored local runtime/cache state; never edits tracked record files
         #[arg(long)]
         fix: bool,
     },
@@ -262,10 +262,10 @@ enum Commands {
         id: Option<String>,
     },
 
-    /// Check tracker runtime and derived-state health
+    /// Check tracker runtime and domain-cache health
     #[command(hide = true)]
     Doctor {
-        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        /// Repair ignored local runtime/cache state; never edits tracked record files
         #[arg(long)]
         fix: bool,
     },

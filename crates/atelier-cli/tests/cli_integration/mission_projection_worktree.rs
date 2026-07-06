@@ -817,7 +817,7 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
         "schema drift diagnostic should name stale-binary repair: {stderr}"
     );
     assert!(
-        !stderr.contains("fix canonical tracker records before querying"),
+        !stderr.contains("fix tracker record files before querying"),
         "schema drift should not be presented as ordinary malformed records: {stderr}"
     );
 
@@ -839,8 +839,8 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["work", "queue"]);
     assert!(!success, "malformed records should block projection query");
     assert!(
-        stderr.contains("recovery: 1. run `atelier lint`")
-            && stderr.contains("2. fix the named canonical record")
+        stderr.contains("recovery: 1. run `atelier check`")
+            && stderr.contains("2. fix the named record file")
             && stderr.contains("4. rerun the blocked command")
             && stderr.contains("Invalid YAML front matter"),
         "malformed diagnostic should stay record-focused: {stderr}"
@@ -930,9 +930,8 @@ fn test_cache_decision_query_never_returns_known_stale_rows() {
         "known-stale cache row escaped into decision output: {stdout}"
     );
     assert!(
-        stderr.contains(
-            "canonical tracker records use a schema this atelier binary does not understand"
-        ),
+        stderr
+            .contains("tracker record files use a schema this atelier binary does not understand"),
         "missing source-schema diagnostic: {stderr}"
     );
 }
@@ -992,12 +991,15 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
     }
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "export check should report stale projection");
+    assert!(
+        !success,
+        "export check should report a stale cache diagnostic"
+    );
     assert!(
         stderr.contains("12 indexed sources changed")
             && stderr.contains("showing first 5")
-            && stderr.contains("recovery: 1. run `atelier lint`")
-            && stderr.contains("3. run `atelier doctor --fix`")
+            && stderr.contains("recovery: 1. run `atelier check`")
+            && stderr.contains("3. run `atelier check --fix`")
             && stderr.contains("4. rerun the blocked command"),
         "stale diagnostics should be bounded and actionable: {stderr}"
     );
@@ -1636,7 +1638,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         |markdown, issue_id| {
             markdown.replace(&format!("id: \"{issue_id}\""), "id: \"atelier-zzzz\"")
         },
-        &["does not match canonical path"],
+        &["does not match record-file path"],
     );
 
     assert_lint_rejects_canonical_mutation(
@@ -1656,10 +1658,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         |dir, _issue_id| {
             std::fs::write(dir.join(".atelier/issues/junk.txt"), "junk\n").unwrap();
         },
-        &[
-            "Unsupported canonical issue file",
-            ".atelier/issues/junk.txt",
-        ],
+        &["Unsupported issue record file", ".atelier/issues/junk.txt"],
     );
     assert_lint_rejects_canonical_mutation(
         "Duplicate ID fixture",
@@ -1687,7 +1686,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
             std::fs::write(&new_path, evidence_markdown).unwrap();
             std::fs::remove_file(old_path).unwrap();
         },
-        &["Duplicate record ID in canonical projection"],
+        &["Duplicate record ID in record files"],
     );
 }
 

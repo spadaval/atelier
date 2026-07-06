@@ -49,7 +49,7 @@ pub fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     let rebuild = load_projection(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!(
-        "Refreshed projection in {} from {}",
+        "Rebuilt domain cache in {} from {}",
         db_path.display(),
         state_dir.display()
     );
@@ -124,7 +124,7 @@ pub fn repair_incremental(
                 let relative = Path::new(path);
                 let record = store.load_record_at(relative, spec).with_context(|| {
                     format!(
-                        "Failed to parse changed canonical record {}",
+                        "Failed to parse changed record file {}",
                         display_state_path(relative)
                     )
                 })?;
@@ -158,7 +158,10 @@ impl ProjectionRebuildLock {
             .truncate(false)
             .open(&path)
             .with_context(|| {
-                format!("Failed to open projection rebuild lock {}", path.display())
+                format!(
+                    "Failed to open domain-cache rebuild lock {}",
+                    path.display()
+                )
             })?;
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -167,7 +170,7 @@ impl ProjectionRebuildLock {
                 Ok(()) => {
                     file.set_len(0).with_context(|| {
                         format!(
-                            "Failed to refresh projection rebuild lock {}",
+                            "Failed to refresh domain-cache rebuild lock {}",
                             path.display()
                         )
                     })?;
@@ -178,7 +181,10 @@ impl ProjectionRebuildLock {
                         chrono::Utc::now().to_rfc3339()
                     )
                     .with_context(|| {
-                        format!("Failed to write projection rebuild lock {}", path.display())
+                        format!(
+                            "Failed to write domain-cache rebuild lock {}",
+                            path.display()
+                        )
                     })?;
                     return Ok(Self { file });
                 }
@@ -188,7 +194,7 @@ impl ProjectionRebuildLock {
                 Err(error) => {
                     return Err(error).with_context(|| {
                         format!(
-                            "Projection rebuild is already running for {}; retry the command after the current rebuild finishes. \
+                            "Domain-cache rebuild is already running for {}; retry the command after the current rebuild finishes. \
                              If no Atelier command appears to be running, inspect the rebuild lock file {} before retrying.",
                             db_path.display(),
                             path.display()
@@ -203,7 +209,7 @@ impl ProjectionRebuildLock {
 impl Drop for ProjectionRebuildLock {
     fn drop(&mut self) {
         if let Err(error) = self.file.unlock() {
-            tracing::warn!("failed to unlock projection rebuild lock: {}", error);
+            tracing::warn!("failed to unlock domain-cache rebuild lock: {}", error);
         }
     }
 }
@@ -303,10 +309,10 @@ impl<'a> ProjectionLoader<'a> {
 
     fn register_issue_id(&mut self, id: &str) -> Result<()> {
         if !self.issue_ids.insert(id.to_string()) {
-            bail!("Duplicate issue ID in canonical projection: {}", id);
+            bail!("Duplicate issue ID in record files: {}", id);
         }
         if !self.global_ids.insert(id.to_string()) {
-            bail!("Duplicate record ID in canonical projection: {}", id);
+            bail!("Duplicate record ID in record files: {}", id);
         }
         Ok(())
     }
@@ -340,14 +346,14 @@ impl<'a> ProjectionLoader<'a> {
     fn register_record(&mut self, record: &Record) -> Result<()> {
         let header = record.header();
         if !self.global_ids.insert(header.id.clone()) {
-            bail!("Duplicate record ID in canonical projection: {}", header.id);
+            bail!("Duplicate record ID in record files: {}", header.id);
         }
         if !self
             .record_refs
             .insert((header.kind.clone(), header.id.clone()))
         {
             bail!(
-                "Duplicate {} ID in canonical projection: {}",
+                "Duplicate {} ID in record files: {}",
                 header.kind,
                 header.id
             );
@@ -635,7 +641,7 @@ fn discover_record_paths(
 ) -> Result<Vec<PathBuf>> {
     let dir_name = spec.canonical_dir.ok_or_else(|| {
         anyhow!(
-            "Record kind '{}' does not have a canonical directory",
+            "Record kind '{}' does not have a record-file directory",
             spec.kind
         )
     })?;
@@ -677,14 +683,14 @@ fn collect_canonical_record_paths(
         } else if path.is_file() {
             let relative = path
                 .strip_prefix(root)
-                .context("Failed to relativize canonical record path")?
+                .context("Failed to relativize record-file path")?
                 .to_path_buf();
             if crate::storage_layout::is_local_atelier_path(&relative) {
                 continue;
             }
             if relative.extension().and_then(|ext| ext.to_str()) != Some(extension) {
                 bail!(
-                    "Unsupported canonical {} file {}; expected .{} record",
+                    "Unsupported {} record file {}; expected .{} record",
                     kind_name,
                     display_state_path(&relative),
                     extension
@@ -755,10 +761,7 @@ fn ensure_no_unsupported_canonical_files(
         if relative == Path::new("mission-control.json") {
             continue;
         }
-        bail!(
-            "Unsupported canonical projection file {}",
-            display_state_path(&relative)
-        );
+        bail!("Unsupported record file {}", display_state_path(&relative));
     }
     Ok(())
 }
@@ -776,7 +779,7 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
         let path = entry.path();
         let relative = path
             .strip_prefix(root)
-            .context("Failed to relativize canonical projection path")?;
+            .context("Failed to relativize record-file path")?;
         if crate::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
@@ -990,7 +993,7 @@ fn record_source_row(
 ) -> Result<RecordSourceCacheRow> {
     let path = state_dir.join(source_path);
     let metadata = fs::metadata(&path)
-        .with_context(|| format!("Failed to inspect canonical source {}", path.display()))?;
+        .with_context(|| format!("Failed to inspect record-file source {}", path.display()))?;
     let modified_micros = metadata.modified().ok().and_then(|modified| {
         modified
             .duration_since(UNIX_EPOCH)
@@ -1917,7 +1920,7 @@ mod tests {
         .unwrap_err();
         assert!(error
             .to_string()
-            .contains("Failed to parse changed canonical record"));
+            .contains("Failed to parse changed record file"));
         assert_eq!(database.issue_cache_row(&ids[0]).unwrap(), before_row);
         assert_eq!(
             database

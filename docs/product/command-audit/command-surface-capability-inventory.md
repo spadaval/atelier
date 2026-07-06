@@ -73,7 +73,7 @@ slice so it does not preserve removed names.
 | Initialize tracker state | `init`, hidden/import migration surfaces | `init` | `atelier init`, `atelier init --import-beads` while migration remains | Low | Keep setup distinct. Remove standalone migration commands when possible. |
 | Orient in current checkout | `status`, parts of `check`, parts of branch/status-like outputs | `status` | `atelier status` | Low | Must stay compact: active work, ready count, health/freshness, next commands. |
 | Validate committed tracker records | `check`, parts of `check`, hidden `workflow check` | one health command | `atelier check [<id>]` or temporary `atelier check [<id>]` | Medium | Need one public health surface. Avoid separate lint/doctor/workflow normal paths. |
-| Repair ignored runtime/projection state | `check --fix`, `rebuild` | health command | `atelier check --fix` | Medium | Must not edit tracked canonical Markdown. |
+| Repair ignored runtime/cache state | `check --fix`, `rebuild` | health command | `atelier check --fix` | Medium | Must not edit tracked record files. |
 | Inspect raw workflow policy diagnostics | hidden `workflow check`, `check` errors | health command or hidden dev command | `atelier check --workflow` if user-facing; otherwise hidden | Low | Keep out of normal workflow unless it explains a real recovery path. |
 | Inspect slow command telemetry | hidden `diagnostics slow` | hidden dev/admin surface | hidden only | Low | Not normal product workflow. |
 | Create ordinary issue work | `issue create` | `issue create` | `atelier issue create "..."` | Low | Core mutation. |
@@ -133,7 +133,7 @@ slice so it does not preserve removed names.
 | Delete arbitrary record | `maintenance delete` | hidden/admin escape hatch or remove | no normal public command | Medium | Public destructive surgery is suspect. |
 | Import predecessor data | `init --import-beads`, hidden `import-beads` | `init` | `init --import-beads` while needed | Low | Remove standalone import path. |
 | Render/export canonical state for diagnostics | hidden `export` | hidden test/dev path or health command | no normal command | Low | Not workflow. |
-| Rebuild projection cache | hidden `rebuild`, `check --fix` | health command | `check --fix` | Low | Not a separate user command. |
+| Rebuild domain cache | hidden `rebuild`, `check --fix` | health command | `check --fix` | Low | Not a separate user command. |
 | Role-specific operating guidance | `man`, root help, docs, status next actions | `man` | `atelier man [role]` | Low | Keep as slightly smart guidance. It should route to surviving commands and not become a duplicate workflow engine. |
 
 ## Capability Gaps To Resolve Before Cutting
@@ -208,7 +208,7 @@ migration should avoid losing:
 
 - record validation;
 - workflow-policy diagnostics;
-- runtime/projection health;
+- runtime/cache health;
 - safe local repair.
 
 ## Selector DSL Question

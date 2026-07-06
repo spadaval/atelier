@@ -367,7 +367,7 @@ impl IssueActivity {
         let expected = record_activity_path(&front.subject_kind, &front.subject_id, &front.id);
         if relative != expected {
             bail!(
-                "Activity id {} for {} {} in {} does not match canonical path {}",
+                "Activity id {} for {} {} in {} does not match record-file path {}",
                 front.id,
                 front.subject_kind,
                 front.subject_id,

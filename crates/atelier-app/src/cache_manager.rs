@@ -277,9 +277,9 @@ impl CacheManager {
         error: &anyhow::Error,
     ) -> CacheAccess {
         tracing::warn!(
-            "Tracker degraded: canonical tracker records are invalid; using the existing local cache for orientation only."
+            "Tracker degraded: record files are invalid; using the existing local cache for orientation only."
         );
-        tracing::warn!("Recovery: 1. run `atelier lint`; 2. fix the named canonical record; 3. run `atelier check --fix`; 4. rerun the blocked command before closing or mutating work.");
+        tracing::warn!("Recovery: 1. run `atelier check`; 2. fix the named record file; 3. run `atelier check --fix`; 4. rerun the blocked command before closing or mutating work.");
         tracing::warn!("Cache freshness: {}", report.problem_messages().join("; "));
         tracing::warn!("Canonical diagnostic: {error:#}");
         self.access(db, initial_state, CachePreparation::OrientationDegraded)
@@ -304,11 +304,11 @@ fn cache_validation_error(error: anyhow::Error, prefix: &str) -> anyhow::Error {
     let detail = format!("{error:#}");
     if looks_like_schema_drift(&detail) {
         error.context(format!(
-            "{prefix}: canonical tracker records use a schema this atelier binary does not understand. Rebuild and use `target/debug/atelier` when testing local CLI changes, or update the installed `atelier` binary before continuing."
+            "{prefix}: tracker record files use a schema this atelier binary does not understand. Rebuild and use `target/debug/atelier` when testing local CLI changes, or update the installed `atelier` binary before continuing."
         ))
     } else {
         error.context(format!(
-            "{prefix}; recovery: 1. run `atelier lint`; 2. fix the named canonical record; 3. run `atelier check --fix`; 4. rerun the blocked command."
+            "{prefix}; recovery: 1. run `atelier check`; 2. fix the named record file; 3. run `atelier check --fix`; 4. rerun the blocked command."
         ))
     }
 }
@@ -515,7 +515,7 @@ mod tests {
         fs::create_dir_all(manager.state_dir().join("evidence")).unwrap();
         fs::write(
             manager.state_dir().join("evidence/atelier-bad1.md"),
-            "not a canonical evidence record",
+            "not an evidence record file",
         )
         .unwrap();
 
@@ -546,7 +546,7 @@ mod tests {
         ));
         assert!(looks_like_schema_drift("Unsupported schema_version 99"));
         assert!(!looks_like_schema_drift(
-            "canonical issue record is missing required section"
+            "issue record file is missing required section"
         ));
     }
 }

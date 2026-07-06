@@ -1737,7 +1737,7 @@ fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     assert!(success, "history failed: {stderr}");
     assert!(stdout.contains("History"));
     assert!(stdout.contains("Scope:          repository"));
-    assert!(stdout.contains("Source:         canonical .atelier"));
+    assert!(stdout.contains("Source:         durable .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
     assert!(stdout.contains("Filters:        event kind evidence_attached"));
     assert!(stdout.contains("Showing:        1 of 1 matching events"));
@@ -1947,7 +1947,7 @@ fn test_history_empty_states_and_invalid_limit() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
     assert!(success, "empty history failed: {stderr}");
-    assert!(stdout.contains("No canonical history found for repository."));
+    assert!(stdout.contains("No durable history found for repository."));
     assert!(stdout.contains("Source:"));
     assert!(stdout.contains("Next Commands"));
 

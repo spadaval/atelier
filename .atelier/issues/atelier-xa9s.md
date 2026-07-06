@@ -31,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Validate and document cache architecture rewrite"
-updated_at: "2026-07-06T20:14:00.841677349+00:00"
+updated_at: "2026-07-06T20:15:00.371285628+00:00"
 ---
 
 ## Description
