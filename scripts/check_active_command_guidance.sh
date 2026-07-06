@@ -176,21 +176,20 @@ join_alternatives() {
 root_alternatives=$(join_alternatives "${removed_roots[@]}")
 path_alternatives=$(join_alternatives "${removed_paths[@]}")
 restricted_root_alternatives=$(join_alternatives "${restricted_roots[@]}")
-atelier_prefix='(^|[:`]|::[[:space:]]*)(target/debug/)?atelier '
-command_boundary='([[:space:]`]|$)'
+command_boundary='([^[:alnum:]_-]|$)'
 
 # Removed roots and paths come from the same source used by the product's
 # command-surface drift check plus the durable retired/deferred audit index.
 # The remaining forms are subcommand/option cuts recorded by the issue, review,
 # history, work, maintenance, and migration audits.
-prohibited_command_pattern="$atelier_prefix((${root_alternatives})${command_boundary}|(${path_alternatives})${command_boundary}|issue (close|claim|new|quick|subissue|search|relate|tree|tested)${command_boundary}|issue update[^\x60]*--claim|issue list[^\x60]*(--ready|--blocked)|work (start|status|queue)${command_boundary}|maintenance delete${command_boundary}|export[^\x60]*--format|review (link|status|comments|comment|approve|request-changes)${command_boundary}|review open[^\x60]*--(title|body|source-branch|target-branch)|history[^\x60]*--(mission|epic|include-descendants|event-kind|actor|since)${command_boundary})"
+prohibited_command_core="atelier ((${root_alternatives})${command_boundary}|(${path_alternatives})${command_boundary}|issue (close|claim|new|quick|subissue|search|relate|tree|tested)${command_boundary}|issue update[^\x60]*--claim|issue list[^\x60]*(--ready|--blocked)|work (start|status|queue)${command_boundary}|maintenance delete${command_boundary}|export[^\x60]*--format|review (link|status|comments|comment|approve|request-changes)${command_boundary}|review open[^\x60]*--(title|body|source-branch|target-branch)|history[^\x60]*--(mission|epic|include-descendants|event-kind|actor|since)${command_boundary})"
 
 # These commands can remain callable as hidden/admin implementation surfaces,
 # but indexed active guidance may name them only with an explicit setup,
 # recovery, migration, historical, or diagnostic boundary.
-restricted_command_pattern="$atelier_prefix((${restricted_root_alternatives})${command_boundary})"
+restricted_command_core="atelier ((${restricted_root_alternatives})${command_boundary})"
 restricted_context_pattern='(^|[^[:alnum:]_-])(hidden|advanced|admin|maintenance|setup|recovery|repair|migration|diagnostic|debug|historical|non-normative)([^[:alnum:]_-]|$)|implementation probe|not (part of )?(a |the )?(normal|routine|workflow)'
-prohibited_allowance_pattern='(^|[^[:alnum:]_-])(historical|non-normative|removed|retired|legacy|must not|do not|does not)([^[:alnum:]_-]|$)|no .*command|not (part of )?(a |the )?(normal|current|live)'
+recommendation_pattern='(^|[^[:alnum:]_-])(run|use|execute|invoke|try|continue|now|current|currently|recommend|recommended)([^[:alnum:]_-]|$)'
 
 active_content() {
   awk '
@@ -254,27 +253,121 @@ guidance_content() {
   fi
 }
 
+prohibited_occurrence_is_negated() {
+  local before=$1
+  local after=$2
+  local before_clause=${before##*[.;|]}
+  local after_clause=${after%%[.;|]*}
+  local lower_before
+  local lower_after
+  local trailing
+  local surrounding
+
+  lower_before=$(printf '%s' "$before_clause" | tr '[:upper:]' '[:lower:]')
+  lower_after=$(printf '%s' "$after_clause" | tr '[:upper:]' '[:lower:]')
+
+  # Direct negation stays local to this occurrence. A later contrasting
+  # recommendation in the same clause cancels the allowance.
+  if printf '%s\n' "$lower_before" |
+    rg -q '(^|[^[:alnum:]_-])((do|does|did|must|should|can|could|would)[[:space:]]+not|never)([^[:alnum:]_-]|$)' &&
+    ! printf '%s\n' "$lower_before" |
+      rg -q '(but|then|instead)[^.;|]*(run|use|execute|invoke|try)([^[:alnum:]_-]|$)'; then
+    return 0
+  fi
+
+  # Classification words before the command apply only when no imperative or
+  # current-routing marker appears after the closest classification word.
+  if [[ "$lower_before" =~ ^(.*[^[:alnum:]_-]|)(legacy|retired|removed|obsolete|superseded|gone|no|not)([^[:alnum:]_-])(.*)$ ]]; then
+    trailing=${BASH_REMATCH[4]}
+    if ! printf '%s\n' "$trailing" | rg -q "$recommendation_pattern"; then
+      return 0
+    fi
+  fi
+
+  # Negative grammar after the occurrence is also local. Recommendation words
+  # elsewhere in that clause make the line live guidance instead.
+  if [[ "$lower_after" =~ ^(.*)((does|do)[[:space:]]+not[[:space:]]+exist|(is|are|was|were)[[:space:]]+not[[:space:]]+(a[[:space:]]+)?(current|live|normal|supported)[[:space:]]+command|no[[:space:]]+longer[[:space:]]+exists)(.*)$ ]]; then
+    surrounding="${BASH_REMATCH[1]}${BASH_REMATCH[7]}"
+    if ! printf '%s\n' "$surrounding" | rg -q "$recommendation_pattern"; then
+      return 0
+    fi
+  fi
+
+  if [[ "$lower_after" =~ ^(.*)(removed|retired|obsolete|superseded|gone)(.*)$ ]]; then
+    surrounding="${BASH_REMATCH[1]}${BASH_REMATCH[3]}"
+    if ! printf '%s\n' "$surrounding" | rg -q "$recommendation_pattern"; then
+      return 0
+    fi
+  fi
+
+  if printf '%s\n' "$lower_after" |
+    rg -q '^[^.;|]*([^[:alnum:]_-]|^)(must|should|do|does)[[:space:]]+not([^[:alnum:]_-]|$)' &&
+    ! printf '%s\n' "$lower_after" |
+      rg -q '(but|then|instead)[^.;|]*(run|use|execute|invoke|try)([^[:alnum:]_-]|$)'; then
+    return 0
+  fi
+
+  return 1
+}
+
 scan_content() {
   local content
   local hit
+  local text
+  local remaining
+  local before
+  local full_before
+  local candidate
+  local matched
+  local after
+  local previous
+  local consumed
+  local finding
   content=$(cat)
 
   while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    if printf '%s\n' "$hit" | rg -q "$prohibited_command_pattern"; then
-      if ! printf '%s\n' "$hit" | rg -q -i "$prohibited_allowance_pattern"; then
-        printf '%s\n' "$hit"
-      fi
-      continue
+    [[ "$hit" == *'atelier '* ]] || continue
+
+    if [[ "$hit" == *' :: '* ]]; then
+      text=${hit#* :: }
+    else
+      text=$hit
     fi
-    if printf '%s\n' "$hit" | rg -q "$restricted_command_pattern" &&
-      ! printf '%s\n' "$hit" | rg -q -i "$restricted_context_pattern"; then
+
+    remaining=$text
+    consumed=''
+    finding=0
+    while [[ "$remaining" == *'atelier '* ]]; do
+      before=${remaining%%atelier *}
+      candidate="atelier ${remaining#*atelier }"
+      full_before="$consumed$before"
+      previous=''
+      [[ -z "$full_before" ]] || previous=${full_before: -1}
+
+      if [[ -z "$previous" || ! "$previous" =~ [[:alnum:]_-] ]]; then
+        if matched=$(printf '%s\n' "$candidate" |
+          rg -o -m 1 "^$prohibited_command_core"); then
+          after=${candidate:${#matched}}
+          if ! prohibited_occurrence_is_negated "$full_before" "$after"; then
+            finding=1
+            break
+          fi
+        elif printf '%s\n' "$candidate" | rg -q "^$restricted_command_core" &&
+          ! printf '%s\n' "$hit" | rg -q -i "$restricted_context_pattern"; then
+          finding=1
+          break
+        fi
+      fi
+
+      consumed+="$before"'atelier '
+      remaining=${remaining#*atelier }
+    done
+
+    if ((finding)); then
       printf '%s\n' "$hit"
     fi
-  done < <(
-    printf '%s\n' "$content" |
-      rg --no-line-number "$prohibited_command_pattern|$restricted_command_pattern" || true
-  )
+  done <<< "$content"
 }
 
 missing_quality_index_entries() {
@@ -429,6 +522,39 @@ run_self_test() {
   local -a required_restricted_examples=(
     'atelier doctor --fix'
   )
+  local -a adversarial_prohibited_examples=(
+    '- atelier start'
+    '* atelier start'
+    '1. atelier start'
+    '> atelier start'
+    'atelier start, then continue'
+    'atelier start.'
+    'atelier start: then continue'
+    '`atelier start`; then continue'
+    '"atelier start" is the current route.'
+    'target/debug/atelier start, then continue'
+    'Run atelier start now.'
+    'The legacy API is gone; run `atelier start` now.'
+    'Use (`atelier start`) now.'
+    'Current route: atelier start'
+    'The legacy API is gone; run atelier start now.'
+    'The legacy API is gone but run atelier start now.'
+    'The retired command differed; use atelier issue close demo for current work.'
+    'The command was retired; now use atelier issue close demo.'
+    'Use atelier issue close demo, then continue.'
+    'Do not run atelier start; use atelier issue close demo now.'
+    'atelier start is retired; use atelier issue close demo now.'
+    'The legacy atelier start differed, but use atelier issue close demo now.'
+    '> Use atelier work queue now.'
+  )
+  local -a local_negative_examples=(
+    'The command `atelier start` is removed.'
+    'Do not run `atelier start`.'
+    'Use `atelier issue transition`, not `atelier start`.'
+    '`atelier issue close demo` is not a current command.'
+    'There is no `atelier worktree` command.'
+    'The legacy `atelier work queue` command is gone.'
+  )
   local -a required_guidance_docs=(
     'docs/product/work-view-ordering.md'
     'docs/product/command-audit/category-review.md'
@@ -494,6 +620,7 @@ run_self_test() {
     'atelier history --actor worker'
     'atelier history --since 2026-01-01'
   )
+  prohibited_examples+=("${adversarial_prohibited_examples[@]}")
 
   for example in "${required_prohibited_examples[@]}"; do
     if ! array_contains "$example" "${prohibited_examples[@]}"; then
@@ -532,6 +659,45 @@ run_self_test() {
       failures=$((failures + 1))
     fi
   done
+
+  for example in "${local_negative_examples[@]}"; do
+    output=$(printf '# Live Negative Classification\n%s\n' "$example" |
+      active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test rejected command-local negative classification: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Meta-test the production section filter and occurrence scanner together so
+  # a simplified fixture regex cannot diverge from the live pipeline.
+  output=$(
+    printf '%s\n' \
+      '## Historical Commands (Non-Normative)' \
+      'atelier start' \
+      '## Live Guidance' \
+      '- atelier start' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test production pipeline missed live re-entry after historical section\n' >&2
+    failures=$((failures + 1))
+  fi
+
+  output=$(
+    printf '%s\n' \
+      '# Current Contract' \
+      '## Rejected Alternatives' \
+      'atelier issue close demo' \
+      '## Current Routing' \
+      '> atelier issue close demo' |
+      active_content | scan_content
+  )
+  if [[ -z "$output" ]]; then
+    printf 'self-test production pipeline missed live re-entry after rejected section\n' >&2
+    failures=$((failures + 1))
+  fi
 
   output=$(
     {
@@ -585,8 +751,8 @@ run_self_test() {
   done
 
   ((failures == 0)) || exit 1
-  printf 'active command guidance self-test passed: %d prohibited/context-restricted example(s), including all prior quality cases\n' \
-    "$checked"
+  printf 'active command guidance self-test passed: %d prohibited/context-restricted example(s), including %d adversarial occurrence fixture(s) and all prior quality cases\n' \
+    "$checked" "${#adversarial_prohibited_examples[@]}"
 }
 
 if [[ ${1:-} == '--self-test' ]]; then
