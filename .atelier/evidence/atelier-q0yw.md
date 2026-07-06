@@ -33,7 +33,6 @@ Independent review fixes pass provider-contract, provider CLI, application PR, n
 ```console
 cargo nextest run -p atelier-app -p atelier-cli forgejo::tests::provider_contract forgejo::tests::comments_and_reviews_with_distinct_sudo_authorship atelier-app::pr::tests atelier-app::review_room::tests provider_request_review_pushes_source_before_opening_pr review_surface_derives_open_context_and_uses_submit_and_show
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -181,4 +180,3 @@ Truncated: yes
    Compiling potential_utf v0.1.4
    Compiling
 ```
-

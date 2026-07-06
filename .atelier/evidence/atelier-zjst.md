@@ -33,7 +33,6 @@ Live Forgejo PR 47 review show --comments succeeds and renders provider comment 
 ```console
 target/debug/atelier review show --issue atelier-ye11 --comments
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -62,4 +61,3 @@ Truncated: no
 
 ```text
 ```
-
