@@ -3,6 +3,10 @@ created_at: "2026-06-23T16:21:20.070365285+00:00"
 id: "atelier-v9sy"
 issue_type: "epic"
 labels: []
+review:
+  kind: pull_request
+  number: 42
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-mska
@@ -35,9 +39,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Persistence architecture contract"
-updated_at: "2026-07-01T05:53:51.868669887+00:00"
+updated_at: "2026-07-01T06:03:09.931411901+00:00"
 ---
 
 ## Description
