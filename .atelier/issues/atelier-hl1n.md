@@ -31,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Unify record-file storage and domain models"
-updated_at: "2026-07-06T18:06:27.896578994+00:00"
+updated_at: "2026-07-06T18:08:39.089571489+00:00"
 ---
 
 ## Description

@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:19:33.919096976+00:00"
+status: "done"
 title: "Isolate issue field handling for future custom fields"
-updated_at: "2026-06-23T16:21:20.075917646+00:00"
+updated_at: "2026-07-06T18:19:33.919096976+00:00"
 ---
 
 ## Description
@@ -26,4 +27,5 @@ Keep current issue field behavior stable while isolating it behind issue-domain 
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Typed issue-review, record-file round-trip, invalid-field, and review-room
+  regression tests pass; transcript: `atelier-aapz`.
