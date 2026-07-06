@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Introduce CacheManager get-cache boundary"
-updated_at: "2026-06-23T16:21:20.077491339+00:00"
+updated_at: "2026-07-06T18:07:31.570498005+00:00"
 ---
 
 ## Description
