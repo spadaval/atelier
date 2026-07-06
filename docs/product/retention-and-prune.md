@@ -101,13 +101,10 @@ git show <commit>:.atelier/issues/<id>.md
 canonical records. A future convenience command may wrap the Git lookup, but v1
 must not keep a live `.atelier/prune/` index just to make lookup faster.
 
-## Hard Deletion
+## Deletion Boundaries
 
 `atelier prune` is allowed to remove eligible records from the active tree
 because Git history preserves the audit trail. It must not delete protected
-records by force.
-
-Exceptional destructive surgery stays under explicit maintenance commands, not
-routine pruning. Operators who need to delete a protected or malformed record
-must use the destructive maintenance surface with force/confirmation semantics
-and then run `atelier check` plus the recovery commands it names.
+records by force. There is no arbitrary-record deletion command: malformed or
+protected records require a reviewed canonical-record repair, followed by
+`atelier check`; recovery remains available through Git history.

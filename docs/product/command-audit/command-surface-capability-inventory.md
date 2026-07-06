@@ -130,7 +130,7 @@ slice so it does not preserve removed names.
 | Merge review artifact | `review merge`, workflow close actions | `review merge` or workflow transition | undecided | Medium | Keep only if merging review artifact is separate from Atelier workflow transition. |
 | Configure/check review provider | `forgejo roles check/provision` | `review provider ...` or admin docs | `review provider check/provision` | Medium | Provider-specific root commands should go away. |
 | Prune supported artifacts | `prune`, `prune --apply` | `prune` | unchanged | Low | Dry-run/apply is a coherent admin surface. |
-| Delete arbitrary record | `maintenance delete` | hidden/admin escape hatch or remove | no normal public command | Medium | Public destructive surgery is suspect. |
+| Delete arbitrary record | removed | no CLI surface | no normal public command | Medium | Supported cleanup is `prune`; canonical recovery uses Git history and reviewed repair. |
 | Import predecessor data | `init --import-beads`, hidden `import-beads` | `init` | `init --import-beads` while needed | Low | Remove standalone import path. |
 | Render/export canonical state for diagnostics | hidden `export` | hidden test/dev path or health command | no normal command | Low | Not workflow. |
 | Rebuild projection cache | hidden `rebuild`, `check --fix` | health command | `check --fix` | Low | Not a separate user command. |

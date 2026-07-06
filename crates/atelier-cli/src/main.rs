@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
-    CommandStorageAccess,
+    command_storage, existing_projection_db, lint_db, CommandStorageAccess,
 };
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
@@ -176,7 +175,7 @@ enum Commands {
         action: ReviewCommands,
     },
 
-    /// Configure and verify Forgejo integration
+    /// Admin recovery for Forgejo role author accounts
     #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]
@@ -230,13 +229,6 @@ enum Commands {
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,
-    },
-
-    /// Destructive maintenance commands
-    #[command(hide = true)]
-    Maintenance {
-        #[command(subcommand)]
-        action: MaintenanceCommands,
     },
 
     /// Prune accumulated artifacts safely
@@ -503,18 +495,6 @@ enum IssueCommands {
 }
 
 #[derive(Subcommand)]
-enum MaintenanceCommands {
-    /// Delete a record with an explicit target kind
-    Delete {
-        target_kind: String,
-        target_id: String,
-        /// Skip confirmation
-        #[arg(short, long)]
-        force: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum BundleCommands {
     /// Preview an authored bundle JSON file without mutating tracker state
     Preview { input: String },
@@ -736,13 +716,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
-}
-
-fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
-    if kind != "issue" {
-        bail!("{command} currently supports issue records only; got '{kind}'");
-    }
-    Ok(())
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -1224,21 +1197,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete {
-                target_kind,
-                target_id,
-                force,
-            } => {
-                require_issue_kind(&target_kind, "atelier maintenance delete")?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                drop(db);
-                commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
-            }
-        },
-
         Commands::Prune {
             apply,
             retention_days,
@@ -1403,9 +1361,6 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",
-        },
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
         Commands::Prune { apply, .. } => {
             if *apply {

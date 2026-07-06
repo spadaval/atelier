@@ -6,6 +6,15 @@ labels:
 - "admin"
 - "cli"
 - "complexity"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-eqq6
+    owner_kind: epic
+    review_target: mission/atelier-durs
+    work_branch: epic/atelier-eqq6
 priority: "P1"
 relationships:
   blocks:
@@ -27,9 +36,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Hide or remove provider and recovery escape hatches"
-updated_at: "2026-06-29T20:15:29.399052097+00:00"
+updated_at: "2026-07-01T15:41:42.864561453+00:00"
 ---
 
 ## Description
