@@ -104,9 +104,9 @@ The exact layout can change, but the principles should not:
 - Canonical Markdown records must be deterministic.
 - Canonical Markdown records must be sufficient to rebuild SQLite projections.
 - During the compatibility window, hidden/admin deterministic-renderer checks
-  may detect stale generated output, but target-state `lint` and `doctor`
-  checks validate canonical `.atelier/` Markdown and local projection health
-  directly.
+  may detect stale generated output, but target-state `atelier check` validates
+  canonical `.atelier/` Markdown and `atelier check --fix` repairs ignored
+  local projection/cache state without editing canonical records.
 - Mutating commands should write canonical Markdown records first, then refresh
   or mark stale the SQLite projection.
 - Git merges should happen through Markdown record files, not by merging SQLite
@@ -522,9 +522,9 @@ issue ORM or session layer.
 The review artifact actions are intentionally narrow. They may create
 the artifact that an epic, standalone issue, or exceptional branch-owning child
 issue will use for review. They do not approve, comment on, request changes,
-resolve findings, merge review artifacts, hide issue close, or replace
-`atelier issue transition`. PR aliases and broad automation hooks are non-goals
-for v1.
+resolve findings, merge review artifacts, bypass configured close transitions,
+or replace `atelier issue transition`. PR aliases and broad automation hooks
+are non-goals for v1.
 
 Terminal merge behavior follows the review mode. Provider-backed workflows use
 provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
@@ -731,21 +731,23 @@ Representative commands:
 
 ```text
 atelier init
-atelier prime
 atelier status
 atelier work ready
+atelier work blocked
 atelier work missions
 atelier issue list
 atelier issue show atelier-z1p8
 atelier issue create
 atelier issue transition atelier-z1p8
+atelier issue transition atelier-z1p8 start
+atelier issue transition atelier-z1p8 close --reason "..."
 atelier issue create "Mission title" --issue-type mission
 atelier issue show atelier-k7mq
 atelier issue link atelier-k7mq atelier-z1p8 --role advances
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier check
-atelier doctor
+atelier check --fix
 ```
 
 Every command that agents call should provide focused human-readable output with

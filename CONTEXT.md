@@ -171,8 +171,10 @@
   runtime work associations.
 - SQLite state: fast local projection state, currently living at ignored
   `.atelier/runtime/state.db`.
-- Doctor: an operator health surface that reports whether the repository and
-  local runtime are usable and may perform safe repair when explicitly asked.
+- Check: the operator health surface that validates canonical tracker records
+  and workflow configuration. `atelier check --fix` is the explicit repair path
+  for ignored local runtime, projection, and cache state; it does not edit
+  canonical records.
 
 ## Ambiguities
 
@@ -184,12 +186,12 @@
   architecture needs canonical projection and rebuild semantics instead.
 - Export and rebuild are low-level diagnostic mechanics, not normal operator
   workflow. Cache and projection state should be transparent and repaired by
-  ordinary commands or by an explicit doctor repair path.
+  ordinary commands or by the explicit `atelier check --fix` repair path.
 - Beads migration is explicit during setup. `atelier init` may detect the
   standard repo-local Beads migration input, but import requires an explicit
   setup option rather than a silent automatic conversion.
-- Doctor repair may change ignored projection/cache state but must not edit
-  tracked `.atelier/` canonical records.
+- `atelier check --fix` may change ignored projection/cache state but must not
+  edit tracked `.atelier/` canonical records.
 - Graph commands should inspect cross-record relationships, including missions
   and issues. If a view is issue-only, its help should say so explicitly.
 - The canonical-state target is Markdown-first in a single `.atelier/` tree:
@@ -244,18 +246,19 @@
   transitions, validators, and evidence requirements for mission-shaped work
   come from `.atelier/workflow.yaml`.
 - Branch policy is workflow-owned rather than a separate routine setup step.
-  `atelier start <id>` prepares the owner branch from the work graph: child
-  issues use the nearest parent epic branch, standalone issues use an issue
-  branch, and epics use an epic branch. Terminal transitions commit tracker
-  state through explicit workflow actions. Child issues normally stop at the
-  owner branch; standalone issues and epics use provider terminal actions in
-  provider mode or explicit `branch_integrate` in local room mode. Squash merge
-  is the default local integration strategy, with repository policy able to
-  select merge alternatives but not configurable branch-name templates. Owner
-  branches use canonical `<issue_type>/<issue_id>` names, and optional mission
-  integration branches are created only by configured workflow actions. A failed
-  close-time commit or merge must not leave the item closed in the integration
-  branch.
+  Operators inspect `atelier issue transition <id>` and execute the configured
+  transition that enters active work; its `git.prepare_branch` action prepares
+  the owner branch from the work graph. Child issues use the nearest parent epic
+  branch, standalone issues use an issue branch, and epics use an epic branch.
+  Terminal transitions commit tracker state through explicit workflow actions.
+  Child issues normally stop at the owner branch; standalone issues and epics
+  use provider terminal actions in provider mode or explicit `branch_integrate`
+  in local room mode. Squash merge is the default local integration strategy,
+  with repository policy able to select merge alternatives but not configurable
+  branch-name templates. Owner branches use canonical
+  `<issue_type>/<issue_id>` names, and optional mission integration branches are
+  created only by configured workflow actions. A failed close-time commit or
+  merge must not leave the item closed in the integration branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic
   modules under `crates/atelier-cli/src/` are migration input for lower crates,
