@@ -110,8 +110,8 @@ inspect history, and validate committed records. Low-level state diagnostics
 such as doctor/export/rebuild, predecessor imports, raw workflow diagnostics,
 and command telemetry are not normal root-help entries; admin guidance,
 targeted error messages, and migration docs may name them when they are
-relevant.
-Destructive maintenance may remain visible as an explicit danger-zone command.
+relevant. Arbitrary destructive record deletion is not an Atelier command;
+supported cleanup is owned by `prune`, and canonical recovery uses Git history.
 
 ## Visible Help Contract
 
@@ -152,9 +152,11 @@ in the command audit:
   [Retention And Prune Policy](retention-and-prune.md).
 - `import-beads`: temporary migration surface; normal setup uses
   `init --import-beads`.
-- `maintenance`: hidden admin danger zone; never a routine next action.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
+- `forgejo roles`: hidden provider-specific role-account recovery. Routine review
+  commands use the configured provider; readiness failures may name this surface
+  when an admin must inspect or provision role authors.
 - `worktree`: removed visible workspace-management surface pending redesign.
 
 Hidden advanced diagnostics probes may remain callable for local performance
@@ -200,9 +202,9 @@ operators should only run them when an admin repair path, targeted error,
 assignment, or completion contract names them. JSON emitted by diagnostics
 commands is an Atelier-maintenance interface for local telemetry and
 performance analysis, not an automation contract for selecting work,
-proving validation, deciding blockers, or closing missions. Destructive
-maintenance is a third category: destructive record surgery exists for explicit
-repair and must not appear as routine next actions.
+proving validation, deciding blockers, or closing missions. Supported cleanup
+is constrained to `prune`; canonical record repair is reviewed and recoverable
+through Git history rather than arbitrary CLI deletion.
 Common read and orientation commands correct record-kind mistakes directly:
 when an operator passes an existing mission or evidence ID to an issue command,
 the error names the actual record kind and suggests the matching show command.
@@ -355,15 +357,15 @@ The predecessor evidence add/capture shapes split one operator job into two
 verbs. New help and Agent Factory guidance should teach `evidence record`;
 implementation may keep old entrypoints only as internal migration scaffolding
 until the unified surface is shipped.
-`atelier history` is the canonical project-history view. Repo-wide history and
-scoped forms such as `atelier history --mission <id>`, `atelier history --issue
-<id>`, and `atelier history --epic <id>` read canonical activity sidecars,
-first-class records, evidence, and record links. History defaults to newest
-first with bounded output, supports event kind, actor, time, and scope filters,
-and separates canonical tracker history from local runtime diagnostics. Issue
-and issue show <objective-id> surfaces may include compact recent activity or record context,
-but they point to scoped history for full activity instead of expanding
-unbounded logs.
+`atelier history` is the canonical high-level project-history view. Repo-wide
+history and the focused `atelier history --issue <id>` form read canonical
+activity sidecars, first-class records, evidence, and record links. History
+defaults to newest first with a 20-event budget; `--limit` is its only breadth
+control. It does not expose actor, event-kind, time-window, descendant, mission,
+or epic query flags. `issue show <id>` owns current record context,
+`work mission <id>` and `work epic <id>` own descendant objective state, and
+`evidence show <id>` owns full proof inspection. This keeps history a bounded
+activity reader rather than a second tracker query language.
 Issue workflow commands mutate the canonical Markdown tracker copy. They must
 not create a second durable active-work pointer in runtime state. Current-work
 orientation is derived from the set of canonical `in_progress` issues in that

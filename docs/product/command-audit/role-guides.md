@@ -55,8 +55,8 @@ After that, the worker follows the transition command and recovery guidance
 Atelier prints for the current issue. Review, branch, provider, and completion
 steps are not chosen from the role guide.
 
-Worker guide should hide or de-emphasize setup, maintenance, raw diagnostics,
-bundle apply, branch merge, and destructive record deletion.
+Worker guide should hide or de-emphasize setup, raw diagnostics, bundle apply,
+and branch merge. Arbitrary destructive record deletion is removed.
 
 ## Reviewer Guide
 
@@ -151,8 +151,8 @@ atelier prune
 ```
 
 Admin guide is the only role guide that may route to local tracker machinery.
-Hidden diagnostics, provider setup, and destructive maintenance commands appear
-only when an explicit recovery path needs them.
+Hidden diagnostics and provider setup appear only when an explicit recovery path
+needs them. Arbitrary destructive record deletion is removed.
 
 ## Resolved Design
 

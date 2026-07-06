@@ -580,9 +580,10 @@ Rebuild proceeds in this order:
 5. Regenerate derived projections such as `mission-control.json` when supported.
 
 If any unexpected canonical file exists under tracked `.atelier/` record
-directories, lint/rebuild must report an untracked or unsupported canonical file
-error. `manifest.json` and `graph.json` are not canonical source files and
-canonical repair removes stale copies when it writes the projection.
+directories, `atelier check` and hidden rebuild diagnostics must report an
+untracked or unsupported canonical file error. `manifest.json` and `graph.json`
+are not canonical source files and canonical repair removes stale copies when it
+writes the projection.
 
 The staged implementation uses a registered first-class record contract for
 non-issue records. Each canonical kind declares its record kind, schema,
@@ -599,9 +600,9 @@ writes target `.atelier/` directly.
 
 Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
 tracked `.atelier/` canonical records and may create ignored runtime/cache
-directories in a fresh checkout. Normal operators use `doctor --fix` for
+directories in a fresh checkout. Normal operators use `atelier check --fix` for
 explicit ignored-state repair. Backup export formats are no longer command
-surfaces; predecessor imports use `atelier import-beads`.
+surfaces; standard predecessor imports use `atelier init --import-beads`.
 
 Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
 write to a unique temporary database before atomically replacing `state.db`.

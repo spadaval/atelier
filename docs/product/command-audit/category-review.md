@@ -15,11 +15,12 @@ Audited low-level surfaces:
 
 | Command family | Classification | Replacement or boundary | Follow-up |
 | --- | --- | --- | --- |
-| `rebuild` | Hide/admin-frame | Keep as an advanced projection diagnostic. Admin local repair is `check --fix`; ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
-| `workflow check` | Hide/admin-frame | Keep as raw workflow-policy debugging. Normal readiness uses `issue transition`, `issue show <objective-id>`, and `check`. | No new issue. |
-| `diagnostics slow` | Hide/admin-frame | Keep as local-only telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
-| `import-beads` | Hide/migration-only | Keep as explicit predecessor import escape hatch. Normal setup uses `init`, with `init --import-beads` only for intentional migration. | No new issue. |
-| `maintenance delete` | Hide or remove | Destructive record surgery is over budget as a normal visible surface. Keep only as explicitly routed recovery if it remains necessary. | Needs budget verdict before being taught. |
+| `export` / `export --check` | Hide | Keep only as deterministic-renderer diagnostics and temporary migration infrastructure. Normal health, repair, and proof use `check` or `check --fix`. | Remove when storage migration no longer needs the renderer probe. |
+| `rebuild` | Fold + Hide | Fold explicit local repair into `check --fix`; keep the callable command hidden only as an advanced projection probe. Ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
+| `workflow check` | Fold + Hide | Fold normal policy health into `check` and transition readiness into `issue transition`; keep the callable command hidden for raw workflow-policy debugging. | No new issue. |
+| `diagnostics slow` | Keep hidden | Keep as local-only admin telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
+| `import-beads` | Fold + Hide | Fold standard predecessor migration into `init --import-beads`; keep the standalone command hidden temporarily for explicit nonstandard backup paths. | Remove after the predecessor migration window closes. |
+| `maintenance delete` | Removed | No explicit recovery flow required arbitrary record surgery. Supported cleanup is `prune`; canonical recovery uses Git history and reviewed repair. | Removed by `atelier-g87o`. |
 | `prune` | Keep visible admin | Keep dry-run by default. `--apply` may remove only cleanup classes with implemented retention contracts from the retention policy. | No new issue. |
 | `bundle` | Keep visible manager/orchestrator | Keep as the reviewed bulk record creation surface. It replaces shell loops over issue/mission/evidence mutation commands, not normal single-record editing. | Implementation ownership is now `commands::bundle`. |
 | `review` | Keep visible workflow/review | Keep review artifact management visible, but static guides should not decide when a review artifact is required. Lifecycle/status output owns that route. | Refine manual `review open` fields. |

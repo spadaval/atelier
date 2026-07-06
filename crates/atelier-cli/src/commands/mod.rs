@@ -2,7 +2,6 @@ pub mod activity_log;
 pub mod bundle;
 pub mod comment;
 pub mod create;
-pub mod delete;
 pub mod deps;
 pub mod evidence;
 pub mod forgejo;

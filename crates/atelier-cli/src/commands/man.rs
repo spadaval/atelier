@@ -279,18 +279,16 @@ fn print_not_usually(role: Role) {
     println!("-------------------------");
     match role {
         Role::Worker => {
-            println!("  maintenance, diagnostics, raw workflow checks, bundle apply, branch merge");
+            println!("  diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Reviewer => {
-            println!("  init, maintenance delete, issue creation, mission scope mutation");
+            println!("  init, issue creation, mission scope mutation");
         }
         Role::Validator => {
             println!("  issue creation, mission scope mutation, merge decisions outside assigned validation");
         }
         Role::Manager => {
-            println!(
-                "  diagnostics slow, rebuild, maintenance delete except during explicit repair; shell loops for bulk graph creation"
-            );
+            println!("  diagnostics slow, rebuild; shell loops for bulk graph creation");
         }
         Role::Admin => {
             println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");

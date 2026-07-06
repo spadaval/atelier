@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T17:52:48.122162591+00:00"
+status: "done"
 title: "Give hidden diagnostics explicit ownership decisions"
-updated_at: "2026-06-29T20:15:29.393741030+00:00"
+updated_at: "2026-07-06T17:52:48.122162591+00:00"
 ---
 
 ## Description

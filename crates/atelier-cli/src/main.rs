@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
-    CommandStorageAccess,
+    command_storage, existing_projection_db, lint_db, CommandStorageAccess,
 };
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
@@ -34,7 +33,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  history       Inspect canonical repo, mission, issue, or epic activity
+  history       Inspect bounded canonical repository or issue activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -129,7 +128,7 @@ enum Commands {
         action: IssueCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
+    /// Advanced deterministic-renderer diagnostic; normal health uses check
     #[command(hide = true)]
     Export {
         /// State directory for canonical export diagnostics
@@ -140,7 +139,7 @@ enum Commands {
         check: bool,
     },
 
-    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
+    /// Advanced projection diagnostic; explicit local repair uses check --fix
     #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from
@@ -176,36 +175,18 @@ enum Commands {
         action: ReviewCommands,
     },
 
-    /// Configure and verify Forgejo integration
+    /// Admin recovery for Forgejo role author accounts
     #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]
         action: ForgejoCommands,
     },
 
-    /// Inspect canonical repo, mission, issue, or epic activity
+    /// Inspect bounded canonical repository or issue activity
     History {
-        /// Scope to one mission and linked work
-        #[arg(long)]
-        mission: Option<String>,
-        /// Scope to one issue
+        /// Scope to one issue record; mission and epic dashboards own descendant views
         #[arg(long)]
         issue: Option<String>,
-        /// Scope to one epic and its descendants
-        #[arg(long)]
-        epic: Option<String>,
-        /// Include subissues when using --issue
-        #[arg(long)]
-        include_descendants: bool,
-        /// Filter by event kind, such as note or evidence_attached
-        #[arg(long)]
-        event_kind: Option<String>,
-        /// Filter by actor exactly as recorded
-        #[arg(long)]
-        actor: Option<String>,
-        /// Filter to events since a duration like 7d, a YYYY-MM-DD date, or RFC3339
-        #[arg(long)]
-        since: Option<String>,
         /// Maximum number of matching events to print
         #[arg(long, default_value_t = commands::history::DEFAULT_LIMIT)]
         limit: usize,
@@ -218,7 +199,7 @@ enum Commands {
         action: WorkflowCommands,
     },
 
-    /// Git branch helpers for epic review branches
+    /// Manual owner-branch recovery after workflow transition failures
     #[command(hide = true)]
     Branch {
         #[command(subcommand)]
@@ -230,13 +211,6 @@ enum Commands {
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,
-    },
-
-    /// Destructive maintenance commands
-    #[command(hide = true)]
-    Maintenance {
-        #[command(subcommand)]
-        action: MaintenanceCommands,
     },
 
     /// Prune accumulated artifacts safely
@@ -503,18 +477,6 @@ enum IssueCommands {
 }
 
 #[derive(Subcommand)]
-enum MaintenanceCommands {
-    /// Delete a record with an explicit target kind
-    Delete {
-        target_kind: String,
-        target_id: String,
-        /// Skip confirmation
-        #[arg(short, long)]
-        force: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum BundleCommands {
     /// Preview an authored bundle JSON file without mutating tracker state
     Preview { input: String },
@@ -655,17 +617,17 @@ enum ForgejoRolesCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
+    /// Run raw workflow-policy diagnostics; normal operator checks use check
     Check,
 }
 
 #[derive(Subcommand)]
 enum BranchCommands {
-    /// Create or switch to the review branch for an epic
+    /// Recover a missing epic review branch after a failed start transition
     ForEpic { id: String },
-    /// Show local epic review branches
+    /// Inspect local epic review branches during transition recovery
     Status,
-    /// Merge the review branch for an epic into the current branch
+    /// Recover integration after a failed close transition
     Merge { id: String },
 }
 
@@ -712,13 +674,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
-}
-
-fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
-    if kind != "issue" {
-        bail!("{command} currently supports issue records only; got '{kind}'");
-    }
-    Ok(())
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -944,7 +899,7 @@ fn run() -> Result<()> {
                         }),
                     )?;
                     if let Some((kind, id)) = parsed_target {
-                        commands::evidence::attach(
+                        commands::evidence::attach_silently(
                             &storage.state_dir(),
                             &storage.db_path(),
                             &evidence_id,
@@ -954,7 +909,7 @@ fn run() -> Result<()> {
                         )?;
                     }
                     let db = use_cases::refreshed_mutation_db(&storage)?;
-                    commands::evidence::show(&db, &evidence_id)
+                    commands::evidence::show(&db, &evidence_id, quiet)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -976,6 +931,7 @@ fn run() -> Result<()> {
                             target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
                             role: &role,
                             command: &command,
+                            quiet,
                         },
                     )
                 }
@@ -983,7 +939,7 @@ fn run() -> Result<()> {
             EvidenceCommands::Show { id } => {
                 let storage = use_cases::evidence_query_storage()?;
                 let db = storage.db();
-                commands::evidence::show(&db, &id)
+                commands::evidence::show(&db, &id, quiet)
             }
             EvidenceCommands::Attach {
                 id,
@@ -1001,12 +957,13 @@ fn run() -> Result<()> {
                     &target_kind,
                     &target_id,
                     &role,
+                    quiet,
                 )
             }
             EvidenceCommands::List { status } => {
                 let storage = use_cases::evidence_query_storage()?;
                 let db = storage.db();
-                commands::evidence::list(&db, status.as_deref())
+                commands::evidence::list(&db, status.as_deref(), quiet)
             }
         },
 
@@ -1140,26 +1097,9 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::History {
-            mission,
-            issue,
-            epic,
-            include_descendants,
-            event_kind,
-            actor,
-            since,
-            limit,
-        } => {
+        Commands::History { issue, limit } => {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
-            let mission = mission
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
             let issue = issue
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
-            let epic = epic
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
                 .transpose()?;
@@ -1167,14 +1107,9 @@ fn run() -> Result<()> {
                 storage.db(),
                 &storage.state_dir(),
                 commands::history::HistoryOptions {
-                    mission,
                     issue,
-                    epic,
-                    include_descendants,
-                    event_kind,
-                    actor,
-                    since,
                     limit,
+                    quiet,
                 },
             )
         }
@@ -1207,21 +1142,6 @@ fn run() -> Result<()> {
                 let summary = telemetry::slow_command_summary(days, threshold_ms)?;
                 println!("{}", serde_json::to_string_pretty(&summary)?);
                 Ok(())
-            }
-        },
-
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete {
-                target_kind,
-                target_id,
-                force,
-            } => {
-                require_issue_kind(&target_kind, "atelier maintenance delete")?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                drop(db);
-                commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
             }
         },
 
@@ -1384,9 +1304,6 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",
-        },
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
         Commands::Prune { apply, .. } => {
             if *apply {

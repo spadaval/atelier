@@ -6,6 +6,19 @@ labels:
 - "admin"
 - "cli"
 - "complexity"
+review:
+  kind: pull_request
+  number: 44
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-eqq6
+    owner_kind: epic
+    review_target: mission/atelier-durs
+    work_branch: epic/atelier-eqq6
 priority: "P1"
 relationships:
   blocks:
@@ -27,9 +40,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:20:05.346194494+00:00"
+status: "done"
 title: "Epic: Hide or remove provider and recovery escape hatches"
-updated_at: "2026-06-29T20:15:29.399052097+00:00"
+updated_at: "2026-07-06T18:20:05.346194494+00:00"
 ---
 
 ## Description

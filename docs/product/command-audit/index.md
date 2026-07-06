@@ -21,8 +21,8 @@ The product surface uses four command categories:
 
 - Normal workflow: visible operator commands for orientation, work lifecycle,
   proof, terminal readiness, and ordinary health.
-- Admin maintenance: visible setup, explicit repair, destructive maintenance,
-  and manual owner-branch recovery.
+- Admin maintenance: visible setup, explicit repair, supported pruning, and
+  manual owner-branch recovery.
 - Hidden debug diagnostics: raw policy, telemetry, projection, or
   deterministic-renderer probes that are callable only for targeted diagnostics,
   tests, or migration work.
@@ -86,7 +86,7 @@ not be taught as ordinary workflow:
   hatch; normal setup uses `init --import-beads`.
 - [lint](lint.md): hidden compatibility health probe; normal validation uses
   visible `check`.
-- [maintenance](maintenance.md): hidden danger-zone maintenance primitives.
+- [maintenance](maintenance.md): removed arbitrary-record deletion surface.
 - [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
   from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
@@ -150,7 +150,7 @@ runtime active-pointer helpers.
 | The audit previously overloaded `work queue`. | Older docs routed mission inventory and generic issue inventory through `work queue --type mission`, but the current direction restores `issue list` as a simple inventory command and keeps mission dashboards under `work mission`. | Update docs and help so inventory, operational queues, and mission dashboards are separate jobs. |
 | `issue list` has a defined inventory role. | `target/debug/atelier issue --help` lists `list` as generic issue inventory. | Keep it simple; do not route work-queue or dashboard decisions through it. |
 | `mission` was a parallel objective namespace. | `mission` is now rejected; root help teaches mission-typed issue records and `work mission <mission-id>`. | Keep mission guidance under typed issue records and work dashboards rather than aliases. |
-| Complex commands need explicit budget verdicts. | `review` mirrors provider verbs, scoped `history` risks query-language sprawl, `evidence attach` duplicates relationship mutation, and transition output dumps implementation machinery. | Apply Keep/Simplify/Fold/Hide/Remove verdicts in each command file before adding new surfaces. |
+| Complex commands need explicit budget verdicts. | Command-specific audit files record Keep/Simplify/Fold/Hide/Remove decisions. Evidence keeps typed reuse secondary to capture; history keeps only repository/issue scope plus a limit; review derives routine provider context and collapses status/comments and submit-like verbs. | Enforce each recorded boundary in help, tests, and current product docs. |
 | Review artifact work mirrored provider plumbing and verbs. | Resolved: `review open` derives routine issue/workflow context, `show` owns status/comments, and `submit` owns comment/approval/change-request mutations. Removed verbs are not aliases. | Keep help, docs, and workflow recovery guidance on `open/show/submit/resolve/merge`. |
 | Human output has recurring scanability debt. | Sampled queue, detail, transition, history, evidence, and role-guide outputs repeat inline commands, overuse `key=value`, print raw activity fields, and lack interactive color. | Use the [human output refresh](human-output-refresh.md) audit to drive the formatter pass before changing command behavior. |
 | Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale status/projection signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
