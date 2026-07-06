@@ -71,4 +71,3 @@ Truncated: no
 ────────────
      Summary [   3.097s] 12 tests run: 12 passed, 711 skipped
 ```
-
