@@ -31,7 +31,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  history       Inspect canonical repo, mission, issue, or epic activity
+  history       Inspect repository, mission, issue, or epic activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -145,12 +145,12 @@ enum Commands {
         input: Option<String>,
     },
 
-    /// Import Beads JSONL backup into Atelier record files and local runtime
+    /// Import Beads JSONL backup into durable record files; cache repair remains lazy
     #[command(hide = true)]
     ImportBeads {
         /// Beads JSONL backup path from an external source
         input: String,
-        /// Canonical state directory to write after import
+        /// Record-file directory to write after import
         #[arg(short, long)]
         output: Option<String>,
     },

@@ -937,6 +937,10 @@ fn test_cache_decision_query_never_returns_known_stale_rows() {
             .contains("tracker record files use a schema this atelier binary does not understand"),
         "missing source-schema diagnostic: {stderr}"
     );
+    assert!(
+        stderr.contains("Tracker record files are invalid"),
+        "missing record-file validity prefix: {stderr}"
+    );
 }
 
 #[test]
@@ -966,6 +970,18 @@ fn test_cache_orientation_names_degraded_last_good_state() {
         stderr.contains("using the existing local cache for orientation only"),
         "missing degraded orientation diagnostic: {stderr}"
     );
+    assert!(
+        stderr.contains("Record-file diagnostic:"),
+        "missing record-file diagnostic label: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "degraded issue show failed: {stderr}");
+    assert!(
+        stdout.contains("Issue record file is malformed:"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("Canonical issue record"), "{stdout}");
 }
 
 #[test]
@@ -1000,6 +1016,7 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
     );
     assert!(
         stderr.contains("12 indexed sources changed")
+            && stderr.contains("Cache diagnostic is stale")
             && stderr.contains("showing first 5")
             && stderr.contains("recovery: 1. run `atelier check`")
             && stderr.contains("3. run `atelier check --fix`")
@@ -1025,6 +1042,9 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
                 .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "fresh export check failed: {stderr}");
+    assert!(stdout.contains("Record files and domain cache are current"));
 }
 
 #[test]
@@ -1538,7 +1558,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
     assert!(
         transcript.contains("has blocks reference to missing issue atelier-missing")
             && transcript.contains(&issue_id)
-            && transcript.contains("Canonical tracker Markdown is invalid"),
+            && transcript.contains("Tracker record files are invalid"),
         "unexpected focused lint error: {transcript}"
     );
 }
@@ -1729,7 +1749,7 @@ fn assert_lint_rejects_canonical_mutation(
     );
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
-        transcript.contains("Canonical tracker Markdown is invalid")
+        transcript.contains("Tracker record files are invalid")
             || transcript.contains("Lint found"),
         "lint should identify canonical markdown failure for {title}: {transcript}"
     );

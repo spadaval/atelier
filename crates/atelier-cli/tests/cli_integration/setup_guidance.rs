@@ -236,7 +236,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     );
     let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     assert!(
-        lint_transcript.contains("Canonical tracker Markdown is invalid")
+        lint_transcript.contains("Tracker record files are invalid")
             && lint_transcript.contains("Invalid YAML front matter"),
         "unexpected lint error: {lint_transcript}"
     );
@@ -862,6 +862,8 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
+    assert!(stdout.contains("history       Inspect repository, mission, issue, or epic activity"));
+    assert!(!stdout.contains("Inspect canonical repo"));
 
     for heading in [
         "Setup:",
@@ -1020,6 +1022,18 @@ fn test_top_level_help_only_shows_core_commands() {
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_import_beads_help_names_record_files_and_lazy_cache_repair() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["import-beads", "--help"]);
+    assert!(success, "import-beads help failed: {stderr}");
+    assert!(stdout.contains("Import Beads JSONL backup into durable record files"));
+    assert!(stdout.contains("cache repair remains lazy"));
+    assert!(stdout.contains("Record-file directory to write after import"));
+    assert!(!stdout.contains("local runtime"));
+    assert!(!stdout.contains("Canonical state directory"));
 }
 
 #[test]

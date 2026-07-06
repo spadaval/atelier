@@ -89,4 +89,3 @@ Truncated: yes
         PASS [   0.017s] ( 32/141) atelier-app project_config::tests::parses_global_user_forgejo_token
         PASS [   0.013s] ( 33/141) atelier-app
 ```
-

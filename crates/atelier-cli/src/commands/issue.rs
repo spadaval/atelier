@@ -471,7 +471,7 @@ pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
         Ok(None) => (issue_object(db, issue)?, None),
         Err(error) => (
             issue_object(db, issue)?,
-            Some(format!("Canonical issue record is malformed: {error:#}")),
+            Some(format!("Issue record file is malformed: {error:#}")),
         ),
     };
     render_issue_show_human(db, &id, &object, degraded.as_deref())
@@ -2496,12 +2496,12 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
     })?;
     let view = outcome.value.data;
     if view.stale_entries.is_empty() {
-        println!("Canonical record cache is current");
+        println!("Record files and domain cache are current");
         println!("State: {}", view.state_dir.display());
         Ok(())
     } else {
         bail!(
-            "Canonical record cache is stale:\n{}",
+            "Record-file/domain-cache state is stale:\n{}",
             view.stale_entries.join("\n")
         )
     }

@@ -88,4 +88,3 @@ Truncated: yes
         PASS [   0.698s] ( 31/269) atelier-cli::cli_integration issues::test_create_subissue
         PASS [   0.553s] ( 32/269) atelier-cli::cli_integration issues::test_issue_list_marks_external_ep
 ```
-

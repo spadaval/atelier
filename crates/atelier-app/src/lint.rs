@@ -117,7 +117,7 @@ pub fn lint(
                 Err(error) => {
                     findings.push(LintFinding {
                         id: "(canonical)".to_string(),
-                        message: format!("Canonical tracker Markdown is invalid: {error:#}"),
+                        message: format!("Tracker record files are invalid: {error:#}"),
                     });
                     Vec::new()
                 }
@@ -135,7 +135,7 @@ pub fn lint(
                             .and_then(|stem| stem.to_str())
                             .unwrap_or("(unknown)")
                             .to_string(),
-                        message: format!("Canonical tracker Markdown is invalid: {error:#}"),
+                        message: format!("Tracker record files are invalid: {error:#}"),
                     });
                 }
             }
@@ -144,7 +144,7 @@ pub fn lint(
             if let Err(error) = crate::rebuild::validate_canonical_state(state_dir) {
                 findings.push(LintFinding {
                     id: "(canonical)".to_string(),
-                    message: format!("Canonical tracker Markdown is invalid: {error:#}"),
+                    message: format!("Tracker record files are invalid: {error:#}"),
                 });
             }
         }

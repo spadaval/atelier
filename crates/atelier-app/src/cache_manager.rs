@@ -264,7 +264,7 @@ impl CacheManager {
             }
             Err(error) => Err(cache_validation_error(
                 error,
-                "Canonical tracker records are invalid",
+                "Tracker record files are invalid",
             )),
         }
     }
@@ -281,7 +281,7 @@ impl CacheManager {
         );
         tracing::warn!("Recovery: 1. run `atelier check`; 2. fix the named record file; 3. run `atelier check --fix`; 4. rerun the blocked command before closing or mutating work.");
         tracing::warn!("Cache freshness: {}", report.problem_messages().join("; "));
-        tracing::warn!("Canonical diagnostic: {error:#}");
+        tracing::warn!("Record-file diagnostic: {error:#}");
         self.access(db, initial_state, CachePreparation::OrientationDegraded)
     }
 
@@ -531,7 +531,7 @@ mod tests {
             Err(error) => error,
         };
         assert!(
-            format!("{error:#}").contains("Canonical tracker records are invalid"),
+            format!("{error:#}").contains("Tracker record files are invalid"),
             "unexpected error: {error:#}"
         );
     }
