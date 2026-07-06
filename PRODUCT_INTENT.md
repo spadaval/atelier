@@ -589,7 +589,6 @@ workflow-derived owner branch.
 Desired commands:
 
 ```text
-atelier agent init <name>
 atelier issue transition atelier-z1p8 start
 atelier issue transition atelier-z1p8 close --reason "done"
 ```
@@ -676,7 +675,7 @@ per epic, lifecycle-owned branch
 preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
 `atelier issue transition <id> close --reason "..."`,
 and `atelier check` health checks. Explicit ignored-state repair uses
-`atelier check --fix`. Branch commands such as `atelier branch for-epic`
+`atelier check --fix`. Advanced repair commands such as `atelier branch for-epic`
 are internal, diagnostic, or advanced repair surfaces; they are not the normal
 mutating-subagent default.
 

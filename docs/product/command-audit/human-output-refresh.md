@@ -9,7 +9,10 @@ For evidence from actual Codex agents using the commands, see
 guidance, and command-language failures that are adjacent to formatting but not
 solved by layout alone.
 
-Sampled commands:
+## Historical Sampled Commands (Non-Normative)
+
+These commands record the surface sampled at the time of the audit; they are
+not current routing guidance:
 
 - `target/debug/atelier status`
 - `target/debug/atelier work queue`

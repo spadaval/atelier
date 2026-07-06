@@ -16,8 +16,9 @@ atelier man admin
 ```
 
 `man` is intentionally a guide layer, not a new command namespace. It must not
-create commands such as `atelier worker start` or `atelier orchestrator issue
-create`. Role guides answer "which existing commands matter to me right now?"
+create the removed role command `atelier worker start`.
+It must not create `atelier orchestrator issue create` either. Role guides
+answer "which existing commands matter to me right now?"
 
 ## Guide Contract
 

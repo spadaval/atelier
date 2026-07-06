@@ -212,7 +212,7 @@ and performance follow-up work. It must not appear in ordinary Agent Factory or
 operator recipes for mission selection, issue readiness, blocker triage,
 validation proof, evidence coverage, or closeout readiness.
 
-## Slow Command Query Defaults
+## Hidden Diagnostic: Slow Command Query Defaults
 
 The slow-command query surface owned by follow-up work should read local event
 logs and produce stable JSON summaries. The default query window is the last

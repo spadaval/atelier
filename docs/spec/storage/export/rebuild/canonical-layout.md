@@ -179,16 +179,16 @@ Direct edits are a supported operator and agent workflow:
 
 1. Edit tracked Markdown under `.atelier/` using the deterministic layout in
    this document.
-2. Run `atelier lint` to validate schema, path, front matter, relationships,
+2. Run `atelier check` to validate schema, path, front matter, relationships,
    activity sidecars, and unsupported files.
 3. Run the normal command that depends on the changed record, or run
-   `atelier doctor --fix` when local projection/runtime repair is explicitly
+   `atelier check --fix` when local projection/runtime repair is explicitly
    needed.
 
 Every canonical Markdown file must use YAML front matter bounded by `---`, UTF-8
 encoding, LF line endings, and exactly one trailing newline. Front matter keys
 are rendered lexically by Atelier writers. Hand edits may use any YAML key order,
-but `atelier lint` and repair commands may report non-canonical ordering as
+but `atelier check` may report non-canonical ordering as
 format drift once the direct-edit lint slice lands.
 
 Required common fields are `schema`, `schema_version`, `id`, `title`, `status`,
@@ -247,7 +247,7 @@ Operators can edit canonical issue Markdown directly and validate the result.
 
 ## Evidence
 
-- `atelier lint atelier-z1p8` reports no findings.
+- `atelier check atelier-z1p8` reports no findings.
 
 ## Notes
 
@@ -279,14 +279,14 @@ normal Git tools and then use Atelier commands to validate the result. The
 standard recovery loop is:
 
 1. Resolve file conflicts under tracked `.atelier/` record directories.
-2. Run `atelier lint`.
+2. Run `atelier check`.
 3. Use focused drill-down commands such as `atelier issue show <id>`,
    `atelier issue show <objective-id>`, `atelier evidence show <id>`, or
    `atelier work ready` to inspect the affected records.
-4. Run `atelier doctor --fix` if ignored local projection/runtime state is
+4. Run `atelier check --fix` if ignored local projection/runtime state is
    stale or was rebuilt from invalid intermediate files.
-5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
-   mission being closed.
+5. Re-run `atelier check`, then inspect `atelier issue transition <id>` for the
+   issue, epic, or mission being advanced.
 
 For a single Markdown record conflict:
 
@@ -332,7 +332,7 @@ For unsupported files or stale runtime state:
 - If `.atelier/runtime/state.db` is missing or stale, rebuild it from canonical
   records instead of resolving it as a Git conflict.
 
-When `atelier lint` reports invalid canonical Markdown, fix the Markdown rather
+When `atelier check` reports invalid canonical Markdown, fix the Markdown rather
 than trusting the current SQLite projection. SQLite is rebuildable; the
 canonical Markdown record tree is the durable review surface.
 

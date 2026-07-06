@@ -6,12 +6,19 @@ implementation visibility.
 
 | Category | Belongs here | Excluded non-examples | Review note |
 | --- | --- | --- | --- |
-| Normal workflow | `status`, `issue show`, `issue transition`, `work queue`, `work mission`, `evidence record`, `review show`, `check` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete`, provider setup commands | Normal commands answer operator questions in domain terms and may be cited for ordinary handoff, validation, committed-state health, and terminal readiness. |
+| Normal workflow | `status`, `issue list`, `issue show`, `issue transition`, `work ready`, `work blocked`, `work missions`, `work mission`, `work epic`, `evidence record`, `review show`, `check` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete`, provider setup commands | Normal commands answer operator questions in domain terms and may be cited for ordinary handoff, validation, committed-state health, and terminal readiness. |
 | Admin maintenance | `init`, `check`, `check --fix`, `prune`, `prune --apply` | `issue show <objective-id>`, `issue transition`, hidden `workflow check`, hidden `diagnostics slow` | Admin commands configure or repair Atelier itself and clean explicitly supported artifacts. Hidden or destructive recovery commands are routed only when needed. |
 | Hidden debug diagnostics | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` used as a projection probe | `check`, `issue show <objective-id>`, `status` | Debug diagnostics may expose raw policy, telemetry, projection, or deterministic-renderer mechanics. They must not be normal next actions or automation contracts for selecting work. |
 | Temporary migration | `init --import-beads`, hidden/manual `import-beads`, hidden advanced `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks | Migration commands bridge inherited state or test deterministic renderers while the Markdown-first store stabilizes. They need a cleanup owner instead of compatibility promises. |
 
-Audited low-level surfaces:
+## Historical Classification (Non-Normative)
+
+Earlier category drafts listed `work queue` as normal workflow. That legacy
+route is retained here only to explain the audit change; current work selection
+uses `work ready`, `work blocked`, `work missions`, `work mission`, and
+`work epic`.
+
+## Audited Low-Level Surfaces
 
 | Command family | Classification | Replacement or boundary | Follow-up |
 | --- | --- | --- | --- |

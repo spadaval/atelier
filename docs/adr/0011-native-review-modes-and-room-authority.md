@@ -11,9 +11,9 @@ workflow transition effects to transition actions.
 ADR 0010 defined provider-backed pull requests as review artifacts and kept
 Atelier workflow transitions separate from provider actions. The next product
 step adds native review rooms while retaining Forgejo-backed review artifacts.
-Without a new decision, implementation could keep `atelier pr` as the public
-surface, accept both native and provider review state in one project, or store
-room summaries that drift from their event history.
+Without a new decision, implementation could retain the superseded
+provider-specific surface, accept both native and provider review state in one
+project, or store room summaries that drift from their event history.
 
 ## Decision
 
