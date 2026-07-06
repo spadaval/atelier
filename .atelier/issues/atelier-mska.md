@@ -35,9 +35,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-06T21:21:42.141118496+00:00"
+status: "publish_review"
 title: "Mission: Unify record storage and lazy domain cache"
-updated_at: "2026-07-06T17:46:19.151940330+00:00"
+updated_at: "2026-07-06T21:21:42.141118496+00:00"
 ---
 
 ## Description
