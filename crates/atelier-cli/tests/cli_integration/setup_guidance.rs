@@ -829,6 +829,93 @@ fn test_prune_protects_active_and_recent_terminal_owner_branches() {
 }
 
 #[test]
+fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
+    let dir = tempdir().unwrap();
+    let remote = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Terminal epic owner",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Active epic child", "--parent", &epic_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_ref(dir.path(), 2);
+    make_issue_terminal_before_retention(dir.path(), &epic_id, 45);
+    commit_all(dir.path(), "terminal epic with active descendant fixture");
+    let branch = format!("epic/{epic_id}");
+    let worktree = dir.path().join("terminal-epic-worktree");
+    for args in [
+        vec!["init", "--bare", remote.path().to_str().unwrap()],
+        vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
+        vec!["push", "-u", "origin", "main"],
+        vec!["branch", &branch],
+        vec!["push", "-u", "origin", &branch],
+        vec!["worktree", "add", worktree.to_str().unwrap(), &branch],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    let reason = format!("owner {epic_id} has active descendant {child_id}");
+    assert!(
+        stdout.contains(&format!("protected branch {branch}")) && stdout.contains(&reason),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("protected worktree") && stdout.contains(&reason),
+        "{stdout}"
+    );
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {branch}")) && stdout.contains(&reason),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("protected worktree") && stdout.contains(&reason),
+        "{stdout}"
+    );
+    assert!(
+        worktree.exists(),
+        "apply removed active descendant worktree"
+    );
+    let branch_exists = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .status()
+        .unwrap();
+    assert!(
+        branch_exists.success(),
+        "apply removed active descendant branch"
+    );
+}
+
+#[test]
 fn test_prune_protects_unmerged_and_unpushed_terminal_owner_branches() {
     let dir = tempdir().unwrap();
     let remote = tempdir().unwrap();

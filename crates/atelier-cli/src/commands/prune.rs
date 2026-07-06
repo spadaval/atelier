@@ -98,6 +98,7 @@ struct GitBranchOwner {
     base: String,
     merge_strategy: MergeStrategy,
     protection: Option<String>,
+    active_descendants: BTreeSet<String>,
 }
 
 impl CanonicalCandidate {
@@ -191,8 +192,9 @@ fn prune_git_artifacts(
         .into_iter()
         .map(|candidate| (candidate.id.clone(), candidate))
         .collect::<BTreeMap<_, _>>();
+    let all_issues = tracker.db.list_issues(Some("all"), None, None)?;
     let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
-    for issue in tracker.db.list_issues(Some("all"), None, None)? {
+    for issue in &all_issues {
         if let Ok(resolution) =
             atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
         {
@@ -214,12 +216,36 @@ fn prune_git_artifacts(
                     .entry(resolution.expected_branch)
                     .or_default()
                     .push(GitBranchOwner {
-                        id: issue.id,
+                        id: issue.id.clone(),
                         base: resolution.base_branch,
                         merge_strategy: resolution.merge_strategy,
                         protection,
+                        active_descendants: BTreeSet::new(),
                     });
             }
+        }
+    }
+    for issue in &all_issues {
+        if crate::commands::issue_workflow::issue_is_done(Some(&policy), issue) {
+            continue;
+        }
+        let Ok(resolution) =
+            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
+        else {
+            continue;
+        };
+        if resolution.owner_id == issue.id {
+            continue;
+        }
+        if let Some(owner) = branch_owners
+            .get_mut(&resolution.expected_branch)
+            .and_then(|owners| {
+                owners
+                    .iter_mut()
+                    .find(|owner| owner.id == resolution.owner_id)
+            })
+        {
+            owner.active_descendants.insert(issue.id.clone());
         }
     }
     let current = git_stdout_trimmed(&tracker.repo_root, &["branch", "--show-current"])?;
@@ -394,6 +420,18 @@ fn git_owner_protection(
         return Ok(Some(format!("ambiguous owner record associations: {ids}")));
     }
     let owner = &owners[0];
+    if !owner.active_descendants.is_empty() {
+        return Ok(Some(format!(
+            "owner {} has active descendant {}",
+            owner.id,
+            owner
+                .active_descendants
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    }
     if let Some(reason) = &owner.protection {
         return Ok(Some(reason.clone()));
     }
@@ -477,7 +515,12 @@ fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> R
     }
     let output = Command::new("git")
         .current_dir(repo_root)
-        .args(["log", "-z", "--format=%H%x00%s", base])
+        .args([
+            "log",
+            "-z",
+            "--format=%H%x00%s",
+            &format!("{merge_base}..{base}"),
+        ])
         .output()
         .context("failed to inspect squash integration history for prune candidate")?;
     if !output.status.success() {
@@ -1516,6 +1559,33 @@ mod tests {
             repo.path(),
             &["commit", "-m", "Squash merge task/owner into main"],
         );
+
+        assert!(
+            !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn historical_reverted_squash_patch_does_not_prove_later_integration() {
+        let repo = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::write(repo.path().join("base"), "base").unwrap();
+        git(repo.path(), &["add", "base"]);
+        git(repo.path(), &["commit", "-m", "base"]);
+        fs::write(repo.path().join("replayed-work"), "same patch").unwrap();
+        git(repo.path(), &["add", "replayed-work"]);
+        git(
+            repo.path(),
+            &["commit", "-m", "Squash merge task/owner into main"],
+        );
+        git(repo.path(), &["revert", "--no-edit", "HEAD"]);
+        git(repo.path(), &["checkout", "-b", "task/owner"]);
+        fs::write(repo.path().join("replayed-work"), "same patch").unwrap();
+        git(repo.path(), &["add", "replayed-work"]);
+        git(repo.path(), &["commit", "-m", "later owner work"]);
 
         assert!(
             !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
