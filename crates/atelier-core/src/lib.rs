@@ -134,6 +134,115 @@ pub struct Issue {
     pub closed_at: Option<DateTime<Utc>>,
 }
 
+pub const ISSUE_REVIEW_FIELD: &str = "review";
+
+/// The review artifact linked from an issue record.
+///
+/// Known issue fields get concrete domain accessors here as they are promoted;
+/// callers should not interpret their JSON storage representation directly.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum IssueReview {
+    Room { id: String },
+    ForgejoPullRequest { number: u64 },
+}
+
+impl IssueReview {
+    pub fn room(id: impl Into<String>) -> Result<Self, IssueFieldError> {
+        let id = id.into();
+        if id.trim().is_empty() {
+            return Err(IssueFieldError::InvalidReview(
+                "room review id must be a non-empty string".to_string(),
+            ));
+        }
+        Ok(Self::Room { id })
+    }
+
+    pub fn from_value(value: &serde_json::Value) -> Result<Self, IssueFieldError> {
+        let object = value.as_object().ok_or_else(|| {
+            IssueFieldError::InvalidReview("review must be an object".to_string())
+        })?;
+        match object.get("kind").and_then(serde_json::Value::as_str) {
+            Some("room") => object
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+                .ok_or_else(|| {
+                    IssueFieldError::InvalidReview(
+                        "room review id must be a non-empty string".to_string(),
+                    )
+                })
+                .and_then(Self::room),
+            Some("pull_request")
+                if object.get("provider").and_then(serde_json::Value::as_str)
+                    == Some("forgejo") =>
+            {
+                object
+                    .get("number")
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|number| *number > 0)
+                    .map(|number| Self::ForgejoPullRequest { number })
+                    .ok_or_else(|| {
+                        IssueFieldError::InvalidReview(
+                            "Forgejo pull request must include a positive number".to_string(),
+                        )
+                    })
+            }
+            Some(kind) => Err(IssueFieldError::InvalidReview(format!(
+                "unsupported review kind '{kind}'"
+            ))),
+            None => Err(IssueFieldError::InvalidReview(
+                "review kind must be a string".to_string(),
+            )),
+        }
+    }
+
+    pub fn to_value(&self) -> serde_json::Value {
+        match self {
+            Self::Room { id } => serde_json::json!({ "kind": "room", "id": id }),
+            Self::ForgejoPullRequest { number } => serde_json::json!({
+                "kind": "pull_request",
+                "provider": "forgejo",
+                "number": number,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum IssueFieldError {
+    InvalidReview(String),
+}
+
+impl fmt::Display for IssueFieldError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidReview(detail) => write!(f, "invalid issue review field: {detail}"),
+        }
+    }
+}
+
+impl std::error::Error for IssueFieldError {}
+
+impl Issue {
+    pub fn review(&self) -> Result<Option<IssueReview>, IssueFieldError> {
+        self.fields
+            .get(ISSUE_REVIEW_FIELD)
+            .map(IssueReview::from_value)
+            .transpose()
+    }
+
+    pub fn set_review(&mut self, review: IssueReview) {
+        self.fields
+            .insert(ISSUE_REVIEW_FIELD.to_string(), review.to_value());
+    }
+
+    pub fn clear_review(&mut self) -> Option<IssueReview> {
+        self.fields
+            .remove(ISSUE_REVIEW_FIELD)
+            .and_then(|value| IssueReview::from_value(&value).ok())
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Comment {
     pub id: i64,
@@ -238,6 +347,20 @@ pub struct IssueRecord {
     pub fields: BTreeMap<String, serde_json::Value>,
     pub closed_at: Option<DateTime<Utc>>,
     pub sections: IssueSections,
+}
+
+impl IssueRecord {
+    pub fn review(&self) -> Result<Option<IssueReview>, IssueFieldError> {
+        self.fields
+            .get(ISSUE_REVIEW_FIELD)
+            .map(IssueReview::from_value)
+            .transpose()
+    }
+
+    pub fn set_review(&mut self, review: IssueReview) {
+        self.fields
+            .insert(ISSUE_REVIEW_FIELD.to_string(), review.to_value());
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -593,6 +716,39 @@ pub fn validate_non_empty(field: &'static str, value: &str) -> Result<(), ValueE
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_review_has_typed_room_and_provider_forms() {
+        let room = IssueReview::from_value(&serde_json::json!({
+            "kind": "room",
+            "id": "atelier-rvw1"
+        }))
+        .unwrap();
+        assert_eq!(
+            room,
+            IssueReview::Room {
+                id: "atelier-rvw1".to_string()
+            }
+        );
+        assert_eq!(
+            room.to_value(),
+            serde_json::json!({"kind": "room", "id": "atelier-rvw1"})
+        );
+
+        let pull = IssueReview::from_value(&serde_json::json!({
+            "kind": "pull_request",
+            "provider": "forgejo",
+            "number": 42
+        }))
+        .unwrap();
+        assert_eq!(pull, IssueReview::ForgejoPullRequest { number: 42 });
+        assert!(IssueReview::from_value(&serde_json::json!({
+            "kind": "pull_request",
+            "provider": "forgejo",
+            "number": 0
+        }))
+        .is_err());
+    }
 
     #[test]
     fn record_id_rejects_empty_values() {

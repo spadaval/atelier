@@ -9,7 +9,7 @@ local runtime state be repaired safely?"
 
 - Name: Correct. `check` is the visible health command.
 - Documentation: Should replace routine references to `lint`, `doctor`,
-  `workflow check`, `rebuild`, and projection repair commands.
+  `workflow check`, `rebuild`, and domain-cache repair commands.
 - Design: Correct if it remains one health surface and does not become a raw
   diagnostics console.
 - Output hierarchy: blocking health failures, safe `--fix` repairs, focused
@@ -21,7 +21,7 @@ local runtime state be repaired safely?"
 | --- | --- | --- | --- |
 | `check` | Reviewer/validator | Validate tracker health. | Keep. |
 | `check <issue-id>` | Reviewer/validator | Validate one issue and its reachable tracker state. | Keep. |
-| `check --fix` | Admin | Repair ignored runtime/cache/projection state without editing canonical records. | Keep. |
+| `check --fix` | Admin | Repair ignored runtime/cache state without editing record files. | Keep. |
 
 ## Complexity Budget
 
@@ -35,4 +35,4 @@ Surfaces over budget unless explicitly routed by `check` output:
 - `doctor`
 - `rebuild`
 - `workflow check`
-- diagnostic export/projection probes
+- diagnostic export/cache probes

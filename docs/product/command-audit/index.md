@@ -7,7 +7,7 @@ documented, and shaped for that role.
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
-Last refreshed: 2026-06-29 from `target/debug/atelier --help`, focused
+Last refreshed: 2026-07-06 from `target/debug/atelier --help`, focused
 subcommand help, command-audit consistency checks, and live dashboard/transition
 samples.
 
@@ -19,7 +19,7 @@ The product surface uses four command categories:
   proof, terminal readiness, and ordinary health.
 - Admin maintenance: visible setup, explicit repair, destructive maintenance,
   and manual owner-branch recovery.
-- Hidden debug diagnostics: raw policy, telemetry, projection, or
+- Hidden debug diagnostics: raw policy, telemetry, domain-cache, or
   deterministic-renderer probes that are callable only for targeted diagnostics,
   tests, or migration work.
 - Temporary migration: transitional inherited-state or deterministic-rendering
@@ -83,7 +83,7 @@ not be taught as ordinary workflow:
 - [lint](lint.md): hidden compatibility health probe; normal validation uses
   visible `check`.
 - [maintenance](maintenance.md): hidden danger-zone maintenance primitives.
-- [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
+- [rebuild](rebuild.md): hidden domain-cache diagnostic; operator repair starts
   from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
 
@@ -110,7 +110,7 @@ documentation:
 - [plan](plan.md): deferred plan CRUD; current one-shot batch creation is
   `bundle`.
 - [repair](repair.md): removed root repair surface; use `check --fix` for
-  ignored local runtime/projection repair and normal issue transitions for
+  ignored local runtime/cache repair and normal issue transitions for
   durable workflow state.
 - [search](search.md): removed root search surface pending a stronger
   cross-record search design.
@@ -149,7 +149,18 @@ runtime active-pointer helpers.
 | Complex commands need explicit budget verdicts. | `review` mirrors provider verbs, scoped `history` risks query-language sprawl, `evidence attach` duplicates relationship mutation, and transition output dumps implementation machinery. | Apply Keep/Simplify/Fold/Hide/Remove verdicts in each command file before adding new surfaces. |
 | `review open` exposes provider plumbing as required operator input. | `atelier review open --help` requires `--title`, `--body`, `--source-branch`, and `--target-branch`; the product contract says lifecycle/status output should route review artifacts. | Refine `review open` toward issue-derived defaults or move the fully manual form to admin/advanced guidance. |
 | Human output has recurring scanability debt. | Sampled queue, detail, transition, history, evidence, and role-guide outputs repeat inline commands, overuse `key=value`, print raw activity fields, and lack interactive color. | Use the [human output refresh](human-output-refresh.md) audit to drive the formatter pass before changing command behavior. |
-| Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale status/projection signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
+| Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale cache-backed status signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
+
+## Storage Terminology Audit
+
+Ordinary command and operator guidance uses the architecture terms from
+[ADR 0017](../../adr/0017-sqlite-domain-cache-and-hard-removal.md): record files
+are durable state, SQLite is a disposable domain cache, writes invalidate
+affected facts, and cache-backed reads repair changed sources lazily through
+`CacheManager`. `projection` remains appropriate only for distinct derived
+artifacts such as the future Mission Control JSON projection or in explicitly
+historical migration/audit text. Hidden repair commands may describe domain-
+cache mechanics, but must not teach eager projection refresh as ordinary work.
 | Retired implementation owners have been removed. | Bundle behavior is owned by `commands::bundle`; stale `label`, `plan`, and `tested` command modules are no longer compiled. | Keep new implementation modules aligned with visible product surfaces. |
 | Test infrastructure no longer preserves removed command shapes. | Integration and smoke harnesses execute the arguments supplied by each test directly; old-shape coverage lives in explicit rejection tests. | Keep new tests on the current command surface and avoid ignored compatibility suites. |
 | CLI command dispatch is becoming a module-boundary bottleneck. | `crates/atelier-cli/src/main.rs` still owns the root enum and subcommand enums, but issue subcommand dispatch now lives in the current-surface `issue_cli` adapter. | Continue splitting by product surface or use-case boundary before adding new command families. |

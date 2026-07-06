@@ -1,6 +1,6 @@
 [package]
 name = "atelier-sqlite"
-description = "Rebuildable SQLite projection for Atelier"
+description = "Disposable SQLite domain cache for Atelier"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

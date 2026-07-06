@@ -1,9 +1,6 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
-use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, existing_projection_db, lint_db, state_and_db_paths,
-    CommandStorageAccess,
-};
+use atelier_app::cache_manager::{state_and_db_paths, CacheManager, CacheUse};
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -34,7 +31,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  history       Inspect canonical repo, mission, issue, or epic activity
+  history       Inspect repository, mission, issue, or epic activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -129,31 +126,31 @@ enum Commands {
         action: IssueCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
+    /// Advanced deterministic-renderer diagnostic; normal health uses check
     #[command(hide = true)]
     Export {
-        /// State directory for canonical export diagnostics
+        /// Record-file directory for export diagnostics
         #[arg(short, long)]
         output: Option<String>,
-        /// Check deterministic renderer/projection freshness without writing tracked records
+        /// Check deterministic renderer/cache freshness without writing tracked records
         #[arg(long)]
         check: bool,
     },
 
-    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
+    /// Advanced domain-cache diagnostic; explicit local repair uses check --fix
     #[command(hide = true)]
     Rebuild {
-        /// Canonical state directory to rebuild from
+        /// Record-file directory to rebuild from
         #[arg(short, long)]
         input: Option<String>,
     },
 
-    /// Import Beads JSONL backup into Atelier runtime and canonical state
+    /// Import Beads JSONL backup into durable record files; cache repair remains lazy
     #[command(hide = true)]
     ImportBeads {
         /// Beads JSONL backup path from an external source
         input: String,
-        /// Canonical state directory to write after import
+        /// Record-file directory to write after import
         #[arg(short, long)]
         output: Option<String>,
     },
@@ -183,7 +180,7 @@ enum Commands {
         action: ForgejoCommands,
     },
 
-    /// Inspect canonical repo, mission, issue, or epic activity
+    /// Inspect durable repo, mission, issue, or epic activity
     History {
         /// Scope to one mission and linked work
         #[arg(long)]
@@ -253,7 +250,7 @@ enum Commands {
     Check {
         /// Optional issue ID or imported source ID
         id: Option<String>,
-        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        /// Repair ignored local runtime/cache state; never edits tracked record files
         #[arg(long)]
         fix: bool,
     },
@@ -265,10 +262,10 @@ enum Commands {
         id: Option<String>,
     },
 
-    /// Check tracker runtime and derived-state health
+    /// Check tracker runtime and domain-cache health
     #[command(hide = true)]
     Doctor {
-        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        /// Repair ignored local runtime/cache state; never edits tracked record files
         #[arg(long)]
         fix: bool,
     },
@@ -802,12 +799,12 @@ fn run() -> Result<()> {
         Commands::Man { role } => commands::man::run(role),
 
         Commands::Status => {
-            let storage = use_cases::status_storage()?;
+            let storage = use_cases::status_cache()?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
         Commands::Work { action } => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = use_cases::work_query_cache()?;
             match action {
                 None => commands::work::dashboards(quiet),
                 Some(WorkCommands::Queue {
@@ -868,7 +865,7 @@ fn run() -> Result<()> {
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Export { output, check } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?.open_cache_for_health()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -877,7 +874,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Rebuild { input } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?;
             let state_dir = input
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -887,25 +884,21 @@ fn run() -> Result<()> {
         }
 
         Commands::ImportBeads { input, output } => {
-            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            let storage = CacheManager::discover()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
-            commands::import::run_beads_jsonl(
-                storage.db(),
-                std::path::Path::new(&input),
-                &state_dir,
-            )
+            commands::import::run_beads_jsonl(std::path::Path::new(&input), &state_dir)
         }
 
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
-                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                let storage = use_cases::bundle_query_cache()?;
                 commands::bundle::preview(storage.db(), &input)
             }
             BundleCommands::Apply { input, yes } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mutation_cache()?;
                 commands::bundle::apply(
                     storage.db(),
                     &storage.state_dir(),
@@ -928,7 +921,7 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = use_cases::evidence_mutation_storage()?;
+                let storage = use_cases::mutation_cache()?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => {
                         let target = use_cases::parse_evidence_target_arg(target)?;
@@ -977,8 +970,9 @@ fn run() -> Result<()> {
                             &role,
                         )?;
                     }
-                    let db = use_cases::refreshed_mutation_db(&storage)?;
-                    commands::evidence::show(&db, &evidence_id)
+                    let evidence =
+                        use_cases::load_canonical_evidence(&storage.state_dir(), &evidence_id)?;
+                    commands::evidence::print_record_without_cache(&evidence)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -1005,7 +999,7 @@ fn run() -> Result<()> {
                 }
             }
             EvidenceCommands::Show { id } => {
-                let storage = use_cases::evidence_query_storage()?;
+                let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
                 commands::evidence::show(&db, &id)
             }
@@ -1015,7 +1009,7 @@ fn run() -> Result<()> {
                 target_id,
                 role,
             } => {
-                let storage = use_cases::evidence_mutation_storage()?;
+                let storage = use_cases::mutation_cache()?;
                 let target_id =
                     use_cases::resolve_evidence_target_ref(&storage, &target_kind, &target_id)?;
                 commands::evidence::attach(
@@ -1028,14 +1022,14 @@ fn run() -> Result<()> {
                 )
             }
             EvidenceCommands::List { status } => {
-                let storage = use_cases::evidence_query_storage()?;
+                let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
                 commands::evidence::list(&db, status.as_deref())
             }
         },
 
         Commands::Review { action } => {
-            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            let storage = use_cases::review_cache()?;
             match action {
                 ReviewCommands::Open {
                     issue,
@@ -1164,7 +1158,7 @@ fn run() -> Result<()> {
             since,
             limit,
         } => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = use_cases::history_query_cache()?;
             let mission = mission
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
@@ -1195,23 +1189,24 @@ fn run() -> Result<()> {
 
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => {
-                let storage = use_cases::workflow_query_storage()?;
+                let storage = use_cases::workflow_query_cache()?;
                 let db = storage.db();
                 commands::workflow::check(&db)
             }
         },
 
         Commands::Branch { action } => {
-            let db = existing_projection_db()?;
+            let cache = use_cases::branch_decision_cache()?;
+            let db = cache.db();
             match action {
                 BranchCommands::ForEpic { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::branch_for_epic(&db, &id)
+                    let id = resolve_issue_arg(db, &id)?;
+                    commands::work::branch_for_epic(db, &id)
                 }
-                BranchCommands::Status => commands::work::branch_status(&db),
+                BranchCommands::Status => commands::work::branch_status(db),
                 BranchCommands::Merge { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::branch_merge(&db, &id)
+                    let id = resolve_issue_arg(db, &id)?;
+                    commands::work::branch_merge(db, &id)
                 }
             }
         }
@@ -1232,9 +1227,9 @@ fn run() -> Result<()> {
             } => {
                 require_issue_kind(&target_kind, "atelier maintenance delete")?;
                 let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                drop(db);
+                let cache = use_cases::mutation_cache()?;
+                let target_id = resolve_issue_arg(cache.db(), &target_id)?;
+                drop(cache);
                 commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
             }
         },
@@ -1243,7 +1238,9 @@ fn run() -> Result<()> {
             apply,
             retention_days,
         } => {
-            let tracker = match command_storage(CommandStorageAccess::CanonicalMutation) {
+            let tracker = match CacheManager::discover()
+                .and_then(|manager| manager.get_cache(CacheUse::Decision))
+            {
                 Ok(storage) => {
                     let repo_root = storage.repo_root().to_path_buf();
                     let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
@@ -1258,7 +1255,7 @@ fn run() -> Result<()> {
                     })
                 }
                 Err(error) => {
-                    if atelier_app::command_storage::find_atelier_dir().is_ok() {
+                    if atelier_app::cache_manager::find_atelier_dir().is_ok() {
                         return Err(error);
                     }
                     None
@@ -1272,34 +1269,34 @@ fn run() -> Result<()> {
                 if id.is_some() {
                     bail!("atelier check --fix cannot be scoped to one issue");
                 }
-                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
                 commands::issue::doctor(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     &storage.db_path(),
-                    storage.projection_db_existed,
+                    storage.cache_existed(),
                     true,
                 )
             } else {
-                let db = lint_db()?;
-                commands::issue::lint(&db, id.as_deref())
+                let cache = use_cases::lint_cache()?;
+                commands::issue::lint(cache.db(), id.as_deref())
             }
         }
 
         Commands::Lint { id } => {
-            let db = lint_db()?;
-            commands::issue::lint(&db, id.as_deref())
+            let cache = use_cases::lint_cache()?;
+            commands::issue::lint(cache.db(), id.as_deref())
         }
 
         Commands::Doctor { fix } => {
-            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            let storage = CacheManager::discover()?.open_cache_for_health()?;
             commands::issue::doctor(
                 storage.db(),
                 storage.repo_root(),
                 &storage.state_dir(),
                 &storage.db_path(),
-                storage.projection_db_existed,
+                storage.cache_existed(),
                 fix,
             )
         }
@@ -1423,5 +1420,75 @@ fn command_identity(command: &Commands) -> &'static str {
         }
         Commands::Lint { .. } => "lint",
         Commands::Doctor { .. } => "doctor",
+    }
+}
+
+#[cfg(test)]
+mod cache_acquisition_tests {
+    #[test]
+    fn central_dispatch_has_no_raw_database_open_bypass() {
+        let sources = [
+            ("main", include_str!("main.rs")),
+            ("issue dispatch", include_str!("issue_cli.rs")),
+            ("role guide", include_str!("commands/man.rs")),
+        ];
+        let raw_database_open = ["Database", "::open"].concat();
+        let raw_app_open = ["open_", "database("].concat();
+
+        for (name, source) in sources {
+            assert!(
+                !source.contains(&raw_database_open) && !source.contains(&raw_app_open),
+                "{name} must acquire cache-dependent reads through CacheManager"
+            );
+        }
+    }
+
+    #[test]
+    fn cache_dependent_query_families_use_named_app_accessors() {
+        let main = include_str!("main.rs");
+        let main = main
+            .split("mod cache_acquisition_tests")
+            .next()
+            .expect("production dispatch source");
+        for accessor in [
+            "status_cache()",
+            "work_query_cache()",
+            "evidence_query_cache()",
+            "bundle_query_cache()",
+            "review_cache()",
+            "history_query_cache()",
+            "workflow_query_cache()",
+            "branch_decision_cache()",
+            "lint_cache()",
+        ] {
+            assert!(main.contains(accessor), "missing cache accessor {accessor}");
+        }
+
+        let issue_dispatch = include_str!("issue_cli.rs");
+        assert!(issue_dispatch.contains("issue_detail_cache()"));
+        assert!(issue_dispatch.contains("issue_query_cache()"));
+    }
+
+    #[test]
+    fn mutation_paths_have_no_eager_cache_refresh_helper() {
+        let sources = [
+            include_str!("issue_cli.rs"),
+            include_str!("commands/issue.rs"),
+            include_str!("commands/evidence.rs"),
+            include_str!("commands/workflow.rs"),
+            include_str!("commands/relate.rs"),
+            include_str!("commands/bundle.rs"),
+            include_str!("../../atelier-app/src/pr.rs"),
+            include_str!("../../atelier-app/src/review_room.rs"),
+        ];
+        let eager_helper = ["refresh_after_", "canonical_write"].concat();
+
+        for source in sources {
+            assert!(
+                !source.contains(&eager_helper),
+                "mutation path retained eager cache refresh"
+            );
+        }
+        assert!(include_str!("issue_cli.rs").contains("mutation_cache()"));
     }
 }

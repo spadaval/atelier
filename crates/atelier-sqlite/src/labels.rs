@@ -13,7 +13,7 @@ impl Database {
             );
         }
         let result = self.conn.execute(
-            "INSERT OR IGNORE INTO labels (issue_id, label) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO issue_label_index (issue_id, label) VALUES (?1, ?2)",
             params![issue_id, label],
         )?;
         Ok(result > 0)
@@ -21,20 +21,13 @@ impl Database {
     pub fn remove_label(&self, issue_id: impl ToString, label: &str) -> Result<bool> {
         let issue_id = issue_id.to_string();
         let rows = self.conn.execute(
-            "DELETE FROM labels WHERE issue_id = ?1 AND label = ?2",
+            "DELETE FROM issue_label_index WHERE issue_id = ?1 AND label = ?2",
             params![issue_id, label],
         )?;
         Ok(rows > 0)
     }
 
     pub fn get_labels(&self, issue_id: impl ToString) -> Result<Vec<String>> {
-        let issue_id = issue_id.to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT label FROM labels WHERE issue_id = ?1 ORDER BY label")?;
-        let labels = stmt
-            .query_map([issue_id], |row| row.get(0))?
-            .collect::<std::result::Result<Vec<String>, _>>()?;
-        Ok(labels)
+        self.issue_cache_labels(&issue_id.to_string())
     }
 }

@@ -1,5 +1,11 @@
 # Canonical Record And Rebuild Layout
 
+> Historical migration specification. Its export/projection terminology does
+> not define current ordinary behavior. Current persistence and cache contracts
+> are [Markdown-First Record Store](../../../architecture/markdown-first-record-store.md),
+> [SQLite Domain Cache Schema](../../../architecture/sqlite-runtime-schema.md),
+> and [ADR 0017](../../../adr/0017-sqlite-domain-cache-and-hard-removal.md).
+
 This document defines the target `.atelier/` canonical record tree. Tracked
 Markdown records under `.atelier/` are the committed rebuild source for the
 local SQLite projection at `.atelier/runtime/state.db`; runtime and cache files remain

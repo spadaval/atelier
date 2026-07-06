@@ -3,7 +3,6 @@ use std::path::Path;
 
 use crate::utils::format_issue_id;
 use atelier_app::project_config::ProjectConfig;
-use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
 use atelier_sqlite::{
     validate_relation_type, Database, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
@@ -102,7 +101,6 @@ pub fn link_issue(
         bail!("issue link only supports issue records");
     };
     drop(db);
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
         println!("Linked {} -> {} ({role})", source.id, target.id);
     } else {
@@ -199,7 +197,6 @@ pub fn unlink_issue(
         bail!("issue unlink only supports issue records");
     };
     drop(db);
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
         println!("Unlinked {} -> {} ({role})", source.id, target.id);
     } else {
@@ -324,6 +321,7 @@ pub fn list(db: &Database, issue_id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -336,8 +334,8 @@ mod tests {
     #[test]
     fn test_add_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         let result = add_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
@@ -350,8 +348,12 @@ mod tests {
     #[test]
     fn test_add_typed_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Assumption A", None, "medium").unwrap();
-        let id2 = db.create_issue("Assumption B", None, "medium").unwrap();
+        let id1 = db
+            .cache_fixture_issue("Assumption A", None, "medium")
+            .unwrap();
+        let id2 = db
+            .cache_fixture_issue("Assumption B", None, "medium")
+            .unwrap();
 
         let result = add_typed(&db, &id1, &id2, "assumption");
         assert!(result.is_ok());
@@ -368,8 +370,8 @@ mod tests {
     #[test]
     fn test_multiple_relation_types_between_same_issues() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "related").unwrap();
         add_typed(&db, &id1, &id2, "assumption").unwrap();
@@ -381,8 +383,8 @@ mod tests {
     #[test]
     fn test_custom_relation_type() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         // Unknown types are accepted with a warning
         let result = add_typed(&db, &id1, &id2, "caused-by");
@@ -396,8 +398,8 @@ mod tests {
     #[test]
     fn test_empty_relation_type_rejected() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         let result = add_typed(&db, &id1, &id2, "");
         assert!(result.is_err());
@@ -407,8 +409,8 @@ mod tests {
     #[test]
     fn test_add_relation_bidirectional() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "related").unwrap();
 
@@ -421,7 +423,7 @@ mod tests {
     #[test]
     fn test_add_relation_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
-        let id = db.create_issue("Issue 1", None, "medium").unwrap();
+        let id = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
 
         let result = add_typed(&db, &id, "atelier-missing", "related");
         assert!(result.is_err());
@@ -431,8 +433,8 @@ mod tests {
     #[test]
     fn test_add_duplicate_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "related").unwrap();
         let result = add_typed(&db, &id1, &id2, "related");
@@ -445,8 +447,8 @@ mod tests {
     #[test]
     fn test_remove_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "related").unwrap();
         let result = remove_typed(&db, &id1, &id2, "related");
@@ -459,8 +461,8 @@ mod tests {
     #[test]
     fn test_remove_typed_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "assumption").unwrap();
         add_typed(&db, &id1, &id2, "related").unwrap();
@@ -476,8 +478,8 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_relation() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
 
         let result = remove_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
@@ -486,9 +488,9 @@ mod tests {
     #[test]
     fn test_list_relations() {
         let (db, _dir) = setup_test_db();
-        let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
-        let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
-        let id3 = db.create_issue("Issue 3", None, "medium").unwrap();
+        let id1 = db.cache_fixture_issue("Issue 1", None, "medium").unwrap();
+        let id2 = db.cache_fixture_issue("Issue 2", None, "medium").unwrap();
+        let id3 = db.cache_fixture_issue("Issue 3", None, "medium").unwrap();
 
         add_typed(&db, &id1, &id2, "related").unwrap();
         add_typed(&db, &id1, &id3, "related").unwrap();
@@ -508,7 +510,9 @@ mod tests {
     #[test]
     fn test_list_no_relations() {
         let (db, _dir) = setup_test_db();
-        let id = db.create_issue("Lonely issue", None, "medium").unwrap();
+        let id = db
+            .cache_fixture_issue("Lonely issue", None, "medium")
+            .unwrap();
 
         let result = list(&db, &id);
         assert!(result.is_ok());
@@ -517,11 +521,17 @@ mod tests {
     #[test]
     fn test_downstream_impact_parent_child() {
         let (db, _dir) = setup_test_db();
-        let root = db.create_issue("Root assumption", None, "high").unwrap();
-        let child1 = db.create_subissue(&root, "Why 1", None, "medium").unwrap();
-        let child2 = db.create_subissue(&root, "Why 2", None, "medium").unwrap();
+        let root = db
+            .cache_fixture_issue("Root assumption", None, "high")
+            .unwrap();
+        let child1 = db
+            .cache_fixture_subissue(&root, "Why 1", None, "medium")
+            .unwrap();
+        let child2 = db
+            .cache_fixture_subissue(&root, "Why 2", None, "medium")
+            .unwrap();
         let grandchild = db
-            .create_subissue(&child1, "Why 1.1", None, "medium")
+            .cache_fixture_subissue(&child1, "Why 1.1", None, "medium")
             .unwrap();
 
         let affected = db.downstream_impact(root).unwrap();
@@ -536,9 +546,11 @@ mod tests {
     #[test]
     fn test_downstream_impact_derived_relations() {
         let (db, _dir) = setup_test_db();
-        let assumption = db.create_issue("Core assumption", None, "high").unwrap();
+        let assumption = db
+            .cache_fixture_issue("Core assumption", None, "high")
+            .unwrap();
         let conclusion = db
-            .create_issue("Conclusion built on assumption", None, "medium")
+            .cache_fixture_issue("Conclusion built on assumption", None, "medium")
             .unwrap();
 
         db.add_typed_relation(&assumption, &conclusion, "derived")
@@ -552,9 +564,13 @@ mod tests {
     #[test]
     fn test_downstream_impact_named_impact_relations() {
         let (db, _dir) = setup_test_db();
-        let source = db.create_issue("Source", None, "high").unwrap();
-        let caused = db.create_issue("Caused work", None, "medium").unwrap();
-        let falsified = db.create_issue("Falsified work", None, "medium").unwrap();
+        let source = db.cache_fixture_issue("Source", None, "high").unwrap();
+        let caused = db
+            .cache_fixture_issue("Caused work", None, "medium")
+            .unwrap();
+        let falsified = db
+            .cache_fixture_issue("Falsified work", None, "medium")
+            .unwrap();
 
         db.add_typed_relation(&source, &caused, "caused-by")
             .unwrap();
@@ -571,12 +587,14 @@ mod tests {
     #[test]
     fn test_downstream_impact_assumption_one_hop() {
         let (db, _dir) = setup_test_db();
-        let a1 = db.create_issue("Assumption A", None, "high").unwrap();
+        let a1 = db
+            .cache_fixture_issue("Assumption A", None, "high")
+            .unwrap();
         let a2 = db
-            .create_issue("Assumption B (shared)", None, "medium")
+            .cache_fixture_issue("Assumption B (shared)", None, "medium")
             .unwrap();
         let a3 = db
-            .create_issue("Assumption C (shared with B)", None, "medium")
+            .cache_fixture_issue("Assumption C (shared with B)", None, "medium")
             .unwrap();
 
         db.add_typed_relation(&a1, &a2, "assumption").unwrap();

@@ -1,15 +1,15 @@
 //! App-layer use-case entrypoints for command families that still render in CLI.
 //!
-//! These functions centralize storage-mode selection and record argument
+//! These functions centralize cache-use selection and record argument
 //! resolution for migrated dispatch paths. CLI code may still render command
-//! outcomes, but it should ask this module for the app-owned storage context
-//! instead of choosing storage access modes or interpreting record ids itself.
+//! outcomes, but it should ask this module for the app-owned cache boundary
+//! instead of choosing freshness policy or interpreting record ids itself.
 
 use anyhow::{bail, Result};
 use std::path::Path;
 
-use crate::command_storage::{command_storage, CommandStorage, CommandStorageAccess};
-use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
+use crate::cache_manager::{CacheAccess, CacheManager, CacheUse};
+use atelier_core::{EvidenceRecord, EvidenceRecordData, ReviewRecord};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 use atelier_sqlite::Database;
 
@@ -19,55 +19,118 @@ pub struct EvidenceTargetArg {
     pub id: String,
 }
 
-pub fn status_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::DegradedProjectionQuery)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CacheCommandRoute {
+    pub command_family: &'static str,
+    pub cache_use: CacheUse,
 }
 
-pub fn mission_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::DegradedProjectionQuery)
+/// Cache-dependent read families and the stale-data policy they require.
+/// Keep this inventory aligned with the central CLI dispatch.
+pub const CACHE_COMMAND_ROUTES: &[CacheCommandRoute] = &[
+    CacheCommandRoute {
+        command_family: "status",
+        cache_use: CacheUse::Orientation,
+    },
+    CacheCommandRoute {
+        command_family: "issue show",
+        cache_use: CacheUse::Orientation,
+    },
+    CacheCommandRoute {
+        command_family: "issue list/options/blockers",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "work/mission/epic",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "evidence show/list",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "bundle preview",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "review read",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "history/graph",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "workflow check",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "branch decision",
+        cache_use: CacheUse::Decision,
+    },
+];
+
+fn cache(cache_use: CacheUse) -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(cache_use)
 }
 
-pub fn mission_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn status_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Orientation)
 }
 
-pub fn evidence_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::ProjectionQuery)
+pub fn issue_detail_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Orientation)
 }
 
-pub fn evidence_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn work_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
 }
 
-pub fn plan_mutation_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::CanonicalMutation)
+pub fn issue_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
 }
 
-pub fn workflow_query_storage() -> Result<CommandStorage> {
-    command_storage(CommandStorageAccess::ProjectionQuery)
+pub fn mutation_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
 }
 
-pub fn refreshed_mutation_db(storage: &CommandStorage) -> Result<Database> {
-    open_database(&storage.db_path())
+pub fn evidence_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn bundle_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn review_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn history_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn workflow_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn branch_decision_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+/// Lint owns canonical parse diagnostics and must be able to report malformed
+/// record files before cache repair is possible. It opens the last cache state
+/// without repairing it, then validates record files directly.
+pub fn lint_cache() -> Result<CacheAccess> {
+    CacheManager::discover()?.open_cache_for_health()
 }
 
 pub fn open_database(db_path: &Path) -> Result<Database> {
     Database::open(db_path).map_err(Into::into)
 }
 
-pub fn refresh_after_canonical_write(state_dir: &Path, db_path: &Path) -> Result<()> {
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)
-}
-
-pub fn load_canonical_record(state_dir: &Path, kind: &str, id: &str) -> Result<Record> {
-    RecordStore::new(state_dir).load_record_by_id(kind, id)
-}
-
 pub fn load_canonical_evidence(state_dir: &Path, id: &str) -> Result<EvidenceRecord> {
-    match load_canonical_record(state_dir, "evidence", id)? {
-        Record::Evidence(record) => Ok(record),
-        other => bail!("Expected evidence record {id}, found {}", other.kind()),
-    }
+    RecordStore::new(state_dir).load_evidence_by_id(id)
 }
 
 pub fn load_canonical_issue(state_dir: &Path, id: &str) -> Result<CanonicalIssueRecord> {
@@ -78,8 +141,16 @@ pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) ->
     RecordStore::new(state_dir).write_issue_atomic(record)
 }
 
-pub fn write_canonical_record(state_dir: &Path, record: &Record) -> Result<()> {
-    RecordStore::new(state_dir).write_record_atomic(record)
+pub fn write_canonical_evidence(state_dir: &Path, record: &EvidenceRecord) -> Result<()> {
+    RecordStore::new(state_dir).write_evidence_atomic(record)
+}
+
+pub fn load_review(state_dir: &Path, id: &str) -> Result<ReviewRecord> {
+    RecordStore::new(state_dir).load_review_by_id(id)
+}
+
+pub fn write_review(state_dir: &Path, record: &ReviewRecord) -> Result<()> {
+    RecordStore::new(state_dir).write_review_atomic(record)
 }
 
 pub fn create_evidence_record(
@@ -143,7 +214,7 @@ pub fn add_attachment_relationship(
     )
 }
 
-pub fn resolve_issue_ref(storage: &CommandStorage, issue_ref: &str) -> Result<String> {
+pub fn resolve_issue_ref(storage: &CacheAccess, issue_ref: &str) -> Result<String> {
     let db = storage.db();
     if let Some(id) = db.resolve_issue_ref(issue_ref)? {
         return Ok(id);
@@ -156,7 +227,7 @@ pub fn resolve_issue_ref(storage: &CommandStorage, issue_ref: &str) -> Result<St
     bail!("Issue {issue_ref} was not found")
 }
 
-pub fn resolve_record_ref(storage: &CommandStorage, kind: &str, id: &str) -> Result<String> {
+pub fn resolve_record_ref(storage: &CacheAccess, kind: &str, id: &str) -> Result<String> {
     let db = storage.db();
     if kind == "issue" {
         resolve_issue_ref(storage, id)
@@ -170,7 +241,7 @@ pub fn resolve_record_ref(storage: &CommandStorage, kind: &str, id: &str) -> Res
 }
 
 pub fn resolve_optional_record_ref(
-    storage: &CommandStorage,
+    storage: &CacheAccess,
     kind: &str,
     id: Option<String>,
 ) -> Result<Option<String>> {
@@ -191,11 +262,7 @@ pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
     })
 }
 
-pub fn resolve_evidence_target_ref(
-    storage: &CommandStorage,
-    kind: &str,
-    id: &str,
-) -> Result<String> {
+pub fn resolve_evidence_target_ref(storage: &CacheAccess, kind: &str, id: &str) -> Result<String> {
     if matches!(kind, "issue" | "epic") {
         resolve_issue_ref(storage, id)
     } else {
@@ -221,21 +288,29 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_evidence_target_arg;
+    use super::*;
+    use atelier_core::{RecordHeader, Relationships};
+    use chrono::Utc;
+    use tempfile::tempdir;
 
     #[test]
-    fn use_case_storage_selectors_are_named_for_target_workflows() {
-        let selectors = [
-            "status",
-            "mission_query",
-            "mission_mutation",
-            "evidence_query",
-            "evidence_mutation",
-            "plan_mutation",
-            "workflow_query",
-        ];
+    fn cache_command_inventory_limits_degraded_reads_to_orientation() {
+        let orientation = CACHE_COMMAND_ROUTES
+            .iter()
+            .filter(|route| route.cache_use == CacheUse::Orientation)
+            .map(|route| route.command_family)
+            .collect::<Vec<_>>();
 
-        assert_eq!(selectors.len(), 7);
+        assert_eq!(orientation, ["status", "issue show"]);
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "work/mission/epic"));
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "workflow check"));
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "branch decision"));
     }
 
     #[test]
@@ -246,5 +321,62 @@ mod tests {
 
         assert!(parse_evidence_target_arg("atelier-1234").is_err());
         assert!(parse_evidence_target_arg("issue/").is_err());
+    }
+
+    #[test]
+    fn concrete_evidence_and_review_services_round_trip_domain_types() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let now = Utc::now();
+        let evidence = create_evidence_record(
+            &state_dir,
+            "Typed evidence",
+            "recorded",
+            "Concrete evidence service proof.",
+            EvidenceRecordData {
+                evidence_type: "test".to_string(),
+                captured_at: now,
+                command: None,
+                path: None,
+                uri: None,
+                producer: None,
+                proof_scope: None,
+                agent_identity: None,
+                independence_level: None,
+                residual_risks: Vec::new(),
+                follow_up_ids: Vec::new(),
+                exit_code: None,
+                exit_status: None,
+                success: None,
+                spawn_error: None,
+                output: None,
+                target: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            load_canonical_evidence(&state_dir, &evidence.header.id).unwrap(),
+            evidence
+        );
+
+        let review = ReviewRecord {
+            header: RecordHeader {
+                kind: "review".to_string(),
+                id: "atelier-rvw1".to_string(),
+                title: "Typed review".to_string(),
+                status: "open".to_string(),
+                labels: vec!["review".to_string()],
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            mode: "room".to_string(),
+            issue_id: "atelier-issue".to_string(),
+            source_branch: "feature/atelier-issue".to_string(),
+            target_branch: "main".to_string(),
+            events: Vec::new(),
+        };
+        write_review(&state_dir, &review).unwrap();
+        assert_eq!(load_review(&state_dir, "atelier-rvw1").unwrap(), review);
     }
 }

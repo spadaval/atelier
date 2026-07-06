@@ -9,7 +9,7 @@ fn test_canonical_export_check_cli() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Canonical issue"]);
-    h.run_ok(&["export"]);
+    h.run_ok(&["work", "queue", "--all"]);
     h.run_ok(&["export", "--check"]);
     let issue_id = h.issue_id(1);
 
@@ -20,6 +20,9 @@ fn test_canonical_export_check_cli() {
         "--title",
         "Changed canonical issue",
     ]);
+    let stale = h.run_err(&["export", "--check"]);
+    assert!(stale.stderr.contains("cache:"), "{}", stale.stderr);
+    h.run_ok(&["work", "queue", "--all"]);
     h.run_ok(&["export", "--check"]);
 
     let issue_id = h.issue_id_by_title("Changed canonical issue");
@@ -27,31 +30,17 @@ fn test_canonical_export_check_cli() {
         markdown.replace("Changed canonical issue", "Markdown canonical issue")
     });
 
-    let result = h.run_err(&["export", "--check"]);
-    assert!(
-        result.stderr.contains("Canonical export is stale"),
-        "expected stale canonical export error, got stderr: {}",
-        result.stderr
-    );
-    assert!(
-        result.stderr.contains("projection: indexed source changed"),
-        "expected stale projection metadata, got stderr: {}",
-        result.stderr
-    );
-    assert!(
-        result.stderr.contains("recovery: 1. run `atelier lint`;")
-            && result.stderr.contains("3. run `atelier doctor --fix`")
-            && result.stderr.contains("4. rerun the blocked command"),
-        "expected ordered stale projection recovery, got stderr: {}",
-        result.stderr
-    );
+    let stale = h.run_err(&["export", "--check"]);
+    assert!(stale.stderr.contains("cache:"), "{}", stale.stderr);
+    h.run_ok(&["work", "queue", "--all"]);
+    h.run_ok(&["export", "--check"]);
 
     let rewrite_result = h.run_err(&["export"]);
     assert!(
         rewrite_result
             .stderr
-            .contains("Refusing to write canonical tracker records from the local projection"),
-        "expected export write refusal, got stderr: {}",
+            .contains("SQLite-to-record export has been removed"),
+        "expected removed export-write diagnostic, got stderr: {}",
         rewrite_result.stderr
     );
     assert!(

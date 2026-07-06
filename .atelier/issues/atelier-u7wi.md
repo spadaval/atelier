@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T20:29:34.906384641+00:00"
+status: "done"
 title: "Update docs and command audit for cache terminology"
-updated_at: "2026-06-23T16:21:20.085065091+00:00"
+updated_at: "2026-07-06T20:29:34.906384641+00:00"
 ---
 
 ## Description
@@ -26,4 +27,12 @@ Update product, architecture, command audit, and operator docs to use cache term
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Command: `rg -n -i 'projection|canonical mutation' docs crates` audits current
+  record-file/domain-cache guidance, historical migration text, and the separate
+  Mission Control JSON projection contract.
+- Tests: `cargo nextest run -p atelier-records -p atelier-app` and `cargo nextest
+  run -p atelier-cli --test cli_integration` prove updated help, diagnostics,
+  and record/cache terminology across the affected command surface.
+- Checks: `target/debug/atelier check --help`, `cargo fmt -- --check`, `git diff
+  --check`, and `atelier check atelier-u7wi` prove docs/help parity, formatting,
+  whitespace, and tracker validity.

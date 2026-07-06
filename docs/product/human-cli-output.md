@@ -69,7 +69,7 @@ Use these display roles consistently:
 
 Rows may use shorter text than the role token, but the meaning must remain
 visible in colorless output. Do not use implementation labels such as
-`context; parent blocked`, `projection`, or `derived` as normal operator
+`context; parent blocked`, `cache`, or `derived` as normal operator
 language.
 
 ## Summaries, Budgets, And Footers
@@ -112,7 +112,7 @@ Command and app logic own state correctness:
 
 - deciding whether an issue is executable, selectable, blocked,
   blocked-through-parent, context-only, or omitted;
-- refreshing or rejecting stale projections before a status-like view claims
+- repairing or rejecting stale cache data before a status-like view claims
   current state;
 - checking Git state, workflow validators, configured policy, permissions, and
   provider review state;
@@ -127,7 +127,7 @@ footer ranking rules, or private workflow vocabulary.
 Domain and workflow services should not return UI annotations, section plans,
 or command strings. They return typed facts and rule evaluations: current
 workflow status, available transitions, unsatisfied requirements, observed
-evidence counts, open blockers, review state, projection health, and checkout
+evidence counts, open blockers, review state, cache health, and checkout
 facts.
 
 Application/read-model code assembles those facts for a particular command.
@@ -305,7 +305,7 @@ their need:
 - Use committed-state commands for handoff gates. `atelier check` is the
   supported noninteractive check for invalid tracker state. Local runtime repair
   commands are admin repair tools, not normal script workflow.
-- Preserve blocked-command and record context in stale projection or invalid
+- Preserve blocked-command and record context in stale cache or invalid
   canonical-record errors, then give one ordered recovery path through lint,
   record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
@@ -408,7 +408,7 @@ Recommended helper boundaries:
 - color/style decisions, once color is added.
 
 Command handlers should keep collecting domain data and call formatter helpers
-for presentation. Canonical state projection, authored JSON inputs, and
+for presentation. Record files, authored JSON inputs, and
 diagnostic logging are separate from command-result rendering.
 
 ## Testing Expectations
@@ -422,7 +422,7 @@ Human-output changes need focused tests at the behavior boundary they affect:
 - compact hierarchy with deep trees, wide sibling sets, and closed/open mixes;
 - narrow-width or bounded-output behavior when wrapping or omission is involved;
 - migration checks proving scripts can use quiet acknowledgements, canonical
-  records, projections, or focused drill-down commands without parsing full
+  records, cached summaries, or focused drill-down commands without parsing full
   human output when a command previously had command-result JSON consumers.
 
 Tests should assert durable signals and structure, not incidental whitespace

@@ -3,20 +3,20 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
+use atelier_core::IssueReview;
 use atelier_records::activity::{
     create_issue_activity_with_metadata, ActivityEventType, ActivityPrAttribution,
 };
 use atelier_records::{issue_record_path, RecordStore};
 use atelier_sqlite::Database;
 use chrono::Utc;
-use serde_json::{json, Value};
 
 use crate::forgejo::{
     ForgejoClient, ForgejoComment, ForgejoPullRequest, ForgejoReview, ForgejoReviewComment,
     ForgejoTransport, ReviewEvent,
 };
 use crate::project_config::{load_forgejo_with_workflow_role_authors, ForgejoConfig};
-use crate::workflow_policy::{self, REVIEW_FIELD};
+use crate::workflow_policy;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrOpenRequest<'a> {
@@ -417,7 +417,7 @@ pub fn review_owner_id(db: &Database, repo_root: &Path, issue_id: &str) -> Resul
 pub fn persist_pull_request(
     db: &Database,
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     issue_id: &str,
     pull: &ForgejoPullRequest,
 ) -> Result<String> {
@@ -442,12 +442,14 @@ pub fn persist_pull_request(
             resolution.base_branch
         );
     }
-    let value = pull_request_field_value(pull.number);
+    let review = IssueReview::ForgejoPullRequest {
+        number: pull.number,
+    };
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
     let mut record = store.load_issue(&path)?;
-    if let Some(existing) = record.issue.fields.get(REVIEW_FIELD) {
-        if existing == &value {
+    if let Some(existing) = record.issue.review()? {
+        if existing == review {
             return Ok(owner_id);
         }
         bail!(
@@ -456,16 +458,15 @@ pub fn persist_pull_request(
             owner_id
         );
     }
-    record.issue.fields.insert(REVIEW_FIELD.to_string(), value);
+    record.issue.set_review(review);
     store.write_issue_atomic(&record)?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
 }
 
 pub fn confirm_pull_request_merged(
     db: &Database,
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     issue_id: &str,
     pull: &ForgejoPullRequest,
 ) -> Result<String> {
@@ -481,14 +482,14 @@ pub fn confirm_pull_request_merged(
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
     let record = store.load_issue(&path)?;
-    let field = record.issue.fields.get(REVIEW_FIELD).ok_or_else(|| {
+    let review = record.issue.review()?.ok_or_else(|| {
         anyhow!(
             "pull_request_missing: issue {} has no linked review field; run `atelier review open --issue {}` first",
             owner_id,
             owner_id
         )
     })?;
-    let number = pull_request_number(field)?;
+    let number = pull_request_number(&review)?;
     if pull.number != number {
         bail!(
             "pull_request_mismatch: linked pull_request number is {}, but Forgejo returned {}; run `atelier review status --issue {}`",
@@ -499,7 +500,6 @@ pub fn confirm_pull_request_merged(
     }
     validate_remote_pull_matches_policy(db, repo_root, pull, &owner_id)?;
     store.write_issue_atomic(&record)?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
 }
 
@@ -515,7 +515,8 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
             format!("no linked review field; run `atelier review open --issue {issue_id}`"),
         ));
     };
-    let number = pull_request_number(&field)?;
+    let review = provider_review_from_value(&field)?;
+    let number = pull_request_number(&review)?;
     let pull = client.show_pull(number)?;
     let policy = workflow_policy::load(repo_root)?;
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
@@ -548,37 +549,37 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
     }
 }
 
-fn linked_pull_request(db: &Database, issue_id: &str) -> Result<Value> {
-    workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
+fn linked_pull_request(db: &Database, issue_id: &str) -> Result<IssueReview> {
+    let field = workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
         anyhow!(
             "pull_request_missing: issue {} has no linked review field; run `atelier review open --issue {}` first",
             issue_id,
             issue_id
         )
-    })
+    })?;
+    provider_review_from_value(&field)
 }
 
-fn pull_request_number(value: &Value) -> Result<u64> {
-    value
-        .as_object()
-        .filter(|object| {
-            object.get("kind").and_then(Value::as_str) == Some("pull_request")
-                && object.get("provider").and_then(Value::as_str) == Some("forgejo")
-        })
-        .and_then(|object| object.get("number"))
-        .and_then(Value::as_u64)
-        .filter(|number| *number > 0)
-        .ok_or_else(|| {
+fn provider_review_from_value(value: &serde_json::Value) -> Result<IssueReview> {
+    IssueReview::from_value(value)
+        .map_err(|_| {
             anyhow!("pull_request_invalid: field review must be a provider pull_request object")
         })
+        .and_then(|review| match review {
+            IssueReview::ForgejoPullRequest { .. } => Ok(review),
+            IssueReview::Room { .. } => Err(anyhow!(
+                "pull_request_invalid: field review must be a provider pull_request object"
+            )),
+        })
 }
 
-fn pull_request_field_value(number: u64) -> Value {
-    json!({
-        "kind": "pull_request",
-        "provider": "forgejo",
-        "number": number,
-    })
+fn pull_request_number(review: &IssueReview) -> Result<u64> {
+    match review {
+        IssueReview::ForgejoPullRequest { number } => Ok(*number),
+        IssueReview::Room { .. } => Err(anyhow!(
+            "pull_request_invalid: field review must be a provider pull_request object"
+        )),
+    }
 }
 
 fn pull_request_url_path<'a>(input: &'a str, forgejo: &ForgejoConfig) -> Result<&'a str> {
@@ -828,9 +829,15 @@ mod tests {
     use super::*;
     use crate::forgejo::{ForgejoRequest, ForgejoResponse};
     use crate::project_config::ForgejoRoleAuthors;
+    use crate::workflow_policy::REVIEW_FIELD;
     use atelier_core::Issue;
     use atelier_records::activity::list_issue_activities;
+    use atelier_records::{
+        relationship_target, CanonicalIssueRecord, IssueSections, Relationships,
+    };
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
     use chrono::Utc;
+    use serde_json::Value;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -933,16 +940,15 @@ repo = "atelier"
         dir
     }
 
-    fn insert_issue(
-        db: &Database,
+    fn fixture_issue(
         id: &str,
         issue_type: &str,
         status: &str,
         parent_id: Option<&str>,
         fields: BTreeMap<String, Value>,
-    ) {
+    ) -> Issue {
         let now = Utc::now();
-        db.insert_issue_rebuild(&Issue {
+        Issue {
             id: id.to_string(),
             title: id.to_string(),
             description: None,
@@ -954,13 +960,92 @@ repo = "atelier"
             created_at: now,
             updated_at: now,
             closed_at: None,
-        })
+        }
+    }
+
+    fn insert_issue(
+        db: &Database,
+        id: &str,
+        issue_type: &str,
+        status: &str,
+        parent_id: Option<&str>,
+        fields: BTreeMap<String, Value>,
+    ) {
+        index_fixture_issue(
+            db,
+            &fixture_issue(id, issue_type, status, parent_id, fields),
+        );
+    }
+
+    fn index_fixture_issue(db: &Database, issue: &Issue) {
+        db.index_issue(
+            &IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title.clone(),
+                status: issue.status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                fields: issue.fields.clone(),
+                parent_id: issue.parent_id.clone(),
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{}.md", issue.id),
+                record_kind: "issue".to_string(),
+                record_id: issue.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
         .unwrap();
+    }
+
+    fn insert_record_issue(
+        db: &Database,
+        state_dir: &Path,
+        id: &str,
+        issue_type: &str,
+        status: &str,
+        parent_id: Option<&str>,
+        fields: BTreeMap<String, Value>,
+    ) {
+        let issue = fixture_issue(id, issue_type, status, parent_id, fields);
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: issue.clone(),
+                labels: Vec::new(),
+                sections: IssueSections::unchecked_from_body(Some(
+                    "## Description\n\nFixture issue\n\n## Outcome\n\nFixture outcome.",
+                )),
+                relationships: Relationships::default(),
+            })
+            .unwrap();
+        if let Some(parent_id) = parent_id {
+            let store = RecordStore::new(state_dir);
+            let parent_path = issue_record_path(parent_id);
+            let mut parent = store.load_issue(&parent_path).unwrap();
+            parent
+                .relationships
+                .children
+                .push(relationship_target("issue", id));
+            store.write_issue_atomic(&parent).unwrap();
+        }
+        index_fixture_issue(db, &issue);
     }
 
     fn pull_request_fields(number: u64) -> BTreeMap<String, Value> {
         let mut fields = BTreeMap::new();
-        fields.insert(REVIEW_FIELD.to_string(), pull_request_field_value(number));
+        fields.insert(
+            REVIEW_FIELD.to_string(),
+            IssueReview::ForgejoPullRequest { number }.to_value(),
+        );
         fields
     }
 
@@ -1090,11 +1175,27 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        let epic = db
-            .create_issue_with_type("Epic", None, "medium", "epic")
-            .unwrap();
-        let child = db.create_subissue(&epic, "Child", None, "medium").unwrap();
-        crate::export::run_canonical(&db, &dir.path().join(".atelier"), false).unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let epic = "atelier-epic".to_string();
+        let child = "atelier-child".to_string();
+        insert_record_issue(
+            &db,
+            &state_dir,
+            &epic,
+            "epic",
+            "todo",
+            None,
+            BTreeMap::new(),
+        );
+        insert_record_issue(
+            &db,
+            &state_dir,
+            &child,
+            "task",
+            "todo",
+            Some(&epic),
+            BTreeMap::new(),
+        );
         let pull = ForgejoPullRequest {
             number: 42,
             url: "https://forge.example.test/tools/atelier/pulls/42".to_string(),
@@ -1107,13 +1208,25 @@ repo = "atelier"
         let owner =
             persist_pull_request(&db, &dir.path().join(".atelier"), &db_path, &child, &pull)
                 .unwrap();
+        drop(db);
+        crate::rebuild::run(&dir.path().join(".atelier"), &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let inherited = workflow_policy::effective_pull_request_field(&refreshed, &child)
             .unwrap()
             .unwrap();
+        let owner_record = RecordStore::new(dir.path().join(".atelier"))
+            .load_issue_by_id(&epic)
+            .unwrap();
 
         assert_eq!(owner, epic);
-        assert_eq!(inherited, pull_request_field_value(42));
+        assert_eq!(
+            owner_record.issue.review().unwrap(),
+            Some(IssueReview::ForgejoPullRequest { number: 42 })
+        );
+        assert_eq!(
+            inherited,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]
@@ -1124,15 +1237,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "in_progress",
             None,
             BTreeMap::new(),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(Vec::new());
         let client = ForgejoClient::new(forgejo_config(), &transport);
 
@@ -1178,15 +1291,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "in_progress",
             None,
             BTreeMap::new(),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 201,
             body: pull_response(42, "open", false, "feature/atelier-issue"),
@@ -1218,11 +1331,16 @@ repo = "atelier"
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].method, "POST");
         assert_eq!(requests[0].path, "/api/v1/repos/tools/atelier/pulls");
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
         let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
@@ -1243,15 +1361,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "in_progress",
             None,
             BTreeMap::new(),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
             body: pull_response(42, "open", false, "feature/atelier-issue"),
@@ -1279,11 +1397,16 @@ repo = "atelier"
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].path, "/api/v1/repos/tools/atelier/pulls/42");
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]
@@ -1294,15 +1417,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "review",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 201,
             body: comment_response(7, "Looks good"),
@@ -1353,15 +1476,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "review",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
             body: review_response(9, "APPROVED", "Approved"),
@@ -1414,23 +1537,24 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-epic",
             "epic",
             "in_progress",
             None,
             BTreeMap::new(),
         );
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-child",
             "feature",
             "validation",
             Some("atelier-epic"),
             BTreeMap::new(),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let pull = ForgejoPullRequest {
             number: 42,
             url: "https://forge.example.test/tools/atelier/pulls/42".to_string(),
@@ -1440,6 +1564,8 @@ repo = "atelier"
             target_branch: "master".to_string(),
         };
         persist_pull_request(&db, &state_dir, &db_path, "atelier-child", &pull).unwrap();
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let merge_db = Database::open(&db_path).unwrap();
         let before_status = merge_db.get_issue("atelier-epic").unwrap().unwrap().status;
         let transport = MockTransport::new(vec![
@@ -1482,7 +1608,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-child")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
         let activities = list_issue_activities(&state_dir, "atelier-epic").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
@@ -1520,15 +1649,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "validation",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
             body: pull_response(42, "closed", true, "feature/atelier-issue"),
@@ -1558,7 +1687,10 @@ repo = "atelier"
         let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field, pull_request_field_value(42));
+        assert_eq!(
+            field,
+            IssueReview::ForgejoPullRequest { number: 42 }.to_value()
+        );
     }
 
     #[test]
@@ -1569,23 +1701,24 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-missing",
             "feature",
             "validation",
             None,
             BTreeMap::new(),
         );
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-linked",
             "feature",
             "validation",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let empty_transport = MockTransport::new(Vec::new());
         let client = ForgejoClient::new(forgejo_config(), &empty_transport);
 
@@ -1637,15 +1770,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-hw9t",
             "epic",
             "validation",
             None,
             BTreeMap::new(),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let empty_transport = MockTransport::new(Vec::new());
         let empty_client = ForgejoClient::new(forgejo_config(), &empty_transport);
 
@@ -1659,15 +1792,15 @@ repo = "atelier"
         assert!(!passed);
         assert!(reason.contains("atelier review open --issue atelier-hw9t"));
 
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-linked",
             "epic",
             "validation",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
 
         let open_transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
@@ -1724,15 +1857,15 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-hw9t",
             "epic",
             "validation",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
             body: pull_response(42, "closed", true, "epic/other"),
@@ -1755,11 +1888,27 @@ repo = "atelier"
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
-        let epic = db
-            .create_issue_with_type("Epic", None, "medium", "epic")
-            .unwrap();
-        let child = db.create_subissue(&epic, "Child", None, "medium").unwrap();
-        crate::export::run_canonical(&db, &dir.path().join(".atelier"), false).unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let epic = "atelier-epic".to_string();
+        let child = "atelier-child".to_string();
+        insert_record_issue(
+            &db,
+            &state_dir,
+            &epic,
+            "epic",
+            "todo",
+            None,
+            BTreeMap::new(),
+        );
+        insert_record_issue(
+            &db,
+            &state_dir,
+            &child,
+            "task",
+            "todo",
+            Some(&epic),
+            BTreeMap::new(),
+        );
 
         record_pr_action(
             dir.path(),
@@ -1809,15 +1958,15 @@ repo = "atelier"
         write_workflow(dir.path());
         write_config(dir.path());
         let db = Database::open(&db_path).unwrap();
-        insert_issue(
+        insert_record_issue(
             &db,
+            &state_dir,
             "atelier-issue",
             "feature",
             "review",
             None,
             pull_request_fields(42),
         );
-        crate::export::run_canonical(&db, &state_dir, false).unwrap();
 
         let outcome = status(
             &db,

@@ -2,18 +2,19 @@
 
 Mission Control terminal UI is an optional browsing surface over deterministic
 Mission Control JSON. It is not the primary agent interface. Agent workflows
-must continue to use CLI commands plus committed `.atelier/` records and
-derived projections as the authoritative interface; the TUI exists to help humans and
+must continue to use CLI commands plus committed `.atelier/` record files as
+the authoritative interface; the TUI exists to help humans and
 orchestrators inspect state, copy IDs, and choose the next CLI action.
 
 The TUI must not read `.atelier/runtime/state.db` directly and must not invent a state
 model separate from the Mission Control projection. Its input is either
 `.atelier/cache/mission-control.json` or an equivalent future Mission Control
 projection API with the same schema.
-Mission Control JSON is derived from canonical records plus ProjectionIndex
-queries; it is not an authoritative record source.
+Mission Control JSON is a distinct derived presentation artifact built from
+record files plus SQLite domain-cache queries through `CacheManager`; it is not
+the SQLite domain cache or an authoritative record source.
 
-## Projection Contract
+## Mission Control Projection Contract
 
 The TUI may consume only the field paths named in this section. New fields may
 be added to the projection without changing the TUI, but the TUI must ignore

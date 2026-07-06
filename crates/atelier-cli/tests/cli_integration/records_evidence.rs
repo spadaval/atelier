@@ -956,6 +956,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stdout"));
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
+    let (fresh, _, _) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(!fresh, "evidence create+attach should leave cache stale");
+    let (success, shown, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
+    assert!(success, "lazy evidence query failed: {stderr}");
+    assert!(shown.contains("issue command proof"));
+    assert!(
+        stderr.contains("Local cache was stale; rebuilt SQLite cache")
+            || stderr.contains("Local cache was stale; repaired changed record sources"),
+        "missing lazy evidence repair diagnostic: {stderr}"
+    );
+    let (fresh, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(
+        fresh,
+        "cache should be fresh after evidence query: {stderr}"
+    );
     let issue_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
     assert!(issue_evidence_front_matter["proof_scope"].is_null());
@@ -1233,11 +1249,17 @@ fn test_evidence_list_bounds_default_output() {
     }
     evidence_ids.sort_by(|(_, left), (_, right)| left.cmp(right));
 
+    let (success, _, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(
+        success,
+        "initial evidence list/cache repair failed: {stderr}"
+    );
+
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     for (rank, (_, evidence_id)) in evidence_ids.iter().enumerate() {
         let timestamp = format!("2024-01-{:02}T00:00:00+00:00", rank + 1);
         conn.execute(
-            "UPDATE records SET created_at = ?1, updated_at = ?1 WHERE kind = 'evidence' AND id = ?2",
+            "UPDATE evidence_index SET created_at = ?1, updated_at = ?1 WHERE id = ?2",
             rusqlite::params![timestamp, evidence_id],
         )
         .unwrap();

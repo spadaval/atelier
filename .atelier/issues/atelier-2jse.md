@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:20:37.272166700+00:00"
+status: "done"
 title: "Introduce CacheManager get-cache boundary"
-updated_at: "2026-06-23T16:21:20.077491339+00:00"
+updated_at: "2026-07-06T18:20:37.272166700+00:00"
 ---
 
 ## Description
@@ -32,4 +33,8 @@ Introduce the cache access boundary that opens existing cache state, checks sour
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Evidence `atelier-39dg` records passing focused CacheManager tests for lazy
+  open, freshness, corruption/version rebuild, safe fallback, and degraded
+  orientation behavior.
+- Test evidence `atelier-2pkp` records passing CLI dispatch scenarios for stale
+  source repair and rebuild through the CacheManager boundary.

@@ -54,7 +54,7 @@ impl<'a> EvidenceMetadata<'a> {
 
 pub fn add_returning_id(
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     evidence_kind: &str,
     summary: &str,
     path: Option<&str>,
@@ -92,7 +92,6 @@ pub fn add_returning_id(
     let created =
         app_use_cases::create_evidence_record(state_dir, summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 
@@ -170,7 +169,6 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
 
     let created =
         app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if let Some(target) = target {
         attach(
             state_dir,
@@ -181,8 +179,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
             &target.role,
         )?;
     }
-    let db = app_use_cases::open_database(db_path)?;
-    print_record(&db, &created)
+    print_record_without_cache(&created)
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
@@ -200,8 +197,8 @@ pub fn attach(
     role: &str,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
+    canonical_evidence_record(id)?;
     let db = app_use_cases::open_database(db_path)?;
-    db.require_record(KIND, id)?;
     let target = validate_record_ref(&db, target_kind, target_id, role)?;
     drop(db);
     let inserted = app_use_cases::add_attachment_relationship(
@@ -212,11 +209,13 @@ pub fn attach(
         target_id,
         role,
     )?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted && target.canonical_kind == "issue" {
-        let db = app_use_cases::open_database(db_path)?;
-        let evidence = db.require_record(KIND, id)?;
-        super::activity_log::record_evidence_attached(target_id, id, Some(&evidence.status))?;
+        let evidence = canonical_evidence_record(id)?;
+        super::activity_log::record_evidence_attached(
+            target_id,
+            id,
+            Some(&evidence.header.status),
+        )?;
     }
     if inserted {
         println!(
@@ -343,6 +342,21 @@ fn evidence_list_command(command: Option<&str>) -> String {
 
 pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
     let data = evidence_record_data(record);
+    let targets = format_targets(db, &record.header.id, &data)?;
+    print_record_with_targets(record, data, targets)
+}
+
+pub fn print_record_without_cache(record: &EvidenceRecord) -> Result<()> {
+    let data = evidence_record_data(record);
+    let targets = format_data_target(&data).into_iter().collect();
+    print_record_with_targets(record, data, targets)
+}
+
+fn print_record_with_targets(
+    record: &EvidenceRecord,
+    data: EvidenceRecordData,
+    targets: Vec<String>,
+) -> Result<()> {
     println!(
         "{} [evidence] {} - {}",
         record.header.id, record.header.status, record.header.title
@@ -362,7 +376,6 @@ pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
     if let Some(exit_status) = data.exit_status.as_deref() {
         println!("Exit Status: {exit_status}");
     }
-    let targets = format_targets(db, &record.header.id, &data)?;
     if !targets.is_empty() {
         println!("Target:      {}", targets.join(", "));
     }
@@ -633,7 +646,7 @@ fn quote_command_arg(arg: &str) -> String {
 
 fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Cannot locate canonical Atelier state directory");
+        bail!("Cannot locate Atelier record-file directory");
     };
     app_use_cases::load_canonical_evidence(&state_dir, id)
 }
