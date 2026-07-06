@@ -8,21 +8,22 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use atelier_core::{Issue, Record, RecordLink};
+use atelier_core::{Issue, Record};
 use atelier_records as record_store;
 use atelier_records::activity::IssueActivity;
 use atelier_records::{
-    IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS, WELL_KNOWN_LINK_TYPES,
-    WELL_KNOWN_RELATION_TYPES,
+    Relationships, FIRST_CLASS_RECORD_KINDS, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 use atelier_sqlite::projection_index;
-use atelier_sqlite::Database;
+use atelier_sqlite::{
+    Database, EvidenceCacheRow, EvidenceTargetCacheRow, IssueBlockCacheRow, IssueCacheRow,
+    IssueRelationCacheRow, RecordSourceCacheRow, ReviewRoomCacheRow,
+};
 
 #[derive(Debug)]
 struct CanonicalIssue {
     issue: Issue,
     labels: Vec<String>,
-    sections: IssueSections,
     relationships: Relationships,
 }
 
@@ -33,7 +34,6 @@ struct RebuildProjection {
     child_edges: Vec<(String, String)>,
     dependency_edges: Vec<(String, String)>,
     relations: Vec<(String, String, String)>,
-    record_links: Vec<(String, String, String, String, String)>,
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -74,53 +74,69 @@ pub fn repair_incremental(
         return Ok(IncrementalRepair::NeedsFullRebuild);
     }
 
-    let stored_sources = db.projection_sources()?;
+    let stored_sources = db.record_source_cache_rows()?;
     let stored_by_path = stored_sources
         .iter()
         .map(|entry| (entry.path.as_str(), entry))
         .collect::<BTreeMap<_, _>>();
     let store = record_store::RecordStore::new(state_dir);
+    let mut problems = report.problems.iter().collect::<Vec<_>>();
+    problems.sort_by_key(|problem| match problem {
+        projection_index::FreshnessProblem::MissingMetadata { .. } => 0,
+        projection_index::FreshnessProblem::MissingSource { path } => stored_by_path
+            .get(path.as_str())
+            .map(|source| match source.record_kind.as_str() {
+                "review" => 1,
+                "evidence" => 2,
+                "issue" => 3,
+                _ => 4,
+            })
+            .unwrap_or(4),
+        projection_index::FreshnessProblem::ChangedSource { path }
+        | projection_index::FreshnessProblem::UnindexedSource { path } => {
+            match canonical_spec_for_path(path).map(|spec| spec.kind) {
+                Some("issue") => 5,
+                Some("evidence") => 6,
+                Some("review") => 7,
+                _ => 8,
+            }
+        }
+    });
 
-    db.transaction(|| {
-        for problem in &report.problems {
-            match problem {
-                projection_index::FreshnessProblem::MissingMetadata { .. } => {
+    for problem in problems {
+        match problem {
+            projection_index::FreshnessProblem::MissingMetadata { .. } => {
+                return Ok(IncrementalRepair::NeedsFullRebuild);
+            }
+            projection_index::FreshnessProblem::MissingSource { path } => {
+                let Some(source) = stored_by_path.get(path.as_str()) else {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                };
+                if remove_missing_source(db, source)? == IncrementalRepair::NeedsFullRebuild {
                     return Ok(IncrementalRepair::NeedsFullRebuild);
                 }
-                projection_index::FreshnessProblem::MissingSource { path } => {
-                    let Some(source) = stored_by_path.get(path.as_str()) else {
-                        return Ok(IncrementalRepair::NeedsFullRebuild);
-                    };
-                    db.remove_projected_record(&source.kind, &source.id)?;
-                    db.remove_projection_source(path)?;
-                }
-                projection_index::FreshnessProblem::ChangedSource { path }
-                | projection_index::FreshnessProblem::UnindexedSource { path } => {
-                    let Some(spec) = first_class_spec_for_path(path) else {
-                        return Ok(IncrementalRepair::NeedsFullRebuild);
-                    };
-                    let relative = Path::new(path);
-                    let record = store.load_record_at(relative, spec).with_context(|| {
-                        format!(
-                            "Failed to parse changed canonical record {}",
-                            display_state_path(relative)
-                        )
-                    })?;
-                    db.replace_record(&record, path)?;
-                    db.replace_record_labels(
-                        &record.header().kind,
-                        &record.header().id,
-                        &record.header().labels,
-                    )?;
-                    let links = outgoing_record_links(&record);
-                    db.replace_outgoing_links(&record.header().kind, &record.header().id, &links)?;
-                    let source = projection_index::source_entry_for_path(state_dir, path)?;
-                    db.upsert_projection_source(&source)?;
+            }
+            projection_index::FreshnessProblem::ChangedSource { path }
+            | projection_index::FreshnessProblem::UnindexedSource { path } => {
+                let Some(spec) = canonical_spec_for_path(path) else {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                };
+                let relative = Path::new(path);
+                let record = store.load_record_at(relative, spec).with_context(|| {
+                    format!(
+                        "Failed to parse changed canonical record {}",
+                        display_state_path(relative)
+                    )
+                })?;
+                if index_changed_record(db, state_dir, path, record)?
+                    == IncrementalRepair::NeedsFullRebuild
+                {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
                 }
             }
         }
-        Ok(IncrementalRepair::Repaired)
-    })
+    }
+    Ok(IncrementalRepair::Repaired)
 }
 
 struct ProjectionRebuildLock {
@@ -251,7 +267,7 @@ impl<'a> ProjectionLoader<'a> {
         ensure_no_unsupported_canonical_files(self.state_dir, &self.canonical_paths)?;
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
-        let record_links = self.collect_record_links()?;
+        self.collect_record_links()?;
         validate_issue_hierarchy_shapes(&self.issues, &child_edges)?;
         self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
@@ -267,7 +283,6 @@ impl<'a> ProjectionLoader<'a> {
             child_edges,
             dependency_edges,
             relations,
-            record_links,
         })
     }
 
@@ -278,7 +293,6 @@ impl<'a> ProjectionLoader<'a> {
             let issue = CanonicalIssue {
                 issue: record.issue,
                 labels: record.labels,
-                sections: record.sections,
                 relationships: record.relationships,
             };
             self.register_issue_id(&issue.issue.id)?;
@@ -823,56 +837,24 @@ fn write_rebuilt_database(
 
     {
         let db = Database::open(&tmp_path)?;
-        db.transaction(|| {
-            for issue in &rebuild.issues {
-                let mut row = issue.issue.clone();
-                row.parent_id = None;
-                row.description = Some(issue.sections.description.clone());
-                db.insert_issue_rebuild(&row)?;
-            }
-            for (child_id, parent_id) in &rebuild.child_edges {
-                let updated_at = rebuild
-                    .issues
-                    .iter()
-                    .find(|issue| issue.issue.id == *child_id)
-                    .map(|issue| issue.issue.updated_at)
-                    .ok_or_else(|| anyhow!("Missing child issue {child_id}"))?;
-                db.update_parent_import(child_id, Some(parent_id), &updated_at)?;
-            }
-            for issue in &rebuild.issues {
-                for label in &issue.labels {
-                    db.add_label(&issue.issue.id, label)?;
-                }
-            }
-            for (blocked_id, blocker_id) in &rebuild.dependency_edges {
-                db.add_dependency(blocked_id, blocker_id)?;
-            }
-            for (source, target, relation_type) in &rebuild.relations {
-                db.add_typed_relation(&source, &target, relation_type)?;
-            }
-            for record in &rebuild.records {
-                let header = record.header();
-                let spec = record_store::canonical_record_kind(&header.kind)?;
-                let source_path = record_store::canonical_record_path(spec, &header.id)?
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                db.insert_record_rebuild_from_source(record, &source_path)?;
-                db.replace_record_labels(&header.kind, &header.id, &header.labels)?;
-            }
-            for (source_kind, source_id, target_kind, target_id, relation_type) in
-                &rebuild.record_links
-            {
-                db.add_record_link(
-                    source_kind,
-                    source_id,
-                    target_kind,
-                    target_id,
-                    relation_type,
-                )?;
-            }
-            Ok(())
-        })?;
-        projection_index::refresh(&db, state_dir)?;
+        let parent_by_child = rebuild
+            .child_edges
+            .iter()
+            .map(|(child, parent)| (child.as_str(), parent.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        for issue in &rebuild.issues {
+            index_canonical_issue(
+                &db,
+                state_dir,
+                issue,
+                parent_by_child.get(issue.issue.id.as_str()).copied(),
+                &rebuild.dependency_edges,
+                &rebuild.relations,
+            )?;
+        }
+        for record in &rebuild.records {
+            index_domain_record(&db, state_dir, record)?;
+        }
     }
 
     fs::rename(&tmp_path, db_path).with_context(|| {
@@ -885,51 +867,286 @@ fn write_rebuilt_database(
     Ok(())
 }
 
-fn first_class_spec_for_path(path: &str) -> Option<&'static record_store::RecordKindSpec> {
+fn index_canonical_issue(
+    db: &Database,
+    state_dir: &Path,
+    issue: &CanonicalIssue,
+    parent_id: Option<&str>,
+    dependency_edges: &[(String, String)],
+    relations: &[(String, String, String)],
+) -> Result<()> {
+    let id = issue.issue.id.as_str();
+    let source_path = record_store::issue_record_path(id)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let row = IssueCacheRow {
+        id: issue.issue.id.clone(),
+        title: issue.issue.title.clone(),
+        status: issue.issue.status.clone(),
+        issue_type: issue.issue.issue_type.clone(),
+        priority: issue.issue.priority.clone(),
+        parent_id: parent_id.map(str::to_string),
+        created_at: issue.issue.created_at,
+        updated_at: issue.issue.updated_at,
+        closed_at: issue.issue.closed_at,
+    };
+    let blocks = dependency_edges
+        .iter()
+        .filter(|(_, blocker_id)| blocker_id == id)
+        .map(|(blocked_id, blocker_id)| IssueBlockCacheRow {
+            blocker_id: blocker_id.clone(),
+            blocked_id: blocked_id.clone(),
+        })
+        .collect::<Vec<_>>();
+    let relations = relations
+        .iter()
+        .filter(|(source_id, _, _)| source_id == id)
+        .map(
+            |(source_issue_id, target_issue_id, relation_type)| IssueRelationCacheRow {
+                source_issue_id: source_issue_id.clone(),
+                target_issue_id: target_issue_id.clone(),
+                relation_type: relation_type.clone(),
+                created_at: issue.issue.updated_at,
+            },
+        )
+        .collect::<Vec<_>>();
+    let source = record_source_row(state_dir, &source_path, "issue", id)?;
+    db.index_issue(&row, &issue.labels, &blocks, &relations, &source)
+}
+
+fn index_domain_record(db: &Database, state_dir: &Path, record: &Record) -> Result<()> {
+    let header = record.header();
+    let spec = record_store::canonical_record_kind(&header.kind)?;
+    let source_path = record_store::canonical_record_path(spec, &header.id)?
+        .to_string_lossy()
+        .replace('\\', "/");
+    match record {
+        Record::Evidence(evidence) => {
+            let row = EvidenceCacheRow {
+                id: header.id.clone(),
+                title: header.title.clone(),
+                status: header.status.clone(),
+                evidence_type: evidence.data.evidence_type.clone(),
+                captured_at: evidence.data.captured_at,
+                proof_scope: evidence.data.proof_scope.clone(),
+                agent_identity: evidence.data.agent_identity.clone(),
+                independence_level: evidence.data.independence_level.clone(),
+                created_at: header.created_at,
+                updated_at: header.updated_at,
+            };
+            let targets = header
+                .relationships
+                .attachments
+                .iter()
+                .map(|target| EvidenceTargetCacheRow {
+                    evidence_id: header.id.clone(),
+                    target_kind: target.kind.clone(),
+                    target_id: target.id.clone(),
+                    role: target.role.clone(),
+                })
+                .collect::<Vec<_>>();
+            let source = record_source_row(
+                state_dir,
+                &source_path,
+                header.kind.as_str(),
+                header.id.as_str(),
+            )?;
+            db.index_evidence(&row, &targets, &source)
+        }
+        Record::Review(review) => {
+            let (approvals, unresolved_blocking, unresolved_nonblocking) =
+                review_room_counts(&review.events);
+            let row = ReviewRoomCacheRow {
+                id: header.id.clone(),
+                issue_id: review.issue_id.clone(),
+                title: header.title.clone(),
+                status: header.status.clone(),
+                source_branch: review.source_branch.clone(),
+                target_branch: review.target_branch.clone(),
+                approvals,
+                unresolved_blocking,
+                unresolved_nonblocking,
+                created_at: header.created_at,
+                updated_at: header.updated_at,
+            };
+            let source = record_source_row(
+                state_dir,
+                &source_path,
+                header.kind.as_str(),
+                header.id.as_str(),
+            )?;
+            db.index_review_room(&row, &source)
+        }
+        Record::Issue(_) => bail!("issue records must use the issue indexer"),
+    }
+}
+
+fn record_source_row(
+    state_dir: &Path,
+    source_path: &str,
+    record_kind: &str,
+    record_id: &str,
+) -> Result<RecordSourceCacheRow> {
+    let path = state_dir.join(source_path);
+    let metadata = fs::metadata(&path)
+        .with_context(|| format!("Failed to inspect canonical source {}", path.display()))?;
+    let modified_micros = metadata.modified().ok().and_then(|modified| {
+        modified
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|duration| duration.as_micros() as i64)
+    });
+    Ok(RecordSourceCacheRow {
+        path: source_path.to_string(),
+        record_kind: record_kind.to_string(),
+        record_id: record_id.to_string(),
+        size_bytes: metadata.len() as i64,
+        modified_micros,
+        content_hash: None,
+        indexed_at: chrono::Utc::now(),
+    })
+}
+
+fn review_room_counts(events: &[serde_json::Value]) -> (i64, i64, i64) {
+    let latest_change_request = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| {
+            (event.get("kind").and_then(serde_json::Value::as_str) == Some("changes_requested"))
+                .then_some(index)
+        })
+        .max();
+    let approvals = events
+        .iter()
+        .enumerate()
+        .filter(|(index, event)| {
+            latest_change_request.is_none_or(|latest| *index > latest)
+                && event.get("kind").and_then(serde_json::Value::as_str) == Some("approval")
+        })
+        .count() as i64;
+    let resolved = events
+        .iter()
+        .filter(|event| event.get("kind").and_then(serde_json::Value::as_str) == Some("resolved"))
+        .filter_map(|event| event.get("finding").and_then(serde_json::Value::as_str))
+        .collect::<BTreeSet<_>>();
+    let unresolved = events
+        .iter()
+        .filter(|event| event.get("kind").and_then(serde_json::Value::as_str) == Some("finding"))
+        .filter(|event| {
+            event
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(|id| !resolved.contains(id))
+        })
+        .collect::<Vec<_>>();
+    let blocking = unresolved
+        .iter()
+        .filter(|event| {
+            event.get("severity").and_then(serde_json::Value::as_str) == Some("blocking")
+        })
+        .count() as i64;
+    let nonblocking = unresolved.len() as i64 - blocking;
+    (approvals, blocking, nonblocking)
+}
+
+fn canonical_spec_for_path(path: &str) -> Option<&'static record_store::RecordKindSpec> {
     let first = Path::new(path)
         .components()
         .next()
         .and_then(|component| component.as_os_str().to_str())?;
-    record_store::FIRST_CLASS_RECORD_KINDS
+    record_store::CANONICAL_RECORD_KINDS
         .iter()
         .find(|spec| spec.canonical_dir == Some(first))
 }
 
-fn outgoing_record_links(record: &Record) -> Vec<RecordLink> {
-    let created_at = chrono::Utc::now();
-    let mut links = Vec::new();
-    let header = record.header();
-    for child in &header.relationships.children {
-        links.push(RecordLink {
-            source_kind: header.kind.clone(),
-            source_id: header.id.clone(),
-            target_kind: child.kind.clone(),
-            target_id: child.id.clone(),
-            relation_type: child_relation_type(&child.kind).to_string(),
-            created_at,
-        });
+fn index_changed_record(
+    db: &Database,
+    state_dir: &Path,
+    path: &str,
+    record: Record,
+) -> Result<IncrementalRepair> {
+    match record {
+        Record::Issue(record) => {
+            let relationships = &record.header.relationships;
+            if !relationships.blocks.is_empty()
+                || !relationships.children.is_empty()
+                || !relationships.attachments.is_empty()
+                || !relationships.relates.is_empty()
+                || db.issue_cache_has_graph_edges(&record.header.id)?
+            {
+                return Ok(IncrementalRepair::NeedsFullRebuild);
+            }
+            let parent_id = db
+                .issue_cache_row(&record.header.id)?
+                .and_then(|row| row.parent_id);
+            let issue = CanonicalIssue {
+                issue: Issue {
+                    id: record.header.id,
+                    title: record.header.title,
+                    description: None,
+                    status: record.header.status,
+                    issue_type: record.issue_type,
+                    priority: record.priority,
+                    fields: record.fields,
+                    parent_id: parent_id.clone(),
+                    created_at: record.header.created_at,
+                    updated_at: record.header.updated_at,
+                    closed_at: record.closed_at,
+                },
+                labels: record.header.labels,
+                relationships: record.header.relationships,
+            };
+            index_canonical_issue(db, state_dir, &issue, parent_id.as_deref(), &[], &[])?;
+        }
+        Record::Evidence(record) => {
+            for target in &record.header.relationships.attachments {
+                let exists = match target.kind.as_str() {
+                    "issue" => db.issue_cache_row(&target.id)?.is_some(),
+                    "evidence" => db.evidence_cache_row(&target.id)?.is_some(),
+                    "review" => db.review_room_cache_row(&target.id)?.is_some(),
+                    _ => false,
+                };
+                if !exists {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                }
+            }
+            index_domain_record(db, state_dir, &Record::Evidence(record))?;
+        }
+        Record::Review(record) => {
+            if db.issue_cache_row(&record.issue_id)?.is_none() {
+                return Ok(IncrementalRepair::NeedsFullRebuild);
+            }
+            index_domain_record(db, state_dir, &Record::Review(record))?;
+        }
     }
-    for attachment in &header.relationships.attachments {
-        links.push(RecordLink {
-            source_kind: header.kind.clone(),
-            source_id: header.id.clone(),
-            target_kind: attachment.kind.clone(),
-            target_id: attachment.id.clone(),
-            relation_type: attachment.role.clone(),
-            created_at,
-        });
+    let source = db.record_source_cache_row(path)?.ok_or_else(|| {
+        anyhow!(
+            "domain indexer did not record source metadata for {}",
+            display_state_path(Path::new(path))
+        )
+    })?;
+    if source.path != path {
+        bail!("indexed source path changed unexpectedly for {path}");
     }
-    for relation in &header.relationships.relates {
-        links.push(RecordLink {
-            source_kind: header.kind.clone(),
-            source_id: header.id.clone(),
-            target_kind: relation.kind.clone(),
-            target_id: relation.id.clone(),
-            relation_type: relation.relation_type.clone(),
-            created_at,
-        });
+    Ok(IncrementalRepair::Repaired)
+}
+
+fn remove_missing_source(
+    db: &Database,
+    source: &RecordSourceCacheRow,
+) -> Result<IncrementalRepair> {
+    match source.record_kind.as_str() {
+        "issue" => {
+            if db.issue_cache_has_graph_edges(&source.record_id)? {
+                return Ok(IncrementalRepair::NeedsFullRebuild);
+            }
+            db.remove_indexed_issue(&source.record_id, &source.path)?;
+        }
+        "evidence" => db.remove_indexed_evidence(&source.record_id, &source.path)?,
+        "review" => db.remove_indexed_review_room(&source.record_id, &source.path)?,
+        _ => return Ok(IncrementalRepair::NeedsFullRebuild),
     }
-    links
+    Ok(IncrementalRepair::Repaired)
 }
 
 fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
@@ -1209,675 +1426,438 @@ fn display_state_path(relative_path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use atelier_core::{
+        AttachmentRelationship, EvidenceRecord, EvidenceRecordData, IssueSections, RecordHeader,
+        RelatesRelationship, ReviewRecord,
+    };
+    use atelier_records::{CanonicalIssueRecord, RecordStore};
+    use chrono::{DateTime, Utc};
+    use serde_json::json;
+    use std::io::{Seek, SeekFrom};
+    use tempfile::TempDir;
+
     use super::*;
-    use tempfile::tempdir;
 
-    use crate::export;
-    use atelier_records::issue_record_path;
+    #[derive(Debug, Eq, PartialEq)]
+    struct CacheSnapshot {
+        issues: Vec<(IssueCacheRow, Vec<String>)>,
+        evidence: Vec<(EvidenceCacheRow, Vec<EvidenceTargetCacheRow>)>,
+        rooms: Vec<ReviewRoomCacheRow>,
+        sources: Vec<(String, String, String, i64, Option<i64>)>,
+    }
 
-    fn setup_test_db() -> (Database, tempfile::TempDir) {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db = Database::open(&db_path).unwrap();
-        (db, dir)
+    fn timestamp(revision: i64) -> DateTime<Utc> {
+        DateTime::from_timestamp(1_750_000_000 + revision, 0).unwrap()
+    }
+
+    fn setup() -> (TempDir, PathBuf, PathBuf) {
+        let directory = tempfile::tempdir().unwrap();
+        let state_dir = directory.path().join(".atelier");
+        fs::create_dir_all(&state_dir).unwrap();
+        let db_path = state_dir.join("runtime/state.db");
+        (directory, state_dir, db_path)
+    }
+
+    fn write_issue(
+        state_dir: &Path,
+        id: &str,
+        title: &str,
+        revision: i64,
+        labels: Vec<&str>,
+        relationships: Relationships,
+    ) {
+        let record = CanonicalIssueRecord {
+            issue: Issue {
+                id: id.to_string(),
+                title: title.to_string(),
+                description: None,
+                status: "todo".to_string(),
+                issue_type: "task".to_string(),
+                priority: "high".to_string(),
+                fields: BTreeMap::new(),
+                parent_id: None,
+                created_at: timestamp(1),
+                updated_at: timestamp(revision),
+                closed_at: None,
+            },
+            labels: labels.into_iter().map(str::to_string).collect(),
+            sections: IssueSections::unchecked_from_body(Some(
+                "## Description\n\nFixture issue\n\n## Outcome\n\nCache rows are reproducible.",
+            )),
+            relationships,
+        };
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&record)
+            .unwrap();
+    }
+
+    fn write_evidence(state_dir: &Path, id: &str, title: &str, target_id: &str, revision: i64) {
+        let record = Record::Evidence(EvidenceRecord {
+            header: RecordHeader {
+                kind: "evidence".to_string(),
+                id: id.to_string(),
+                title: title.to_string(),
+                status: "pass".to_string(),
+                labels: Vec::new(),
+                relationships: Relationships {
+                    attachments: vec![AttachmentRelationship {
+                        kind: "issue".to_string(),
+                        id: target_id.to_string(),
+                        role: "validates".to_string(),
+                    }],
+                    ..Relationships::default()
+                },
+                created_at: timestamp(1),
+                updated_at: timestamp(revision),
+            },
+            data: EvidenceRecordData {
+                evidence_type: "test".to_string(),
+                captured_at: timestamp(revision),
+                command: Some("cargo nextest run".to_string()),
+                path: None,
+                uri: None,
+                producer: None,
+                proof_scope: Some("domain cache".to_string()),
+                agent_identity: Some("worker".to_string()),
+                independence_level: Some("implementer".to_string()),
+                residual_risks: Vec::new(),
+                follow_up_ids: Vec::new(),
+                exit_code: Some(0),
+                exit_status: Some("0".to_string()),
+                success: Some(true),
+                spawn_error: None,
+                output: None,
+                target: None,
+            },
+            summary: "Focused proof".to_string(),
+        });
+        RecordStore::new(state_dir)
+            .write_record_atomic(&record)
+            .unwrap();
+    }
+
+    fn write_review(state_dir: &Path, id: &str, title: &str, issue_id: &str, revision: i64) {
+        let events = if revision > 1 {
+            vec![
+                json!({"id": "event-1", "kind": "opened"}),
+                json!({"id": "finding-2", "kind": "finding", "severity": "blocking"}),
+                json!({"id": "event-3", "kind": "resolved", "finding": "finding-2"}),
+                json!({"id": "event-4", "kind": "approval"}),
+            ]
+        } else {
+            vec![json!({"id": "event-1", "kind": "opened"})]
+        };
+        let record = Record::Review(ReviewRecord {
+            header: RecordHeader {
+                kind: "review".to_string(),
+                id: id.to_string(),
+                title: title.to_string(),
+                status: "open".to_string(),
+                labels: vec!["review".to_string()],
+                relationships: Relationships::default(),
+                created_at: timestamp(1),
+                updated_at: timestamp(revision),
+            },
+            mode: "room".to_string(),
+            issue_id: issue_id.to_string(),
+            source_branch: format!("epic/{issue_id}"),
+            target_branch: "main".to_string(),
+            events,
+        });
+        RecordStore::new(state_dir)
+            .write_record_atomic(&record)
+            .unwrap();
+    }
+
+    fn write_domain_set(state_dir: &Path, suffix: &str, revision: i64) -> [String; 3] {
+        let issue_id = format!("atelier-{suffix}");
+        let evidence_id = format!("atelier-{suffix}e");
+        let review_id = format!("atelier-{suffix}r");
+        write_issue(
+            state_dir,
+            &issue_id,
+            &format!("Issue {revision}"),
+            revision,
+            vec![if revision == 1 { "initial" } else { "changed" }],
+            Relationships::default(),
+        );
+        write_evidence(
+            state_dir,
+            &evidence_id,
+            &format!("Evidence {revision}"),
+            &issue_id,
+            revision,
+        );
+        write_review(
+            state_dir,
+            &review_id,
+            &format!("Review {revision}"),
+            &issue_id,
+            revision,
+        );
+        [issue_id, evidence_id, review_id]
+    }
+
+    fn domain_paths(ids: &[String; 3]) -> [String; 3] {
+        [
+            format!("issues/{}.md", ids[0]),
+            format!("evidence/{}.md", ids[1]),
+            format!("reviews/{}.yaml", ids[2]),
+        ]
+    }
+
+    fn report(
+        problems: Vec<projection_index::FreshnessProblem>,
+    ) -> projection_index::FreshnessReport {
+        projection_index::FreshnessReport {
+            checked: true,
+            source_count: problems.len(),
+            problems,
+        }
+    }
+
+    fn snapshot(database: &Database) -> CacheSnapshot {
+        let issue_rows = database
+            .query_issue_cache(&atelier_sqlite::IssueCacheQuery::default())
+            .unwrap();
+        let issues = issue_rows
+            .into_iter()
+            .map(|row| {
+                let labels = database.issue_cache_labels(&row.id).unwrap();
+                (row, labels)
+            })
+            .collect();
+        let evidence_rows = database
+            .query_evidence_cache(&atelier_sqlite::EvidenceCacheQuery::default())
+            .unwrap();
+        let evidence = evidence_rows
+            .into_iter()
+            .map(|row| {
+                let targets = database.evidence_cache_targets(&row.id).unwrap();
+                (row, targets)
+            })
+            .collect();
+        let rooms = database
+            .query_issue_cache(&atelier_sqlite::IssueCacheQuery::default())
+            .unwrap()
+            .into_iter()
+            .flat_map(|issue| database.review_room_cache_for_issue(&issue.id).unwrap())
+            .collect();
+        let sources = database
+            .record_source_cache_rows()
+            .unwrap()
+            .into_iter()
+            .map(|source| {
+                (
+                    source.path,
+                    source.record_kind,
+                    source.record_id,
+                    source.size_bytes,
+                    source.modified_micros,
+                )
+            })
+            .collect();
+        CacheSnapshot {
+            issues,
+            evidence,
+            rooms,
+            sources,
+        }
+    }
+
+    fn assert_matches_full(state_dir: &Path, incremental: &Database, full_path: &Path) {
+        run(state_dir, full_path).unwrap();
+        let full = Database::open(full_path).unwrap();
+        assert_eq!(snapshot(incremental), snapshot(&full));
     }
 
     #[test]
-    fn rebuild_round_trips_canonical_issue_state() {
-        let (db, dir) = setup_test_db();
-        let parent = db
-            .create_issue_with_type("Parent", Some("Parent body"), "high", "epic")
-            .unwrap();
-        let child = db
-            .create_subissue(&parent, "Child", Some("Child body"), "low")
-            .unwrap();
-        db.add_label(&child, "alpha").unwrap();
-        db.add_label(&child, "zeta").unwrap();
-        db.add_dependency(&child, &parent).unwrap();
-        db.add_typed_relation(&parent, &child, "derived").unwrap();
+    fn full_and_incremental_add_change_delete_are_equivalent_for_all_domains() {
+        let (_directory, state_dir, incremental_path) = setup();
+        let base = write_domain_set(&state_dir, "base", 1);
+        run(&state_dir, &incremental_path).unwrap();
+        let incremental = Database::open(&incremental_path).unwrap();
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-
-        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
-        run(&state_dir, &rebuilt_path).unwrap();
-        let rebuilt = Database::open(&rebuilt_path).unwrap();
-
-        let rebuilt_parent = rebuilt.get_issue(&parent).unwrap().unwrap();
-        let rebuilt_child = rebuilt.get_issue(&child).unwrap().unwrap();
-        assert_eq!(rebuilt_parent.title, "Parent");
-        assert_eq!(rebuilt_child.title, "Child");
-        assert_eq!(rebuilt_child.parent_id, Some(parent.clone()));
-        assert_eq!(rebuilt_child.priority, "low");
-        assert_eq!(rebuilt.get_labels(&child).unwrap(), vec!["alpha", "zeta"]);
-        assert_eq!(rebuilt.get_blockers(&child).unwrap(), vec![parent.clone()]);
-        assert_eq!(rebuilt.get_blocking(&parent).unwrap(), vec![child.clone()]);
-
-        let rebuilt_state_dir = dir.path().join(".rebuilt-state");
-        export::run_canonical(&rebuilt, &rebuilt_state_dir, false).unwrap();
+        write_domain_set(&state_dir, "base", 2);
+        let changed = domain_paths(&base)
+            .into_iter()
+            .map(|path| projection_index::FreshnessProblem::ChangedSource { path })
+            .collect();
         assert_eq!(
-            fs::read_to_string(state_dir.join(issue_record_path(&child))).unwrap(),
-            fs::read_to_string(rebuilt_state_dir.join(issue_record_path(&child))).unwrap()
+            repair_incremental(&incremental, &state_dir, &report(changed)).unwrap(),
+            IncrementalRepair::Repaired
         );
-        assert!(!rebuilt_state_dir.join("graph.json").exists());
-        assert_eq!(rebuilt.get_typed_relations(&parent).unwrap().len(), 1);
+        assert_matches_full(
+            &state_dir,
+            &incremental,
+            &state_dir.join("runtime/full-changed.db"),
+        );
+
+        let added = write_domain_set(&state_dir, "added", 1);
+        let unindexed = domain_paths(&added)
+            .into_iter()
+            .rev()
+            .map(|path| projection_index::FreshnessProblem::UnindexedSource { path })
+            .collect();
+        assert_eq!(
+            repair_incremental(&incremental, &state_dir, &report(unindexed)).unwrap(),
+            IncrementalRepair::Repaired
+        );
+        assert_matches_full(
+            &state_dir,
+            &incremental,
+            &state_dir.join("runtime/full-added.db"),
+        );
+
+        let added_paths = domain_paths(&added);
+        for path in &added_paths {
+            fs::remove_file(state_dir.join(path)).unwrap();
+        }
+        let missing = added_paths
+            .into_iter()
+            .rev()
+            .map(|path| projection_index::FreshnessProblem::MissingSource { path })
+            .collect();
+        assert_eq!(
+            repair_incremental(&incremental, &state_dir, &report(missing)).unwrap(),
+            IncrementalRepair::Repaired
+        );
+        assert_matches_full(
+            &state_dir,
+            &incremental,
+            &state_dir.join("runtime/full-deleted.db"),
+        );
     }
 
     #[test]
-    fn rebuild_round_trips_canonical_issue_fields() {
-        let (db, dir) = setup_test_db();
-        let now = chrono::Utc::now();
-        let mut fields = BTreeMap::new();
-        fields.insert(
-            "review".to_string(),
-            serde_json::json!({"kind": "pull_request", "provider": "forgejo", "number": 42}),
+    fn one_issue_repair_is_bounded_and_has_one_transaction_owner() {
+        let (_directory, state_dir, db_path) = setup();
+        let ids = write_domain_set(&state_dir, "bound", 1);
+        run(&state_dir, &db_path).unwrap();
+        let database = Database::open(&db_path).unwrap();
+        let paths = domain_paths(&ids);
+        let untouched_source = database
+            .record_source_cache_row(&paths[1])
+            .unwrap()
+            .unwrap();
+
+        write_issue(
+            &state_dir,
+            &ids[0],
+            "Bounded update",
+            2,
+            vec!["changed"],
+            Relationships::default(),
         );
-        db.insert_issue_rebuild(&Issue {
-            id: "atelier-flds".to_string(),
-            title: "Fielded issue".to_string(),
-            description: Some("Field body".to_string()),
-            status: "todo".to_string(),
-            issue_type: "task".to_string(),
-            priority: "medium".to_string(),
-            fields: fields.clone(),
-            parent_id: None,
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-        })
+        let outcome = repair_incremental(
+            &database,
+            &state_dir,
+            &report(vec![projection_index::FreshnessProblem::ChangedSource {
+                path: paths[0].clone(),
+            }]),
+        )
         .unwrap();
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v3_policy(&state_dir);
-
-        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
-        run(&state_dir, &rebuilt_path).unwrap();
-        let rebuilt = Database::open(&rebuilt_path).unwrap();
-
+        assert_eq!(outcome, IncrementalRepair::Repaired);
         assert_eq!(
-            rebuilt.require_issue("atelier-flds").unwrap().fields,
-            fields
+            database.issue_cache_row(&ids[0]).unwrap().unwrap().title,
+            "Bounded update"
         );
-        validate_canonical_state(&state_dir).unwrap();
-    }
-
-    #[test]
-    fn rebuild_rejects_issue_fields_that_violate_workflow_schema() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Invalid field", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v3_policy(&state_dir);
-        let path = state_dir.join(issue_record_path(&id));
-        let text = fs::read_to_string(&path).unwrap().replace(
-            "labels: []\n",
-            "labels: []\nreview:\n  kind: \"pull_request\"\n  provider: \"forgejo\"\n",
+        assert_eq!(
+            database
+                .record_source_cache_row(&paths[1])
+                .unwrap()
+                .unwrap(),
+            untouched_source
         );
-        fs::write(path, text).unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-
-        assert!(error.to_string().contains("workflow_issue_field_invalid"));
-        assert!(error.to_string().contains("issue "));
-        assert!(error.to_string().contains("positive number"));
     }
 
     #[test]
-    fn rebuild_rejects_child_local_pull_request_field() {
-        let (db, dir) = setup_test_db();
-        let parent = db
-            .create_issue_with_type("Parent", None, "medium", "epic")
-            .unwrap();
-        let child = db
-            .create_subissue(&parent, "Child", None, "medium")
-            .unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v3_policy(&state_dir);
-        let path = state_dir.join(issue_record_path(&child));
-        let text = fs::read_to_string(&path).unwrap().replace(
-            "labels: []\n",
-            "labels: []\nreview:\n  kind: \"room\"\n  id: \"atelier-rvw1\"\n",
+    fn graph_change_requests_one_safe_full_rebuild() {
+        let (_directory, state_dir, db_path) = setup();
+        let first = write_domain_set(&state_dir, "graph", 1);
+        let second = write_domain_set(&state_dir, "peer", 1);
+        run(&state_dir, &db_path).unwrap();
+        let database = Database::open(&db_path).unwrap();
+        write_issue(
+            &state_dir,
+            &first[0],
+            "Graph update",
+            2,
+            vec!["changed"],
+            Relationships {
+                relates: vec![RelatesRelationship {
+                    kind: "issue".to_string(),
+                    id: second[0].clone(),
+                    relation_type: "related".to_string(),
+                }],
+                ..Relationships::default()
+            },
         );
-        fs::write(path, text).unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-
-        assert!(error.to_string().contains("workflow_issue_field_invalid"));
-        assert!(error.to_string().contains("child issues inherit review"));
-    }
-
-    #[test]
-    fn rebuild_allows_parent_records_after_children() {
-        let (db, dir) = setup_test_db();
-        let child = db.create_issue("Child", Some("Child body"), "low").unwrap();
-        let parent = db
-            .create_issue_with_type("Parent", Some("Parent body"), "high", "epic")
-            .unwrap();
-        db.update_parent(&child, Some(&parent)).unwrap();
-
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-
-        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
-        run(&state_dir, &rebuilt_path).unwrap();
-        let rebuilt = Database::open(&rebuilt_path).unwrap();
-
-        let rebuilt_child = rebuilt.get_issue(&child).unwrap().unwrap();
-        assert_eq!(rebuilt_child.parent_id, Some(parent.clone()));
-    }
-
-    #[test]
-    fn rebuild_round_trips_canonical_domain_records() {
-        let (db, dir) = setup_test_db();
-        let mission_id = db
-            .create_issue_with_type("Mission", Some("Mission body"), "medium", "mission")
-            .unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        let store = record_store::RecordStore::new(&state_dir);
-        let evidence_id = store
-            .create_evidence(
-                "Evidence",
-                "recorded",
-                "Evidence body",
-                atelier_core::EvidenceRecordData {
-                    evidence_type: "test".to_string(),
-                    captured_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    command: None,
-                    path: None,
-                    uri: None,
-                    producer: None,
-                    proof_scope: None,
-                    agent_identity: None,
-                    independence_level: None,
-                    residual_risks: Vec::new(),
-                    follow_up_ids: Vec::new(),
-                    exit_code: None,
-                    exit_status: None,
-                    success: Some(true),
-                    spawn_error: None,
-                    output: None,
-                    target: None,
-                },
-            )
-            .unwrap()
-            .header
-            .id;
-        store
-            .add_attachment_relationship(
-                "evidence",
-                &evidence_id,
-                "issue",
-                &mission_id,
-                "validates",
-            )
-            .unwrap();
-
-        let mission_path = state_dir.join("issues").join(format!("{mission_id}.md"));
-        let mission_markdown = fs::read_to_string(&mission_path).unwrap();
-        assert!(mission_markdown.contains("schema: \"atelier.issue\""));
-        assert!(mission_markdown.contains("schema_version: 1"));
-        assert!(mission_markdown.contains("issue_type: \"mission\""));
-        assert!(!mission_markdown.contains("\ndata: "));
-        assert!(mission_markdown.contains("## Description\n\nMission body"));
-        assert!(!mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
-
-        let evidence_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
-        let evidence_markdown = fs::read_to_string(&evidence_path).unwrap();
-        assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
-
-        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
-        run(&state_dir, &rebuilt_path).unwrap();
-        let rebuilt = Database::open(&rebuilt_path).unwrap();
-
-        let mission = rebuilt.get_issue(&mission_id).unwrap().unwrap();
-        assert_eq!(mission.title, "Mission");
-        assert_eq!(mission.issue_type, "mission");
-        assert!(rebuilt
-            .get_record("evidence", &evidence_id)
-            .unwrap()
-            .is_some());
-
-        let mission_links = rebuilt.list_record_links("issue", &mission_id).unwrap();
-        assert!(mission_links.iter().any(|link| {
-            link.source_kind == "evidence"
-                && link.source_id == evidence_id
-                && link.target_kind == "issue"
-                && link.target_id == mission_id
-                && link.relation_type == "validates"
-        }));
-    }
-
-    #[test]
-    fn record_table_rejects_non_canonical_record_kinds() {
-        let (db, _dir) = setup_test_db();
-        let error = db
-            .create_record("workflow_validator", "Deferred validator", "open")
-            .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("not a canonical first-class record"));
-    }
-
-    #[test]
-    fn rebuild_rejects_global_id_collision_across_record_kinds() {
-        let (db, dir) = setup_test_db();
-        let issue_id = db.create_issue("Issue", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        let store = record_store::RecordStore::new(&state_dir);
-        let evidence_id = store
-            .create_evidence(
-                "Evidence",
-                "recorded",
-                "Evidence body",
-                atelier_core::EvidenceRecordData {
-                    evidence_type: "test".to_string(),
-                    captured_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::Utc),
-                    command: None,
-                    path: None,
-                    uri: None,
-                    producer: None,
-                    proof_scope: None,
-                    agent_identity: None,
-                    independence_level: None,
-                    residual_risks: Vec::new(),
-                    follow_up_ids: Vec::new(),
-                    exit_code: None,
-                    exit_status: None,
-                    success: Some(true),
-                    spawn_error: None,
-                    output: None,
-                    target: None,
-                },
-            )
-            .unwrap()
-            .header
-            .id;
-
-        let old_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
-        let new_path = state_dir.join("evidence").join(format!("{issue_id}.md"));
-        let evidence_markdown = fs::read_to_string(&old_path).unwrap().replace(
-            &format!("id: \"{evidence_id}\""),
-            &format!("id: \"{issue_id}\""),
-        );
-        fs::write(&new_path, evidence_markdown).unwrap();
-        fs::remove_file(old_path).unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains(&format!(
-            "Duplicate record ID in canonical projection: {issue_id}"
-        )));
-    }
-
-    #[test]
-    fn rebuild_succeeds_without_manifest_or_graph() {
-        let (db, dir) = setup_test_db();
-        db.create_issue("Standalone", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-
-        assert!(!state_dir.join("manifest.json").exists());
-        assert!(!state_dir.join("graph.json").exists());
-        run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap();
-    }
-
-    #[test]
-    fn rebuild_recreates_canonical_projection_without_local_only_state() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Runtime reset", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-
-        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let outcome = repair_incremental(
+            &database,
+            &state_dir,
+            &report(vec![projection_index::FreshnessProblem::ChangedSource {
+                path: domain_paths(&first)[0].clone(),
+            }]),
+        )
+        .unwrap();
+        assert_eq!(outcome, IncrementalRepair::NeedsFullRebuild);
+        drop(database);
         run(&state_dir, &db_path).unwrap();
         let rebuilt = Database::open(&db_path).unwrap();
-
-        assert!(rebuilt.require_issue(&id).is_ok());
+        assert_eq!(rebuilt.issue_cache_relations(&first[0]).unwrap().len(), 1);
     }
 
     #[test]
-    fn refresh_projection_rebuilds_without_local_only_state() {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        fs::create_dir_all(db_path.parent().unwrap()).unwrap();
-        let db = Database::open(&db_path).unwrap();
-        let id = db
-            .create_issue("Runtime preserved", None, "medium")
-            .unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
+    fn parse_failure_leaves_rows_and_source_metadata_unchanged() {
+        let (_directory, state_dir, db_path) = setup();
+        let ids = write_domain_set(&state_dir, "atomic", 1);
+        run(&state_dir, &db_path).unwrap();
+        let database = Database::open(&db_path).unwrap();
+        let path = domain_paths(&ids)[0].clone();
+        let before_row = database.issue_cache_row(&ids[0]).unwrap();
+        let before_source = database.record_source_cache_row(&path).unwrap();
+        fs::write(state_dir.join(&path), "invalid record").unwrap();
 
-        drop(db);
-
-        refresh_projection(&state_dir, &db_path).unwrap();
-        let refreshed = Database::open(&db_path).unwrap();
-
-        assert!(refreshed.require_issue(&id).is_ok());
-    }
-
-    #[test]
-    fn rebuild_accepts_issue_activity_sidecars() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Activity", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        write_activity_sidecar(&state_dir, &id);
-
-        run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap();
-        validate_canonical_state(&state_dir).unwrap();
-    }
-
-    #[test]
-    fn rebuild_rejects_activity_for_missing_issue() {
-        let (db, dir) = setup_test_db();
-        db.create_issue("Only issue", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        write_activity_sidecar(&state_dir, "atelier-miss");
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Issue atelier-miss has activity reference to missing issue atelier-miss"));
-    }
-
-    #[test]
-    fn rebuild_reports_path_id_mismatch() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Mismatch", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        let wrong_id = "atelier-zzzz";
-        fs::rename(
-            state_dir.join(issue_record_path(&id)),
-            state_dir.join(issue_record_path(wrong_id)),
+        let error = repair_incremental(
+            &database,
+            &state_dir,
+            &report(vec![projection_index::FreshnessProblem::ChangedSource {
+                path,
+            }]),
         )
-        .unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains(&format!(
-            "does not match canonical path .atelier/issues/{id}.md"
-        )));
-    }
-
-    #[test]
-    fn rebuild_reports_malformed_front_matter() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Malformed", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        fs::write(state_dir.join(issue_record_path(&id)), "not front matter\n").unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains(&format!(
-            "Missing YAML front matter in .atelier/issues/{id}.md"
-        )));
-    }
-
-    #[test]
-    fn rebuild_reports_schema_mismatch() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Wrong schema", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-        let path = state_dir.join(issue_record_path(&id));
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace("schema: \"atelier.issue\"", "schema: \"atelier.graph\"");
-        fs::write(path, text).unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
+        .unwrap_err();
         assert!(error
             .to_string()
-            .contains("Unsupported schema 'atelier.graph'"));
-    }
-
-    #[test]
-    fn rebuild_reports_dangling_dependency_and_duplicate_link() {
-        let (db, dir) = setup_test_db();
-        let id = db.create_issue("Source", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
-
-        let missing_id = "atelier-zzzz";
-        let path = state_dir.join(issue_record_path(&id));
-        let text = fs::read_to_string(&path).unwrap().replace(
-            "  blocks: []",
-            &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{missing_id}\""),
+            .contains("Failed to parse changed canonical record"));
+        assert_eq!(database.issue_cache_row(&ids[0]).unwrap(), before_row);
+        assert_eq!(
+            database
+                .record_source_cache_row(&format!("issues/{}.md", ids[0]))
+                .unwrap(),
+            before_source
         );
-        fs::write(&path, text).unwrap();
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains(&format!(
-            "{id} has blocks reference to missing issue {missing_id}"
-        )));
-
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace(
-                &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{missing_id}\""),
-                "  blocks: []",
-            )
-            .replace(
-                "  relates: []",
-                &format!(
-                    "  relates:\n  - kind: \"issue\"\n    id: \"{id}\"\n    type: \"related\"\n  - kind: \"issue\"\n    id: \"{id}\"\n    type: \"related\""
-                ),
-            );
-        fs::write(&path, text).unwrap();
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains(&format!(
-            "Duplicate relationships.relates target issue {id} (related)"
-        )));
     }
 
     #[test]
-    fn rebuild_reports_invalid_relation_type() {
-        let (db, dir) = setup_test_db();
-        let first = db.create_issue("First", None, "medium").unwrap();
-        let second = db.create_issue("Second", None, "medium").unwrap();
-        db.add_typed_relation(&first, &second, "related").unwrap();
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
+    fn full_rebuild_replaces_schema_mismatch_as_disposable_state() {
+        let (_directory, state_dir, db_path) = setup();
+        let ids = write_domain_set(&state_dir, "schema", 1);
+        fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        drop(Database::open(&db_path).unwrap());
+        let mut file = OpenOptions::new().write(true).open(&db_path).unwrap();
+        file.seek(SeekFrom::Start(60)).unwrap();
+        file.write_all(&99_u32.to_be_bytes()).unwrap();
+        drop(file);
+        assert!(
+            atelier_sqlite::cache_incompatibility(&Database::open(&db_path).err().unwrap())
+                .is_some()
+        );
 
-        let path = [first.as_str(), second.as_str()]
-            .into_iter()
-            .map(|id| state_dir.join(issue_record_path(id)))
-            .find(|path| {
-                fs::read_to_string(path)
-                    .map(|text| text.contains("type: \"related\""))
-                    .unwrap_or(false)
-            })
-            .unwrap();
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace("type: \"related\"", "type: \"\"");
-        fs::write(path, text).unwrap();
-
-        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
-        assert!(error.to_string().contains("Relation type cannot be empty"));
-    }
-
-    fn write_activity_sidecar(state_dir: &Path, issue_id: &str) {
-        let activity_path = state_dir
-            .join("issues")
-            .join(format!("{issue_id}.activity"))
-            .join("20260610T181920123456Z.md");
-        fs::create_dir_all(activity_path.parent().unwrap()).unwrap();
-        fs::write(
-            activity_path,
-            format!(
-                "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Activity\"\n---\n\nBody\n"
-            ),
-        )
-        .unwrap();
-    }
-
-    fn write_schema_v3_policy(state_dir: &Path) {
-        fs::write(
-            state_dir.join("workflow.yaml"),
-            r#"schema: atelier.workflow
-schema_version: 3
-
-branch_policy:
-  base_branch: main
-  merge_strategy: squash
-
-issue_types:
-  bug: { label: Bug }
-  epic: { label: Epic }
-  feature: { label: Feature }
-  spike: { label: Spike }
-  task: { label: Task }
-  validation: { label: Validation }
-
-statuses:
-  todo:
-    category: todo
-  in_progress:
-    category: active
-  blocked:
-    category: blocked
-  review:
-    category: active
-  validation:
-    category: active
-  done:
-    category: done
-
-workflows:
-  task:
-    applies_to: [bug, feature, task]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-      block:
-        from: [todo, in_progress, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      close:
-        from: [in_progress, validation]
-        to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence and no open blockers."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-
-  epic:
-    applies_to: [epic]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - git.on_base
-      block:
-        from: [todo, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open: { role: worker }
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move reviewed work into validation after review is complete."
-        validators: [review.complete]
-      close:
-        from: [validation]
-        to: done
-        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - children.proof_complete
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-
-  validation:
-    applies_to: [validation]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-      block:
-        from: [todo, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open: { role: worker }
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move reviewed work into validation after review is complete."
-        validators: [review.complete]
-      close:
-        from: [validation]
-        to: done
-        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - children.proof_complete
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-
-  spike:
-    applies_to: [spike]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-      block:
-        from: [todo, in_progress, review]
-        to: blocked
-        description: "Mark spike work blocked while preserving review expectations."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Open the configured review artifact for this spike."
-        actions:
-          - review.open: { role: worker }
-      revise:
-        from: [review]
-        to: in_progress
-        description: "Return a reviewed spike to active work."
-      close:
-        from: [review]
-        to: done
-        description: "Closing requires complete review."
-        validators:
-          - review.complete
-"#,
-        )
-        .unwrap();
+        run(&state_dir, &db_path).unwrap();
+        let rebuilt = Database::open(&db_path).unwrap();
+        assert!(rebuilt.issue_cache_row(&ids[0]).unwrap().is_some());
     }
 }

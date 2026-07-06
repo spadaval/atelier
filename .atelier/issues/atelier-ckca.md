@@ -31,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Rewrite domain-shaped cache schema"
-updated_at: "2026-07-06T18:06:41.316901020+00:00"
+updated_at: "2026-07-06T18:22:19.261233034+00:00"
 ---
 
 ## Description

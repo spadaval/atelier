@@ -429,6 +429,23 @@ impl Database {
         Ok(rows)
     }
 
+    /// Returns whether an issue participates in graph state that cannot be
+    /// repaired safely from only that issue's source file.
+    pub fn issue_cache_has_graph_edges(&self, id: &str) -> Result<bool> {
+        let edge_count: i64 = self.conn.query_row(
+            "SELECT
+                (SELECT COUNT(*) FROM issue_block_index
+                 WHERE blocker_id = ?1 OR blocked_id = ?1) +
+                (SELECT COUNT(*) FROM issue_relation_index
+                 WHERE source_issue_id = ?1 OR target_issue_id = ?1) +
+                (SELECT COUNT(*) FROM issue_index
+                 WHERE parent_id = ?1 OR (id = ?1 AND parent_id IS NOT NULL))",
+            [id],
+            |row| row.get(0),
+        )?;
+        Ok(edge_count > 0)
+    }
+
     pub fn index_evidence(
         &self,
         evidence: &EvidenceCacheRow,
