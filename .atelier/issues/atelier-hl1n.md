@@ -33,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Unify record-file storage and domain models"
-updated_at: "2026-07-06T18:21:24.005227002+00:00"
+updated_at: "2026-07-06T18:35:44.577478592+00:00"
 ---
 
 ## Description
