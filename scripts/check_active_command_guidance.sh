@@ -219,18 +219,24 @@ active_content() {
       if (fence_marker) {
         if (in_fence) {
           in_fence = 0
-          shell_fence = 0
+          fence_kind = 0
         } else {
           marker = tolower($0)
-          shell_fence = (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*(sh|bash|shell|console|terminal|zsh)?[[:space:]]*$/)
+          if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*(sh|bash|shell|console|terminal|zsh)[[:space:]]*$/) {
+            fence_kind = 1
+          } else if (marker ~ /^[[:space:]]*(```|~~~)[[:space:]]*$/) {
+            fence_kind = 2
+          } else {
+            fence_kind = 0
+          }
           in_fence = 1
         }
         fenced_content = 0
       } else {
-        fenced_content = (in_fence && shell_fence) ? 1 : 0
+        fenced_content = in_fence ? fence_kind : 0
       }
     }
-    !fenced_content && /^#{1,6} / {
+    !in_fence && /^#{1,6} / {
       level = heading_level($0)
       if (excluded && level <= excluded_level) {
         excluded = 0
@@ -331,6 +337,24 @@ bare_candidate_is_finding() {
   return 1
 }
 
+untyped_fence_line_is_data() {
+  local candidate=$1
+  local yaml_key_pattern='^[-]?[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*:[[:space:]]*([^[:space:]].*)?$'
+  local quoted_yaml_key_pattern='^[-]?[[:space:]]*["'"'][^"'"']+["'"']:[[:space:]]*.*$'
+  local structured_literal_pattern='^[[{].*[]}][,]?$'
+  local structured_close_pattern='^[]}][,]?$'
+
+  candidate=${candidate#"${candidate%%[![:space:]]*}"}
+  candidate=${candidate%"${candidate##*[![:space:]]}"}
+  [[ -z "$candidate" ]] && return 0
+  [[ "$candidate" == '---' || "$candidate" == '...' ]] && return 0
+  [[ "$candidate" =~ $yaml_key_pattern ]] && return 0
+  [[ "$candidate" =~ $quoted_yaml_key_pattern ]] && return 0
+  [[ "$candidate" =~ $structured_literal_pattern ]] && return 0
+  [[ "$candidate" =~ $structured_close_pattern ]] && return 0
+  return 1
+}
+
 scan_content() {
   local content
   local hit
@@ -351,15 +375,20 @@ scan_content() {
   local structural_candidate
   local structural_context
   local inline_code_pattern='`([^`]*)`'
-  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|try|enter|owns?|validates|reports?|mutates?|current route|normal repair)([^[:alnum:]_-]|$)'
+  local inline_command_context_pattern='(^|[^[:alnum:]_-])(run|use|invoke|execute|rerun|retry|try|enter|prefer|prefers|preferred|recommend|recommends|recommended|choose|chooses|select|selects|call|calls|called|owns?|handles?|serves?|validates|reports?|mutates?|current command|supported command|preferred command|recommended command|current route|normal repair|normal workflow)([^[:alnum:]_-]|$)'
+  local inline_data_context_pattern='^[[:space:]]+as[[:space:]]+(a|an|the)?[[:space:]]*((record|schema|data)[[:space:]]+)?(type|transition|role|value|label|data)([[:space:]]+(name|type|value|label))?([^[:alnum:]_-]|$)'
   local list_command_shape_pattern="^(((${path_alternatives})${command_boundary})|(dep (add|remove)${command_boundary})|(issue (close|claim|new|quick|subissue|search|relate|tree|tested|update|list)${command_boundary})|(work (start|status|queue)${command_boundary})|(maintenance delete${command_boundary})|(review (link|status|comments|comment|approve|request-changes|open)${command_boundary})|(history[[:space:]]+--)|(worktree (create|for|list|remove)${command_boundary})|(mission (atelier-|--|<|create|show|start|status|close|list|update|note|add-work|unlink|add-blocker))|((${root_alternatives}|${restricted_root_alternatives})[[:space:]]+(--|atelier-|<)))"
   local single_command_token_pattern='^[a-z0-9-]+[,.;:!?)]?$'
   local inline_remaining
   local inline_before
+  local inline_before_window
   local inline_after
+  local inline_after_segment
+  local inline_after_window
   local inline_context
   local list_shape_regex
   local structural_kind
+  local inline_data_regex
   content=$(cat)
 
   while IFS= read -r hit; do
@@ -413,8 +442,17 @@ scan_content() {
         candidate=${BASH_REMATCH[1]}
         inline_before=${inline_remaining%%"$span"*}
         inline_after=${inline_remaining#*"$span"}
-        inline_context="$inline_before ${inline_after%%\`*}"
-        if [[ ! "${inline_after,,}" =~ ^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$) ]] &&
+        inline_after_segment=${inline_after%%\`*}
+        inline_before_window=$inline_before
+        inline_after_window=$inline_after_segment
+        ((${#inline_before_window} <= 80)) ||
+          inline_before_window=${inline_before_window: -80}
+        ((${#inline_after_window} <= 160)) ||
+          inline_after_window=${inline_after_window:0:160}
+        inline_context="$inline_before_window $inline_after_window"
+        inline_data_regex=$inline_data_context_pattern
+        if [[ ! "${inline_after,,}" =~ $inline_data_regex ]] &&
+          [[ ! "${inline_after,,}" =~ ^[[:space:]]*(transition|field|type|status|value|label|role|key)([^[:alnum:]_-]|$) ]] &&
           [[ "${inline_context,,}" =~ $inline_command_context_pattern ]] &&
           bare_candidate_is_finding "$candidate" "$source" "$heading"; then
           finding=1
@@ -428,22 +466,28 @@ scan_content() {
       structural_candidate=${text#"${text%%[![:space:]]*}"}
       structural_context=$fenced
       structural_kind=''
-      ((fenced)) && structural_kind='shell'
-      while [[ "$structural_candidate" =~ ^(\>|-|\*|\+|[0-9]+\.)[[:space:]]+(.*)$ ]]; do
-        structural_context=1
-        [[ "$structural_kind" == shell ]] || structural_kind='list'
-        structural_candidate=${BASH_REMATCH[2]}
-      done
+      ((fenced == 1)) && structural_kind='shell'
+      ((fenced == 2)) && structural_kind='untyped'
       if [[ "$structural_candidate" =~ ^\$[[:space:]]+(.*)$ ]]; then
         structural_context=1
         structural_kind='shell'
         structural_candidate=${BASH_REMATCH[1]}
+      elif [[ "$structural_kind" == untyped ]] &&
+        untyped_fence_line_is_data "$structural_candidate"; then
+        structural_context=0
+      else
+        while [[ "$structural_candidate" =~ ^(\>|-|\*|\+|[0-9]+\.)[[:space:]]+(.*)$ ]]; do
+          structural_context=1
+          [[ "$structural_kind" == shell || "$structural_kind" == untyped ]] ||
+            structural_kind='list'
+          structural_candidate=${BASH_REMATCH[2]}
+        done
       fi
       if ((structural_context)); then
         if [[ "$structural_kind" == shell ]] &&
           bare_candidate_is_finding "$structural_candidate" "$source" "$heading"; then
           finding=1
-        elif [[ "$structural_kind" == list ]]; then
+        elif [[ "$structural_kind" == list || "$structural_kind" == untyped ]]; then
           list_shape_regex=$list_command_shape_pattern
           if [[ "$structural_candidate" =~ $single_command_token_pattern ||
             "$structural_candidate" =~ $list_shape_regex ]] &&
@@ -879,6 +923,78 @@ run_self_test() {
     output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
     if [[ -z "$output" ]]; then
       printf 'self-test missed exact atelier-b8xw bare-command fixture: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact atelier-pgwg/atelier-ztnc actionable misses plus systematic
+  # imperative and ownership variants. Context is evaluated adjacent to each
+  # inline span, not as a line-wide sentiment exemption.
+  for example in \
+    'Prefer `lint --all` for validation.' \
+    'The current command is `doctor --fix`.' \
+    'Call `dep add atelier-demo atelier-blocker` to link records.' \
+    'Normal workflow: `mission show atelier-demo`.' \
+    'Recommend `lint --all` for validation.' \
+    'Choose `doctor --fix` for repair.' \
+    'Retry `dep add atelier-demo atelier-blocker`.' \
+    'The supported command is `mission show atelier-demo`.' \
+    '`mission show atelier-demo` handles objective detail.' \
+    'Enter `history --mission atelier-demo` for the old view.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed actionable bare inline variant: %s\n' "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  # Exact data/schema false positives plus systematic explicit `as ...`
+  # variants. Only the syntax adjacent to the candidate grants this exemption.
+  for example in \
+    'Use `mission` as the record type.' \
+    'Use `close` as the transition name.' \
+    'Use `worker` as the role value.' \
+    'Use `list` as a data label.' \
+    'Use `mission` as a type.' \
+    'Use `close` as the transition value.' \
+    'Use `worker` as a role label.' \
+    'Use `list` as the data value.' \
+    'Use `mission` as the schema type.' \
+    'Use `close` as data.'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for explicit data/schema syntax: %s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```\nmission: atelier-demo\nstatus: todo\n```' \
+    $'```\n- mission: atelier-demo\n  status: todo\n```' \
+    $'```\n{"mission": "atelier-demo", "status": "todo"}\n```' \
+    $'```yaml\nmission: atelier-demo\nstatus: todo\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -n "$output" ]]; then
+      printf 'self-test false-positive for untyped/typed structured data fence:\n%s\n' \
+        "$example" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for example in \
+    $'```\nmission show atelier-demo\n```' \
+    $'```\ndoctor --fix\n```' \
+    $'```\nreview open --title manual\n```' \
+    $'```\n$ mission show atelier-demo\n```'; do
+    checked=$((checked + 1))
+    output=$(printf '# Live Guidance\n%s\n' "$example" | active_content | scan_content)
+    if [[ -z "$output" ]]; then
+      printf 'self-test missed command-shaped untyped fence line:\n%s\n' \
         "$example" >&2
       failures=$((failures + 1))
     fi
