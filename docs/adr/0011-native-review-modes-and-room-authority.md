@@ -24,7 +24,7 @@ room summaries that drift from their event history.
    provider implemented in this mission.
 
 2. The public command surface is `atelier review`.
-   `atelier review open/status/show/comments/comment/approve/request-changes/resolve/merge`
+   `atelier review open/show/submit/resolve/merge`
    operate in the configured mode. `link` is provider-only because native rooms
    are created by Atelier. The old `atelier pr` command surface is removed
    instead of kept as an alias.
