@@ -1029,6 +1029,39 @@ fn spawn_forgejo_open_server(
     (host, requests, pushed_before_open, handle)
 }
 
+fn spawn_forgejo_approval_server() -> (String, Arc<Mutex<Vec<String>>>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let host = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let requests_for_thread = Arc::clone(&requests);
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&stream);
+        let approved = request.contains(r#""event":"APPROVED""#);
+        requests_for_thread.lock().unwrap().push(request);
+        let (status, reason, body) = if approved {
+            (
+                201,
+                "Created",
+                r#"{"id":43,"state":"APPROVED","body":"Approved"}"#.to_string(),
+            )
+        } else {
+            (
+                422,
+                "Unprocessable Entity",
+                r#"{"message":"event must be the official APPROVED state"}"#.to_string(),
+            )
+        };
+        let response = format!(
+            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+    });
+    (host, requests, handle)
+}
+
 fn write_branch_action_workflow(dir: &Path) {
     let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
@@ -1185,6 +1218,39 @@ fn provider_request_review_pushes_source_before_opening_pr() {
             )
         });
     assert!(push_activity < open_activity);
+
+    let (approval_host, approval_requests, approval_server) = spawn_forgejo_approval_server();
+    write_provider_config_with_host(dir.path(), &approval_host);
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &[
+            "review",
+            "submit",
+            "--issue",
+            &issue_id,
+            "--role",
+            "reviewer",
+            "--approve",
+            "--body",
+            "Approved",
+        ],
+        &[("HOME", dir.path().to_str().unwrap())],
+    );
+    assert!(success, "provider review submit --approve failed: {stderr}");
+    assert!(stdout.contains("State:  APPROVED"), "{stdout}");
+    approval_server.join().unwrap();
+    let approval_requests = approval_requests.lock().unwrap();
+    assert_eq!(approval_requests.len(), 1, "{approval_requests:#?}");
+    assert!(
+        approval_requests[0].starts_with("POST /api/v1/repos/tools/atelier/pulls/42/reviews "),
+        "{}",
+        approval_requests[0]
+    );
+    assert!(
+        approval_requests[0].contains(r#""event":"APPROVED""#),
+        "{}",
+        approval_requests[0]
+    );
 }
 
 #[test]
