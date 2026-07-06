@@ -9,6 +9,7 @@ pub mod export;
 pub mod forgejo;
 pub mod health;
 pub mod init;
+pub mod issue_inventory;
 pub mod issue_read;
 pub mod lint;
 pub mod mission_overview;
