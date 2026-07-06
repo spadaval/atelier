@@ -1,8 +1,6 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
-use atelier_app::cache_manager::{
-    decision_cache_db, lint_cache_db, state_and_db_paths, CacheManager, CacheUse,
-};
+use atelier_app::cache_manager::{state_and_db_paths, CacheManager, CacheUse};
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -801,12 +799,12 @@ fn run() -> Result<()> {
         Commands::Man { role } => commands::man::run(role),
 
         Commands::Status => {
-            let storage = use_cases::status_storage()?;
+            let storage = use_cases::status_cache()?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
         Commands::Work { action } => {
-            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+            let storage = use_cases::work_query_cache()?;
             match action {
                 None => commands::work::dashboards(quiet),
                 Some(WorkCommands::Queue {
@@ -886,7 +884,7 @@ fn run() -> Result<()> {
         }
 
         Commands::ImportBeads { input, output } => {
-            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+            let storage = use_cases::mutation_cache()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
@@ -900,11 +898,11 @@ fn run() -> Result<()> {
 
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
-                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+                let storage = use_cases::bundle_query_cache()?;
                 commands::bundle::preview(storage.db(), &input)
             }
             BundleCommands::Apply { input, yes } => {
-                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+                let storage = use_cases::mutation_cache()?;
                 commands::bundle::apply(
                     storage.db(),
                     &storage.state_dir(),
@@ -927,7 +925,7 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = use_cases::evidence_mutation_storage()?;
+                let storage = use_cases::mutation_cache()?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => {
                         let target = use_cases::parse_evidence_target_arg(target)?;
@@ -1004,7 +1002,7 @@ fn run() -> Result<()> {
                 }
             }
             EvidenceCommands::Show { id } => {
-                let storage = use_cases::evidence_query_storage()?;
+                let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
                 commands::evidence::show(&db, &id)
             }
@@ -1014,7 +1012,7 @@ fn run() -> Result<()> {
                 target_id,
                 role,
             } => {
-                let storage = use_cases::evidence_mutation_storage()?;
+                let storage = use_cases::mutation_cache()?;
                 let target_id =
                     use_cases::resolve_evidence_target_ref(&storage, &target_kind, &target_id)?;
                 commands::evidence::attach(
@@ -1027,14 +1025,14 @@ fn run() -> Result<()> {
                 )
             }
             EvidenceCommands::List { status } => {
-                let storage = use_cases::evidence_query_storage()?;
+                let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
                 commands::evidence::list(&db, status.as_deref())
             }
         },
 
         Commands::Review { action } => {
-            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+            let storage = use_cases::review_cache()?;
             match action {
                 ReviewCommands::Open {
                     issue,
@@ -1163,7 +1161,7 @@ fn run() -> Result<()> {
             since,
             limit,
         } => {
-            let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
+            let storage = use_cases::history_query_cache()?;
             let mission = mission
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
@@ -1194,23 +1192,24 @@ fn run() -> Result<()> {
 
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => {
-                let storage = use_cases::workflow_query_storage()?;
+                let storage = use_cases::workflow_query_cache()?;
                 let db = storage.db();
                 commands::workflow::check(&db)
             }
         },
 
         Commands::Branch { action } => {
-            let db = decision_cache_db()?;
+            let cache = use_cases::branch_decision_cache()?;
+            let db = cache.db();
             match action {
                 BranchCommands::ForEpic { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::branch_for_epic(&db, &id)
+                    let id = resolve_issue_arg(db, &id)?;
+                    commands::work::branch_for_epic(db, &id)
                 }
-                BranchCommands::Status => commands::work::branch_status(&db),
+                BranchCommands::Status => commands::work::branch_status(db),
                 BranchCommands::Merge { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::branch_merge(&db, &id)
+                    let id = resolve_issue_arg(db, &id)?;
+                    commands::work::branch_merge(db, &id)
                 }
             }
         }
@@ -1231,9 +1230,9 @@ fn run() -> Result<()> {
             } => {
                 require_issue_kind(&target_kind, "atelier maintenance delete")?;
                 let (state_dir, db_path) = state_and_db_paths()?;
-                let db = decision_cache_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                drop(db);
+                let cache = use_cases::mutation_cache()?;
+                let target_id = resolve_issue_arg(cache.db(), &target_id)?;
+                drop(cache);
                 commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
             }
         },
@@ -1283,14 +1282,14 @@ fn run() -> Result<()> {
                     true,
                 )
             } else {
-                let db = lint_cache_db()?;
-                commands::issue::lint(&db, id.as_deref())
+                let cache = use_cases::lint_cache()?;
+                commands::issue::lint(cache.db(), id.as_deref())
             }
         }
 
         Commands::Lint { id } => {
-            let db = lint_cache_db()?;
-            commands::issue::lint(&db, id.as_deref())
+            let cache = use_cases::lint_cache()?;
+            commands::issue::lint(cache.db(), id.as_deref())
         }
 
         Commands::Doctor { fix } => {
@@ -1424,5 +1423,52 @@ fn command_identity(command: &Commands) -> &'static str {
         }
         Commands::Lint { .. } => "lint",
         Commands::Doctor { .. } => "doctor",
+    }
+}
+
+#[cfg(test)]
+mod cache_acquisition_tests {
+    #[test]
+    fn central_dispatch_has_no_raw_database_open_bypass() {
+        let sources = [
+            ("main", include_str!("main.rs")),
+            ("issue dispatch", include_str!("issue_cli.rs")),
+            ("role guide", include_str!("commands/man.rs")),
+        ];
+        let raw_database_open = ["Database", "::open"].concat();
+        let raw_app_open = ["open_", "database("].concat();
+
+        for (name, source) in sources {
+            assert!(
+                !source.contains(&raw_database_open) && !source.contains(&raw_app_open),
+                "{name} must acquire cache-dependent reads through CacheManager"
+            );
+        }
+    }
+
+    #[test]
+    fn cache_dependent_query_families_use_named_app_accessors() {
+        let main = include_str!("main.rs");
+        let main = main
+            .split("mod cache_acquisition_tests")
+            .next()
+            .expect("production dispatch source");
+        for accessor in [
+            "status_cache()",
+            "work_query_cache()",
+            "evidence_query_cache()",
+            "bundle_query_cache()",
+            "review_cache()",
+            "history_query_cache()",
+            "workflow_query_cache()",
+            "branch_decision_cache()",
+            "lint_cache()",
+        ] {
+            assert!(main.contains(accessor), "missing cache accessor {accessor}");
+        }
+
+        let issue_dispatch = include_str!("issue_cli.rs");
+        assert!(issue_dispatch.contains("issue_detail_cache()"));
+        assert!(issue_dispatch.contains("issue_query_cache()"));
     }
 }

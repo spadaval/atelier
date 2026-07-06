@@ -11,7 +11,7 @@ use std::path::Path;
 use crate::cache_manager::{CacheAccess, CacheManager, CacheUse};
 use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
-use atelier_sqlite::Database;
+use atelier_sqlite::{CacheFileState, Database};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceTargetArg {
@@ -19,32 +19,115 @@ pub struct EvidenceTargetArg {
     pub id: String,
 }
 
-pub fn status_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Orientation)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CacheCommandRoute {
+    pub command_family: &'static str,
+    pub cache_use: CacheUse,
 }
 
-pub fn mission_query_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Orientation)
+/// Cache-dependent read families and the stale-data policy they require.
+/// Keep this inventory aligned with the central CLI dispatch.
+pub const CACHE_COMMAND_ROUTES: &[CacheCommandRoute] = &[
+    CacheCommandRoute {
+        command_family: "status",
+        cache_use: CacheUse::Orientation,
+    },
+    CacheCommandRoute {
+        command_family: "issue show",
+        cache_use: CacheUse::Orientation,
+    },
+    CacheCommandRoute {
+        command_family: "issue list/options/blockers",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "work/mission/epic",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "evidence show/list",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "bundle preview",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "review read",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "history/graph",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "workflow check",
+        cache_use: CacheUse::Decision,
+    },
+    CacheCommandRoute {
+        command_family: "branch decision",
+        cache_use: CacheUse::Decision,
+    },
+];
+
+fn cache(cache_use: CacheUse) -> Result<CacheAccess> {
+    CacheManager::discover()?.get_cache(cache_use)
 }
 
-pub fn mission_mutation_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Decision)
+pub fn status_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Orientation)
 }
 
-pub fn evidence_query_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Decision)
+pub fn issue_detail_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Orientation)
 }
 
-pub fn evidence_mutation_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Decision)
+pub fn work_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
 }
 
-pub fn plan_mutation_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Decision)
+pub fn issue_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
 }
 
-pub fn workflow_query_storage() -> Result<CacheAccess> {
-    CacheManager::discover()?.get_cache(CacheUse::Decision)
+pub fn mutation_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn evidence_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn bundle_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn review_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn history_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn workflow_query_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+pub fn branch_decision_cache() -> Result<CacheAccess> {
+    cache(CacheUse::Decision)
+}
+
+/// Lint owns canonical diagnostics, so it opens existing cache state without
+/// freshness rejection. A missing cache is rebuilt first so lint can still run
+/// whole-project rules that require indexed facts.
+pub fn lint_cache() -> Result<CacheAccess> {
+    let manager = CacheManager::discover()?;
+    if matches!(manager.inspect_cache(), CacheFileState::Missing) {
+        manager.get_cache(CacheUse::Decision)
+    } else {
+        manager.open_cache_for_health()
+    }
 }
 
 pub fn refreshed_mutation_db(storage: &CacheAccess) -> Result<Database> {
@@ -217,21 +300,27 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_evidence_target_arg;
+    use super::{parse_evidence_target_arg, CACHE_COMMAND_ROUTES};
+    use crate::cache_manager::CacheUse;
 
     #[test]
-    fn use_case_cache_selectors_are_named_for_target_workflows() {
-        let selectors = [
-            "status",
-            "mission_query",
-            "mission_mutation",
-            "evidence_query",
-            "evidence_mutation",
-            "plan_mutation",
-            "workflow_query",
-        ];
+    fn cache_command_inventory_limits_degraded_reads_to_orientation() {
+        let orientation = CACHE_COMMAND_ROUTES
+            .iter()
+            .filter(|route| route.cache_use == CacheUse::Orientation)
+            .map(|route| route.command_family)
+            .collect::<Vec<_>>();
 
-        assert_eq!(selectors.len(), 7);
+        assert_eq!(orientation, ["status", "issue show"]);
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "work/mission/epic"));
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "workflow check"));
+        assert!(CACHE_COMMAND_ROUTES
+            .iter()
+            .any(|route| route.command_family == "branch decision"));
     }
 
     #[test]

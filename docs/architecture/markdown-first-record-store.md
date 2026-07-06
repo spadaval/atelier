@@ -247,6 +247,16 @@ own repair policy. Missing cache files, cache schema-version mismatches, and
 corrupt cache files are disposable-state rebuild signals, not migrations or
 operator-managed errors.
 
+The degraded orientation allowance is intentionally narrow: checkout status
+and single-record detail views may use it. Lists, ready/blocker calculations,
+transition options, workflow/evidence/review lookups, history/graph traversal,
+and branch decisions use `Decision` access and fail rather than expose known-
+stale rows. Central CLI dispatch selects these policies through named
+application accessors; command modules do not open cache databases for indexed
+read acquisition. Lint, export-check, doctor, and rebuild remain explicit
+health/repair consumers because they must diagnose invalid canonical state
+rather than have freshness acquisition reject it first.
+
 `CacheManager` discovers supported record-file sources and compares them with
 `record_source_index`. File size and modified time are candidate-selection
 hints. A candidate whose hints changed is parsed directly; an implementation

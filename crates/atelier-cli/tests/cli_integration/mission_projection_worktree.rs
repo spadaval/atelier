@@ -795,7 +795,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
 }
 
 #[test]
-fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
+fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
     let schema_dir = tempdir().unwrap();
     init_atelier(schema_dir.path());
 
@@ -840,7 +840,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     assert!(!success, "malformed records should block projection query");
     assert!(
         stderr.contains("recovery: 1. run `atelier lint`")
-            && stderr.contains("2. fix the named canonical Markdown record")
+            && stderr.contains("2. fix the named canonical record")
             && stderr.contains("4. rerun the blocked command")
             && stderr.contains("Invalid YAML front matter"),
         "malformed diagnostic should stay record-focused: {stderr}"
@@ -880,6 +880,87 @@ fn test_cache_rebuilds_changed_sources_before_issue_queries() {
     assert!(
         stderr.contains("Local cache was stale; rebuilt SQLite cache"),
         "missing automatic rebuild diagnostic: {stderr}"
+    );
+}
+
+#[test]
+fn test_cache_query_rebuilds_missing_cache_on_demand() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Lazy missing cache"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    remove_projection_state(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+
+    assert!(success, "query should rebuild missing cache: {stderr}");
+    assert!(stdout.contains("Lazy missing cache"));
+    assert!(
+        stderr.contains("Local cache was missing; rebuilt SQLite cache"),
+        "missing lazy rebuild diagnostic: {stderr}"
+    );
+}
+
+#[test]
+fn test_cache_decision_query_never_returns_known_stale_rows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Known stale decision"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("schema_version: 1", "schema_version: 99")
+    });
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+
+    assert!(!success, "decision query must reject invalid source state");
+    assert!(
+        !stdout.contains("Known stale decision"),
+        "known-stale cache row escaped into decision output: {stdout}"
+    );
+    assert!(
+        stderr.contains(
+            "canonical tracker records use a schema this atelier binary does not understand"
+        ),
+        "missing source-schema diagnostic: {stderr}"
+    );
+}
+
+#[test]
+fn test_cache_orientation_names_degraded_last_good_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Degraded orientation"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("status: todo", "status: in_progress")
+    });
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("schema_version: 1", "schema_version: 99")
+    });
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+
+    assert!(success, "orientation should use last good cache: {stderr}");
+    assert!(stdout.contains("Atelier Status"));
+    assert!(
+        stderr.contains("using the existing local cache for orientation only"),
+        "missing degraded orientation diagnostic: {stderr}"
     );
 }
 
@@ -1244,7 +1325,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     assert!(success, "lint should rebuild missing state.db: {stderr}");
     assert!(stdout.contains("Lint passed."));
     assert!(
-        stderr.contains("Runtime projection database was missing; rebuilt local SQLite projection"),
+        stderr.contains("Local cache was missing; rebuilt SQLite cache"),
         "missing rebuild diagnostic: {stderr}"
     );
 }
@@ -1282,9 +1363,7 @@ fn test_status_recovers_when_runtime_directory_is_missing() {
         success,
         "status should recreate missing runtime dir: {stderr}"
     );
-    assert!(
-        stderr.contains("Runtime projection database was missing; rebuilt local SQLite projection")
-    );
+    assert!(stderr.contains("Local cache was missing; rebuilt SQLite cache"));
     assert!(stdout.contains("Current work:  1 issue(s)"), "{stdout}");
     assert!(stdout.contains(&format!("{issue_id}")));
     assert!(dir.path().join(".atelier/runtime/state.db").exists());

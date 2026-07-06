@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
-use atelier_app::cache_manager::{decision_cache_db, orientation_cache_db, state_and_db_paths};
+use atelier_app::cache_manager::state_and_db_paths;
+use atelier_app::use_cases;
 use atelier_core::IssuePriority;
 
 use crate::commands;
@@ -114,8 +115,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Show { id } => {
-            let db = orientation_cache_db()?;
-            commands::issue::show(&db, &id)
+            let cache = use_cases::issue_detail_cache()?;
+            commands::issue::show(cache.db(), &id)
         }
 
         super::IssueCommands::List {
@@ -127,13 +128,14 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             ready,
             blocked,
         } => {
-            let db = orientation_cache_db()?;
+            let cache = use_cases::issue_query_cache()?;
+            let db = cache.db();
             if blocked {
                 if ready || status != "all" || category.is_some() {
                     bail!("--blocked cannot be combined with --ready, --status, or --category");
                 }
                 commands::issue::list_blocked_inventory(
-                    &db,
+                    db,
                     issue_type.as_deref(),
                     label.as_deref(),
                     priority.as_deref(),
@@ -141,7 +143,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                 )
             } else {
                 commands::issue::list_inventory(
-                    &db,
+                    db,
                     Some(&status),
                     category.as_deref(),
                     issue_type.as_deref(),
@@ -161,9 +163,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         } => {
             if let Some(transition) = transition {
                 let (state_dir, db_path) = state_and_db_paths()?;
-                let db = decision_cache_db()?;
+                let cache = use_cases::mutation_cache()?;
                 commands::workflow::transition_issue(
-                    &db,
+                    cache.db(),
                     &state_dir,
                     &db_path,
                     &id,
@@ -171,8 +173,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     close_reason.as_deref(),
                 )
             } else {
-                let db = orientation_cache_db()?;
-                commands::issue::transition_options(&db, &id, verbose)
+                let cache = use_cases::issue_query_cache()?;
+                commands::issue::transition_options(cache.db(), &id, verbose)
             }
         }
 
@@ -225,9 +227,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Note { id, text, kind } => {
-            let db = decision_cache_db()?;
-            let id = super::resolve_issue_arg(&db, &id)?;
-            commands::comment::run_issue_note(&db, &id, &text, &kind)
+            let cache = use_cases::mutation_cache()?;
+            let id = super::resolve_issue_arg(cache.db(), &id)?;
+            commands::comment::run_issue_note(cache.db(), &id, &text, &kind)
         }
 
         super::IssueCommands::Link { id, target, role } => {

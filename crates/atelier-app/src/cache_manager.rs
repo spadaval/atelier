@@ -309,22 +309,6 @@ pub fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
     Ok(CacheManager::discover()?.state_and_db_paths())
 }
 
-pub fn decision_cache_db() -> Result<Database> {
-    Ok(CacheManager::discover()?
-        .get_cache(CacheUse::Decision)?
-        .into_db())
-}
-
-pub fn orientation_cache_db() -> Result<Database> {
-    Ok(CacheManager::discover()?
-        .get_cache(CacheUse::Orientation)?
-        .into_db())
-}
-
-pub fn lint_cache_db() -> Result<Database> {
-    decision_cache_db()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

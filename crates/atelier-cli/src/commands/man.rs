@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 
 use crate::commands;
-use atelier_app::cache_manager::{CacheManager, CacheUse};
+use atelier_app::cache_manager::CacheManager;
+use atelier_app::use_cases;
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
@@ -55,13 +56,11 @@ struct Snapshot {
 }
 
 fn run_stateful(role: Role) -> Result<()> {
-    let storage = CacheManager::discover()
-        .and_then(|manager| manager.get_cache(CacheUse::Decision))
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
-            )
-        })?;
+    let storage = use_cases::work_query_cache().map_err(|error| {
+        anyhow::anyhow!(
+            "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
+        )
+    })?;
     let repo = storage.repo_root().display().to_string();
     let snapshot = snapshot(storage.db(), &storage.state_dir(), &repo)?;
     print_role_guide(role, Some(&snapshot), None);
