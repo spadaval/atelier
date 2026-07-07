@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-07T06:09:55.609121312+00:00"
+status: "done"
 title: "Render the Mission Overview with shared formatting and color"
-updated_at: "2026-07-07T05:39:27.467540697+00:00"
+updated_at: "2026-07-07T06:09:55.609121312+00:00"
 ---
 
 ## Description
