@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+status: "in_progress"
 title: "Build the mission-to-epic overview projection"
-updated_at: "2026-07-06T18:13:41.018622062+00:00"
+updated_at: "2026-07-07T05:25:26.947745827+00:00"
 ---
 
 ## Description
