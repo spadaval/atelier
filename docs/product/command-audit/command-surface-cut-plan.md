@@ -54,7 +54,7 @@ Removed commands must have replacement capability, not replacement spellings:
 | `issue table` | `issue list` for inventory; scoped operational work in `work ready`, `work blocked`, `work mission`, and `work epic` |
 | separate block/unblock verbs | typed `issue link` / `issue unlink --role blocked_by` |
 | root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
-| scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
+| scoped `history --mission/--epic` variants | `work mission` / `work epic` for descendant objective state; retained `history --issue <id>` for one-record activity; high-level timeline in `history` |
 | provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
 | visible branch repair | workflow transitions, with hidden/admin recovery only when needed |
 | `lint` / `doctor` / `workflow check` / `rebuild` as separate normal surfaces | one `check` health and repair surface |
@@ -223,7 +223,7 @@ It should absorb the useful parts of:
 - `lint`
 - `doctor`
 - hidden `workflow check`
-- hidden projection/runtime diagnostics when needed for public recovery
+- hidden domain-cache/runtime diagnostics when needed for public recovery
 
 If renaming is too disruptive in the first implementation slice, `lint` may
 temporarily remain the spelling, but the product target is one health command,
@@ -245,7 +245,7 @@ Replace:
 Mission-specific status behavior should become generic objective rollup inside
 `issue show`.
 
-### Remove `atelier issue status`
+### Remove the retired issue-status command
 
 The workflow status field is valuable. The `issue status` command is not.
 
@@ -392,13 +392,11 @@ Replace:
 Manual branch repair can exist only as a hidden/admin recovery path if workflow
 transitions cannot reasonably do the job.
 
-### Hide Or Remove `maintenance`
+### Remove `maintenance`
 
-Public destructive record surgery is not normal workflow.
-
-Keep only if there is a clear admin-only escape hatch, and keep it out of root
-workflow guidance. Otherwise prefer `prune` for supported cleanup and Git for
-recovery.
+`maintenance delete` was removed because no explicit recovery flow required
+arbitrary record surgery. `prune` owns supported cleanup and Git history owns
+canonical recovery.
 
 ### Merge `lint`, `doctor`, `workflow`, `export`, And `rebuild`
 

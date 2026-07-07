@@ -435,6 +435,9 @@ mod tests {
     use super::*;
     use crate::workflow_policy::{BranchLifecycleConfig, StatusDefinition, WorkflowPolicy};
     use atelier_core::Issue;
+    use atelier_sqlite::{
+        EvidenceCacheRow, EvidenceTargetCacheRow, IssueCacheRow, RecordSourceCacheRow,
+    };
     use chrono::{TimeZone, Utc};
     use serde_json::Value;
     use std::collections::BTreeMap;
@@ -494,7 +497,7 @@ mod tests {
         status: &str,
         parent_id: Option<&str>,
     ) {
-        db.insert_issue_rebuild(&Issue {
+        let issue = Issue {
             id: id.to_string(),
             title: title.to_string(),
             description: None,
@@ -506,7 +509,34 @@ mod tests {
             created_at: Utc.with_ymd_and_hms(2026, 6, 24, 12, 0, 0).unwrap(),
             updated_at: Utc.with_ymd_and_hms(2026, 6, 24, 12, 0, 0).unwrap(),
             closed_at: None,
-        })
+        };
+        let row = IssueCacheRow {
+            id: issue.id.clone(),
+            title: issue.title,
+            status: issue.status,
+            issue_type: issue.issue_type,
+            priority: issue.priority,
+            fields: issue.fields,
+            parent_id: issue.parent_id,
+            created_at: issue.created_at,
+            updated_at: issue.updated_at,
+            closed_at: issue.closed_at,
+        };
+        db.index_issue(
+            &row,
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{}.md", row.id),
+                record_kind: "issue".to_string(),
+                record_id: row.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
         .unwrap();
     }
 
@@ -610,15 +640,36 @@ mod tests {
             "todo",
             Some("atelier-obj"),
         );
-        let evidence_id = db
-            .create_record("evidence", "Validation proof", "recorded")
-            .unwrap();
-        db.add_record_link(
-            "evidence",
-            &evidence_id,
-            "issue",
-            "atelier-ready",
-            "validates",
+        let evidence_id = "atelier-proof".to_string();
+        let now = Utc::now();
+        db.index_evidence(
+            &EvidenceCacheRow {
+                id: evidence_id.clone(),
+                title: "Validation proof".to_string(),
+                status: "pass".to_string(),
+                evidence_type: "validation".to_string(),
+                captured_at: now,
+                proof_scope: None,
+                agent_identity: None,
+                independence_level: None,
+                created_at: now,
+                updated_at: now,
+            },
+            &[EvidenceTargetCacheRow {
+                evidence_id: evidence_id.clone(),
+                target_kind: "issue".to_string(),
+                target_id: "atelier-ready".to_string(),
+                role: "validates".to_string(),
+            }],
+            &RecordSourceCacheRow {
+                path: "evidence/atelier-proof.md".to_string(),
+                record_kind: "evidence".to_string(),
+                record_id: evidence_id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
         )
         .unwrap();
 

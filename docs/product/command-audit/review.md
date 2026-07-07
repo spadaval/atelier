@@ -5,6 +5,12 @@ Primary role: Reviewer.
 Primary question: "How do I manage the configured review artifact for issue or
 epic work?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I act on the configured review artifact? | Reviewer | Manual provider verbs and inputs make routine review costly. | Provider adapters and issue/branch context risk duplicated policy. | Simplify | Infer routine context and keep one show surface plus one submit surface. |
+
 ## Assessment
 
 - Name: Correct. Review is a first-class workflow concern, but it should not
@@ -12,9 +18,10 @@ epic work?"
 - Documentation: Visible in root help. Role guides should send operators here
   only when status, transition, or configured review output names a review
   action.
-- Design: Mixed. The family has a clear job, but `open` currently asks for
-  low-level review plumbing that should usually be derived from the issue,
-  branch policy, and configured provider.
+- Design: Simplified. `atelier review open` derives routine context from the
+  issue, branch policy, workflow state, and configured review mode.
+  `atelier review show` owns inspection; `atelier review submit` owns comment,
+  approval, and change-request mutations.
 - Output hierarchy: Issue/owner, review artifact identifier or URL, provider
   mode, role source, action result, then `issue transition`.
 
@@ -22,37 +29,35 @@ epic work?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `review open --title <title> --source-branch <branch> [--issue <id>]` | Reviewer | Open or confirm the active review artifact. | Needs refinement; too many required manual provider fields for routine use. |
-| `review link <pull-request> [--issue <id>]` | Reviewer | Attach an existing review artifact. | Good as recovery/import. |
-| `review status [--issue <id>]` | Reviewer | Inspect concise review state. | Good. |
-| `review show [--issue <id>]` | Reviewer | Inspect review detail. | Good. |
+| `review open [--issue <id>] [--existing <url-or-number>]` | Reviewer | Open an issue-derived artifact or attach an existing provider artifact during recovery/import. | Simplify and keep. Routine creation derives issue, owner, title, body, source branch, target branch, mode/provider, and role context. |
+| `review show [--issue <id>] [--comments] [--unresolved]` | Reviewer | Inspect review authority, state, detail, and optional discussion. | Keep; folds former status and comments verbs. |
+| `review submit [--issue <id>] --approve|--request-changes|--comment <text>` | Reviewer | Submit exactly one review decision or comment. | Keep; folds former comment, approve, and request-changes verbs. |
 | `review merge [--issue <id>]` | Manager/orchestrator | Merge or confirm the linked artifact without changing workflow state. | Advanced; should follow workflow guidance. |
-| `review comments [--issue <id>] [--unresolved]` | Reviewer | Inspect live comments. | Good. |
-| `review comment <body> [--issue <id>]` | Reviewer | Add a review comment or native finding. | Good. |
-| `review approve [--issue <id>]` | Reviewer | Approve the artifact. | Good. |
-| `review request-changes [--issue <id>]` | Reviewer | Request changes on the artifact. | Good. |
 | `review resolve <finding> [--issue <id>]` | Reviewer | Resolve a native room finding. | Good. |
 
-## Cutting Note
+## Explicit Complexity-Budget Outcomes
 
-Refine `review open` before adding more provider-specific flags. Routine review
-creation should use issue and branch context; fully manual branch/title/body
-forms belong in recovery guidance if they remain necessary.
+- Keep `review`, `review show`, `review resolve`, and `review merge`: each owns a
+  distinct operator job.
+- Simplify `review open`: the routine path accepts only optional issue and role
+  selection, then derives title, body, source branch, target branch, owner, and
+  review mode/provider context. `--existing` is the explicit provider
+  recovery/import path.
+- Fold `review link` into `review open --existing`.
+- Fold `review status` and `review comments` into `review show`; comments and
+  unresolved filtering are flags on the surviving inspection surface.
+- Fold `review comment`, `review approve`, and `review request-changes` into
+  `review submit`, which requires exactly one submit action.
+- Hide no review verb as a compatibility path. The folded verbs are removed
+  from parsing and help.
+- Remove manual `review open --title`, `--body`, `--source-branch`, and
+  `--target-branch` plumbing. There is no routine or hidden fallback alias.
 
 ## Complexity Budget
 
-`review` is over budget if it mirrors every provider operation as a first-class
-Atelier verb. Keep the review artifact job, but collapse submit-like actions
-where possible and infer issue, branch, title, body, and provider context from
-workflow state.
-
-Budget pressure:
-
-- `review open` should not require routine manual provider plumbing.
-- `review status` should fold into `review show` if the concise default can
-  answer the status question.
-- `review comment`, `review approve`, and `review request-changes` should be
-  considered for one submit-style owner unless separate verbs prove clearer.
+`review` stays within budget by exposing artifact jobs rather than mirroring
+provider operations. Provider-specific implementation remains behind the
+configured review mode, while issue and workflow state own routine context.
 
 ## Human Output Debt
 

@@ -33,7 +33,7 @@ count, recovery command shape, and any failure. If a class is not implemented
 yet, output must keep reporting it as deferred rather than silently ignoring it.
 
 Canonical record pruning requires a clean tracked checkout and a healthy tracker
-state. If canonical Markdown is invalid, the projection is stale in a way the
+state. If a record file is invalid, the domain cache is stale in a way the
 command cannot refresh, or tracked files are dirty, apply mode must stop before
 removing canonical records. Local diagnostics cleanup may still run when it can
 do so without reading or mutating tracked records.
@@ -46,7 +46,7 @@ but normal output must give enough IDs or paths to inspect the candidate set.
 | Class | Default policy | Apply behavior |
 | --- | --- | --- |
 | Local diagnostics logs | Retain command diagnostics for 30 UTC days unless the operator supplies a command override. | Delete expired ignored diagnostics log files. |
-| Ignored runtime, cache, and projection artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable projections are disposable. | Delete only ignored local files that are not locked and are safe to rebuild; print `check --fix` guidance when cleanup affects projection state. |
+| Ignored runtime and cache artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and a corrupt domain cache are disposable. | Delete only ignored local files that are not locked and are safe to rebuild; print `check --fix` guidance when cleanup affects cache state. |
 | Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Remove eligible terminal records from the active tree. Recovery uses Git history for the removed path or ID. |
 | Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | Remove only evidence metadata records pruned with their sole terminal dependents; do not delete external payloads. |
 | Native review rooms | Keep while the branch owner is open, under review, or has unmerged branch state. | Prune only with the terminal branch owner after review completion and branch integration are proven. |
@@ -101,13 +101,10 @@ git show <commit>:.atelier/issues/<id>.md
 canonical records. A future convenience command may wrap the Git lookup, but v1
 must not keep a live `.atelier/prune/` index just to make lookup faster.
 
-## Hard Deletion
+## Deletion Boundaries
 
 `atelier prune` is allowed to remove eligible records from the active tree
 because Git history preserves the audit trail. It must not delete protected
-records by force.
-
-Exceptional destructive surgery stays under explicit maintenance commands, not
-routine pruning. Operators who need to delete a protected or malformed record
-must use the destructive maintenance surface with force/confirmation semantics
-and then run `atelier check` plus the recovery commands it names.
+records by force. There is no arbitrary-record deletion command: malformed or
+protected records require a reviewed canonical-record repair, followed by
+`atelier check`; recovery remains available through Git history.

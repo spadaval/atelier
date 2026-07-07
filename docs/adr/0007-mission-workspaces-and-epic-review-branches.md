@@ -5,7 +5,10 @@
 Accepted. Updated by
 [ADR 0016](0016-canonical-work-branches-and-mission-integration.md) for
 canonical work branch names, branch base terminology, and opt-in mission
-integration branches.
+integration branches, and by
+[ADR 0013](0013-workflow-transition-actions-and-branching.md) for current
+transition-owned branch actions. Superseded command examples are retained below
+only as non-normative history.
 
 ## Context
 
@@ -44,13 +47,13 @@ Atelier uses this hierarchy as the target operating model:
    local proof named by their `Evidence` section. They do not require an
    independent review by default.
 
-4. Branch lifecycle is owned by start and close commands.
-   Routine workers use `atelier start <id>` to prepare the correct owner
-   branch. The owner branch is the nearest parent epic branch for child issues,
-   an issue branch for standalone issues, and an epic branch for epics.
-   `atelier issue close <id>` commits the close-state tracker change on that
-   owner branch. Child issue close stops at the epic branch; standalone issue
-   and epic close merge their owner branch to the configured base branch.
+4. Branch lifecycle is owned by issue transitions and configured actions.
+   Routine workers inspect `atelier issue transition <id>` and execute the
+   named transition selected by repository workflow. Transition actions prepare
+   or integrate the canonical work branch and its recorded branch base. Child
+   issue transitions stay on the owning epic branch when policy assigns one;
+   standalone issue, epic, and mission integration behavior exists only when
+   declared by workflow validators and actions.
 
 5. Squash merge is the default integration strategy.
    Repositories may configure merge commit or fast-forward-only alternatives,
@@ -69,6 +72,16 @@ Atelier uses this hierarchy as the target operating model:
    command/API contracts, migrations, persistence/workflow changes,
    Agent Factory process changes, stale-test risk, and any issue whose
    `Evidence` section or assignment explicitly requires another reviewer.
+
+## Historical Command Examples (Non-Normative)
+
+The original accepted text taught `atelier start <id>` for branch preparation
+and `atelier issue close <id>` for close-state integration. Those removed paths
+are preserved here only to explain the decision's evolution. Current routing is
+`atelier issue transition <id>` followed by the repository-defined transition;
+workflow actions own branch preparation, commits, integration, and push policy.
+Likewise, references to mission or issue worktrees in the rationale describe
+Git workspace isolation, not a live `atelier worktree` command.
 
 ## Alternatives Considered
 
@@ -104,8 +117,8 @@ where work should happen and where proof should be reviewed.
   must stop teaching per-issue worktrees as the normal mutating-subagent
   default.
 - Product docs, command help, and Agent Factory bindings must teach
-  lifecycle-owned branch preparation through `atelier start <id>` rather than
-  routine pre-work calls to explicit branch helpers.
+  transition-owned branch preparation through `atelier issue transition <id>`
+  rather than routine pre-work calls to explicit branch helpers.
 - Workflow policy should allow ordinary implementation issues to close with
   local proof and move review gates to epics, validation issues, closeout
   issues, or explicitly risk-escalated issue types.
@@ -114,9 +127,8 @@ where work should happen and where proof should be reviewed.
 - Epic closeout becomes the normal review artifact for grouped implementation
   work. It must map child issue proof to epic outcomes and record residual
   risks.
-- Explicit branch commands such as `atelier branch for-epic` remain internal,
-  diagnostic, or advanced repair surfaces for inspecting or recovering owner
-  branch state.
+- Advanced owner-branch recovery commands remain internal diagnostic or repair
+  surfaces for inspecting or recovering owner branch state.
 - Per-issue isolation remains available but must be explicit, justified, and
   visible in handoff notes or assignment context.
 

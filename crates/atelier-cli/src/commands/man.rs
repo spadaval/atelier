@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 
 use crate::commands;
-use atelier_app::command_storage::{command_storage, CommandStorageAccess};
+use atelier_app::cache_manager::CacheManager;
+use atelier_app::use_cases;
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
@@ -55,7 +56,7 @@ struct Snapshot {
 }
 
 fn run_stateful(role: Role) -> Result<()> {
-    let storage = command_storage(CommandStorageAccess::ProjectionQuery).map_err(|error| {
+    let storage = use_cases::work_query_cache().map_err(|error| {
         anyhow::anyhow!(
             "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
         )
@@ -67,7 +68,7 @@ fn run_stateful(role: Role) -> Result<()> {
 }
 
 fn run_admin() -> Result<()> {
-    match command_storage(CommandStorageAccess::HealthRepair) {
+    match CacheManager::discover().and_then(|manager| manager.open_cache_for_health()) {
         Ok(storage) => {
             let repo = storage.repo_root().display().to_string();
             let snapshot = snapshot(storage.db(), &storage.state_dir(), &repo)?;
@@ -215,7 +216,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
-            println!("  2. atelier check --fix - Repair ignored runtime and projection health.");
+            println!("  2. atelier check --fix - Repair ignored runtime and cache health.");
             println!(
                 "  3. atelier issue transition <id> - Inspect live validators and planned actions."
             );
@@ -279,18 +280,16 @@ fn print_not_usually(role: Role) {
     println!("-------------------------");
     match role {
         Role::Worker => {
-            println!("  maintenance, diagnostics, raw workflow checks, bundle apply, branch merge");
+            println!("  diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Reviewer => {
-            println!("  init, maintenance delete, issue creation, mission scope mutation");
+            println!("  init, issue creation, mission scope mutation");
         }
         Role::Validator => {
             println!("  issue creation, mission scope mutation, merge decisions outside assigned validation");
         }
         Role::Manager => {
-            println!(
-                "  diagnostics slow, rebuild, maintenance delete except during explicit repair; shell loops for bulk graph creation"
-            );
+            println!("  diagnostics slow, rebuild; shell loops for bulk graph creation");
         }
         Role::Admin => {
             println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");

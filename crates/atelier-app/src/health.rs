@@ -17,7 +17,7 @@ pub struct DoctorRequest<'a> {
     pub repo_root: PathBuf,
     pub state_dir: PathBuf,
     pub db_path: PathBuf,
-    pub projection_db_existed: bool,
+    pub cache_db_existed: bool,
     pub fix: bool,
     pub diagnostics_enabled: bool,
 }
@@ -31,7 +31,7 @@ pub struct DoctorView {
     pub ignore_rules_current: bool,
     pub state_dir_ok: bool,
     pub rebuild_ready: bool,
-    pub projection_fresh: bool,
+    pub cache_fresh: bool,
     pub cache_dir_status: &'static str,
     pub runtime_db_available: bool,
     pub diagnostics: &'static str,
@@ -59,17 +59,15 @@ pub fn doctor(
     let repaired_db;
     let active_db = if input.fix {
         crate::rebuild::validate_canonical_state(&input.state_dir).with_context(|| {
-            "doctor --fix refused to edit tracked `.atelier/` canonical records; \
-             run `atelier lint`, fix the named canonical Markdown record, then rerun `atelier doctor --fix`"
+            "doctor --fix refused to edit tracked `.atelier/` record files; \
+             run `atelier check`, fix the named record file, then rerun `atelier check --fix`"
         })?;
-        crate::rebuild::refresh_projection(&input.state_dir, &input.db_path).with_context(
-            || {
-                format!(
-                    "doctor --fix failed while repairing ignored local projection state at {}",
-                    input.db_path.display()
-                )
-            },
-        )?;
+        crate::rebuild::refresh_cache(&input.state_dir, &input.db_path).with_context(|| {
+            format!(
+                "doctor --fix failed while repairing the ignored local domain cache at {}",
+                input.db_path.display()
+            )
+        })?;
         repaired_db =
             Database::open(&input.db_path).context("Failed to reopen repaired database")?;
         &repaired_db
@@ -78,13 +76,13 @@ pub fn doctor(
     };
 
     let rebuild_ready = crate::rebuild::validate_canonical_state(&input.state_dir).is_ok();
-    let projection_fresh = atelier_sqlite::projection_index::check(active_db, &input.state_dir)
+    let cache_fresh = atelier_sqlite::source_freshness::check(active_db, &input.state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
     let runtime_db_available = if input.fix {
         input.db_path.exists()
     } else {
-        input.projection_db_existed
+        input.cache_db_existed
     };
     let state_dir_ok = input.state_dir.is_dir();
     let ignore_rules_current = runtime_gitignore_entries_present(&input.repo_root);
@@ -97,7 +95,7 @@ pub fn doctor(
     health.insert("config", config_path.exists());
     health.insert("database", runtime_db_available);
     health.insert("ignore_rules", ignore_rules_current);
-    health.insert("projection_fresh", projection_fresh);
+    health.insert("cache_fresh", cache_fresh);
     health.insert("rebuild_ready", rebuild_ready);
     let review_backend = review_backend_health(&input.repo_root);
     health.insert("review_backend", review_backend.status != "not ok");
@@ -112,7 +110,7 @@ pub fn doctor(
                 ignore_rules_current,
                 state_dir_ok,
                 rebuild_ready,
-                projection_fresh,
+                cache_fresh,
                 cache_dir_status: optional_dir_status(&cache_dir),
                 runtime_db_available,
                 diagnostics,

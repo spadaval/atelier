@@ -4,7 +4,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
+mod support;
 
 #[derive(Arbitrary, Debug, Clone)]
 enum StateOp {
@@ -35,9 +35,9 @@ fuzz_target!(|input: StateMachineInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match ProjectionIndex::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
+    let db = match support::open_cache(&db_path) {
+        Some(db) => db,
+        None => return,
     };
 
     let mut issue_ids: Vec<String> = Vec::new();
@@ -46,10 +46,7 @@ fuzz_target!(|input: StateMachineInput| {
         match op {
             StateOp::CreateIssue { title, priority } => {
                 let id = format!("atelier-fuzz-{}", issue_ids.len());
-                if db
-                    .insert_issue(&fuzz_issue(&id, title, None, priority))
-                    .is_ok()
-                {
+                if support::index_issue(&db, &id, title, "todo", priority) {
                     issue_ids.push(id);
                 }
             }
@@ -92,10 +89,10 @@ fuzz_target!(|input: StateMachineInput| {
                 }
             }
             StateOp::ListIssues => {
-                let _ = db.list_issues(None, None);
+                let _ = db.list_issues(None, None, None);
             }
             StateOp::ListArchived => {
-                let _ = db.list_issues(Some("archived"), None);
+                let _ = db.list_issues(Some("archived"), None, None);
             }
             StateOp::ListReady => {
                 let _ = db.list_ready_issues();
@@ -109,10 +106,6 @@ fuzz_target!(|input: StateMachineInput| {
     // Final consistency checks - should never panic
     let _ = db.list_ready_issues();
     let _ = db.list_blocked_issues();
-    let _ = db.list_issues(None, None);
-    let _ = db.list_issues(Some("archived"), None);
+    let _ = db.list_issues(None, None, None);
+    let _ = db.list_issues(Some("archived"), None, None);
 });
-
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
-    ProjectionIssue::new(id, title, description, priority)
-}

@@ -4,6 +4,12 @@ Primary role: Reviewer.
 
 Primary question: "How do I record, inspect, and reuse proof?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I record and inspect proof? | Reviewer | Low when each verb has one job and list output is bounded. | First-class evidence records and typed attachment links already have domain owners. | Simplify | Keep the four distinct jobs, bound `list`, and keep `attach` secondary to targeted `record`. |
+
 ## Assessment
 
 - Name: Correct. Evidence is a first-class product concept.
@@ -17,28 +23,30 @@ Primary question: "How do I record, inspect, and reuse proof?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `evidence record --target issue/<id> ...` | Reviewer | Capture validation, test, review, or artifact proof. | Good. |
-| `evidence show <id>` | Reviewer | Inspect one proof record. | Good. |
-| `evidence list` | Reviewer | Find proof records. | Good. |
-| `evidence attach <id> ...` | Reviewer | Reuse existing proof on another target. | Budget pressure. This is relationship mutation and may belong in the general link model. |
+| `evidence record --target issue/<id> ...` | Reviewer | Capture validation, test, review, or artifact proof. | Keep. It is the only normal proof-capture workflow. |
+| `evidence show <id>` | Reviewer | Inspect one proof record. | Keep. It owns full proof and bounded transcript inspection. |
+| `evidence list` | Reviewer | Find proof records. | Simplify. Default output is capped at 20 and quiet output emits matching IDs only. |
+| `evidence attach <id> ...` | Reviewer | Reuse existing proof on another target. | Keep, secondary. It is the typed cross-kind reuse owner; generic issue linking intentionally rejects evidence records. |
 
 ## Complexity Budget
 
 `evidence record`, `evidence show`, and `evidence list` own distinct proof jobs.
-`evidence attach` survives only if it is simpler than a general relationship
-mutation for cross-kind proof links.
+`evidence attach` survives because cross-kind proof reuse is evidence-domain
+behavior: it validates the `validates` role, updates canonical evidence
+relationships, refreshes the projection, and records issue activity. The public
+generic link root is removed and `issue link` owns issue-to-issue relationships,
+so moving proof reuse there would blur record kinds rather than simplify them.
 
-## Human Output Debt
+## Human Output Contract
 
-`evidence list` currently has the clearest default-budget problem: this checkout
-prints hundreds of records and includes command transcripts inline. That is
-technically complete but not usable as a human browse surface.
+`evidence list` applies a 20-record default budget and elides command-backed
+proof to a short command summary. Full output remains owned by `evidence show`.
 
-Refresh target:
+The retained contract:
 
 - bound the default list and state the omitted count;
-- group by result, kind, target, or recency when useful;
+- order by recency and keep result, kind, and target visible;
 - elide command transcripts to one human sentence with `evidence show <id>` as
   the drill-down;
 - keep evidence IDs visible but secondary after the summary; and
-- preserve quiet output as the composition path for IDs and status tokens.
+- preserve quiet output as the unbounded composition path for matching IDs.

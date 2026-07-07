@@ -55,7 +55,7 @@ that direction into contracts that can be implemented and validated.
 
 ## Boundary
 
-Product docs may name implementation-backed concepts such as `ProjectionIndex`
-or `RuntimeState` when the behavior is user-visible, but they should not define
+Product docs may name implementation-backed concepts such as the SQLite domain
+cache or local runtime state when the behavior is user-visible, but they should not define
 storage ownership, database schema, module boundaries, or cache repair
 algorithms. Those belong in architecture docs.

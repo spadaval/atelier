@@ -9,16 +9,19 @@ For evidence from actual Codex agents using the commands, see
 guidance, and command-language failures that are adjacent to formatting but not
 solved by layout alone.
 
-Sampled commands:
+## Historical Sampled Commands (Non-Normative)
+
+These commands record the surface sampled at the time of the audit; they are
+not current routing guidance:
 
 - `target/debug/atelier status`
 - `target/debug/atelier work queue`
-- `target/debug/atelier work queue --ready`
+- `target/debug/atelier work ready`
 - `target/debug/atelier issue show atelier-kpa1`
 - `target/debug/atelier issue show`
 - `target/debug/atelier issue show atelier-t3h3`
-- historical removed-surface samples: `issue table --kind mission` and
-  `issue status atelier-24xn --verbose`
+- historical removed-surface samples: `issue table --kind mission` and the
+  retired `issue status` form (replaced by `issue show` and `issue transition`)
 - `target/debug/atelier issue transition atelier-kpa1`
 - `target/debug/atelier history --issue atelier-kpa1 --limit 10`
 - `target/debug/atelier evidence list`
@@ -29,7 +32,7 @@ Sampled commands:
 
 | Complaint | Evidence | Target behavior |
 | --- | --- | --- |
-| Inline help is repeated per row. | `work queue` and `issue show` repeat `details: atelier issue show <id>` on many rows. | Move repeated drill-down commands to one footer. Rows may show a short marker such as `blocked by 4`, but command syntax belongs in `Next Commands` or `Drill Down`. |
+| Inline help is repeated per row. | Legacy queue and issue-detail views repeat `details: atelier issue show <id>` on many rows. | Move repeated drill-down commands to one footer. Rows may show a short marker such as `blocked by 4`, but command syntax belongs in `Next Commands` or `Drill Down`. |
 | Summary lines overuse `key=value`. | Queue summaries print `Category: todo=10`, `Status: ready=2, todo=4`, and similar count blobs. | Human summaries should read as labels and counts, not telemetry. Prefer `10 total · 6 blocked · status: 2 ready, 4 todo` or a compact vertical summary when several dimensions matter. Keep `key=value` for quiet output, logs, diagnostics, or machine-adjacent snippets. |
 | Some row labels are opaque. | `context; parent blocked` does not explain what action is blocked or why the parent is rendered as a context group. | Replace implementation labels with domain language: `parent blocked`, `shown for context`, or `blocked through parent`, and put the reason near the grouped parent. |
 | Blocker rows show IDs without enough human meaning. | Long blocker lists emphasize issue IDs and repeated commands more than blocker titles or blocker counts. | Inline blockers should answer "what is blocking this?" with title, type, status, and count. IDs remain visible but secondary. Large blocker sets should be summarized with one footer command for full detail. |
@@ -124,7 +127,7 @@ app logic supplies them.
 | `issue transition` | Repeats dirty state and mixes validators, blockers, branch context, commands, and descriptions with equal visual weight. | Show transition names and failed requirements by default. Hide passing validators, messages, action preflight detail, descriptions, and dirty path firehoses behind verbose output. |
 | `issue show` | Repeats detail commands and does not prioritize blocker meaning. | Show blocker counts and human titles first; put `atelier issue show <id>` once in a footer. |
 | `issue list` | Queue-shaped output obscures simple record inventory. | Render one bounded, neutral ID-ordered row per matching record with metadata filters; do not add hierarchy, ready/blocked selection, or search. |
-| `history` | Pipe-delimited rows are hard to scan. | Group or wrap events, de-emphasize repeated scope/target data, and keep filters visible. |
-| `evidence list` | Default output is unbounded and swamps the terminal. | Add a default limit, grouping/filter hints, omitted count, and command transcript elision. |
+| `history` | The former pipe-delimited rows were hard to scan and query flags exceeded the command budget. | Implemented: wrapped event rows, de-emphasized metadata, a 20-event default, and only issue/limit scope controls. |
+| `evidence list` | The former default was unbounded and swamped the terminal. | Implemented: 20-record default limit, omitted count, status hint, quiet ID composition, and command transcript elision. |
 | `man` | Role guides are readable but still use raw command lists and stale objective wording in places. | Keep guides terse, use objective terminology, and color only headings/roles/health when interactive. |
 | `review`, `doctor`, `lint`, `prune`, hidden provider/branch/maintenance diagnostics | Less frequently sampled in this pass, but they should still use the shared footer, color, and bounded-list rules. | Audit implementation output before each command is refreshed; do not invent a separate style per command. Hidden diagnostics stay out of normal role output unless routed by a failure. |

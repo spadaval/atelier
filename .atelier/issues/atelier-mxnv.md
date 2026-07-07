@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T17:50:49.866931357+00:00"
+status: "done"
 title: "Route branch recovery only from failed workflow guidance"
-updated_at: "2026-06-29T20:15:16.003270031+00:00"
+updated_at: "2026-07-06T17:50:49.866931357+00:00"
 ---
 
 ## Description

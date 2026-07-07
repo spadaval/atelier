@@ -20,10 +20,10 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, local path overrides, projection/cache content, or hidden defaults. |
-| `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, projection data, diagnostics, locks, or caches. |
-| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for provider credentials. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, domain-cache data, diagnostics, locks, or other caches. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, local path overrides, domain-cache content, or hidden defaults. |
+| `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, domain-cache data, diagnostics, locks, or other caches. |
+| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, the rebuilt SQLite domain cache, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for provider credentials. |
 
 The boundary is intentionally split for review integration. `.atelier/config.toml`
 selects the review backend, such as `review.mode = "provider"` with
@@ -529,7 +529,7 @@ Failure behavior is part of the action contract:
   owner-branch tracker commit.
 - Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
-  transition options`, `atelier review status --issue <id>`, or `atelier check <id>`.
+  transition options`, `atelier review show --issue <id>`, or `atelier check <id>`.
 
 ## Validators
 
@@ -553,7 +553,7 @@ flat validator names, and invalid params are hard config errors.
 Validators must be read-only. They may inspect canonical records, worktree
 state, evidence, blockers, and review artifacts, but they must not write
 records, create commits, change branches, open reviews, or merge anything.
-Mutating behavior belongs in transition actions. Projection freshness is an
+Mutating behavior belongs in transition actions. Domain-cache freshness is an
 internal command-storage health concern repaired by normal commands or explicit
 diagnostics; it is not a user-configurable workflow validator.
 
@@ -623,16 +623,17 @@ events:
     body: "Fix the failing path"
 ```
 
-The current room status is derived from metadata plus ordered events. Room
-projections may index open findings, approvals, stale approvals, and merge
-state, but canonical records must not store a second mutable summary that can
+The current room status is derived from metadata plus ordered events. The
+SQLite domain cache may index open findings, approvals, stale approvals,
+and merge state, but record files must not store a second mutable summary that can
 drift from the event timeline.
 
-Provider-mode `review link` inputs may accept a review number or a full
-provider URL, but canonical issue records store only the normalized structured
-field. URL inputs must match the configured review provider, host, owner, and
-repository before they normalize to a number. The current provider
-implementation is Forgejo.
+Provider-mode `review open --existing` inputs may accept a review number or a
+full provider URL, but canonical issue records store only the normalized
+structured field. URL inputs must match the configured review provider, host,
+owner, and repository before they normalize to a number. The current provider
+implementation is Forgejo. This is a recovery/import path; routine `review
+open` derives creation fields from issue and workflow state.
 
 The active review link belongs to the branch-owning issue or epic. Child issues
 inherit the nearest parent epic's `review`; defining `review` directly on a

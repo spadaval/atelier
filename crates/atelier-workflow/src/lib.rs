@@ -274,8 +274,6 @@ const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
     "post_functions",
     "post-functions",
     "waivers",
-    "workflow_projection_tables",
-    "projection_tables",
 ];
 const TOP_LEVEL_FIELDS: &[&str] = &[
     "schema",
@@ -2868,6 +2866,20 @@ mod tests {
 
         assert!(error.contains("workflow_config_unknown_field"));
         assert!(error.contains("guidance_templates"));
+    }
+
+    #[test]
+    fn obsolete_cache_table_fields_are_plain_unknown_fields() {
+        for field in ["workflow_projection_tables", "projection_tables"] {
+            let text = format!("{}\n{field}: []\n", valid_policy());
+            let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("workflow_config_unknown_field"));
+            assert!(error.contains(field));
+            assert!(!error.contains("workflow_config_deferred_feature"));
+        }
     }
 
     #[test]

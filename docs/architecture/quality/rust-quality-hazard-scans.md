@@ -2,9 +2,11 @@
 
 Use these commands when a slice needs explicit debt-marker, dead/unused-code,
 large-function, or unused-dependency review. They complement normal handoff
-checks such as `cargo fmt -- --check`, `target/debug/atelier lint`, and
-`target/debug/atelier export --check`; they are the repo's focused hazard scans
-rather than a replacement for broader validation.
+checks such as `cargo fmt -- --check`, `git diff --check`, and
+`target/debug/atelier check`; they are the repo's focused hazard scans rather
+than a replacement for broader validation. Use
+`target/debug/atelier check --fix` only when ignored local runtime, projection,
+or cache state needs repair.
 
 Run commands from the repository root.
 

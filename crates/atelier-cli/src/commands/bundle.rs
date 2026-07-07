@@ -12,10 +12,6 @@ use atelier_sqlite::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
 };
 
-fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
-}
-
 pub fn preview(db: &Database, input: &str) -> Result<()> {
     let bundle = load_bundle(input)?;
     validate_bundle(db, &bundle)?;
@@ -25,7 +21,7 @@ pub fn preview(db: &Database, input: &str) -> Result<()> {
 pub fn apply(
     db: &Database,
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     input: &str,
     yes: bool,
 ) -> Result<()> {
@@ -36,8 +32,6 @@ pub fn apply(
     validate_bundle(db, &bundle)?;
 
     let summary = apply_bundle_file(db, state_dir, &bundle)?;
-    refresh_projection(state_dir, db_path)?;
-
     print_bundle_summary(summary)
 }
 

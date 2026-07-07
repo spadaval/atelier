@@ -99,6 +99,7 @@ dependencies = [
  "atelier-workflow",
  "chrono",
  "fs2",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -70,6 +70,7 @@ fn reject_invalid_comment_kind(kind: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -84,7 +85,9 @@ mod tests {
     #[test]
     fn test_add_comment_to_existing_issue() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let result = run(&db, &issue_id, "This is a comment", "note");
         assert!(result.is_ok());
@@ -107,7 +110,9 @@ mod tests {
     #[test]
     fn test_add_multiple_comments() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         run(&db, &issue_id, "First comment", "note").unwrap();
         run(&db, &issue_id, "Second comment", "note").unwrap();
@@ -123,7 +128,9 @@ mod tests {
     #[test]
     fn test_add_empty_comment() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let result = run(&db, &issue_id, "", "note");
         assert!(result.is_ok());
@@ -136,7 +143,9 @@ mod tests {
     #[test]
     fn test_add_unicode_comment() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let unicode_content = "こんにちは 🎉 مرحبا αβγδ ← → ↑ ↓";
         let result = run(&db, &issue_id, unicode_content, "note");
@@ -149,7 +158,9 @@ mod tests {
     #[test]
     fn test_add_very_long_comment() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let long_content = "a".repeat(100000);
         let result = run(&db, &issue_id, &long_content, "note");
@@ -162,7 +173,9 @@ mod tests {
     #[test]
     fn test_add_comment_with_newlines() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let multiline = "Line 1\nLine 2\nLine 3\n\nLine 5";
         let result = run(&db, &issue_id, multiline, "note");
@@ -175,7 +188,9 @@ mod tests {
     #[test]
     fn test_add_comment_with_special_chars() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let special = "Quotes: \"test\" 'test' `test` | Symbols: @#$%^&*() | SQL: '; DROP TABLE;--";
         let result = run(&db, &issue_id, special, "note");
@@ -188,7 +203,9 @@ mod tests {
     #[test]
     fn test_add_comment_sql_injection() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let malicious = "'); DELETE FROM comments; --";
         run(&db, &issue_id, malicious, "note").unwrap();
@@ -206,8 +223,10 @@ mod tests {
     #[test]
     fn test_comment_on_closed_issue() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(&issue_id).unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
+        db.cache_fixture_close(&issue_id).unwrap();
 
         // Should still be able to comment on closed issues
         let result = run(&db, &issue_id, "Comment on closed issue", "note");
@@ -220,7 +239,9 @@ mod tests {
     #[test]
     fn test_comment_with_null_bytes() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let with_null = "before\0after";
         let result = run(&db, &issue_id, with_null, "note");
@@ -233,7 +254,9 @@ mod tests {
     #[test]
     fn test_comment_kind_roundtrip() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         run(&db, &issue_id, "A plan was made", "plan").unwrap();
 
@@ -244,7 +267,9 @@ mod tests {
     #[test]
     fn test_invalid_comment_kind_is_rejected() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+        let issue_id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
 
         let error = run(&db, &issue_id, "Do not store this", "decision").unwrap_err();
         assert!(error
@@ -275,7 +300,7 @@ mod tests {
     #[test]
     fn test_comment_roundtrip_order_and_missing_issue() {
         let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Test", None, "medium").unwrap();
+        let issue_id = db.cache_fixture_issue("Test", None, "medium").unwrap();
 
         run(&db, &issue_id, "Comment 0", "note").unwrap();
         run(&db, &issue_id, "Comment 1", "note").unwrap();

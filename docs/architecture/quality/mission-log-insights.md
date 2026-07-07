@@ -31,8 +31,8 @@ Improvement:
 
 - CLI: make record lookup type-aware for common read commands, or make the
   error say when the ID exists as another record kind.
-- Docs: clarify when to use `mission show/status` versus `issue show`, and when
-  epics are executable work versus parent validation scope.
+- Docs: replace the legacy mission-detail routes with `atelier issue show`, and
+  clarify when epics are executable work versus parent validation scope.
 
 Confidence: high.
 
@@ -92,14 +92,15 @@ Confidence: high.
 
 ### 5. Mission readiness and closeout were split across too many surfaces
 
-Controllers repeatedly stitched together `atelier status`, `mission status`,
+Controllers repeatedly stitched together `atelier status`, a now-retired
+mission dashboard,
 `mission audit`, `workflow check`, `lint`, `doctor`, `export --check`,
 evidence commands, and manual issue drill-down. The information was usually
 available, but the path to a closeout decision was noisy.
 
 Improvement:
 
-- CLI: make `mission status` the normal operator surface for state, blockers,
+- CLI: make `work mission` the normal operator surface for state, blockers,
   missing proof, stale projection, next action, and closeout readiness.
 - CLI: fold mission audit output into contextual status or verbose/advanced
   modes.

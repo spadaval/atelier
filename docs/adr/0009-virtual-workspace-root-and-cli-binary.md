@@ -30,9 +30,9 @@ The target crate layers are:
 
 1. `atelier-core` for pure domain types and shared vocabulary.
 2. `atelier-workflow` for repository workflow policy and transition checks.
-3. `atelier-records` for canonical Markdown record storage.
-4. `atelier-sqlite` for rebuildable projection and ignored runtime SQLite
-   state.
+3. `atelier-records` for durable Markdown record-file storage.
+4. `atelier-sqlite` for the disposable domain cache and its ignored local
+   SQLite state.
 5. `atelier-app` for use-case orchestration, request/outcome APIs, and
    view-models.
 6. `atelier-cli` for the public binary and terminal shell.
@@ -71,6 +71,7 @@ binary.
 
 ### Use One `atelier-app` Crate For Everything Below The CLI
 
-This would reduce workspace complexity. It was rejected because canonical
-Markdown storage, workflow policy, SQLite projection/runtime state, and pure
-domain vocabulary need separately testable boundaries during the migration.
+This would reduce workspace complexity. It was rejected because durable
+record-file storage, workflow policy, the disposable SQLite domain cache, and
+pure domain vocabulary need separately testable boundaries during the
+migration.

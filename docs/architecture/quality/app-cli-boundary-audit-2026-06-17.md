@@ -53,7 +53,9 @@ following searches and representative behavior tests:
   return typed outcomes or view models that CLI renderers print.
 - Focused CLI tests or transcripts cover representative migrated status,
   mission, evidence, and workflow surfaces after the orchestration move.
-- `atelier lint`, `atelier doctor`, and `git diff --check` pass.
+- `atelier check` and `git diff --check` pass. Use `atelier check --fix` only
+  when a normal command reports degraded ignored local state, then rerun the
+  blocked command and `atelier check`.
 
 ## Follow-Up Owners
 

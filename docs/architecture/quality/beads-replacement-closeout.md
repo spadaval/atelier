@@ -26,7 +26,7 @@ Date: 2026-06-08
 | Agent Factory skill docs no longer assume Beads as the only tracker. | pass | `SKILL.md` routes through the repository tracker and `AGENTS.md` names only Atelier commands for normal work. |
 | A real planning, update, and closeout workflow is executed through Atelier. | pass | `agent-factory-atelier-validation.md` records issue create, ready, show, update, dependency add/remove, notes, close, lint, historical export/rebuild diagnostics, and sync proof. |
 | Beads data is kept after import. | superseded | The retention policy was retired. The old archive was purged after the canonical Atelier state proved self-sufficient. |
-| Predecessor tracker health checks are no longer required for normal work in this repo. | pass | Current normal health checks are `atelier lint` and `atelier doctor`; storage-rendering diagnostics such as `atelier export --check` are no longer routine workflow proof. |
+| Predecessor tracker health checks are no longer required for normal work in this repo. | pass | The current normal committed-state health check is `atelier check`; `atelier check --fix` is reserved for explicit repair of ignored local runtime, projection, or cache state. Hidden storage-rendering diagnostics are not routine workflow proof. |
 
 ## Closeout Criteria
 

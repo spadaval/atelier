@@ -4,10 +4,14 @@ This audit classifies the current `atelier` CLI surface by the operator role
 most likely to reach for each command, then records whether the command is named,
 documented, and shaped for that role.
 
+Each active audit page uses the compact decision-record contract: operator
+question, role, product/cognitive cost, architecture/code cost, verdict, and
+next action. It is a decision aid, not a workflow.
+
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
-Last refreshed: 2026-06-29 from `target/debug/atelier --help`, focused
+Last refreshed: 2026-07-06 from `target/debug/atelier --help`, focused
 subcommand help, command-audit consistency checks, and live dashboard/transition
 samples.
 
@@ -17,9 +21,9 @@ The product surface uses four command categories:
 
 - Normal workflow: visible operator commands for orientation, work lifecycle,
   proof, terminal readiness, and ordinary health.
-- Admin maintenance: visible setup, explicit repair, destructive maintenance,
-  and manual owner-branch recovery.
-- Hidden debug diagnostics: raw policy, telemetry, projection, or
+- Admin maintenance: visible setup, explicit repair, supported pruning, and
+  manual owner-branch recovery.
+- Hidden debug diagnostics: raw policy, telemetry, domain-cache, or
   deterministic-renderer probes that are callable only for targeted diagnostics,
   tests, or migration work.
 - Temporary migration: transitional inherited-state or deterministic-rendering
@@ -72,7 +76,7 @@ not be taught as ordinary workflow:
 
 - [diagnostics](diagnostics.md): hidden local command telemetry.
 - [export](export.md): hidden deterministic-renderer diagnostic or migration
-  helper.
+  helper; normal operator health uses `check`.
 - [branch](branch.md): hidden/manual owner-branch recovery; routine branch
   guidance comes from status, work dashboards, issue detail, and transitions.
 - [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
@@ -82,8 +86,8 @@ not be taught as ordinary workflow:
   hatch; normal setup uses `init --import-beads`.
 - [lint](lint.md): hidden compatibility health probe; normal validation uses
   visible `check`.
-- [maintenance](maintenance.md): hidden danger-zone maintenance primitives.
-- [rebuild](rebuild.md): hidden projection diagnostic; operator repair starts
+- [maintenance](maintenance.md): removed arbitrary-record deletion surface.
+- [rebuild](rebuild.md): hidden domain-cache diagnostic; operator repair starts
   from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
 
@@ -110,7 +114,7 @@ documentation:
 - [plan](plan.md): deferred plan CRUD; current one-shot batch creation is
   `bundle`.
 - [repair](repair.md): removed root repair surface; use `check --fix` for
-  ignored local runtime/projection repair and normal issue transitions for
+  ignored local runtime/cache repair and normal issue transitions for
   durable workflow state.
 - [search](search.md): removed root search surface pending a stronger
   cross-record search design.
@@ -135,7 +139,7 @@ come from canonical in-progress issue records rendered by `status`, type-aware
 `issue show <objective-id>`, and issue workflow surfaces, not from separate
 runtime active-pointer helpers.
 
-## Cutting Findings
+## Historical Cutting Findings (Non-Normative)
 
 | Finding | Evidence | Next step |
 | --- | --- | --- |
@@ -146,10 +150,21 @@ runtime active-pointer helpers.
 | The audit previously overloaded `work queue`. | Flat inventory belongs to `issue list`; the plural Mission Overview belongs to `work missions`; scoped coordination belongs to `work mission` / `work epic`; selection belongs to `work ready` / `work blocked`. | Retire the legacy queue from normal guidance without aliases or fallback rendering. |
 | `issue list` had queue-shaped flags and output. | The flat inventory contract includes all statuses by default, uses neutral ID ordering and metadata filters, and routes ready/blocked selection to `work`. | Align help, parser, renderer, and regression tests with the approved inventory contract. |
 | `mission` was a parallel objective namespace. | `mission` is now rejected; root help teaches mission-typed issue records and `work mission <mission-id>`. | Keep mission guidance under typed issue records and work dashboards rather than aliases. |
-| Complex commands need explicit budget verdicts. | `review` mirrors provider verbs, scoped `history` risks query-language sprawl, `evidence attach` duplicates relationship mutation, and transition output dumps implementation machinery. | Apply Keep/Simplify/Fold/Hide/Remove verdicts in each command file before adding new surfaces. |
-| `review open` exposes provider plumbing as required operator input. | `atelier review open --help` requires `--title`, `--body`, `--source-branch`, and `--target-branch`; the product contract says lifecycle/status output should route review artifacts. | Refine `review open` toward issue-derived defaults or move the fully manual form to admin/advanced guidance. |
+| Complex commands need explicit budget verdicts. | Command-specific audit files record Keep/Simplify/Fold/Hide/Remove decisions. Evidence keeps typed reuse secondary to capture; history keeps only repository/issue scope plus a limit; review derives routine provider context and collapses status/comments and submit-like verbs. | Enforce each recorded boundary in help, tests, and current product docs. |
+| Review artifact work mirrored provider plumbing and verbs. | Resolved: `review open` derives routine issue/workflow context, `show` owns status/comments, and `submit` owns comment/approval/change-request mutations. Removed verbs are not aliases. | Keep help, docs, and workflow recovery guidance on `open/show/submit/resolve/merge`. |
 | Human output has recurring scanability debt. | Sampled queue, detail, transition, history, evidence, and role-guide outputs repeat inline commands, overuse `key=value`, print raw activity fields, and lack interactive color. | Use the [human output refresh](human-output-refresh.md) audit to drive the formatter pass before changing command behavior. |
-| Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale status/projection signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
+| Actual agents hit trust and guidance failures beyond formatting. | The [actual agent complaint audit](agent-complaints.md) found stale cache-backed status signals, hidden ready work, parent-blocker ambiguity, duplicate lifecycle paths, implementation-shaped command names, and stale help flags. | Treat the UX refresh as a command-language and trust-state pass, not only a color/layout formatter pass. |
+
+## Storage Terminology Audit
+
+Ordinary command and operator guidance uses the architecture terms from
+[ADR 0017](../../adr/0017-sqlite-domain-cache-and-hard-removal.md): record files
+are durable state, SQLite is a disposable domain cache, writes invalidate
+affected facts, and cache-backed reads repair changed sources lazily through
+`CacheManager`. `projection` remains appropriate only for distinct derived
+artifacts such as the future Mission Control JSON projection or in explicitly
+historical migration/audit text. Hidden repair commands may describe domain-
+cache mechanics, but must not teach eager projection refresh as ordinary work.
 | Retired implementation owners have been removed. | Bundle behavior is owned by `commands::bundle`; stale `label`, `plan`, and `tested` command modules are no longer compiled. | Keep new implementation modules aligned with visible product surfaces. |
 | Test infrastructure no longer preserves removed command shapes. | Integration and smoke harnesses execute the arguments supplied by each test directly; old-shape coverage lives in explicit rejection tests. | Keep new tests on the current command surface and avoid ignored compatibility suites. |
 | CLI command dispatch is becoming a module-boundary bottleneck. | `crates/atelier-cli/src/main.rs` still owns the root enum and subcommand enums, but issue subcommand dispatch now lives in the current-surface `issue_cli` adapter. | Continue splitting by product surface or use-case boundary before adding new command families. |
