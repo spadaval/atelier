@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-07T05:34:40.262572798+00:00"
+status: "done"
 title: "Build the mission-to-epic overview projection"
-updated_at: "2026-07-07T05:25:26.947745827+00:00"
+updated_at: "2026-07-07T05:34:40.262572798+00:00"
 ---
 
 ## Description
