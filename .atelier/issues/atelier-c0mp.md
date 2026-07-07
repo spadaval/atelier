@@ -55,4 +55,7 @@ Restore a clear read-side boundary between generic issue inventory and mission c
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Attached child evidence must include focused command transcripts for the flat `atelier issue list` inventory and formatted `atelier work missions` overview, including deterministic ordering, omission accounting, and `NO_COLOR` output.
+- Independent validation issue `atelier-g5fl` must exercise the delivered commands in a temporary repository and attach its validation evidence before this mission requests publication.
+- `cargo nextest run`, `cargo fmt -- --check`, `git diff --check`, and `atelier check atelier-c0mp` must pass on the integrated mission branch.
+- The mission review artifact must account for the public contract, both epic diffs, their independent review evidence, and any residual behavior or evidence gaps.
