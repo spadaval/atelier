@@ -35,9 +35,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-07T06:27:58.130693935+00:00"
+status: "done"
 title: "Epic: Build the formatted Mission Overview"
-updated_at: "2026-07-07T06:22:01.837264732+00:00"
+updated_at: "2026-07-07T06:27:58.130693935+00:00"
 ---
 
 ## Description
