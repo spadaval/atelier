@@ -15,6 +15,8 @@ relationships:
   - kind: "issue"
     id: "atelier-l5mw"
   - kind: "issue"
+    id: "atelier-2uim"
+  - kind: "issue"
     id: "atelier-wyxn"
   children: []
   attachments: []
@@ -23,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Publish mission and issue-set authoring standards"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-07T05:42:00.000000000+00:00"
 ---
 
 ## Description

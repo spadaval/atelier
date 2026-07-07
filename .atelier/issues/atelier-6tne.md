@@ -17,6 +17,8 @@ relationships:
   - kind: "issue"
     id: "atelier-0zhd"
   - kind: "issue"
+    id: "atelier-2uim"
+  - kind: "issue"
     id: "atelier-wlk4"
   attachments: []
   relates: []
@@ -24,17 +26,18 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Define the independent mission-plan review contract"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-07T05:42:00.000000000+00:00"
 ---
 
 ## Description
 
-Reconcile prior mission-lifecycle decisions with the newly chosen independent review model before implementation begins. This epic owns the product, architecture, domain-language, lifecycle, migration, and authoring-standard contract.
+Reconcile prior mission-lifecycle decisions with the newly chosen independent review model before implementation begins. This epic owns the product, architecture, domain-language, lifecycle, migration, and authoring-standard contract plus independent validation that the updated contract clearly retains, amends, or supersedes every applicable legacy rule.
 
 ## Outcome
 
 - Repository-owned product and architecture sources define mission drafts, independent plan review, exact-revision approval, stale approval, author-reviewer separation, dependency-safe readiness, and migration behavior consistently.
 - The repository has one normative, example-backed standard for constructing and reviewing complete mission issue sets.
+- The legacy atelier-2uim validation responsibility is migrated into this epic as a compatibility audit of the updated contract, not left ready against the closed atelier-1mga mission or used to validate obsolete direct-readiness behavior.
 
 ## Evidence
 

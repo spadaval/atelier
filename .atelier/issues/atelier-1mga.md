@@ -14,9 +14,6 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-2uim"
-    type: "advances"
-  - kind: "issue"
     id: "atelier-ef94"
     type: "advances"
   - kind: "issue"
@@ -36,7 +33,7 @@ schema_version: 1
 closed_at: "2026-06-30T15:22:42.555053602+00:00"
 status: "closed"
 title: "Mission: Simplify mission planning and workflow behavior"
-updated_at: "2026-06-30T15:22:42.555053602+00:00"
+updated_at: "2026-07-07T05:42:00.000000000+00:00"
 ---
 
 ## Description
