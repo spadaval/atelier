@@ -4,6 +4,9 @@ use std::env;
 use std::path::Path;
 use std::process::Command;
 
+use atelier_app::mission_overview::{
+    mission_overview, MissionOverviewRequest, MISSION_OVERVIEW_MISSION_LIMIT,
+};
 use atelier_app::read_pipeline::{WorkBuckets, WorkRow};
 use atelier_core::Issue;
 use atelier_sqlite::Database;
@@ -181,18 +184,42 @@ pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn missions(db: &Database, quiet: bool) -> Result<()> {
-    crate::commands::issue::list_with_title(
-        db,
-        "Missions",
-        Some("all"),
-        None,
-        Some("mission"),
-        None,
-        None,
-        false,
-        quiet,
-    )
+pub fn missions(db: &Database, include_done: bool, quiet: bool) -> Result<()> {
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let overview = mission_overview(db, policy.as_ref(), MissionOverviewRequest { include_done })?;
+    if quiet {
+        for mission in overview.missions {
+            println!("{}", mission.id);
+        }
+        return Ok(());
+    }
+
+    // This deliberately remains a thin shared-component handoff. The
+    // dedicated Mission Overview renderer owns epic hierarchy, collapsed
+    // summaries, exceptional-work facts, and semantic color.
+    Page::new("Mission Overview")
+        .panel(
+            IssueListPanel::new(
+                "Missions",
+                overview
+                    .missions
+                    .into_iter()
+                    .map(|mission| IssueListRow {
+                        role: display_role_for_state(&mission.status_category),
+                        id: mission.id,
+                        status: Some(mission.status),
+                        priority: mission.priority,
+                        title: mission.title,
+                        blockers: mission.open_blocker_count,
+                        depth: 1,
+                    })
+                    .collect(),
+            )
+            .total_count(overview.matching_mission_count)
+            .limit(MISSION_OVERVIEW_MISSION_LIMIT),
+        )
+        .print(RenderContext::for_stdout());
+    Ok(())
 }
 
 fn print_quiet(bucket: &str, buckets: &WorkBuckets) {

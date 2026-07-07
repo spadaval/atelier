@@ -36,4 +36,5 @@ Add a dedicated overview model that selects non-done missions by default, resolv
 
 - Partial implementation evidence `atelier-mvt3` records 5 passing directed membership, descendant collapse, overlap/shared-scope, exceptional-work, ordering, budget, and cycle-safety projection tests.
 - Independent review evidence `atelier-nm2w` records a pass with no severity findings for checkpoint `0fd1e8ee` and names the intentionally unclaimed adapter, renderer, and CLI risks.
-- The `atelier-mska` directed relation/query interface is now integrated; final evidence must record the decision-cache acquisition adapter tests and delivered `atelier work missions` command transcripts.
+- Evidence `atelier-1hwe` records 6 passing projection and decision-cache acquisition tests, including directed link preservation, parent-edge acquisition, live blocker classification, default done-mission omission, and explicit inclusion.
+- Evidence `atelier-dhck` and `atelier-rmqc` record passing default and `--all` quiet `atelier work missions` command transcripts from the wired projected model.

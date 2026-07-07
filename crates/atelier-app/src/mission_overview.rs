@@ -6,7 +6,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use atelier_core::IssuePriority;
+use anyhow::Result;
+use atelier_core::{Issue, IssuePriority};
+use atelier_sqlite::Database;
+
+use crate::workflow_policy::WorkflowPolicy;
 
 pub const MISSION_OVERVIEW_MISSION_LIMIT: usize = 20;
 pub const MISSION_OVERVIEW_EPIC_LIMIT: usize = 10;
@@ -102,6 +106,95 @@ pub struct MissionOverviewCounts {
 pub struct OutsideVisibleMissions {
     pub unassigned_nonterminal: usize,
     pub linked_only_to_hidden_done_missions: usize,
+}
+
+/// Acquires the complete, persistence-backed fact set consumed by the Mission
+/// Overview projection.
+///
+/// The disposable decision cache is selected by the caller. This adapter only
+/// translates its canonical issue rows, directed links, parent edges, and
+/// blocker state into the persistence-neutral projection input.
+pub fn acquire_mission_overview_input(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+) -> Result<MissionOverviewInput> {
+    let cached_issues = db.list_issues(Some("all"), None, None)?;
+    let mut issues = Vec::with_capacity(cached_issues.len());
+    let mut children = Vec::new();
+
+    for issue in &cached_issues {
+        if let Some(parent_id) = &issue.parent_id {
+            children.push(IssueParentChild {
+                parent_id: parent_id.clone(),
+                child_id: issue.id.clone(),
+            });
+        }
+        issues.push(MissionOverviewIssue {
+            id: issue.id.clone(),
+            title: issue.title.clone(),
+            issue_type: issue.issue_type.clone(),
+            status: issue.status.clone(),
+            status_category: status_category(workflow_policy, &issue.status),
+            priority: issue.priority.clone(),
+            open_blocker_count: open_blocker_count(db, workflow_policy, issue)?,
+        });
+    }
+
+    let advances = db
+        .list_all_record_links()?
+        .into_iter()
+        .filter(|link| {
+            link.source_kind == "issue"
+                && link.target_kind == "issue"
+                && link.relation_type == "advances"
+        })
+        .map(|link| MissionAdvancesRoot {
+            mission_id: link.source_id,
+            root_id: link.target_id,
+        })
+        .collect();
+
+    Ok(MissionOverviewInput {
+        issues,
+        advances,
+        children,
+    })
+}
+
+/// Acquires and projects one Mission Overview from a caller-owned decision
+/// cache. Keeping this boundary in the application crate lets the CLI remain a
+/// renderer rather than interpreting cache rows or relationship direction.
+pub fn mission_overview(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    request: MissionOverviewRequest,
+) -> Result<MissionOverview> {
+    let input = acquire_mission_overview_input(db, workflow_policy)?;
+    Ok(project_mission_overview(request, &input))
+}
+
+fn open_blocker_count(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<usize> {
+    let mut count = 0;
+    for blocker_id in db.get_blockers(&issue.id)? {
+        let Some(blocker) = db.get_issue(&blocker_id)? else {
+            continue;
+        };
+        if status_category(workflow_policy, &blocker.status) != "done" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn status_category(workflow_policy: Option<&WorkflowPolicy>, status: &str) -> String {
+    workflow_policy
+        .and_then(|policy| policy.status_category(status))
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 /// Projects the bounded Mission Overview from a complete in-memory snapshot.
@@ -421,6 +514,12 @@ fn priority_rank(priority: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{TimeZone, Utc};
+    use tempfile::tempdir;
+
+    use atelier_sqlite::{IssueCacheRow, IssueRelationCacheRow, RecordSourceCacheRow};
+
+    use crate::workflow_policy::{BranchLifecycleConfig, StatusDefinition};
 
     fn issue(
         id: impl Into<String>,
@@ -699,5 +798,182 @@ mod tests {
             overview.outside_visible_missions,
             OutsideVisibleMissions::default()
         );
+    }
+
+    #[test]
+    fn acquires_directed_cache_facts_and_projects_the_command_model() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        for (id, issue_type, status, parent_id) in [
+            ("mission-active", "mission", "in_progress", None),
+            ("mission-done", "mission", "done", None),
+            ("epic-a", "epic", "todo", None),
+            ("task-a", "task", "todo", Some("epic-a")),
+            ("direct-a", "task", "todo", None),
+            ("hidden-a", "task", "todo", None),
+            ("open-blocker", "task", "todo", None),
+            ("done-blocker", "task", "done", None),
+        ] {
+            index_cached_issue(&db, id, issue_type, status, parent_id, &[]);
+        }
+        index_cached_issue(
+            &db,
+            "mission-active",
+            "mission",
+            "in_progress",
+            None,
+            &[("epic-a", "advances"), ("direct-a", "advances")],
+        );
+        index_cached_issue(
+            &db,
+            "mission-done",
+            "mission",
+            "done",
+            None,
+            &[("hidden-a", "advances")],
+        );
+        // This is an incoming link to the mission and must never be inverted
+        // into mission membership by the acquisition adapter.
+        index_cached_issue(
+            &db,
+            "direct-a",
+            "task",
+            "todo",
+            None,
+            &[("mission-active", "advances")],
+        );
+        db.add_dependency("epic-a", "open-blocker").unwrap();
+        db.add_dependency("epic-a", "done-blocker").unwrap();
+
+        let policy = test_workflow_policy();
+        let input = acquire_mission_overview_input(&db, Some(&policy)).unwrap();
+
+        assert!(input.children.contains(&IssueParentChild {
+            parent_id: "epic-a".to_string(),
+            child_id: "task-a".to_string(),
+        }));
+        assert!(input.advances.contains(&MissionAdvancesRoot {
+            mission_id: "mission-active".to_string(),
+            root_id: "epic-a".to_string(),
+        }));
+        assert!(input.advances.contains(&MissionAdvancesRoot {
+            mission_id: "direct-a".to_string(),
+            root_id: "mission-active".to_string(),
+        }));
+        let epic = input
+            .issues
+            .iter()
+            .find(|issue| issue.id == "epic-a")
+            .unwrap();
+        assert_eq!(epic.status_category, "todo");
+        assert_eq!(epic.open_blocker_count, 1);
+
+        let overview =
+            mission_overview(&db, Some(&policy), MissionOverviewRequest::default()).unwrap();
+        assert_eq!(
+            overview
+                .missions
+                .iter()
+                .map(|mission| mission.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["mission-active"]
+        );
+        assert_eq!(overview.missions[0].epics[0].id, "epic-a");
+        assert_eq!(overview.missions[0].epics[0].descendant_count, 1);
+        assert_eq!(overview.missions[0].direct_work.root_count, 1);
+        assert_eq!(
+            overview
+                .outside_visible_missions
+                .linked_only_to_hidden_done_missions,
+            1
+        );
+
+        let all = mission_overview(
+            &db,
+            Some(&policy),
+            MissionOverviewRequest { include_done: true },
+        )
+        .unwrap();
+        assert_eq!(
+            all.missions
+                .iter()
+                .map(|mission| mission.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["mission-active", "mission-done"]
+        );
+    }
+
+    fn index_cached_issue(
+        db: &Database,
+        id: &str,
+        issue_type: &str,
+        status: &str,
+        parent_id: Option<&str>,
+        relations: &[(&str, &str)],
+    ) {
+        let now = Utc.with_ymd_and_hms(2026, 7, 7, 12, 0, 0).unwrap();
+        let row = IssueCacheRow {
+            id: id.to_string(),
+            title: format!("Title for {id}"),
+            status: status.to_string(),
+            issue_type: issue_type.to_string(),
+            priority: "high".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: parent_id.map(str::to_string),
+            created_at: now,
+            updated_at: now,
+            closed_at: (status == "done").then_some(now),
+        };
+        let relations = relations
+            .iter()
+            .map(|(target_id, relation_type)| IssueRelationCacheRow {
+                source_issue_id: id.to_string(),
+                target_issue_id: (*target_id).to_string(),
+                relation_type: (*relation_type).to_string(),
+                created_at: now,
+            })
+            .collect::<Vec<_>>();
+        db.index_issue(
+            &row,
+            &[],
+            &[],
+            &relations,
+            &RecordSourceCacheRow {
+                path: format!("issues/{id}.md"),
+                record_kind: "issue".to_string(),
+                record_id: id.to_string(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
+        )
+        .unwrap();
+    }
+
+    fn test_workflow_policy() -> WorkflowPolicy {
+        let mut statuses = BTreeMap::new();
+        for (status, category) in [
+            ("todo", "todo"),
+            ("in_progress", "active"),
+            ("blocked", "blocked"),
+            ("done", "done"),
+        ] {
+            statuses.insert(
+                status.to_string(),
+                StatusDefinition {
+                    category: category.to_string(),
+                    role: None,
+                },
+            );
+        }
+        WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig::default(),
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::new(),
+            statuses,
+            workflows: BTreeMap::new(),
+        }
     }
 }
