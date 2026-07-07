@@ -4,6 +4,10 @@ id: "atelier-xuno"
 issue_type: "task"
 labels:
 - "lifecycle"
+review:
+  kind: pull_request
+  number: 55
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
