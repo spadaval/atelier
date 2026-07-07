@@ -208,11 +208,11 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!("  3. atelier issue transition <id> - Follow current workflow guidance.");
         }
         Role::Manager => {
-            println!("  1. atelier work ready - Choose executable work explicitly.");
+            println!("  1. atelier work missions - Compare the current Mission Overview.");
             println!(
-                "  2. atelier issue show <objective-id> - Review objective readiness and blockers."
+                "  2. atelier work mission <mission-id> - Drill into one mission's scoped dashboard."
             );
-            println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
+            println!("  3. atelier work ready - Choose executable work explicitly.");
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
@@ -253,6 +253,8 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
+            println!("  atelier work missions");
+            println!("  atelier work mission <mission-id>");
             println!("  atelier work ready");
             println!("  atelier work blocked");
             println!("  atelier issue show <objective-id>");

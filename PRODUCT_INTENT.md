@@ -737,6 +737,8 @@ atelier status
 atelier work ready
 atelier work blocked
 atelier work missions
+atelier work mission <mission-id>
+atelier work epic <epic-id>
 atelier issue list
 atelier issue show atelier-z1p8
 atelier issue create

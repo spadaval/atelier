@@ -33,7 +33,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Build the formatted Mission Overview"
-updated_at: "2026-07-07T05:39:27.467291395+00:00"
+updated_at: "2026-07-07T06:10:49.036377143+00:00"
 ---
 
 ## Description

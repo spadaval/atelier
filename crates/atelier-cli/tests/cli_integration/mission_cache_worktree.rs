@@ -224,6 +224,87 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
 }
 
 #[test]
+fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expanding_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Published overview mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission fixture create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Published overview mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Work linked only to done mission"],
+    );
+    assert!(success, "linked work fixture create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Work linked only to done mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &work_id, "--role", "advances"],
+    );
+    assert!(success, "mission advances fixture failed: {stderr}");
+
+    let mission_path = canonical_issue_path(dir.path(), &mission_id);
+    let markdown = std::fs::read_to_string(&mission_path).unwrap();
+    let published = markdown.replacen("status: \"draft\"", "status: \"publish_review\"", 1);
+    assert_ne!(published, markdown, "mission fixture status was not draft");
+    std::fs::write(&mission_path, published).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(
+        success,
+        "rebuild published mission fixture failed: {stderr}"
+    );
+
+    let (success, default, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "default Mission Overview failed: {stderr}");
+    assert!(
+        default.contains("No missions match the current overview."),
+        "{default}"
+    );
+    assert!(!default.contains(&mission_id), "{default}");
+    assert!(!default.contains("Published overview mission"), "{default}");
+    assert!(
+        !default.contains("Work linked only to done mission"),
+        "{default}"
+    );
+    assert!(
+        default.contains("Linked only to done missions: 1 nonterminal issue"),
+        "{default}"
+    );
+
+    let (success, default_quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "work", "missions"]);
+    assert!(success, "default quiet Mission Overview failed: {stderr}");
+    assert!(default_quiet.is_empty(), "{default_quiet:?}");
+
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "--all Mission Overview failed: {stderr}");
+    assert!(
+        all.contains(&format!(
+            "{mission_id}  done  medium  Published overview mission"
+        )),
+        "{all}"
+    );
+    assert!(all.contains("Status: publish_review"), "{all}");
+    assert!(all.contains("Direct work: 1 root"), "{all}");
+    assert!(!all.contains("Work linked only to done mission"), "{all}");
+    assert!(!all.contains("Outside visible missions"), "{all}");
+
+    let (success, all_quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "work", "missions", "--all"]);
+    assert!(success, "--all quiet Mission Overview failed: {stderr}");
+    assert_eq!(all_quiet.trim(), mission_id);
+}
+
+#[test]
 fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

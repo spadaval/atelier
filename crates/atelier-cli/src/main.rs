@@ -20,7 +20,7 @@ mod issue_cli;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
-  work          Show operational multi-issue work views
+  work          Show operational views, including the plural Mission Overview
 
 Issues:
   issue         Create, list, show, update, transition, note, and manage links
@@ -311,9 +311,9 @@ enum WorkCommands {
     Active,
     /// Show all operational work buckets
     All,
-    /// Show the cross-mission overview
+    /// Show the Mission Overview across current missions
     Missions {
-        /// Include done missions
+        /// Include done missions in the Mission Overview
         #[arg(long)]
         all: bool,
     },

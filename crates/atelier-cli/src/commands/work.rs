@@ -87,6 +87,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
             [
                 "ready    Small top-level executable work picker",
                 "blocked  Repo-wide blocker triage",
+                "missions Cross-mission Mission Overview with collapsed epics",
                 "mission  Live mission orchestration dashboard",
                 "epic     Focused epic execution dashboard",
             ],
@@ -96,6 +97,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
             [
                 FooterAction::new("Browse ready work", "atelier work ready"),
                 FooterAction::new("Triage blockers", "atelier work blocked"),
+                FooterAction::new("Compare missions", "atelier work missions"),
                 FooterAction::new(
                     "Open mission dashboard",
                     "atelier work mission <mission-id>",
