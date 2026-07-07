@@ -12,8 +12,9 @@ use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 use crate::human_output::{
-    plural_suffix, priority_style, status_style, DisplayRole, FooterAction, FooterPanel,
-    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, Panel, RenderContext, TextStyle,
+    plural_suffix, render_labeled_lines, render_wrapped_lines, status_style, DisplayRole,
+    FooterAction, FooterPanel, IssueHeadingRow, IssueListPanel, IssueListRow, LinesPanel,
+    MetadataPanel, Page, Panel, RenderContext, TextStyle,
 };
 
 pub struct QueueOptions<'a> {
@@ -216,115 +217,170 @@ impl Panel for MissionOverviewPanel {
 
         if self.overview.missions.is_empty() {
             lines.push("No missions match the current overview.".to_string());
-            lines.push(
-                "Browse mission records: atelier issue list --issue-type mission".to_string(),
-            );
+            lines.extend(render_labeled_lines(
+                context,
+                "",
+                "Browse mission records",
+                "atelier issue list --issue-type mission",
+                TextStyle::Secondary,
+            ));
         }
 
         for (index, mission) in self.overview.missions.iter().enumerate() {
             if index > 0 {
                 lines.push(String::new());
             }
-            lines.push(format_issue_heading(
+            lines.extend(
+                IssueHeadingRow {
+                    indent: "",
+                    id: &mission.id,
+                    issue_type: None,
+                    status_category: &mission.status_category,
+                    priority: &mission.priority,
+                    title: &mission.title,
+                }
+                .render(context),
+            );
+            lines.extend(render_labeled_lines(
                 context,
-                "",
-                &mission.id,
-                None,
-                &mission.status_category,
-                &mission.priority,
-                &mission.title,
+                "  ",
+                "Status",
+                &mission.status,
+                status_style(&mission.status_category),
             ));
-            lines.push(format!(
-                "  Status: {}",
-                context.paint(status_style(&mission.status_category), &mission.status)
-            ));
-            lines.push(format!(
-                "  Progress: {}",
-                context.paint(TextStyle::Secondary, render_counts(mission.progress))
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                "Progress",
+                &render_counts(mission.progress),
+                TextStyle::Secondary,
             ));
             if mission.open_blocker_count > 0 {
-                lines.push(format!(
-                    "  Blockers: {}",
-                    context.paint(TextStyle::Danger, open_blockers(mission.open_blocker_count))
+                lines.extend(render_labeled_lines(
+                    context,
+                    "  ",
+                    "Blockers",
+                    &open_blockers(mission.open_blocker_count),
+                    TextStyle::Danger,
                 ));
             }
 
             for epic in &mission.epics {
-                lines.push(format_issue_heading(
+                lines.extend(
+                    IssueHeadingRow {
+                        indent: "  ",
+                        id: &epic.id,
+                        issue_type: Some("epic"),
+                        status_category: &epic.status_category,
+                        priority: &epic.priority,
+                        title: &epic.title,
+                    }
+                    .render(context),
+                );
+                lines.extend(render_labeled_lines(
                     context,
-                    "  ",
-                    &epic.id,
-                    Some("epic"),
-                    &epic.status_category,
-                    &epic.priority,
-                    &epic.title,
+                    "    ",
+                    "Status",
+                    &epic.status,
+                    status_style(&epic.status_category),
                 ));
-                lines.push(format!(
-                    "    Status: {}",
-                    context.paint(status_style(&epic.status_category), &epic.status)
-                ));
-                lines.push(format!(
-                    "    Children: {} {} · {}",
+                let children = format!(
+                    "{} {} · {}",
                     epic.descendant_count,
                     if epic.descendant_count == 1 {
                         "issue"
                     } else {
                         "issues"
                     },
-                    context.paint(
-                        TextStyle::Secondary,
-                        render_counts(epic.descendant_progress)
-                    )
+                    render_counts(epic.descendant_progress)
+                );
+                lines.extend(render_labeled_lines(
+                    context,
+                    "    ",
+                    "Children",
+                    &children,
+                    TextStyle::Secondary,
                 ));
                 if epic.open_blocker_count > 0 {
-                    lines.push(format!(
-                        "    Blockers: {}",
-                        context.paint(TextStyle::Danger, open_blockers(epic.open_blocker_count))
+                    lines.extend(render_labeled_lines(
+                        context,
+                        "    ",
+                        "Blockers",
+                        &open_blockers(epic.open_blocker_count),
+                        TextStyle::Danger,
                     ));
                 }
-                lines.push(format!("    Drill down: atelier work epic {}", epic.id));
+                lines.extend(render_labeled_lines(
+                    context,
+                    "    ",
+                    "Drill down",
+                    &format!("atelier work epic {}", epic.id),
+                    TextStyle::Secondary,
+                ));
             }
 
             if mission.omitted_epic_count > 0 {
-                lines.push(format!(
-                    "  {}: {} more directly linked epic{} omitted (showing {} of {})",
-                    DisplayRole::Omitted.render(context.style_policy()),
-                    mission.omitted_epic_count,
-                    plural_suffix(mission.omitted_epic_count),
-                    mission.epics.len(),
-                    mission.matching_epic_count
+                lines.extend(render_wrapped_lines(
+                    context,
+                    "  ",
+                    &format!(
+                        "omitted: {} more directly linked epic{} omitted (showing {} of {})",
+                        mission.omitted_epic_count,
+                        plural_suffix(mission.omitted_epic_count),
+                        mission.epics.len(),
+                        mission.matching_epic_count
+                    ),
+                    TextStyle::Secondary,
                 ));
             }
 
             if mission.direct_work.root_count > 0 {
-                lines.push(format!(
-                    "  Direct work: {} root{} · {}",
+                let direct_work = format!(
+                    "{} root{} · {}",
                     mission.direct_work.root_count,
                     plural_suffix(mission.direct_work.root_count),
-                    context.paint(
-                        TextStyle::Secondary,
-                        render_counts(mission.direct_work.root_progress)
-                    )
+                    render_counts(mission.direct_work.root_progress)
+                );
+                lines.extend(render_labeled_lines(
+                    context,
+                    "  ",
+                    "Direct work",
+                    &direct_work,
+                    TextStyle::Secondary,
                 ));
             }
-            lines.push(format!("  Drill down: atelier work mission {}", mission.id));
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                "Drill down",
+                &format!("atelier work mission {}", mission.id),
+                TextStyle::Secondary,
+            ));
         }
 
         if self.overview.omitted_mission_count > 0 {
             if !lines.is_empty() {
                 lines.push(String::new());
             }
-            lines.push(format!(
-                "{}: {} more mission{} omitted (showing {} of {})",
-                DisplayRole::Omitted.render(context.style_policy()),
-                self.overview.omitted_mission_count,
-                plural_suffix(self.overview.omitted_mission_count),
-                self.overview.missions.len(),
-                self.overview.matching_mission_count
+            lines.extend(render_wrapped_lines(
+                context,
+                "",
+                &format!(
+                    "omitted: {} more mission{} omitted (showing {} of {})",
+                    self.overview.omitted_mission_count,
+                    plural_suffix(self.overview.omitted_mission_count),
+                    self.overview.missions.len(),
+                    self.overview.matching_mission_count
+                ),
+                TextStyle::Secondary,
             ));
-            lines.push(
-                "Browse mission records: atelier issue list --issue-type mission".to_string(),
-            );
+            lines.extend(render_labeled_lines(
+                context,
+                "",
+                "Browse mission records",
+                "atelier issue list --issue-type mission",
+                TextStyle::Secondary,
+            ));
         }
 
         let outside = self.overview.outside_visible_missions;
@@ -334,41 +390,39 @@ impl Panel for MissionOverviewPanel {
             }
             lines.push(context.paint(TextStyle::Heading, "Outside visible missions"));
             lines.push("------------------------".to_string());
-            lines.push(format!(
-                "  Unassigned: {} nonterminal issue{}",
-                outside.unassigned_nonterminal,
-                plural_suffix(outside.unassigned_nonterminal)
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                "Unassigned",
+                &format!(
+                    "{} nonterminal issue{}",
+                    outside.unassigned_nonterminal,
+                    plural_suffix(outside.unassigned_nonterminal)
+                ),
+                TextStyle::Secondary,
             ));
-            lines.push(format!(
-                "  Linked only to done missions: {} nonterminal issue{}",
-                outside.linked_only_to_hidden_done_missions,
-                plural_suffix(outside.linked_only_to_hidden_done_missions)
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                "Linked only to done missions",
+                &format!(
+                    "{} nonterminal issue{}",
+                    outside.linked_only_to_hidden_done_missions,
+                    plural_suffix(outside.linked_only_to_hidden_done_missions)
+                ),
+                TextStyle::Secondary,
             ));
-            lines.push("  Browse records: atelier issue list".to_string());
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                "Browse records",
+                "atelier issue list",
+                TextStyle::Secondary,
+            ));
         }
 
         lines
     }
-}
-
-fn format_issue_heading(
-    context: RenderContext,
-    indent: &str,
-    id: &str,
-    issue_type: Option<&str>,
-    status_category: &str,
-    priority: &str,
-    title: &str,
-) -> String {
-    let kind = issue_type
-        .map(|issue_type| format!("  {issue_type}"))
-        .unwrap_or_default();
-    format!(
-        "{indent}{}{kind}  {}  {}  {title}",
-        context.paint(TextStyle::Heading, id),
-        context.paint(status_style(status_category), status_category),
-        context.paint(priority_style(priority), priority),
-    )
 }
 
 fn render_counts(counts: MissionOverviewCounts) -> String {
@@ -1179,6 +1233,47 @@ mod mission_overview_render_tests {
         assert_eq!(strip_ansi(&colored), plain);
         assert_eq!(no_color, plain);
         assert!(!no_color.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn mission_overview_at_forty_columns_preserves_hierarchy_without_terminal_wrapping() {
+        let narrow_context =
+            RenderContext::from_parts_with_width(ColorChoice::Never, false, false, 40);
+        let rendered = render_fixture(narrow_context);
+        let colored = render_fixture(RenderContext::from_parts_with_width(
+            ColorChoice::Always,
+            true,
+            false,
+            40,
+        ));
+
+        assert!(
+            rendered.lines().all(|line| line.chars().count() <= 40),
+            "narrow output contains an over-width line:\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "atelier-m1\n  State: active\n  Priority: high\n  Title: Ship the Mission Overview"
+            ),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "  atelier-e1  epic\n    State: blocked\n    Priority: medium\n    Title: Render mission hierarchy"
+            ),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("    Drill down:\n      atelier work epic atelier-e1"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("  Drill down:\n    atelier work mission atelier-m1"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("Outside visible missions"), "{rendered}");
+        assert!(colored.contains('\u{1b}'));
+        assert_eq!(strip_ansi(&colored), rendered);
     }
 
     #[test]

@@ -162,6 +162,41 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
     assert_eq!(no_color, overview);
     assert!(!no_color.contains('\u{1b}'), "{no_color:?}");
 
+    let (success, narrow, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["work", "missions"],
+        &[("COLUMNS", "40"), ("NO_COLOR", "")],
+    );
+    assert!(success, "40-column work missions failed: {stderr}");
+    assert!(
+        narrow.lines().all(|line| line.chars().count() <= 40),
+        "40-column output contains an over-width line:\n{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "{mission_id}\n  State: todo\n  Priority: high\n  Title: Overview mission"
+        )),
+        "{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "  {epic_id}  epic\n    State: todo\n    Priority: medium\n    Title: Overview epic"
+        )),
+        "{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "    Drill down:\n      atelier work epic {epic_id}"
+        )) && narrow.contains(&format!(
+            "  Drill down:\n    atelier work mission {mission_id}"
+        )),
+        "{narrow}"
+    );
+    assert!(narrow.contains("  Status: draft"), "{narrow}");
+    assert!(narrow.contains("Outside visible missions"), "{narrow}");
+    assert!(!narrow.contains("Collapsed epic child"), "{narrow}");
+    assert!(!narrow.contains('\u{1b}'), "{narrow:?}");
+
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "missions"]);
     assert!(success, "quiet work missions failed: {stderr}");
     assert_eq!(quiet.trim(), mission_id);

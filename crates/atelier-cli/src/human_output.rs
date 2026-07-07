@@ -6,6 +6,7 @@ use std::io::IsTerminal;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RenderContext {
     style_policy: StylePolicy,
+    width: usize,
 }
 
 impl RenderContext {
@@ -13,12 +14,14 @@ impl RenderContext {
     pub(crate) fn plain() -> Self {
         Self {
             style_policy: StylePolicy::plain(),
+            width: usize::MAX,
         }
     }
 
     pub(crate) fn for_stdout() -> Self {
         Self {
             style_policy: StylePolicy::for_stdout(),
+            width: stdout_width(),
         }
     }
 
@@ -26,6 +29,20 @@ impl RenderContext {
     pub(crate) fn from_parts(choice: ColorChoice, is_terminal: bool, no_color: bool) -> Self {
         Self {
             style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
+            width: usize::MAX,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_parts_with_width(
+        choice: ColorChoice,
+        is_terminal: bool,
+        no_color: bool,
+        width: usize,
+    ) -> Self {
+        Self {
+            style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
+            width,
         }
     }
 
@@ -36,6 +53,18 @@ impl RenderContext {
     pub(crate) fn paint(self, style: TextStyle, text: impl AsRef<str>) -> String {
         self.style_policy.paint(style, text)
     }
+
+    pub(crate) fn width(self) -> usize {
+        self.width
+    }
+}
+
+fn stdout_width() -> usize {
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width > 0)
+        .unwrap_or(usize::MAX)
 }
 
 pub(crate) trait Panel {
@@ -219,6 +248,134 @@ pub(crate) struct IssueListRow {
     pub title: String,
     pub blockers: usize,
     pub depth: usize,
+}
+
+pub(crate) struct IssueHeadingRow<'a> {
+    pub indent: &'a str,
+    pub id: &'a str,
+    pub issue_type: Option<&'a str>,
+    pub status_category: &'a str,
+    pub priority: &'a str,
+    pub title: &'a str,
+}
+
+impl IssueHeadingRow<'_> {
+    pub(crate) fn render(&self, context: RenderContext) -> Vec<String> {
+        let kind = self
+            .issue_type
+            .map(|issue_type| format!("  {issue_type}"))
+            .unwrap_or_default();
+        let wide_text = format!(
+            "{}{}{kind}  {}  {}  {}",
+            self.indent, self.id, self.status_category, self.priority, self.title
+        );
+        if visible_width(&wide_text) <= context.width() {
+            return vec![format!(
+                "{}{}{kind}  {}  {}  {}",
+                self.indent,
+                context.paint(TextStyle::Heading, self.id),
+                context.paint(status_style(self.status_category), self.status_category),
+                context.paint(priority_style(self.priority), self.priority),
+                self.title
+            )];
+        }
+
+        let detail_indent = format!("{}  ", self.indent);
+        let mut lines = vec![format!(
+            "{}{}{kind}",
+            self.indent,
+            context.paint(TextStyle::Heading, self.id)
+        )];
+        lines.extend(render_labeled_lines(
+            context,
+            &detail_indent,
+            "State",
+            self.status_category,
+            status_style(self.status_category),
+        ));
+        lines.extend(render_labeled_lines(
+            context,
+            &detail_indent,
+            "Priority",
+            self.priority,
+            priority_style(self.priority),
+        ));
+        lines.extend(render_labeled_lines(
+            context,
+            &detail_indent,
+            "Title",
+            self.title,
+            TextStyle::Secondary,
+        ));
+        lines
+    }
+}
+
+pub(crate) fn render_labeled_lines(
+    context: RenderContext,
+    indent: &str,
+    label: &str,
+    value: &str,
+    value_style: TextStyle,
+) -> Vec<String> {
+    let wide_text = format!("{indent}{label}: {value}");
+    if visible_width(&wide_text) <= context.width() {
+        return vec![format!(
+            "{indent}{label}: {}",
+            context.paint(value_style, value)
+        )];
+    }
+
+    let value_indent = format!("{indent}  ");
+    let mut lines = vec![format!("{indent}{label}:")];
+    lines.extend(render_wrapped_lines(
+        context,
+        &value_indent,
+        value,
+        value_style,
+    ));
+    lines
+}
+
+pub(crate) fn render_wrapped_lines(
+    context: RenderContext,
+    indent: &str,
+    text: &str,
+    style: TextStyle,
+) -> Vec<String> {
+    let available = context.width().saturating_sub(visible_width(indent)).max(1);
+    wrap_words(text, available)
+        .into_iter()
+        .map(|line| format!("{indent}{}", context.paint(style, line)))
+        .collect()
+}
+
+fn wrap_words(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let separator = usize::from(!current.is_empty());
+        if !current.is_empty() && visible_width(&current) + separator + visible_width(word) > width
+        {
+            lines.push(current);
+            current = String::new();
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn visible_width(text: &str) -> usize {
+    text.chars().count()
 }
 
 pub(crate) struct IssueListPanel {
@@ -700,6 +857,42 @@ mod tests {
             page.render(RenderContext::plain()),
             "Example\n=======\n\nStatus: ready"
         );
+    }
+
+    #[test]
+    fn issue_heading_row_keeps_wide_shape_and_decomposes_at_narrow_width() {
+        let row = IssueHeadingRow {
+            indent: "  ",
+            id: "atelier-4fip",
+            issue_type: Some("epic"),
+            status_category: "active",
+            priority: "high",
+            title: "Build the formatted Mission Overview",
+        };
+
+        assert_eq!(
+            row.render(RenderContext::plain()),
+            vec!["  atelier-4fip  epic  active  high  Build the formatted Mission Overview"]
+        );
+
+        let narrow = row.render(RenderContext::from_parts_with_width(
+            ColorChoice::Never,
+            false,
+            false,
+            40,
+        ));
+        assert_eq!(
+            narrow,
+            vec![
+                "  atelier-4fip  epic",
+                "    State: active",
+                "    Priority: high",
+                "    Title:",
+                "      Build the formatted Mission",
+                "      Overview",
+            ]
+        );
+        assert!(narrow.iter().all(|line| line.chars().count() <= 40));
     }
 
     #[test]

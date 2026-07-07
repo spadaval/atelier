@@ -63,4 +63,3 @@ Truncated: no
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.88s
      Running unittests src/lib.rs (target/debug/deps/atelier-945a47c12cf55d10)
 ```
-
