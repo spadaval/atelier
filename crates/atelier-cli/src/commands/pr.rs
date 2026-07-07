@@ -595,6 +595,7 @@ fn single_line_body(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use atelier_core::Issue;
     use atelier_sqlite::Database;
     use chrono::Utc;
@@ -614,7 +615,7 @@ mod tests {
         .unwrap();
         let db = Database::open(&db_path).unwrap();
         let now = Utc::now();
-        db.insert_issue_rebuild(&Issue {
+        db.cache_fixture_insert(&Issue {
             id: "atelier-role".to_string(),
             title: "role issue".to_string(),
             description: None,

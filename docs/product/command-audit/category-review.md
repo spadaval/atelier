@@ -8,7 +8,7 @@ implementation visibility.
 | --- | --- | --- | --- |
 | Normal workflow | `status`, `issue list`, `issue show`, `issue transition`, `work ready`, `work blocked`, `work missions`, `work mission`, `work epic`, `evidence record`, `review show`, `check` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete`, provider setup commands | Normal commands answer operator questions in domain terms and may be cited for ordinary handoff, validation, committed-state health, and terminal readiness. |
 | Admin maintenance | `init`, `check`, `check --fix`, `prune`, `prune --apply` | `issue show <objective-id>`, `issue transition`, hidden `workflow check`, hidden `diagnostics slow` | Admin commands configure or repair Atelier itself and clean explicitly supported artifacts. Hidden or destructive recovery commands are routed only when needed. |
-| Hidden debug diagnostics | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` used as a projection probe | `check`, `issue show <objective-id>`, `status` | Debug diagnostics may expose raw policy, telemetry, projection, or deterministic-renderer mechanics. They must not be normal next actions or automation contracts for selecting work. |
+| Hidden debug diagnostics | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` used as a cache probe | `check`, `issue show <objective-id>`, `status` | Debug diagnostics may expose raw policy, telemetry, domain-cache, or deterministic-renderer mechanics. They must not be normal next actions or automation contracts for selecting work. |
 | Temporary migration | `init --import-beads`, hidden/manual `import-beads`, hidden advanced `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks | Migration commands bridge inherited state or test deterministic renderers while the Markdown-first store stabilizes. They need a cleanup owner instead of compatibility promises. |
 
 ## Historical Classification (Non-Normative)
@@ -23,7 +23,7 @@ uses `work ready`, `work blocked`, `work missions`, `work mission`, and
 | Command family | Classification | Replacement or boundary | Follow-up |
 | --- | --- | --- | --- |
 | `export` / `export --check` | Hide | Keep only as deterministic-renderer diagnostics and temporary migration infrastructure. Normal health, repair, and proof use `check` or `check --fix`. | Remove when storage migration no longer needs the renderer probe. |
-| `rebuild` | Fold + Hide | Fold explicit local repair into `check --fix`; keep the callable command hidden only as an advanced projection probe. Ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
+| `rebuild` | Fold + Hide | Fold explicit local repair into `check --fix`; keep the callable command hidden only as an advanced domain-cache probe. Ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
 | `workflow check` | Fold + Hide | Fold normal policy health into `check` and transition readiness into `issue transition`; keep the callable command hidden for raw workflow-policy debugging. | No new issue. |
 | `diagnostics slow` | Keep hidden | Keep as local-only admin telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
 | `import-beads` | Fold + Hide | Fold standard predecessor migration into `init --import-beads`; keep the standalone command hidden temporarily for explicit nonstandard backup paths. | Remove after the predecessor migration window closes. |
@@ -40,10 +40,10 @@ uses `work ready`, `work blocked`, `work missions`, `work mission`, and
 Boundary decisions:
 
 - `.atelier/` canonical Markdown is the durable source of truth. Runtime,
-  projection, diagnostic, lock, and cache state is ignored checkout state.
-- Normal commands refresh projections safely when possible and report stale
-  derived state as an operator-facing health problem.
-- `check` and `check --fix` own explicit ignored runtime/cache/projection
+  domain-cache, diagnostic, lock, and other cache state is ignored checkout state.
+- Cache-backed commands repair changed record-file sources lazily and report
+  unusable cached state as an operator-facing health problem.
+- `check` and `check --fix` own explicit ignored runtime/cache
   inspection and repair and must not edit tracked canonical records.
 - If retained, `export` is hidden advanced migration or deterministic-renderer
   testing. It is not a normal health, validation, handoff, or terminal-readiness command.

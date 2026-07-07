@@ -74,7 +74,7 @@ pub fn canonical_record_kind(kind: &str) -> Result<&'static RecordKindSpec> {
         .find(|spec| spec.kind == kind && spec.canonical_dir.is_some())
     else {
         bail!(
-            "Record kind '{}' is not a canonical first-class record",
+            "Record kind '{}' is not a first-class record-file type",
             kind
         );
     };
@@ -99,7 +99,7 @@ pub fn validate_record_kind(kind: &str) -> Result<()> {
 
 pub fn canonical_record_path(spec: &RecordKindSpec, id: &str) -> Result<PathBuf> {
     let Some(dir) = spec.canonical_dir else {
-        bail!("Record kind '{}' has no canonical directory", spec.kind);
+        bail!("Record kind '{}' has no record-file directory", spec.kind);
     };
     Ok(PathBuf::from(dir).join(format!("{id}.{}", spec.extension)))
 }

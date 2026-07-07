@@ -19,17 +19,17 @@
 - Add or update CLI integration tests for user-visible command behavior.
 - Add focused database tests for schema, migration, transaction, and invariant
   changes.
-- Preserve documented authored-input and projection JSON compatibility unless a
+- Preserve documented authored-input and distinct derived JSON compatibility unless a
   migration bead or ADR explicitly changes that contract. Do not treat retired
   command-result JSON as the default automation boundary.
 
 ## Data And State
 
-- Treat SQLite as runtime state and deterministic exported files as the target
-  durable repo state.
+- Treat record files as durable repository state and SQLite as a disposable
+  domain cache.
 - Do not merge SQLite databases through Git.
-- Any canonical projection or rebuild change must define how stale exports are
-  detected.
+- Any domain-cache rebuild change must define how changed record-file sources
+  are detected and repaired.
 - Use typed links for semantic relationships; reserve dependencies for real
   sequencing.
 

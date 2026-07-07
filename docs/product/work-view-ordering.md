@@ -28,7 +28,7 @@ inside that visible set affect display order:
 - blockers outside the visible set are not inserted as phantom rows;
 - closed or done blockers do not constrain ordering;
 - hidden blockers still affect the blocked row state and compact blocker cue;
-- cycles or invalid dependency projections preserve every row and fall back to a
+- cycles or invalid cached dependency graphs preserve every row and fall back to a
   deterministic display order for the cyclic remainder.
 
 The shared order is layered after the command has chosen its scope. Parent and

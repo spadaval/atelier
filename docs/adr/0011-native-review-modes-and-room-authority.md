@@ -30,12 +30,12 @@ project, or store room summaries that drift from their event history.
    Atelier. The old review-link and provider-specific command surfaces are
    removed instead of kept as aliases.
 
-3. Native rooms are canonical tracked records.
+3. Native rooms are durable tracked records.
    A room is stored under `.atelier/reviews/<id>.yaml`. Current room state is
    derived from metadata plus ordered events, including comments, findings,
    approvals, change requests, resolutions, stale-approval invalidations, and
-   merge. Projections may index derived state, but they must not become a
-   second mutable room snapshot.
+   merge. The disposable domain cache may index selected derived room facts,
+   but it must not become a second mutable room snapshot.
 
 4. Issues link review artifacts through `review`.
    The canonical issue field is a structured `review` object. In room mode it
@@ -67,7 +67,7 @@ project, or store room summaries that drift from their event history.
   and provider review modes.
 - Validation can prove provider parity by using the `review` commands without
   keeping `pr` compatibility shims.
-- Room projections must be rebuildable from canonical YAML and event order.
+- Room cache indexes must be rebuildable from durable room YAML and event order.
 - A future GitHub or GitLab provider requires a separate provider decision; it
   is not implied by the provider mode introduced here.
 - Workflow action implementations must preserve this review boundary: they can

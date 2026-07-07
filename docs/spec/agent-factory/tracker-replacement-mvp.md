@@ -1,5 +1,12 @@
 # Agent Factory Tracker Replacement MVP
 
+> Historical replacement specification. Its `ProjectionIndex`, projection
+> refresh, export, and rebuild command descriptions record the migration plan;
+> they are not current operator guidance. Current storage behavior is defined
+> by [ADR 0017](../../adr/0017-sqlite-domain-cache-and-hard-removal.md),
+> [Markdown-First Record Store](../../architecture/markdown-first-record-store.md),
+> and [SQLite Domain Cache Schema](../../architecture/sqlite-runtime-schema.md).
+
 This document records the minimum Atelier contract used when this repository
 and Agent Factory replaced Beads for durable work tracking. It is not a Beads
 compatibility promise or the owner of the current CLI. The current command
@@ -11,11 +18,11 @@ let agents plan, start, update, validate, and hand off work without private chat
 state.
 
 Current storage architecture is superseded by
-[ADR 0002: Markdown-First Record Store](../../adr/0002-markdown-first-record-store.md).
-Historical MVP language about SQLite-to-export freshness remains useful only as
-a cutover record. It is non-normative: current work treats Markdown records as
-canonical, SQLite as ProjectionIndex plus RuntimeState, and `atelier check` as
-the normal committed-state validation surface.
+[ADR 0002: Markdown-First Record Store](../../adr/0002-markdown-first-record-store.md)
+and then by ADR 0017. Historical MVP language about projection freshness remains
+useful only as a cutover record; current work uses durable record files plus the
+lazy SQLite domain cache, with `atelier check` as the normal committed-state
+validation surface.
 
 ## Cutover Rule
 

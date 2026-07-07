@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-01T05:58:16.282366761+00:00"
+status: "done"
 title: "Specify selected-domain-fact cache schema"
-updated_at: "2026-06-23T16:21:20.072142428+00:00"
+updated_at: "2026-07-01T05:58:16.282366761+00:00"
 ---
 
 ## Description

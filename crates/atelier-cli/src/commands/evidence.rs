@@ -56,7 +56,7 @@ impl<'a> EvidenceMetadata<'a> {
 
 pub fn add_returning_id(
     state_dir: &Path,
-    db_path: &Path,
+    _db_path: &Path,
     evidence_kind: &str,
     summary: &str,
     path: Option<&str>,
@@ -94,7 +94,6 @@ pub fn add_returning_id(
     let created =
         app_use_cases::create_evidence_record(state_dir, summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 
@@ -172,7 +171,6 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
 
     let created =
         app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if let Some(target) = target {
         attach_silently(
             state_dir,
@@ -183,8 +181,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
             &target.role,
         )?;
     }
-    let db = app_use_cases::open_database(db_path)?;
-    print_record(&db, &created, options.quiet)
+    print_record_without_cache(&created, options.quiet)
 }
 
 pub fn show(db: &Database, id: &str, quiet: bool) -> Result<()> {
@@ -234,8 +231,8 @@ fn attach_impl(
     quiet: Option<bool>,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
+    canonical_evidence_record(id)?;
     let db = app_use_cases::open_database(db_path)?;
-    db.require_record(KIND, id)?;
     let target = validate_record_ref(&db, target_kind, target_id, role)?;
     drop(db);
     let inserted = app_use_cases::add_attachment_relationship(
@@ -246,11 +243,13 @@ fn attach_impl(
         target_id,
         role,
     )?;
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted && target.canonical_kind == "issue" {
-        let db = app_use_cases::open_database(db_path)?;
-        let evidence = db.require_record(KIND, id)?;
-        super::activity_log::record_evidence_attached(target_id, id, Some(&evidence.status))?;
+        let evidence = canonical_evidence_record(id)?;
+        super::activity_log::record_evidence_attached(
+            target_id,
+            id,
+            Some(&evidence.header.status),
+        )?;
     }
     let Some(quiet) = quiet else {
         return Ok(());
@@ -407,9 +406,24 @@ fn bounded_list_text(value: &str) -> String {
 
 pub fn print_record(db: &Database, record: &EvidenceRecord, quiet: bool) -> Result<()> {
     let data = evidence_record_data(record);
+    let targets = format_targets(db, &record.header.id, &data)?;
+    print_record_with_targets(record, data, targets, quiet)
+}
+
+pub fn print_record_without_cache(record: &EvidenceRecord, quiet: bool) -> Result<()> {
+    let data = evidence_record_data(record);
+    let targets = format_data_target(&data).into_iter().collect();
+    print_record_with_targets(record, data, targets, quiet)
+}
+
+fn print_record_with_targets(
+    record: &EvidenceRecord,
+    data: EvidenceRecordData,
+    targets: Vec<String>,
+    quiet: bool,
+) -> Result<()> {
     if quiet {
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = format_targets(db, &record.header.id, &data)?;
         let targets = if targets.is_empty() {
             "(none)".to_string()
         } else {
@@ -440,7 +454,6 @@ pub fn print_record(db: &Database, record: &EvidenceRecord, quiet: bool) -> Resu
     if let Some(exit_status) = data.exit_status.as_deref() {
         println!("Exit Status: {exit_status}");
     }
-    let targets = format_targets(db, &record.header.id, &data)?;
     if !targets.is_empty() {
         println!("Target:      {}", targets.join(", "));
     }
@@ -711,7 +724,7 @@ fn quote_command_arg(arg: &str) -> String {
 
 fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Cannot locate canonical Atelier state directory");
+        bail!("Cannot locate Atelier record-file directory");
     };
     app_use_cases::load_canonical_evidence(&state_dir, id)
 }

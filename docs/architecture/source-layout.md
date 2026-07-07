@@ -18,7 +18,7 @@ behind the lower target crate boundary.
 | `atelier-core` | Shared domain types, record IDs, typed relationships, workflow status/category vocabulary, and pure formatting helpers that do not touch the filesystem, SQLite, Clap, or Git. | External pure utility crates only. |
 | `atelier-workflow` | Repository-owned workflow policy loading, transition validation, readiness checks, and guidance text evaluation. | `atelier-core`. |
 | `atelier-records` | Canonical `.atelier/` Markdown record discovery, parsing, deterministic rendering, ID allocation, relationship rendering, activity sidecar schema/IO, and atomic tracked-file mutation. | `atelier-core`, `atelier-workflow` when validation needs workflow policy. |
-| `atelier-sqlite` | Rebuildable SQLite `ProjectionIndex` schema/query code for projection freshness and graph/search/list/status queries. It may project enough metadata to filter and order results, but it must not own canonical activity sidecar reads or writes. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
+| `atelier-sqlite` | Rebuildable SQLite domain-cache schema, source-freshness metadata, domain indexers, and graph/search/list/status queries. It may cache enough metadata to filter and order results, but it must not own durable activity sidecar reads or writes. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
 | `atelier-app` | Use-case orchestration for mission, issue, issue-note/activity, evidence, workflow, status, doctor, export, lint, worktree, branch, and rebuild operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`, `atelier-sqlite`. |
 | `atelier-cli` | The `atelier` binary, Clap parser, command dispatch telemetry, terminal rendering, process exit mapping, and CLI-only transcript formatting. | `atelier-app`, plus lower crates only for types explicitly re-exported by `atelier-app` contracts. |
 
@@ -62,7 +62,7 @@ callers can render or apply.
 
 `atelier-app` owns orchestration around those workflow APIs. It chooses when to
 load policy for a use case, combines workflow results with RecordStore writes,
-ProjectionIndex queries, Git/worktree checks, evidence lookup, lint/export
+domain-cache queries, Git/worktree checks, evidence lookup, lint/export
 checks, and mission readiness, then returns request/outcome/view-model structs.
 It may not duplicate workflow policy tables, hard-code status categories, or
 reimplement transition availability rules as a parallel source of truth.
@@ -120,7 +120,7 @@ When it validates or defaults a status during record creation or bundle apply,
 it should ask `atelier-workflow` for the configured initial status and status
 catalog instead of using a local lifecycle constant.
 
-`atelier-sqlite` owns rebuildable projection fields used for filtering and
+`atelier-sqlite` owns rebuildable cache fields used for filtering and
 ordering. It may store status strings and indexed relationships, but category
 classification and transition readiness remain workflow/app questions. SQLite
 queries should not decide whether a transition is allowed.
@@ -163,7 +163,7 @@ classified as not an adapter because it is target-state code.
 | `crates/atelier-cli/src/models.rs`, `crates/atelier-cli/src/record_id.rs`, pure shared helpers | `atelier-core` |
 | `crates/atelier-cli/src/workflow_policy.rs`, `crates/atelier-cli/src/commands/issue_workflow.rs`, `crates/atelier-cli/src/commands/workflow.rs` policy internals | `atelier-workflow` |
 | `crates/atelier-cli/src/record_store.rs`, `crates/atelier-cli/src/record_store/` | `atelier-records` |
-| `crates/atelier-cli/src/projection_index.rs`, `crates/atelier-cli/src/db/`, projection/rebuild storage internals | `atelier-sqlite` |
+| `crates/atelier-sqlite/src/cache.rs`, remaining legacy-named cache modules, and cache/rebuild storage internals | `atelier-sqlite` |
 | `crates/atelier-cli/src/commands/*.rs` use-case logic, doctor/lint/export/status orchestration | `atelier-app` |
 | `crates/atelier-cli/src/main.rs`, Clap definitions, terminal output, command-surface tracing | `atelier-cli` |
 

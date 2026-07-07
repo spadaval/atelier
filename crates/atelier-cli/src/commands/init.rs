@@ -1,8 +1,6 @@
 use anyhow::Result;
 use std::path::Path;
 
-use atelier_sqlite::Database;
-
 pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
     let outcome = atelier_app::init::initialize(atelier_app::Request {
         input: atelier_app::init::InitRequest {
@@ -20,9 +18,7 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
             input_path,
             state_dir,
         }) => {
-            let db_path = atelier_app::storage_layout::StorageLayout::new(path).runtime_db_path();
-            let db = Database::open(&db_path)?;
-            crate::commands::import::run_beads_jsonl(&db, input_path, state_dir)?;
+            crate::commands::import::run_beads_jsonl(input_path, state_dir)?;
         }
         Some(atelier_app::init::BeadsImportView::Available { input_path }) => {
             println!(
@@ -45,6 +41,8 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
+    use atelier_sqlite::Database;
     use std::fs;
     use tempfile::tempdir;
 
@@ -187,7 +185,9 @@ project_slug = "custom"
         let db = Database::open(&db_path).unwrap();
 
         // Should be able to create an issue
-        let id = db.create_issue("Test issue", None, "medium").unwrap();
+        let id = db
+            .cache_fixture_issue("Test issue", None, "medium")
+            .unwrap();
         assert!(!id.is_empty());
     }
 

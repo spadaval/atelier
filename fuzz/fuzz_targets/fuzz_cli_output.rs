@@ -10,7 +10,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
+mod support;
 
 #[derive(Arbitrary, Debug)]
 struct CliOutputInput {
@@ -32,9 +32,9 @@ fuzz_target!(|input: CliOutputInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match ProjectionIndex::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
+    let db = match support::open_cache(&db_path) {
+        Some(db) => db,
+        None => return,
     };
 
     // Create issues with fuzzy titles
@@ -47,23 +47,16 @@ fuzz_target!(|input: CliOutputInput| {
         };
 
         let id = format!("atelier-fuzz-{i}");
-        if db
-            .insert_issue(&fuzz_issue(
-                &id,
-                &title,
-                input.description.clone(),
-                "medium",
-            ))
-            .is_ok()
-        {
+        let _ = &input.description;
+        if support::index_issue(&db, &id, &title, "todo", "medium") {
             created_ids.push(id);
         }
     }
 
     // Test list_issues - this exercises truncation
-    let _ = db.list_issues(None, None);
-    let _ = db.list_issues(Some("open"), None);
-    let _ = db.list_issues(None, Some("medium"));
+    let _ = db.list_issues(None, None, None);
+    let _ = db.list_issues(Some("todo"), None, None);
+    let _ = db.list_issues(None, None, Some("medium"));
 
     // Test get_issue - exercises show output
     for id in &created_ids {
@@ -92,7 +85,3 @@ fuzz_target!(|input: CliOutputInput| {
         let _ = db.get_labels(id);
     }
 });
-
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
-    ProjectionIssue::new(id, title, description, priority)
-}

@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted.
+Superseded for persistence and query-cache behavior by
+[ADR 0017](0017-sqlite-domain-cache-and-hard-removal.md). This ADR remains as
+historical rationale for choosing tracked Markdown record files. References
+below to `ProjectionIndex`, projection refresh, and canonical mutations describe
+the pre-0017 design and are not current implementation guidance.
 
 ## Context
 

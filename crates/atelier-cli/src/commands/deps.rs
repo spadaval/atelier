@@ -93,6 +93,7 @@ fn blocked_list_row(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_support::DomainCacheFixture;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -115,8 +116,10 @@ mod tests {
     #[test]
     fn test_list_blocked_with_issues() {
         let (db, _dir) = setup_test_db();
-        let issue1 = db.create_issue("Blocked issue", None, "medium").unwrap();
-        let issue2 = db.create_issue("Blocker", None, "medium").unwrap();
+        let issue1 = db
+            .cache_fixture_issue("Blocked issue", None, "medium")
+            .unwrap();
+        let issue2 = db.cache_fixture_issue("Blocker", None, "medium").unwrap();
         db.add_dependency(&issue1, &issue2).unwrap();
 
         list_blocked(&db, false).unwrap();
@@ -128,9 +131,9 @@ mod tests {
     #[test]
     fn test_list_blocked_multiple_blockers() {
         let (db, _dir) = setup_test_db();
-        let blocked = db.create_issue("Blocked", None, "medium").unwrap();
-        let blocker1 = db.create_issue("Blocker 1", None, "medium").unwrap();
-        let blocker2 = db.create_issue("Blocker 2", None, "medium").unwrap();
+        let blocked = db.cache_fixture_issue("Blocked", None, "medium").unwrap();
+        let blocker1 = db.cache_fixture_issue("Blocker 1", None, "medium").unwrap();
+        let blocker2 = db.cache_fixture_issue("Blocker 2", None, "medium").unwrap();
         db.add_dependency(&blocked, &blocker1).unwrap();
         db.add_dependency(&blocked, &blocker2).unwrap();
 
@@ -144,8 +147,8 @@ mod tests {
     #[test]
     fn test_list_ready_excludes_blocked() {
         let (db, _dir) = setup_test_db();
-        let blocked = db.create_issue("Blocked", None, "high").unwrap();
-        let blocker = db.create_issue("Blocker", None, "medium").unwrap();
+        let blocked = db.cache_fixture_issue("Blocked", None, "high").unwrap();
+        let blocker = db.cache_fixture_issue("Blocker", None, "medium").unwrap();
         db.add_dependency(&blocked, &blocker).unwrap();
 
         let ready = db.list_ready_issues().unwrap();
@@ -156,8 +159,10 @@ mod tests {
     #[test]
     fn test_list_ready_excludes_closed() {
         let (db, _dir) = setup_test_db();
-        let issue = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(&issue).unwrap();
+        let issue = db
+            .cache_fixture_issue("Closed issue", None, "medium")
+            .unwrap();
+        db.cache_fixture_close(&issue).unwrap();
 
         let ready = db.list_ready_issues().unwrap();
         assert!(!ready.iter().any(|i| i.id == issue));
@@ -166,8 +171,8 @@ mod tests {
     #[test]
     fn test_closing_blocker_unblocks() {
         let (db, _dir) = setup_test_db();
-        let blocked = db.create_issue("Blocked", None, "high").unwrap();
-        let blocker = db.create_issue("Blocker", None, "medium").unwrap();
+        let blocked = db.cache_fixture_issue("Blocked", None, "high").unwrap();
+        let blocker = db.cache_fixture_issue("Blocker", None, "medium").unwrap();
         db.add_dependency(&blocked, &blocker).unwrap();
 
         // Blocked issue should not be ready
@@ -175,7 +180,7 @@ mod tests {
         assert!(!ready.iter().any(|i| i.id == blocked));
 
         // Close the blocker
-        db.close_issue(&blocker).unwrap();
+        db.cache_fixture_close(&blocker).unwrap();
 
         // Now blocked issue should be ready
         let ready = db.list_ready_issues().unwrap();

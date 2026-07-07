@@ -2,7 +2,7 @@
 
 Atelier records command telemetry as local diagnostics, not as durable project
 records. The diagnostics store exists to help operators find slow commands,
-failed workflows, and stale projections without making agent sessions or raw
+failed workflows, and stale cache-backed reads without making agent sessions or raw
 command interactions part of committed `.atelier/` records.
 
 This policy unblocks command instrumentation while keeping
@@ -260,11 +260,11 @@ successes, failures, disabled diagnostics, redaction behavior, and slow-command
 queries can be tested without special-case command paths.
 
 Phase timings are optional per command. When available, use stable snake_case
-keys such as `parse_ms`, `load_state_ms`, `projection_check_ms`,
+keys such as `parse_ms`, `load_state_ms`, `cache_check_ms`,
 `record_write_ms`, `sqlite_write_ms`, `export_check_ms`, and
 `render_output_ms`. Unknown future keys are allowed, but values must remain
 non-negative integer millisecond durations.
 
 The event writer should be isolated from canonical record writes. It must never
-hold a transaction or lock required by `RecordStore`, `ProjectionIndex`, or
+hold a transaction or lock required by `RecordStore`, `CacheManager`, or
 runtime work association while performing diagnostics IO.

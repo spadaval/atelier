@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T21:01:57.029624179+00:00"
+status: "done"
 title: "Validate lazy cache behavior for batch writes"
-updated_at: "2026-06-23T16:21:20.083529820+00:00"
+updated_at: "2026-07-06T21:01:57.029624179+00:00"
 ---
 
 ## Description
@@ -26,4 +27,11 @@ Add regression coverage showing relationship-heavy batch writes do not rebuild t
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Independent scenario evidence `atelier-x1d1` and transcript
+  `/tmp/atelier-mska-m7za-transcript.txt` prove that a relationship-heavy
+  `bundle apply` left `state.db` byte-for-byte unchanged, stale state was
+  detectable, and the next cache-backed query performed exactly one repair and
+  returned the correct mission, parent, blocker, and evidence relationships.
+- Test evidence `atelier-vj0b` records 67/67 focused cache tests passing. The
+  448-test CLI inventory contains no ignored tests, so no ignored or skipped
+  test is used as proof.

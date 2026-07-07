@@ -1488,17 +1488,19 @@ fn test_issue_show_reads_detail_body_from_record_store() {
         text.replace("No description provided.", "Canonical Markdown body")
     });
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    conn.execute(
-        "UPDATE issues SET description = 'SQLite shadow body' WHERE id = ?1",
-        [&issue_id],
-    )
-    .unwrap();
+    let obsolete_table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'issues'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(obsolete_table_count, 0);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Canonical Markdown body"));
-    assert!(!stdout.contains("SQLite shadow body"));
 }
 
 #[test]
@@ -1535,16 +1537,26 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     assert!(stdout.contains(edited_evidence), "{stdout}");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let projected_text: String = conn
+    let cached_title: String = conn
         .query_row(
-            "SELECT description FROM issues WHERE id = ?1",
+            "SELECT title FROM issue_index WHERE id = ?1",
             [&issue_id],
             |row| row.get(0),
         )
         .unwrap();
-    assert!(projected_text.contains(edited_body));
-    assert!(!projected_text.contains(edited_outcome));
-    assert!(!projected_text.contains("## Description"));
+    assert!(!cached_title.is_empty());
+    let body_columns: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('issue_index')
+             WHERE name IN ('description', 'body', 'outcome', 'fields_json')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        body_columns, 0,
+        "detail bodies must remain record-file sourced"
+    );
 }
 
 #[test]
@@ -1583,23 +1595,19 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Canonical evidence summary");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    conn.execute(
-        "UPDATE records SET title = 'SQLite mission title', status = 'sqlite_status' WHERE id = ?1",
-        [mission_id.as_str()],
-    )
-    .unwrap();
-    conn.execute(
-        "UPDATE records SET title = 'SQLite evidence title', status = 'sqlite_status' WHERE id = ?1",
-        [evidence_id.as_str()],
-    )
-    .unwrap();
+    let obsolete_table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('records', 'record_labels', 'record_links')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(obsolete_table_count, 0);
 
     let (success, mission_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("Canonical mission body"));
     assert!(mission_out.contains("Canonical constraint"));
-    assert!(!mission_out.contains("SQLite mission title"));
-    assert!(!mission_out.contains("sqlite_status"));
 
     let (success, evidence_out, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
@@ -1607,7 +1615,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(evidence_out.contains("Canonical evidence summary"));
     assert!(evidence_out.contains("Status:      recorded"));
     assert!(evidence_out.contains("Kind:        test"));
-    assert!(!evidence_out.contains("SQLite evidence summary"));
     assert!(!evidence_out.contains("Kind:        sqlite"));
 
     for args in [
@@ -1721,7 +1728,7 @@ fn test_history_repo_wide_is_bounded_and_routes_to_issue_drill_downs() {
     assert!(success, "history failed: {stderr}");
     assert!(stdout.contains("History"));
     assert!(stdout.contains("Scope:          repository"));
-    assert!(stdout.contains("Source:         canonical .atelier"));
+    assert!(stdout.contains("Source:         durable .atelier"));
     assert!(stdout.contains("Ordering:       newest first"));
     assert!(!stdout.contains("Filters:"));
     assert!(stdout.contains("Showing:        1 of"));
@@ -1871,7 +1878,7 @@ fn test_history_empty_states_and_invalid_limit() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
     assert!(success, "empty history failed: {stderr}");
-    assert!(stdout.contains("No canonical history found for repository."));
+    assert!(stdout.contains("No durable history found for repository."));
     assert!(stdout.contains("Source:"));
     assert!(stdout.contains("Next Commands"));
 
@@ -2084,8 +2091,46 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(
         fresh,
-        "export --check validates canonical Markdown/projection state, not SQLite-only drift: {fresh_err}"
+        "export --check validates record Markdown/cache state, not SQLite-only drift: {fresh_err}"
     );
+}
+
+#[test]
+fn test_import_beads_late_invalid_record_is_failure_atomic_and_retryable() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let import_path = dir.path().join("late-invalid.jsonl");
+    let invalid = concat!(
+        r#"{"_type":"issue","id":"first","title":"First","status":"open","priority":2,"issue_type":"task","notes":"first note"}"#,
+        "\n",
+        r#"{"_type":"issue","id":"second","title":"Second","status":"open","priority":2,"issue_type":"invalid type"}"#,
+        "\n"
+    );
+    std::fs::write(&import_path, invalid).unwrap();
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
+    assert!(!success, "late-invalid import unexpectedly succeeded");
+    assert!(stderr.contains("Invalid issue_type"), "{stderr}");
+    for id in ["atelier-0001", "atelier-0002"] {
+        assert!(!dir.path().join(format!(".atelier/issues/{id}.md")).exists());
+        assert!(!dir
+            .path()
+            .join(format!(".atelier/issues/{id}.activity"))
+            .exists());
+    }
+
+    std::fs::write(&import_path, invalid.replace("invalid type", "task")).unwrap();
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
+    assert!(success, "clean retry failed: {stderr}");
+    assert!(stdout.contains("imported issues: 2"), "{stdout}");
+    assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
+    assert!(dir.path().join(".atelier/issues/atelier-0002.md").exists());
+    assert!(dir
+        .path()
+        .join(".atelier/issues/atelier-0001.activity")
+        .is_dir());
 }
 
 // ==================== Issue Delete Tests ====================
@@ -2164,8 +2209,8 @@ fn test_issue_mutations_create_activity_sidecars() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Activity issue");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     for (kind, body) in [
         ("human", "Plain comment body"),
@@ -2275,8 +2320,8 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Rebuild activity"]);
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Rebuild activity");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2345,7 +2390,8 @@ fn test_issue_create_is_durable_without_manual_export() {
     let issue_id = issue_id_by_title(dir.path(), "Create-only durable");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after create: {stderr}");
+    assert!(!success, "create should leave the disposable cache stale");
+    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2359,7 +2405,7 @@ fn test_issue_create_is_durable_without_manual_export() {
 }
 
 #[test]
-fn test_issue_mutations_are_durable_without_manual_export() {
+fn test_issue_mutations_leave_stale_cache_for_one_lazy_repair() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2397,11 +2443,8 @@ fn test_issue_mutations_are_durable_without_manual_export() {
     }
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed before rebuild: {stderr}");
-
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
+    assert!(!success, "mutations should leave the cache stale");
+    assert!(stderr.contains("cache:"), "{stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
@@ -2409,6 +2452,9 @@ fn test_issue_mutations_are_durable_without_manual_export() {
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("keep-me"));
     assert!(stdout.contains(&target_id));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "cache should be fresh after lazy query: {stderr}");
 
     let source_text = read_canonical_record(dir.path(), "issues", &source_id);
     assert!(!source_text.contains("- \"remove-me\""));
@@ -2627,7 +2673,8 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
     );
     assert!(success, "issue link failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after issue link: {stderr}");
+    assert!(!success, "issue link should leave the cache stale");
+    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2649,7 +2696,8 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
     );
     assert!(success, "issue unlink failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after issue unlink: {stderr}");
+    assert!(!success, "issue unlink should leave the cache stale");
+    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2971,8 +3019,8 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
     assert!(success, "issue type update failed: {stderr}");
     assert!(stdout.contains("Type:     epic"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);

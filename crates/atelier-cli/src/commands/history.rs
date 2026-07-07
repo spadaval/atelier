@@ -10,7 +10,7 @@ use atelier_sqlite::{Database, RecordSummary};
 pub const DEFAULT_LIMIT: usize = 20;
 
 const SOURCE_BOUNDARY: &str =
-    "canonical .atelier issue activity, records, evidence, status roles, review artifacts, and record links; local runtime diagnostics excluded";
+    "durable .atelier issue activity, records, evidence, status roles, review artifacts, and record links; local runtime diagnostics excluded";
 
 #[derive(Debug, Clone)]
 pub struct HistoryOptions {
@@ -360,8 +360,8 @@ fn render_history(
     println!("Limit:          {}", options.limit);
 
     if rows.is_empty() {
-        println!("\nNo canonical history found for {}.", scope.label);
-        println!("This scope has no canonical activity, records, evidence, or links yet.");
+        println!("\nNo durable history found for {}.", scope.label);
+        println!("This scope has no durable activity, records, evidence, or links yet.");
         print_next_commands(&scope.next_commands);
         return Ok(());
     }

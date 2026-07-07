@@ -14,9 +14,9 @@ Markdown records, not from ignored runtime work associations.
 ## Context
 
 Atelier inherits Chainlink lock and sync machinery. That machinery is useful for
-some local coordination, but the target product now has canonical Markdown
-records, rebuildable SQLite projection state, explicit work lifecycle commands,
-and Git worktree helpers.
+some local coordination, but the target product now has durable Markdown record
+files, a rebuildable disposable SQLite domain cache, explicit work lifecycle
+commands, and Git worktree helpers.
 
 Normal agent workflow needs to know which issue slices are in progress in the
 current checkout, which mission worktree and epic branch contain the changes,
@@ -38,9 +38,9 @@ ergonomic path:
 - keep Git as the source of truth for branches, commits, and worktrees;
 - reject dirty source worktrees where the workflow action depends on a clean
   repository;
-- check canonical tracker health through `atelier check`, repairing only
-  ignored runtime/cache/projection state through `atelier check --fix` when
-  needed;
+- check record-file tracker health and local cache health through
+  `atelier check`, using `atelier check --fix` only for ignored local cache
+  repair before closeout;
 - never launch or supervise coding agents.
 
 Explicit branch helpers are advanced diagnostics and repair surfaces. They do
@@ -49,11 +49,11 @@ available lifecycle route, and the selected transition executes configured
 workflow branch actions such as `git.prepare_branch` on the recorded work
 branch and branch base.
 
-Ignored runtime tables may cache diagnostics or projection state, but runtime
-`work_associations`, hidden claims, sessions, and active pointers are not
-durable current-work source-of-truth surfaces. A fresh checkout can rebuild the
-projection and recover current-work orientation from tracked `.atelier/`
-records plus Git context.
+Ignored runtime tables may cache diagnostics or selected domain facts, but
+runtime `work_associations`, hidden claims, sessions, and active pointers are
+not durable current-work source-of-truth surfaces. A fresh checkout can rebuild
+the disposable domain cache and recover current-work orientation from tracked
+`.atelier/` record files plus Git context.
 
 Inherited lock and sync commands are removed from the CLI surface. Internal
 lock-checking helpers may remain only where core workflow code still needs
@@ -76,9 +76,9 @@ worktree command.
 
 - Work lifecycle behavior stays understandable as Git plus canonical issue
   workflow status.
-- A fresh mission worktree can rebuild projection state from tracked
-  `.atelier/` records and recover its current-work set without hidden runtime
-  associations.
+- A fresh mission worktree can rebuild the domain cache from tracked
+  `.atelier/` record files and recover its current-work set without hidden
+  runtime associations.
 - Advanced/manual coordination needs a new explicit core proposal rather than a
   hidden inherited command.
 - Mission Control can project branch/worktree orientation separately from locks.
