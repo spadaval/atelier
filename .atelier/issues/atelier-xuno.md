@@ -4,6 +4,15 @@ id: "atelier-xuno"
 issue_type: "task"
 labels:
 - "lifecycle"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-xuno
+    owner_kind: issue
+    review_target: master
+    work_branch: task/atelier-xuno
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Reconcile post-publication mission attribution"
-updated_at: "2026-07-07T05:25:40.335690417+00:00"
+updated_at: "2026-07-07T05:27:22.487130869+00:00"
 ---
 
 ## Description
