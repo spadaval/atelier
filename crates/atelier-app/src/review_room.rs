@@ -3,14 +3,14 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
-use atelier_core::{Record, RecordHeader, Relationships, ReviewRecord};
+use atelier_core::{IssueReview, RecordHeader, Relationships, ReviewRecord};
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
 use serde_json::{json, Value};
 
 use crate::project_config::{ProjectConfig, ReviewConfig};
-use crate::workflow_policy::{self, REVIEW_FIELD};
+use crate::workflow_policy;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RoomOpenRequest<'a> {
@@ -137,20 +137,18 @@ pub fn open(db: &Database, request: RoomOpenRequest<'_>) -> Result<RoomOpenOutco
         || request.target_branch != resolution.base_branch
     {
         bail!(
-            "review_room_branch_mismatch: requested room branches are {} -> {}, but issue {} expects {} -> {}; rerun `atelier review open --issue {} --source-branch {} --target-branch {}`",
+            "review_room_branch_mismatch: requested room branches are {} -> {}, but issue {} expects {} -> {}; `atelier review open --issue {}` derives these branches from workflow state",
             request.source_branch,
             request.target_branch,
             resolution.owner_id,
             resolution.expected_branch,
             resolution.base_branch,
-            resolution.owner_id,
-            resolution.expected_branch,
-            resolution.base_branch
+            resolution.owner_id
         );
     }
     if workflow_policy::effective_review_field(db, &issue_id)?.is_some() {
         bail!(
-            "review_room_active: issue {} already has a linked review artifact; inspect `atelier review status --issue {}` before opening another review",
+            "review_room_active: issue {} already has a linked review artifact; inspect `atelier review show --issue {}` before opening another review",
             resolution.owner_id,
             resolution.owner_id
         );
@@ -183,19 +181,14 @@ pub fn open(db: &Database, request: RoomOpenRequest<'_>) -> Result<RoomOpenOutco
             None,
         )],
     };
-    store.write_record_atomic(&Record::Review(record))?;
+    store.write_review_atomic(&record)?;
 
     let mut owner = store.load_issue_by_id(&resolution.owner_id)?;
-    owner.issue.fields.insert(
-        REVIEW_FIELD.to_string(),
-        json!({
-            "kind": "room",
-            "id": review_id,
-        }),
-    );
+    owner
+        .issue
+        .set_review(IssueReview::room(review_id.clone())?);
     owner.issue.updated_at = Utc::now();
     store.write_issue_atomic(&owner)?;
-    crate::projection::refresh_after_canonical_write(request.state_dir, request.db_path)?;
 
     Ok(RoomOpenOutcome {
         issue_id,
@@ -416,22 +409,15 @@ fn append_decision(
     })
 }
 
-fn write_room(state_dir: &Path, db_path: &Path, record: ReviewRecord) -> Result<()> {
+fn write_room(state_dir: &Path, _db_path: &Path, record: ReviewRecord) -> Result<()> {
     let mut record = record;
     record.header.updated_at = Utc::now();
-    RecordStore::new(state_dir).write_record_atomic(&Record::Review(record))?;
-    crate::projection::refresh_after_canonical_write(state_dir, db_path)
+    RecordStore::new(state_dir).write_review_atomic(&record)
 }
 
 fn linked_room(db: &Database, state_dir: &Path, issue_id: &str) -> Result<ReviewRecord> {
     let review_id = linked_room_id(db, issue_id)?;
-    match RecordStore::new(state_dir).load_record_by_id("review", &review_id)? {
-        Record::Review(record) => Ok(record),
-        other => bail!(
-            "review_room_invalid: expected review record, found {}",
-            other.kind()
-        ),
-    }
+    RecordStore::new(state_dir).load_review_by_id(&review_id)
 }
 
 fn linked_room_id(db: &Database, issue_id: &str) -> Result<String> {
@@ -442,13 +428,12 @@ fn linked_room_id(db: &Database, issue_id: &str) -> Result<String> {
             issue_id
         )
     })?;
-    field
-        .as_object()
-        .filter(|object| object.get("kind").and_then(Value::as_str) == Some("room"))
-        .and_then(|object| object.get("id"))
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| anyhow!("review_mode_invalid: linked review field is not a native room"))
+    match IssueReview::from_value(&field) {
+        Ok(IssueReview::Room { id }) => Ok(id),
+        Ok(IssueReview::ForgejoPullRequest { .. }) | Err(_) => Err(anyhow!(
+            "review_mode_invalid: linked review field is not a native room"
+        )),
+    }
 }
 
 fn status_for_record(issue_id: String, record: &ReviewRecord) -> RoomStatusOutcome {
@@ -692,6 +677,7 @@ fn current_actor() -> String {
 mod tests {
     use super::*;
     use atelier_core::{Issue, IssueSections};
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
     use tempfile::tempdir;
 
     fn setup_repo() -> (tempfile::TempDir, Database) {
@@ -742,7 +728,7 @@ mode = "room"
         parent_id: Option<&str>,
     ) {
         let now = Utc::now();
-        db.insert_issue_rebuild(&Issue {
+        let issue = Issue {
             id: id.to_string(),
             title: id.to_string(),
             description: Some("body".to_string()),
@@ -754,10 +740,36 @@ mode = "room"
             created_at: now,
             updated_at: now,
             closed_at: None,
-        })
+        };
+        db.index_issue(
+            &IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title.clone(),
+                status: issue.status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                fields: issue.fields.clone(),
+                parent_id: issue.parent_id.clone(),
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{id}.md"),
+                record_kind: "issue".to_string(),
+                record_id: id.to_string(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
+        )
         .unwrap();
         let record = atelier_records::CanonicalIssueRecord {
-            issue: db.require_issue(id).unwrap(),
+            issue,
             labels: Vec::new(),
             sections: IssueSections::unchecked_from_body(Some(
                 "## Description\n\nbody\n\n## Outcome\n\nworks\n\n## Evidence\n\nproof",
@@ -790,6 +802,20 @@ mode = "room"
         )
         .unwrap();
         assert_eq!(open.status, "open");
+        let store = RecordStore::new(&state_dir);
+        let owner = store.load_issue_by_id("atelier-issue").unwrap();
+        assert_eq!(
+            owner.issue.review().unwrap(),
+            Some(IssueReview::Room {
+                id: open.review_id.clone()
+            })
+        );
+        assert_eq!(
+            store.load_review_by_id(&open.review_id).unwrap().issue_id,
+            "atelier-issue"
+        );
+        drop(db);
+        crate::rebuild::run(&state_dir, &db_path).unwrap();
         let db = Database::open(&db_path).unwrap();
         let finding = comment(
             &db,

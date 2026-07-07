@@ -2,7 +2,7 @@
 
 Atelier records command telemetry as local diagnostics, not as durable project
 records. The diagnostics store exists to help operators find slow commands,
-failed workflows, and stale projections without making agent sessions or raw
+failed workflows, and stale cache-backed reads without making agent sessions or raw
 command interactions part of committed `.atelier/` records.
 
 This policy unblocks command instrumentation while keeping
@@ -200,7 +200,7 @@ future tools that summarize command behavior. It is not the contract for normal
 project operation.
 
 Normal mission, issue, validation, and terminal workflows must use
-human-oriented operator surfaces: `atelier status`, `atelier issue status
+human-oriented operator surfaces: `atelier status`, `atelier issue show
 <objective-id>`, `atelier issue transition <id> --options`, `atelier check`,
 `atelier check`, and `atelier evidence record`. Agents and scripts must not
 parse diagnostics JSON to choose ready work, decide blockers, prove validation,
@@ -212,7 +212,7 @@ and performance follow-up work. It must not appear in ordinary Agent Factory or
 operator recipes for mission selection, issue readiness, blocker triage,
 validation proof, evidence coverage, or closeout readiness.
 
-## Slow Command Query Defaults
+## Hidden Diagnostic: Slow Command Query Defaults
 
 The slow-command query surface owned by follow-up work should read local event
 logs and produce stable JSON summaries. The default query window is the last
@@ -260,11 +260,11 @@ successes, failures, disabled diagnostics, redaction behavior, and slow-command
 queries can be tested without special-case command paths.
 
 Phase timings are optional per command. When available, use stable snake_case
-keys such as `parse_ms`, `load_state_ms`, `projection_check_ms`,
+keys such as `parse_ms`, `load_state_ms`, `cache_check_ms`,
 `record_write_ms`, `sqlite_write_ms`, `export_check_ms`, and
 `render_output_ms`. Unknown future keys are allowed, but values must remain
 non-negative integer millisecond durations.
 
 The event writer should be isolated from canonical record writes. It must never
-hold a transaction or lock required by `RecordStore`, `ProjectionIndex`, or
+hold a transaction or lock required by `RecordStore`, `CacheManager`, or
 runtime work association while performing diagnostics IO.

@@ -4,6 +4,12 @@ Primary role: Worker.
 
 Primary question: "Which existing Atelier commands matter for my current role?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Which commands matter for my current role? | Worker | Low when guides are short and role-specific. | Small guidance renderer over current tracker state. | Keep | Keep exact roles and ranked loops; do not add role aliases or diagnostic detours. |
+
 ## Assessment
 
 - Name: Correct. `man` is a guide layer, not a new command namespace.

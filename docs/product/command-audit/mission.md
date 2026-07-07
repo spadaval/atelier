@@ -1,7 +1,7 @@
 # Retired `atelier mission`
 
-Primary role: Retired namespace; current objective coordination uses
-mission-typed issue records plus `work mission` dashboards.
+`atelier mission` is removed. A mission is a typed issue record, not a parallel
+command namespace.
 
 Primary question: "How do I create, focus, inspect, coordinate, and close a
 durable mission?"

@@ -5,6 +5,12 @@ Primary role: Manager/orchestrator.
 Primary question: "How do I preview and apply a reviewed batch of mission,
 issue, relationship, and evidence records?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I apply a reviewed batch safely? | Manager/orchestrator | Low when preview and explicit apply stay paired. | Bounded graph parsing and record writes. | Keep | Keep one-shot `preview` and confirmed `apply`; do not add plan CRUD. |
+
 ## Assessment
 
 - Name: Correct. `bundle` is a better product term than resurrecting

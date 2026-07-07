@@ -5,6 +5,12 @@ Primary role: Manager/orchestrator.
 Primary question: "How do I create, list, inspect, mutate, and advance
 accountable issue work, including objective records that replace missions?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I manage accountable issue work? | Shared: worker, reviewer, manager/orchestrator | One noun lowers command choice; a broad family needs role guidance. | Shared issue lifecycle and relationship ownership avoid parallel namespaces. | Keep | Keep reads, mutations, and transitions under `issue`; keep `list` inventory-shaped. |
+
 `issue` is intentionally shared by roles. The root noun is correct because the
 command owns issue records and issue workflow state, not a single user persona.
 `issue create` and `issue transition` belong in this family because both are
@@ -83,7 +89,7 @@ must name the surviving status, category, issue-type, label, priority, limit,
 and quiet forms, and route ready/blocked selection to `work ready` and `work
 blocked`. Do not compensate by making `work queue` the generic inventory owner.
 
-`atelier issue --help` must also avoid implying an `issue close` subcommand.
+`atelier issue --help` must also avoid implying a direct closure subcommand.
 Closure is intentionally owned by `issue transition <id> close --reason`.
 
 ## Human Output Debt

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::project_config::ForgejoConfig;
 
@@ -213,14 +214,36 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
     pub fn review_comments(&self, number: u64) -> Result<Vec<ForgejoReviewComment>> {
         let response = self.send(ForgejoRequest {
             method: "GET",
-            path: self.repo_path(&format!("pulls/{number}/reviews/comments")),
-            query: Vec::new(),
+            path: self.repo_path(&format!("pulls/{number}/reviews")),
+            query: vec![("limit".to_string(), "50".to_string())],
             headers: BTreeMap::new(),
             body: None,
         })?;
-        serde_json::from_str::<Vec<ReviewCommentResponse>>(&response.body)
-            .map(|comments| comments.into_iter().map(Into::into).collect())
-            .context("forgejo_api_error: failed to parse pull request review comments response")
+        let reviews = serde_json::from_str::<Vec<ReviewCommentOwnerResponse>>(&response.body)
+            .context("forgejo_api_error: failed to parse pull request reviews response")?;
+        let mut comments = Vec::new();
+        for review in reviews
+            .into_iter()
+            .filter(|review| review.comments_count > 0)
+        {
+            let response = self.send(ForgejoRequest {
+                method: "GET",
+                path: self.repo_path(&format!("pulls/{number}/reviews/{}/comments", review.id)),
+                query: Vec::new(),
+                headers: BTreeMap::new(),
+                body: None,
+            })?;
+            let mut review_comments =
+                serde_json::from_str::<Vec<ReviewCommentResponse>>(&response.body)
+                    .context(
+                        "forgejo_api_error: failed to parse pull request review comments response",
+                    )?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<_>>();
+            comments.append(&mut review_comments);
+        }
+        Ok(comments)
     }
 
     pub fn user_exists(&self, username: &str) -> Result<bool> {
@@ -451,7 +474,7 @@ pub enum ReviewEvent {
 impl ReviewEvent {
     fn as_str(self) -> &'static str {
         match self {
-            Self::Approve => "APPROVE",
+            Self::Approve => "APPROVED",
             Self::RequestChanges => "REQUEST_CHANGES",
             Self::Comment => "COMMENT",
         }
@@ -538,6 +561,13 @@ struct ReviewResponse {
     body: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReviewCommentOwnerResponse {
+    id: u64,
+    #[serde(default)]
+    comments_count: u64,
+}
+
 impl From<ReviewResponse> for ForgejoReview {
     fn from(value: ReviewResponse) -> Self {
         Self {
@@ -552,10 +582,11 @@ impl From<ReviewResponse> for ForgejoReview {
 struct ReviewCommentResponse {
     id: u64,
     path: String,
+    #[serde(rename = "position")]
     line: Option<u64>,
     body: String,
     #[serde(default)]
-    resolved: bool,
+    resolver: Option<Value>,
 }
 
 impl From<ReviewCommentResponse> for ForgejoReviewComment {
@@ -565,7 +596,7 @@ impl From<ReviewCommentResponse> for ForgejoReviewComment {
             path: value.path,
             line: value.line,
             body: value.body,
-            resolved: value.resolved,
+            resolved: value.resolver.is_some(),
         }
     }
 }
@@ -614,6 +645,64 @@ mod tests {
                 .borrow_mut()
                 .pop()
                 .ok_or_else(|| anyhow!("missing mock response"))
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct ProviderContractTransport {
+        requests: RefCell<Vec<ForgejoRequest>>,
+    }
+
+    impl ProviderContractTransport {
+        fn requests(&self) -> Vec<ForgejoRequest> {
+            self.requests.borrow().clone()
+        }
+    }
+
+    impl ForgejoTransport for &ProviderContractTransport {
+        fn send(&self, request: ForgejoRequest) -> Result<ForgejoResponse> {
+            self.requests.borrow_mut().push(request.clone());
+            match (request.method, request.path.as_str()) {
+                ("GET", "/api/v1/repos/tools/atelier/pulls/42/reviews") => {
+                    Ok(ForgejoResponse {
+                        status: 200,
+                        body: r#"[{"id":31,"state":"REQUESTED_CHANGES","body":"Fix this","comments_count":2,"official":true},{"id":32,"state":"APPROVED","body":"Follow-up","comments_count":0,"official":true}]"#.to_string(),
+                    })
+                }
+                ("GET", "/api/v1/repos/tools/atelier/pulls/42/reviews/31/comments") => {
+                    Ok(ForgejoResponse {
+                        status: 200,
+                        body: r#"[{"id":230,"path":"src/lib.rs","position":12,"body":"Fix this","pull_request_review_id":31,"resolver":null},{"id":231,"path":"src/main.rs","position":8,"body":"Resolved","pull_request_review_id":31,"resolver":{"login":"forge-reviewer"}}]"#.to_string(),
+                    })
+                }
+                ("POST", "/api/v1/repos/tools/atelier/pulls/42/reviews") => {
+                    let payload: Value = serde_json::from_str(
+                        request.body.as_deref().unwrap_or_default(),
+                    )?;
+                    if payload["event"] == "APPROVED" {
+                        Ok(ForgejoResponse {
+                            status: 201,
+                            body: r#"{"id":33,"state":"APPROVED","body":"Approved"}"#
+                                .to_string(),
+                        })
+                    } else {
+                        Ok(ForgejoResponse {
+                            status: 422,
+                            body: format!(
+                                "expected official APPROVED event, got {}",
+                                payload["event"]
+                            ),
+                        })
+                    }
+                }
+                _ => Ok(ForgejoResponse {
+                    status: 404,
+                    body: format!(
+                        "unexpected provider endpoint {} {}",
+                        request.method, request.path
+                    ),
+                }),
+            }
         }
     }
 
@@ -767,7 +856,8 @@ mod tests {
             requests[1].headers.get("Sudo").map(String::as_str),
             Some("forge-validator")
         );
-        assert!(requests[1].body.as_deref().unwrap().contains("APPROVE"));
+        let payload: Value = serde_json::from_str(requests[1].body.as_deref().unwrap()).unwrap();
+        assert_eq!(payload["event"], "APPROVED");
     }
 
     #[test]
@@ -861,27 +951,46 @@ mod tests {
     }
 
     #[test]
-    fn lists_review_comments_and_surfaces_api_failures() {
-        let transport = MockTransport::new(vec![
-            ForgejoResponse {
-                status: 200,
-                body:
-                    r#"[{"id":5,"path":"src/lib.rs","line":12,"body":"Fix this","resolved":false}]"#
-                        .to_string(),
-            },
-            ForgejoResponse {
-                status: 500,
-                body: "remote exploded".to_string(),
-            },
-        ]);
+    fn provider_contract_lists_reviews_then_comments_by_review_id() {
+        let transport = ProviderContractTransport::default();
         let client = ForgejoClient::new(config(), &transport);
 
         let comments = client.review_comments(42).unwrap();
-        let error = client.show_pull(42).unwrap_err().to_string();
 
+        assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].path, "src/lib.rs");
+        assert_eq!(comments[0].line, Some(12));
         assert!(!comments[0].resolved);
-        assert!(error.contains("forgejo_api_error"));
-        assert!(error.contains("GET /api/v1/repos/tools/atelier/pulls/42 failed"));
+        assert!(comments[1].resolved);
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(
+            requests[0].path,
+            "/api/v1/repos/tools/atelier/pulls/42/reviews"
+        );
+        assert_eq!(
+            requests[0].query,
+            vec![("limit".to_string(), "50".to_string())]
+        );
+        assert_eq!(
+            requests[1].path,
+            "/api/v1/repos/tools/atelier/pulls/42/reviews/31/comments"
+        );
+    }
+
+    #[test]
+    fn provider_contract_accepts_only_official_approved_event() {
+        let transport = ProviderContractTransport::default();
+        let client = ForgejoClient::new(config(), &transport);
+
+        let review = client
+            .review_pull("reviewer", 42, ReviewEvent::Approve, "Approved")
+            .unwrap();
+
+        assert_eq!(review.state, "APPROVED");
+        let requests = transport.requests();
+        let payload: Value = serde_json::from_str(requests[0].body.as_deref().unwrap()).unwrap();
+        assert_eq!(payload["event"], "APPROVED");
+        assert_ne!(payload["event"], "APPROVE");
     }
 }

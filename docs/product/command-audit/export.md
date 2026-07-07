@@ -16,7 +16,7 @@ storage migration or repair?"
 - Documentation: Should be hidden from root normal workflow help and absent
   from worker/reviewer handoff recipes. Focused help may describe it as an
   advanced deterministic-renderer diagnostic.
-- Design: Acceptable only as a deterministic-renderer test, projection
+- Design: Acceptable only as a deterministic-renderer test, domain-cache
   diagnostic, or temporary migration surface. It should not be an automation
   contract for agents selecting work, proving validation, or deciding terminal readiness.
 - Output hierarchy: Export/check result, paths, freshness result, next `check` or
@@ -27,13 +27,13 @@ storage migration or repair?"
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | hidden advanced `atelier export` | Admin/migration | Materialize deterministic renderer output during migration or debugging. | Temporary migration or test-only. |
-| hidden advanced `atelier export --check` | Admin/debug | Check deterministic renderer/projection freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `check`; use admin repair only when local state is degraded. |
+| hidden advanced `atelier export --check` | Admin/debug | Check deterministic renderer/cache freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `check`; use admin repair only when local state is degraded. |
 
 ## Boundary
 
-Tracked `.atelier/` Markdown is authoritative. Ignored projection, runtime,
+Tracked `.atelier/` Markdown is authoritative. The ignored domain cache, runtime,
 diagnostic, lock, and cache state is repairable checkout state. Normal commands
-should refresh projections safely when possible. `check` and `check --fix`
+should repair changed cache sources lazily when possible. `check` and `check --fix`
 own explicit ignored-state inspection and repair. `export` must not overwrite
 canonical records during recovery and must not be presented as the ordinary
 proof that a handoff, validation, or terminal check is ready.

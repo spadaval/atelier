@@ -6,6 +6,12 @@ explicit ready-work pickup.
 Primary question: "Which bounded work view reduces the next coordination
 decision?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Which bounded view resolves my next coordination decision? | Manager/orchestrator; worker for explicit pickup | Scoped dashboards reduce scanning; the legacy queue mixes unrelated decisions. | Each view risks duplicating inventory, hierarchy, and blocker reads. | Simplify | Keep role-shaped views; leave `work queue` legacy and out of normal guidance. |
+
 `work` is the dashboard namespace for multi-issue operational views. It does not
 own issue mutation, workflow transitions, or durable record text. Those remain
 under `issue`, `evidence`, `review`, and `history`.
@@ -27,8 +33,9 @@ not a data view.
 - `work missions`: the cross-mission Mission Overview. It shows current
   missions and directly advanced epics with collapsed descendant state, plus
   direct and outside-visible-mission summaries.
-- `work queue`: legacy repo-wide output. It owns neither inventory nor Mission
-  Overview and should leave normal guidance once its remaining callers move.
+- The legacy nested queue: repo-wide output. It owns neither inventory nor
+  Mission Overview and should leave normal guidance once its remaining callers
+  move.
 - `work mission <mission-id>`: live mission orchestration dashboard with
   mission-scoped progress, ready/active/blocked/done workstreams, blockers,
   closeout only when relevant, and next actions.
@@ -50,9 +57,9 @@ the behavior belongs in `work mission`, `work epic`, or `issue list`.
 | `work active` | Manager/orchestrator | See work already in motion. | Keep only if it answers in-flight coordination better than `status`. |
 | `work all` | Manager/orchestrator | Inspect all operational buckets at once. | Questionable. High cognitive load; prefer scoped dashboards unless a clear all-buckets job is proven. |
 | `work missions` | Manager/orchestrator | Compare current missions and their directly advanced epics. | Keep as the bounded, epic-first Mission Overview; use `--all` to include done missions. |
-| `work queue` | Legacy | Browse the old repo-wide nested dump. | Remove from normal guidance and migrate remaining callers; do not alias it to inventory or Mission Overview. |
-| `work queue --ready` | Worker/scripts | Choose selectable leaf work. | Fold toward `work ready` unless quiet leaf IDs are a proven automation need. |
-| `work queue --blocked` | Manager/orchestrator | Inspect work with open blockers. | Fold toward `work blocked` unless the broader queue adds distinct context. |
+| Legacy nested queue | Legacy only | Browse the old repo-wide nested dump. | Retire from normal guidance and migrate remaining callers; do not alias it to inventory or Mission Overview. |
+| Legacy queue ready filter | Legacy only | Choose selectable leaf work. | Retired from normal guidance. Use `atelier work ready`. |
+| Legacy queue blocked filter | Legacy only | Inspect work with open blockers. | Retired from normal guidance. Use `atelier work blocked`. |
 | `work mission <id>` | Manager/orchestrator | Coordinate one live mission. | Keep. It avoids stitching issue detail, blockers, and child state across commands. |
 | `work epic <id>` | Worker/reviewer | Coordinate one epic boundary. | Keep only if it remains tighter than `issue show <epic-id>` plus child issue drill-down. |
 

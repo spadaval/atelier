@@ -38,8 +38,8 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // Concurrent writers can leave the projection index stale; ordinary reads
-    // should validate canonical state, rebuild automatically, and continue.
+    // Concurrent writers can leave the domain cache stale; ordinary reads
+    // should validate record files, repair automatically, and continue.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
@@ -144,8 +144,8 @@ fn test_concurrent_mixed_operations() {
         "At least one concurrent read should succeed"
     );
 
-    // Concurrent writers can leave the projection index stale; ordinary reads
-    // should validate canonical state, rebuild automatically, and continue.
+    // Concurrent writers can leave the domain cache stale; ordinary reads
+    // should validate record files, repair automatically, and continue.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
@@ -155,7 +155,7 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Serialized rebuild source"]);
     let issue_id = h.issue_id(1);
-    h.run_ok(&["export"]);
+    h.run_ok(&["work", "queue", "--all"]);
     h.edit_canonical_issue(&issue_id, |markdown| {
         markdown.replace("Serialized rebuild source", "Serialized rebuild changed")
     });
@@ -192,5 +192,5 @@ fn test_concurrent_rebuilds_and_reads_are_serialized() {
 
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.stdout.contains("Serialized rebuild changed"));
-    h.run_ok(&["export", "--check"]);
+    h.run_ok(&["work", "queue", "--all"]);
 }

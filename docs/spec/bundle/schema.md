@@ -4,8 +4,8 @@ This document defines the target JSON contract for one-shot bundle files.
 Bundles are agent-authored graph deltas that create multiple Atelier records in
 one reviewed operation. They are input files, not durable source of truth,
 backup exports, or long-lived desired-state manifests. After a successful apply,
-canonical Markdown under `.atelier/` is the durable state described in
-[Canonical Record And Rebuild Layout](../storage/export/rebuild/canonical-layout.md).
+record files under `.atelier/` are the durable state described in
+[Markdown-First Record Store](../../architecture/markdown-first-record-store.md).
 
 The contract covers `schema_version: 1`. Future versions may add operations or
 record kinds, but commands must reject unknown future versions unless an
@@ -24,9 +24,10 @@ atelier bundle apply <file> --yes
 ```
 
 `preview` validates the input and prints a deterministic non-mutating summary.
-`apply` validates the same contract, requires `--yes`, writes canonical records,
-refreshes rebuildable projection state, and prints the created IDs and
-relationships. Mutating apply must fail before any write when validation fails.
+`apply` validates the same contract, requires `--yes`, writes record files,
+invalidates the affected domain-cache facts for later lazy repair, and prints
+the created IDs and relationships. Mutating apply must fail before any write
+when validation fails.
 
 The input file is intentionally temporary. The file can be archived or consumed
 only through an explicit option after a successful apply; failed preview or
@@ -198,8 +199,7 @@ relationship buckets.
 ## Preview And Validation
 
 Validation must complete before any mutation. A failed validation creates no
-records, no dependency edges, no relationships, no notes, and no projection
-changes.
+records, no dependency edges, no relationships, no notes, and no cache changes.
 
 Required validation checks:
 

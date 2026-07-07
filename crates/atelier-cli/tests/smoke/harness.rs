@@ -146,11 +146,12 @@ impl SmokeHarness {
         self.run_ok(&["issue", "transition", issue_ref, "request_review"]);
         self.run_ok(&[
             "review",
-            "approve",
+            "submit",
             "--issue",
             issue_ref,
             "--role",
             "reviewer",
+            "--approve",
             "--body",
             "fixture approval",
         ]);

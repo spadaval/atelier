@@ -4,7 +4,7 @@ use libfuzzer_sys::fuzz_target;
 use std::io::Write;
 use tempfile::tempdir;
 
-use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
+mod support;
 
 fuzz_target!(|data: &[u8]| {
     let dir = match tempdir() {
@@ -24,9 +24,9 @@ fuzz_target!(|data: &[u8]| {
     }
     drop(file);
 
-    let db = match ProjectionIndex::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
+    let db = match support::open_cache(&db_path) {
+        Some(db) => db,
+        None => return,
     };
 
     // Try to parse the data as JSON and import
@@ -58,21 +58,13 @@ fuzz_target!(|data: &[u8]| {
                             .take(8)
                             .collect::<String>()
                     );
-                    let _ = db.insert_issue(&fuzz_issue(
-                        &id,
-                        title,
-                        desc.map(str::to_string),
-                        priority,
-                    ));
+                    let _ = desc;
+                    support::index_issue(&db, &id, title, "todo", priority);
                 }
             }
         }
     }
 
     // Verify database is still functional after import attempt
-    let _ = db.list_issues(None, None);
+    let _ = db.list_issues(None, None, None);
 });
-
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
-    ProjectionIssue::new(id, title, description, priority)
-}

@@ -45,8 +45,8 @@ workflow may opt in by declaring Git validators and branch actions such as
 `git.prepare_branch`; without those declarations, a mission remains an objective
 record and workspace boundary, not a hidden branch lifecycle.
 
-Projection freshness is internal command-storage health. Commands may repair or
-diagnose stale projections, but workflow policy must not expose projection
+Domain-cache freshness is internal command-storage health. Commands may repair
+or diagnose stale cache rows, but workflow policy must not expose cache
 freshness as a configurable validator.
 
 Starter workflow names are domain names: `mission`, `epic`, `task`,
@@ -63,8 +63,8 @@ defaults.
 - Mission closeout and mission status continue to derive scope from direct
   `advances` roots plus descendants, not from parent hierarchy.
 - Workflow validators stay focused on durable facts such as evidence, blockers,
-  lint, Git state, and review state; projection freshness remains a command
-  health concern.
+  record-file validity, Git state, and review state; domain-cache freshness
+  remains a command health concern.
 
 ## Rejected Alternatives
 
@@ -93,8 +93,8 @@ Rejected. Mission execution scope is the direct `advances` links plus
 descendants. Parent hierarchy remains structural context and must not silently
 add or remove mission work.
 
-### Workflow Validator For Projection Freshness
+### Workflow Validator For Cache Freshness
 
-Rejected. Projection freshness is rebuildable local state, not durable workflow
-policy. Exposing it as a validator would make repository policy depend on a
-machine-local cache implementation detail.
+Rejected. Domain-cache freshness is rebuildable local state, not durable
+workflow policy. Exposing it as a validator would make repository policy depend
+on a machine-local cache implementation detail.

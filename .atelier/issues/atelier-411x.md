@@ -6,6 +6,19 @@ labels:
 - "cli"
 - "complexity"
 - "docs"
+review:
+  kind: pull_request
+  number: 43
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-411x
+    owner_kind: epic
+    review_target: mission/atelier-durs
+    work_branch: epic/atelier-411x
 priority: "P1"
 relationships:
   blocks:
@@ -25,9 +38,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-01T15:35:24.772065670+00:00"
+status: "done"
 title: "Epic: Collapse retired command audit and stale guidance"
-updated_at: "2026-06-29T20:16:42.094521639+00:00"
+updated_at: "2026-07-01T15:35:24.772065670+00:00"
 ---
 
 ## Description

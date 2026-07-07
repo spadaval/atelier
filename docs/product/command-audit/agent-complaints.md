@@ -1,4 +1,4 @@
-# Actual Agent Complaint Audit
+# Historical Agent Complaint Audit (Non-Normative)
 
 This audit records command complaints found in Codex session logs from
 2026-06-16 through 2026-06-22. It complements

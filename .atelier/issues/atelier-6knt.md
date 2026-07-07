@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-01T06:06:49.958855412+00:00"
+status: "done"
 title: "Keep command audit guidance decision-oriented"
-updated_at: "2026-06-29T20:16:42.089703500+00:00"
+updated_at: "2026-07-01T06:06:49.958855412+00:00"
 ---
 
 ## Description

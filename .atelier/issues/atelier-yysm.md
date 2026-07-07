@@ -7,6 +7,19 @@ labels:
 - "complexity"
 - "evidence"
 - "history"
+review:
+  kind: pull_request
+  number: 46
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-yysm
+    owner_kind: epic
+    review_target: mission/atelier-durs
+    work_branch: epic/atelier-yysm
 priority: "P1"
 relationships:
   blocks:
@@ -26,9 +39,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:29:05.949446913+00:00"
+status: "done"
 title: "Epic: Simplify evidence and history browse surfaces"
-updated_at: "2026-06-29T20:13:31.328877971+00:00"
+updated_at: "2026-07-06T18:29:05.949446913+00:00"
 ---
 
 ## Description

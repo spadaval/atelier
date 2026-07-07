@@ -73,7 +73,7 @@ slice so it does not preserve removed names.
 | Initialize tracker state | `init`, hidden/import migration surfaces | `init` | `atelier init`, `atelier init --import-beads` while migration remains | Low | Keep setup distinct. Remove standalone migration commands when possible. |
 | Orient in current checkout | `status`, parts of `check`, parts of branch/status-like outputs | `status` | `atelier status` | Low | Must stay compact: active work, ready count, health/freshness, next commands. |
 | Validate committed tracker records | `check`, parts of `check`, hidden `workflow check` | one health command | `atelier check [<id>]` or temporary `atelier check [<id>]` | Medium | Need one public health surface. Avoid separate lint/doctor/workflow normal paths. |
-| Repair ignored runtime/projection state | `check --fix`, `rebuild` | health command | `atelier check --fix` | Medium | Must not edit tracked canonical Markdown. |
+| Repair ignored runtime/cache state | `check --fix`, `rebuild` | health command | `atelier check --fix` | Medium | Must not edit tracked record files. |
 | Inspect raw workflow policy diagnostics | hidden `workflow check`, `check` errors | health command or hidden dev command | `atelier check --workflow` if user-facing; otherwise hidden | Low | Keep out of normal workflow unless it explains a real recovery path. |
 | Inspect slow command telemetry | hidden `diagnostics slow` | hidden dev/admin surface | hidden only | Low | Not normal product workflow. |
 | Create ordinary issue work | `issue create` | `issue create` | `atelier issue create "..."` | Low | Core mutation. |
@@ -83,14 +83,14 @@ slice so it does not preserve removed names.
 | List generic issue inventory | queue-shaped `issue list` behavior | `issue list` | `atelier issue list` plus simple metadata and limit filters | Low | Inventory is flat, all-status by default, and not an operational dashboard. |
 | Compare current missions | thin mission-type inventory and legacy broad queue | `work missions` | bounded Mission Overview with directly advanced epic rows and collapsed summaries | Medium | Done missions require `--all`; direct and outside-visible-mission work remain explicit facts. |
 | List global work queue | `work queue` | no distinct owner job remains | retire | Medium | Inventory, Mission Overview, scoped dashboards, selection, and blocker triage now have separate owners. Do not add an alias or fallback renderer. |
-| List ready work | `work ready`, `work queue --ready`, `status` signpost, mission selectable work | `work ready` | `atelier work ready` | Low | Ready work is the small picker. `work queue --ready` should fold here unless quiet leaf IDs prove a separate automation need. |
-| List blocked work | `work blocked`, old blocked-work shortcut, `work queue --blocked`, queue footers | `work blocked` | `atelier work blocked` | Low | Blocked triage is a distinct manager job; blocker detail belongs in `issue show`. |
+| List ready work | `work ready`, legacy `work queue --ready`, `status` signpost, mission selectable work | `work ready` | `atelier work ready` | Low | Ready work is the small picker. The legacy queue filter is not normal guidance. |
+| List blocked work | `work blocked`, old blocked-work shortcut, legacy `work queue --blocked`, queue footers | `work blocked` | `atelier work blocked` | Low | Blocked triage is a distinct manager job; blocker detail belongs in `issue show`. |
 | Filter by workflow status | `work queue --status`, `issue list --status` | `issue list` for inventory; scoped work dashboards for operational state | `atelier issue list --status <status>` | Medium | Status filtering is useful, but adding it to every work view can recreate a query language. |
 | Filter by issue type | `issue list --issue-type`, older `work queue --type mission`, ad hoc mission list | `issue list` for inventory; `work missions` for mission coordination | `atelier issue list --issue-type mission` | Low | Flat mission records and the Mission Overview answer different questions; the legacy queue owns neither. |
 | Filter by label/priority | `work queue --label`, `work queue --priority`, issue inventory filters | `issue list` unless a work-view job proves otherwise | inventory filters | Low | Metadata filters belong to inventory by default. Work views should gain filters only when they reduce a real coordination decision. |
 | Search issue text when ID is unknown | root `work queue`, maybe work queue/search behavior | none in this cut | none | Medium | Remove search entirely for now. Do not create `work queue --query` as a quieter replacement. A future search design must prove a stronger cross-record job. |
 | Show issue record detail | `issue show` | `issue show` | `atelier issue show <id>` | Low | Core durable record view. |
-| Show issue workflow status field | `issue show`, `work queue`, `issue transition`, misleading `issue status` name | `issue show` and `work queue` | displayed as `Status:` in show/list | Low | The status field is valuable; a separate `issue status` command is not. |
+| Show issue workflow status field | `issue show`, legacy `work queue`, `issue transition`, retired `issue status` name | `issue show` and `issue list` | displayed as `Status:` in show/list | Low | The status field is valuable; a separate status command is not. |
 | Show issue linkers and blocking relationships | `issue show`, old status/mission reports | `issue show` | `atelier issue show <id>` | Medium | Detail must include enough blocker meaning to avoid separate blocker commands. |
 | Show downstream impact | `issue show`, retired graph impact | `issue show` | `atelier issue show <id>` | Low | Keep as bounded section. |
 | Show parent/children hierarchy | `issue show`, `work queue`, retired graph tree | `issue show` | `atelier issue show <id>` | Low | Hierarchy belongs to record detail. |
@@ -112,29 +112,29 @@ slice so it does not preserve removed names.
 | Add issue note/activity | `issue note`, old root note docs | `issue note` or `issue update --note` | likely keep `issue note <id> "..."` | Low | This may be first-class enough to keep. |
 | Inspect recent issue activity | `issue show` recent activity, `history --issue` | `issue show` | default bounded recent activity | Low | Default issue detail should not dump raw timelines. |
 | Inspect high-level project history | root `history` | `history` | `atelier history` | Medium | Keep only if it remains bounded and does not become search. |
-| Inspect full issue history | root `history --issue`, `issue show` recent activity | budget review needed | maybe `issue show <id>` recent activity; maybe `history --issue` if full audit trail earns its keep | Medium | Specific history is useful, but scoped variants should justify themselves. |
-| Inspect mission/epic history including scoped work | `history --mission`, `history --epic` | budget review needed | likely objective activity in `work mission` or `issue show` | High | Avoid a second objective query system. |
-| Filter history by event kind/actor/since/limit | root `history` flags | high-level `history` only | bounded flags on `history` | Medium | Keep only filters needed for a high-level timeline. Specific record filters should not become a second query system. |
+| Inspect full issue history | `history --issue`, `issue show` recent activity | `history --issue` | bounded one-record activity reader | Medium | Keep one record scope without descendant traversal. |
+| Inspect mission/epic history including scoped work | removed mission/epic history flags | `work mission`, `work epic`, and `issue show` | objective dashboard plus bounded current-record activity | High | Fold descendant state into objective owners instead of adding a second objective query system. |
+| Filter history by event kind/actor/since/limit | former root `history` filters | `history --limit` only | bounded newest-first timeline | Medium | Remove actor/event/time query syntax; retain only the output budget control. |
 | Record manual evidence | `evidence record` | `evidence record` | unchanged | Low | Core proof surface. |
 | Capture command-backed evidence | `evidence record -- <command>` | `evidence record` | unchanged | Low | Core proof surface. |
 | Show evidence record | `evidence show` | `evidence show` | unchanged | Low | Evidence is a first-class record. |
 | List evidence records | `evidence list` | `evidence list` | bounded list with filters | Low | Needs default limit; capability is distinct from work queue. |
-| Attach existing evidence to issue | `evidence attach`, maybe `issue link` | relationship owner | `issue link <issue> <evidence> --role validates` or keep attach only if cross-kind link is not ergonomic | Medium | Separate attach verb is over budget unless it proves clearer than relationship mutation. |
+| Attach existing evidence to issue | `evidence attach` | `evidence attach` | typed cross-kind proof reuse with role validation and activity | Medium | Keep as a secondary evidence-domain verb; issue linking intentionally remains issue-to-issue. |
 | Show evidence for an issue | `issue show`, `evidence list`, `history` | `issue show` plus evidence list filter if needed | `issue show <id>`; maybe `evidence list --target issue/<id>` | Medium | Avoid overloading issue show with huge evidence transcripts. |
-| Open review artifact | `review open` | `review open` | infer title/body/branches from issue when possible | Medium | Current command exposes too much provider plumbing. |
-| Link existing review artifact | `review link` | `review open` or `review attach` style | `review open --existing <url>` | Low | Fold into open if possible. |
-| Show review status/detail | `review status`, `review show`, issue/history references | `review show` | `review show [--issue <id>]` | Low | Remove separate status if show can be concise by default. |
-| Show review comments/findings | `review comments`, `review show`, provider UI | `review show` | `review show --comments [--unresolved]` | Medium | Preserve unresolved filtering. |
-| Add review comment/finding | `review comment` | `review submit` | `review submit --comment "..." [--finding]` | Medium | Collapse submit-like actions. |
-| Approve/request changes | `review approve`, `review request-changes` | `review submit` | `review submit --approve`, `review submit --request-changes` | Low | Avoid one command per review outcome. |
+| Open review artifact | `review open` | `review open` | `review open [--issue <id>]` | Medium | Title, body, branches, owner, role, and review mode/provider are issue/workflow-derived. |
+| Link existing review artifact | `review open --existing` | `review open` | `review open --existing <url-or-number>` | Low | Explicit provider recovery/import path on the open job. |
+| Show review status/detail | `review show` and issue/history references | `review show` | `review show [--issue <id>]` | Low | Concise authority and state lead the default view. |
+| Show review comments/findings | `review show --comments`, provider UI | `review show` | `review show --comments [--unresolved]` | Medium | Unresolved filtering remains available without a second inspection verb. |
+| Add review comment/finding | `review submit --comment` | `review submit` | `review submit --comment "..." [--finding]` | Medium | One submit owner handles mutations. |
+| Approve/request changes | `review submit` | `review submit` | `review submit --approve`, `review submit --request-changes` | Low | Exactly one submit action is required. |
 | Resolve review finding | `review resolve` | `review resolve` | unchanged | Low | Specific mutation may earn its keep. |
 | Merge review artifact | `review merge`, workflow close actions | `review merge` or workflow transition | undecided | Medium | Keep only if merging review artifact is separate from Atelier workflow transition. |
 | Configure/check review provider | `forgejo roles check/provision` | `review provider ...` or admin docs | `review provider check/provision` | Medium | Provider-specific root commands should go away. |
 | Prune supported artifacts | `prune`, `prune --apply` | `prune` | unchanged | Low | Dry-run/apply is a coherent admin surface. |
-| Delete arbitrary record | `maintenance delete` | hidden/admin escape hatch or remove | no normal public command | Medium | Public destructive surgery is suspect. |
+| Delete arbitrary record | removed | no CLI surface | no normal public command | Medium | Supported cleanup is `prune`; canonical recovery uses Git history and reviewed repair. |
 | Import predecessor data | `init --import-beads`, hidden `import-beads` | `init` | `init --import-beads` while needed | Low | Remove standalone import path. |
 | Render/export canonical state for diagnostics | hidden `export` | hidden test/dev path or health command | no normal command | Low | Not workflow. |
-| Rebuild projection cache | hidden `rebuild`, `check --fix` | health command | `check --fix` | Low | Not a separate user command. |
+| Rebuild domain cache | hidden `rebuild`, `check --fix` | health command | `check --fix` | Low | Not a separate user command. |
 | Role-specific operating guidance | `man`, root help, docs, status next actions | `man` | `atelier man [role]` | Low | Keep as slightly smart guidance. It should route to surviving commands and not become a duplicate workflow engine. |
 
 ## Capability Gaps To Resolve Before Cutting
@@ -176,11 +176,9 @@ Do not add many scoped flags piecemeal.
 Root `history` stays as a high-level timeline view. The risk is not that history
 exists; the risk is scoped variants spreading across every record type.
 
-Implementation should decide:
-
-- which high-level filters are necessary for project timeline browsing;
-- whether issue-specific history earns a focused `issue show` mode;
-- which mission/epic scoped history modes should simply be removed.
+The implemented boundary keeps root history, one-record `--issue`, and
+`--limit`. Mission/epic descendant scope belongs to objective dashboards;
+actor, event-kind, time-window, and descendant filters are removed.
 
 ### Bulk Graph Apply
 
@@ -209,7 +207,7 @@ migration should avoid losing:
 
 - record validation;
 - workflow-policy diagnostics;
-- runtime/projection health;
+- runtime/cache health;
 - safe local repair.
 
 ## Selector DSL Question

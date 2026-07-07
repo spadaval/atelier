@@ -2,7 +2,7 @@
 
 Primary role: Admin.
 
-Primary question: "Is this local runtime/projection/install state healthy, and
+Primary question: "Is this local runtime/cache/install state healthy, and
 can safe ignored-state repairs be applied?"
 
 ## Assessment
@@ -18,5 +18,5 @@ can safe ignored-state repairs be applied?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `check` | Admin | Inspect runtime/projection/install health. | Good. |
-| `check --fix` | Admin | Repair ignored local runtime/cache/projection state. | Good. |
+| `check` | Admin | Inspect runtime/cache/install health. | Good. |
+| `check --fix` | Admin | Repair ignored local runtime/cache state. | Good. |
