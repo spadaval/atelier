@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-07T05:38:38.751001331+00:00"
+status: "done"
 title: "Reconcile post-publication mission attribution"
-updated_at: "2026-07-07T05:27:22.487130869+00:00"
+updated_at: "2026-07-07T05:38:38.751001331+00:00"
 ---
 
 ## Description
