@@ -354,6 +354,21 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
+        if visible_width(word) > width {
+            if !current.is_empty() {
+                lines.push(current);
+                current = String::new();
+            }
+            let mut chunks = hard_wrap_token(word, width).into_iter().peekable();
+            while let Some(chunk) = chunks.next() {
+                if chunks.peek().is_some() {
+                    lines.push(chunk);
+                } else {
+                    current = chunk;
+                }
+            }
+            continue;
+        }
         let separator = usize::from(!current.is_empty());
         if !current.is_empty() && visible_width(&current) + separator + visible_width(word) > width
         {
@@ -372,6 +387,25 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
         lines.push(String::new());
     }
     lines
+}
+
+fn hard_wrap_token(token: &str, width: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut chunk = String::new();
+    let mut chunk_width = 0;
+    for character in token.chars() {
+        if chunk_width == width {
+            chunks.push(chunk);
+            chunk = String::new();
+            chunk_width = 0;
+        }
+        chunk.push(character);
+        chunk_width += 1;
+    }
+    if !chunk.is_empty() {
+        chunks.push(chunk);
+    }
+    chunks
 }
 
 fn visible_width(text: &str) -> usize {
@@ -893,6 +927,32 @@ mod tests {
             ]
         );
         assert!(narrow.iter().all(|line| line.chars().count() <= 40));
+    }
+
+    #[test]
+    fn wrapped_lines_split_a_token_longer_than_the_available_width_without_loss() {
+        let token = "x".repeat(100);
+        let lines = render_wrapped_lines(
+            RenderContext::from_parts_with_width(ColorChoice::Never, false, false, 40),
+            "    ",
+            &token,
+            TextStyle::Secondary,
+        );
+
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| line.chars().count())
+                .collect::<Vec<_>>(),
+            vec![40, 40, 32]
+        );
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| line.trim_start())
+                .collect::<String>(),
+            token
+        );
     }
 
     #[test]

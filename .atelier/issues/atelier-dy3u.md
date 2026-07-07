@@ -36,3 +36,4 @@ Render the Mission Overview through the shared page, panel, row, and style abstr
 - Renderer snapshot and color/plain semantic-parity test transcript: `atelier-9mto`.
 - Temporary-repository `atelier work missions` CLI transcript covering hierarchy, blocker-aware progress, direct and unassigned accounting, `NO_COLOR`, and quiet output: `atelier-w2py`.
 - Review-response transcript covering shared width-aware rows and `COLUMNS=40` rendering: `atelier-ud6t`.
+- Adversarial review-response transcript covering a 100-character unbroken title at `COLUMNS=40`: `atelier-7v8q`.

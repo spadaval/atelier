@@ -46,6 +46,7 @@ fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
 fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let long_title = "X".repeat(100);
 
     for args in [
         vec![
@@ -56,6 +57,15 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
             "mission",
             "--priority",
             "high",
+        ],
+        vec![
+            "issue",
+            "create",
+            long_title.as_str(),
+            "--issue-type",
+            "mission",
+            "--priority",
+            "medium",
         ],
         vec![
             "issue",
@@ -75,6 +85,7 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
     }
 
     let mission_id = issue_id_by_title(dir.path(), "Overview mission");
+    let long_title_mission_id = issue_id_by_title(dir.path(), &long_title);
     let epic_id = issue_id_by_title(dir.path(), "Overview epic");
     let direct_id = issue_id_by_title(dir.path(), "Direct mission work");
     let blocker_id = issue_id_by_title(dir.path(), "Epic blocker");
@@ -196,10 +207,19 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
     assert!(narrow.contains("Outside visible missions"), "{narrow}");
     assert!(!narrow.contains("Collapsed epic child"), "{narrow}");
     assert!(!narrow.contains('\u{1b}'), "{narrow:?}");
+    let rendered_long_title = narrow
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && line.chars().all(|character| character == 'X'))
+        .collect::<String>();
+    assert_eq!(rendered_long_title, long_title, "{narrow}");
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "missions"]);
     assert!(success, "quiet work missions failed: {stderr}");
-    assert_eq!(quiet.trim(), mission_id);
+    assert_eq!(
+        quiet.lines().collect::<Vec<_>>(),
+        vec![mission_id.as_str(), long_title_mission_id.as_str()]
+    );
     assert!(!quiet.contains('\u{1b}'), "{quiet:?}");
 }
 
