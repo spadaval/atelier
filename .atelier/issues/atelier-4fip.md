@@ -6,6 +6,10 @@ labels:
 - "cli"
 - "human-output"
 - "mission-dashboard"
+review:
+  kind: pull_request
+  number: 56
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-c0mp
@@ -31,9 +35,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Build the formatted Mission Overview"
-updated_at: "2026-07-07T06:10:49.036377143+00:00"
+updated_at: "2026-07-07T06:16:39.176074387+00:00"
 ---
 
 ## Description
