@@ -27,9 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "draft"
+status: "ready"
 title: "Mission: Require independent review before mission execution"
-updated_at: "2026-07-07T05:42:00.000000000+00:00"
+updated_at: "2026-07-07T05:55:25.405692460+00:00"
 ---
 
 ## Description
