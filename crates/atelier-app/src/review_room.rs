@@ -137,20 +137,18 @@ pub fn open(db: &Database, request: RoomOpenRequest<'_>) -> Result<RoomOpenOutco
         || request.target_branch != resolution.base_branch
     {
         bail!(
-            "review_room_branch_mismatch: requested room branches are {} -> {}, but issue {} expects {} -> {}; rerun `atelier review open --issue {} --source-branch {} --target-branch {}`",
+            "review_room_branch_mismatch: requested room branches are {} -> {}, but issue {} expects {} -> {}; `atelier review open --issue {}` derives these branches from workflow state",
             request.source_branch,
             request.target_branch,
             resolution.owner_id,
             resolution.expected_branch,
             resolution.base_branch,
-            resolution.owner_id,
-            resolution.expected_branch,
-            resolution.base_branch
+            resolution.owner_id
         );
     }
     if workflow_policy::effective_review_field(db, &issue_id)?.is_some() {
         bail!(
-            "review_room_active: issue {} already has a linked review artifact; inspect `atelier review status --issue {}` before opening another review",
+            "review_room_active: issue {} already has a linked review artifact; inspect `atelier review show --issue {}` before opening another review",
             resolution.owner_id,
             resolution.owner_id
         );

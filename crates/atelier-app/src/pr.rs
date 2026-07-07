@@ -39,6 +39,48 @@ pub struct PrOpenOutcome {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReviewOpenContext {
+    pub issue_id: String,
+    pub owner_id: String,
+    pub title: String,
+    pub body: String,
+    pub source_branch: String,
+    pub target_branch: String,
+}
+
+pub fn derive_review_open_context(
+    db: &Database,
+    repo_root: &Path,
+    issue_ref: Option<&str>,
+) -> Result<ReviewOpenContext> {
+    let issue_id = infer_issue_id(db, repo_root, issue_ref)?;
+    let policy = workflow_policy::load(repo_root)?;
+    let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, &issue_id)?;
+    db.require_issue(&resolution.owner_id)?;
+    let owner =
+        RecordStore::new(repo_root.join(".atelier")).load_issue_by_id(&resolution.owner_id)?;
+    let title = format!("{}: {}", owner.issue.id, owner.issue.title);
+    let mut body = format!("Atelier review for {}.", owner.issue.id);
+    let description = owner.sections.description.trim();
+    if !description.is_empty() {
+        body.push_str("\n\n");
+        body.push_str(description);
+    }
+    body.push_str(&format!(
+        "\n\nInspect with `atelier issue show {}`.",
+        owner.issue.id
+    ));
+    Ok(ReviewOpenContext {
+        issue_id,
+        owner_id: owner.issue.id,
+        title,
+        body,
+        source_branch: resolution.expected_branch,
+        target_branch: resolution.base_branch,
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrLinkRequest<'a> {
     pub repo_root: &'a Path,
     pub state_dir: &'a Path,
@@ -52,21 +94,6 @@ pub struct PrLinkOutcome {
     pub issue_id: String,
     pub owner_id: String,
     pub pull: ForgejoPullRequest,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrStatusRequest<'a> {
-    pub repo_root: &'a Path,
-    pub state_dir: &'a Path,
-    pub issue_ref: Option<&'a str>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrStatusOutcome {
-    pub issue_id: String,
-    pub number: u64,
-    pub url: String,
-    pub repo: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -200,22 +227,6 @@ pub fn link_with_client<T: ForgejoTransport>(
         issue_id,
         owner_id,
         pull,
-    })
-}
-
-pub fn status(db: &Database, request: PrStatusRequest<'_>) -> Result<PrStatusOutcome> {
-    let issue_id = infer_issue_id(db, request.repo_root, request.issue_ref)?;
-    let field = linked_pull_request(db, &issue_id)?;
-    let forgejo = load_forgejo(request.repo_root)?;
-    let number = pull_request_number(&field)?;
-    Ok(PrStatusOutcome {
-        issue_id,
-        number,
-        url: format!(
-            "{}/{}/{}/pulls/{}",
-            forgejo.host, forgejo.owner, forgejo.repo, number
-        ),
-        repo: format!("{}/{}", forgejo.owner, forgejo.repo),
     })
 }
 
@@ -453,7 +464,7 @@ pub fn persist_pull_request(
             return Ok(owner_id);
         }
         bail!(
-            "pull_request_mismatch: issue {} already has a different review field; inspect `atelier review status --issue {}` before replacing it",
+            "pull_request_mismatch: issue {} already has a different review field; inspect `atelier review show --issue {}` before replacing it",
             owner_id,
             owner_id
         );
@@ -492,7 +503,7 @@ pub fn confirm_pull_request_merged(
     let number = pull_request_number(&review)?;
     if pull.number != number {
         bail!(
-            "pull_request_mismatch: linked pull_request number is {}, but Forgejo returned {}; run `atelier review status --issue {}`",
+            "pull_request_mismatch: linked pull_request number is {}, but Forgejo returned {}; run `atelier review show --issue {}`",
             number,
             pull.number,
             owner_id
@@ -526,7 +537,7 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
         return Ok((
             false,
             format!(
-                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review show --issue {}`",
                 pull.source_branch,
                 pull.target_branch,
                 resolution.owner_id,
@@ -542,7 +553,7 @@ pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
         Ok((
             false,
             format!(
-                "linked PR {} is {} and not merged; run `atelier review status --issue {}`",
+                "linked PR {} is {} and not merged; run `atelier review show --issue {}`",
                 pull.number, pull.state, issue_id
             ),
         ))
@@ -615,7 +626,7 @@ fn validate_remote_pull_matches_policy(
         || pull.target_branch != resolution.base_branch
     {
         bail!(
-            "pull_request_mismatch: linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
+            "pull_request_mismatch: linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review show --issue {}`",
             pull.source_branch,
             pull.target_branch,
             resolution.owner_id,
@@ -638,15 +649,13 @@ fn validate_requested_pull_request_matches_policy(
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
     if source_branch != resolution.expected_branch || target_branch != resolution.base_branch {
         bail!(
-            "pull_request_mismatch: requested PR branches are {} -> {}, but issue {} expects {} -> {}; rerun `atelier review open --issue {} --source-branch {} --target-branch {}`",
+            "pull_request_mismatch: requested PR branches are {} -> {}, but issue {} expects {} -> {}; `atelier review open --issue {}` derives these branches from workflow state",
             source_branch,
             target_branch,
             resolution.owner_id,
             resolution.expected_branch,
             resolution.base_branch,
-            resolution.owner_id,
-            resolution.expected_branch,
-            resolution.base_branch
+            resolution.owner_id
         );
     }
     Ok(())
@@ -689,7 +698,7 @@ fn ensure_no_linked_pull_request(db: &Database, repo_root: &Path, issue_id: &str
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
     if workflow_policy::effective_pull_request_field(db, issue_id)?.is_some() {
         bail!(
-            "pull_request_active: issue {} already has a linked review artifact; inspect `atelier review status --issue {}` before opening another review",
+            "pull_request_active: issue {} already has a linked review artifact; inspect `atelier review show --issue {}` before opening another review",
             resolution.owner_id,
             resolution.owner_id
         );
@@ -896,30 +905,6 @@ mod tests {
         std::fs::write(repo_root.join(".atelier/workflow.yaml"), workflow).unwrap();
     }
 
-    fn write_config(repo_root: &Path) {
-        std::fs::create_dir_all(repo_root.join(".atelier")).unwrap();
-        std::fs::write(
-            repo_root.join(".atelier/config.toml"),
-            r#"schema = "atelier.project_config"
-schema_version = 1
-project_slug = "atelier"
-
-[paths]
-state_root = ".atelier"
-
-[review]
-mode = "provider"
-provider = "forgejo"
-
-[review.providers.forgejo]
-host = "forge.example.test"
-owner = "tools"
-repo = "atelier"
-"#,
-        )
-        .unwrap();
-    }
-
     fn setup_repo_on_branch(branch: &str) -> tempfile::TempDir {
         let dir = tempdir().unwrap();
         write_workflow(dir.path());
@@ -1060,6 +1045,40 @@ repo = "atelier"
             r#"{{"id":{id},"body":{}}}"#,
             serde_json::to_string(body).unwrap()
         )
+    }
+
+    #[test]
+    fn derived_open_context_uses_the_branch_owner_and_workflow_branches() {
+        let dir = setup_repo_on_branch("master");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        let state_dir = dir.path().join(".atelier");
+        insert_record_issue(
+            &db,
+            &state_dir,
+            "atelier-epic",
+            "epic",
+            "review",
+            None,
+            BTreeMap::new(),
+        );
+        insert_record_issue(
+            &db,
+            &state_dir,
+            "atelier-child",
+            "task",
+            "in_progress",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+
+        let context = derive_review_open_context(&db, dir.path(), Some("atelier-child")).unwrap();
+
+        assert_eq!(context.issue_id, "atelier-child");
+        assert_eq!(context.owner_id, "atelier-epic");
+        assert_eq!(context.title, "atelier-epic: atelier-epic");
+        assert_eq!(context.source_branch, "epic/atelier-epic");
+        assert_eq!(context.target_branch, "master");
+        assert!(context.body.contains("atelier issue show atelier-epic"));
     }
 
     fn review_response(id: u64, state: &str, body: &str) -> String {
@@ -1271,9 +1290,8 @@ repo = "atelier"
         assert!(error.contains("pull_request_mismatch"));
         assert!(error.contains("codex/wrong -> master"));
         assert!(error.contains("atelier-issue expects feature/atelier-issue -> master"));
-        assert!(error.contains(
-            "atelier review open --issue atelier-issue --source-branch feature/atelier-issue --target-branch master"
-        ));
+        assert!(error.contains("atelier review open --issue atelier-issue"));
+        assert!(error.contains("derives these branches from workflow state"));
         assert!(transport.requests().is_empty());
         let refreshed = Database::open(&db_path).unwrap();
         assert!(
@@ -1816,7 +1834,7 @@ repo = "atelier"
         .unwrap();
         assert!(!passed);
         assert!(reason.contains("not merged"));
-        assert!(reason.contains("atelier review status --issue atelier-linked"));
+        assert!(reason.contains("atelier review show --issue atelier-linked"));
 
         let closed_transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
@@ -1878,7 +1896,7 @@ repo = "atelier"
 
         assert!(!passed);
         assert!(reason.contains("linked PR branches"));
-        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
+        assert!(reason.contains("atelier review show --issue atelier-hw9t"));
     }
 
     #[test]
@@ -1947,44 +1965,6 @@ repo = "atelier"
                 .as_deref(),
             Some("reviewer")
         );
-    }
-
-    #[test]
-    fn status_outcome_resolves_linked_pr_without_rendering() {
-        let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier");
-        let db_path = state_dir.join("runtime/state.db");
-        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
-        write_workflow(dir.path());
-        write_config(dir.path());
-        let db = Database::open(&db_path).unwrap();
-        insert_record_issue(
-            &db,
-            &state_dir,
-            "atelier-issue",
-            "feature",
-            "review",
-            None,
-            pull_request_fields(42),
-        );
-
-        let outcome = status(
-            &db,
-            PrStatusRequest {
-                repo_root: dir.path(),
-                state_dir: &state_dir,
-                issue_ref: Some("atelier-issue"),
-            },
-        )
-        .unwrap();
-
-        assert_eq!(outcome.issue_id, "atelier-issue");
-        assert_eq!(outcome.number, 42);
-        assert_eq!(
-            outcome.url,
-            "forge.example.test/tools/atelier/pulls/42".to_string()
-        );
-        assert_eq!(outcome.repo, "tools/atelier");
     }
 
     #[test]

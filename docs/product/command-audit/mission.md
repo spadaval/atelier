@@ -1,7 +1,7 @@
 # Retired `atelier mission`
 
-Primary role: Retired namespace; current objective coordination uses
-mission-typed issue records plus `work mission` dashboards.
+`atelier mission` is removed. A mission is a typed issue record, not a parallel
+command namespace.
 
 Primary question: "How do I create, focus, inspect, coordinate, and close a
 durable mission?"
@@ -75,7 +75,7 @@ the root namespace is retired.
 | `mission status` | Manager/orchestrator | See current mission health and next actions. | Removed. Replacement: `work mission <id>` and `issue transition <id>`. |
 | `mission status --verbose` | Reviewer | Inspect terminal-check detail. | Removed. Replacement: `issue transition <id> --verbose` once verbose transition output lands. |
 | `mission close --reason` | Manager/orchestrator | Close a mission after gates pass. | Removed. Replacement: `issue transition <objective-id> close --reason`. |
-| `mission list` | Manager/orchestrator | Select current missions and health summaries. | Removed. Replacement: `issue list --issue-type mission` once issue inventory lands. |
+| `mission list` | Manager/orchestrator | Browse mission records or compare current mission health. | Removed. Replacement: `issue list --issue-type mission` for flat records; `work missions` for the Mission Overview. |
 | `mission update` | Manager/orchestrator | Change lifecycle fields and mission sections. | Removed. Replacement: `issue update` for fields and Markdown section edits for rich prose. |
 | `mission note` | Manager/orchestrator | Add durable coordination or handoff context. | Removed. Replacement: `issue note <objective-id>`. |
 | `mission add-work` | Manager/orchestrator | Link issue work into mission scope. | Removed. Replacement: `issue link <objective-id> <issue-id> --role advances`. |

@@ -31,7 +31,7 @@ The product contract needs four boundaries to stay clear before implementation:
 - workflow validators read PR state without performing PR actions.
 
 Without a durable decision, implementation could recreate hidden active
-pointers, overload evidence attachments as mutable PR state, or let `atelier pr`
+pointers, overload evidence attachments as mutable review state, or let review
 commands transition issues as a side effect.
 
 ## Decision
@@ -48,11 +48,11 @@ commands transition issues as a side effect.
    mission context. Inspecting a derived session view must not close, block, or
    unassign an issue.
 
-3. PR-equivalent review artifacts are code review workspaces.
-   `atelier pr` commands may open, inspect, comment on, review, and summarize
-   provider-backed review artifacts for linked issues or epics. They do not
-   start, close, block, or otherwise transition Atelier workflow. Forgejo is the
-   current provider, not the durable product concept.
+3. Review artifacts are code review workspaces.
+   The current `atelier review` surface may open, inspect, comment on, review,
+   and summarize configured review artifacts for linked issues or epics. It
+   does not start, close, block, or otherwise transition Atelier workflow.
+   Forgejo is the current provider, not the durable product concept.
 
 4. Provider role authorship is command authorship, not Atelier authorship.
    Repository config maps Atelier PR roles to provider service users for remote
@@ -80,6 +80,13 @@ commands transition issues as a side effect.
    and unresolved review-comment counts for guidance. The configured review
    provider remains the policy authority for branch protection, required
    approvals, allowed merge methods, and merge authorization.
+
+## Historical Command Examples (Non-Normative)
+
+The original accepted wording used `atelier pr` for provider-backed review and
+named `atelier pr merge` in validator guidance. ADR 0011 removed that public
+surface in favor of `atelier review`; these spellings remain here only to
+preserve the rationale behind the review/workflow authority boundary.
 
 ## Alternatives Considered
 
@@ -123,7 +130,7 @@ provider-backed merge gates.
 - Product docs and help must teach `session` as a derived inspection surface
   over issue activity, not a replacement for `status`, `start`, or issue
   transitions.
-- Product docs and help must teach `pr` as a review-artifact surface whose
+- Product docs and help must teach `review` as a review-artifact surface whose
   next steps point back to issue or epic transition readiness.
 - Workflow schema version 3 does not define a top-level typed-field registry.
   Strict validation accepts the built-in `pull_request` field as a positive
@@ -134,7 +141,7 @@ provider-backed merge gates.
   it.
 - Adding local enforcement of provider approval or branch-protection policy is a
   separate product/architecture decision, not an implied extension of
-  `linked_pr_merged`, `review_complete`, or `atelier pr merge`.
+  `linked_pr_merged`, `review_complete`, or `atelier review merge`.
 - Evidence records remain the proof mechanism for validation transcripts,
   review summaries, and residual risk; they do not become the mutable PR state
   store.

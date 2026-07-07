@@ -529,7 +529,7 @@ Failure behavior is part of the action contract:
   owner-branch tracker commit.
 - Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
-  transition options`, `atelier review status --issue <id>`, or `atelier check <id>`.
+  transition options`, `atelier review show --issue <id>`, or `atelier check <id>`.
 
 ## Validators
 
@@ -628,11 +628,12 @@ SQLite domain cache may index open findings, approvals, stale approvals,
 and merge state, but record files must not store a second mutable summary that can
 drift from the event timeline.
 
-Provider-mode `review link` inputs may accept a review number or a full
-provider URL, but canonical issue records store only the normalized structured
-field. URL inputs must match the configured review provider, host, owner, and
-repository before they normalize to a number. The current provider
-implementation is Forgejo.
+Provider-mode `review open --existing` inputs may accept a review number or a
+full provider URL, but canonical issue records store only the normalized
+structured field. URL inputs must match the configured review provider, host,
+owner, and repository before they normalize to a number. The current provider
+implementation is Forgejo. This is a recovery/import path; routine `review
+open` derives creation fields from issue and workflow state.
 
 The active review link belongs to the branch-owning issue or epic. Child issues
 inherit the nearest parent epic's `review`; defining `review` directly on a

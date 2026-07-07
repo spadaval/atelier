@@ -937,14 +937,14 @@ mod tests {
     #[test]
     fn visible_grouped_review_references_target_subcommand_help() {
         let groups = grouped_paths(&[&[], &["review"]]);
-        let uses = expand_command_reference("atelier review approve --body", &groups);
+        let uses = expand_command_reference("atelier review submit --approve --body", &groups);
 
         assert_eq!(
             uses,
             vec![CommandUse {
-                display: "atelier review approve --body".to_string(),
-                path: vec!["review".to_string(), "approve".to_string(),],
-                options: vec!["--body".to_string()],
+                display: "atelier review submit --approve --body".to_string(),
+                path: vec!["review".to_string(), "submit".to_string(),],
+                options: vec!["--approve".to_string(), "--body".to_string()],
             }]
         );
     }
@@ -978,11 +978,11 @@ mod tests {
 
     #[test]
     fn subcommand_help_parser_extracts_commands_section() {
-        let help = "Configured review artifacts\n\nUsage: atelier review [OPTIONS] <COMMAND>\n\nCommands:\n  approve          Approve a review artifact\n  request-changes  Request changes on a review artifact\n  help             Print this message\n\nOptions:\n  -h, --help       Print help\n";
+        let help = "Configured review artifacts\n\nUsage: atelier review [OPTIONS] <COMMAND>\n\nCommands:\n  open    Open or link a review artifact\n  show    Show review state\n  submit  Submit a review action\n  help    Print this message\n\nOptions:\n  -h, --help       Print help\n";
         let commands = parse_subcommand_help_commands(help);
 
-        assert!(commands.contains("approve"));
-        assert!(commands.contains("request-changes"));
+        assert!(commands.contains("open"));
+        assert!(commands.contains("submit"));
         assert!(commands.contains("help"));
         assert!(!commands.contains("--help"));
     }

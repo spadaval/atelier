@@ -46,6 +46,9 @@ that direction into contracts that can be implemented and validated.
   surface.
 - [Human CLI Output](human-cli-output.md): human-readable CLI output grammar,
   formatter boundaries, color/width policy, and test expectations.
+- [Issue Inventory And Mission Overview](issue-inventory-and-mission-overview.md):
+  flat issue inventory, cross-mission membership and rollups, exceptional work,
+  ordering, budgets, quiet output, and colorless behavior.
 - [Mission Control TUI](mission-control-tui.md): Mission Control TUI projection
   dependencies, degradation rules, navigation model, mutation boundary, and
   fixture expectations.

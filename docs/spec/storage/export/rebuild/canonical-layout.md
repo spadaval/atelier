@@ -2,9 +2,9 @@
 
 > Historical migration specification. Its export/projection terminology does
 > not define current ordinary behavior. Current persistence and cache contracts
-> are [Markdown-First Record Store](../../../architecture/markdown-first-record-store.md),
-> [SQLite Domain Cache Schema](../../../architecture/sqlite-runtime-schema.md),
-> and [ADR 0017](../../../adr/0017-sqlite-domain-cache-and-hard-removal.md).
+> are [Markdown-First Record Store](../../../../architecture/markdown-first-record-store.md),
+> [SQLite Domain Cache Schema](../../../../architecture/sqlite-runtime-schema.md),
+> and [ADR 0017](../../../../adr/0017-sqlite-domain-cache-and-hard-removal.md).
 
 This document defines the target `.atelier/` canonical record tree. Tracked
 Markdown records under `.atelier/` are the committed rebuild source for the
@@ -16,9 +16,10 @@ ignored local state.
 - Canonical rendering is deterministic for the same logical state.
 - Canonical records are sufficient to rebuild SQLite for all canonical records.
 - Every record carries schema and version metadata.
-- `lint` validates `.atelier/` Markdown directly, `doctor` reports local
-  projection/runtime health, and hidden/admin deterministic-renderer or rebuild
-  diagnostics may verify migration internals.
+- `atelier check` validates canonical `.atelier/` Markdown and reports local
+  projection/runtime health; `atelier check --fix` repairs ignored local state.
+  Hidden/admin deterministic-renderer or projection diagnostics may verify
+  migration internals.
 - Git merges happen through tracked `.atelier/` record files, not through
   SQLite.
 
@@ -185,16 +186,16 @@ Direct edits are a supported operator and agent workflow:
 
 1. Edit tracked Markdown under `.atelier/` using the deterministic layout in
    this document.
-2. Run `atelier lint` to validate schema, path, front matter, relationships,
+2. Run `atelier check` to validate schema, path, front matter, relationships,
    activity sidecars, and unsupported files.
 3. Run the normal command that depends on the changed record, or run
-   `atelier doctor --fix` when local projection/runtime repair is explicitly
+   `atelier check --fix` when local projection/runtime repair is explicitly
    needed.
 
 Every canonical Markdown file must use YAML front matter bounded by `---`, UTF-8
 encoding, LF line endings, and exactly one trailing newline. Front matter keys
 are rendered lexically by Atelier writers. Hand edits may use any YAML key order,
-but `atelier lint` and repair commands may report non-canonical ordering as
+but `atelier check` may report non-canonical ordering as
 format drift once the direct-edit lint slice lands.
 
 Required common fields are `schema`, `schema_version`, `id`, `title`, `status`,
@@ -253,7 +254,7 @@ Operators can edit canonical issue Markdown directly and validate the result.
 
 ## Evidence
 
-- `atelier lint atelier-z1p8` reports no findings.
+- `atelier check atelier-z1p8` reports no findings.
 
 ## Notes
 
@@ -285,14 +286,14 @@ normal Git tools and then use Atelier commands to validate the result. The
 standard recovery loop is:
 
 1. Resolve file conflicts under tracked `.atelier/` record directories.
-2. Run `atelier lint`.
+2. Run `atelier check`.
 3. Use focused drill-down commands such as `atelier issue show <id>`,
-   `atelier issue status <objective-id>`, `atelier evidence show <id>`, or
-   `atelier work queue --ready` to inspect the affected records.
-4. Run `atelier doctor --fix` if ignored local projection/runtime state is
+   `atelier issue show <objective-id>`, `atelier evidence show <id>`, or
+   `atelier work ready` to inspect the affected records.
+4. Run `atelier check --fix` if ignored local projection/runtime state is
    stale or was rebuilt from invalid intermediate files.
-5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
-   mission being closed.
+5. Re-run `atelier check`, then inspect `atelier issue transition <id>` for the
+   issue, epic, or mission being advanced.
 
 For a single Markdown record conflict:
 
@@ -316,7 +317,7 @@ For relationship conflicts:
 - Do not author `depends_on`; express sequencing in `blocks` and let commands
   derive inverse display.
 - After resolving dependency changes, inspect readiness with
-  `atelier work queue --ready` and targeted issue `show` output.
+  `atelier work ready` and targeted `atelier issue show <id>` output.
 
 For activity sidecar conflicts:
 
@@ -338,7 +339,7 @@ For unsupported files or stale runtime state:
 - If `.atelier/runtime/state.db` is missing or stale, rebuild it from canonical
   records instead of resolving it as a Git conflict.
 
-When `atelier lint` reports invalid canonical Markdown, fix the Markdown rather
+When `atelier check` reports invalid canonical Markdown, fix the Markdown rather
 than trusting the current SQLite projection. SQLite is rebuildable; the
 canonical Markdown record tree is the durable review surface.
 
@@ -586,9 +587,10 @@ Rebuild proceeds in this order:
 5. Regenerate derived projections such as `mission-control.json` when supported.
 
 If any unexpected canonical file exists under tracked `.atelier/` record
-directories, lint/rebuild must report an untracked or unsupported canonical file
-error. `manifest.json` and `graph.json` are not canonical source files and
-canonical repair removes stale copies when it writes the projection.
+directories, `atelier check` and hidden rebuild diagnostics must report an
+untracked or unsupported canonical file error. `manifest.json` and `graph.json`
+are not canonical source files and canonical repair removes stale copies when it
+writes the projection.
 
 The staged implementation uses a registered first-class record contract for
 non-issue records. Each canonical kind declares its record kind, schema,
@@ -599,15 +601,16 @@ defines its durable layout.
 
 ## Mutating Command Rollout
 
-Hidden/admin `atelier export` remains the deterministic check surface for
-canonical records during migration or targeted maintenance, and normal durable
-writes target `.atelier/` directly.
+The hidden/admin deterministic renderer remains available for canonical-record
+migration or targeted maintenance, and normal durable writes target
+`.atelier/` directly.
 
-Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
-tracked `.atelier/` canonical records and may create ignored runtime/cache
-directories in a fresh checkout. Normal operators use `doctor --fix` for
-explicit ignored-state repair. Backup export formats are no longer command
-surfaces; predecessor imports use `atelier import-beads`.
+The hidden/admin projection rebuild primitive recreates
+`.atelier/runtime/state.db` from tracked `.atelier/` canonical records and may
+create ignored runtime/cache directories in a fresh checkout. Normal operators
+use `atelier check --fix` for explicit ignored-state repair. Backup export
+formats are no longer command surfaces; standard predecessor imports use
+`atelier init --import-beads`.
 
 Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
 write to a unique temporary database before atomically replacing `state.db`.

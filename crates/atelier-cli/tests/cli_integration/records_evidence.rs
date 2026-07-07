@@ -1232,6 +1232,39 @@ fn test_evidence_list_elides_command_transcripts() {
 }
 
 #[test]
+fn test_evidence_list_bounds_no_summary_command_capture() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let long_command = format!("printf proof # {}", "x".repeat(5_200));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--",
+            "sh",
+            "-c",
+            &long_command,
+        ],
+    );
+    assert!(success, "no-summary command capture failed: {stderr}");
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains("command sh -c 'printf ..."));
+    assert!(evidence_list.contains("(command-backed proof)"));
+    assert!(!evidence_list.contains(&"x".repeat(256)));
+    assert!(
+        evidence_list.len() < 1_024,
+        "one no-summary record must not create a list firehose ({} bytes):\n{evidence_list}",
+        evidence_list.len()
+    );
+}
+
+#[test]
 fn test_evidence_list_bounds_default_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1286,6 +1319,69 @@ fn test_evidence_list_bounds_default_output() {
         evidence_list.contains("Omitted: 1 older evidence record(s) hidden by default limit 20")
     );
     assert!(evidence_list.contains("Filter by status: atelier evidence list --status <status>"));
+    assert!(evidence_list.contains("List matching IDs: atelier --quiet evidence list"));
+
+    let (success, quiet_list, stderr) = run_atelier(dir.path(), &["--quiet", "evidence", "list"]);
+    assert!(success, "quiet evidence list failed: {stderr}");
+    assert_eq!(quiet_list.lines().count(), 21);
+    assert!(quiet_list.lines().any(|line| line == evidence_ids[0].1));
+    assert!(quiet_list
+        .lines()
+        .any(|line| line == evidence_ids.last().unwrap().1));
+}
+
+#[test]
+fn test_evidence_quiet_output_is_a_stable_id_composition_path() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Proof target"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Proof target");
+
+    let (success, record_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--quiet",
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "quiet proof",
+        ],
+    );
+    assert!(success, "quiet evidence record failed: {stderr}");
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "quiet proof");
+    assert_eq!(
+        record_out.trim(),
+        format!("{evidence_id} recorded validation exit=(none) target=issue/{issue_id}(validates)")
+    );
+
+    let (success, show_out, stderr) =
+        run_atelier(dir.path(), &["--quiet", "evidence", "show", &evidence_id]);
+    assert!(success, "quiet evidence show failed: {stderr}");
+    assert_eq!(show_out, record_out);
+
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["--quiet", "evidence", "list"]);
+    assert!(success, "quiet evidence list failed: {stderr}");
+    assert_eq!(list_out.trim(), evidence_id);
+    assert!(!list_out.contains("Evidence\n"));
+
+    let (success, attach_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--quiet",
+            "evidence",
+            "attach",
+            &evidence_id,
+            "issue",
+            &issue_id,
+        ],
+    );
+    assert!(success, "quiet idempotent attach failed: {stderr}");
+    assert_eq!(attach_out.trim(), evidence_id);
 }
 
 #[test]

@@ -6,6 +6,19 @@ labels:
 - "cli"
 - "command-audit"
 - "validation"
+review:
+  kind: pull_request
+  number: 50
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-vqhi
+    owner_kind: issue
+    review_target: mission/atelier-durs
+    work_branch: validation/atelier-vqhi
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +30,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T19:10:04.304395363+00:00"
+status: "done"
 title: "Validate command complexity budget cleanup"
-updated_at: "2026-06-29T20:16:55.721310737+00:00"
+updated_at: "2026-07-06T19:10:04.304395363+00:00"
 ---
 
 ## Description

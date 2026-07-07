@@ -862,7 +862,7 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
-    assert!(stdout.contains("history       Inspect repository, mission, issue, or epic activity"));
+    assert!(stdout.contains("history       Inspect bounded durable repository or issue activity"));
     assert!(!stdout.contains("Inspect canonical repo"));
 
     for heading in [
@@ -1025,6 +1025,88 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
+fn test_forgejo_role_setup_is_hidden_from_normal_guidance_but_callable_for_recovery() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, root_help, stderr) = run_atelier_raw(dir.path(), &["--help"]);
+    assert!(success, "root help failed: {stderr}");
+    assert!(
+        !root_help.contains("forgejo"),
+        "root help must not teach provider setup as routine workflow:\n{root_help}"
+    );
+
+    for role in ["worker", "reviewer", "validator", "manager", "admin"] {
+        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
+        assert!(success, "man {role} failed: {stderr}");
+        assert!(
+            !guide.contains("forgejo roles"),
+            "{role} guidance must not teach provider setup as routine workflow:\n{guide}"
+        );
+    }
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
+    assert!(success, "Forgejo recovery help failed: {stderr}");
+    assert!(recovery_help.contains("Create missing role author users"));
+}
+
+#[test]
+fn test_branch_recovery_is_hidden_from_routine_work_but_callable_explicitly() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Recovery epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Recovery epic");
+
+    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "epic", &epic_id]);
+    assert!(success, "work epic failed: {stderr}");
+    assert!(
+        dashboard.contains(&format!("atelier issue transition {epic_id}")),
+        "routine epic guidance should route through lifecycle transitions:\n{dashboard}"
+    );
+    assert!(
+        !dashboard.contains("atelier branch"),
+        "routine epic guidance must not promote branch recovery:\n{dashboard}"
+    );
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["branch", "for-epic", "--help"]);
+    assert!(success, "branch recovery help failed: {stderr}");
+    assert!(recovery_help.contains("failed start transition"));
+}
+
+#[test]
+fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
+    let dir = tempdir().unwrap();
+
+    for (args, expected) in [
+        (vec!["export", "--help"], "normal health uses check"),
+        (
+            vec!["rebuild", "--help"],
+            "explicit local repair uses check --fix",
+        ),
+        (
+            vec!["workflow", "check", "--help"],
+            "normal operator checks use check",
+        ),
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(success, "{args:?} help failed: {stderr}");
+        assert!(
+            stdout.contains(expected),
+            "{args:?} help was stale:\n{stdout}"
+        );
+        assert!(!stdout.contains("normal health uses lint"), "{stdout}");
+        assert!(!stdout.contains("repair uses doctor"), "{stdout}");
+    }
+}
+
+#[test]
 fn test_import_beads_help_names_record_files_and_lazy_cache_repair() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["import-beads", "--help"]);
@@ -1151,7 +1233,7 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     assert!(stdout.contains("Advanced/debug workflow policy diagnostics"));
     assert!(!stdout.contains("\n  init"));
     assert!(stdout.contains("check"));
-    assert!(stdout.contains("normal operator checks use lint and status surfaces"));
+    assert!(stdout.contains("normal operator checks use check"));
     assert!(!stdout.contains("validate"));
 }
 
@@ -2327,9 +2409,6 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
             &source_id,
         ],
     );
-    run_atelier(dir.path(), &["issue", "create", "Disposable item"]);
-    let disposable_id = issue_ref(dir.path(), 3);
-
     let (success, impact_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(impact_out.contains("Impact"));
@@ -2356,13 +2435,6 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Explicit note body"));
-
-    let (success, delete_out, stderr) = run_atelier(
-        dir.path(),
-        &["maintenance", "delete", "issue", &disposable_id, "--force"],
-    );
-    assert!(success, "maintenance delete failed: {stderr}");
-    assert!(delete_out.contains("Deleted issue"));
 }
 
 #[test]
@@ -2474,7 +2546,7 @@ fn test_generic_link_rejection_is_plain_unknown_command() {
 }
 
 #[test]
-fn test_explicit_homes_reject_non_issue_targets_until_supported() {
+fn test_removed_maintenance_delete_is_unknown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2488,11 +2560,12 @@ fn test_explicit_homes_reject_non_issue_targets_until_supported() {
             "--force",
         ],
     );
+    assert!(!success, "maintenance delete should be removed");
     assert!(
-        !success,
-        "maintenance delete unexpectedly accepted a mission target"
+        stderr.contains("unrecognized subcommand 'maintenance'"),
+        "{stderr}"
     );
-    assert!(stderr.contains("supports issue records only"));
+    assert!(!stderr.contains("was removed"), "{stderr}");
 }
 
 #[test]

@@ -22,6 +22,14 @@ commands. A purpose-built view is not automatically better if it duplicates
 read models, forks lifecycle interpretation, or needs special formatting tricks
 to feel coherent.
 
+## Decision Record Contract
+
+This is a decision aid, not a workflow or an additional approval gate. For an
+audit entry, record only the operator question, role, product/cognitive cost,
+architecture/code cost, one `Keep`, `Simplify`, `Fold`, `Hide`, or `Remove`
+verdict, and the next action. Use short evidence-backed phrases; do not turn a
+command audit into a narrative or a separate process.
+
 ## Budget Test
 
 For every command or flag family, ask:
@@ -63,13 +71,14 @@ Hide it, fold it into the owner command, or remove it.
 
 | Surface | Pressure | Target |
 | --- | --- | --- |
-| `issue list` | Needed as a simple inventory command; root help already claims listing while the subcommand is missing. | Add as generic issue inventory, not as a dashboard. |
-| `work queue` | Being asked to cover generic inventory, mission discovery, top-level work selection, and operational queues. Its current repo-wide nested output does not clearly belong to one Agent Factory role. | Simplify or fold. Keep only if it has a crisp repo-wide operational job that reduces scanning and command stitching more than `work ready`, `work blocked`, `work active`, `work mission`, `work epic`, and `issue list` already do. |
+| `issue list` | Queue-shaped flags and hierarchy obscure the generic inventory job. | Keep flat, all-status inventory with metadata filters, neutral ordering, and a default limit. |
+| `work missions` | A thin mission-type list cannot answer cross-mission coordination. | Use the bounded Mission Overview: current missions, directly advanced epics, collapsed progress, and exceptional-work facts. |
+| `work queue` | Generic inventory, mission discovery, top-level selection, and operational queues now have distinct owners. | Retire from normal guidance after callers migrate; do not alias it to the new read models. |
 | `work mission` | Current dashboard prints proof/closeout/ready-work noise before useful mission coordination. | Epic-first, mission-scoped, bounded, with drill-down flags. |
 | `issue transition` | Default output leaks validators, action preflights, dirty-path dumps, descriptions, and commands with equal weight. | Default shows transitions and failed requirements only; verbose keeps full machinery. |
 | `review` | Too many verbs mirror provider operations. | Collapse submit-like actions and infer issue/provider context where possible. |
-| `evidence attach` | Separate verb for a relationship mutation. | Fold into the general relationship model unless reuse proves worth the extra verb. |
-| scoped `history` flags | Can become a second query language. | Keep only if bounded issue/objective activity in `issue show` is insufficient. |
+| `evidence attach` | Separate verb for a typed cross-kind proof relationship. | Keep as the secondary reuse path; `record --target` remains the taught first step and generic issue links do not own evidence. |
+| scoped `history` flags | Can become a second query language. | Keep only `--issue` and `--limit`; fold objective scope into `work mission`/`work epic` and remove query filters. |
 | provider, branch, maintenance, diagnostics roots | Expose recovery or implementation machinery. | Hide unless explicitly needed for admin recovery. |
 
 ## Output Budget

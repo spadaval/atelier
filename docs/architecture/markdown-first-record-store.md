@@ -239,7 +239,8 @@ current committed records against the target contract above.
 Query commands use `CacheManager` when they need selected facts across many
 records:
 
-- `work queue`, `work queue --ready`, search, dependency views, and graph traversal;
+- `atelier work ready`, `atelier work blocked`, `atelier issue list`, objective
+  detail views, dependency views, and graph traversal;
 - workflow validator lookup and transition checks;
 - Mission Control and terminal UI inputs;
 - lint rules that need reverse links or whole-project consistency.
@@ -297,7 +298,7 @@ activity sidecars directly. Frequent polling surfaces may use small domain
 cache rows for candidate lists without treating complete record objects or
 Markdown bodies as cached UI state.
 
-## Rebuild And Freshness
+## Hidden Rebuild Diagnostic And Freshness
 
 `atelier rebuild` recreates `.atelier/runtime/state.db` from record files
 discovered under tracked `.atelier/` record directories. Cache schema/version
@@ -396,15 +397,15 @@ history and recent-activity views read the sidecars directly.
 | Issue create/update/close/reopen/label/unlabel/block/unblock/relate/unrelate/subissue/quick | RecordStore-owned mutation | Public commands write issue records first and invalidate affected cache source metadata. They do not write SQLite domain rows directly. |
 | Issue note/comment and lifecycle activity | Activity-sidecar mutation | Commands append activity sidecars through `atelier-records::activity`; the cache does not own or mirror their payloads. |
 | Issue delete and close-all | RecordStore-owned mutation | Delete removes the record file; close-all rewrites matching issue files through the lifecycle close path. Cache repair occurs lazily. |
-| `dep add` and `dep remove` | RecordStore-owned mutation | Dependency aliases mutate issue relationship front matter. `dep list` is query-only and goes through `CacheManager`. |
+| `atelier issue link <id> <target> --role blocked_by` and `atelier issue unlink <id> <target> --role blocked_by` | RecordStore-owned mutation | Typed issue relationship commands mutate issue relationship front matter. Issue detail is the query surface and goes through `CacheManager`. |
 | Mission objective create/update/link/block | RecordStore-owned mutation | Mission objectives are issue records with `issue_type: "mission"`; links and blockers write issue record files and relationships. |
 | Plan create/revise/link | Removed/deferred | V1 plans are ordinary Markdown artifacts or prose references, not `.atelier/plans/` records. |
 | Bundle apply | RecordStore-owned mutation | Bundle apply stages issue-backed missions, ordinary issues, evidence, and relationships as record files, then invalidates affected cache sources after successful writes. |
 | Evidence add/attach | RecordStore-owned mutation | Evidence records and attachment links write evidence files and relationships. Issue evidence attachments also append issue activity sidecars. |
 | Typed links, labels, and blockers | Record-file facts | Cache rebuild and repair derive domain-specific label, blocker, and relation rows from concrete domain records. |
 | Workflow validate | Cache-backed query | Built-in validators use domain services and cache read models but do not persist validator-result records. |
-| Work start/finish and worktree helpers | Record files plus local runtime | Issue status and activity sidecars are durable; checkout/session context under `.atelier/runtime/` is disposable. |
-| Diagnostics, telemetry, import, rebuild, lint, doctor | Local runtime, migration, or repair | Telemetry is local. Imports must emit valid record files. Rebuild recreates only the disposable domain cache. |
+| Issue transitions and branch recovery | Record files plus activity sidecars | `atelier issue transition <id>` exposes readiness and executes configured lifecycle actions. Canonical issue status remains the durable current-work source of truth; manual owner-branch commands are recovery-only after failed transition actions. |
+| Diagnostics, telemetry, import, hidden renderer/cache probes, and check | Local runtime, migration, or repair | Telemetry is local. Imports must emit valid record files. Hidden probes diagnose migration or cache behavior; `atelier check` and `atelier check --fix` own normal operator health and ignored-state repair. |
 
 Current caller map for activity sidecars:
 

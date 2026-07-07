@@ -237,9 +237,12 @@ otherwise degraded; `check --fix` is the admin explicit local repair path.
 
 ## Queue Views
 
-Use a queue view when the command returns many independent records, such as
-`atelier work ready`, `atelier work blocked`, and bounded `atelier work`
-dashboards.
+Use a queue view when the command returns operational work, such as `atelier
+work ready`, `atelier work blocked`, and bounded `atelier work` dashboards.
+`atelier issue list` is a flat metadata inventory, not a queue, and `atelier
+work missions` is an epic-first cross-mission overview. Their membership,
+ordering, budgets, and representative shapes are defined in [Issue Inventory
+And Mission Overview](issue-inventory-and-mission-overview.md).
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -260,9 +263,8 @@ context-only parent rows, and omitted rows need distinct text. Parent rows shown
 only to explain child work are context-only unless the parent itself is the
 action target.
 
-Empty queue output should say what was searched and what to try next. For
-example, `work ready` may include the blocked count, while
-`issue search` should echo the search query.
+Empty queue output should say what was selected and what to try next. For
+example, `work ready` may include the blocked count.
 
 Quiet mode remains the terse path for strict composition values only. Quiet
 output may contain IDs, counts, paths, status tokens, and pass/fail tokens. It
@@ -350,7 +352,9 @@ Color is optional hierarchy, never the only carrier of meaning.
 - Symbols may be used only when paired with text or when they are already a
   familiar status marker in the same line.
 - Initial color policy is automatic only: enable color for interactive terminals
-  when `NO_COLOR` is not set, and disable it for non-interactive output.
+  when `NO_COLOR` is absent, and disable it for non-interactive output or when
+  `NO_COLOR` is present, including when its value is empty. Quiet output never
+  contains ANSI escapes.
 - Avoid one-off per-command color decisions; use shared style helpers once
   color is introduced.
 - A future `--color=auto|always|never` flag is a separate CLI-surface artifact

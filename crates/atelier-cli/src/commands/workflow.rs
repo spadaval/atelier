@@ -858,7 +858,7 @@ fn open_review_artifact_action(
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
-    transition_name: &str,
+    _transition_name: &str,
     action: &PlannedAction,
 ) -> Result<String> {
     let policy = atelier_app::workflow_policy::load(repo_root)?;
@@ -867,11 +867,7 @@ fn open_review_artifact_action(
     if let Some(detail) = existing_review_artifact_detail(state_dir, &resolution.owner_id)? {
         return Ok(detail);
     }
-    let title = format!("Review {} {}", resolution.owner_id, transition_name);
-    let body = format!(
-        "Opened by transition action `{}` for issue {}.",
-        action.name, issue.id
-    );
+    let context = app_pr::derive_review_open_context(db, repo_root, Some(&issue.id))?;
     let role = action.review_artifact_role.as_deref().ok_or_else(|| {
         anyhow!(
             "action {} failed: missing workflow action role",
@@ -894,10 +890,10 @@ fn open_review_artifact_action(
                     db_path,
                     issue_ref: Some(&resolution.owner_id),
                     role,
-                    title: &title,
-                    body: &body,
-                    source_branch: &resolution.expected_branch,
-                    target_branch: &resolution.base_branch,
+                    title: &context.title,
+                    body: &context.body,
+                    source_branch: &context.source_branch,
+                    target_branch: &context.target_branch,
                 },
             )?;
             Ok(format!("opened room {}", outcome.review_id))
@@ -930,10 +926,10 @@ fn open_review_artifact_action(
                         db_path,
                         issue_ref: Some(&resolution.owner_id),
                         role,
-                        title: &title,
-                        body: &body,
-                        source_branch: &resolution.expected_branch,
-                        target_branch: &resolution.base_branch,
+                        title: &context.title,
+                        body: &context.body,
+                        source_branch: &context.source_branch,
+                        target_branch: &context.target_branch,
                     },
                     &forgejo,
                     &client,
@@ -2817,8 +2813,13 @@ repo = "atelier"
         else {
             panic!("expected review record");
         };
+        assert_eq!(review_record.header.title, "atelier-epic1: Issue");
         assert_eq!(review_record.source_branch, "epic/atelier-epic1");
         assert_eq!(review_record.target_branch, "mission/atelier-miss");
+        assert!(review_record.events[0]["body"]
+            .as_str()
+            .unwrap()
+            .contains("atelier issue show atelier-epic1"));
 
         let second_detail = open_review_artifact_action(
             &db,
@@ -2941,7 +2942,7 @@ repo = "atelier"
             "{reason}"
         );
         assert!(
-            reason.contains("atelier review status --issue atelier-epic1"),
+            reason.contains("atelier review show --issue atelier-epic1"),
             "{reason}"
         );
 

@@ -37,7 +37,7 @@ to `manager`.
   model.
 - Role attribution is explicit policy, not hidden inference from activity
   history.
-- There is no `atelier session` command, `.atelier/sessions` record kind, or
+- There is no session command, `.atelier/sessions` record kind, or
   activity `attempt` metadata.
 - Historical session-oriented ADR 0010 is superseded for session/attempt
   modeling; its review-artifact boundary remains valid where not contradicted

@@ -5,6 +5,12 @@ Primary role: Manager/orchestrator.
 Primary question: "How do I create, list, inspect, mutate, and advance
 accountable issue work, including objective records that replace missions?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I manage accountable issue work? | Shared: worker, reviewer, manager/orchestrator | One noun lowers command choice; a broad family needs role guidance. | Shared issue lifecycle and relationship ownership avoid parallel namespaces. | Keep | Keep reads, mutations, and transitions under `issue`; keep `list` inventory-shaped. |
+
 `issue` is intentionally shared by roles. The root noun is correct because the
 command owns issue records and issue workflow state, not a single user persona.
 `issue create` and `issue transition` belong in this family because both are
@@ -22,8 +28,10 @@ terminal readiness, and closeout notes.
 Current issue forms for that target are:
 
 - `issue create --issue-type mission` for mission-shaped coordination work.
-- `issue list` for generic issue inventory once the current listing gap is
-  fixed. It is not the mission dashboard and not the operational work queue.
+- `issue list` for generic issue inventory. It includes all statuses by default,
+  renders one neutral ID-ordered row per matching record, and supports only
+  simple metadata and output-budget filters. It is not the mission dashboard
+  and not the operational work queue.
 - `issue show <objective-id>` for rich objective detail, hierarchy, blockers,
   evidence, affected-record context, objective health, ready and blocked work,
   proof gaps, terminal readiness, and completion gates.
@@ -55,7 +63,7 @@ create compatibility aliases for the removed mission commands.
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | `issue create` | Manager/orchestrator | Create actionable issue-shaped work. | Good. Keep `--issue-type` and template behavior explicit. |
-| `issue list` | Manager/orchestrator | Browse issue records with simple metadata filters. | Missing today but correct target. Keep it inventory-shaped; do not turn it into the work dashboard. |
+| `issue list` | Manager/orchestrator | Browse issue records with simple metadata filters. | Keep it flat and inventory-shaped. Remove ready/blocked forms; do not turn it into the Mission Overview or a work dashboard. |
 | `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Good. It includes issue-scoped downstream impact so operators do not leave the issue view for blast-radius context. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `transition options` should be the reviewer entry point. |
 | `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
@@ -74,14 +82,14 @@ Reviewers should see `transition`, `issue show`, and evidence commands.
 Managers should see `create`, `list`, `update`, `link`, `unlink`, and focused
 work dashboards.
 
-## Help Drift
+## Help Contract
 
-Root help currently describes `issue` as including "list", but
-`atelier issue --help` has no `list` subcommand. The product target is to add
-`issue list` as a simple inventory surface. Do not compensate by making
-`work queue` the generic inventory owner.
+Root and issue help describe `issue list` as generic inventory. Subcommand help
+must name the surviving status, category, issue-type, label, priority, limit,
+and quiet forms, and route ready/blocked selection to `work ready` and `work
+blocked`. Do not compensate by making `work queue` the generic inventory owner.
 
-`atelier issue --help` must also avoid implying an `issue close` subcommand.
+`atelier issue --help` must also avoid implying a direct closure subcommand.
 Closure is intentionally owned by `issue transition <id> close --reason`.
 
 ## Human Output Debt

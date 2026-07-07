@@ -247,7 +247,7 @@ mandatory line IDs.
 
 `atelier issue show <mission-id>` is the normal operator surface for mission
 state, blockers, configured validator failures, next actions, and completion
-status. Verbose issue status is completion drill-down: it reports mission shell
+status. Verbose issue transition output is completion drill-down: it reports mission shell
 completion and any explicit linked validation work that supplies workflow
 approval.
 Hidden workflow validators are
@@ -313,7 +313,7 @@ command forms:
 | Formatting check | `cargo fmt -- --check` |
 | Tracker lint | `atelier check` |
 | Admin local-state health check | `atelier check --fix` |
-| Deterministic export/cache diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
+| Deterministic export/cache diagnostic | Use the hidden deterministic-renderer probe only for storage-rendering, migration, or debug claims. |
 | Python invocation | `python3 -c 'print("validation ok")'` |
 | Crate migration completion guard | `python3 scripts/check_crate_migration_completion.py` |
 | Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_completion.py --self-test` |
@@ -389,12 +389,15 @@ than through Agent Factory prose alone.
   focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
-- Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
-  only for local Atelier performance and telemetry analysis. It is not proof of
-  ready work, blockers, validation results, evidence coverage, or completion
-  readiness.
 - Migration work should classify expected breakage and name reconnect or
   completion ownership.
+
+### Diagnostics
+
+Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
+only for local Atelier performance and telemetry analysis. It is not proof of
+ready work, blockers, validation results, evidence coverage, or completion
+readiness.
 
 ## Result States
 

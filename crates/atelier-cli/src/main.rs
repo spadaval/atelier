@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
-use atelier_app::cache_manager::{state_and_db_paths, CacheManager, CacheUse};
+use atelier_app::cache_manager::{CacheManager, CacheUse};
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -31,7 +31,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Manage configured review artifacts
-  history       Inspect repository, mission, issue, or epic activity
+  history       Inspect bounded durable repository or issue activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -173,36 +173,18 @@ enum Commands {
         action: ReviewCommands,
     },
 
-    /// Configure and verify Forgejo integration
+    /// Admin recovery for Forgejo role author accounts
     #[command(hide = true)]
     Forgejo {
         #[command(subcommand)]
         action: ForgejoCommands,
     },
 
-    /// Inspect durable repo, mission, issue, or epic activity
+    /// Inspect bounded durable repository or issue activity
     History {
-        /// Scope to one mission and linked work
-        #[arg(long)]
-        mission: Option<String>,
-        /// Scope to one issue
+        /// Scope to one issue record; mission and epic dashboards own descendant views
         #[arg(long)]
         issue: Option<String>,
-        /// Scope to one epic and its descendants
-        #[arg(long)]
-        epic: Option<String>,
-        /// Include subissues when using --issue
-        #[arg(long)]
-        include_descendants: bool,
-        /// Filter by event kind, such as note or evidence_attached
-        #[arg(long)]
-        event_kind: Option<String>,
-        /// Filter by actor exactly as recorded
-        #[arg(long)]
-        actor: Option<String>,
-        /// Filter to events since a duration like 7d, a YYYY-MM-DD date, or RFC3339
-        #[arg(long)]
-        since: Option<String>,
         /// Maximum number of matching events to print
         #[arg(long, default_value_t = commands::history::DEFAULT_LIMIT)]
         limit: usize,
@@ -215,7 +197,7 @@ enum Commands {
         action: WorkflowCommands,
     },
 
-    /// Git branch helpers for epic review branches
+    /// Manual owner-branch recovery after workflow transition failures
     #[command(hide = true)]
     Branch {
         #[command(subcommand)]
@@ -227,13 +209,6 @@ enum Commands {
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,
-    },
-
-    /// Destructive maintenance commands
-    #[command(hide = true)]
-    Maintenance {
-        #[command(subcommand)]
-        action: MaintenanceCommands,
     },
 
     /// Prune accumulated artifacts safely
@@ -500,18 +475,6 @@ enum IssueCommands {
 }
 
 #[derive(Subcommand)]
-enum MaintenanceCommands {
-    /// Delete a record with an explicit target kind
-    Delete {
-        target_kind: String,
-        target_id: String,
-        /// Skip confirmation
-        #[arg(short, long)]
-        force: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum BundleCommands {
     /// Preview an authored bundle JSON file without mutating tracker state
     Preview { input: String },
@@ -578,30 +541,20 @@ enum ReviewCommands {
         issue: Option<String>,
         #[arg(long)]
         role: Option<String>,
-        #[arg(long)]
-        title: String,
-        #[arg(long, default_value = "")]
-        body: String,
-        #[arg(long)]
-        source_branch: String,
-        #[arg(long, default_value = "master")]
-        target_branch: String,
+        /// Link an existing provider review instead of creating one
+        #[arg(long, conflicts_with = "role")]
+        existing: Option<String>,
     },
-    /// Link an existing review artifact by number or URL
-    Link {
-        #[arg(long)]
-        issue: Option<String>,
-        pull_request: String,
-    },
-    /// Show concise linked review status
-    Status {
-        #[arg(long)]
-        issue: Option<String>,
-    },
-    /// Show linked review details
+    /// Show linked review state and optionally its comments
     Show {
         #[arg(long)]
         issue: Option<String>,
+        /// Include review comments or native room findings
+        #[arg(long)]
+        comments: bool,
+        /// Show only unresolved review comments or native room findings
+        #[arg(long)]
+        unresolved: bool,
     },
     /// Merge or confirm the linked review artifact without changing Atelier workflow state
     Merge {
@@ -610,44 +563,30 @@ enum ReviewCommands {
         #[arg(long)]
         role: Option<String>,
     },
-    /// List live review comments
-    Comments {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        unresolved: bool,
-    },
-    /// Add a review artifact comment
-    Comment {
+    /// Submit one comment, approval, or change request
+    Submit {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         role: Option<String>,
-        /// Record this room comment as a finding instead of a plain timeline comment
+        /// Approve the review artifact
         #[arg(long)]
+        approve: bool,
+        /// Request changes on the review artifact
+        #[arg(long)]
+        request_changes: bool,
+        /// Add a review artifact comment
+        #[arg(long, value_name = "TEXT", conflicts_with = "body")]
+        comment: Option<String>,
+        /// Optional body for an approval or change request
+        #[arg(long, conflicts_with = "comment")]
+        body: Option<String>,
+        /// Record this room comment as a finding instead of a plain timeline comment
+        #[arg(long, requires = "comment")]
         finding: bool,
         /// Finding severity for native room mode
-        #[arg(long, default_value = "blocking")]
-        severity: String,
-        body: String,
-    },
-    /// Approve a review artifact
-    Approve {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        role: Option<String>,
-        #[arg(long, default_value = "")]
-        body: String,
-    },
-    /// Request changes on a review artifact
-    RequestChanges {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        role: Option<String>,
-        #[arg(long, default_value = "")]
-        body: String,
+        #[arg(long, requires = "finding")]
+        severity: Option<String>,
     },
     /// Resolve a native room finding
     Resolve {
@@ -676,17 +615,17 @@ enum ForgejoRolesCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
+    /// Run raw workflow-policy diagnostics; normal operator checks use check
     Check,
 }
 
 #[derive(Subcommand)]
 enum BranchCommands {
-    /// Create or switch to the review branch for an epic
+    /// Recover a missing epic review branch after a failed start transition
     ForEpic { id: String },
-    /// Show local epic review branches
+    /// Inspect local epic review branches during transition recovery
     Status,
-    /// Merge the review branch for an epic into the current branch
+    /// Recover integration after a failed close transition
     Merge { id: String },
 }
 
@@ -733,13 +672,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
-}
-
-fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
-    if kind != "issue" {
-        bail!("{command} currently supports issue records only; got '{kind}'");
-    }
-    Ok(())
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -961,7 +893,7 @@ fn run() -> Result<()> {
                         }),
                     )?;
                     if let Some((kind, id)) = parsed_target {
-                        commands::evidence::attach(
+                        commands::evidence::attach_silently(
                             &storage.state_dir(),
                             &storage.db_path(),
                             &evidence_id,
@@ -972,7 +904,7 @@ fn run() -> Result<()> {
                     }
                     let evidence =
                         use_cases::load_canonical_evidence(&storage.state_dir(), &evidence_id)?;
-                    commands::evidence::print_record_without_cache(&evidence)
+                    commands::evidence::print_record_without_cache(&evidence, quiet)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -994,6 +926,7 @@ fn run() -> Result<()> {
                             target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
                             role: &role,
                             command: &command,
+                            quiet,
                         },
                     )
                 }
@@ -1001,7 +934,7 @@ fn run() -> Result<()> {
             EvidenceCommands::Show { id } => {
                 let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
-                commands::evidence::show(&db, &id)
+                commands::evidence::show(&db, &id, quiet)
             }
             EvidenceCommands::Attach {
                 id,
@@ -1019,12 +952,13 @@ fn run() -> Result<()> {
                     &target_kind,
                     &target_id,
                     &role,
+                    quiet,
                 )
             }
             EvidenceCommands::List { status } => {
                 let storage = use_cases::evidence_query_cache()?;
                 let db = storage.db();
-                commands::evidence::list(&db, status.as_deref())
+                commands::evidence::list(&db, status.as_deref(), quiet)
             }
         },
 
@@ -1034,45 +968,51 @@ fn run() -> Result<()> {
                 ReviewCommands::Open {
                     issue,
                     role,
-                    title,
-                    body,
-                    source_branch,
-                    target_branch,
-                } => commands::pr::open(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    role.as_deref(),
-                    &title,
-                    &body,
-                    &source_branch,
-                    &target_branch,
-                ),
-                ReviewCommands::Link {
+                    existing,
+                } => {
+                    if let Some(existing) = existing {
+                        commands::pr::link(
+                            storage.db(),
+                            storage.repo_root(),
+                            &storage.state_dir(),
+                            &storage.db_path(),
+                            issue.as_deref(),
+                            &existing,
+                        )
+                    } else {
+                        commands::pr::open(
+                            storage.db(),
+                            storage.repo_root(),
+                            &storage.state_dir(),
+                            &storage.db_path(),
+                            issue.as_deref(),
+                            role.as_deref(),
+                        )
+                    }
+                }
+                ReviewCommands::Show {
                     issue,
-                    pull_request,
-                } => commands::pr::link(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    &pull_request,
-                ),
-                ReviewCommands::Status { issue } => commands::pr::status(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    issue.as_deref(),
-                ),
-                ReviewCommands::Show { issue } => commands::pr::show(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    issue.as_deref(),
-                ),
+                    comments,
+                    unresolved,
+                } => {
+                    commands::pr::show(
+                        storage.db(),
+                        storage.repo_root(),
+                        &storage.state_dir(),
+                        issue.as_deref(),
+                    )?;
+                    if comments || unresolved {
+                        commands::pr::comments(
+                            storage.db(),
+                            storage.repo_root(),
+                            &storage.state_dir(),
+                            issue.as_deref(),
+                            unresolved,
+                        )
+                    } else {
+                        Ok(())
+                    }
+                }
                 ReviewCommands::Merge { issue, role } => commands::pr::merge(
                     storage.db(),
                     storage.repo_root(),
@@ -1081,50 +1021,54 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     role.as_deref(),
                 ),
-                ReviewCommands::Comments { issue, unresolved } => commands::pr::comments(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    issue.as_deref(),
-                    unresolved,
-                ),
-                ReviewCommands::Comment {
+                ReviewCommands::Submit {
                     issue,
                     role,
+                    approve,
+                    request_changes,
+                    comment,
+                    body,
                     finding,
                     severity,
-                    body,
-                } => commands::pr::comment(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    role.as_deref(),
-                    &body,
-                    finding,
-                    finding.then_some(severity.as_str()),
-                ),
-                ReviewCommands::Approve { issue, role, body } => commands::pr::review(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    role.as_deref(),
-                    "approve",
-                    &body,
-                ),
-                ReviewCommands::RequestChanges { issue, role, body } => commands::pr::review(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    role.as_deref(),
-                    "request-changes",
-                    &body,
-                ),
+                } => {
+                    let action_count = usize::from(approve)
+                        + usize::from(request_changes)
+                        + usize::from(comment.is_some());
+                    if action_count == 0 {
+                        bail!("review_submit_action_required: pass exactly one of --approve, --request-changes, or --comment <text>");
+                    }
+                    if action_count > 1 {
+                        bail!("review_submit_action_conflict: pass only one of --approve, --request-changes, or --comment <text>");
+                    }
+                    if let Some(comment) = comment {
+                        commands::pr::comment(
+                            storage.db(),
+                            storage.repo_root(),
+                            &storage.state_dir(),
+                            &storage.db_path(),
+                            issue.as_deref(),
+                            role.as_deref(),
+                            &comment,
+                            finding,
+                            severity.as_deref(),
+                        )
+                    } else {
+                        commands::pr::review(
+                            storage.db(),
+                            storage.repo_root(),
+                            &storage.state_dir(),
+                            &storage.db_path(),
+                            issue.as_deref(),
+                            role.as_deref(),
+                            if approve {
+                                "approve"
+                            } else {
+                                "request-changes"
+                            },
+                            body.as_deref().unwrap_or(""),
+                        )
+                    }
+                }
                 ReviewCommands::Resolve { issue, finding } => commands::pr::resolve(
                     storage.db(),
                     storage.repo_root(),
@@ -1148,26 +1092,9 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::History {
-            mission,
-            issue,
-            epic,
-            include_descendants,
-            event_kind,
-            actor,
-            since,
-            limit,
-        } => {
+        Commands::History { issue, limit } => {
             let storage = use_cases::history_query_cache()?;
-            let mission = mission
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
             let issue = issue
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
-            let epic = epic
                 .as_deref()
                 .map(|id| resolve_issue_arg(storage.db(), id))
                 .transpose()?;
@@ -1175,14 +1102,9 @@ fn run() -> Result<()> {
                 storage.db(),
                 &storage.state_dir(),
                 commands::history::HistoryOptions {
-                    mission,
                     issue,
-                    epic,
-                    include_descendants,
-                    event_kind,
-                    actor,
-                    since,
                     limit,
+                    quiet,
                 },
             )
         }
@@ -1216,21 +1138,6 @@ fn run() -> Result<()> {
                 let summary = telemetry::slow_command_summary(days, threshold_ms)?;
                 println!("{}", serde_json::to_string_pretty(&summary)?);
                 Ok(())
-            }
-        },
-
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete {
-                target_kind,
-                target_id,
-                force,
-            } => {
-                require_issue_kind(&target_kind, "atelier maintenance delete")?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let cache = use_cases::mutation_cache()?;
-                let target_id = resolve_issue_arg(cache.db(), &target_id)?;
-                drop(cache);
-                commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
             }
         },
 
@@ -1373,14 +1280,9 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Review { action } => match action {
             ReviewCommands::Open { .. } => "review open",
-            ReviewCommands::Link { .. } => "review link",
-            ReviewCommands::Status { .. } => "review status",
             ReviewCommands::Show { .. } => "review show",
             ReviewCommands::Merge { .. } => "review merge",
-            ReviewCommands::Comments { .. } => "review comments",
-            ReviewCommands::Comment { .. } => "review comment",
-            ReviewCommands::Approve { .. } => "review approve",
-            ReviewCommands::RequestChanges { .. } => "review request-changes",
+            ReviewCommands::Submit { .. } => "review submit",
             ReviewCommands::Resolve { .. } => "review resolve",
         },
         Commands::Forgejo { action } => match action {
@@ -1400,9 +1302,6 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",
-        },
-        Commands::Maintenance { action } => match action {
-            MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
         Commands::Prune { apply, .. } => {
             if *apply {

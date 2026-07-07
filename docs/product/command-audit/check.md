@@ -5,6 +5,12 @@ Primary role: Admin, reviewer, validator.
 Primary question: "Is tracker state healthy enough to trust, and can ignored
 local runtime state be repaired safely?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Is tracker state trustworthy, and can local state be repaired? | Admin, reviewer, validator | Low with one visible health entry point. | Shared validation and bounded local repair. | Keep | Teach `check`; route raw diagnostics only from its output. |
+
 ## Assessment
 
 - Name: Correct. `check` is the visible health command.

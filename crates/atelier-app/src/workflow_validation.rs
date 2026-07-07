@@ -694,7 +694,7 @@ fn linked_pr_merged(
             return Ok((
                 false,
                 format!(
-                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
+                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review show --issue {}`",
                     error,
                     target_id,
                     target_id
@@ -708,7 +708,7 @@ fn linked_pr_merged(
             return Ok((
                 false,
                 format!(
-                    "{error:#}; run `atelier review status --issue {}` after configuring ~/.config/atelier.toml",
+                    "{error:#}; run `atelier review show --issue {}` after configuring ~/.config/atelier.toml",
                     target_id
                 ),
             ));
@@ -748,10 +748,7 @@ fn review_complete(
         }) => linked_pr_merged(db, repo_root, target_kind, target_id),
         Err(error) => Ok((
             false,
-            format!(
-                "{}; run `atelier review status --issue {}`",
-                error, target_id
-            ),
+            format!("{}; run `atelier review show --issue {}`", error, target_id),
         )),
     }
 }
@@ -770,10 +767,7 @@ fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Resu
         Err(error) => {
             return Ok((
                 false,
-                format!(
-                    "{}; run `atelier review status --issue {}`",
-                    error, issue_id
-                ),
+                format!("{}; run `atelier review show --issue {}`", error, issue_id),
             ))
         }
     };
@@ -784,7 +778,7 @@ fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Resu
         Ok((
             false,
             format!(
-                "review room {} is {}; run `atelier review status --issue {}`",
+                "review room {} is {}; run `atelier review show --issue {}`",
                 outcome.review_id, outcome.status, issue_id
             ),
         ))

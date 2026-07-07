@@ -14,6 +14,7 @@ use atelier_sqlite::{validate_record_kind, Database};
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
 const EVIDENCE_LIST_LIMIT: usize = 20;
+const EVIDENCE_LIST_TEXT_LIMIT: usize = 96;
 const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
@@ -26,6 +27,7 @@ pub struct CaptureOptions<'a> {
     pub target_id: Option<&'a str>,
     pub role: &'a str,
     pub command: &'a [String],
+    pub quiet: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -170,7 +172,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
     let created =
         app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
     if let Some(target) = target {
-        attach(
+        attach_silently(
             state_dir,
             db_path,
             &created.header.id,
@@ -179,13 +181,13 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
             &target.role,
         )?;
     }
-    print_record_without_cache(&created)
+    print_record_without_cache(&created, options.quiet)
 }
 
-pub fn show(db: &Database, id: &str) -> Result<()> {
+pub fn show(db: &Database, id: &str, quiet: bool) -> Result<()> {
     db.require_record(KIND, id)?;
     let record = canonical_evidence_record(id)?;
-    print_record(db, &record)
+    print_record(db, &record, quiet)
 }
 
 pub fn attach(
@@ -195,6 +197,38 @@ pub fn attach(
     target_kind: &str,
     target_id: &str,
     role: &str,
+    quiet: bool,
+) -> Result<()> {
+    attach_impl(
+        state_dir,
+        db_path,
+        id,
+        target_kind,
+        target_id,
+        role,
+        Some(quiet),
+    )
+}
+
+pub fn attach_silently(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    target_kind: &str,
+    target_id: &str,
+    role: &str,
+) -> Result<()> {
+    attach_impl(state_dir, db_path, id, target_kind, target_id, role, None)
+}
+
+fn attach_impl(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    target_kind: &str,
+    target_id: &str,
+    role: &str,
+    quiet: Option<bool>,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
     canonical_evidence_record(id)?;
@@ -217,7 +251,12 @@ pub fn attach(
             Some(&evidence.header.status),
         )?;
     }
-    if inserted {
+    let Some(quiet) = quiet else {
+        return Ok(());
+    };
+    if quiet {
+        println!("{id}");
+    } else if inserted {
         println!(
             "Attached evidence {id} to {} {target_id} ({role})",
             target.display_kind
@@ -275,8 +314,14 @@ pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
     )
 }
 
-pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
+pub fn list(db: &Database, status: Option<&str>, quiet: bool) -> Result<()> {
     let records = db.list_records(KIND, status)?;
+    if quiet {
+        for record in records {
+            println!("{}", record.id);
+        }
+        return Ok(());
+    }
     if records.is_empty() {
         print_heading("Evidence");
         println!("(none)");
@@ -294,6 +339,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
         let data = evidence_record_data(&record);
         let kind = data.evidence_type.as_str();
         let command = evidence_list_command(data.command.as_deref());
+        let title = evidence_list_title(&record.header.title, data.command.as_deref());
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
         let targets = format_targets(db, &record.header.id, &data)?;
         let target = if targets.is_empty() {
@@ -303,13 +349,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
         };
         println!(
             "  {:<14} {:<13} {:<10} exit {} target {} command {} - {}",
-            record.header.id,
-            record.header.status,
-            kind,
-            exit_status,
-            target,
-            command,
-            record.header.title
+            record.header.id, record.header.status, kind, exit_status, target, command, title
         );
     }
     if records.len() > EVIDENCE_LIST_LIMIT {
@@ -324,6 +364,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     println!("-------------");
     println!("  Show proof detail: atelier evidence show <evidence-id>");
     println!("  Filter by status: atelier evidence list --status <status>");
+    println!("  List matching IDs: atelier --quiet evidence list");
     Ok(())
 }
 
@@ -332,31 +373,68 @@ fn evidence_list_command(command: Option<&str>) -> String {
         return "(manual)".to_string();
     };
     let parts = command.split_whitespace().collect::<Vec<_>>();
-    let summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
-    if parts.len() > 3 {
+    let raw_summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
+    let truncated = parts.len() > 3 || raw_summary.chars().count() > EVIDENCE_LIST_TEXT_LIMIT;
+    let summary = bounded_list_text(&raw_summary);
+    if truncated {
         format!("{summary} ...")
     } else {
         summary
     }
 }
 
-pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
-    let data = evidence_record_data(record);
-    let targets = format_targets(db, &record.header.id, &data)?;
-    print_record_with_targets(record, data, targets)
+fn evidence_list_title(title: &str, command: Option<&str>) -> String {
+    if command == Some(title) {
+        "(command-backed proof)".to_string()
+    } else {
+        bounded_list_text(title)
+    }
 }
 
-pub fn print_record_without_cache(record: &EvidenceRecord) -> Result<()> {
+fn bounded_list_text(value: &str) -> String {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= EVIDENCE_LIST_TEXT_LIMIT {
+        return normalized;
+    }
+    let mut output = normalized
+        .chars()
+        .take(EVIDENCE_LIST_TEXT_LIMIT - 3)
+        .collect::<String>();
+    output.push_str("...");
+    output
+}
+
+pub fn print_record(db: &Database, record: &EvidenceRecord, quiet: bool) -> Result<()> {
+    let data = evidence_record_data(record);
+    let targets = format_targets(db, &record.header.id, &data)?;
+    print_record_with_targets(record, data, targets, quiet)
+}
+
+pub fn print_record_without_cache(record: &EvidenceRecord, quiet: bool) -> Result<()> {
     let data = evidence_record_data(record);
     let targets = format_data_target(&data).into_iter().collect();
-    print_record_with_targets(record, data, targets)
+    print_record_with_targets(record, data, targets, quiet)
 }
 
 fn print_record_with_targets(
     record: &EvidenceRecord,
     data: EvidenceRecordData,
     targets: Vec<String>,
+    quiet: bool,
 ) -> Result<()> {
+    if quiet {
+        let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
+        let targets = if targets.is_empty() {
+            "(none)".to_string()
+        } else {
+            targets.join(",").replace(' ', "")
+        };
+        println!(
+            "{} {} {} exit={exit_status} target={targets}",
+            record.header.id, record.header.status, data.evidence_type
+        );
+        return Ok(());
+    }
     println!(
         "{} [evidence] {} - {}",
         record.header.id, record.header.status, record.header.title

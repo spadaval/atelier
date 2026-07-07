@@ -6,20 +6,28 @@ implementation visibility.
 
 | Category | Belongs here | Excluded non-examples | Review note |
 | --- | --- | --- | --- |
-| Normal workflow | `status`, `issue show`, `issue transition`, `work queue`, `work mission`, `evidence record`, `review show`, `check` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete`, provider setup commands | Normal commands answer operator questions in domain terms and may be cited for ordinary handoff, validation, committed-state health, and terminal readiness. |
+| Normal workflow | `status`, `issue list`, `issue show`, `issue transition`, `work ready`, `work blocked`, `work missions`, `work mission`, `work epic`, `evidence record`, `review show`, `check` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete`, provider setup commands | Normal commands answer operator questions in domain terms and may be cited for ordinary handoff, validation, committed-state health, and terminal readiness. |
 | Admin maintenance | `init`, `check`, `check --fix`, `prune`, `prune --apply` | `issue show <objective-id>`, `issue transition`, hidden `workflow check`, hidden `diagnostics slow` | Admin commands configure or repair Atelier itself and clean explicitly supported artifacts. Hidden or destructive recovery commands are routed only when needed. |
 | Hidden debug diagnostics | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` used as a cache probe | `check`, `issue show <objective-id>`, `status` | Debug diagnostics may expose raw policy, telemetry, domain-cache, or deterministic-renderer mechanics. They must not be normal next actions or automation contracts for selecting work. |
 | Temporary migration | `init --import-beads`, hidden/manual `import-beads`, hidden advanced `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks | Migration commands bridge inherited state or test deterministic renderers while the Markdown-first store stabilizes. They need a cleanup owner instead of compatibility promises. |
 
-Audited low-level surfaces:
+## Historical Classification (Non-Normative)
+
+Earlier category drafts listed `work queue` as normal workflow. That legacy
+route is retained here only to explain the audit change; current work selection
+uses `work ready`, `work blocked`, `work missions`, `work mission`, and
+`work epic`.
+
+## Historical Audited Low-Level Surfaces (Non-Normative)
 
 | Command family | Classification | Replacement or boundary | Follow-up |
 | --- | --- | --- | --- |
-| `rebuild` | Hide/admin-frame | Keep as an advanced domain-cache diagnostic. Admin local repair is `check --fix`; ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
-| `workflow check` | Hide/admin-frame | Keep as raw workflow-policy debugging. Normal readiness uses `issue transition`, `issue show <objective-id>`, and `check`. | No new issue. |
-| `diagnostics slow` | Hide/admin-frame | Keep as local-only telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
-| `import-beads` | Hide/migration-only | Keep as explicit predecessor import escape hatch. Normal setup uses `init`, with `init --import-beads` only for intentional migration. | No new issue. |
-| `maintenance delete` | Hide or remove | Destructive record surgery is over budget as a normal visible surface. Keep only as explicitly routed recovery if it remains necessary. | Needs budget verdict before being taught. |
+| `export` / `export --check` | Hide | Keep only as deterministic-renderer diagnostics and temporary migration infrastructure. Normal health, repair, and proof use `check` or `check --fix`. | Remove when storage migration no longer needs the renderer probe. |
+| `rebuild` | Fold + Hide | Fold explicit local repair into `check --fix`; keep the callable command hidden only as an advanced domain-cache probe. Ordinary proof uses `check` plus the domain command being retried. | Covered by `atelier-a7gd`; no new issue. |
+| `workflow check` | Fold + Hide | Fold normal policy health into `check` and transition readiness into `issue transition`; keep the callable command hidden for raw workflow-policy debugging. | No new issue. |
+| `diagnostics slow` | Keep hidden | Keep as local-only admin telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
+| `import-beads` | Fold + Hide | Fold standard predecessor migration into `init --import-beads`; keep the standalone command hidden temporarily for explicit nonstandard backup paths. | Remove after the predecessor migration window closes. |
+| `maintenance delete` | Removed | No explicit recovery flow required arbitrary record surgery. Supported cleanup is `prune`; canonical recovery uses Git history and reviewed repair. | Removed by `atelier-g87o`. |
 | `prune` | Keep visible admin | Keep dry-run by default. `--apply` may remove only cleanup classes with implemented retention contracts from the retention policy. | No new issue. |
 | `bundle` | Keep visible manager/orchestrator | Keep as the reviewed bulk record creation surface. It replaces shell loops over issue/mission/evidence mutation commands, not normal single-record editing. | Implementation ownership is now `commands::bundle`. |
 | `review` | Keep visible workflow/review | Keep review artifact management visible, but static guides should not decide when a review artifact is required. Lifecycle/status output owns that route. | Refine manual `review open` fields. |

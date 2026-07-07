@@ -105,9 +105,9 @@ The exact layout can change, but the principles should not:
 
 - Record files must be deterministic.
 - Record files must be sufficient to rebuild the SQLite domain cache.
-- `lint` validates record files, while cache-backed commands and `doctor`
-  report local cache health without making ignored state an operator-managed
-  prerequisite.
+- `check` validates record files, while cache-backed commands and `check --fix`
+  report or repair local cache health without making ignored state an
+  operator-managed prerequisite.
 - Mutating commands write record files first and invalidate affected cache
   facts. The next cache-backed query repairs them through `CacheManager`; writes
   do not require eager cache refresh.
@@ -526,9 +526,9 @@ issue ORM or session layer.
 The review artifact actions are intentionally narrow. They may create
 the artifact that an epic, standalone issue, or exceptional branch-owning child
 issue will use for review. They do not approve, comment on, request changes,
-resolve findings, merge review artifacts, hide issue close, or replace
-`atelier issue transition`. PR aliases and broad automation hooks are non-goals
-for v1.
+resolve findings, merge review artifacts, bypass configured close transitions,
+or replace `atelier issue transition`. PR aliases and broad automation hooks
+are non-goals for v1.
 
 Terminal merge behavior follows the review mode. Provider-backed workflows use
 provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
@@ -554,7 +554,7 @@ Failure semantics are explicit:
   tracker commit and continue without duplicating records.
 - Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
-  `atelier issue transition <id>`, `atelier review status <id>`, or
+  `atelier issue transition <id>`, `atelier review show --issue <id>`, or
   `atelier check <id>`.
 
 This contract blocks implementation work that adds workflow schema support,
@@ -593,7 +593,6 @@ workflow-derived owner branch.
 Desired commands:
 
 ```text
-atelier agent init <name>
 atelier issue transition atelier-z1p8 start
 atelier issue transition atelier-z1p8 close --reason "done"
 ```
@@ -679,10 +678,9 @@ Chainlink lock sync. The default workflow is one checkout, one reviewable branch
 per epic, lifecycle-owned branch
 preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
 `atelier issue transition <id> close --reason "..."`,
-and `lint`/`doctor` health
-checks. Explicit branch commands such as `atelier branch for-epic`
-are internal, diagnostic, or advanced repair surfaces; they are not the normal
-mutating-subagent default.
+and `atelier check` health checks. Explicit ignored-state repair uses
+`atelier check --fix`. Advanced owner-branch repair commands are internal
+diagnostic surfaces; they are not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 
@@ -735,20 +733,23 @@ Representative commands:
 
 ```text
 atelier init
-atelier prime
 atelier status
 atelier work ready
-atelier issue list --ready
+atelier work blocked
+atelier work missions
+atelier issue list
 atelier issue show atelier-z1p8
 atelier issue create
 atelier issue transition atelier-z1p8
+atelier issue transition atelier-z1p8 start
+atelier issue transition atelier-z1p8 close --reason "..."
 atelier issue create "Mission title" --issue-type mission
 atelier issue show atelier-k7mq
 atelier issue link atelier-k7mq atelier-z1p8 --role advances
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier check
-atelier doctor
+atelier check --fix
 ```
 
 Every command that agents call should provide focused human-readable output with

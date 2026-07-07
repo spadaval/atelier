@@ -200,7 +200,7 @@ future tools that summarize command behavior. It is not the contract for normal
 project operation.
 
 Normal mission, issue, validation, and terminal workflows must use
-human-oriented operator surfaces: `atelier status`, `atelier issue status
+human-oriented operator surfaces: `atelier status`, `atelier issue show
 <objective-id>`, `atelier issue transition <id> --options`, `atelier check`,
 `atelier check`, and `atelier evidence record`. Agents and scripts must not
 parse diagnostics JSON to choose ready work, decide blockers, prove validation,
@@ -212,7 +212,7 @@ and performance follow-up work. It must not appear in ordinary Agent Factory or
 operator recipes for mission selection, issue readiness, blocker triage,
 validation proof, evidence coverage, or closeout readiness.
 
-## Slow Command Query Defaults
+## Hidden Diagnostic: Slow Command Query Defaults
 
 The slow-command query surface owned by follow-up work should read local event
 logs and produce stable JSON summaries. The default query window is the last
