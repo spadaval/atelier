@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Render the Mission Overview with shared formatting and color"
-updated_at: "2026-07-06T17:20:25.693166412+00:00"
+updated_at: "2026-07-07T05:39:27.467540697+00:00"
 ---
 
 ## Description
@@ -33,4 +33,5 @@ Render the Mission Overview through the shared page, panel, row, and style abstr
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Renderer snapshot and color/plain semantic-parity test transcript: `atelier-9mto`.
+- Temporary-repository `atelier work missions` CLI transcript covering hierarchy, blocker-aware progress, direct and unassigned accounting, `NO_COLOR`, and quiet output: `atelier-w2py`.

@@ -367,6 +367,24 @@ impl StylePolicy {
     }
 }
 
+pub(crate) fn status_style(category: &str) -> TextStyle {
+    match category {
+        "active" => TextStyle::Active,
+        "blocked" => TextStyle::Danger,
+        "todo" => TextStyle::Warning,
+        "done" => TextStyle::Success,
+        _ => TextStyle::Secondary,
+    }
+}
+
+pub(crate) fn priority_style(priority: &str) -> TextStyle {
+    match priority {
+        "critical" | "high" => TextStyle::Danger,
+        "medium" => TextStyle::Warning,
+        _ => TextStyle::Secondary,
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TextStyle {
