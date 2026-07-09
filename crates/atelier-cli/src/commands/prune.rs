@@ -655,7 +655,7 @@ fn prune_local_artifacts(
     if apply {
         for candidate in summary.candidates.iter().filter(|c| c.protection.is_none()) {
             let absolute = tracker.state_dir.join(&candidate.path);
-            match fs::remove_file(&absolute) {
+            match remove_exclusively_owned_local_artifact(&absolute) {
                 Ok(()) => summary.removed.push(candidate.path.clone()),
                 Err(error) => summary
                     .failures
@@ -729,12 +729,17 @@ fn collect_local_candidates(
         let protection = if is_lock {
             Some("locked by a running or interrupted command; inspect before removal".to_string())
         } else if is_runtime_projection_artifact(&relative) {
-            projection_artifact_protection(state_dir, &path)?
-                .or_else(|| (!stale).then(|| "within local artifact retention window".to_string()))
+            if let Some(reason) = projection_artifact_protection(state_dir, &path)? {
+                Some(reason)
+            } else if !stale {
+                Some("within local artifact retention window".to_string())
+            } else {
+                local_artifact_lock_protection(&path)?
+            }
         } else if !stale {
             Some("within local artifact retention window".to_string())
         } else {
-            None
+            local_artifact_lock_protection(&path)?
         };
         candidates.push(LocalCandidate {
             class,
@@ -742,6 +747,48 @@ fn collect_local_candidates(
             protection,
         });
     }
+    Ok(())
+}
+
+fn local_artifact_lock_protection(path: &Path) -> Result<Option<String>> {
+    let file = match OpenOptions::new().read(true).write(true).open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            return Ok(Some(format!(
+                "exclusive ownership cannot be proven: {error}"
+            )))
+        }
+    };
+    match file.try_lock_exclusive() {
+        Ok(()) => {
+            file.unlock()?;
+            Ok(None)
+        }
+        Err(error) => Ok(Some(format!(
+            "artifact is open or locked; exclusive ownership cannot be proven: {error}"
+        ))),
+    }
+}
+
+fn remove_exclusively_owned_local_artifact(path: &Path) -> Result<()> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .with_context(|| {
+            format!(
+                "refusing to unlink local artifact without an ownership handle {}",
+                path.display()
+            )
+        })?;
+    file.try_lock_exclusive().with_context(|| {
+        format!(
+            "refusing to unlink open or locked local artifact {}",
+            path.display()
+        )
+    })?;
+    fs::remove_file(path).with_context(|| format!("failed to unlink {}", path.display()))?;
+    file.unlock()?;
     Ok(())
 }
 

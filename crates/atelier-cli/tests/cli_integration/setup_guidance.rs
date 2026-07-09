@@ -691,6 +691,51 @@ fn test_prune_removes_ignored_orphaned_runtime_artifacts_but_protects_locks() {
     assert!(stdout.contains("atelier check --fix"), "{stdout}");
     assert!(!orphan.exists(), "apply left orphaned artifact in place");
     assert!(lock.exists(), "apply removed protected lock");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "cache health failed after actual prune mutation: {stderr}"
+    );
+}
+
+#[test]
+fn test_prune_protects_aged_open_and_locked_cache_temp() {
+    use fs2::FileExt;
+    use std::fs::OpenOptions;
+
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "aged locked cache artifact fixture");
+
+    let artifact = dir.path().join(".atelier/cache/aged-open.tmp");
+    fs::create_dir_all(artifact.parent().unwrap()).unwrap();
+    fs::write(&artifact, "still owned by another process").unwrap();
+    let status = Command::new("touch")
+        .args(["-d", "45 days ago", artifact.to_str().unwrap()])
+        .status()
+        .unwrap();
+    assert!(status.success(), "failed to age locked cache artifact");
+    let owner = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&artifact)
+        .unwrap();
+    owner.lock_exclusive().unwrap();
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("protected stale-cache"), "{stdout}");
+    assert!(
+        stdout.contains("open or locked") && stdout.contains("exclusive ownership"),
+        "{stdout}"
+    );
+    assert!(
+        artifact.exists(),
+        "apply unlinked an aged artifact while another owner held its lock"
+    );
 }
 
 #[test]
