@@ -32,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-07-09T16:31:42.961843317+00:00"
+status: "done"
 title: "Epic: Rework issue list as simple inventory"
-updated_at: "2026-07-09T16:24:21.636615252+00:00"
+updated_at: "2026-07-09T16:31:42.961843317+00:00"
 ---
 
 ## Description
@@ -48,4 +49,5 @@ Replace the current grouped queue-style implementation behind `atelier issue lis
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Independent epic scenario classification and CLI transcript summary: evidence `atelier-8k4e`.
+- Focused active integration test for flat inventory, filters, quiet/limit behavior, and removed operational flags: evidence `atelier-mqtk`.
