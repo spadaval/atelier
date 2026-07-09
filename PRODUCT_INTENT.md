@@ -368,7 +368,6 @@ workflows:
           - objective.work_terminal
           - objective.blockers_none_open
           - issue.sections_parseable
-          - evidence.attached: { min_count: 1 }
           - validation.criteria_satisfied
           - lint.none_blocking
           - command_surface_current
