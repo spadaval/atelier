@@ -1267,6 +1267,9 @@ pub fn list_inventory(
         IssueStatusFilter::from_input(workflow_policy.as_ref(), status, None)?;
         IssueInventoryStatusFilter::Exact(status.to_string())
     };
+    if let Some(category) = category {
+        IssueStatusFilter::category(workflow_policy.as_ref(), category)?;
+    }
     let limit = IssueInventoryLimit::new(limit)?;
     let issues = db.list_issues(Some("all"), label, priority)?;
     let snapshots = issues.into_iter().map(|issue| IssueInventorySnapshot {

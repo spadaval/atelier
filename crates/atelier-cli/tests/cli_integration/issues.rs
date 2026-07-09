@@ -2600,6 +2600,13 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
         "{empty}"
     );
 
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "list", "--category", "does-not-exist"],
+    );
+    assert!(!success, "unknown category unexpectedly succeeded");
+    assert!(stderr.contains("Invalid issue category"), "{stderr}");
+
     let (success, quiet, stderr) = run_atelier(
         dir.path(),
         &["--quiet", "issue", "list", "--issue-type", "mission"],
