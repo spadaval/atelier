@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "artifact-update"
 - "prune"
+review:
+  kind: pull_request
+  number: 64
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
@@ -28,9 +32,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Retention and prune contract"
-updated_at: "2026-07-06T17:48:04.764142495+00:00"
+updated_at: "2026-07-09T16:39:31.924105220+00:00"
 ---
 
 ## Description
