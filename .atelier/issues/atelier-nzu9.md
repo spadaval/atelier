@@ -32,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-09T16:31:42.961843317+00:00"
+status: "done"
 title: "Epic: Rework issue list as simple inventory"
-updated_at: "2026-07-09T16:27:18.206177208+00:00"
+updated_at: "2026-07-09T16:31:42.961843317+00:00"
 ---
 
 ## Description
