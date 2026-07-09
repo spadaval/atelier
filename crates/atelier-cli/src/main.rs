@@ -18,7 +18,7 @@ mod issue_cli;
   init          Initialize Atelier in the current repository
 
 Orientation:
-  man           Show role-specific operating guidance
+  man           Show role guides and Atelier product topics
   status        Show checkout, mission, work, and tracker signposts
   work          Show operational multi-issue work views
 
@@ -44,6 +44,7 @@ Common commands:
   atelier man validator
   atelier man manager
   atelier man admin
+  atelier man work-model
   atelier status
   atelier work ready
   atelier work blocked
@@ -105,10 +106,10 @@ enum Commands {
         import_beads: bool,
     },
 
-    /// Show role-specific operating guidance
+    /// Show role guides and Atelier product topics
     Man {
-        /// Role guide to print: worker, reviewer, validator, manager, or admin
-        role: Option<String>,
+        /// Guide to print: a role, or work-model
+        page: Option<String>,
     },
 
     /// Show checkout, mission, work, and tracker signposts
@@ -728,7 +729,7 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force, import_beads)
         }
 
-        Commands::Man { role } => commands::man::run(role),
+        Commands::Man { page } => commands::man::run(page),
 
         Commands::Status => {
             let storage = use_cases::status_cache()?;

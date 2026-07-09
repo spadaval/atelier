@@ -1780,7 +1780,20 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
         "issue_type": "task",
         "priority": "medium",
         "status": "done",
-        "labels": ["bundle"]
+        "labels": ["bundle"],
+        "blocks": [{ "client_ref": "issue.blocked" }]
+      },
+      {
+        "client_ref": "issue.blocked",
+        "title": "Blocked bundle work",
+        "issue_type": "task",
+        "priority": "medium"
+      },
+      {
+        "client_ref": "issue.epic",
+        "title": "Bundle epic",
+        "issue_type": "epic",
+        "priority": "high"
       },
       {
         "client_ref": "issue.work",
@@ -1788,7 +1801,12 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
         "issue_type": "feature",
         "priority": "high",
         "status": "in_progress",
+        "parent": { "client_ref": "issue.epic" },
         "depends_on": [{ "client_ref": "issue.blocker" }],
+        "notes": [
+          { "body": "Zulu authored first" },
+          { "body": "Alpha authored second" }
+        ],
         "outcome": ["summary maps client refs"],
         "evidence": ["export check passes"]
       },
@@ -1798,7 +1816,7 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
         "issue_type": "mission",
         "priority": "medium",
         "labels": ["bundle", "mission"],
-        "advances": [{ "client_ref": "issue.work" }],
+        "advances": [{ "client_ref": "issue.epic" }],
         "description": "Mission from bundle"
       }
     ],
@@ -1817,6 +1835,8 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     )
     .unwrap();
     let bundle_arg = bundle_path.to_str().unwrap();
+    let db_path = dir.path().join(".atelier/runtime/state.db");
+    let db_before_preview = std::fs::read(&db_path).unwrap();
 
     let (success, dry_run_out, stderr) =
         run_atelier(dir.path(), &["bundle", "preview", bundle_arg]);
@@ -1824,15 +1844,75 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     assert!(dry_run_out.contains("Bundle preview is valid."));
     assert!(dry_run_out.contains("Applied:       false"));
     assert!(dry_run_out.contains("Preview:       true"));
-    assert!(dry_run_out.contains("issues: 3"), "{dry_run_out}");
+    assert!(dry_run_out.contains("issues: 5"), "{dry_run_out}");
+    assert!(dry_run_out.contains("relationships: 5"), "{dry_run_out}");
+    assert!(dry_run_out.contains("notes: 2"), "{dry_run_out}");
+    let expected_edges = [
+        "evidence/evidence.bundle -> issue/mission.bundle (validates)",
+        "issue/issue.blocker -> issue/issue.blocked (blocks)",
+        "issue/issue.blocker -> issue/issue.work (blocks)",
+        "issue/issue.epic -> issue/issue.work (parent)",
+        "issue/mission.bundle -> issue/issue.epic (advances)",
+    ];
+    let mut previous_position = 0;
+    for edge in expected_edges {
+        let position = dry_run_out
+            .find(edge)
+            .unwrap_or_else(|| panic!("preview missing {edge:?}: {dry_run_out}"));
+        assert!(
+            position >= previous_position,
+            "preview relationships are not deterministic: {dry_run_out}"
+        );
+        previous_position = position;
+    }
+    assert_eq!(
+        std::fs::read(&db_path).unwrap(),
+        db_before_preview,
+        "bundle preview mutated SQLite"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path().join(".atelier/issues"))
+            .unwrap()
+            .count(),
+        0,
+        "bundle preview created canonical issues"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path().join(".atelier/evidence"))
+            .unwrap()
+            .count(),
+        0,
+        "bundle preview created canonical evidence"
+    );
+    let (success, repeated_preview, stderr) =
+        run_atelier(dir.path(), &["bundle", "preview", bundle_arg]);
+    assert!(success, "repeated bundle preview failed: {stderr}");
+    assert_eq!(
+        dry_run_out, repeated_preview,
+        "preview must be deterministic"
+    );
 
     let (success, apply_out, stderr) =
         run_atelier(dir.path(), &["bundle", "apply", bundle_arg, "--yes"]);
     assert!(success, "bundle apply failed: {stderr}");
     assert!(apply_out.contains("Bundle applied."));
     assert!(apply_out.contains("Applied:       true"));
+    assert!(apply_out.contains("relationships: 5"), "{apply_out}");
+    assert!(apply_out.contains("notes: 2"), "{apply_out}");
+    assert_eq!(apply_out.matches("(blocks)").count(), 2, "{apply_out}");
+    for role in ["parent", "advances", "validates"] {
+        assert_eq!(
+            apply_out.matches(&format!("({role})")).count(),
+            1,
+            "{apply_out}"
+        );
+    }
     assert!(apply_out.contains("atelier issue show"));
     let mission_id = issue_id_by_title(dir.path(), "Bundle mission");
+    let epic_id = issue_id_by_title(dir.path(), "Bundle epic");
+    let work_id = issue_id_by_title(dir.path(), "Implement bundle output");
+    let blocker_id = issue_id_by_title(dir.path(), "Complete prerequisite");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked bundle work");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(!success, "bundle apply should leave cache detectably stale");
@@ -1865,6 +1945,102 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     assert!(mission_markdown.contains("issue_type: \"mission\""));
     assert!(mission_markdown.contains("- \"bundle\"\n"));
     assert!(mission_markdown.contains("- \"mission\"\n"));
+    assert!(mission_markdown.contains(&format!("id: \"{epic_id}\"")));
+    let epic_markdown = std::fs::read_to_string(
+        dir.path()
+            .join(".atelier/issues")
+            .join(format!("{epic_id}.md")),
+    )
+    .unwrap();
+    assert!(epic_markdown.contains(&format!("id: \"{work_id}\"")));
+    let blocker_markdown = std::fs::read_to_string(
+        dir.path()
+            .join(".atelier/issues")
+            .join(format!("{blocker_id}.md")),
+    )
+    .unwrap();
+    assert!(blocker_markdown.contains(&format!("id: \"{work_id}\"")));
+    assert!(blocker_markdown.contains(&format!("id: \"{blocked_id}\"")));
+    let mut note_paths = std::fs::read_dir(
+        dir.path()
+            .join(".atelier/issues")
+            .join(format!("{work_id}.activity")),
+    )
+    .unwrap()
+    .map(|entry| entry.unwrap().path())
+    .collect::<Vec<_>>();
+    note_paths.sort();
+    let note_bodies = note_paths
+        .iter()
+        .map(|path| std::fs::read_to_string(path).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let first_note = note_bodies.find("Zulu authored first").unwrap();
+    let second_note = note_bodies.find("Alpha authored second").unwrap();
+    assert!(
+        first_note < second_note,
+        "bundle notes were not appended in authored order: {note_bodies}"
+    );
+    let evidence_markdown = std::fs::read_dir(dir.path().join(".atelier/evidence"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let evidence_markdown = std::fs::read_to_string(evidence_markdown).unwrap();
+    assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
+    assert!(evidence_markdown.contains("role: \"validates\""));
+}
+
+#[test]
+fn test_bundle_preview_rejects_duplicate_normalized_relationships_without_mutation() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("duplicate-relationship-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Duplicate normalized relationship",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.blocker",
+        "title": "Bundle blocker",
+        "blocks": [{ "client_ref": "issue.blocked" }]
+      },
+      {
+        "client_ref": "issue.blocked",
+        "title": "Bundle blocked",
+        "depends_on": [{ "client_ref": "issue.blocker" }]
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let db_path = dir.path().join(".atelier/runtime/state.db");
+    let db_before_preview = std::fs::read(&db_path).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "duplicate normalized edge should fail preview");
+    assert!(
+        stderr.contains("Duplicate bundle relationship after normalization")
+            && stderr.contains("(blocks)"),
+        "stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert_eq!(std::fs::read(&db_path).unwrap(), db_before_preview);
+    assert_eq!(
+        std::fs::read_dir(dir.path().join(".atelier/issues"))
+            .unwrap()
+            .count(),
+        0
+    );
 }
 
 #[test]
