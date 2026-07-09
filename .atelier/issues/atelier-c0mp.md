@@ -7,6 +7,10 @@ labels:
 - "human-output"
 - "inventory"
 - "mission-dashboard"
+review:
+  kind: pull_request
+  number: 70
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
