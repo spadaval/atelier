@@ -34,7 +34,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Prune command implementation"
-updated_at: "2026-07-06T17:48:32.295795460+00:00"
+updated_at: "2026-07-09T16:33:35.052641571+00:00"
 ---
 
 ## Description

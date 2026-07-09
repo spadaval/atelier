@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+closed_at: "2026-07-09T16:33:39.824142428+00:00"
+status: "done"
 title: "Add prune inventory and dry-run report"
-updated_at: "2026-07-06T18:11:01.317631676+00:00"
+updated_at: "2026-07-09T16:33:39.824142428+00:00"
 ---
 
 ## Description

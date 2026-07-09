@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+closed_at: "2026-07-09T16:33:30.924168085+00:00"
+status: "done"
 title: "Prune ignored local runtime, cache, and diagnostics"
-updated_at: "2026-07-06T18:10:56.643037281+00:00"
+updated_at: "2026-07-09T16:33:30.924168085+00:00"
 ---
 
 ## Description
