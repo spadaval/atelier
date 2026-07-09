@@ -49,10 +49,10 @@ Anti-red-tape rule: add detail to a higher layer only when it changes scope,
 risk, sequencing, or parent-level confidence. Otherwise, keep detail at the
 lowest accountable layer and let completion map parent claims to child evidence.
 
-Broad persistence, canonical write, projection refresh, runtime-cache, and
+Broad persistence, record-file write, lazy cache repair, runtime-cache, and
 worktree changes need early concurrency or scenario validation before final
 completion. Do not rely only on an end-of-mission audit for changes that can lose
-canonical state, corrupt projections, or misroute work.
+durable state, corrupt cache results, or misroute work.
 
 ## Contract-First Work
 
@@ -64,7 +64,7 @@ docs, quality guidance, command help contracts, tracker item wording, or tests
 before code.
 
 Test-first proof is required or strongly preferred for CLI behavior, workflow
-validators, projection/rebuild behavior, evidence recording, regression fixes,
+validators, cache/rebuild behavior, evidence recording, regression fixes,
 and rejected-command behavior. Strict TDD is optional for tiny local refactors,
 typo-scale docs, mechanical renames, or low-risk internal cleanup where the
 existing checks directly cover the claim. It is required when the defect,
@@ -74,7 +74,7 @@ public behavior, or workflow gate can be reproduced before the fix.
 | --- | --- | --- |
 | Docs-first workflow policy | Documentation diff shows the new policy, a review artifact maps the policy to example work items, and tracker lint plus a focused transcript or search prove the affected guidance. | "Updated docs" plus a broad lint run with no mapping to the policy claim. |
 | Test-first CLI rejection | A failing-before/passing-after test or transcript shows the rejected command and error text, with docs/help parity when public help changes. | Full test suite passes without showing the rejected command path. |
-| Canonical write or projection refresh | Round-trip or rebuild transcript, concurrency or scenario proof, and attached evidence show canonical files remain source of truth. | End-of-mission audit only, with no early proof of the write or refresh path. |
+| Record-file write or lazy cache repair | Round-trip or rebuild transcript, concurrency or scenario proof, and attached evidence show record files remain durable state. | End-of-mission audit only, with no early proof of the write or repair path. |
 
 ## Agent Guidance Boundary
 
@@ -126,9 +126,9 @@ files by hand as a substitute for the documented repair surfaces.
 | Issue type | Default proof expectation | Escalate when |
 | --- | --- | --- |
 | `task` | Focused diff inspection plus the narrow checks named by the task. Docs-only tasks usually need the documentation diff, Markdown whitespace check, and tracker lint for the item when tracker state changed. Ordinary implementation tasks do not require independent review by default. | The task changes process policy, public docs that must match help output, workflow gates, Agent Factory guidance, or another artifact that future work depends on. |
-| `feature` | Positive and negative behavior proof through focused tests, command transcripts, screenshots, or docs/help parity checks for the user-visible surface. | The feature changes a public command/API contract, crosses storage/projection/workflow boundaries, or broad green tests could miss the claim. |
+| `feature` | Positive and negative behavior proof through focused tests, command transcripts, screenshots, or docs/help parity checks for the user-visible surface. | The feature changes a public command/API contract, crosses storage/cache/workflow boundaries, or broad green tests could miss the claim. |
 | `story` | End-to-end scenario proof for the operator workflow, including the important success path and rejected or blocked path. | The story spans multiple commands, records, UI views, or mission criteria, or claims a parent-level user outcome. |
-| `bug` | A failing-before and passing-after reproduction when practical, plus a regression test or transcript that shows the defect no longer appears. | The bug involved data loss, stale projection, migration, completion, safety, security, or behavior that is hard for the implementer to disprove alone. |
+| `bug` | A failing-before and passing-after reproduction when practical, plus a regression test or transcript that shows the defect no longer appears. | The bug involved data loss, stale cache data, migration, completion, safety, security, or behavior that is hard for the implementer to disprove alone. |
 | `validation` | An independent validator classifies each relevant claim as `pass`, `fail`, `blocked`, `deferred`, or `not-applicable` and attaches first-class evidence. | Validation discovers new defects, stale tests, missing proof, or ambiguous criteria; create follow-up implementation or artifact-update issues instead of silently widening scope. |
 | `spike` | A durable decision, investigation result, or artifact update that names what was learned, what remains unknown, and what work is now unblocked. | The conclusion commits the repository to a migration, public contract, architecture boundary, workflow policy, or costly sequencing choice. |
 
@@ -178,7 +178,7 @@ Examples:
 
 Create or use a separate validation issue when any of these apply:
 
-- migration, schema, canonical record, projection rebuild, or runtime-state
+- migration, schema, durable record, domain-cache rebuild, or runtime-state
   repair work;
 - public command/API contracts, CLI help, docs/help parity, or user-visible
   workflow behavior;
@@ -224,7 +224,7 @@ than "make objective status faster."
 | --- | --- | --- | --- |
 | Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier check <id>` or repo-wide `atelier check` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, completion, public contracts, docs/help parity, or epic/mission review boundaries. |
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
-| Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
+| Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or cache-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTS.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
 | Crate migration root-deletion completion | Crate-migration guard script, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before root deletion, run the guard self-test if one exists. | First-class evidence attached to the root-deletion or validation issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission completion. |
 | Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id>`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
@@ -247,7 +247,7 @@ mandatory line IDs.
 
 `atelier issue show <mission-id>` is the normal operator surface for mission
 state, blockers, configured validator failures, next actions, and completion
-status. Verbose issue status is completion drill-down: it reports mission shell
+status. Verbose issue transition output is completion drill-down: it reports mission shell
 completion and any explicit linked validation work that supplies workflow
 approval.
 Hidden workflow validators are
@@ -281,17 +281,17 @@ For a quantitative performance task:
 - The validation issue reruns the benchmark command, records environment and
   observed numbers, and classifies the result.
 
-For a canonical write or projection-refresh issue:
+For a record-file write or lazy-cache-repair issue:
 
-- Mission `Outcome` says canonical Markdown remains the durable source of
-  truth and rebuildable projections stay current.
+- Mission `Outcome` says record files remain durable state and the rebuildable
+  domain cache is repaired before cache-backed answers.
 - Epic outcome names the write/rebuild boundary and delegates proof to child
   round-trip and concurrency scenarios.
 - Executable issue evidence names the command transcript, targeted test, or
   evidence record that proves early concurrent write, rebuild, and export
   freshness behavior.
 - The validation issue replays the scenario or inspects the evidence before
-  final completion rather than waiting for a mission audit to discover projection
+  final completion rather than waiting for a mission audit to discover cache
   drift.
 
 ## Commands
@@ -313,7 +313,7 @@ command forms:
 | Formatting check | `cargo fmt -- --check` |
 | Tracker lint | `atelier check` |
 | Admin local-state health check | `atelier check --fix` |
-| Deterministic export/projection diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
+| Deterministic export/cache diagnostic | Use the hidden deterministic-renderer probe only for storage-rendering, migration, or debug claims. |
 | Python invocation | `python3 -c 'print("validation ok")'` |
 | Crate migration completion guard | `python3 scripts/check_crate_migration_completion.py` |
 | Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_completion.py --self-test` |
@@ -373,12 +373,12 @@ than through Agent Factory prose alone.
 ## Scenario Proof
 
 - CLI behavior changes should include command-level tests or transcript evidence.
-- Persistence changes should include RecordStore round-trip, projection rebuild,
+- Persistence changes should include `RecordStore` round-trip, domain-cache rebuild,
   or runtime-state migration proof as appropriate.
 - Export/rebuild changes should prove deterministic output and derived-state
   repair behavior.
 - Workflow, validator, evidence, mission, checkpoint-prose, or planning-artifact changes should
-  include human-output transcript evidence and projection/rebuild proof when
+  include human-output transcript evidence and cache/rebuild proof when
   machine-readable state is involved.
 - Mission completion proof should show linked work closed, evidence attached to
   accountable child work, configured transition gates passing, and clean Git
@@ -389,12 +389,15 @@ than through Agent Factory prose alone.
   focused `show` commands, `issue transition`, and objective detail or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
-- Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
-  only for local Atelier performance and telemetry analysis. It is not proof of
-  ready work, blockers, validation results, evidence coverage, or completion
-  readiness.
 - Migration work should classify expected breakage and name reconnect or
   completion ownership.
+
+### Diagnostics
+
+Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
+only for local Atelier performance and telemetry analysis. It is not proof of
+ready work, blockers, validation results, evidence coverage, or completion
+readiness.
 
 ## Result States
 

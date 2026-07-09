@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:19:28.938632570+00:00"
+status: "done"
 title: "Unbundle generic record usage from domain services"
-updated_at: "2026-06-23T16:21:20.075184044+00:00"
+updated_at: "2026-07-06T18:19:28.938632570+00:00"
 ---
 
 ## Description
@@ -28,4 +29,5 @@ Move behavior toward concrete Issue, Evidence, and Review domain types and confi
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Focused `atelier-app` concrete evidence/review service, review-room, and
+  workflow-validation tests pass; transcript: `atelier-919w`.

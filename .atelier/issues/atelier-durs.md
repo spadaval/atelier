@@ -6,6 +6,19 @@ labels:
 - "cli"
 - "command-audit"
 - "complexity"
+review:
+  kind: pull_request
+  number: 51
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-durs
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-durs
 priority: "P1"
 relationships:
   blocks: []
@@ -29,9 +42,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+closed_at: "2026-07-06T19:12:13.111761133+00:00"
+status: "publish_review"
 title: "Mission: Apply command complexity budget to remaining CLI surfaces"
-updated_at: "2026-06-29T20:11:38.060404364+00:00"
+updated_at: "2026-07-06T19:12:13.111761133+00:00"
 ---
 
 ## Description

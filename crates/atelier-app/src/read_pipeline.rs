@@ -76,7 +76,9 @@ pub fn status_view(
     let work = work_buckets(db, workflow_policy)?;
     let current_missions = current_missions(db, workflow_policy)?;
     let active_role_counts = active_role_counts(&work.active, workflow_policy);
-    let stale_records = crate::export::canonical_stale_entries(db, state_dir)?.len();
+    let _ = state_dir;
+    // CacheManager establishes freshness before constructing this read model.
+    let stale_records = 0;
     let tracker_state = if stale_records == 0 {
         "current".to_string()
     } else {
@@ -225,7 +227,7 @@ fn priority_rank(priority: &str) -> u8 {
 mod tests {
     use super::*;
     use atelier_core::Issue;
-    use atelier_sqlite::Database;
+    use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
     use chrono::Utc;
     use tempfile::tempdir;
 
@@ -246,17 +248,47 @@ mod tests {
         }
     }
 
+    fn index_issue(db: &Database, issue: Issue) {
+        let row = IssueCacheRow {
+            id: issue.id.clone(),
+            title: issue.title,
+            status: issue.status,
+            issue_type: issue.issue_type,
+            priority: issue.priority,
+            fields: issue.fields,
+            parent_id: issue.parent_id,
+            created_at: issue.created_at,
+            updated_at: issue.updated_at,
+            closed_at: issue.closed_at,
+        };
+        db.index_issue(
+            &row,
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{}.md", row.id),
+                record_kind: "issue".to_string(),
+                record_id: row.id.clone(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: Utc::now(),
+            },
+        )
+        .unwrap();
+    }
+
     fn db_with_rows() -> Database {
         let dir = tempdir().unwrap();
         let db = Database::open(&dir.path().join("state.db")).unwrap();
-        db.insert_issue_rebuild(&issue("atelier-ready", "Ready", "ready", "high"))
-            .unwrap();
-        db.insert_issue_rebuild(&issue("atelier-active", "Active", "in_progress", "medium"))
-            .unwrap();
-        db.insert_issue_rebuild(&issue("atelier-done", "Done", "done", "low"))
-            .unwrap();
-        db.insert_issue_rebuild(&issue("atelier-blocked", "Blocked", "todo", "medium"))
-            .unwrap();
+        index_issue(&db, issue("atelier-ready", "Ready", "ready", "high"));
+        index_issue(
+            &db,
+            issue("atelier-active", "Active", "in_progress", "medium"),
+        );
+        index_issue(&db, issue("atelier-done", "Done", "done", "low"));
+        index_issue(&db, issue("atelier-blocked", "Blocked", "todo", "medium"));
         db.add_dependency("atelier-blocked", "atelier-ready")
             .unwrap();
         db

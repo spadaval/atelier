@@ -657,13 +657,13 @@ mod tests {
             "Recovery",
             [
                 "run `atelier check`",
-                "fix the named canonical record",
+                "fix the named record file",
                 "rerun the blocked command",
             ],
         );
         assert_eq!(
             callout.render(),
-            "Recovery\n--------\n  1. run `atelier check`\n  2. fix the named canonical record\n  3. rerun the blocked command"
+            "Recovery\n--------\n  1. run `atelier check`\n  2. fix the named record file\n  3. rerun the blocked command"
         );
     }
 

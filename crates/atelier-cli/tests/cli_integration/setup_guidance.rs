@@ -122,46 +122,45 @@ fn test_integrations_command_is_removed() {
 }
 
 #[test]
-fn test_doctor_human_separates_projection_and_runtime_state_health() {
+fn test_doctor_human_separates_cache_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     run_atelier(dir.path(), &["issue", "create", "Health check"]);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
     assert!(stdout.contains("Install health:"));
     assert!(stdout.contains("ignored_runtime_paths: ok"));
-    assert!(stdout.contains("Projection rebuild:"));
+    assert!(stdout.contains("Cache rebuild:"));
     assert!(stdout.contains("rebuild_ready: ok"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("Cache health:"));
-    assert!(stdout.contains("projection_metadata: ok"));
-    assert!(stdout.contains("Projection database:"));
+    assert!(stdout.contains("source_metadata: ok"));
+    assert!(stdout.contains("Cache database:"));
     assert!(stdout.contains("database: ok"));
     assert!(stdout.contains("diagnostics:"));
 }
 
 #[test]
-fn test_doctor_distinguishes_missing_runtime_projection_database() {
+fn test_doctor_distinguishes_missing_runtime_cache_database() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Missing projection db"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Missing cache db"]);
     assert!(success, "issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
-    assert!(stdout.contains("Projection rebuild:"));
-    assert!(stdout.contains("projection_fresh: not ok"));
-    assert!(stdout.contains("Projection database:"));
+    assert!(stdout.contains("Cache rebuild:"));
+    assert!(stdout.contains("cache_fresh: not ok"));
+    assert!(stdout.contains("Cache database:"));
     assert!(stdout.contains("database: missing"));
-    assert!(stdout.contains("projection_metadata: stale"));
+    assert!(stdout.contains("source_metadata: stale"));
 }
 
 #[test]
@@ -170,45 +169,42 @@ fn test_doctor_help_documents_fix_boundary() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["doctor", "--help"]);
     assert!(success, "doctor help failed: {stderr}");
     assert!(stdout.contains("--fix"));
-    assert!(stdout.contains("Repair ignored local runtime/cache/projection state"));
-    assert!(stdout.contains("never edits tracked canonical records"));
+    assert!(stdout.contains("Repair ignored local runtime/cache state"));
+    assert!(stdout.contains("never edits tracked record files"));
 }
 
 #[test]
-fn test_doctor_fix_repairs_missing_and_stale_local_projection_state() {
+fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Doctor fix projection"]);
+        run_atelier(dir.path(), &["issue", "create", "Doctor fix cache"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    assert!(success, "cache repair query failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
     assert!(success, "doctor --fix failed for missing db: {stderr}");
     assert!(stdout.contains("Repair:"));
-    assert!(stdout.contains("local_projection: repaired"));
-    assert!(stdout.contains("canonical_records: unchanged"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("local_cache: repaired"));
+    assert!(stdout.contains("record_files: unchanged"));
+    assert!(stdout.contains("cache_fresh: ok"));
     assert!(stdout.contains("database: ok"));
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Doctor fix projection", "Doctor fix projection repaired")
+        markdown.replace("Doctor fix cache", "Doctor fix cache repaired")
     });
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(
-        success,
-        "doctor --fix failed for stale projection: {stderr}"
-    );
-    assert!(stdout.contains("local_projection: repaired"));
-    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(success, "doctor --fix failed for stale cache: {stderr}");
+    assert!(stdout.contains("local_cache: repaired"));
+    assert!(stdout.contains("cache_fresh: ok"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed after doctor --fix: {stderr}");
-    assert!(stdout.contains("Doctor fix projection repaired"));
+    assert!(stdout.contains("Doctor fix cache repaired"));
 }
 
 #[test]
@@ -240,7 +236,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     );
     let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     assert!(
-        lint_transcript.contains("Canonical tracker Markdown is invalid")
+        lint_transcript.contains("Tracker record files are invalid")
             && lint_transcript.contains("Invalid YAML front matter"),
         "unexpected lint error: {lint_transcript}"
     );
@@ -250,9 +246,9 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
         doctor_success,
         "doctor should continue reporting health: {doctor_stderr}"
     );
-    assert!(doctorstdout.contains("Projection rebuild:"));
+    assert!(doctorstdout.contains("Cache rebuild:"));
     assert!(doctorstdout.contains("rebuild_ready: not ok"));
-    assert!(doctorstdout.contains("Projection database:"));
+    assert!(doctorstdout.contains("Cache database:"));
     assert!(doctorstdout.contains("database: ok"));
 }
 
@@ -1386,6 +1382,8 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
+    assert!(stdout.contains("history       Inspect bounded durable repository or issue activity"));
+    assert!(!stdout.contains("Inspect canonical repo"));
 
     for heading in [
         "Setup:",
@@ -1547,6 +1545,100 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
+fn test_forgejo_role_setup_is_hidden_from_normal_guidance_but_callable_for_recovery() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, root_help, stderr) = run_atelier_raw(dir.path(), &["--help"]);
+    assert!(success, "root help failed: {stderr}");
+    assert!(
+        !root_help.contains("forgejo"),
+        "root help must not teach provider setup as routine workflow:\n{root_help}"
+    );
+
+    for role in ["worker", "reviewer", "validator", "manager", "admin"] {
+        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
+        assert!(success, "man {role} failed: {stderr}");
+        assert!(
+            !guide.contains("forgejo roles"),
+            "{role} guidance must not teach provider setup as routine workflow:\n{guide}"
+        );
+    }
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
+    assert!(success, "Forgejo recovery help failed: {stderr}");
+    assert!(recovery_help.contains("Create missing role author users"));
+}
+
+#[test]
+fn test_branch_recovery_is_hidden_from_routine_work_but_callable_explicitly() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Recovery epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Recovery epic");
+
+    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "epic", &epic_id]);
+    assert!(success, "work epic failed: {stderr}");
+    assert!(
+        dashboard.contains(&format!("atelier issue transition {epic_id}")),
+        "routine epic guidance should route through lifecycle transitions:\n{dashboard}"
+    );
+    assert!(
+        !dashboard.contains("atelier branch"),
+        "routine epic guidance must not promote branch recovery:\n{dashboard}"
+    );
+
+    let (success, recovery_help, stderr) =
+        run_atelier_raw(dir.path(), &["branch", "for-epic", "--help"]);
+    assert!(success, "branch recovery help failed: {stderr}");
+    assert!(recovery_help.contains("failed start transition"));
+}
+
+#[test]
+fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
+    let dir = tempdir().unwrap();
+
+    for (args, expected) in [
+        (vec!["export", "--help"], "normal health uses check"),
+        (
+            vec!["rebuild", "--help"],
+            "explicit local repair uses check --fix",
+        ),
+        (
+            vec!["workflow", "check", "--help"],
+            "normal operator checks use check",
+        ),
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(success, "{args:?} help failed: {stderr}");
+        assert!(
+            stdout.contains(expected),
+            "{args:?} help was stale:\n{stdout}"
+        );
+        assert!(!stdout.contains("normal health uses lint"), "{stdout}");
+        assert!(!stdout.contains("repair uses doctor"), "{stdout}");
+    }
+}
+
+#[test]
+fn test_import_beads_help_names_record_files_and_lazy_cache_repair() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["import-beads", "--help"]);
+    assert!(success, "import-beads help failed: {stderr}");
+    assert!(stdout.contains("Import Beads JSONL backup into durable record files"));
+    assert!(stdout.contains("cache repair remains lazy"));
+    assert!(stdout.contains("Record-file directory to write after import"));
+    assert!(!stdout.contains("local runtime"));
+    assert!(!stdout.contains("Canonical state directory"));
+}
+
+#[test]
 fn test_obsolete_command_surfaces_are_removed_without_aliases() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1661,7 +1753,7 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     assert!(stdout.contains("Advanced/debug workflow policy diagnostics"));
     assert!(!stdout.contains("\n  init"));
     assert!(stdout.contains("check"));
-    assert!(stdout.contains("normal operator checks use lint and status surfaces"));
+    assert!(stdout.contains("normal operator checks use check"));
     assert!(!stdout.contains("validate"));
 }
 
@@ -1789,7 +1881,7 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
     assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("Projection freshness is an"));
+    assert!(docs.contains("Domain-cache freshness is an"));
     assert!(docs.contains("internal command-storage health concern"));
     assert!(!docs.contains("| `tracker.current` |"));
 }
@@ -1838,7 +1930,7 @@ fn test_product_intent_representative_commands_match_signpost_surfaces() {
 }
 
 #[test]
-fn test_man_lists_roles() {
+fn test_man_lists_roles_and_topics() {
     let dir = tempdir().unwrap();
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man"]);
@@ -1849,6 +1941,26 @@ fn test_man_lists_roles() {
     assert!(stdout.contains("manager"));
     assert!(stdout.contains("admin"));
     assert!(stdout.contains("atelier man worker"));
+    assert!(stdout.contains("Topics"));
+    assert!(stdout.contains("work-model"));
+    assert!(stdout.contains("atelier man work-model"));
+}
+
+#[test]
+fn test_man_work_model_explains_scope_and_runs_without_tracker_state() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "work-model"]);
+    assert!(success, "man work-model failed: {stderr}");
+    assert!(stdout.contains("Atelier Man: Work Model"));
+    assert!(stdout.contains("Mission"));
+    assert!(stdout.contains("Epic"));
+    assert!(stdout.contains("Issue"));
+    assert!(stdout.contains("mission --advances--> epic --children--> issue"));
+    assert!(stdout.contains("A mission is not the hierarchy parent of its work"));
+    assert!(stdout.contains("Dependencies and `blocked_by` links"));
+    assert!(stdout.contains("atelier issue link <mission-id> <work-id> --role advances"));
+    assert!(stdout.contains("atelier work mission <mission-id>"));
 }
 
 #[test]
@@ -1896,14 +2008,15 @@ fn test_man_worker_names_current_work() {
 }
 
 #[test]
-fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
+fn test_man_rejects_unknown_pages_and_admin_degrades_before_init() {
     let dir = tempdir().unwrap();
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "bogus"]);
-    assert!(!success, "unknown role should fail");
+    assert!(!success, "unknown page should fail");
     assert!(stdout.is_empty());
-    assert!(stderr.contains("unknown man role 'bogus'"));
+    assert!(stderr.contains("unknown man page 'bogus'"));
     assert!(stderr.contains("Valid roles: worker, reviewer, validator, manager, admin"));
+    assert!(stderr.contains("Valid topics: work-model"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);
     assert!(!success, "worker guide should require tracker state");

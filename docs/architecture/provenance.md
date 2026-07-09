@@ -39,21 +39,22 @@ Atelier is not a thin rename. The product direction in
 [PRODUCT_INTENT.md](../../PRODUCT_INTENT.md) keeps useful Chainlink runtime
 machinery while changing the durable product model:
 
-- Markdown records under `.atelier/` become the deterministic, mergeable
-  repository record store that can rebuild local SQLite projections.
-- SQLite remains the fast local ProjectionIndex and RuntimeState store for
-  queries, locks, sessions, workflow checks, and Mission Control inputs.
-- Mutating commands are migrating toward Markdown-first writes, and normal
-  health is reported through `check` and `check`.
-- Hidden/admin projection diagnostics may verify deterministic rendered output,
-  and `check --fix` owns explicit ignored-state repair from committed Markdown
-  records after checkout, pull, merge, or clone.
+- Markdown records under `.atelier/` are the deterministic, mergeable record
+  store from which local query state can be rebuilt.
+- SQLite at `.atelier/runtime/state.db` is a disposable domain cache containing
+  selected query facts. It does not own locks, sessions, durable workflow
+  state, or complete record bodies.
+- Mutating commands write concrete record files and leave changed cache facts
+  for the next cache-backed query to repair lazily through `CacheManager`.
+- Hidden/admin cache diagnostics may verify deterministic rendering or local
+  repair, and `check --fix` owns explicit ignored-state repair from committed
+  record files after checkout, pull, merge, or clone.
 - Missions, issues, evidence, workflow validators, runs, typed links, and
   workflows become first-class Atelier concepts instead of only inherited
   issue-tracker fields. Plan and checkpoint intent remains prose or referenced
   Markdown until a future contract reintroduces first-class records.
 - Agent-facing commands keep focused human output for coordination and
-  validation while durable projections provide machine-readable state.
+  validation while the disposable cache accelerates domain queries.
 
 Use "Chainlink" when documenting source provenance or current behavior that is
 still plainly inherited from the original project. Use "Atelier" when
@@ -64,13 +65,13 @@ documenting target product behavior or new architecture choices.
 Inherited behavior should be preserved until assigned tracker work or an ADR
 explicitly changes it:
 
-- Preserve useful CLI behavior, SQLite persistence invariants, sessions used by
-  current work association, hooks, durable projection behavior, and practical
-  test coverage while rename and migration work is underway.
+- Preserve useful CLI behavior, record-file persistence invariants, local
+  runtime behavior that remains in scope, and practical test coverage while
+  rename and migration work is underway.
 - Do not replace working inherited modules with compatibility shims whose only
   purpose is hiding current names before target behavior exists.
-- Do not treat backup-oriented Chainlink export/import as the target canonical
-  projection and rebuild system.
+- Do not treat backup-oriented Chainlink export/import as a target persistence
+  or cache-rebuild system.
 - When replacing inherited behavior, update target-state docs or ADRs so the
   new design does not rely only on historical prose.
 - If inherited tests or resources no longer apply, retire them only through the
@@ -86,8 +87,7 @@ them:
   rename work.
 - Moving local runtime state fully from inherited Chainlink conventions toward
   `.atelier/runtime/` and `.atelier/cache/`.
-- Replacing backup-style export/import with canonical `.atelier/`
-  Markdown records and rebuildable projections.
+- Any remaining cleanup of backup-style export/import migration diagnostics.
 - Adding first-class missions, evidence, workflow validators, runs, typed links,
   and workflow configuration.
 - Reworking lock sync behavior beyond what the relevant migration or design

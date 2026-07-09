@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted.
+Superseded for persistence and query-cache behavior by
+[ADR 0017](0017-sqlite-domain-cache-and-hard-removal.md). This ADR remains as
+historical rationale for choosing tracked Markdown record files. References
+below to `ProjectionIndex`, projection refresh, and canonical mutations describe
+the pre-0017 design and are not current implementation guidance.
 
 ## Context
 
@@ -46,10 +50,10 @@ Query commands may use SQLite after freshness checks. When a query would read a
 stale projection, it must refresh/reindex when safe or fail with an actionable
 rebuild or repair command.
 
-Hidden/admin `atelier export` and `atelier export --check` remain compatibility
-and determinism-check commands for migration or targeted maintenance. `doctor
---fix` owns explicit ignored-state repair for normal operators. Export's target
-role is not to be the ordinary step that makes successful mutations durable.
+Hidden/admin export and deterministic-check surfaces remain compatibility tools
+for migration or targeted maintenance. `atelier check --fix` owns explicit
+ignored-state repair for normal operators. Export's target role is not to be the
+ordinary step that makes successful mutations durable.
 
 ## Consequences
 

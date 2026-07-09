@@ -6,6 +6,19 @@ labels:
 - "cli"
 - "complexity"
 - "review"
+review:
+  kind: pull_request
+  number: 47
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-durs
+    integration_target: mission/atelier-durs
+    merge_strategy: squash
+    owner_issue_id: atelier-ye11
+    owner_kind: epic
+    review_target: mission/atelier-durs
+    work_branch: epic/atelier-ye11
 priority: "P1"
 relationships:
   blocks:
@@ -23,9 +36,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T18:37:19.742248159+00:00"
+status: "done"
 title: "Epic: Simplify review command surface"
-updated_at: "2026-06-29T20:12:28.955830174+00:00"
+updated_at: "2026-07-06T18:37:19.742248159+00:00"
 ---
 
 ## Description

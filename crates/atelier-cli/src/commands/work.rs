@@ -371,10 +371,6 @@ pub fn epic_dashboard(db: &Database, epic_ref: &str, quiet: bool) -> Result<()> 
                 "Inspect transitions",
                 format!("atelier issue transition {}", epic.id),
             ),
-            FooterAction::new(
-                "Open review branch",
-                format!("atelier branch for-epic {}", epic.id),
-            ),
         ],
     ))
     .print(RenderContext::for_stdout());

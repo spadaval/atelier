@@ -31,7 +31,7 @@ struct CanonicalPruneSummary {
     removed: Vec<CanonicalRemoval>,
     failures: Vec<(PathBuf, String)>,
     unavailable: Option<String>,
-    rebuilt_projection: bool,
+    rebuilt_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +114,7 @@ pub fn run(
 ) -> Result<()> {
     let diagnostics = telemetry::prune_diagnostics_logs(retention_days, apply)?;
     // Local artifacts are explicitly independent of canonical health.  Do this
-    // before opening or validating canonical state so a broken projection never
+    // before opening or validating canonical state so a broken cache never
     // prevents removal of an abandoned temporary file.
     let local = prune_local_artifacts(tracker.as_ref(), retention_days, apply)?;
     let git = prune_git_artifacts(tracker.as_ref(), retention_days, apply)?;
@@ -820,7 +820,7 @@ fn prune_canonical_records(
             removed: Vec::new(),
             failures: Vec::new(),
             unavailable: Some("tracker unavailable in this directory".to_string()),
-            rebuilt_projection: false,
+            rebuilt_cache: false,
         });
     };
 
@@ -848,7 +848,7 @@ fn prune_canonical_records(
         if !removed.is_empty() {
             drop(tracker.db);
             atelier_app::rebuild::run(&tracker.state_dir, &tracker.db_path)
-                .context("failed to rebuild local projection after canonical prune")?;
+                .context("failed to rebuild the local domain cache after pruning record files")?;
             return Ok(CanonicalPruneSummary {
                 retention_days,
                 cutoff,
@@ -857,7 +857,7 @@ fn prune_canonical_records(
                 removed,
                 failures,
                 unavailable: None,
-                rebuilt_projection: true,
+                rebuilt_cache: true,
             });
         }
     }
@@ -870,7 +870,7 @@ fn prune_canonical_records(
         removed,
         failures,
         unavailable: None,
-        rebuilt_projection: false,
+        rebuilt_cache: false,
     })
 }
 
@@ -1292,7 +1292,9 @@ fn print_local(summary: &LocalPruneSummary, apply: bool) {
         }
     }
     if !summary.removed.is_empty() {
-        println!("Projection: local state changed; run `atelier check --fix` if projection health is stale");
+        println!(
+            "Domain cache: local state changed; run `atelier check --fix` if cache health is stale"
+        );
     }
     if !summary.failures.is_empty() {
         println!("Failures:");
@@ -1362,8 +1364,8 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
         }
     }
 
-    if summary.rebuilt_projection {
-        println!("Projection: rebuilt after canonical prune");
+    if summary.rebuilt_cache {
+        println!("Domain cache: rebuilt after pruning record files");
     }
 
     if !summary.failures.is_empty() {
@@ -1630,7 +1632,7 @@ mod tests {
             removed,
             failures,
             unavailable: None,
-            rebuilt_projection: false,
+            rebuilt_cache: false,
         };
         assert!(canonical_activity_line(&candidate, &summary)
             .contains("failed activity-sidecars .atelier/issues/atelier-sidecar.activity"));

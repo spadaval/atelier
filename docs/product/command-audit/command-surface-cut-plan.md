@@ -47,14 +47,14 @@ Removed commands must have replacement capability, not replacement spellings:
 
 | Removed surface | Replacement owner |
 | --- | --- |
-| `mission list` | `issue list --issue-type mission` once issue inventory lands |
+| `mission list` | `issue list --issue-type mission` for flat records; `work missions` for the Mission Overview |
 | `mission status <id>` | `work mission <mission-id>` for operational dashboard, `issue show <mission-id>` for record detail, and `issue transition <mission-id>` for terminal gates |
 | `issue status <objective-id>` | `work mission` / `work epic` for operational dashboard, `issue show <objective-id>` for record detail, and `issue transition <objective-id>` for gates |
 | `issue blocked` | blocked triage in `work blocked`; blocker detail in `issue show <id>` |
 | `issue table` | `issue list` for inventory; scoped operational work in `work ready`, `work blocked`, `work mission`, and `work epic` |
 | separate block/unblock verbs | typed `issue link` / `issue unlink --role blocked_by` |
 | root `search` | no replacement in this cut; a future search design must justify a cross-record search job |
-| scoped `history --issue/--mission/--epic` variants | bounded recent activity in `issue show` where useful; high-level timeline in `history` |
+| scoped `history --mission/--epic` variants | `work mission` / `work epic` for descendant objective state; retained `history --issue <id>` for one-record activity; high-level timeline in `history` |
 | provider roots such as `forgejo` | review/admin ownership, normally hidden from workflow help |
 | visible branch repair | workflow transitions, with hidden/admin recovery only when needed |
 | `lint` / `doctor` / `workflow check` / `rebuild` as separate normal surfaces | one `check` health and repair surface |
@@ -83,17 +83,21 @@ The surviving `work` commands answer:
 - `work ready`: what top-level work can be started or coordinated now;
 - `work blocked`: what work is stopped by open blockers;
 - `work active`: what work is already in motion;
+- `work missions`: which current missions and directly advanced epics define
+  the mission backlog;
 - `work mission <id>`: what one mission needs next;
 - `work epic <id>`: what one epic boundary needs next.
 
-`work queue` remains under audit. Keep it only if a distinct repo-wide
-operational question remains after the smaller views and `issue list` exist.
+`work queue` is legacy repo-wide output. It owns neither the Mission Overview
+nor generic inventory and should leave normal guidance without an alias after
+remaining callers migrate.
 
 Allowed direction today:
 
 - `work ready`
 - `work blocked`
 - `work active`
+- `work missions`
 - `work mission <id>`
 - `work epic <id>`
 
@@ -148,7 +152,10 @@ It answers:
 
 It must not become the mission dashboard, operational queue, search engine, or
 objective query language. Keep filters simple: status, category, issue type,
-label, priority, ready, blocked, and quiet IDs.
+label, priority, limit, and quiet IDs. Ready and blocked selection belongs to
+`work ready` and `work blocked`; do not preserve inventory aliases for those
+operational questions. The complete flat ordering and bounded-output contract
+is [Issue Inventory And Mission Overview](../issue-inventory-and-mission-overview.md).
 
 ### `atelier issue transition <id> [transition]`
 
@@ -216,7 +223,7 @@ It should absorb the useful parts of:
 - `lint`
 - `doctor`
 - hidden `workflow check`
-- hidden projection/runtime diagnostics when needed for public recovery
+- hidden domain-cache/runtime diagnostics when needed for public recovery
 
 If renaming is too disruptive in the first implementation slice, `lint` may
 temporarily remain the spelling, but the product target is one health command,
@@ -230,14 +237,15 @@ Mission is an issue type, not a command namespace.
 
 Replace:
 
-- `mission list` with `issue list --issue-type mission` once inventory lands
+- `mission list` with `issue list --issue-type mission` for flat records or
+  `work missions` for the Mission Overview
 - `mission status <id>` with `work mission <mission-id>` for orchestration and
   `issue show <mission-id>` for record detail
 
 Mission-specific status behavior should become generic objective rollup inside
 `issue show`.
 
-### Remove `atelier issue status`
+### Remove the retired issue-status command
 
 The workflow status field is valuable. The `issue status` command is not.
 

@@ -313,7 +313,7 @@ fn print_status_next_commands(
     match lifecycle.as_str() {
         "closed" => {
             println!(
-                "  Inspect mission history: atelier history --mission {}",
+                "  Inspect mission activity: atelier history --issue {}",
                 mission.id
             );
             return;
@@ -509,13 +509,13 @@ fn print_reliability_summary(
     let section_gaps = mission_issue_section_gaps(db, state_dir, &mission.id)?;
 
     if tracker.stale_entries.is_empty() {
-        println!("Projection Freshness: current");
+        println!("Cache Freshness: current");
     } else {
         println!(
-            "Projection Freshness: stale - {}",
+            "Cache Freshness: stale - {}",
             compact_strings(&tracker.stale_entries)
         );
-        println!("  Next: atelier doctor --fix");
+        println!("  Next: atelier check --fix");
     }
 
     if let Some(result) = terminal_validator_result(terminal, "issue.sections_parseable") {

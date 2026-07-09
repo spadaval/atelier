@@ -93,7 +93,7 @@ were removed, not yet implemented, or belonged to another model:
 - `atelier work start`;
 - `atelier history`;
 - `atelier prime`;
-- `atelier work queue --blocked`.
+- the retired legacy queue blocked filter.
 
 Some of this was caused by active migration, but the repeated pattern suggests
 that current help and docs do not make the supported command taxonomy obvious
@@ -109,8 +109,8 @@ High-value improvement:
   `unrecognized subcommand` or wrong-family error and consult the command map,
   instead of probing adjacent names.
 - CLI: for removed or likely command names, return suggestions such as
-  `workflow check was removed; use issue transition <id> --options or mission
-  status <id> for the normal operator path`.
+  `workflow check was removed; use issue transition <id> --options or work
+  mission <id> for the normal operator path`.
 
 ### 2. Mission, issue, and evidence IDs were easy to misuse
 
@@ -119,7 +119,7 @@ the wrong evidence relation:
 
 - `atelier issue show atelier-2nc9` and `atelier issue show atelier-n8ag`
   failed because those IDs were missions, not issues.
-- `atelier mission status` and `atelier mission start` were tried in sessions
+- the retired mission status and mission start forms were tried in sessions
   where those surfaces had not yet landed or had different semantics.
 - `evidence attach ... --role validation` failed because the role did not match
   the accepted relation vocabulary.

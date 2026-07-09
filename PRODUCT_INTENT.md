@@ -17,18 +17,20 @@ mission-control features needed by agent-factory style orchestration.
 
 Atelier should use:
 
-- Markdown records for canonical state at rest.
-- SQLite for rebuildable projection indexes and local runtime state.
+- Record files for durable project state at rest.
+- SQLite for a rebuildable domain cache; ignored files own other local runtime
+  state.
 - Git for merge, review, and long-term audit.
 - Agent-facing commands as the primary interface.
-- Optional UI surfaces built on top of mechanical projections.
+- Optional UI surfaces built on documented domain queries.
 
-Markdown records are the durable, mergeable repo surface. The SQLite database is
-the fast local projection and runtime store. It supports queries, locks,
-sessions, workflow checks, and Mission Control projections without making
-Markdown parsing the hot path for every command. A worktree should be able to
-rebuild its local SQLite projection from committed Markdown records after
-checkout, pull, merge, or clone.
+Record files are the durable, mergeable repo surface. The SQLite database is a
+fast, disposable domain cache. It supports query and workflow lookups without
+making record-file parsing the hot path for every command; it does not own
+locks, sessions, or durable workflow facts. Cache-backed commands open the
+cache lazily, compare source metadata with record files, and repair only the
+changed sources when safe. A worktree can rebuild the cache from committed
+record files after checkout, pull, merge, or clone.
 
 ## Starting Point
 
@@ -74,7 +76,7 @@ Atelier should not become:
 - A system where every issue maps rigidly to one agent session.
 
 Interactive UI can come later. The foundation should be a crisp human-first CLI
-with durable file projections.
+with durable record files.
 
 ## Storage Model
 
@@ -101,22 +103,23 @@ Atelier should implement this storage contract:
 
 The exact layout can change, but the principles should not:
 
-- Canonical Markdown records must be deterministic.
-- Canonical Markdown records must be sufficient to rebuild SQLite projections.
-- During the compatibility window, hidden/admin deterministic-renderer checks
-  may detect stale generated output, but target-state `lint` and `doctor`
-  checks validate canonical `.atelier/` Markdown and local projection health
-  directly.
-- Mutating commands should write canonical Markdown records first, then refresh
-  or mark stale the SQLite projection.
+- Record files must be deterministic.
+- Record files must be sufficient to rebuild the SQLite domain cache.
+- `check` validates record files, while cache-backed commands and `check --fix`
+  report or repair local cache health without making ignored state an
+  operator-managed prerequisite.
+- Mutating commands write record files first and invalidate affected cache
+  facts. The next cache-backed query repairs them through `CacheManager`; writes
+  do not require eager cache refresh.
 - Git merges should happen through Markdown record files, not by merging SQLite
   files.
 - SQLite should be rebuildable after checkout, merge, pull, or clone.
 - Runtime and cache paths under `.atelier/runtime/` and `.atelier/cache/` are
   ignored local state and are never the durable project record source.
 
-The existing Chainlink export/import system is backup-oriented. Atelier needs a
-Markdown-first canonical record store with rebuildable projections instead.
+The inherited Chainlink export/import path is historical migration input, not a
+target persistence boundary. Atelier uses a Markdown-first record store and a
+rebuildable domain cache instead.
 
 ## Record Identity
 
@@ -479,7 +482,8 @@ Examples:
 
 - Required evidence before `done`.
 - Warning when a summary is too long or too vague.
-- Error when durable records or derived projections are stale.
+- Error when record files are invalid or a decision-bearing query cannot repair
+  its stale domain-cache facts safely.
 - Error when a workflow transition is invalid.
 - Warning when implementation starts on `main`.
 
@@ -527,9 +531,9 @@ issue ORM or session layer.
 The review artifact actions are intentionally narrow. They may create
 the artifact that an epic, standalone issue, or exceptional branch-owning child
 issue will use for review. They do not approve, comment on, request changes,
-resolve findings, merge review artifacts, hide issue close, or replace
-`atelier issue transition`. PR aliases and broad automation hooks are non-goals
-for v1.
+resolve findings, merge review artifacts, bypass configured close transitions,
+or replace `atelier issue transition`. PR aliases and broad automation hooks
+are non-goals for v1.
 
 Terminal merge behavior follows the review mode. Provider-backed workflows use
 provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
@@ -555,7 +559,7 @@ Failure semantics are explicit:
   tracker commit and continue without duplicating records.
 - Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
-  `atelier issue transition <id>`, `atelier review status <id>`, or
+  `atelier issue transition <id>`, `atelier review show --issue <id>`, or
   `atelier check <id>`.
 
 This contract blocks implementation work that adds workflow schema support,
@@ -594,16 +598,15 @@ workflow-derived owner branch.
 Desired commands:
 
 ```text
-atelier agent init <name>
 atelier issue transition atelier-z1p8 start
 atelier issue transition atelier-z1p8 close --reason "done"
 ```
 
 `atelier issue transition <id> start` owns routine branch preparation. It derives the owner
-branch from the work graph, creates or checks out that branch when needed,
-refreshes local runtime/projection state, and then transitions the issue into
-the checkout's current-work set. Routine workers should not run explicit branch
-setup before issue work.
+branch from the work graph, creates or checks out that branch when needed, and
+then transitions the issue into the checkout's current-work set. Any
+cache-backed reads used by that workflow open and repair the domain cache
+lazily. Routine workers should not run explicit branch setup before issue work.
 
 The default branch model is opinionated. Branch owner derivation is:
 
@@ -668,8 +671,8 @@ Useful enforcement:
   specific operation.
 - Record owner branch, branch base, merge strategy, and current issue
   association when workflow actions prepare or integrate branches.
-- Repair stale projections as internal command-storage health rather than
-  exposing projection freshness as user-configurable workflow policy.
+- Repair stale domain-cache facts inside cache-backed commands rather than
+  exposing freshness as user-configurable workflow policy.
 - Allow multi-issue slices with explicit intent.
 
 Atelier-managed workspace isolation is deferred pending redesign. It should be
@@ -680,10 +683,9 @@ Chainlink lock sync. The default workflow is one checkout, one reviewable branch
 per epic, lifecycle-owned branch
 preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
 `atelier issue transition <id> close --reason "..."`,
-and `lint`/`doctor` health
-checks. Explicit branch commands such as `atelier branch for-epic`
-are internal, diagnostic, or advanced repair surfaces; they are not the normal
-mutating-subagent default.
+and `atelier check` health checks. Explicit ignored-state repair uses
+`atelier check --fix`. Advanced owner-branch repair commands are internal
+diagnostic surfaces; they are not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 
@@ -714,7 +716,7 @@ Mission Control should be able to show:
 - Active agents and runs.
 - Branch/worktree associations.
 - Claims and locks.
-- Stale exports.
+- Record-file and domain-cache health.
 - Required evidence.
 - Workflow validator failures.
 - Plan drift.
@@ -725,8 +727,8 @@ The first Mission Control slice should be CLI-native: `atelier issue show
 <objective-id>` should summarize mission health, blockers, evidence gaps,
 validator failures, completion status, and next actions for agents and
 orchestrators.
-Deterministic JSON projections and richer UI surfaces can follow once the CLI
-status contract proves the needed state model.
+Additional query views and richer UI surfaces can follow once the CLI status
+contract proves the needed domain model.
 
 ## Command Philosophy
 
@@ -736,26 +738,29 @@ Representative commands:
 
 ```text
 atelier init
-atelier prime
 atelier status
 atelier work ready
-atelier issue list --ready
+atelier work blocked
+atelier work missions
+atelier issue list
 atelier issue show atelier-z1p8
 atelier issue create
 atelier issue transition atelier-z1p8
+atelier issue transition atelier-z1p8 start
+atelier issue transition atelier-z1p8 close --reason "..."
 atelier issue create "Mission title" --issue-type mission
 atelier issue show atelier-k7mq
 atelier issue link atelier-k7mq atelier-z1p8 --role advances
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier check
-atelier doctor
+atelier check --fix
 ```
 
 Every command that agents call should provide focused human-readable output with
 the actionable identifiers, state, and next commands needed for the immediate
-workflow. Durable Markdown records and explicit projection files are the
-machine-readable source of truth, not command-result JSON.
+workflow. Durable record files are the machine-readable source of truth, not
+command-result JSON or ignored SQLite cache rows.
 
 ## Initial Milestones
 
@@ -766,13 +771,12 @@ machine-readable source of truth, not command-result JSON.
 - Preserve tests where practical.
 - Document provenance and architectural intent.
 
-### Milestone 2: Canonical Export/Rebuild
+### Milestone 2: Record Files And Cache Rebuild
 
-- Define tracked canonical Markdown under `.atelier/`.
-- Export deterministic per-record files.
-- Add `export --check`.
-- Add `rebuild`.
-- Make SQLite rebuildable from committed Markdown records.
+- Define tracked deterministic record files under `.atelier/`.
+- Make normal mutations write those record files directly.
+- Add deterministic record validation and cache rebuild.
+- Make SQLite rebuildable from committed record files.
 - Keep `.atelier/state.db` ignored as local runtime state; committed
   durable state lives under tracked `.atelier/` record directories.
 
@@ -798,26 +802,26 @@ machine-readable source of truth, not command-result JSON.
 - Add linter severities and waivers.
 - Surface action-aware guidance.
 
-### Milestone 6: Mission Control Projection
+### Milestone 6: Mission Control Queries
 
-- Add JSON projections for active missions, agents, blockers, workflow
-  validator failures, evidence, branches, and artifact-update drift.
-- Defer rich UI until projections are useful.
+- Add domain queries for active missions, agents, blockers, workflow validator
+  failures, evidence, branches, and artifact-update drift.
+- Defer rich UI until those queries are useful.
 
 ## Open Questions
 
 - Resolved for Milestone 1: the canonical binary is `atelier`; short aliases
   such as `atl` are deferred until the install story is stable.
 - Resolved for the Markdown-first storage overhaul: `.atelier/` is the single
-  project root. Canonical Markdown records and tracked project config live under
-  `.atelier/`; `.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/`
-  contain ignored local projection/runtime/cache files such as SQLite state,
-  identity, locks, diagnostics, and UI caches.
+  project root. Record files and tracked project config live under `.atelier/`;
+  `.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/` contain
+  ignored local cache/runtime files such as SQLite state, identity, locks,
+  diagnostics, and UI caches.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata? Command diagnostics are resolved separately as local-only telemetry
   and do not answer this broader run/session policy.
 - Which external artifact backend should be implemented after metadata-only
   path/URI evidence records?
 - What shared or remote lock policy is needed after work association and
-  Mission Control projections stabilize?
+  Mission Control queries stabilize?
 - What should the default workflow be for tiny tasks?

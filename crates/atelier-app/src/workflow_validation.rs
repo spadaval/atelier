@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use atelier_core::{EvidenceRecord, Issue, Record};
+use atelier_core::{EvidenceRecord, Issue};
 use atelier_records::IssueSections;
 use atelier_sqlite::Database;
 use serde::Serialize;
@@ -325,12 +325,7 @@ fn linked_evidence_records(
 
 fn canonical_evidence_record(repo_root: &Path, id: &str) -> Result<Option<EvidenceRecord>> {
     let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    Ok(
-        match crate::use_cases::load_canonical_record(&state_dir, "evidence", id) {
-            Ok(Record::Evidence(record)) => Some(record),
-            Ok(_) | Err(_) => None,
-        },
-    )
+    Ok(crate::use_cases::load_canonical_evidence(&state_dir, id).ok())
 }
 
 fn lint_none_blocking(db: &Database) -> Result<(bool, String)> {
@@ -699,7 +694,7 @@ fn linked_pr_merged(
             return Ok((
                 false,
                 format!(
-                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
+                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review show --issue {}`",
                     error,
                     target_id,
                     target_id
@@ -713,7 +708,7 @@ fn linked_pr_merged(
             return Ok((
                 false,
                 format!(
-                    "{error:#}; run `atelier review status --issue {}` after configuring ~/.config/atelier.toml",
+                    "{error:#}; run `atelier review show --issue {}` after configuring ~/.config/atelier.toml",
                     target_id
                 ),
             ));
@@ -753,10 +748,7 @@ fn review_complete(
         }) => linked_pr_merged(db, repo_root, target_kind, target_id),
         Err(error) => Ok((
             false,
-            format!(
-                "{}; run `atelier review status --issue {}`",
-                error, target_id
-            ),
+            format!("{}; run `atelier review show --issue {}`", error, target_id),
         )),
     }
 }
@@ -775,10 +767,7 @@ fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Resu
         Err(error) => {
             return Ok((
                 false,
-                format!(
-                    "{}; run `atelier review status --issue {}`",
-                    error, issue_id
-                ),
+                format!("{}; run `atelier review show --issue {}`", error, issue_id),
             ))
         }
     };
@@ -789,7 +778,7 @@ fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Resu
         Ok((
             false,
             format!(
-                "review room {} is {}; run `atelier review status --issue {}`",
+                "review room {} is {}; run `atelier review show --issue {}`",
                 outcome.review_id, outcome.status, issue_id
             ),
         ))

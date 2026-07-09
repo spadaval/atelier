@@ -11,9 +11,9 @@ workflow transition effects to transition actions.
 ADR 0010 defined provider-backed pull requests as review artifacts and kept
 Atelier workflow transitions separate from provider actions. The next product
 step adds native review rooms while retaining Forgejo-backed review artifacts.
-Without a new decision, implementation could keep `atelier pr` as the public
-surface, accept both native and provider review state in one project, or store
-room summaries that drift from their event history.
+Without a new decision, implementation could retain the superseded
+provider-specific surface, accept both native and provider review state in one
+project, or store room summaries that drift from their event history.
 
 ## Decision
 
@@ -24,17 +24,18 @@ room summaries that drift from their event history.
    provider implemented in this mission.
 
 2. The public command surface is `atelier review`.
-   `atelier review open/status/show/comments/comment/approve/request-changes/resolve/merge`
-   operate in the configured mode. `link` is provider-only because native rooms
-   are created by Atelier. The old `atelier pr` command surface is removed
-   instead of kept as an alias.
+   `atelier review open/show/submit/resolve/merge`
+   operate in the configured mode. `review open --existing <url-or-number>` is
+   the provider-only recovery/import path because native rooms are created by
+   Atelier. The old review-link and provider-specific command surfaces are
+   removed instead of kept as aliases.
 
-3. Native rooms are canonical tracked records.
+3. Native rooms are durable tracked records.
    A room is stored under `.atelier/reviews/<id>.yaml`. Current room state is
    derived from metadata plus ordered events, including comments, findings,
    approvals, change requests, resolutions, stale-approval invalidations, and
-   merge. Projections may index derived state, but they must not become a
-   second mutable room snapshot.
+   merge. The disposable domain cache may index selected derived room facts,
+   but it must not become a second mutable room snapshot.
 
 4. Issues link review artifacts through `review`.
    The canonical issue field is a structured `review` object. In room mode it
@@ -66,7 +67,7 @@ room summaries that drift from their event history.
   and provider review modes.
 - Validation can prove provider parity by using the `review` commands without
   keeping `pr` compatibility shims.
-- Room projections must be rebuildable from canonical YAML and event order.
+- Room cache indexes must be rebuildable from durable room YAML and event order.
 - A future GitHub or GitLab provider requires a separate provider decision; it
   is not implied by the provider mode introduced here.
 - Workflow action implementations must preserve this review boundary: they can

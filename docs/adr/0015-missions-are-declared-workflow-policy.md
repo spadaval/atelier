@@ -35,7 +35,8 @@ The replacement command boundary is:
 - `atelier status` orients the checkout and names active work.
 - `atelier issue show <objective-id>` renders one objective record and its
   linked work, blockers, and proof.
-- `atelier issue status <objective-id>` inspects readiness and terminal checks
+- `atelier issue show <objective-id>` inspects objective detail, while
+  `atelier issue transition <objective-id>` inspects readiness and terminal checks
   for one objective.
 - Explicit issue browsing or inventory surfaces discover objective records.
 - `atelier issue transition <objective-id> <transition>` applies the workflow
@@ -67,6 +68,6 @@ The replacement command boundary is:
   rendering path as other work.
 - Legacy mission records need a direct migration or rebuild into the declared
   objective model.
-- Documentation and role guidance should route operators to status, issue
-  detail, issue status, issue transition options, and explicit browsing
-  surfaces, not to hidden mission-specific lifecycle rules.
+- Documentation and role guidance should route operators to status, `issue
+  show`, `issue transition` options, and explicit browsing surfaces, not to
+  hidden mission-specific lifecycle rules.

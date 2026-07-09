@@ -6,11 +6,16 @@ records.
 
 This contract applies to issue-like row sets in:
 
-- `atelier work queue`
+- `atelier work ready` and `atelier work blocked`
+- `atelier work mission <mission-id>` and `atelier work epic <epic-id>`
 - `atelier issue show` subissues
 - `atelier issue show <objective-id>`
-- explicit objective browsing or inventory views
+- explicit objective browsing views
 - root `atelier status`
+
+It does not apply to the neutral ID ordering of `atelier issue list` or the
+mission-record ordering of `atelier work missions`; those contracts live in
+[Issue Inventory And Mission Overview](issue-inventory-and-mission-overview.md).
 
 ## Blocker Order
 
@@ -23,7 +28,7 @@ inside that visible set affect display order:
 - blockers outside the visible set are not inserted as phantom rows;
 - closed or done blockers do not constrain ordering;
 - hidden blockers still affect the blocked row state and compact blocker cue;
-- cycles or invalid dependency projections preserve every row and fall back to a
+- cycles or invalid cached dependency graphs preserve every row and fall back to a
   deterministic display order for the cyclic remainder.
 
 The shared order is layered after the command has chosen its scope. Parent and

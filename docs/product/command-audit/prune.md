@@ -6,6 +6,12 @@ Primary question: "How do I inspect and explicitly remove accumulated local,
 canonical, branch, and worktree artifacts without bypassing their safety
 contracts?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| What cleanup is eligible, and may I apply it? | Admin | Acceptable only with dry-run, classes, and recovery clarity. | Retention policy and protected-state evaluation. | Keep | Keep preview by default and restrict apply to implemented retention contracts. |
+
 ## Assessment
 
 - Name: Correct. It signals cleanup rather than repair or validation.

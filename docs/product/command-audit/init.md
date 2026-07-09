@@ -5,6 +5,12 @@ Primary role: Admin.
 Primary question: "How do I create or reconcile the Atelier project state in
 this repository?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| How do I establish trustworthy project state? | Admin | Low as a distinct setup step; import must remain explicit. | Scaffolding, configuration, and optional migration input. | Keep | Keep setup bounded; use `check` after setup and hide standalone migration mechanics. |
+
 ## Assessment
 
 - Name: Correct. `init` is the expected setup verb.

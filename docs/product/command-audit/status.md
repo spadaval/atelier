@@ -4,6 +4,12 @@ Primary role: Worker.
 
 Primary question: "What is active, ready, stale, or unsafe in this checkout?"
 
+## Decision Record
+
+| Operator question | Role | Product/cognitive cost | Architecture/code cost | Verdict | Next action |
+| --- | --- | --- | --- | --- | --- |
+| What should I do safely in this checkout now? | Worker | Low when state and next actions remain compact. | Shared checkout and tracker read model. | Keep | Keep orientation bounded; route detail to issue, work, or check. |
+
 ## Assessment
 
 - Name: Correct. `status` is the expected root orientation command.

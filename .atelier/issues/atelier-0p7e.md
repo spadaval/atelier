@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T19:14:53.547495587+00:00"
+status: "done"
 title: "Update command queries for new cache schema"
-updated_at: "2026-06-23T16:21:20.082011829+00:00"
+updated_at: "2026-07-06T19:14:53.547495587+00:00"
 ---
 
 ## Description
@@ -28,4 +29,5 @@ Update command query code to read from the new domain-shaped cache schema and lo
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Focused CLI nextest scenarios prove missing-cache issue queries, status, issue/evidence lists, record-file detail, and lazy direct-edit repair.
+- `cargo check -p atelier-sqlite -p atelier-app -p atelier-cli`, `cargo fmt --all -- --check`, `git diff --check mission/atelier-mska...HEAD`, and `atelier check` prove build and repository integrity.
