@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate issue inventory and Mission Overview behavior"
-updated_at: "2026-07-09T16:42:13.276236820+00:00"
+updated_at: "2026-07-09T16:48:29.071290831+00:00"
 ---
 
 ## Description
