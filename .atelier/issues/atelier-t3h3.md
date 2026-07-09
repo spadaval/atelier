@@ -36,9 +36,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Prune command implementation"
-updated_at: "2026-07-09T16:34:09.934776191+00:00"
+updated_at: "2026-07-09T16:34:45.429151320+00:00"
 ---
 
 ## Description
