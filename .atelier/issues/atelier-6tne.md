@@ -6,6 +6,10 @@ labels:
 - "architecture"
 - "mission-review"
 - "planning"
+review:
+  kind: pull_request
+  number: 66
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-p4z2

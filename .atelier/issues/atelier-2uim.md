@@ -22,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate retained mission-planning contracts before review expansion"
-updated_at: "2026-07-09T16:38:54.554461358+00:00"
+updated_at: "2026-07-09T16:43:07.661277587+00:00"
 ---
 
 ## Description
