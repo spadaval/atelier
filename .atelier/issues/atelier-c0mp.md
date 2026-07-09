@@ -36,9 +36,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-09T16:54:52.762916655+00:00"
+status: "publish_review"
 title: "Mission: Separate issue inventory from the mission overview"
-updated_at: "2026-07-06T17:44:36.666721847+00:00"
+updated_at: "2026-07-09T16:54:52.762916655+00:00"
 ---
 
 ## Description
