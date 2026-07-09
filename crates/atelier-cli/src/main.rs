@@ -20,7 +20,7 @@ mod issue_cli;
 Orientation:
   man           Show role guides and Atelier product topics
   status        Show checkout, mission, work, and tracker signposts
-  work          Show operational multi-issue work views
+  work          Show operational views, including the plural Mission Overview
 
 Issues:
   issue         Create, list, show, update, transition, note, and manage links
@@ -312,8 +312,12 @@ enum WorkCommands {
     Active,
     /// Show all operational work buckets
     All,
-    /// List mission records by issue_type
-    Missions,
+    /// Show the Mission Overview across current missions
+    Missions {
+        /// Include done missions in the Mission Overview
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -377,12 +381,9 @@ enum IssueCommands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// Show only ready todo-category issue records
-        #[arg(long)]
-        ready: bool,
-        /// Show blocked issue records
-        #[arg(long)]
-        blocked: bool,
+        /// Maximum number of matching records to show
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
     },
 
     /// Show or execute issue transitions
@@ -791,7 +792,9 @@ fn run() -> Result<()> {
                 Some(WorkCommands::Blocked) => commands::work::list(storage.db(), "blocked", quiet),
                 Some(WorkCommands::Active) => commands::work::list(storage.db(), "active", quiet),
                 Some(WorkCommands::All) => commands::work::list(storage.db(), "all", quiet),
-                Some(WorkCommands::Missions) => commands::work::missions(storage.db(), quiet),
+                Some(WorkCommands::Missions { all }) => {
+                    commands::work::missions(storage.db(), all, quiet)
+                }
             }
         }
 
@@ -1248,7 +1251,7 @@ fn command_identity(command: &Commands) -> &'static str {
             Some(WorkCommands::Blocked) => "work blocked",
             Some(WorkCommands::Active) => "work active",
             Some(WorkCommands::All) => "work all",
-            Some(WorkCommands::Missions) => "work missions",
+            Some(WorkCommands::Missions { .. }) => "work missions",
         },
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",

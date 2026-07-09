@@ -7,6 +7,10 @@ labels:
 - "human-output"
 - "inventory"
 - "mission-dashboard"
+review:
+  kind: pull_request
+  number: 70
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
@@ -36,9 +40,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-09T16:54:52.762916655+00:00"
+status: "publish_review"
 title: "Mission: Separate issue inventory from the mission overview"
-updated_at: "2026-07-06T17:44:36.666721847+00:00"
+updated_at: "2026-07-09T16:54:52.762916655+00:00"
 ---
 
 ## Description
@@ -55,4 +60,9 @@ Restore a clear read-side boundary between generic issue inventory and mission c
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Attached child evidence must include focused command transcripts for the flat `atelier issue list` inventory and formatted `atelier work missions` overview, including deterministic ordering, omission accounting, and `NO_COLOR` output.
+- Independent validation issue `atelier-g5fl` must exercise the delivered commands in a temporary repository and attach its validation evidence before this mission requests publication.
+- `cargo nextest run`, `cargo fmt -- --check`, `git diff --check`, and `atelier check atelier-c0mp` must pass on the integrated mission branch.
+- The mission review artifact must account for the public contract, both epic diffs, their independent review evidence, and any residual behavior or evidence gaps.
+- Evidence record `atelier-1q1r`: PASS — post-master-integration regression at exact candidate `a9763d40` preserved the prior `atelier-g5fl` classification: four mission-critical temporary-repository/help scenarios passed; the full suite passed 704 tests with none skipped; inventory/overview help, durable docs, manager `work missions` plus `man work-model` guidance, formatting, diff, mission lint, and repository lint all passed.
+- Evidence record `atelier-4k8q`: superseded tooling-input failure — an over-specific unverified full-hash assertion stopped the first capture before any validation scenario ran. The corrected short-hash assertion and every requested check passed in `atelier-1q1r`; this failed capture is not a product or publication-candidate failure.

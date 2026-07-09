@@ -1581,6 +1581,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier man admin",
         "atelier work ready",
         "atelier work blocked",
+        "atelier work missions",
         "atelier issue list",
         "atelier work mission <mission-id>",
         "atelier issue show <id>",
@@ -1646,6 +1647,51 @@ fn test_top_level_help_only_shows_core_commands() {
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped_views() {
+    let dir = tempdir().unwrap();
+
+    let (success, work_help, stderr) = run_atelier_raw(dir.path(), &["work", "--help"]);
+    assert!(success, "work help failed: {stderr}");
+    assert!(
+        work_help.contains("Show the Mission Overview across current missions"),
+        "{work_help}"
+    );
+    assert!(
+        work_help.contains("Show one mission dashboard"),
+        "{work_help}"
+    );
+
+    let (success, missions_help, stderr) =
+        run_atelier_raw(dir.path(), &["work", "missions", "--help"]);
+    assert!(success, "work missions help failed: {stderr}");
+    assert!(
+        missions_help.contains("Show the Mission Overview across current missions")
+            && missions_help.contains("Include done missions in the Mission Overview"),
+        "{missions_help}"
+    );
+
+    init_atelier(dir.path());
+    let (success, dashboards, stderr) = run_atelier(dir.path(), &["work"]);
+    assert!(success, "bare work guidance failed: {stderr}");
+    assert!(
+        dashboards.contains("missions Cross-mission Mission Overview with collapsed epics")
+            && dashboards.contains("Compare missions: atelier work missions")
+            && dashboards.contains("mission  Live mission orchestration dashboard"),
+        "{dashboards}"
+    );
+
+    let (success, manager, stderr) = run_atelier(dir.path(), &["man", "manager"]);
+    assert!(success, "manager guide failed: {stderr}");
+    let overview = manager
+        .find("atelier work missions")
+        .expect("manager guide should name plural Mission Overview");
+    let scoped = manager
+        .find("atelier work mission <mission-id>")
+        .expect("manager guide should name scoped mission drill-down");
+    assert!(overview < scoped, "{manager}");
 }
 
 #[test]
@@ -2028,6 +2074,9 @@ fn test_product_intent_representative_commands_match_signpost_surfaces() {
     );
     assert!(!product_intent.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(product_intent.contains("atelier status"));
+    assert!(product_intent.contains("atelier work missions"));
+    assert!(product_intent.contains("atelier work mission <mission-id>"));
+    assert!(product_intent.contains("atelier work epic <epic-id>"));
     assert!(product_intent.contains("atelier issue transition atelier-z1p8"));
     assert!(product_intent
         .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
