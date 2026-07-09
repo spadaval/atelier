@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T17:24:41.897403493+00:00"
+status: "done"
 title: "Represent mission-plan review provenance and revision freshness"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-09T17:24:41.897403493+00:00"
 ---
 
 ## Description

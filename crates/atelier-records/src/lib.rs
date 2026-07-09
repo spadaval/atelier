@@ -20,6 +20,7 @@ pub mod activity;
 pub mod document;
 pub mod evidence;
 pub mod issue;
+pub mod mission_plan_review;
 pub mod review;
 pub mod store;
 pub mod validation;

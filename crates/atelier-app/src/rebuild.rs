@@ -301,6 +301,7 @@ impl<'a> CacheRebuildLoader<'a> {
         self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
+        record_store::mission_plan_review::validate_mission_plan_reviews(self.state_dir)?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
         self.records.sort_by(|a, b| {
@@ -1488,6 +1489,11 @@ mod tests {
         AttachmentRelationship, EvidenceRecord, EvidenceRecordData, IssueSections, RecordHeader,
         RelatesRelationship, ReviewRecord,
     };
+    use atelier_records::activity::create_mission_plan_review_activity;
+    use atelier_records::mission_plan_review::{
+        mission_graph_revision, mission_plan_review_state, MissionPlanFindingSeverity,
+        MissionPlanReviewEvent, MissionPlanReviewFreshness,
+    };
     use atelier_records::{CanonicalIssueRecord, RecordStore};
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -2042,5 +2048,181 @@ mod tests {
         run(&state_dir, &db_path).unwrap();
         let rebuilt = Database::open(&db_path).unwrap();
         assert!(rebuilt.issue_cache_row(&ids[0]).unwrap().is_some());
+    }
+
+    fn write_plan_issue(
+        state_dir: &Path,
+        id: &str,
+        issue_type: &str,
+        relationships: Relationships,
+    ) {
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: Issue {
+                    id: id.to_string(),
+                    title: format!("Plan fixture {id}"),
+                    description: None,
+                    status: if issue_type == "mission" {
+                        "draft"
+                    } else {
+                        "todo"
+                    }
+                    .to_string(),
+                    issue_type: issue_type.to_string(),
+                    priority: "high".to_string(),
+                    fields: BTreeMap::new(),
+                    parent_id: None,
+                    created_at: timestamp(1),
+                    updated_at: timestamp(1),
+                    closed_at: None,
+                },
+                labels: vec!["mission-review".to_string()],
+                sections: IssueSections {
+                    description: format!("Intent for {id}"),
+                    outcome: format!("Outcome for {id}"),
+                    evidence: format!("Closeout for {id}"),
+                    notes: None,
+                },
+                relationships,
+            })
+            .unwrap();
+    }
+
+    fn append_plan_event(
+        state_dir: &Path,
+        offset: i64,
+        actor: &str,
+        event: MissionPlanReviewEvent,
+    ) {
+        create_mission_plan_review_activity(
+            state_dir,
+            "atelier-m200",
+            actor,
+            timestamp(10 + offset),
+            "Mission plan review fixture",
+            event,
+            "Inspectable canonical event.",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn rebuild_preserves_complete_mission_plan_review_projection_deterministically() {
+        let (_directory, state_dir, db_path) = setup();
+        write_plan_issue(
+            &state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships {
+                relates: vec![RelatesRelationship {
+                    kind: "issue".to_string(),
+                    id: "atelier-e200".to_string(),
+                    relation_type: "advances".to_string(),
+                }],
+                ..Relationships::default()
+            },
+        );
+        write_plan_issue(
+            &state_dir,
+            "atelier-e200",
+            "epic",
+            Relationships {
+                children: vec![atelier_records::issue_relationship_target("atelier-t200")],
+                ..Relationships::default()
+            },
+        );
+        write_plan_issue(
+            &state_dir,
+            "atelier-t200",
+            "feature",
+            Relationships::default(),
+        );
+        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
+        append_plan_event(
+            &state_dir,
+            1,
+            "planner@example.com",
+            MissionPlanReviewEvent::Request {
+                graph_revision: revision.clone(),
+                authors: vec!["author@example.com".to_string()],
+                material_editors: vec!["editor@example.com".to_string()],
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            2,
+            "reviewer@example.com",
+            MissionPlanReviewEvent::Finding {
+                graph_revision: revision.clone(),
+                finding_id: "finding-200".to_string(),
+                severity: MissionPlanFindingSeverity::Blocking,
+                affected_issue_ids: vec!["atelier-t200".to_string()],
+                dependency_path: Vec::new(),
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            3,
+            "author@example.com",
+            MissionPlanReviewEvent::Resolution {
+                graph_revision: revision.clone(),
+                target_id: "finding-200".to_string(),
+                disposition: "covered by the feature issue".to_string(),
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            4,
+            "reviewer@example.com",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision,
+            },
+        );
+
+        let before = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(before.freshness, MissionPlanReviewFreshness::FreshApproval);
+        run(&state_dir, &db_path).unwrap();
+        let first_cache = snapshot(&Database::open(&db_path).unwrap());
+        let after = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(after, before);
+
+        fs::remove_file(&db_path).unwrap();
+        run(&state_dir, &db_path).unwrap();
+        assert_eq!(
+            snapshot(&Database::open(&db_path).unwrap()),
+            first_cache,
+            "full cache rebuild is deterministic"
+        );
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn rebuild_rejects_plan_approval_when_provenance_was_lost() {
+        let (_directory, state_dir, db_path) = setup();
+        write_plan_issue(
+            &state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships::default(),
+        );
+        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
+        append_plan_event(
+            &state_dir,
+            1,
+            "reviewer@example.com",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision,
+            },
+        );
+
+        let error = run(&state_dir, &db_path).unwrap_err().to_string();
+        assert!(
+            error.contains("incomplete author/material-editor provenance"),
+            "unexpected rebuild error: {error}"
+        );
+        assert!(!db_path.exists());
     }
 }

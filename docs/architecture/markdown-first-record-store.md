@@ -358,7 +358,8 @@ Activity front matter uses `schema: "atelier.activity"` and
 - `subject_id`: canonical issue ID.
 - `event_type`: one of `comment`, `note`, `handoff`, `plan`,
   `close_reason`, `status_changed`, `field_changed`, `work_started`,
-  `work_finished`, or `evidence_attached`.
+  `work_finished`, `work_abandoned`, `evidence_attached`,
+  `transition_applied`, `transition_blocked`, or `mission_plan_review`.
 - `actor`: user or agent identity that produced the event.
 - `created_at`: RFC3339 timestamp.
 - `summary`: one-line event summary.
@@ -368,6 +369,28 @@ Evidence remains a rich first-class record under `.atelier/evidence/`;
 issue activity records only lightweight `evidence_attached` references such as
 `evidence_id` and `result` so operators can follow up with
 `atelier evidence show`.
+
+`mission_plan_review` activities additionally require a strictly typed
+`mission_plan_review` front-matter object. Its event kind is one of `request`,
+`material_edit_attribution`, `finding`, `change_request`, `resolution`,
+`approval`, or `legacy_grandfather`. Every kind names the versioned graph
+revision it concerns; requests record the complete author/material-editor
+provenance snapshot, attributions chain a new revision to its predecessor,
+findings and change requests carry stable decision IDs and affected issue or
+dependency-path IDs, resolutions target those IDs, and approval identity comes
+from the activity actor. Lists that represent sets are sorted and unique so
+rendering and rebuild are deterministic. Malformed payloads, missing
+provenance, non-independent approval, unresolved blocking decisions at approval
+time, and plan-review events attached to non-mission issues make canonical
+rebuild fail.
+
+The graph revision string is `mission-graph-v1:sha256:<digest>`. The hashed
+payload uses stable-ID ordering and contains the mission and reachable authored
+planning sections, direct roots, hierarchy and `advances` edges, and blocker
+edges touching reviewed scope. Status, timestamps, notes, evidence receipts,
+code-review fields, context-only links, activity, and cache state are excluded.
+The current review projection is rebuilt directly from canonical issue records
+and sidecars; it is not a mutable snapshot or a SQLite activity table.
 
 `atelier issue show` uses the same sidecars for its bounded recent activity
 preview. It does not fall back to SQLite notes or comments.

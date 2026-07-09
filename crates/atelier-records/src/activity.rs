@@ -7,6 +7,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::mission_plan_review::MissionPlanReviewEvent;
+
 const ACTIVITY_SCHEMA: &str = "atelier.activity";
 const ACTIVITY_SCHEMA_VERSION: i64 = 1;
 
@@ -20,6 +22,7 @@ pub struct IssueActivity {
     pub created_at: DateTime<Utc>,
     pub summary: String,
     pub pr_attribution: Option<ActivityPrAttribution>,
+    pub mission_plan_review: Option<MissionPlanReviewEvent>,
     pub body: String,
 }
 
@@ -49,6 +52,7 @@ pub enum ActivityEventType {
     EvidenceAttached,
     TransitionApplied,
     TransitionBlocked,
+    MissionPlanReview,
 }
 
 impl ActivityEventType {
@@ -67,6 +71,7 @@ impl ActivityEventType {
             Self::EvidenceAttached => "evidence_attached",
             Self::TransitionApplied => "transition_applied",
             Self::TransitionBlocked => "transition_blocked",
+            Self::MissionPlanReview => "mission_plan_review",
         }
     }
 }
@@ -95,6 +100,7 @@ impl FromStr for ActivityEventType {
             "evidence_attached" => Ok(Self::EvidenceAttached),
             "transition_applied" => Ok(Self::TransitionApplied),
             "transition_blocked" => Ok(Self::TransitionBlocked),
+            "mission_plan_review" => Ok(Self::MissionPlanReview),
             other => bail!("Unsupported activity event_type '{}'", other),
         }
     }
@@ -114,6 +120,8 @@ struct ActivityFrontMatter {
     summary: String,
     #[serde(default)]
     pr_attribution: Option<ActivityPrAttribution>,
+    #[serde(default)]
+    mission_plan_review: Option<MissionPlanReviewEvent>,
 }
 
 #[cfg(test)]
@@ -286,6 +294,33 @@ pub fn create_issue_activity_with_metadata(
     )
 }
 
+/// Append one typed mission-plan review event to a mission's activity stream.
+pub fn create_mission_plan_review_activity(
+    state_dir: &Path,
+    mission_id: &str,
+    actor: &str,
+    created_at: DateTime<Utc>,
+    summary: &str,
+    event: MissionPlanReviewEvent,
+    body: &str,
+) -> Result<IssueActivity> {
+    let id = allocate_activity_id(state_dir, "issue", mission_id, created_at)?;
+    let activity = IssueActivity {
+        id,
+        subject_kind: "issue".to_string(),
+        subject_id: mission_id.to_string(),
+        event_type: ActivityEventType::MissionPlanReview,
+        actor: actor.to_string(),
+        created_at,
+        summary: summary.to_string(),
+        pr_attribution: None,
+        mission_plan_review: Some(event),
+        body: normalize_body(body),
+    };
+    write_record_activity(state_dir, &activity)?;
+    Ok(activity)
+}
+
 pub fn create_record_activity(
     state_dir: &Path,
     subject_kind: &str,
@@ -331,6 +366,7 @@ pub fn create_record_activity_with_metadata(
         created_at,
         summary: summary.to_string(),
         pr_attribution,
+        mission_plan_review: None,
         body: normalize_body(body),
     };
     write_record_activity(state_dir, &activity)?;
@@ -382,6 +418,7 @@ impl IssueActivity {
                 display_state_path(relative)
             )
         })?;
+        validate_plan_review_metadata(event_type, front.mission_plan_review.as_ref(), relative)?;
 
         Ok(Self {
             id: front.id,
@@ -392,6 +429,7 @@ impl IssueActivity {
             created_at: front.created_at,
             summary: front.summary,
             pr_attribution: front.pr_attribution,
+            mission_plan_review: front.mission_plan_review,
             body: body.to_string(),
         })
     }
@@ -426,10 +464,47 @@ impl IssueActivity {
         )?;
         write_yaml_scalar(&mut output, "summary", &self.summary)?;
         write_yaml_struct_if_some(&mut output, "pr_attribution", self.pr_attribution.as_ref())?;
+        validate_plan_review_metadata(
+            self.event_type,
+            self.mission_plan_review.as_ref(),
+            Path::new("<generated>"),
+        )?;
+        write_yaml_struct_if_some(
+            &mut output,
+            "mission_plan_review",
+            self.mission_plan_review.as_ref(),
+        )?;
         output.push_str("---\n\n");
         output.push_str(&normalize_body(&self.body));
         output.push('\n');
         Ok(output)
+    }
+}
+
+fn validate_plan_review_metadata(
+    event_type: ActivityEventType,
+    event: Option<&MissionPlanReviewEvent>,
+    relative: &Path,
+) -> Result<()> {
+    match (event_type, event) {
+        (ActivityEventType::MissionPlanReview, Some(event)) => {
+            event.validate().with_context(|| {
+                format!(
+                    "Invalid mission-plan review event in {}",
+                    display_state_path(relative)
+                )
+            })
+        }
+        (ActivityEventType::MissionPlanReview, None) => bail!(
+            "Mission-plan review activity in {} is missing mission_plan_review metadata",
+            display_state_path(relative)
+        ),
+        (_, Some(_)) => bail!(
+            "Activity in {} has mission_plan_review metadata but event_type is '{}'",
+            display_state_path(relative),
+            event_type
+        ),
+        (_, None) => Ok(()),
     }
 }
 
@@ -530,6 +605,7 @@ mod tests {
             created_at: at(),
             summary: "Implemented activity sidecars".to_string(),
             pr_attribution: None,
+            mission_plan_review: None,
             body: "Line one\n\nLine two".to_string(),
         }
     }
