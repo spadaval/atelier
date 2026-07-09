@@ -30,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Rework issue list as simple inventory"
-updated_at: "2026-07-06T17:56:55.359282876+00:00"
+updated_at: "2026-07-09T16:23:25.733737025+00:00"
 ---
 
 ## Description
