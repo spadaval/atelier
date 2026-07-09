@@ -7,6 +7,10 @@ labels:
 - "independent-validation"
 - "inventory"
 - "mission-dashboard"
+review:
+  kind: pull_request
+  number: 65
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-c0mp
@@ -24,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate issue inventory and Mission Overview behavior"
-updated_at: "2026-07-09T16:36:22.072101228+00:00"
+updated_at: "2026-07-09T16:42:13.276236820+00:00"
 ---
 
 ## Description
