@@ -668,6 +668,11 @@ fn test_prune_removes_ignored_orphaned_runtime_artifacts_but_protects_locks() {
     fs::create_dir_all(&cache).unwrap();
     fs::write(&orphan, "interrupted rebuild").unwrap();
     fs::write(&lock, "pid=999\n").unwrap();
+    let status = Command::new("touch")
+        .args(["-d", "45 days ago", orphan.to_str().unwrap()])
+        .status()
+        .unwrap();
+    assert!(status.success(), "failed to age orphaned cache artifact");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
@@ -686,6 +691,46 @@ fn test_prune_removes_ignored_orphaned_runtime_artifacts_but_protects_locks() {
     assert!(stdout.contains("atelier check --fix"), "{stdout}");
     assert!(!orphan.exists(), "apply left orphaned artifact in place");
     assert!(lock.exists(), "apply removed protected lock");
+}
+
+#[test]
+fn test_prune_protects_fresh_local_artifacts_and_preserves_cache_health() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "fresh local artifact fixture");
+
+    let fresh = dir.path().join(".atelier/cache/fresh.tmp");
+    fs::create_dir_all(fresh.parent().unwrap()).unwrap();
+    fs::write(&fresh, "possibly active cache work").unwrap();
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("protected stale-cache"), "{stdout}");
+    assert!(
+        stdout.contains("within local artifact retention window"),
+        "{stdout}"
+    );
+    assert!(fresh.exists(), "apply removed a fresh cache artifact");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "cache health failed after prune: {stderr}");
+}
+
+#[test]
+fn test_prune_quiet_reports_compact_equivalent_counts() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "quiet prune fixture");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--quiet", "prune"]);
+    assert!(success, "quiet prune failed: {stderr}");
+    assert!(stdout.starts_with("mode=dry-run eligible="), "{stdout}");
+    assert!(stdout.contains(" protected="), "{stdout}");
+    assert!(stdout.contains(" removed=0 failures=0"), "{stdout}");
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
 }
 
 #[test]
@@ -879,6 +924,11 @@ fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
         stdout.contains("protected worktree") && stdout.contains(&reason),
         "{stdout}"
     );
+    assert!(
+        stdout.contains(&format!("protected issue {epic_id}"))
+            && stdout.contains(&format!("active descendant {child_id}")),
+        "{stdout}"
+    );
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
@@ -890,6 +940,15 @@ fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
     assert!(
         stdout.contains("protected worktree") && stdout.contains(&reason),
         "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("protected issue {epic_id}"))
+            && stdout.contains(&format!("active descendant {child_id}")),
+        "{stdout}"
+    );
+    assert!(
+        canonical_issue_path(dir.path(), &epic_id).exists(),
+        "apply removed terminal parent with an active descendant"
     );
     assert!(
         worktree.exists(),

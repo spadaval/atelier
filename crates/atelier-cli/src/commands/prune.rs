@@ -111,6 +111,7 @@ pub fn run(
     tracker: Option<TrackerContext>,
     apply: bool,
     retention_days: Option<u64>,
+    quiet: bool,
 ) -> Result<()> {
     let diagnostics = telemetry::prune_diagnostics_logs(retention_days, apply)?;
     // Local artifacts are explicitly independent of canonical health.  Do this
@@ -119,6 +120,11 @@ pub fn run(
     let local = prune_local_artifacts(tracker.as_ref(), retention_days, apply)?;
     let git = prune_git_artifacts(tracker.as_ref(), retention_days, apply)?;
     let canonical = prune_canonical_records(tracker, retention_days, apply)?;
+
+    if quiet {
+        print_quiet_summary(&diagnostics, &local, &git, &canonical, apply);
+        return Ok(());
+    }
 
     println!("Prune");
     println!("=====");
@@ -724,6 +730,9 @@ fn collect_local_candidates(
             Some("locked by a running or interrupted command; inspect before removal".to_string())
         } else if is_runtime_projection_artifact(&relative) {
             projection_artifact_protection(state_dir, &path)?
+                .or_else(|| (!stale).then(|| "within local artifact retention window".to_string()))
+        } else if !stale {
+            Some("within local artifact retention window".to_string())
         } else {
             None
         };
@@ -901,6 +910,7 @@ fn issue_candidates(
     let activity_latest = issue_activity_latest(&tracker.state_dir)?;
     let links = tracker.db.list_all_record_links()?;
     let retained_records = retained_record_ids(&tracker.db, cutoff)?;
+    let active_descendants = active_descendants_by_ancestor(policy.as_ref(), &all_issues);
 
     let mut old_terminal = BTreeSet::new();
     for issue in &all_issues {
@@ -927,13 +937,18 @@ fn issue_candidates(
             .get(&issue.id)
             .map(|activity| activity.count)
             .unwrap_or(0);
-        let protection = crossing_link_reason(
-            &links,
-            "issue",
-            &issue.id,
-            &retained_issues,
-            &retained_records,
-        );
+        let protection = active_descendants
+            .get(&issue.id)
+            .map(|descendant| format!("terminal record has active descendant {descendant}"))
+            .or_else(|| {
+                crossing_link_reason(
+                    &links,
+                    "issue",
+                    &issue.id,
+                    &retained_issues,
+                    &retained_records,
+                )
+            });
         candidates.push(CanonicalCandidate {
             kind: "issue",
             id: issue.id.clone(),
@@ -947,6 +962,36 @@ fn issue_candidates(
     }
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(candidates)
+}
+
+fn active_descendants_by_ancestor(
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issues: &[Issue],
+) -> BTreeMap<String, String> {
+    let by_id = issues
+        .iter()
+        .map(|issue| (issue.id.as_str(), issue))
+        .collect::<BTreeMap<_, _>>();
+    let mut descendants = BTreeMap::new();
+    for issue in issues {
+        if crate::commands::issue_workflow::issue_is_done(policy, issue) {
+            continue;
+        }
+        let mut parent = issue.parent_id.as_deref();
+        let mut visited = BTreeSet::new();
+        while let Some(parent_id) = parent {
+            if !visited.insert(parent_id) {
+                break;
+            }
+            descendants
+                .entry(parent_id.to_string())
+                .or_insert_with(|| issue.id.clone());
+            parent = by_id
+                .get(parent_id)
+                .and_then(|parent_issue| parent_issue.parent_id.as_deref());
+        }
+    }
+    descendants
 }
 
 fn evidence_candidates(
@@ -1208,6 +1253,60 @@ fn remove_candidate(
         }
         Err(error) => failures.push((candidate.path.clone(), error.to_string())),
     }
+}
+
+fn print_quiet_summary(
+    diagnostics: &DiagnosticsPruneSummary,
+    local: &LocalPruneSummary,
+    git: &GitPruneSummary,
+    canonical: &CanonicalPruneSummary,
+    apply: bool,
+) {
+    let eligible = diagnostics.candidates.len()
+        + local
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.protection.is_none())
+            .count()
+        + git
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.protection.is_none())
+            .count()
+        + canonical
+            .issues
+            .iter()
+            .chain(canonical.evidence.iter())
+            .filter(|candidate| candidate.eligible())
+            .count();
+    let protected = local
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.protection.is_some())
+        .count()
+        + git
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.protection.is_some())
+            .count()
+        + canonical
+            .issues
+            .iter()
+            .chain(canonical.evidence.iter())
+            .filter(|candidate| !candidate.eligible())
+            .count();
+    let removed = diagnostics.removed.len()
+        + local.removed.len()
+        + git.removed.len()
+        + canonical.removed.len();
+    let failures = diagnostics.failures.len()
+        + local.failures.len()
+        + git.failures.len()
+        + canonical.failures.len();
+    println!(
+        "mode={} eligible={eligible} protected={protected} removed={removed} failures={failures}",
+        if apply { "apply" } else { "dry-run" }
+    );
 }
 
 fn print_diagnostics(summary: &DiagnosticsPruneSummary, apply: bool) {

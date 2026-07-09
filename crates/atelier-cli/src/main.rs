@@ -1169,7 +1169,7 @@ fn run() -> Result<()> {
                     None
                 }
             };
-            commands::prune::run(tracker, apply, retention_days)
+            commands::prune::run(tracker, apply, retention_days, quiet)
         }
 
         Commands::Check { id, fix } => {
