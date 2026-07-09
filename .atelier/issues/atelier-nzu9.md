@@ -48,4 +48,5 @@ Replace the current grouped queue-style implementation behind `atelier issue lis
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Independent epic scenario classification and CLI transcript summary: evidence `atelier-8k4e`.
+- Focused active integration test for flat inventory, filters, quiet/limit behavior, and removed operational flags: evidence `atelier-mqtk`.
