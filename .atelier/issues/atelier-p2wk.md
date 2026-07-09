@@ -27,7 +27,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Enforce reviewed and dependency-safe mission readiness"
-updated_at: "2026-07-06T20:37:49.843257256+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -41,4 +41,6 @@ Implement the repository-owned records, workflow transitions, validators, diagno
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Child evidence provides focused positive and negative transcripts for exact-revision approval, stale approval, reviewer independence, direct and transitive blocker closure, issue dependency readiness, migration, rebuild, and normal recovery output.
+- The epic review artifact maps each changed workflow/record/CLI boundary to its accountable child and confirms that direct record edits and alternate transition paths cannot bypass the same policy.
+- atelier-t876 independently reruns the cross-child scenario matrix, including exclusion of draft mission work from ready surfaces, and attaches classified first-class evidence IDs before this epic is treated as complete.

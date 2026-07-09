@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Add the Agent Factory mission-review subskill"
-updated_at: "2026-07-06T20:37:49.363294325+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -33,4 +33,6 @@ Assigned subskill: implement. Add `mission-review` as the independent counterpar
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- A dogfood reviewer applies the new procedure to an exact complete mission graph and records revision-bound approval, then applies it to defective graphs and reports blocking findings with affected issue IDs and dependency paths.
+- Routing tests or focused skill inspection show `mission-review` is selectable independently from `plan`, code `review`, `orchestrate`, and `validate`, and its assignment template requires repository, mission ID, exact revision, complete graph scope, evidence destination, and independence context.
+- A negative dogfood case shows the material author cannot approve the graph and the reviewer does not edit it; requested repairs return to a separately assigned planner.

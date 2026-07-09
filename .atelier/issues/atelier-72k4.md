@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Explain mission review and dependency readiness failures"
-updated_at: "2026-07-06T20:37:49.345233020+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -34,4 +34,6 @@ Assigned subskill: implement. Update normal issue detail, mission work, ready-wo
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Snapshot tests or public transcripts cover `atelier issue show <mission-id>`, `atelier work ready`, transition inspection/attempts, and manager/planner/reviewer guidance for review not requested, approval missing, self-approval, unresolved finding, stale approval, direct blocker, and transitive blocker.
+- Each rejection identifies the relevant mission, review/finding or full dependency path and emits exactly one state-appropriate recovery command without requiring verbose diagnostics.
+- A CLI transcript for a regression fixture matching atelier-p4z2's current baseline shows the draft mission shell and its open descendants are not advertised as executable by objective detail or ready-work output; after current independent approval, only dependency-safe work is offered.

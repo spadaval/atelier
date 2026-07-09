@@ -27,9 +27,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "draft"
+status: "ready"
 title: "Mission: Require independent review before mission execution"
-updated_at: "2026-07-06T20:37:52.346804573+00:00"
+updated_at: "2026-07-07T05:55:25.405692460+00:00"
 ---
 
 ## Description
@@ -38,7 +38,7 @@ Mission planning becomes a reviewable, non-executable draft phase rather than an
 
 Non-scope: changing ordinary code-review semantics, requiring planner-authored validation transcripts, adding arbitrary approval workflow graphs, or treating mission-plan approval as merge authority.
 
-Risks: completed repository decisions currently reject mission review states and limit readiness review to Outcome clarity; existing draft and ready missions need an explicit migration policy; author identity and graph revision fingerprints must remain trustworthy across canonical rebuilds; and dependency enforcement cannot detect blockers that planning failed to record.
+Risks: completed repository decisions currently reject mission review states and limit readiness review to Outcome clarity; existing draft and ready missions need an explicit migration policy; the open legacy validator atelier-2uim must validate only the retained parts of those decisions rather than obsolete direct-readiness behavior; author identity and graph revision fingerprints must remain trustworthy across canonical rebuilds; and dependency enforcement cannot detect blockers that planning failed to record.
 
 ## Outcome
 
@@ -51,4 +51,7 @@ Risks: completed repository decisions currently reject mission review states and
 
 ## Evidence
 
-- The independent validation issue records a claim map from every mission Outcome line to public command transcripts, review artifacts, migration and rebuild results, Agent Factory guidance inspection, and first-class evidence records.
+- `atelier-t876` records a claim map from every mission Outcome line to public command transcripts, mission-plan review artifacts, migration and rebuild results, Agent Factory guidance inspection, and attached first-class evidence IDs.
+- `atelier-2uim` independently reviews the contract artifacts for explicit retained, amended, and superseded rules from atelier-a44d, atelier-ql9k, and atelier-1mga before implementation epics can proceed; its evidence record must not validate the obsolete direct `draft -> ready` lifecycle as a target state.
+- The end-to-end transcript includes the current regression baseline: a draft mission and its open descendants are not offered by `atelier issue show`, `atelier work ready`, or transition inspection as executable work; the same graph becomes executable only after a distinct reviewer approves its exact revision and declared dependency closure is complete.
+- The validator's evidence record classifies every claim and negative scenario as `pass`, `fail`, `blocked`, `deferred`, or `not-applicable` without treating broad suite success or this planning text as execution evidence.

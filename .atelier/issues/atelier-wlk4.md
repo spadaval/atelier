@@ -15,6 +15,8 @@ relationships:
   - kind: "issue"
     id: "atelier-l5mw"
   - kind: "issue"
+    id: "atelier-2uim"
+  - kind: "issue"
     id: "atelier-wyxn"
   children: []
   attachments: []
@@ -23,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Publish mission and issue-set authoring standards"
-updated_at: "2026-07-06T20:37:49.381094280+00:00"
+updated_at: "2026-07-07T05:42:00.000000000+00:00"
 ---
 
 ## Description
@@ -38,4 +40,6 @@ Assigned subskill: docs. Consolidate the distributed planning rules into one aut
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- A fresh planner uses the published checklist to classify one complete mission graph and examples with a missing external blocker, unsafe initial parallelism, orphaned Outcome claim, duplicate ownership, and malformed validation coverage; the artifact records the affected issue IDs and dependency paths.
+- A fresh mission reviewer can follow links from Agent Factory and the repository documentation to the single normative standard without private context, and focused searches show contradictory duplicate planning rules were removed or explicitly routed to it.
+- The documentation diff, `git diff --check -- '*.md'`, and `atelier check atelier-wlk4` are captured on this issue; process-policy judgment is independently covered by atelier-t876.

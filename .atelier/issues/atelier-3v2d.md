@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Migrate existing mission readiness state"
-updated_at: "2026-07-06T20:37:49.376591376+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -30,4 +30,6 @@ Assigned subskill: implement. Apply the contract's explicit migration treatment 
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Migration tests cover fixtures for legacy draft, ready, active, and terminal missions and record the post-migration inspectable state for each; no fixture gains a fabricated reviewer, approval, or dependency-completeness fact.
+- Running migration twice produces the same canonical records, and rebuilding the derived cache from those records preserves the migrated state and review provenance.
+- Focused migration tests and a repository-level transcript record the chosen grandfathering/blocking behavior, rollback or recovery instructions, and any intentionally unchanged terminal history as first-class evidence.

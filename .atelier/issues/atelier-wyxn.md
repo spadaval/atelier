@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Represent mission-plan review provenance and revision freshness"
-updated_at: "2026-07-06T20:37:49.354483200+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -33,4 +33,6 @@ Assigned subskill: implement. Provide canonical mission-plan review state that i
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- A round-trip fixture records an approval by a reviewer distinct from every author/material editor, identifies the exact mission plus reachable-graph revision, rebuilds the cache from canonical records, and observes unchanged provenance, findings, resolutions, approval, and freshness.
+- Focused tests change mission intent, scope roots, reachable work-item content, hierarchy, blocker/dependency edges, and closeout coverage one class at a time and observe the prior approval become stale; a note-only activity append preserves approval freshness.
+- Deterministic render/rebuild comparison and malformed/provenance-loss rejection output are captured as first-class test evidence on this issue.

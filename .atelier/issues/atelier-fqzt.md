@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Enforce independent review in the mission lifecycle"
-updated_at: "2026-07-06T20:37:49.349657810+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -35,4 +35,6 @@ Assigned subskill: implement. Implement the configured draft, plan-review, ready
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Public transition tests reject readiness and start for review not requested, approval missing, author/material-editor self-approval, unresolved blocking findings, change requested, and approval made stale by a material graph edit.
+- A transcript shows a distinct reviewer approving the exact current graph revision, after which the configured ready and start paths succeed when all other validators pass.
+- Focused tests exercise every supported lifecycle mutation entry point, including direct record/status mutation recovery and alternate transition attempts, and show none can create executable state without the same authority, freshness, and finding checks.

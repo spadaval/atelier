@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Separate mission authorship, review, and orchestration handoffs"
-updated_at: "2026-07-06T20:37:49.372239276+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -32,4 +32,6 @@ Assigned subskill: implement. Update Agent Factory plan, orchestrate, install, r
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Dogfood handoffs record a planner leaving an authored graph in draft, a separately assigned mission reviewer inspecting the exact revision, and an orchestrator proceeding only after Atelier reports current approval and ready state.
+- Assignment inspection confirms mission-review handoffs include repository/mission/revision context, all reachable issue IDs or an equivalent complete-graph selector, expected finding/approval destination, and author/editor independence information.
+- Installation/readiness fixtures for a repository with and without lifecycle support show the supported case routes through Atelier commands and the unsupported case reports the missing capability instead of claiming operability.

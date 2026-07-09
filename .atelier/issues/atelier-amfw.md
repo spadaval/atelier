@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Enforce direct and transitive dependency readiness"
-updated_at: "2026-07-06T20:37:49.340906873+00:00"
+updated_at: "2026-07-07T05:28:00.000000000+00:00"
 ---
 
 ## Description
@@ -36,4 +36,6 @@ Assigned subskill: implement. Add cycle-safe dependency-closure evaluation to ex
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Focused workflow tests and public transition transcripts show mission start rejected for an open direct blocker and for an open transitive blocker, including the complete blocking path, then accepted after the configured terminal closure is complete.
+- Ready-work and direct-start transcripts show an ordinary issue with an incomplete dependency is absent/rejected, then becomes executable when the dependency reaches a configured terminal status.
+- Separate focused tests prove unrelated internal mission work is not treated as a prerequisite, non-default configured terminal statuses are honored, and dependency cycles fail safely with an actionable path instead of hanging or being reported ready.
