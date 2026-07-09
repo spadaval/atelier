@@ -31,4 +31,4 @@ Align the `issue list` parser, help, metadata filters, quiet output, next-action
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Evidence record atelier-90hp captures `cargo nextest run -p atelier-cli test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_operational_flags`, covering flat all-status inventory, exact status/category/type/label/priority filters, quiet IDs, limits and ordering, empty results, supported help, rejected ready/blocked forms, and absence of hierarchy/blocker formatting.
