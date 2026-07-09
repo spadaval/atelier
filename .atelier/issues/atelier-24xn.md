@@ -4,6 +4,10 @@ id: "atelier-24xn"
 issue_type: "mission"
 labels:
 - "mission"
+review:
+  kind: pull_request
+  number: 61
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
