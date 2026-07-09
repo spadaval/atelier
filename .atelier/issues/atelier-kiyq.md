@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-09T16:24:05.099789376+00:00"
+status: "done"
 title: "Align issue-list filters, help, and regression coverage"
-updated_at: "2026-07-09T16:23:25.733973665+00:00"
+updated_at: "2026-07-09T16:24:05.099789376+00:00"
 ---
 
 ## Description
