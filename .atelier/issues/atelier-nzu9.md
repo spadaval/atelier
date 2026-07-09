@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "cli"
 - "inventory"
+review:
+  kind: pull_request
+  number: 60
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-c0mp
@@ -28,9 +32,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Rework issue list as simple inventory"
-updated_at: "2026-07-09T16:23:25.733737025+00:00"
+updated_at: "2026-07-09T16:24:21.636615252+00:00"
 ---
 
 ## Description
