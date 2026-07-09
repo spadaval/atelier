@@ -4,6 +4,15 @@ id: "atelier-gxq5"
 issue_type: "task"
 labels:
 - "integration"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-gxq5
+    owner_kind: issue
+    review_target: master
+    work_branch: task/atelier-gxq5
 priority: "P1"
 relationships:
   blocks: []
@@ -12,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Integrate preserved local master commits"
-updated_at: "2026-07-09T15:27:59.261518394+00:00"
+updated_at: "2026-07-09T15:28:26.657531663+00:00"
 ---
 
 ## Description
