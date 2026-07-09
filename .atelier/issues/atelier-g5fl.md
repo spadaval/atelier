@@ -45,6 +45,7 @@ Independently validate the delivered command split from the mission Outcome and 
 ## Evidence
 
 - Evidence record `atelier-ppld`: PASS — isolated temporary-repository command transcripts prove flat inventory membership and ordering, metadata filters, quiet/limit/error/empty forms, collapsed mission/epic/child/direct/blocked/unassigned/done behavior, exceptional-work accounting, explicit drilldowns, and default-done versus `--all` semantics.
-- Evidence record `atelier-s2em`: PASS — public help, durable product guidance, mission wording, captured output, `NO_COLOR`, and interactive-terminal color agree; color changes styling without removing textual meaning.
-- Evidence record `atelier-za8n`: PASS — the `cargo nextest run` test transcript completed 684 tests with 684 passed and 0 skipped. The extended ignored-only profile reported zero ignored tests, so no stale ignored scenario substitutes for validation.
+- Evidence records `atelier-s2em`, `atelier-d4fw`, and `atelier-x2m5`: PASS — public help, durable product guidance, and mission wording agree. For both `work missions` and `issue list`, ANSI-stripped interactive text compares byte-for-byte equal to `NO_COLOR` TTY and captured noninteractive text; interactive output contains ANSI styling while the other modes contain no escapes.
+- Evidence record `atelier-za8n`: PASS — the `cargo nextest run` test transcript completed 684 tests with 684 passed and 0 skipped.
+- Evidence record `atelier-k9f4`: PASS — the captured ignored-only command returned nextest's expected no-tests status 4 and explicitly reported 0 tests run and 684 skipped, proving that no ignored validation scenario exists.
 - Quality gates: PASS — `cargo fmt -- --check`, `git diff --check`, `target/debug/atelier check atelier-c0mp`, `target/debug/atelier check atelier-g5fl`, and repository-wide `target/debug/atelier check` pass after rebuilding only disposable cache state with the validation-commit binary.

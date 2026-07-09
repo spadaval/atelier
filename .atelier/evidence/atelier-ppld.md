@@ -33,7 +33,6 @@ bash -lc 'set -euo pipefail; cargo nextest run -p atelier-cli test_issue_list_is
 ```console
 bash -lc 'set -euo pipefail; cargo nextest run -p atelier-cli test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_operational_flags test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_output test_work_missions_hides_done_by_default_and_all_includes_done_without_expanding_work; echo "PASS: isolated temp repositories cover flat parent/child/mission/epic/standalone/blocked/done/empty inventory states; metadata filters, quiet, positive limit, unknown category and removed flag errors; mission/epic/child/direct/unassigned/blocked/done/empty overview states; collapsed leaves; progress, blockers and drilldowns; done omission and --all; captured and NO_COLOR semantics."'
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -62,4 +61,3 @@ Truncated: no
 ────────────
      Summary [   0.544s] 3 tests run: 3 passed, 470 skipped
 ```
-

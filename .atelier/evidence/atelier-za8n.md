@@ -33,7 +33,6 @@ cargo nextest run
 ```console
 cargo nextest run
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -88,4 +87,3 @@ Truncated: yes
         PASS [   0.014s] ( 31/684) atelier-app mission_overview::tests::excludes_done_missions_and_reports_exceptional_work_until_all_is_requested
         PASS [   0.014s]
 ```
-

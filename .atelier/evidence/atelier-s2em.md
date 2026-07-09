@@ -33,7 +33,6 @@ bash -lc 'set -euo pipefail; BIN=$PWD/target/debug/atelier; $BIN issue list --he
 ```console
 bash -lc 'set -euo pipefail; BIN=$PWD/target/debug/atelier; $BIN issue list --help | grep -q "List issue records as generic inventory"; ! $BIN issue list --help | grep -Eq -- "--ready|--blocked"; $BIN work missions --help | grep -q "Mission Overview"; rg -q "flat, deterministic inventory" .atelier/issues/atelier-c0mp.md; rg -q "Mission Overview" docs/product/issue-inventory-and-mission-overview.md docs/product/cli-surface.md docs/product/human-cli-output.md; $BIN work missions > /tmp/g5fl-cap; NO_COLOR= $BIN work missions > /tmp/g5fl-nc; cmp -s /tmp/g5fl-cap /tmp/g5fl-nc; test "$(LC_ALL=C tr -cd "\033" </tmp/g5fl-cap | wc -c)" -eq 0; env -u NO_COLOR TERM=xterm-256color script -qec "$BIN work missions" /tmp/g5fl-tty >/dev/null; test "$(LC_ALL=C tr -cd "\033" </tmp/g5fl-tty | wc -c)" -gt 0; env -u NO_COLOR TERM=xterm-256color script -qec "$BIN issue list --limit 2" /tmp/g5fl-inv-tty >/dev/null; test "$(LC_ALL=C tr -cd "\033" </tmp/g5fl-inv-tty | wc -c)" -gt 0; echo "PASS: help/docs/tracker contracts agree; captured and NO_COLOR outputs are identical and ANSI-free; interactive xterm outputs for both public surfaces contain ANSI semantic styling."'
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -53,4 +52,3 @@ Truncated: no
 ```text
 Broken pipe (os error 32)
 ```
-
