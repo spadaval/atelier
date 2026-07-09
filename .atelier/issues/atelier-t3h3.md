@@ -32,9 +32,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Prune command implementation"
-updated_at: "2026-07-09T16:33:35.052641571+00:00"
+updated_at: "2026-07-09T16:33:51.150108123+00:00"
 ---
 
 ## Description
