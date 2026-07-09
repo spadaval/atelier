@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-09T15:31:35.375941595+00:00"
+status: "done"
 title: "Integrate preserved local master commits"
-updated_at: "2026-07-09T15:28:26.657531663+00:00"
+updated_at: "2026-07-09T15:31:35.375941595+00:00"
 ---
 
 ## Description
