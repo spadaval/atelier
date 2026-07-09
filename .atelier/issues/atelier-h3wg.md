@@ -30,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Add independent mission review to Agent Factory"
-updated_at: "2026-07-09T16:55:39.768278231+00:00"
+updated_at: "2026-07-09T16:55:49.192063604+00:00"
 ---
 
 ## Description
