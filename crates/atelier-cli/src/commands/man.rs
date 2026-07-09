@@ -6,22 +6,28 @@ use atelier_app::use_cases;
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
+const TOPICS: &[&str] = &["work-model"];
 
-pub fn run(role: Option<String>) -> Result<()> {
-    let Some(role) = role else {
-        print_role_index();
+pub fn run(page: Option<String>) -> Result<()> {
+    let Some(page) = page else {
+        print_index();
         return Ok(());
     };
 
-    match role.as_str() {
+    match page.as_str() {
         "worker" => run_stateful(Role::Worker),
         "reviewer" => run_stateful(Role::Reviewer),
         "validator" => run_stateful(Role::Validator),
         "manager" => run_stateful(Role::Manager),
         "admin" => run_admin(),
+        "work-model" => {
+            print_work_model();
+            Ok(())
+        }
         _ => bail!(
-            "unknown man role '{role}'\nValid roles: {}\nUse `atelier man` to list role guides.",
-            ROLES.join(", ")
+            "unknown man page '{page}'\nValid roles: {}\nValid topics: {}\nUse `atelier man` to list guides.",
+            ROLES.join(", "),
+            TOPICS.join(", ")
         ),
     }
 }
@@ -107,10 +113,10 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
     })
 }
 
-fn print_role_index() {
+fn print_index() {
     println!("Atelier Man");
     println!("===========");
-    println!("Role guides filter the existing command surface for the job at hand.");
+    println!("Role guides and product topics explain Atelier's operating model.");
     println!();
     println!("Roles");
     println!("-----");
@@ -122,6 +128,10 @@ fn print_role_index() {
     );
     println!("  admin     Set up, repair, migrate, and maintain Atelier state.");
     println!();
+    println!("Topics");
+    println!("------");
+    println!("  work-model  Choose between missions, epics, and issues.");
+    println!();
     println!("Commands");
     println!("--------");
     println!("  atelier man worker");
@@ -129,6 +139,55 @@ fn print_role_index() {
     println!("  atelier man validator");
     println!("  atelier man manager");
     println!("  atelier man admin");
+    println!("  atelier man work-model");
+}
+
+fn print_work_model() {
+    println!("Atelier Man: Work Model");
+    println!("=======================");
+    println!("Choose the smallest work type that owns the outcome without hiding coordination.");
+    println!();
+    println!("Work Types");
+    println!("----------");
+    println!("  Mission  A long-running objective spanning multiple coordinated work packages.");
+    println!("           It owns the target outcome and links root work with `advances`.");
+    println!("  Epic     A coherent work package and the normal branch/review boundary.");
+    println!("           It owns executable child issues that deliver one reviewable change.");
+    println!("  Issue    The accountability unit for implementation, docs, review, validation,");
+    println!("           migration, or other locally provable work.");
+    println!();
+    println!("Graph Shape");
+    println!("-----------");
+    println!("  mission --advances--> epic --children--> issue");
+    println!("          `--advances--> validation issue");
+    println!();
+    println!("  A mission is not the hierarchy parent of its work. Its scope is each direct");
+    println!("  `advances` root plus that root's descendants. Epics own ordinary child issues.");
+    println!("  Dependencies and `blocked_by` links express sequencing or gates, not ownership.");
+    println!();
+    println!("Sizing");
+    println!("------");
+    println!("  Use an issue when one accountable slice can be implemented and proved locally.");
+    println!("  Use an epic when several slices combine into one coherent review boundary.");
+    println!("  Use a mission when multiple work packages coordinate toward a larger objective.");
+    println!();
+    println!("Proof");
+    println!("-----");
+    println!("  Issues own local proof. Epic completion maps child proof to the epic outcome and");
+    println!("  review boundary. Mission completion synthesizes terminal linked work, clear");
+    println!("  blockers, configured health gates, and explicit validation when required.");
+    println!();
+    println!("Commands");
+    println!("--------");
+    println!("  atelier issue create \"...\" --issue-type mission");
+    println!("  atelier issue create \"...\" --issue-type epic");
+    println!("  atelier issue create \"...\" --parent <epic-id>");
+    println!("  atelier issue link <mission-id> <work-id> --role advances");
+    println!("  atelier work missions");
+    println!("  atelier work mission <mission-id>");
+    println!("  atelier work epic <epic-id>");
+    println!("  atelier issue show <id>");
+    println!("  atelier issue transition <id>");
 }
 
 fn print_role_guide(role: Role, snapshot: Option<&Snapshot>, state_error: Option<&str>) {
@@ -208,11 +267,11 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!("  3. atelier issue transition <id> - Follow current workflow guidance.");
         }
         Role::Manager => {
-            println!("  1. atelier work ready - Choose executable work explicitly.");
+            println!("  1. atelier man work-model - Review mission, epic, and issue boundaries.");
+            println!("  2. atelier work ready - Choose executable work explicitly.");
             println!(
-                "  2. atelier issue show <objective-id> - Review objective readiness and blockers."
+                "  3. atelier issue show <objective-id> - Review objective readiness and blockers."
             );
-            println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
@@ -253,6 +312,7 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
+            println!("  atelier man work-model");
             println!("  atelier work ready");
             println!("  atelier work blocked");
             println!("  atelier issue show <objective-id>");

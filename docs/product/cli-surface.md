@@ -34,7 +34,7 @@ output, not this static list, decides the next process step for a concrete issue
 or mission:
 
 - `atelier init`
-- `atelier man [worker|reviewer|validator|manager|admin]`
+- `atelier man [worker|reviewer|validator|manager|admin|work-model]`
 - `atelier status`
 - `atelier work ...`
 - `atelier issue ...`
@@ -89,14 +89,16 @@ must not route a fresh checkout directly to issue creation before
 `atelier check` confirms the committed tracker and workflow configuration are
 valid.
 
-`atelier man [<role>]` is the role-specific guide surface. It filters the
-existing product command surface for the operator's job without creating
-role-prefixed command namespaces. Valid roles are `worker`, `reviewer`,
+`atelier man [<page>]` is the guide surface. Role pages filter the existing
+product command surface for the operator's job without creating role-prefixed
+command namespaces. Valid roles are `worker`, `reviewer`,
 `validator`, `manager`, and `admin`. `manager` is the broad CLI role class for work
-coordination; Agent Factory may still use the orchestrator agent label for a
-specific agent type inside that class, but that label is not a `man` role
-alias. With no
-role, `atelier man` lists the valid roles. Worker, reviewer, validator, and
+coordination; Agent Factory may still use `orchestrator` for a specific agent
+type inside that class, but `orchestrator` is not a `man` role alias. With no
+page, `atelier man` lists valid roles and product topics. The static
+`work-model` topic explains Atelier's mission, epic, and issue split, graph
+shape, sizing, proof ownership, and inspection commands without requiring an
+initialized repository. Worker, reviewer, validator, and
 manager guides require valid tracker/runtime state and fail fast with recovery guidance when
 state is unavailable. The admin guide degrades gracefully before initialization
 or when local state is broken.
@@ -127,7 +129,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `check`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
-| `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, or `man admin` when repair is needed. |
+| `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
 | `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record, `history`. |

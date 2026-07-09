@@ -15,7 +15,8 @@ use atelier_sqlite::{
 pub fn preview(db: &Database, input: &str) -> Result<()> {
     let bundle = load_bundle(input)?;
     validate_bundle(db, &bundle)?;
-    print_bundle_summary(preview_bundle_summary(&bundle))
+    let plan = BundleGraphPlan::from_bundle(db, &bundle)?;
+    print_bundle_summary(preview_bundle_summary(&bundle, &plan))
 }
 
 pub fn apply(
@@ -30,8 +31,9 @@ pub fn apply(
     }
     let bundle = load_bundle(input)?;
     validate_bundle(db, &bundle)?;
+    let plan = BundleGraphPlan::from_bundle(db, &bundle)?;
 
-    let summary = apply_bundle_file(db, state_dir, &bundle)?;
+    let summary = apply_bundle_file(state_dir, &bundle, &plan)?;
     print_bundle_summary(summary)
 }
 
@@ -139,6 +141,140 @@ struct BundleNote {
 struct ResolvedRef {
     kind: String,
     id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+enum PlannedReference {
+    ClientRef(String),
+    Id(String),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+struct PlannedRef {
+    kind: String,
+    reference: PlannedReference,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+struct PlannedRelationship {
+    source: PlannedRef,
+    target: PlannedRef,
+    role: String,
+}
+
+#[derive(Debug)]
+struct PlannedNote<'a> {
+    target: PlannedRef,
+    note: &'a BundleNote,
+}
+
+/// The complete, validated mutation plan for a bundle.
+///
+/// Relationship direction is canonical rather than dependent on the authored
+/// field: parents point to children and blockers point to blocked issues. This
+/// makes `depends_on` and `blocks` normalize to the same graph edge.
+#[derive(Debug)]
+struct BundleGraphPlan<'a> {
+    issues: Vec<&'a BundleIssue>,
+    evidence: Vec<&'a BundleEvidence>,
+    notes: Vec<PlannedNote<'a>>,
+    relationships: Vec<PlannedRelationship>,
+}
+
+impl<'a> BundleGraphPlan<'a> {
+    fn from_bundle(db: &Database, bundle: &'a BundleFile) -> Result<Self> {
+        let mut issues = bundle.resources.issues.iter().collect::<Vec<_>>();
+        issues.sort_by(|left, right| left.client_ref.cmp(&right.client_ref));
+        let mut evidence = bundle.resources.evidence.iter().collect::<Vec<_>>();
+        evidence.sort_by(|left, right| left.client_ref.cmp(&right.client_ref));
+
+        let mut notes = Vec::new();
+        let mut relationships = BTreeSet::new();
+        for issue in &issues {
+            let issue_ref = planned_client_ref(bundle, &issue.client_ref)?;
+            for note in &issue.notes {
+                notes.push(PlannedNote {
+                    target: issue_ref.clone(),
+                    note,
+                });
+            }
+            if let Some(parent) = &issue.parent {
+                insert_planned_relationship(
+                    &mut relationships,
+                    PlannedRelationship {
+                        source: planned_bundle_ref(db, bundle, parent)?,
+                        target: issue_ref.clone(),
+                        role: "parent".to_string(),
+                    },
+                )?;
+            }
+            for blocker in &issue.depends_on {
+                insert_planned_relationship(
+                    &mut relationships,
+                    PlannedRelationship {
+                        source: planned_bundle_ref(db, bundle, blocker)?,
+                        target: issue_ref.clone(),
+                        role: "blocks".to_string(),
+                    },
+                )?;
+            }
+            for blocked in &issue.blocks {
+                insert_planned_relationship(
+                    &mut relationships,
+                    PlannedRelationship {
+                        source: issue_ref.clone(),
+                        target: planned_bundle_ref(db, bundle, blocked)?,
+                        role: "blocks".to_string(),
+                    },
+                )?;
+            }
+            for target in &issue.advances {
+                insert_planned_relationship(
+                    &mut relationships,
+                    PlannedRelationship {
+                        source: issue_ref.clone(),
+                        target: planned_bundle_ref(db, bundle, target)?,
+                        role: "advances".to_string(),
+                    },
+                )?;
+            }
+        }
+        for record in &evidence {
+            let source = planned_client_ref(bundle, &record.client_ref)?;
+            for target in &record.validates {
+                insert_planned_relationship(
+                    &mut relationships,
+                    PlannedRelationship {
+                        source: source.clone(),
+                        target: planned_bundle_ref(db, bundle, target)?,
+                        role: "validates".to_string(),
+                    },
+                )?;
+            }
+        }
+
+        Ok(Self {
+            issues,
+            evidence,
+            notes,
+            relationships: relationships.into_iter().collect(),
+        })
+    }
+}
+
+fn insert_planned_relationship(
+    relationships: &mut BTreeSet<PlannedRelationship>,
+    relationship: PlannedRelationship,
+) -> Result<()> {
+    if !relationships.insert(relationship.clone()) {
+        bail!(
+            "Duplicate bundle relationship after normalization: {} -> {} ({})",
+            planned_ref_label(&relationship.source),
+            planned_ref_label(&relationship.target),
+            relationship.role
+        );
+    }
+    Ok(())
 }
 
 fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
@@ -348,14 +484,18 @@ fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
     )
 }
 
-fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
+fn apply_bundle_file(
+    state_dir: &Path,
+    bundle: &BundleFile,
+    plan: &BundleGraphPlan<'_>,
+) -> Result<Value> {
     let stage_parent = state_dir
         .parent()
         .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
     let stage = create_bundle_stage_dir(stage_parent)?;
     let result = (|| {
         copy_state_tree(state_dir, &stage)?;
-        let summary = apply_bundle_to_state(db, &stage, bundle)?;
+        let summary = apply_bundle_to_state(&stage, bundle, plan)?;
         install_bundle_stage(&stage, state_dir)?;
         Ok(summary)
     })();
@@ -390,12 +530,16 @@ fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
     )
 }
 
-fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
+fn apply_bundle_to_state(
+    state_dir: &Path,
+    bundle: &BundleFile,
+    plan: &BundleGraphPlan<'_>,
+) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
     let store = RecordStore::new(state_dir);
 
-    for issue in &bundle.resources.issues {
+    for issue in &plan.issues {
         let description = issue_description(issue);
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
@@ -423,22 +567,6 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
             relationships: Relationships::default(),
         };
         store.write_issue_atomic(&record)?;
-        for note in &issue.notes {
-            let body = match &note.author {
-                Some(author) if !author.trim().is_empty() => format!("[{author}] {}", note.body),
-                _ => note.body.clone(),
-            };
-            let _ = &note.created_at;
-            create_issue_activity(
-                state_dir,
-                &id,
-                ActivityEventType::Note,
-                &current_actor(),
-                chrono::Utc::now(),
-                "Added note",
-                &body,
-            )?;
-        }
         resolved.insert(
             issue.client_ref.clone(),
             ResolvedRef {
@@ -455,7 +583,7 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
             }));
     }
 
-    for evidence in &bundle.resources.evidence {
+    for evidence in &plan.evidence {
         let data = EvidenceRecordData {
             evidence_type: evidence.evidence_type.clone(),
             captured_at: chrono::Utc::now(),
@@ -488,55 +616,36 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
         )?;
     }
 
-    for issue in &bundle.resources.issues {
-        let source = resolved_ref(db, bundle, &resolved, &BundleRef::client(&issue.client_ref))?;
-        if let Some(parent) = &issue.parent {
-            let parent = resolved_ref(db, bundle, &resolved, parent)?;
-            if parent.kind != "issue" {
-                bail!(
-                    "Issue parent for {} must resolve to an issue",
-                    issue.client_ref
-                );
+    for note in &plan.notes {
+        let target = resolve_planned_ref(&resolved, &note.target)?;
+        let body = match &note.note.author {
+            Some(author) if !author.trim().is_empty() => {
+                format!("[{author}] {}", note.note.body)
             }
-            store.add_issue_child(&parent.id, &source.id)?;
-        }
-        for blocker in &issue.depends_on {
-            let blocker = resolved_ref(db, bundle, &resolved, blocker)?;
-            if blocker.kind != "issue" {
-                bail!(
-                    "depends_on for {} must resolve to an issue",
-                    issue.client_ref
-                );
-            }
-            store.add_issue_block(&source.id, &blocker.id)?;
-        }
-        for blocked in &issue.blocks {
-            let blocked = resolved_ref(db, bundle, &resolved, blocked)?;
-            if blocked.kind != "issue" {
-                bail!("blocks for {} must resolve to an issue", issue.client_ref);
-            }
-            store.add_issue_block(&blocked.id, &source.id)?;
-        }
-        for target in &issue.advances {
-            add_resolved_link(db, &store, bundle, &resolved, &source, target, "advances")?;
-        }
+            _ => note.note.body.clone(),
+        };
+        let _ = &note.note.created_at;
+        create_issue_activity(
+            state_dir,
+            &target.id,
+            ActivityEventType::Note,
+            &current_actor(),
+            chrono::Utc::now(),
+            "Added note",
+            &body,
+        )?;
     }
 
-    let mut relationship_count = 0usize;
-    for issue in &bundle.resources.issues {
-        relationship_count += issue.advances.len();
-    }
-    for evidence in &bundle.resources.evidence {
-        let source = resolved_ref(
-            db,
-            bundle,
-            &resolved,
-            &BundleRef::client(&evidence.client_ref),
-        )?;
-        for target in &evidence.validates {
-            add_resolved_link(db, &store, bundle, &resolved, &source, target, "validates")?;
-            relationship_count += 1;
-        }
+    let mut applied_relationships = Vec::new();
+    for relationship in &plan.relationships {
+        let source = resolve_planned_ref(&resolved, &relationship.source)?;
+        let target = resolve_planned_ref(&resolved, &relationship.target)?;
+        apply_planned_relationship(&store, &source, &target, &relationship.role)?;
+        applied_relationships.push(resolved_relationship_value(
+            &source,
+            &target,
+            &relationship.role,
+        ));
     }
 
     Ok(json!({
@@ -545,7 +654,8 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
         "title": bundle.title,
         "description": bundle.description,
         "records": created,
-        "relationships": relationship_count,
+        "relationships": applied_relationships,
+        "notes": plan.notes.len(),
     }))
 }
 
@@ -666,15 +776,6 @@ impl BundleFile {
     }
 }
 
-impl BundleRef {
-    fn client(client_ref: &str) -> Self {
-        Self {
-            client_ref: Some(client_ref.to_string()),
-            id: None,
-        }
-    }
-}
-
 fn validate_client_ref(client_ref: &str) -> Result<()> {
     let mut chars = client_ref.chars();
     let Some(first) = chars.next() else {
@@ -750,20 +851,72 @@ fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
     bail!("Record id '{}' not found", id)
 }
 
-fn resolved_ref(
+fn planned_client_ref(bundle: &BundleFile, client_ref: &str) -> Result<PlannedRef> {
+    let kind = bundle
+        .client_kind(client_ref)
+        .with_context(|| format!("Reference '{client_ref}' does not resolve in this file"))?;
+    Ok(PlannedRef {
+        kind: kind.to_string(),
+        reference: PlannedReference::ClientRef(client_ref.to_string()),
+    })
+}
+
+fn planned_bundle_ref(
     db: &Database,
-    _bundle: &BundleFile,
-    resolved: &BTreeMap<String, ResolvedRef>,
+    bundle: &BundleFile,
     reference: &BundleRef,
-) -> Result<ResolvedRef> {
+) -> Result<PlannedRef> {
     match (&reference.client_ref, &reference.id) {
-        (Some(client_ref), None) => resolved
-            .get(client_ref)
-            .cloned()
-            .with_context(|| format!("Reference '{}' has not been allocated", client_ref)),
-        (None, Some(id)) => resolve_existing_ref(db, id),
+        (Some(client_ref), None) => planned_client_ref(bundle, client_ref),
+        (None, Some(id)) => {
+            let resolved = resolve_existing_ref(db, id)?;
+            Ok(PlannedRef {
+                kind: resolved.kind,
+                reference: PlannedReference::Id(resolved.id),
+            })
+        }
         _ => bail!("Reference must contain exactly one of client_ref or id"),
     }
+}
+
+fn resolve_planned_ref(
+    resolved: &BTreeMap<String, ResolvedRef>,
+    reference: &PlannedRef,
+) -> Result<ResolvedRef> {
+    match &reference.reference {
+        PlannedReference::ClientRef(client_ref) => resolved
+            .get(client_ref)
+            .cloned()
+            .with_context(|| format!("Reference '{client_ref}' has not been allocated")),
+        PlannedReference::Id(id) => Ok(ResolvedRef {
+            kind: reference.kind.clone(),
+            id: id.clone(),
+        }),
+    }
+}
+
+fn apply_planned_relationship(
+    store: &RecordStore,
+    source: &ResolvedRef,
+    target: &ResolvedRef,
+    role: &str,
+) -> Result<()> {
+    match role {
+        "parent" => {
+            if source.kind != "issue" || target.kind != "issue" {
+                bail!("parent relationship endpoints must both be issues");
+            }
+            store.add_issue_child(&source.id, &target.id)?;
+        }
+        "blocks" => {
+            if source.kind != "issue" || target.kind != "issue" {
+                bail!("blocks relationship endpoints must both be issues");
+            }
+            store.add_issue_block(&target.id, &source.id)?;
+        }
+        relation_type => add_relationship(store, source, target, relation_type)?,
+    }
+    Ok(())
 }
 
 fn create_bulk_record(
@@ -802,20 +955,6 @@ fn create_bulk_record(
         .entry(created_key(kind).to_string())
         .or_default()
         .push(json!({ "client_ref": client_ref, "id": id }));
-    Ok(())
-}
-
-fn add_resolved_link(
-    db: &Database,
-    store: &RecordStore,
-    bundle: &BundleFile,
-    resolved: &BTreeMap<String, ResolvedRef>,
-    source: &ResolvedRef,
-    target: &BundleRef,
-    relation_type: &str,
-) -> Result<()> {
-    let target = resolved_ref(db, bundle, resolved, target)?;
-    add_relationship(store, source, &target, relation_type)?;
     Ok(())
 }
 
@@ -865,7 +1004,7 @@ fn bullet_list(values: &[String]) -> String {
         .join("\n")
 }
 
-fn preview_bundle_summary(bundle: &BundleFile) -> Value {
+fn preview_bundle_summary(bundle: &BundleFile, plan: &BundleGraphPlan<'_>) -> Value {
     let mut records = BTreeMap::<String, Vec<Value>>::new();
     for (client_ref, kind) in bundle.client_refs() {
         records
@@ -873,14 +1012,54 @@ fn preview_bundle_summary(bundle: &BundleFile) -> Value {
             .or_default()
             .push(json!({ "client_ref": client_ref, "kind": kind }));
     }
+    for records in records.values_mut() {
+        records.sort_by(|left, right| {
+            left["client_ref"]
+                .as_str()
+                .cmp(&right["client_ref"].as_str())
+        });
+    }
     json!({
         "applied": false,
         "preview": true,
         "title": bundle.title,
         "description": bundle.description,
         "records": records,
-        "relationships": 0,
+        "relationships": plan.relationships.iter().map(planned_relationship_value).collect::<Vec<_>>(),
+        "notes": plan.notes.len(),
     })
+}
+
+fn planned_relationship_value(relationship: &PlannedRelationship) -> Value {
+    json!({
+        "source": planned_ref_value(&relationship.source),
+        "target": planned_ref_value(&relationship.target),
+        "role": relationship.role,
+    })
+}
+
+fn planned_ref_value(reference: &PlannedRef) -> Value {
+    match &reference.reference {
+        PlannedReference::ClientRef(client_ref) => {
+            json!({ "kind": reference.kind, "client_ref": client_ref })
+        }
+        PlannedReference::Id(id) => json!({ "kind": reference.kind, "id": id }),
+    }
+}
+
+fn resolved_relationship_value(source: &ResolvedRef, target: &ResolvedRef, role: &str) -> Value {
+    json!({
+        "source": { "kind": source.kind, "id": source.id },
+        "target": { "kind": target.kind, "id": target.id },
+        "role": role,
+    })
+}
+
+fn planned_ref_label(reference: &PlannedRef) -> String {
+    match &reference.reference {
+        PlannedReference::ClientRef(client_ref) => format!("{}/{client_ref}", reference.kind),
+        PlannedReference::Id(id) => format!("{}/{id}", reference.kind),
+    }
 }
 
 fn print_bundle_summary(summary: Value) -> Result<()> {
@@ -921,6 +1100,21 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         })
         .unwrap_or(0);
     println!("  relationships: {relationship_count}");
+    println!("  notes: {}", summary["notes"].as_u64().unwrap_or_default());
+
+    if let Some(relationships) = summary["relationships"].as_array() {
+        if !relationships.is_empty() {
+            println!();
+            println!("Relationships");
+            println!("-------------");
+            for relationship in relationships {
+                let source = summary_ref_label(&relationship["source"]);
+                let target = summary_ref_label(&relationship["target"]);
+                let role = relationship["role"].as_str().unwrap_or("unknown");
+                println!("  {source} -> {target} ({role})");
+            }
+        }
+    }
 
     if let Some(id) = first_created_id(&summary, "issues") {
         println!();
@@ -935,6 +1129,15 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         println!("  atelier check");
     }
     Ok(())
+}
+
+fn summary_ref_label(reference: &Value) -> String {
+    let kind = reference["kind"].as_str().unwrap_or("record");
+    let identifier = reference["client_ref"]
+        .as_str()
+        .or_else(|| reference["id"].as_str())
+        .unwrap_or("unknown");
+    format!("{kind}/{identifier}")
 }
 
 fn first_created_id<'a>(summary: &'a Value, kind: &str) -> Option<&'a str> {

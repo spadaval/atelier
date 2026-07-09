@@ -238,28 +238,16 @@ resource `client_ref` when one exists:
 Top-level errors that do not belong to a resource use `"client_ref": null`.
 
 `atelier bundle preview <file>` must be deterministic and must not mutate
-canonical records or SQLite. Preview output returns the same envelope style as
-other agent-facing JSON commands:
+canonical records or SQLite. Its human-readable summary reports record counts
+by kind, note count, and the complete normalized relationship plan. Preview
+relationships use `client_ref` for records authored in the bundle and canonical
+IDs for existing records. Records are sorted by kind and `client_ref`; graph
+edges are sorted by their normalized source, target, and role tuple.
 
-```json
-{
-  "ok": true,
-  "command": "bundle.preview",
-  "data": {
-    "valid": true,
-    "would_create": [],
-    "would_link": [],
-    "would_note": [],
-    "client_ref_map": {}
-  },
-  "warnings": []
-}
-```
-
-Preview arrays are sorted deterministically by record kind, then `client_ref`,
-then relationship tuple. Proposed durable IDs may be placeholder strings such
-as `"<allocated:issue.bundle-contract>"`; they are preview-only and must not be
-treated as reservations.
+Parent references normalize to `parent -> child (parent)`. Both `depends_on`
+and `blocks` normalize to `blocker -> blocked (blocks)`. `advances` and
+`validates` preserve their authored direction and role. A duplicate normalized
+edge is a validation error rather than being silently counted or applied twice.
 
 Validation failure under preview exits non-zero and lists validation errors in
 human-readable diagnostics.
@@ -267,18 +255,12 @@ human-readable diagnostics.
 ## Apply Summary And Failure Behavior
 
 `atelier bundle apply <file> --yes` validates this v1 input contract and prints
-a compact human summary with created counts by kind, relationship count, note
-count, and next commands. Mutating apply persists durable records under tracked
-`.atelier/`, where `client_ref` to durable `id` mappings can be audited.
-
-A successful mutating apply returns:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `created` | array | Created records with `kind`, `client_ref`, and durable `id`. |
-| `links` | array | Created relationship edges. |
-| `notes` | array | Appended notes with target record references. |
-| `client_ref_map` | object | Maps every authored `client_ref` to the durable record ID. |
+a compact human summary with created counts by kind, note count, the complete
+relationship list, and next commands. Apply executes the same normalized graph
+plan shown by preview. Its relationship list has the same ordering, count, and
+roles as preview, with authored `client_ref` values replaced by their allocated
+durable IDs. Mutating apply persists durable records under tracked `.atelier/`,
+where those mappings can be audited.
 
 Apply is atomic at the canonical-record level. If validation fails, nothing is
 written. If an unexpected write failure occurs after mutation starts, the
