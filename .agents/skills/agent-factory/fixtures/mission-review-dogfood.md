@@ -16,9 +16,12 @@ missing scope or a prerequisite.
 ```text
 Repository: /root/.codex/worktrees/9661/atelier
 Mission ID: atelier-fixture-complete
-Exact graph revision: mission-plan-graph-v1:sha256:002869c1092e45a5e0bd40a5e2e56895094552f122231035d6449f98a829ccbc
+Exact graph revision: mission-plan-graph-v1:sha256:5f2a625447f52a44e6b17ca868c54128a6d98db78ded4a0d245268a355cab40b
+Digest input: UTF-8 LF bytes of `Mission ID` followed by `Mission Outcome`
+through `External prerequisites`; revision and review-provenance metadata are
+excluded.
 Author: fixture-author
-Material editors: fixture-author, fixture-editor
+Material editors: fixture-author, fixture-editor, fixture-plan-repair
 Assigned reviewer: fixture-independent-reviewer
 Evidence destination: issue/atelier-l5mw (first-class evidence or durable note)
 
@@ -40,17 +43,35 @@ Reachable records:
 - atelier-fixture-contract-integration (task): Integrate mission review
   contract. Outcome: The public contract coherently composes digest and events.
 - atelier-fixture-lifecycle (epic): Enforce review-gated mission lifecycle.
-  Outcome: Only current independent approval permits ready.
+  Outcome: Only current independent approval permits ready and execution start.
 - atelier-fixture-ready-gate (task): Gate ready transition.
   Outcome: Ready rejects stale or non-independent approval.
+- atelier-fixture-start-gate (task): Recheck approval at execution start.
+  Outcome: Execution start rejects approval that became stale after ready and
+  rechecks declared dependency closure.
+- atelier-fixture-migration (task): Migrate legacy mission readiness state.
+  Outcome: Draft, ready, active, and terminal legacy missions receive the
+  explicit deterministic treatment required by the lifecycle contract.
+- atelier-fixture-docs (task): Publish operator lifecycle documentation.
+  Outcome: Operator guidance explains review request, readiness, freshness,
+  start rejection, and recovery without private context.
+- atelier-fixture-cleanup (task): Remove the obsolete direct-ready path.
+  Outcome: No supported workflow, guidance, or fallback bypasses independent
+  plan review.
 - atelier-fixture-validation (validation): Independently classify mission
-  review behavior. Outcome: Validation maps public lifecycle claims and
-  evidence.
+  review behavior. Outcome: Validation independently classifies ready and
+  execution-start freshness, migration, documentation, cleanup, and public
+  lifecycle claims and records their evidence.
+- atelier-fixture-closeout (task): Map parent claims to completed work.
+  Outcome: Parent closeout maps the mission Outcome to contract, lifecycle,
+  migration, documentation, cleanup, validation, and their evidence records.
 
 Hierarchy: contract -> digest, events, contract-integration; lifecycle ->
-ready-gate.
+ready-gate, start-gate, migration, docs, cleanup, closeout.
 Dependencies: digest -> contract-integration; events -> contract-integration;
-contract-integration -> ready-gate; ready-gate -> validation.
+contract-integration -> ready-gate; ready-gate -> start-gate; start-gate ->
+migration; start-gate -> docs; start-gate -> cleanup; migration -> validation;
+docs -> validation; cleanup -> validation; validation -> closeout.
 External prerequisites: none.
 ```
 
