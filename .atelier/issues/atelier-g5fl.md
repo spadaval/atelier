@@ -7,6 +7,15 @@ labels:
 - "independent-validation"
 - "inventory"
 - "mission-dashboard"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-c0mp
+    integration_target: mission/atelier-c0mp
+    merge_strategy: squash
+    owner_issue_id: atelier-g5fl
+    owner_kind: issue
+    review_target: mission/atelier-c0mp
+    work_branch: validation/atelier-g5fl
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate issue inventory and Mission Overview behavior"
-updated_at: "2026-07-06T17:20:25.694804491+00:00"
+updated_at: "2026-07-09T16:36:22.072101228+00:00"
 ---
 
 ## Description
