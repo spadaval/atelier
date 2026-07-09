@@ -63,6 +63,8 @@
 - [docs/product/work-model.md](product/work-model.md): mission, deferred
   checkpoint semantics, epic, issue, workflow validator, and evidence
   relationships.
+- [docs/product/mission-authoring.md](product/mission-authoring.md):
+  normative mission and issue-set authoring and review checklist.
 - [docs/product/validation.md](product/validation.md): product language for
   outcomes, proof, evidence, validation, closeout, and proof visibility in
   normal operator surfaces.

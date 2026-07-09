@@ -30,13 +30,13 @@ migration-only, or explicitly workflow-configured; it is not the normal way to
 satisfy mission proof.
 
 Mission-plan review is a readiness judgment, not execution proof. Before a
-configured mission becomes executable, an independent reviewer inspects the
-exact current mission graph for Outcome clarity, coverage, decomposition,
-sequencing, dependencies, external prerequisites, validation and closeout
-ownership, and safe initial parallelism. Its findings, resolutions, and
-approval are canonical plan-review events. They do not replace implementation
-evidence, code review, or validator-authored outcome proof, and the plan author
-does not prewrite the later validation transcript.
+configured mission becomes executable, an independent reviewer applies the
+normative [Mission And Issue-Set Authoring
+Standard](../../product/mission-authoring.md) to the exact current mission
+graph. Its findings, resolutions, and approval are canonical plan-review
+events. They do not replace implementation evidence, code review, or
+validator-authored outcome proof, and the plan author does not prewrite the
+later validation transcript.
 
 Session `show` and `list` are read-only inspection surfaces over derived issue
 activity. They can support attribution proof, but they do not create, end, or

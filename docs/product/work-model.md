@@ -116,12 +116,11 @@ or known risks.
 
 Pre-execution plan approval is a separate readiness input. It asks an
 independent reviewer to inspect the Outcome and its complete reachable issue
-set for coverage, decomposition, sequencing, declared dependencies, external
-prerequisites, validation ownership, closeout coverage, and safe initial
-parallelism. The reviewer approves one exact graph revision. This broader
-readiness judgment does not move execution proof into the plan: validators
-still derive scenarios after implementation, and evidence remains a receipt
-for a check that actually ran.
+set against the normative [Mission And Issue-Set Authoring
+Standard](mission-authoring.md). The reviewer approves one exact graph revision.
+This broader readiness judgment does not move execution proof into the plan:
+validators still derive scenarios after implementation, and evidence remains a
+receipt for a check that actually ran.
 
 Missions do not have a hidden built-in lifecycle. If a repository wants
 mission-shaped work, it declares the issue type, statuses, done statuses,
@@ -211,6 +210,10 @@ the executable slices should live under one or more epics or issues linked to
 that objective.
 
 ## Mission Graph Shape
+
+The normative authoring, coverage, dependency, and initial-parallelism rules
+are in [Mission And Issue-Set Authoring Standard](mission-authoring.md). This
+section describes only the record and relationship shape those rules use.
 
 Prefer a shallow objective graph: the objective links to epics, validation
 issues, or other root work that directly advances the objective, and those
