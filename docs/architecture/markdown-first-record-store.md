@@ -141,10 +141,12 @@ canonical vocabulary is `P0`, `P1`, `P2`, and `P3`; human-facing terms such as
 separate canonical fields.
 
 Issue status is durable workflow state owned by `.atelier/workflow.yaml`. The
-current repository-defined values are `todo`, `in_progress`, `blocked`,
-`review`, `validation`, and `done`. Human-ready groupings such as `todo`,
+repository-defined vocabulary includes `draft`, `plan_review`, `ready`,
+`todo`, `in_progress`, `blocked`, `review`, `publish_review`, `validation`,
+`done`, `closed`, and `superseded`. Human-ready groupings such as `todo`,
 `active`, `blocked`, and `done` are derived categories, not alternate stored
-tokens; `review` and `validation` are workflow statuses in the active category.
+tokens; `plan_review`, `review`, and `validation` are workflow statuses in the
+active category.
 
 ### Mission Records
 
@@ -154,12 +156,18 @@ tokens; `review` and `validation` are workflow statuses in the active category.
 | Optional front matter | None in V1 beyond record-generic labels and relationships. |
 | Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
 | Optional body | `## Terminal Notes` and `## Notes`. |
-| Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
+| Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`; current mission-plan review state from canonical revision-bound review events. |
 | Migration input | None. |
 | Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose may reference plan/checkpoint Markdown by path, but must not become a shadow graph. |
 
-Mission objective status is type-aware issue workflow state. The current
-durable vocabulary is `draft`, `ready`, `active`, `superseded`, and `closed`.
+Mission objective status is type-aware issue workflow state. This repository's
+accepted target planning path is `draft`, `plan_review`, `ready`, and
+`in_progress`, with terminal states declared by workflow policy. Mission-plan request,
+authorship/material-edit attribution, finding, change-request, resolution,
+approval, and migration events are tracked canonical history linked to the
+mission in its `.atelier/issues/<mission-id>.activity/` sidecar stream; they do
+not create first-class plan records, a mutable review snapshot, or use the
+code-review artifact field.
 
 ### Deferred Plan Records
 

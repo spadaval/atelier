@@ -13,6 +13,12 @@ state or execute issue transitions load and validate this file directly. If the
 file is missing, obsolete, or invalid, the command fails with a workflow config
 error.
 
+The target repository policy includes the mission-plan review capabilities
+accepted in [ADR 0018](../adr/0018-independent-mission-plan-review.md). The
+workflow file, validators, canonical event support, and legacy-state migration
+must cut over atomically; contract-first documentation does not make an
+unsupported partial workflow configuration valid.
+
 ## Ownership Boundary
 
 Atelier has three separate configuration surfaces. A setting belongs to exactly
@@ -100,6 +106,13 @@ Status `role` is allowed only when `category: active`. Valid role values are
 explicit `--role` first; when omitted, they infer the role from the linked owner
 issue's current status role and fail if that status has none.
 
+Mission-plan review is separate from the review backend selected in
+`.atelier/config.toml`. Its append-only request, attribution, finding,
+resolution, change-request, approval, and migration events are linked to the
+mission and name a graph revision. They do not populate the issue `review`
+field, open a room or provider artifact, satisfy `review.complete`, or grant
+merge authority.
+
 ## Fixed V3 Shape
 
 The file is strict YAML with explicit schema identity:
@@ -122,6 +135,8 @@ issue_types:
   validation: { label: Validation }
 
 statuses:
+  draft: { category: todo }
+  plan_review: { category: active, role: reviewer }
   ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active, role: worker }
@@ -136,14 +151,29 @@ statuses:
 workflows:
   mission:
     applies_to: [mission]
-    initial_status: ready
+    initial_status: draft
     done_statuses: [publish_review, closed, superseded]
     transitions:
+      request_plan_review:
+        from: [draft]
+        to: plan_review
+        description: "Submit the exact current mission graph for independent plan review."
+        validators:
+          - issue.sections_parseable
+      ready:
+        from: [plan_review]
+        to: ready
+        description: "Make an independently approved exact mission graph ready for execution."
+        validators:
+          - plan_review.current_approval
+          - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
+          - plan_review.current_approval
+          - blockers.transitive_none_open
           - git.worktree_clean
         actions:
           - git.prepare_branch
@@ -156,7 +186,6 @@ workflows:
           - objective.work_terminal
           - objective.blockers_none_open
           - issue.sections_parseable
-          - evidence.attached: { min_count: 1 }
           - validation.criteria_satisfied
           - lint.none_blocking
           - command_surface_current

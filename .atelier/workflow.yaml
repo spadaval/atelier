@@ -1,6 +1,13 @@
 schema: atelier.workflow
 schema_version: 3
 
+# Pre-cutover executable policy. ADR 0018 supersedes the direct mission
+# draft-to-ready contract, but the plan-review validators, canonical events,
+# and migration must land atomically before this live file can select them.
+# Until that implementation cutover, the direct transition below is retained
+# only as the observable legacy behavior and must not be treated as target
+# architecture or used to claim independent mission-plan approval.
+
 branch_policy:
   base_branch: master
   merge_strategy: squash

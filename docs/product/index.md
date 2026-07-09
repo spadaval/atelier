@@ -19,6 +19,9 @@ that direction into contracts that can be implemented and validated.
 
 - [Work Model](work-model.md): mission, deferred checkpoint semantics, epic,
   issue, workflow validator, and evidence relationships.
+- [Mission And Issue-Set Authoring Standard](mission-authoring.md): the
+  normative outcome-to-work, decomposition, dependency, parallel-safety, and
+  closeout checklist for mission-plan review.
 - [Validation](validation.md): product language for outcomes, proof, evidence,
   validation, terminal checks, and proof visibility in normal operator surfaces.
 - [Milestone Records](milestone-records.md): deferred checkpoint semantics and
