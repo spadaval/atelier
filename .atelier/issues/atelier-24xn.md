@@ -31,9 +31,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-07-09T16:48:09.856721859+00:00"
+status: "publish_review"
 title: "Prune stale Atelier artifacts and branches"
-updated_at: "2026-07-06T17:44:10.806301462+00:00"
+updated_at: "2026-07-09T16:48:09.856721859+00:00"
 ---
 
 ## Description

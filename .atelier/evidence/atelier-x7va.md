@@ -21,6 +21,9 @@ relationships:
     id: "atelier-t3h3"
     role: "validates"
   - kind: "issue"
+    id: "atelier-txf6"
+    role: "validates"
+  - kind: "issue"
     id: "atelier-w1z8"
     role: "validates"
   - kind: "issue"
@@ -31,7 +34,7 @@ schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "Independent destructive-operation re-review approved commit 08affed6 with no actionable findings. Verified held advisory lock across unlink, aged locked cache preservation, post-deletion atelier check, canonical active-descendant closure, quiet-output parity, and retained Git safety. Residual risk is limited to non-cooperating writers that ignore the repository lock convention."
-updated_at: "2026-07-09T16:27:39.807495996+00:00"
+updated_at: "2026-07-09T16:39:59.309654315+00:00"
 ---
 
 Independent destructive-operation re-review approved commit 08affed6 with no actionable findings. Verified held advisory lock across unlink, aged locked cache preservation, post-deletion atelier check, canonical active-descendant closure, quiet-output parity, and retained Git safety. Residual risk is limited to non-cooperating writers that ignore the repository lock convention.
