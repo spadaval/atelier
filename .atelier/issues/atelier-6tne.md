@@ -37,9 +37,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Define the independent mission-plan review contract"
-updated_at: "2026-07-09T16:38:54.554041990+00:00"
+updated_at: "2026-07-09T16:50:43.244726378+00:00"
 ---
 
 ## Description
