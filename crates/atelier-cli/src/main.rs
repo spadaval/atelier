@@ -380,12 +380,9 @@ enum IssueCommands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// Show only ready todo-category issue records
-        #[arg(long)]
-        ready: bool,
-        /// Show blocked issue records
-        #[arg(long)]
-        blocked: bool,
+        /// Maximum number of matching records to show
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
     },
 
     /// Show or execute issue transitions

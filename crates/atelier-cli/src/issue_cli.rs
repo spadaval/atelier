@@ -127,34 +127,19 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             issue_type,
             label,
             priority,
-            ready,
-            blocked,
+            limit,
         } => {
             let cache = use_cases::issue_query_cache()?;
-            let db = cache.db();
-            if blocked {
-                if ready || status != "all" || category.is_some() {
-                    bail!("--blocked cannot be combined with --ready, --status, or --category");
-                }
-                commands::issue::list_blocked_inventory(
-                    db,
-                    issue_type.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    quiet,
-                )
-            } else {
-                commands::issue::list_inventory(
-                    db,
-                    Some(&status),
-                    category.as_deref(),
-                    issue_type.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    ready,
-                    quiet,
-                )
-            }
+            commands::issue::list_inventory(
+                cache.db(),
+                &status,
+                category.as_deref(),
+                issue_type.as_deref(),
+                label.as_deref(),
+                priority.as_deref(),
+                limit,
+                quiet,
+            )
         }
 
         super::IssueCommands::Transition {

@@ -10,10 +10,15 @@ use crate::commands::issue_workflow::{
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::human_output::{
-    self, DisplayRole, FooterAction, FooterPanel, IssueListPanel, IssueListRow, LinesPanel,
-    MetadataPanel, Panel, RenderContext, StylePolicy, TextPanel,
+    self, render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction,
+    FooterPanel, IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext,
+    StylePolicy, TextPanel,
 };
 use crate::utils::format_issue_id;
+use atelier_app::issue_inventory::{
+    issue_inventory, IssueInventoryFilters, IssueInventoryLimit, IssueInventoryRequest,
+    IssueInventorySnapshot, IssueInventoryStatusFilter,
+};
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority};
@@ -1228,25 +1233,79 @@ pub fn list(
 #[allow(clippy::too_many_arguments)]
 pub fn list_inventory(
     db: &Database,
-    status: Option<&str>,
+    status: &str,
     category: Option<&str>,
     issue_type: Option<&str>,
     label: Option<&str>,
     priority: Option<&str>,
-    ready: bool,
+    limit: usize,
     quiet: bool,
 ) -> Result<()> {
-    list_with_title(
-        db,
-        "Issue List",
-        status,
-        category,
-        issue_type,
-        label,
-        priority,
-        ready,
-        quiet,
-    )
+    let workflow_policy = load_issue_workflow_policy()?;
+    if let Some(issue_type) = issue_type {
+        let Some(policy) = workflow_policy.as_ref() else {
+            bail!("--issue-type requires a workflow policy");
+        };
+        if !policy.issue_types.contains_key(issue_type) {
+            bail!(
+                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
+                issue_type,
+                policy
+                    .issue_types
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    }
+    let status_filter = if status == "all" {
+        IssueInventoryStatusFilter::All
+    } else {
+        // Reuse workflow parsing for configured-status validation, while keeping
+        // category as a separate exact inventory filter.
+        IssueStatusFilter::from_input(workflow_policy.as_ref(), status, None)?;
+        IssueInventoryStatusFilter::Exact(status.to_string())
+    };
+    let limit = IssueInventoryLimit::new(limit)?;
+    let issues = db.list_issues(Some("all"), label, priority)?;
+    let snapshots = issues.into_iter().map(|issue| IssueInventorySnapshot {
+        status_category: workflow_policy
+            .as_ref()
+            .and_then(|policy| policy.status_category(&issue.status))
+            .map(str::to_string),
+        id: issue.id.to_string(),
+        issue_type: issue.issue_type,
+        status: issue.status,
+        priority: issue.priority,
+        title: issue.title,
+        labels: label.into_iter().map(str::to_string).collect(),
+    });
+    let view = issue_inventory(
+        snapshots,
+        &IssueInventoryRequest {
+            filters: IssueInventoryFilters {
+                status: status_filter,
+                category: category.map(str::to_string),
+                issue_type: issue_type.map(str::to_string),
+                label: label.map(str::to_string),
+                priority: priority
+                    .map(IssuePriority::from_cli_input)
+                    .transpose()?
+                    .map(|priority| priority.label().to_string()),
+            },
+            limit,
+        },
+    );
+    let output = if quiet {
+        render_issue_inventory_quiet(&view)
+    } else {
+        render_issue_inventory(&view, RenderContext::for_stdout())
+    };
+    if !output.is_empty() {
+        println!("{output}");
+    }
+    Ok(())
 }
 
 pub(crate) fn list_with_title(

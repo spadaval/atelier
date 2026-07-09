@@ -556,7 +556,7 @@ impl InventoryColumnWidths {
 
     fn row(self, row: &IssueInventoryRow, context: RenderContext) -> String {
         let status = context.paint(
-            status_style(row.status_category.as_deref()),
+            status_style(row.status_category.as_deref().unwrap_or_default()),
             format!("{:<width$}", row.status, width = self.status),
         );
         let priority = context.paint(
@@ -581,26 +581,6 @@ fn max_width<'a>(heading: &str, values: impl Iterator<Item = &'a str>) -> usize 
     values
         .map(str::len)
         .fold(heading.len(), |width, value| width.max(value))
-}
-
-#[allow(dead_code)]
-fn status_style(category: Option<&str>) -> TextStyle {
-    match category {
-        Some("active") => TextStyle::Active,
-        Some("blocked") => TextStyle::Danger,
-        Some("todo") => TextStyle::Warning,
-        Some("done") => TextStyle::Success,
-        _ => TextStyle::Secondary,
-    }
-}
-
-#[allow(dead_code)]
-fn priority_style(priority: &str) -> TextStyle {
-    match priority {
-        "critical" => TextStyle::Danger,
-        "high" => TextStyle::Warning,
-        _ => TextStyle::Secondary,
-    }
 }
 
 #[allow(dead_code)]
