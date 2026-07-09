@@ -33,7 +33,6 @@ cargo test -p atelier-cli --test cli_integration test_removed_maintenance_delete
 ```console
 cargo test -p atelier-cli --test cli_integration test_removed_maintenance_delete_is_unknown -- --nocapture
 ```
-
 Exit status: 0
 
 ## Stdout

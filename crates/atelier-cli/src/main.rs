@@ -217,7 +217,7 @@ enum Commands {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
         apply: bool,
-        /// Retain diagnostics logs for this many UTC days
+        /// Override diagnostics and canonical record retention for this prune pass
         #[arg(long)]
         retention_days: Option<u64>,
     },
@@ -1169,7 +1169,7 @@ fn run() -> Result<()> {
                     None
                 }
             };
-            commands::prune::run(tracker, apply, retention_days)
+            commands::prune::run(tracker, apply, retention_days, quiet)
         }
 
         Commands::Check { id, fix } => {

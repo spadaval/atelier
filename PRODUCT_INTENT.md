@@ -243,8 +243,13 @@ Pruning keeps the active tracker tree focused on current coordination. Local
 diagnostics and ignored runtime/cache artifacts can be deleted when they satisfy
 their retention contracts. Terminal canonical records may be removed from the
 active `.atelier/` tree only after active references, blockers, review state,
-and proof obligations are closed. Apply output names removed paths and recovery
-uses Git history for full pre-prune detail instead of a second live archive.
+and proof obligations are closed. Git branches and worktrees are separately
+protected until they are non-current, clean, terminal-owner state whose commits
+are integrated or otherwise preserved. Age alone never authorizes removal.
+Apply output names each affected class and removed path or identity; recovery
+uses Git history for full pre-prune canonical detail instead of a second live
+archive. The product contract and operator recovery steps live in
+`docs/product/retention-and-prune.md`.
 
 ### Run
 
