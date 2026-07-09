@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "in_progress"
 title: "Inventory current artifact and branch growth"
-updated_at: "2026-07-06T17:57:20.544912641+00:00"
+updated_at: "2026-07-09T16:18:34.475931159+00:00"
 ---
 
 ## Description
