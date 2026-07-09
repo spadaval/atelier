@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:24:05.099789376+00:00"
+status: "done"
 title: "Align issue-list filters, help, and regression coverage"
-updated_at: "2026-07-06T17:20:25.690578987+00:00"
+updated_at: "2026-07-09T16:24:05.099789376+00:00"
 ---
 
 ## Description
@@ -31,4 +32,4 @@ Align the `issue list` parser, help, metadata filters, quiet output, next-action
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Evidence record atelier-lcv6 captures `cargo nextest run -p atelier-cli test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_operational_flags`, covering flat all-status inventory, accepted and rejected status/category metadata, type/label/priority filters, quiet IDs, limits and ordering, empty results, supported help, rejected ready/blocked forms, and absence of hierarchy/blocker formatting.

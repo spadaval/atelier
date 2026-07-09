@@ -3,6 +3,8 @@
 use std::collections::BTreeSet;
 use std::io::IsTerminal;
 
+use atelier_app::issue_inventory::{IssueInventoryRow, IssueInventoryView};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RenderContext {
     style_policy: StylePolicy,
@@ -479,6 +481,131 @@ impl Panel for IssueListPanel {
     }
 }
 
+// The command adapter is a separate slice. Keep this target-state renderer
+// compile-checked while it waits for that adapter to consume it.
+#[allow(dead_code)]
+pub(crate) struct IssueInventoryPanel {
+    view: IssueInventoryView,
+}
+
+#[allow(dead_code)]
+impl IssueInventoryPanel {
+    pub(crate) fn new(view: &IssueInventoryView) -> Self {
+        Self { view: view.clone() }
+    }
+}
+
+impl Panel for IssueInventoryPanel {
+    fn render(&self, context: RenderContext) -> Vec<String> {
+        if self.view.is_empty() {
+            return vec!["No issues match the selected filters.".to_string()];
+        }
+
+        let widths = InventoryColumnWidths::for_rows(&self.view.rows);
+        let mut lines = vec![widths.header(context)];
+        lines.extend(self.view.rows.iter().map(|row| widths.row(row, context)));
+        lines.push(String::new());
+        lines.push(format!(
+            "Showing {} of {} issues",
+            self.view.shown_count(),
+            self.view.matching_count
+        ));
+        if self.view.is_truncated() {
+            lines.push("Narrow the metadata filters or raise --limit.".to_string());
+        }
+        lines
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
+struct InventoryColumnWidths {
+    id: usize,
+    issue_type: usize,
+    status: usize,
+    priority: usize,
+}
+
+#[allow(dead_code)]
+impl InventoryColumnWidths {
+    fn for_rows(rows: &[IssueInventoryRow]) -> Self {
+        Self {
+            id: max_width("ID", rows.iter().map(|row| row.id.as_str())),
+            issue_type: max_width("Type", rows.iter().map(|row| row.issue_type.as_str())),
+            status: max_width("Status", rows.iter().map(|row| row.status.as_str())),
+            priority: max_width("Priority", rows.iter().map(|row| row.priority.as_str())),
+        }
+    }
+
+    fn header(self, context: RenderContext) -> String {
+        context.paint(
+            TextStyle::Heading,
+            format!(
+                "{:<id_width$}  {:<type_width$}  {:<status_width$}  {:<priority_width$}  Title",
+                "ID",
+                "Type",
+                "Status",
+                "Priority",
+                id_width = self.id,
+                type_width = self.issue_type,
+                status_width = self.status,
+                priority_width = self.priority,
+            ),
+        )
+    }
+
+    fn row(self, row: &IssueInventoryRow, context: RenderContext) -> String {
+        let status = context.paint(
+            status_style(row.status_category.as_deref().unwrap_or_default()),
+            format!("{:<width$}", row.status, width = self.status),
+        );
+        let priority = context.paint(
+            priority_style(&row.priority),
+            format!("{:<width$}", row.priority, width = self.priority),
+        );
+        format!(
+            "{:<id_width$}  {:<type_width$}  {}  {}  {}",
+            row.id,
+            row.issue_type,
+            status,
+            priority,
+            row.title,
+            id_width = self.id,
+            type_width = self.issue_type,
+        )
+    }
+}
+
+#[allow(dead_code)]
+fn max_width<'a>(heading: &str, values: impl Iterator<Item = &'a str>) -> usize {
+    values
+        .map(str::len)
+        .fold(heading.len(), |width, value| width.max(value))
+}
+
+#[allow(dead_code)]
+pub(crate) fn render_issue_inventory(view: &IssueInventoryView, context: RenderContext) -> String {
+    Page::new("Issue Inventory")
+        .panel(IssueInventoryPanel::new(view))
+        .panel(FooterPanel::new(
+            "Drill Down",
+            [FooterAction::new(
+                "Inspect a record",
+                "atelier issue show <issue-id>",
+            )],
+        ))
+        .render(context)
+}
+
+#[allow(dead_code)]
+pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView) -> String {
+    view.rows
+        .iter()
+        .map(|row| row.id.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(crate) struct FooterPanel {
     title: String,
     actions: Vec<FooterAction>,
@@ -802,6 +929,46 @@ pub(crate) fn plural_suffix(count: usize) -> &'static str {
 mod tests {
     use super::*;
 
+    fn inventory_view(rows: Vec<IssueInventoryRow>, matching_count: usize) -> IssueInventoryView {
+        IssueInventoryView {
+            rows,
+            matching_count,
+            limit: 50,
+        }
+    }
+
+    fn inventory_row(
+        id: &str,
+        issue_type: &str,
+        status: &str,
+        status_category: &str,
+        priority: &str,
+        title: &str,
+    ) -> IssueInventoryRow {
+        IssueInventoryRow {
+            id: id.to_string(),
+            issue_type: issue_type.to_string(),
+            status: status.to_string(),
+            status_category: Some(status_category.to_string()),
+            priority: priority.to_string(),
+            title: title.to_string(),
+        }
+    }
+
+    fn strip_test_ansi(value: &str) -> String {
+        [
+            "\u{1b}[1m",
+            "\u{1b}[2m",
+            "\u{1b}[31m",
+            "\u{1b}[32m",
+            "\u{1b}[33m",
+            "\u{1b}[36m",
+        ]
+        .into_iter()
+        .fold(value.to_string(), |value, code| value.replace(code, ""))
+        .replace("\u{1b}[0m", "")
+    }
+
     #[test]
     fn color_policy_auto_requires_terminal_and_no_color_absent() {
         assert!(StylePolicy::from_context(ColorChoice::Auto, true, false).color);
@@ -984,5 +1151,139 @@ mod tests {
             panel.render(RenderContext::plain()).join("\n"),
             "Ready Work\n----------\n  ready atelier-a [todo] high - A\n  ... 2 more ready work items omitted"
         );
+    }
+
+    #[test]
+    fn issue_inventory_renders_one_flat_metadata_row_per_issue() {
+        let view = inventory_view(
+            vec![
+                inventory_row(
+                    "atelier-a",
+                    "mission",
+                    "in_progress",
+                    "active",
+                    "high",
+                    "Coordinate the mission",
+                ),
+                inventory_row(
+                    "atelier-b",
+                    "epic",
+                    "todo",
+                    "todo",
+                    "critical",
+                    "Own a parent slice",
+                ),
+                inventory_row(
+                    "atelier-c",
+                    "task",
+                    "blocked",
+                    "blocked",
+                    "medium",
+                    "A linked child record",
+                ),
+                inventory_row(
+                    "atelier-d",
+                    "bug",
+                    "done",
+                    "done",
+                    "low",
+                    "A completed standalone record",
+                ),
+            ],
+            4,
+        );
+
+        let output = render_issue_inventory(&view, RenderContext::plain());
+
+        assert!(output.starts_with("Issue Inventory\n===============\n\nID"));
+        assert!(output.contains("atelier-a  mission  in_progress  high"));
+        assert!(output.contains("atelier-b  epic     todo         critical"));
+        assert!(output.contains("atelier-c  task     blocked      medium"));
+        assert!(output.contains("atelier-d  bug      done         low"));
+        assert!(output.contains("Showing 4 of 4 issues"));
+        assert!(output
+            .contains("Drill Down\n----------\n  Inspect a record: atelier issue show <issue-id>"));
+        assert!(!output.contains("Standalone"));
+        assert!(!output.contains("blocker"));
+        assert!(!output.contains("ready"));
+        assert!(!output.contains("Queue"));
+        for id in ["atelier-a", "atelier-b", "atelier-c", "atelier-d"] {
+            assert_eq!(
+                output.lines().filter(|line| line.starts_with(id)).count(),
+                1,
+                "{id} should appear exactly once as an unindented row"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_inventory_reports_truncation_and_filter_guidance() {
+        let view = inventory_view(
+            vec![inventory_row(
+                "atelier-a",
+                "task",
+                "todo",
+                "todo",
+                "medium",
+                "Visible",
+            )],
+            3,
+        );
+
+        let output = render_issue_inventory(&view, RenderContext::plain());
+
+        assert!(output.contains("Showing 1 of 3 issues"));
+        assert!(output.contains("Narrow the metadata filters or raise --limit."));
+    }
+
+    #[test]
+    fn issue_inventory_empty_and_quiet_states_are_explicit() {
+        let view = inventory_view(Vec::new(), 0);
+
+        let human = render_issue_inventory(&view, RenderContext::plain());
+        assert!(human.contains("No issues match the selected filters."));
+        assert!(!human.contains("Showing 0 of 0 issues"));
+        assert_eq!(render_issue_inventory_quiet(&view), "");
+    }
+
+    #[test]
+    fn issue_inventory_quiet_uses_view_order_and_contains_only_ids() {
+        let view = inventory_view(
+            vec![
+                inventory_row("atelier-a", "task", "todo", "todo", "high", "First"),
+                inventory_row("atelier-b", "epic", "done", "done", "low", "Second"),
+            ],
+            4,
+        );
+
+        assert_eq!(render_issue_inventory_quiet(&view), "atelier-a\natelier-b");
+    }
+
+    #[test]
+    fn issue_inventory_color_changes_style_only() {
+        let view = inventory_view(
+            vec![inventory_row(
+                "atelier-a",
+                "task",
+                "blocked",
+                "blocked",
+                "critical",
+                "Needs attention",
+            )],
+            1,
+        );
+        let plain = render_issue_inventory(&view, RenderContext::plain());
+        let colored = render_issue_inventory(
+            &view,
+            RenderContext::from_parts(ColorChoice::Always, true, false),
+        );
+        let no_color = render_issue_inventory(
+            &view,
+            RenderContext::from_parts(ColorChoice::Always, true, true),
+        );
+
+        assert!(colored.contains("\u{1b}[31mblocked"));
+        assert_eq!(strip_test_ansi(&colored), plain);
+        assert_eq!(no_color, plain);
     }
 }

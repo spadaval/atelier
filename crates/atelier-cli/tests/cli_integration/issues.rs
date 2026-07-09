@@ -2528,11 +2528,22 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
 }
 
 #[test]
-fn test_issue_list_inventory_filters_across_status_type_and_state() {
+fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_operational_flags() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Todo task"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Todo task",
+            "--label",
+            "inventory",
+            "--priority",
+            "high",
+        ],
+    );
     run_atelier(
         dir.path(),
         &[
@@ -2544,33 +2555,19 @@ fn test_issue_list_inventory_filters_across_status_type_and_state() {
         ],
     );
     run_atelier(dir.path(), &["issue", "create", "Done task"]);
-    run_atelier(dir.path(), &["issue", "create", "Blocked task"]);
-    run_atelier(dir.path(), &["issue", "create", "Blocker task"]);
     let done_id = issue_id_by_title(dir.path(), "Done task");
-    let blocked_id = issue_id_by_title(dir.path(), "Blocked task");
-    let blocker_id = issue_id_by_title(dir.path(), "Blocker task");
     set_issue_status(dir.path(), &done_id, "done");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "link",
-            &blocked_id,
-            &blocker_id,
-            "--role",
-            "blocked_by",
-        ],
-    );
-    assert!(success, "blocker link failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
     let (success, all, stderr) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success, "issue list failed: {stderr}");
-    assert!(all.contains("Issue List"), "{all}");
+    assert!(all.contains("Issue Inventory"), "{all}");
     assert!(all.contains("Todo task"), "{all}");
     assert!(all.contains("Done task"), "{all}");
     assert!(all.contains("Mission record"), "{all}");
+    assert!(!all.contains("Subissues"), "{all}");
+    assert!(!all.contains("blocker"), "{all}");
 
     let (success, todo, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
     assert!(success, "status filter failed: {stderr}");
@@ -2588,17 +2585,27 @@ fn test_issue_list_inventory_filters_across_status_type_and_state() {
     assert!(missions.contains("Mission record"), "{missions}");
     assert!(!missions.contains("Todo task"), "{missions}");
 
-    let (success, ready, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(success, "ready filter failed: {stderr}");
-    assert!(ready.contains("Todo task"), "{ready}");
-    assert!(ready.contains("Blocker task"), "{ready}");
-    assert!(!ready.contains("Blocked task"), "{ready}");
-    assert!(!ready.contains("Done task"), "{ready}");
+    for (flag, value) in [("--label", "inventory"), ("--priority", "high")] {
+        let (success, filtered, stderr) = run_atelier(dir.path(), &["issue", "list", flag, value]);
+        assert!(success, "{flag} filter failed: {stderr}");
+        assert!(filtered.contains("Todo task"), "{filtered}");
+        assert!(!filtered.contains("Done task"), "{filtered}");
+    }
 
-    let (success, blocked, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
-    assert!(success, "blocked filter failed: {stderr}");
-    assert!(blocked.contains("Blocked task"), "{blocked}");
-    assert!(!blocked.contains("Blocker task"), "{blocked}");
+    let (success, empty, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--label", "does-not-exist"]);
+    assert!(success, "empty inventory failed: {stderr}");
+    assert!(
+        empty.contains("No issues match the selected filters."),
+        "{empty}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "list", "--category", "does-not-exist"],
+    );
+    assert!(!success, "unknown category unexpectedly succeeded");
+    assert!(stderr.contains("Invalid issue category"), "{stderr}");
 
     let (success, quiet, stderr) = run_atelier(
         dir.path(),
@@ -2607,6 +2614,34 @@ fn test_issue_list_inventory_filters_across_status_type_and_state() {
     assert!(success, "quiet issue type filter failed: {stderr}");
     assert_eq!(quiet.lines().count(), 1, "{quiet}");
     assert!(quiet.trim().starts_with("atelier-"), "{quiet}");
+
+    let (success, limited, stderr) =
+        run_atelier(dir.path(), &["--quiet", "issue", "list", "--limit", "2"]);
+    assert!(success, "limited quiet inventory failed: {stderr}");
+    let ids = limited.lines().collect::<Vec<_>>();
+    assert_eq!(ids.len(), 2, "{limited}");
+    assert!(ids.windows(2).all(|pair| pair[0] < pair[1]), "{limited}");
+
+    for removed in ["--ready", "--blocked"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "list", removed]);
+        assert!(!success, "removed {removed} form unexpectedly succeeded");
+        assert!(stderr.contains("unexpected argument"), "{stderr}");
+    }
+
+    let (success, help, stderr) = run_atelier(dir.path(), &["issue", "list", "--help"]);
+    assert!(success, "issue list help failed: {stderr}");
+    for supported in [
+        "--status",
+        "--category",
+        "--issue-type",
+        "--label",
+        "--priority",
+        "--limit",
+    ] {
+        assert!(help.contains(supported), "missing {supported}: {help}");
+    }
+    assert!(!help.contains("--ready"), "{help}");
+    assert!(!help.contains("--blocked"), "{help}");
 }
 
 #[test]
