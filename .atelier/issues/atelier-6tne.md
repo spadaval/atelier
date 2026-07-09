@@ -6,6 +6,15 @@ labels:
 - "architecture"
 - "mission-review"
 - "planning"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-p4z2
+    integration_target: mission/atelier-p4z2
+    merge_strategy: squash
+    owner_issue_id: atelier-6tne
+    owner_kind: epic
+    review_target: mission/atelier-p4z2
+    work_branch: epic/atelier-6tne
 priority: "P1"
 relationships:
   blocks:
@@ -24,9 +33,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Define the independent mission-plan review contract"
-updated_at: "2026-07-07T05:42:00.000000000+00:00"
+updated_at: "2026-07-09T16:12:01.539642268+00:00"
 ---
 
 ## Description
