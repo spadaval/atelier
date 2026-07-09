@@ -1023,6 +1023,69 @@ fn test_prune_protects_non_current_dirty_worktree() {
 }
 
 #[test]
+fn test_prune_protects_missing_locked_worktree_and_branch_without_inspecting_path() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "locked worktree prune fixture");
+    let branch = "locked-worktree";
+    let worktree = dir.path().join(branch);
+    for args in [
+        vec!["worktree", "add", "-b", branch, worktree.to_str().unwrap()],
+        vec!["worktree", "lock", worktree.to_str().unwrap()],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(&args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
+    }
+    fs::remove_dir_all(&worktree).unwrap();
+
+    for args in [vec!["prune"], vec!["prune", "--apply"]] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "prune {:?} failed: {stderr}", args);
+        assert!(
+            stdout.contains(&format!("protected branch {branch} - locked worktree")),
+            "{stdout}"
+        );
+        assert!(
+            stdout.contains(&format!(
+                "protected worktree {} - locked worktree",
+                worktree.display()
+            )),
+            "{stdout}"
+        );
+        assert!(!worktree.exists(), "prune recreated missing worktree");
+    }
+
+    let branch_exists = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .status()
+        .unwrap();
+    assert!(branch_exists.success(), "apply removed locked branch");
+    let registrations = Command::new("git")
+        .current_dir(dir.path())
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(registrations.status.success());
+    let registrations = String::from_utf8(registrations.stdout).unwrap();
+    assert!(
+        registrations.contains(&format!("worktree {}", worktree.display()))
+            && registrations.contains("locked"),
+        "apply removed locked registration:\n{registrations}"
+    );
+}
+
+#[test]
 fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
     let dir = tempdir().unwrap();
     let remote = tempdir().unwrap();

@@ -311,12 +311,11 @@ fn prune_git_artifacts(
             continue;
         }
         let is_current = worktree.path == tracker.repo_root;
-        let dirty = !git_stdout_trimmed(&worktree.path, &["status", "--porcelain"])?.is_empty();
         let protection = if is_current {
             Some("current checkout".to_string())
         } else if worktree.locked {
             Some("locked worktree".to_string())
-        } else if dirty {
+        } else if !git_stdout_trimmed(&worktree.path, &["status", "--porcelain"])?.is_empty() {
             Some("dirty worktree".to_string())
         } else if let Some(branch) = &worktree.branch {
             if branch == &base {
