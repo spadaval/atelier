@@ -32,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-09T16:40:04.903638994+00:00"
+status: "done"
 title: "Epic: Retention and prune contract"
-updated_at: "2026-07-09T16:39:44.687198525+00:00"
+updated_at: "2026-07-09T16:40:04.903638994+00:00"
 ---
 
 ## Description
