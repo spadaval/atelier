@@ -22,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "blocked"
 title: "Validate retained mission-planning contracts before review expansion"
-updated_at: "2026-07-07T05:52:00.000000000+00:00"
+updated_at: "2026-07-09T16:34:18.655153762+00:00"
 ---
 
 ## Description
