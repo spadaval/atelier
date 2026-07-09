@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "implementation"
 - "prune"
+review:
+  kind: pull_request
+  number: 63
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
@@ -32,9 +36,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Prune command implementation"
-updated_at: "2026-07-09T16:33:51.150108123+00:00"
+updated_at: "2026-07-09T16:34:09.934776191+00:00"
 ---
 
 ## Description
