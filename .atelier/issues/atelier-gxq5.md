@@ -4,6 +4,10 @@ id: "atelier-gxq5"
 issue_type: "task"
 labels:
 - "integration"
+review:
+  kind: pull_request
+  number: 57
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
