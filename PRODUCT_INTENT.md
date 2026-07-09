@@ -162,6 +162,16 @@ one epic of accountable work beneath it. Smaller work should stay as an issue,
 while mission execution should be split into epics, tasks, validation, review,
 documentation, or migration issues linked back to the mission.
 
+For this repository, authored missions begin as non-executable drafts. A
+mission-plan reviewer independent of the author and every material editor must
+approve the exact current mission and reachable issue graph before the mission
+can become ready or start. Review judges whether the Outcome-led issue set is
+complete, decomposed, sequenced, dependency-safe, and independently
+validatable. It does not make plans into first-class records, require planners
+to author execution proof, approve a code changeset, or confer merge authority.
+The durable lifecycle and migration contract is
+[ADR 0018](docs/adr/0018-independent-mission-plan-review.md).
+
 ### Epic
 
 An epic is the normal branch and review boundary beneath a mission. It groups a
@@ -308,6 +318,8 @@ issue_types:
   validation: { label: Validation }
 
 statuses:
+  draft: { category: todo }
+  plan_review: { category: active, role: reviewer }
   ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active }
@@ -321,14 +333,27 @@ statuses:
 workflows:
   mission:
     applies_to: [mission]
-    initial_status: ready
+    initial_status: draft
     done_statuses: [closed, superseded]
     transitions:
+      request_plan_review:
+        from: [draft]
+        to: plan_review
+        validators:
+          - issue.sections_parseable
+      ready:
+        from: [plan_review]
+        to: ready
+        validators:
+          - plan_review.current_approval
+          - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
+          - plan_review.current_approval
+          - blockers.transitive_none_open
           - git.on_base
           - git.worktree_clean
         actions:

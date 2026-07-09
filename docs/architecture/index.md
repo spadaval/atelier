@@ -60,6 +60,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0014: Status Role Attribution Replaces Sessions](../adr/0014-status-role-attribution-replaces-sessions.md)
 - [ADR 0015: Missions Are Declared Workflow Policy](../adr/0015-missions-are-declared-workflow-policy.md)
 - [ADR 0017: SQLite Domain Cache And Hard Removal](../adr/0017-sqlite-domain-cache-and-hard-removal.md)
+- [ADR 0018: Independent Mission-Plan Review Gates Execution](../adr/0018-independent-mission-plan-review.md)
 
 ## Target Architecture
 
@@ -84,8 +85,9 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 - `check --fix` repairs ignored local cache state from committed record files
   when it is safe to do so.
 - First-class concepts include missions, issues, evidence, typed links,
-  workflows, workflow validators, status roles, review artifacts, and deferred
-  run metadata; their user-visible behavior is defined in [Product](../product/index.md).
+  workflows, workflow validators, status roles, review artifacts,
+  revision-bound mission-plan review events, and deferred run metadata; their
+  user-visible behavior is defined in [Product](../product/index.md).
 - Repository-owned issue workflow policy lives at the fixed
   `.atelier/workflow.yaml` path. Loading, schema validation, status categories,
   transition lookup, validator evaluation, guidance rendering, and branch

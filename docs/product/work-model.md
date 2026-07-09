@@ -13,6 +13,9 @@ separate issue hierarchy.
   descendants of those linked roots. It may be the shared background workspace
   boundary when the repository workflow and assignment model choose that
   coordination shape.
+- Mission-plan review: independent judgment of an exact mission graph revision
+  before that graph becomes executable. It evaluates the complete issue set and
+  records findings or approval; it is not code review or outcome validation.
 - Status role: optional workflow policy on an active status that names the role
   currently responsible for that work state. Status roles are displayed by
   status/man surfaces and used as the default role for review attribution.
@@ -110,6 +113,15 @@ transition actions run, and explicit validation approval applies only when
 Mission `Outcome` prose is the target state validators read; planner-authored
 validation scenarios are optional and reserved for explicit product contracts
 or known risks.
+
+Pre-execution plan approval is a separate readiness input. It asks an
+independent reviewer to inspect the Outcome and its complete reachable issue
+set for coverage, decomposition, sequencing, declared dependencies, external
+prerequisites, validation ownership, closeout coverage, and safe initial
+parallelism. The reviewer approves one exact graph revision. This broader
+readiness judgment does not move execution proof into the plan: validators
+still derive scenarios after implementation, and evidence remains a receipt
+for a check that actually ran.
 
 Missions do not have a hidden built-in lifecycle. If a repository wants
 mission-shaped work, it declares the issue type, statuses, done statuses,
@@ -223,6 +235,34 @@ execute as implementation slices under their epic. Objective status should
 count each unique issue once even when a deliberate duplicate path exists, but
 planners should avoid duplicate objective links by default because they make
 completion state harder to scan.
+
+## Mission Planning Lifecycle
+
+This repository's accepted target configures
+`draft -> plan_review -> ready -> in_progress` for mission-shaped issues. A
+draft and its advancing work remain outside executable mission work selection
+until a current independent approval exists.
+
+The plan-review revision includes authored mission and reachable-work content,
+scope roots, hierarchy, and workflow-driving blocker/dependency edges. Material
+changes to those inputs make approval stale. Notes, activity, status changes,
+evidence receipts, code commits, and context-only links do not. `ready` and
+`start` both check current approval; `start` also checks the transitive closure
+of declared mission blockers. Internal advancing work is the work to execute,
+not a prerequisite that must already be complete.
+
+The reviewer must be distinct from the plan author and every attributed
+material editor. Missing attribution blocks approval rather than establishing
+independence. Blocking findings must be resolved, and a later change request
+must no longer be effective, before approval can satisfy readiness.
+
+Migration does not invent approval. Legacy drafts remain drafts, ready missions
+move to `plan_review`, active missions retain only an explicit grandfather for
+their exact cutover revision, and terminal history is unchanged. A material
+edit makes an active mission's grandfather stale and blocks not-yet-started
+graph work until the current revision receives independent approval. See
+[ADR 0018](../adr/0018-independent-mission-plan-review.md) for canonical inputs,
+event provenance, and the complete migration table.
 
 ## Workspace, Branch, And Review Boundaries
 
