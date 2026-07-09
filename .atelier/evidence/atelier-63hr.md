@@ -91,4 +91,3 @@ Truncated: yes
         PASS [   0.162s] ( 34/461) atelier-cli commands::comment::tests::test_add_comment_with_special_chars
         PASS [   0.153s] ( 35/461)
 ```
-
