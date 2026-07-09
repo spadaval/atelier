@@ -33,7 +33,6 @@ cargo nextest run -p atelier-cli --test cli_integration test_man_
 ```console
 cargo nextest run -p atelier-cli --test cli_integration test_man_
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -63,4 +62,3 @@ Truncated: no
 ────────────
      Summary [   0.471s] 5 tests run: 5 passed, 262 skipped
 ```
-
