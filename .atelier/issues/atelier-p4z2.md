@@ -7,6 +7,15 @@ labels:
 - "mission-review"
 - "planning"
 - "workflow"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-p4z2
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-p4z2
 priority: "P1"
 relationships:
   blocks: []
@@ -27,9 +36,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Mission: Require independent review before mission execution"
-updated_at: "2026-07-07T05:55:25.405692460+00:00"
+updated_at: "2026-07-09T16:11:46.506689193+00:00"
 ---
 
 ## Description
