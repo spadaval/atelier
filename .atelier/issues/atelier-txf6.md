@@ -7,7 +7,7 @@ labels:
 - "prune"
 review:
   kind: pull_request
-  number: 45
+  number: 64
   provider: forgejo
 fields:
   workflow_branch:
@@ -32,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:40:04.903638994+00:00"
+status: "done"
 title: "Epic: Retention and prune contract"
-updated_at: "2026-07-06T17:48:04.764142495+00:00"
+updated_at: "2026-07-09T16:40:04.903638994+00:00"
 ---
 
 ## Description
