@@ -146,6 +146,10 @@ enum Commands {
         input: Option<String>,
     },
 
+    /// One-shot independent mission plan-review cutover
+    #[command(hide = true)]
+    MigrateMissionPlanReview,
+
     /// Import Beads JSONL backup into durable record files; cache repair remains lazy
     #[command(hide = true)]
     ImportBeads {
@@ -861,6 +865,30 @@ fn run() -> Result<()> {
             commands::issue::rebuild(&state_dir, &db_path)
         }
 
+        Commands::MigrateMissionPlanReview => {
+            let manager = CacheManager::discover()?;
+            let report = atelier_app::mission_plan_migration::run(manager.repo_root())?;
+            atelier_app::rebuild::run(&manager.state_dir(), &manager.db_path())?;
+            if quiet {
+                println!("{}", report.mission_count);
+            } else if report.already_applied {
+                println!(
+                    "Independent mission plan-review cutover already applied ({} missions validated).",
+                    report.mission_count
+                );
+            } else {
+                println!(
+                    "Migrated {} missions: {} terminal unchanged, {} draft unchanged, {} moved to plan_review, {} active grandfathered.",
+                    report.mission_count,
+                    report.terminal_count,
+                    report.draft_count,
+                    report.plan_review_count,
+                    report.active_count
+                );
+            }
+            Ok(())
+        }
+
         Commands::ImportBeads { input, output } => {
             let storage = CacheManager::discover()?;
             let state_dir = output
@@ -1314,6 +1342,7 @@ fn command_identity(command: &Commands) -> &'static str {
             }
         }
         Commands::Rebuild { .. } => "rebuild",
+        Commands::MigrateMissionPlanReview => "migrate-mission-plan-review",
         Commands::ImportBeads { .. } => "import-beads",
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",

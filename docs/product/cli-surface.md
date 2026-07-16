@@ -158,6 +158,11 @@ in the command audit:
   [Retention And Prune Policy](retention-and-prune.md).
 - `import-beads`: temporary migration surface; normal setup uses
   `init --import-beads`.
+- `migrate-mission-plan-review`: one-shot hidden admin cutover for repositories
+  carrying the legacy direct mission-ready policy. It stages and validates the
+  full canonical transaction, rolls back failed application, and becomes a
+  validation-only no-op after success. Remove it when no supported repository
+  can retain that legacy policy.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
 - `forgejo roles`: hidden provider-specific role-account recovery. Routine review

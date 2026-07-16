@@ -267,6 +267,15 @@ graph work until the current revision receives independent approval. See
 [ADR 0018](../adr/0018-independent-mission-plan-review.md) for canonical inputs,
 event provenance, and the complete migration table.
 
+Repositories still carrying the legacy direct-ready policy use the hidden,
+one-shot admin command `atelier migrate-mission-plan-review`. It inventories
+canonical mission records, validates a complete staged cutover, and then
+atomically installs the policy, status changes, manifest, and grandfather
+receipts. A repeat invocation validates the installed state and makes no
+canonical changes. On failure, repair the named `.atelier` source, run
+`atelier check --fix`, and retry; SQLite is disposable and is never a migration
+source.
+
 ## Workspace, Branch, And Review Boundaries
 
 The default operating model separates three concerns:
