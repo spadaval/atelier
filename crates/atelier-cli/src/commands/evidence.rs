@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::human_output;
+use atelier_app::cache_manager::{CacheManager, CacheUse};
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
@@ -97,17 +98,18 @@ pub fn add_returning_id(
     Ok(id)
 }
 
-pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) -> Result<()> {
+pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     if options.command.is_empty() {
         bail!("evidence capture requires a command after --");
     }
+    validate_evidence_relation_role(options.role)?;
+    if matches!(
+        (options.target_kind, options.target_id),
+        (Some(_), None) | (None, Some(_))
+    ) {
+        bail!("--target-kind and --target-id must be supplied together");
+    }
 
-    let target = capture_target(
-        db_path,
-        options.target_kind,
-        options.target_id,
-        options.role,
-    )?;
     let command_display = format_command(options.command);
     let captured_at = chrono::Utc::now().to_rfc3339();
     let command_output = Command::new(&options.command[0])
@@ -126,6 +128,28 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
                 Some(error.to_string()),
             ),
         };
+
+    // Never hold the canonical association lock while waiting for an arbitrary
+    // child: the child may be a normal Atelier writer or the exclusive
+    // migration. Once it exits, acquire one transaction and rebuild/revalidate
+    // current repository and target state before allocating or appending proof.
+    let manager = CacheManager::discover()?;
+    let state_dir = manager.state_dir();
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
+    let storage = manager.get_cache(CacheUse::Decision)?;
+    let resolved_target_id = match (options.target_kind, options.target_id) {
+        (Some(kind), Some(id)) => Some(app_use_cases::resolve_evidence_target_ref(
+            &storage, kind, id,
+        )?),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    let target = capture_target(
+        &storage.db_path(),
+        options.target_kind,
+        resolved_target_id.as_deref(),
+        options.role,
+    )?;
 
     let summary = options
         .summary
@@ -170,11 +194,11 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
     };
 
     let created =
-        app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
+        app_use_cases::create_evidence_record(&state_dir, &summary, "recorded", &body, data)?;
     if let Some(target) = target {
         attach_silently(
-            state_dir,
-            db_path,
+            &state_dir,
+            &storage.db_path(),
             &created.header.id,
             &target.display_kind,
             &target.id,

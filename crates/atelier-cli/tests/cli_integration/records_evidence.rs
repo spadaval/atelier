@@ -1201,6 +1201,122 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
 }
 
 #[test]
+fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
+    fn run_with_timeout(dir: &Path, args: &[&str]) -> std::process::Output {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(dir)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("failed to spawn timed Atelier command");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            if child
+                .try_wait()
+                .expect("failed to inspect timed Atelier command")
+                .is_some()
+            {
+                return child
+                    .wait_with_output()
+                    .expect("failed to collect timed Atelier command output");
+            }
+            if std::time::Instant::now() >= deadline {
+                child
+                    .kill()
+                    .expect("failed to kill deadlocked Atelier command");
+                let output = child
+                    .wait_with_output()
+                    .expect("failed to collect deadlocked Atelier command output");
+                panic!(
+                    "Atelier command exceeded deadlock deadline; stdout: {}; stderr: {}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Capture target", "--issue-type", "task"],
+    );
+    assert!(success, "target create failed: {stderr}");
+    let target_id = issue_id_by_title(dir.path(), "Capture target");
+    let executable = env!("CARGO_BIN_EXE_atelier");
+
+    let migration = run_with_timeout(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Nested migration proof",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            executable,
+            "migrate-mission-plan-review",
+        ],
+    );
+    assert!(
+        migration.status.success(),
+        "migration capture failed: {}",
+        String::from_utf8_lossy(&migration.stderr)
+    );
+    assert!(String::from_utf8_lossy(&migration.stdout)
+        .contains("Independent mission plan-review cutover already applied"));
+
+    let mutation = run_with_timeout(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Nested mutation proof",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            executable,
+            "issue",
+            "create",
+            "Nested child issue",
+            "--issue-type",
+            "task",
+        ],
+    );
+    assert!(
+        mutation.status.success(),
+        "mutation capture failed: {}",
+        String::from_utf8_lossy(&mutation.stderr)
+    );
+    assert!(
+        issue_id_by_title(dir.path(), "Nested child issue").starts_with("atelier-"),
+        "nested mutation did not commit"
+    );
+    assert!(
+        record_id_by_title(dir.path(), "evidence", "Nested migration proof")
+            .starts_with("atelier-")
+    );
+    assert!(
+        record_id_by_title(dir.path(), "evidence", "Nested mutation proof").starts_with("atelier-")
+    );
+
+    let (healthy, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        healthy,
+        "nested capture left invalid canonical state: {stderr}"
+    );
+}
+
+#[test]
 fn test_evidence_list_elides_command_transcripts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

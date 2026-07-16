@@ -940,20 +940,23 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = use_cases::mutation_cache()?;
                 let parsed_target = match target.as_deref() {
-                    Some(target) => {
-                        let target = use_cases::parse_evidence_target_arg(target)?;
-                        let id = use_cases::resolve_evidence_target_ref(
-                            &storage,
-                            &target.kind,
-                            &target.id,
-                        )?;
-                        Some((target.kind, id))
-                    }
+                    Some(target) => Some(use_cases::parse_evidence_target_arg(target)?),
                     None => None,
                 };
                 if command.is_empty() {
+                    let storage = use_cases::mutation_cache()?;
+                    let resolved_target = parsed_target
+                        .as_ref()
+                        .map(|target| {
+                            use_cases::resolve_evidence_target_ref(
+                                &storage,
+                                &target.kind,
+                                &target.id,
+                            )
+                            .map(|id| (target.kind.clone(), id))
+                        })
+                        .transpose()?;
                     let summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
                             bail!("use either --summary or a positional summary, not both")
@@ -971,7 +974,7 @@ fn run() -> Result<()> {
                         path.as_deref(),
                         uri.as_deref(),
                         producer.as_deref(),
-                        parsed_target.as_ref().map(|(kind, id)| {
+                        resolved_target.as_ref().map(|(kind, id)| {
                             commands::evidence::TargetMetadata {
                                 kind,
                                 id,
@@ -979,7 +982,7 @@ fn run() -> Result<()> {
                             }
                         }),
                     )?;
-                    if let Some((kind, id)) = parsed_target {
+                    if let Some((kind, id)) = resolved_target {
                         commands::evidence::attach_silently(
                             &storage.state_dir(),
                             &storage.db_path(),
@@ -1000,22 +1003,18 @@ fn run() -> Result<()> {
                         (Some(summary), None) | (None, Some(summary)) => Some(summary),
                         (None, None) => None,
                     };
-                    commands::evidence::capture(
-                        &storage.state_dir(),
-                        &storage.db_path(),
-                        commands::evidence::CaptureOptions {
-                            evidence_kind: &evidence_kind,
-                            summary: command_summary,
-                            path: path.as_deref(),
-                            uri: uri.as_deref(),
-                            producer: producer.as_deref(),
-                            target_kind: parsed_target.as_ref().map(|(kind, _)| kind.as_str()),
-                            target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
-                            role: &role,
-                            command: &command,
-                            quiet,
-                        },
-                    )
+                    commands::evidence::capture(commands::evidence::CaptureOptions {
+                        evidence_kind: &evidence_kind,
+                        summary: command_summary,
+                        path: path.as_deref(),
+                        uri: uri.as_deref(),
+                        producer: producer.as_deref(),
+                        target_kind: parsed_target.as_ref().map(|target| target.kind.as_str()),
+                        target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
+                        role: &role,
+                        command: &command,
+                        quiet,
+                    })
                 }
             }
             EvidenceCommands::Show { id } => {
@@ -1323,6 +1322,12 @@ fn command_uses_canonical_transaction(command: &Commands) -> bool {
         // Fresh initialization has no repository association to lock. Forced
         // reconciliation of an existing tracker does.
         Commands::Init { .. } => std::path::Path::new(".atelier").exists(),
+        // Command-backed evidence deliberately executes its arbitrary child
+        // before acquiring an association transaction for the canonical
+        // append. The child may itself be an Atelier writer or migration.
+        Commands::Evidence {
+            action: EvidenceCommands::Record { command, .. },
+        } if !command.is_empty() => false,
         Commands::Man { .. }
         | Commands::MigrateMissionPlanReview
         | Commands::Diagnostics { .. }
@@ -1437,6 +1442,36 @@ fn command_identity(command: &Commands) -> &'static str {
 
 #[cfg(test)]
 mod cache_acquisition_tests {
+    use super::{command_uses_canonical_transaction, Cli};
+    use clap::Parser;
+
+    #[test]
+    fn command_backed_evidence_defers_association_transaction_until_after_child() {
+        let capture = Cli::try_parse_from([
+            "atelier",
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--",
+            "atelier",
+            "migrate-mission-plan-review",
+        ])
+        .expect("command-backed evidence CLI");
+        assert!(!command_uses_canonical_transaction(&capture.command));
+
+        let manual = Cli::try_parse_from([
+            "atelier",
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "manual proof",
+        ])
+        .expect("manual evidence CLI");
+        assert!(command_uses_canonical_transaction(&manual.command));
+    }
+
     #[test]
     fn canonical_transaction_lock_precedes_repository_dispatch() {
         let main = include_str!("main.rs");

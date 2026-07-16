@@ -363,7 +363,11 @@ imports, migration notes, or explicit completion mirroring; normal mission and
 epic readiness reads proof from linked accountable child issues. The command
 mode preserves the old capture behavior by storing the command, exit status,
 success flag, timestamp, result, and bounded stdout/stderr summaries so
-validation proof does not require manual transcript copy/paste.
+validation proof does not require manual transcript copy/paste. Command-backed
+capture runs the child without holding a canonical association transaction, so
+the child may itself invoke normal or administrative Atelier commands. After
+the child exits, capture acquires the transaction, refreshes and revalidates the
+current repository and target, and only then appends the evidence and activity.
 Evidence target links use the relation role `validates`; evidence classifications
 such as `validation`, `test`, or `review` belong in `--kind`.
 
