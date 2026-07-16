@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use atelier_core::Issue;
+use atelier_records::activity::{list_issue_activities, ActivityEventType};
+use atelier_records::mission_plan_review::{mission_plan_review_state, MissionPlanReviewFreshness};
 use atelier_sqlite::Database;
 use serde_json::Value;
 
@@ -32,11 +34,77 @@ pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
     for issue in &issues {
         validate_issue_against_policy(&policy, issue, &policy_path)?;
         validate_issue_hierarchy(db, issue, issue.parent_id.as_deref())?;
+        validate_mission_plan_execution_state(&policy, repo_root, issue)?;
     }
     Ok(WorkflowCheckReport {
         issue_count: issues.len(),
         policy,
     })
+}
+
+pub fn enforces_independent_mission_plan_review(policy: &WorkflowPolicy) -> Result<bool> {
+    let workflow = policy.workflow_for_issue_type("mission")?;
+    Ok(["ready", "start"].into_iter().all(|transition_name| {
+        workflow
+            .transitions
+            .get(transition_name)
+            .is_some_and(|transition| {
+                transition
+                    .validators
+                    .iter()
+                    .any(|validator| validator.builtin == "plan_review.current_approval")
+            })
+    }))
+}
+
+pub fn validate_mission_plan_execution_state(
+    policy: &WorkflowPolicy,
+    repo_root: &Path,
+    issue: &Issue,
+) -> Result<()> {
+    if issue.issue_type != "mission"
+        || !matches!(issue.status.as_str(), "ready" | "in_progress")
+        || !enforces_independent_mission_plan_review(policy)?
+    {
+        return Ok(());
+    }
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let state = mission_plan_review_state(&state_dir, &issue.id)?;
+    let authorized = match issue.status.as_str() {
+        "ready" => state.freshness == MissionPlanReviewFreshness::FreshApproval,
+        "in_progress" => {
+            matches!(
+                state.freshness,
+                MissionPlanReviewFreshness::FreshApproval
+                    | MissionPlanReviewFreshness::FreshGrandfather
+            ) || (state.authorization.is_some()
+                && list_issue_activities(&state_dir, &issue.id)?
+                    .iter()
+                    .any(|activity| {
+                        activity.event_type == ActivityEventType::TransitionApplied
+                            && activity
+                                .body
+                                .lines()
+                                .any(|line| line == "transition: \"start\"")
+                            && activity.body.lines().any(|line| line == "from: \"ready\"")
+                            && activity
+                                .body
+                                .lines()
+                                .any(|line| line == "to: \"in_progress\"")
+                    }))
+        }
+        _ => true,
+    };
+    if !authorized {
+        return Err(anyhow!(
+            "workflow_mission_plan_review_bypass: mission {} has executable status '{}' without current independent approval for graph revision {} (review state: {:?}); restore plan_review and use configured transitions",
+            issue.id,
+            issue.status,
+            state.current_graph_revision,
+            state.freshness
+        ));
+    }
+    Ok(())
 }
 
 pub fn validate_issue_hierarchy(

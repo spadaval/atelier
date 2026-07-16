@@ -92,6 +92,102 @@ fn migrate_default_issue_workflow(dir: &Path) {
         .expect("failed to write starter workflow policy");
 }
 
+fn request_and_approve_mission_plan(dir: &Path, mission_id: &str) {
+    use atelier_records::activity::create_mission_plan_review_activity;
+    use atelier_records::mission_plan_review::{mission_graph_revision, MissionPlanReviewEvent};
+
+    const PLANNER: &str = "actor-v1:tests.atelier.local/planner-1";
+    const REVIEWER: &str = "actor-v1:tests.atelier.local/reviewer-1";
+    let state_dir = dir.join(".atelier");
+    let revision = mission_graph_revision(&state_dir, mission_id).unwrap();
+    create_mission_plan_review_activity(
+        &state_dir,
+        mission_id,
+        PLANNER,
+        chrono::Utc::now(),
+        "Requested independent mission-plan review",
+        MissionPlanReviewEvent::Request {
+            graph_revision: revision.clone(),
+            authors: vec![PLANNER.to_string()],
+            material_editors: vec![PLANNER.to_string()],
+        },
+        "Test fixture review request.",
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir,
+        &["issue", "transition", mission_id, "request_plan_review"],
+    );
+    assert!(
+        success,
+        "mission review request transition failed: {stderr}"
+    );
+    create_mission_plan_review_activity(
+        &state_dir,
+        mission_id,
+        REVIEWER,
+        chrono::Utc::now(),
+        "Approved exact mission graph",
+        MissionPlanReviewEvent::Approval {
+            graph_revision: revision,
+        },
+        "Independent test fixture approval.",
+    )
+    .unwrap();
+}
+
+fn move_reviewed_mission_to_ready(dir: &Path, mission_id: &str) {
+    request_and_approve_mission_plan(dir, mission_id);
+    let (success, _, stderr) = run_atelier(dir, &["issue", "transition", mission_id, "ready"]);
+    assert!(success, "mission ready transition failed: {stderr}");
+}
+
+fn approve_current_mission_revision(dir: &Path, mission_id: &str) {
+    use atelier_records::activity::create_mission_plan_review_activity;
+    use atelier_records::mission_plan_review::{
+        mission_graph_revision, mission_plan_review_state, MissionPlanReviewEvent,
+    };
+
+    const PLANNER: &str = "actor-v1:tests.atelier.local/planner-1";
+    const REVIEWER: &str = "actor-v1:tests.atelier.local/reviewer-1";
+    let state_dir = dir.join(".atelier");
+    let state = mission_plan_review_state(&state_dir, mission_id).unwrap();
+    let current = mission_graph_revision(&state_dir, mission_id).unwrap();
+    let previous = state
+        .authorization
+        .expect("reviewed mission fixture must have prior authorization")
+        .graph_revision;
+    if previous == current {
+        return;
+    }
+    create_mission_plan_review_activity(
+        &state_dir,
+        mission_id,
+        PLANNER,
+        chrono::Utc::now(),
+        "Attributed material mission-plan edit",
+        MissionPlanReviewEvent::MaterialEditAttribution {
+            previous_graph_revision: previous,
+            graph_revision: current.clone(),
+            editors: vec![PLANNER.to_string()],
+        },
+        "Test fixture attribution for changed graph.",
+    )
+    .unwrap();
+    create_mission_plan_review_activity(
+        &state_dir,
+        mission_id,
+        REVIEWER,
+        chrono::Utc::now(),
+        "Approved changed mission graph",
+        MissionPlanReviewEvent::Approval {
+            graph_revision: current,
+        },
+        "Independent test fixture reapproval.",
+    )
+    .unwrap();
+}
+
 fn init_git_repo(dir: &Path) {
     if !dir.join(".git").exists() {
         let status = Command::new("git")
@@ -1551,6 +1647,8 @@ fn is_record_id(value: &str) -> bool {
 mod issues;
 #[path = "cli_integration/mission_cache_worktree.rs"]
 mod mission_cache_worktree;
+#[path = "cli_integration/mission_plan_review_lifecycle.rs"]
+mod mission_plan_review_lifecycle;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
 #[path = "cli_integration/setup_guidance.rs"]

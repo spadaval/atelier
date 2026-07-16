@@ -302,6 +302,7 @@ impl<'a> CacheRebuildLoader<'a> {
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
         record_store::mission_plan_review::validate_mission_plan_reviews(self.state_dir)?;
+        self.validate_mission_plan_execution_states()?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
         self.records.sort_by(|a, b| {
@@ -500,6 +501,28 @@ impl<'a> CacheRebuildLoader<'a> {
                 &policy,
                 &issue.issue,
                 &policy_path,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn validate_mission_plan_execution_states(&self) -> Result<()> {
+        let repo_root = self.state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "Cannot determine repository root for {}",
+                self.state_dir.display()
+            )
+        })?;
+        let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+        if !policy_path.exists() {
+            return Ok(());
+        }
+        let policy = crate::workflow_policy::load(repo_root)?;
+        for issue in &self.issues {
+            crate::workflow_policy::validate_mission_plan_execution_state(
+                &policy,
+                repo_root,
+                &issue.issue,
             )?;
         }
         Ok(())

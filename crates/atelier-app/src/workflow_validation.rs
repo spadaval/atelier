@@ -1,5 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_core::{EvidenceRecord, Issue};
+use atelier_records::mission_plan_review::{
+    mission_plan_review_state, MissionPlanFindingSeverity, MissionPlanReviewFreshness,
+};
 use atelier_records::IssueSections;
 use atelier_sqlite::Database;
 use serde::Serialize;
@@ -152,6 +155,10 @@ fn evaluate_builtin_with_params(
             issue_sections_parseable(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
         }
+        "plan_review.current_approval" => {
+            plan_review_current_approval(repo_root, target_kind, target_id)
+                .map(without_validator_help)
+        }
         "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
@@ -191,6 +198,107 @@ fn evaluate_builtin_with_params(
             None,
         )),
     }
+}
+
+fn plan_review_current_approval(
+    repo_root: &Path,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            false,
+            format!("mission-plan approval requires an issue target, found {target_kind}"),
+        ));
+    }
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let state = mission_plan_review_state(&state_dir, target_id)?;
+    let result = match state.freshness {
+        MissionPlanReviewFreshness::FreshApproval => (
+            true,
+            format!(
+                "current mission graph {} has independent approval",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::FreshGrandfather => (
+            false,
+            "legacy grandfathering does not constitute independent approval".to_string(),
+        ),
+        MissionPlanReviewFreshness::Stale => (
+            false,
+            format!(
+                "mission-plan approval is stale; current graph revision is {}",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::Unapproved => (
+            false,
+            format!(
+                "mission graph {} was submitted for review but has no independent approval",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::ProvenanceIncomplete
+            if state.authors.is_empty()
+                && state.material_editors.is_empty()
+                && state.authorization.is_none() =>
+        {
+            (
+                false,
+                format!(
+                    "mission-plan review was not requested for current graph revision {}",
+                    state.current_graph_revision
+                ),
+            )
+        }
+        MissionPlanReviewFreshness::ProvenanceIncomplete => (
+            false,
+            format!(
+                "mission-plan author and material-editor provenance is incomplete for current graph revision {}",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::BlockedByReview => {
+            let revision = &state.current_graph_revision;
+            let blocking_findings = state
+                .findings
+                .iter()
+                .filter(|finding| {
+                    finding.graph_revision == *revision
+                        && finding.severity == MissionPlanFindingSeverity::Blocking
+                        && finding.resolution.is_none()
+                })
+                .map(|finding| finding.id.as_str())
+                .collect::<Vec<_>>();
+            let change_requests = state
+                .change_requests
+                .iter()
+                .filter(|request| {
+                    request.graph_revision == *revision && request.resolution.is_none()
+                })
+                .map(|request| request.id.as_str())
+                .collect::<Vec<_>>();
+            let mut causes = Vec::new();
+            if !blocking_findings.is_empty() {
+                causes.push(format!(
+                    "unresolved blocking findings: {}",
+                    blocking_findings.join(", ")
+                ));
+            }
+            if !change_requests.is_empty() {
+                causes.push(format!(
+                    "unresolved change requests: {}",
+                    change_requests.join(", ")
+                ));
+            }
+            (
+                false,
+                format!("mission-plan approval is blocked by {}", causes.join("; ")),
+            )
+        }
+    };
+    Ok(result)
 }
 
 fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {

@@ -1740,9 +1740,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Stale test closeout");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready transition failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
