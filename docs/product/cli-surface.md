@@ -369,10 +369,12 @@ invalid repository or target fails before the child runs. It then releases the
 canonical association transaction while the child executes, so the child may
 itself invoke normal or administrative Atelier commands. After the child exits,
 capture reacquires the same logical repository association, refreshes and
-revalidates the same canonical target ID, and only then appends the evidence and
-activity. An association swap or missing target fails closed without writing
-proof; same-repository target mutations and canonical subtree imports remain
-valid when the target still resolves to the bound ID.
+revalidates the same canonical target identity (kind, ID, schema/version,
+creation timestamp, and record type), and only then appends the evidence and activity under an
+exclusive postflight transaction. An association swap, missing target, or
+delete-and-recreate reuse of the same ID fails closed without writing proof;
+same-record title, status, body, and update-time mutations plus canonical
+subtree imports remain valid when the immutable identity is unchanged.
 Evidence target links use the relation role `validates`; evidence classifications
 such as `validation`, `test`, or `review` belong in `--kind`.
 

@@ -65,7 +65,17 @@ struct CaptureAssociation {
 #[derive(Debug)]
 struct CaptureBinding {
     association: CaptureAssociation,
-    resolved_target_id: Option<String>,
+    target_identity: Option<CaptureTargetIdentity>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct CaptureTargetIdentity {
+    canonical_kind: String,
+    id: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    schema: String,
+    schema_version: i64,
+    record_type: String,
 }
 
 impl<'a> EvidenceMetadata<'a> {
@@ -163,7 +173,11 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         "evidence capture postflight could not rediscover the original repository; no evidence was written",
     )?;
     let state_dir = manager.state_dir();
-    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
+    // No child remains to wait on. Hold the exclusive association transaction
+    // across final identity validation and every canonical append so no normal
+    // writer can replace the target between the check and attachment.
+    let _transaction =
+        atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?;
     let association = capture_association(&manager)?;
     if association != binding.association {
         bail!(
@@ -181,15 +195,8 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         (None, None) => None,
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
-    if resolved_target_id != binding.resolved_target_id {
-        bail!(
-            "evidence_capture_target_changed: the command changed target resolution from {:?} to {:?}; no evidence was written. Inspect the child command's effects and retry against the intended canonical target ID.",
-            binding.resolved_target_id,
-            resolved_target_id
-        );
-    }
-    let target = capture_target(
-        &storage.db_path(),
+    let (target, target_identity) = capture_target_and_identity(
+        storage.db(),
         options.target_kind,
         resolved_target_id.as_deref(),
         options.role,
@@ -197,6 +204,13 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     .context(
         "evidence capture postflight target validation failed after the command completed; no evidence was written",
     )?;
+    if target_identity != binding.target_identity {
+        bail!(
+            "evidence_capture_target_changed: the command replaced the bound target identity {:?} with {:?}; no evidence was written. Inspect the child command's effects and retry against the intended canonical target.",
+            binding.target_identity,
+            target_identity
+        );
+    }
 
     let summary = options
         .summary
@@ -272,8 +286,8 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
         (None, None) => None,
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
-    capture_target(
-        &storage.db_path(),
+    let (_, target_identity) = capture_target_and_identity(
+        storage.db(),
         options.target_kind,
         resolved_target_id.as_deref(),
         options.role,
@@ -281,8 +295,49 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
     .context("evidence capture preflight target validation failed; the command was not executed")?;
     Ok(CaptureBinding {
         association,
-        resolved_target_id,
+        target_identity,
     })
+}
+
+fn capture_target_and_identity<'a>(
+    db: &Database,
+    target_kind: Option<&'a str>,
+    target_id: Option<&'a str>,
+    role: &'a str,
+) -> Result<(Option<TargetRef<'a>>, Option<CaptureTargetIdentity>)> {
+    let target = match (target_kind, target_id) {
+        (Some(kind), Some(id)) => Some(validate_record_ref(db, kind, id, role)?),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    let identity = match target.as_ref() {
+        Some(target) if target.canonical_kind == "issue" => {
+            let issue = db.require_issue(target.id)?;
+            let spec = atelier_records::canonical_record_kind("issue")?;
+            Some(CaptureTargetIdentity {
+                canonical_kind: "issue".to_string(),
+                id: issue.id,
+                created_at: issue.created_at,
+                schema: spec.schema.to_string(),
+                schema_version: spec.schema_version,
+                record_type: issue.issue_type,
+            })
+        }
+        Some(target) => {
+            let record = db.require_record(target.canonical_kind, target.id)?;
+            let spec = atelier_records::canonical_record_kind(target.canonical_kind)?;
+            Some(CaptureTargetIdentity {
+                canonical_kind: record.kind.clone(),
+                id: record.id,
+                created_at: record.created_at,
+                schema: spec.schema.to_string(),
+                schema_version: spec.schema_version,
+                record_type: record.kind,
+            })
+        }
+        None => None,
+    };
+    Ok((target, identity))
 }
 
 fn capture_association(manager: &CacheManager) -> Result<CaptureAssociation> {
@@ -658,22 +713,6 @@ fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {
         data.agent_identity = data.producer.clone();
     }
     data
-}
-
-fn capture_target<'a>(
-    db_path: &Path,
-    target_kind: Option<&'a str>,
-    target_id: Option<&'a str>,
-    role: &'a str,
-) -> Result<Option<TargetRef<'a>>> {
-    match (target_kind, target_id) {
-        (Some(kind), Some(id)) => {
-            let db = app_use_cases::open_database(db_path)?;
-            Ok(Some(validate_record_ref(&db, kind, id, role)?))
-        }
-        (None, None) => Ok(None),
-        _ => bail!("--target-kind and --target-id must be supplied together"),
-    }
 }
 
 fn command_result_metadata(

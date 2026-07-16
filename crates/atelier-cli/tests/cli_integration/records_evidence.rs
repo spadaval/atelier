@@ -1455,6 +1455,51 @@ fn test_evidence_capture_postflight_refuses_association_swap_and_deleted_target(
         &deleted.path().join(".atelier"),
         "Must not land after target deletion"
     ));
+
+    let replaced = tempdir().unwrap();
+    init_atelier(replaced.path());
+    let (success, _, stderr) = run_atelier(
+        replaced.path(),
+        &[
+            "issue",
+            "create",
+            "Replace capture target",
+            "--issue-type",
+            "task",
+        ],
+    );
+    assert!(success, "target create failed: {stderr}");
+    let target_id = issue_id_by_title(replaced.path(), "Replace capture target");
+    let target_path = format!(".atelier/issues/{target_id}.md");
+    let replacement = run_atelier_with_deadlock_timeout(
+        replaced.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Must not land on replacement identity",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            "sh",
+            "-c",
+            &format!(
+                "sed -e 's/^created_at: .*/created_at: \"2000-01-01T00:00:00Z\"/' -e 's/^issue_type: \"task\"/issue_type: \"epic\"/' {target_path} > {target_path}.replacement && mv {target_path}.replacement {target_path}"
+            ),
+        ],
+    );
+    assert!(!replacement.status.success());
+    assert!(
+        String::from_utf8_lossy(&replacement.stderr).contains("evidence_capture_target_changed"),
+        "{}",
+        String::from_utf8_lossy(&replacement.stderr)
+    );
+    assert!(!evidence_tree_contains(
+        &replaced.path().join(".atelier"),
+        "Must not land on replacement identity"
+    ));
 }
 
 #[test]
