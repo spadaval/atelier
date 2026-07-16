@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:16:24.982935633+00:00"
+status: "done"
 title: "Implement a flat issue inventory read and render path"
-updated_at: "2026-07-06T17:20:25.689756160+00:00"
+updated_at: "2026-07-09T16:16:24.982935633+00:00"
 ---
 
 ## Description
@@ -32,4 +33,6 @@ Introduce the issue-list-specific read model and renderer. Remove epic headers, 
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Partial implementation evidence `atelier-ytmy` records 6 passing persistence-neutral inventory selection, filtering, ordering, limit, deduplication, and empty-state tests.
+- Partial implementation evidence `atelier-xens` records 5 passing flat human/quiet renderer, truncation, and color-preservation tests.
+- Final CLI adapter and command transcript proof remain pending the `atelier-mska` cache/query interface and `atelier-kiyq` parser/dispatch slice.
