@@ -6,18 +6,153 @@
 //! plan approval grants no code-review or merge authority.
 
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::{DateTime, Utc};
+use icu_normalizer::ComposingNormalizerBorrowed;
+use icu_properties::props::DefaultIgnorableCodePoint;
+use icu_properties::CodePointSetData;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::path::Path;
 
 use crate::activity::{list_issue_activities, ActivityEventType, IssueActivity};
 use crate::{CanonicalIssueRecord, RecordStore};
 
 pub const MISSION_GRAPH_REVISION_VERSION: &str = "mission-graph-v2";
+pub const STABLE_ACTOR_IDENTITY_VERSION: &str = "actor-v1";
 pub const LEGACY_GRANDFATHER_STATUS: &str = "in_progress";
 pub const LEGACY_GRANDFATHER_MIGRATION_ID: &str = "independent-mission-plan-review-v1";
-pub const LEGACY_GRANDFATHER_MIGRATION_ACTOR: &str = "atelier-migration";
+pub const LEGACY_GRANDFATHER_MIGRATION_ACTOR: &str =
+    "actor-v1:atelier.local/mission-review-migration";
+pub const MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH: &str = "mission-plan-review-cutover.yaml";
+pub const MISSION_PLAN_REVIEW_CUTOVER_SCHEMA: &str = "atelier.mission-plan-review-cutover";
+pub const MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION: u32 = 1;
+pub const LEGACY_GRANDFATHER_RECEIPT_VERSION: &str = "mission-plan-cutover-receipt-v1";
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MissionPlanReviewCutoverManifest {
+    pub schema: String,
+    pub schema_version: u32,
+    pub migration_id: String,
+    pub cutover_at: DateTime<Utc>,
+    pub eligible_missions: Vec<LegacyGrandfatherEligibility>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LegacyGrandfatherEligibility {
+    pub mission_id: String,
+    pub graph_revision: MissionGraphRevision,
+    pub legacy_status: String,
+    pub receipt_activity_id: String,
+}
+
+#[derive(Serialize)]
+struct LegacyGrandfatherReceiptPayload<'a> {
+    version: &'static str,
+    migration_id: &'a str,
+    cutover_at: DateTime<Utc>,
+    mission_id: &'a str,
+    graph_revision: &'a MissionGraphRevision,
+    legacy_status: &'a str,
+    receipt_activity_id: &'a str,
+}
+
+impl MissionPlanReviewCutoverManifest {
+    pub fn validate(&self) -> Result<()> {
+        if self.schema != MISSION_PLAN_REVIEW_CUTOVER_SCHEMA {
+            bail!("mission-plan cutover schema must be '{MISSION_PLAN_REVIEW_CUTOVER_SCHEMA}'");
+        }
+        if self.schema_version != MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION {
+            bail!(
+                "mission-plan cutover schema_version must be {MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION}"
+            );
+        }
+        if self.migration_id != LEGACY_GRANDFATHER_MIGRATION_ID {
+            bail!("mission-plan cutover migration_id must be '{LEGACY_GRANDFATHER_MIGRATION_ID}'");
+        }
+        if self.eligible_missions.is_empty() {
+            bail!("mission-plan cutover manifest must contain at least one eligible mission");
+        }
+        if self
+            .eligible_missions
+            .windows(2)
+            .any(|pair| pair[0].mission_id >= pair[1].mission_id)
+        {
+            bail!(
+                "mission-plan cutover eligible_missions must be sorted by mission_id with no duplicates"
+            );
+        }
+        let expected_activity_id = crate::activity::timestamp_activity_id(self.cutover_at);
+        for eligibility in &self.eligible_missions {
+            crate::record_id::validate_record_id(&eligibility.mission_id).with_context(|| {
+                format!(
+                    "Invalid mission-plan cutover mission_id {}",
+                    eligibility.mission_id
+                )
+            })?;
+            eligibility.graph_revision.validate()?;
+            if eligibility.legacy_status != LEGACY_GRANDFATHER_STATUS {
+                bail!(
+                    "mission-plan cutover legacy_status for {} must be '{LEGACY_GRANDFATHER_STATUS}'",
+                    eligibility.mission_id
+                );
+            }
+            if eligibility.receipt_activity_id != expected_activity_id {
+                bail!(
+                    "mission-plan cutover receipt_activity_id for {} must be '{}' derived from cutover_at",
+                    eligibility.mission_id,
+                    expected_activity_id
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn eligibility_for(&self, mission_id: &str) -> Option<&LegacyGrandfatherEligibility> {
+        self.eligible_missions
+            .binary_search_by(|entry| entry.mission_id.as_str().cmp(mission_id))
+            .ok()
+            .map(|index| &self.eligible_missions[index])
+    }
+
+    pub fn receipt_for(&self, eligibility: &LegacyGrandfatherEligibility) -> Result<String> {
+        let payload = LegacyGrandfatherReceiptPayload {
+            version: LEGACY_GRANDFATHER_RECEIPT_VERSION,
+            migration_id: &self.migration_id,
+            cutover_at: self.cutover_at,
+            mission_id: &eligibility.mission_id,
+            graph_revision: &eligibility.graph_revision,
+            legacy_status: &eligibility.legacy_status,
+            receipt_activity_id: &eligibility.receipt_activity_id,
+        };
+        let bytes = serde_json::to_vec(&payload)
+            .context("Failed to render mission-plan cutover receipt")?;
+        let digest = Sha256::digest(bytes);
+        Ok(format!(
+            "{LEGACY_GRANDFATHER_RECEIPT_VERSION}:sha256:{digest:x}"
+        ))
+    }
+}
+
+pub fn load_mission_plan_review_cutover_manifest(
+    state_dir: &Path,
+) -> Result<Option<MissionPlanReviewCutoverManifest>> {
+    let path = state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let manifest: MissionPlanReviewCutoverManifest =
+        serde_yaml::from_str(&text).with_context(|| format!("Invalid {}", path.display()))?;
+    manifest
+        .validate()
+        .with_context(|| format!("Invalid {}", path.display()))?;
+    Ok(Some(manifest))
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -100,6 +235,7 @@ pub enum MissionPlanReviewEvent {
         graph_revision: MissionGraphRevision,
         legacy_status: String,
         migration_id: String,
+        cutover_receipt: String,
     },
 }
 
@@ -170,6 +306,7 @@ impl MissionPlanReviewEvent {
             Self::LegacyGrandfather {
                 legacy_status,
                 migration_id,
+                cutover_receipt,
                 ..
             } => {
                 if legacy_status != LEGACY_GRANDFATHER_STATUS {
@@ -182,6 +319,11 @@ impl MissionPlanReviewEvent {
                         "migration_id must be '{LEGACY_GRANDFATHER_MIGRATION_ID}' for mission-plan grandfathering"
                     );
                 }
+                validate_versioned_sha256(
+                    "cutover_receipt",
+                    cutover_receipt,
+                    LEGACY_GRANDFATHER_RECEIPT_VERSION,
+                )?;
                 Ok(())
             }
         }
@@ -233,6 +375,8 @@ pub struct MissionPlanAuthorization {
     pub legacy_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub migration_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cutover_receipt: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
@@ -277,6 +421,21 @@ struct StableActorIdentity(String);
 impl StableActorIdentity {
     fn parse(field: &str, value: &str) -> Result<Self> {
         validate_nonempty(field, value)?;
+        let prefix = format!("{STABLE_ACTOR_IDENTITY_VERSION}:");
+        let Some(namespaced) = value.strip_prefix(&prefix) else {
+            bail!(
+                "{field} '{value}' must use the authenticated stable actor namespace '{prefix}<authority>/<immutable-subject>'"
+            );
+        };
+        let Some((authority, subject)) = namespaced.split_once('/') else {
+            bail!(
+                "{field} '{value}' must contain an authenticated authority and immutable subject separated by '/'"
+            );
+        };
+        validate_actor_authority(field, value, authority)?;
+        if subject.is_empty() || subject.contains('/') {
+            bail!("{field} '{value}' must contain one non-empty immutable subject");
+        }
         if value.trim() != value || value.chars().any(char::is_whitespace) {
             bail!(
                 "{field} '{value}' is not a canonical stable actor identity; whitespace is not allowed"
@@ -287,8 +446,64 @@ impl StableActorIdentity {
                 "{field} '{value}' is not a canonical stable actor identity; control characters are not allowed"
             );
         }
+        let default_ignorables = CodePointSetData::new::<DefaultIgnorableCodePoint>();
+        if let Some(character) = value
+            .chars()
+            .find(|character| default_ignorables.contains(*character))
+        {
+            bail!(
+                "{field} '{value}' contains default-ignorable Unicode code point U+{:04X}",
+                character as u32
+            );
+        }
+        if !ComposingNormalizerBorrowed::new_nfc().is_normalized(value) {
+            bail!(
+                "{field} '{value}' is not NFC; noncanonical Unicode actor aliases are not allowed"
+            );
+        }
+        if !subject
+            .chars()
+            .all(|character| character.is_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        {
+            bail!(
+                "{field} '{value}' has an invalid immutable subject; use Unicode letters/numbers or '-', '_' and '.'"
+            );
+        }
+        if !subject.chars().next().is_some_and(char::is_alphanumeric)
+            || !subject
+                .chars()
+                .next_back()
+                .is_some_and(char::is_alphanumeric)
+        {
+            bail!("{field} '{value}' immutable subject must start and end with a letter or number");
+        }
         Ok(Self(value.to_string()))
     }
+}
+
+fn validate_actor_authority(field: &str, value: &str, authority: &str) -> Result<()> {
+    let labels = authority.split('.').collect::<Vec<_>>();
+    if labels.len() < 2
+        || labels.iter().any(|label| {
+            label.is_empty()
+                || !label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+                || !label
+                    .as_bytes()
+                    .first()
+                    .is_some_and(u8::is_ascii_alphanumeric)
+                || !label
+                    .as_bytes()
+                    .last()
+                    .is_some_and(u8::is_ascii_alphanumeric)
+        })
+    {
+        bail!(
+            "{field} '{value}' has a noncanonical authenticated authority; use a lowercase DNS-style authority"
+        );
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -486,7 +701,14 @@ pub fn mission_plan_review_state(
     let mission = RecordStore::new(state_dir).load_issue_by_id(mission_id)?;
     let revision = mission_graph_revision(state_dir, mission_id)?;
     let activities = list_issue_activities(state_dir, mission_id)?;
-    project_mission_plan_review(mission_id, &mission.issue.status, revision, &activities)
+    let cutover_manifest = load_mission_plan_review_cutover_manifest(state_dir)?;
+    project_mission_plan_review(
+        mission_id,
+        &mission.issue.status,
+        revision,
+        &activities,
+        cutover_manifest.as_ref(),
+    )
 }
 
 pub fn project_mission_plan_review(
@@ -494,6 +716,7 @@ pub fn project_mission_plan_review(
     mission_status: &str,
     current_graph_revision: MissionGraphRevision,
     activities: &[IssueActivity],
+    cutover_manifest: Option<&MissionPlanReviewCutoverManifest>,
 ) -> Result<MissionPlanReviewState> {
     current_graph_revision.validate()?;
     let mut ordered = activities.iter().collect::<Vec<_>>();
@@ -512,6 +735,7 @@ pub fn project_mission_plan_review(
     let mut changes = Vec::<MissionPlanChangeRequestState>::new();
     let mut ids = BTreeSet::new();
     let mut authorizations = Vec::new();
+    let mut grandfather_receipts = 0usize;
 
     for activity in ordered {
         if activity.subject_kind != "issue" || activity.subject_id != mission_id {
@@ -661,19 +885,49 @@ pub fn project_mission_plan_review(
                     activity_id: activity.id.clone(),
                     legacy_status: None,
                     migration_id: None,
+                    cutover_receipt: None,
                 });
             }
             MissionPlanReviewEvent::LegacyGrandfather {
                 graph_revision,
                 legacy_status,
                 migration_id,
+                cutover_receipt,
             } => {
+                grandfather_receipts += 1;
+                if grandfather_receipts > 1 {
+                    bail!(
+                        "Mission {mission_id} has duplicate legacy-grandfather receipts; expected exactly one"
+                    );
+                }
                 if activity_actor.0 != LEGACY_GRANDFATHER_MIGRATION_ACTOR {
                     bail!(
                         "Legacy grandfather activity {} must be produced by migration actor '{LEGACY_GRANDFATHER_MIGRATION_ACTOR}'",
                         activity.id
                     );
                 }
+                let manifest = cutover_manifest.ok_or_else(|| {
+                    anyhow!(
+                        "Legacy grandfather activity {} is hand-authored or late; {} is missing",
+                        activity.id,
+                        MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH
+                    )
+                })?;
+                let eligibility = manifest.eligibility_for(mission_id).ok_or_else(|| {
+                    anyhow!(
+                        "Legacy grandfather activity {} names mission {mission_id}, which is not eligible in the cutover manifest",
+                        activity.id
+                    )
+                })?;
+                validate_legacy_grandfather_receipt(
+                    manifest,
+                    eligibility,
+                    activity,
+                    graph_revision,
+                    legacy_status,
+                    migration_id,
+                    cutover_receipt,
+                )?;
                 authorizations.push(MissionPlanAuthorization {
                     kind: MissionPlanAuthorizationKind::LegacyGrandfather,
                     graph_revision: graph_revision.clone(),
@@ -681,9 +935,20 @@ pub fn project_mission_plan_review(
                     activity_id: activity.id.clone(),
                     legacy_status: Some(legacy_status.clone()),
                     migration_id: Some(migration_id.clone()),
+                    cutover_receipt: Some(cutover_receipt.clone()),
                 });
             }
         }
+    }
+
+    if cutover_manifest
+        .and_then(|manifest| manifest.eligibility_for(mission_id))
+        .is_some()
+        && grandfather_receipts != 1
+    {
+        bail!(
+            "Mission {mission_id} is eligible in the cutover manifest but has no legacy-grandfather receipt; expected exactly one"
+        );
     }
 
     for revision in attributions.keys() {
@@ -779,10 +1044,31 @@ pub fn project_mission_plan_review(
 /// Validate every mission's review stream during canonical rebuild/check.
 pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
     let issues = RecordStore::new(state_dir).load_issues()?;
+    let cutover_manifest = load_mission_plan_review_cutover_manifest(state_dir)?;
     let known_ids = issues
         .iter()
         .map(|record| record.issue.id.as_str())
         .collect::<BTreeSet<_>>();
+    if let Some(manifest) = cutover_manifest.as_ref() {
+        for eligibility in &manifest.eligible_missions {
+            let issue = issues
+                .iter()
+                .find(|issue| issue.issue.id == eligibility.mission_id)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Mission-plan cutover manifest references missing mission {}",
+                        eligibility.mission_id
+                    )
+                })?;
+            if issue.issue.issue_type != "mission" {
+                bail!(
+                    "Mission-plan cutover manifest references {} with issue_type '{}'; expected mission",
+                    eligibility.mission_id,
+                    issue.issue.issue_type
+                );
+            }
+        }
+    }
     for issue in &issues {
         let activities = list_issue_activities(state_dir, &issue.issue.id)?;
         if issue.issue.issue_type != "mission"
@@ -828,7 +1114,73 @@ pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
             }
         }
         let revision = graph_revision_from_records(&issues, &issue.issue.id)?;
-        project_mission_plan_review(&issue.issue.id, &issue.issue.status, revision, &activities)?;
+        project_mission_plan_review(
+            &issue.issue.id,
+            &issue.issue.status,
+            revision,
+            &activities,
+            cutover_manifest.as_ref(),
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_legacy_grandfather_receipt(
+    manifest: &MissionPlanReviewCutoverManifest,
+    eligibility: &LegacyGrandfatherEligibility,
+    activity: &IssueActivity,
+    graph_revision: &MissionGraphRevision,
+    legacy_status: &str,
+    migration_id: &str,
+    cutover_receipt: &str,
+) -> Result<()> {
+    if activity.id != eligibility.receipt_activity_id {
+        bail!(
+            "Legacy grandfather activity {} is late or forged; cutover manifest requires receipt activity {}",
+            activity.id,
+            eligibility.receipt_activity_id
+        );
+    }
+    if activity.created_at != manifest.cutover_at {
+        bail!(
+            "Legacy grandfather activity {} was created at {}, after or outside exact cutover time {}",
+            activity.id,
+            activity.created_at,
+            manifest.cutover_at
+        );
+    }
+    if graph_revision != &eligibility.graph_revision {
+        bail!(
+            "Legacy grandfather activity {} names graph revision {}, but cutover eligibility requires {}",
+            activity.id,
+            graph_revision,
+            eligibility.graph_revision
+        );
+    }
+    if legacy_status != eligibility.legacy_status {
+        bail!(
+            "Legacy grandfather activity {} names legacy status '{}', but cutover eligibility requires '{}'",
+            activity.id,
+            legacy_status,
+            eligibility.legacy_status
+        );
+    }
+    if migration_id != manifest.migration_id {
+        bail!(
+            "Legacy grandfather activity {} names migration '{}', but cutover manifest requires '{}'",
+            activity.id,
+            migration_id,
+            manifest.migration_id
+        );
+    }
+    let expected_receipt = manifest.receipt_for(eligibility)?;
+    if cutover_receipt != expected_receipt {
+        bail!(
+            "Legacy grandfather activity {} has a forged cutover receipt; expected {}",
+            activity.id,
+            expected_receipt
+        );
     }
     Ok(())
 }
@@ -949,6 +1301,21 @@ fn validate_event_id(field: &str, value: &str) -> Result<()> {
         .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
         bail!("{field} '{value}' may contain only letters, digits, '-' and '_'");
+    }
+    Ok(())
+}
+
+fn validate_versioned_sha256(field: &str, value: &str, version: &str) -> Result<()> {
+    let prefix = format!("{version}:sha256:");
+    let Some(digest) = value.strip_prefix(&prefix) else {
+        bail!("{field} '{value}' must start with '{prefix}'");
+    };
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("{field} '{value}' has an invalid SHA-256 digest");
     }
     Ok(())
 }
@@ -1146,6 +1513,47 @@ mod tests {
         }
     }
 
+    fn cutover_manifest(
+        mission_id: &str,
+        graph_revision: MissionGraphRevision,
+        cutover_at: DateTime<Utc>,
+    ) -> MissionPlanReviewCutoverManifest {
+        MissionPlanReviewCutoverManifest {
+            schema: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA.to_string(),
+            schema_version: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
+            migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
+            cutover_at,
+            eligible_missions: vec![LegacyGrandfatherEligibility {
+                mission_id: mission_id.to_string(),
+                graph_revision,
+                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+                receipt_activity_id: crate::activity::timestamp_activity_id(cutover_at),
+            }],
+        }
+    }
+
+    fn write_cutover_manifest(state_dir: &Path, manifest: &MissionPlanReviewCutoverManifest) {
+        manifest.validate().unwrap();
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(manifest).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn grandfather_event(
+        manifest: &MissionPlanReviewCutoverManifest,
+        mission_id: &str,
+    ) -> MissionPlanReviewEvent {
+        let eligibility = manifest.eligibility_for(mission_id).unwrap();
+        MissionPlanReviewEvent::LegacyGrandfather {
+            graph_revision: eligibility.graph_revision.clone(),
+            legacy_status: eligibility.legacy_status.clone(),
+            migration_id: manifest.migration_id.clone(),
+            cutover_receipt: manifest.receipt_for(eligibility).unwrap(),
+        }
+    }
+
     #[test]
     fn typed_events_round_trip_and_project_fresh_independent_approval() {
         let directory = tempdir().unwrap();
@@ -1166,10 +1574,10 @@ mod tests {
             &state_dir,
             "atelier-m100",
             1,
-            "planner@example.com",
+            "actor-v1:example.com/planner",
             MissionPlanReviewEvent::Request {
                 graph_revision: previous.clone(),
-                authors: vec!["author@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
                 material_editors: Vec::new(),
             },
         );
@@ -1177,18 +1585,18 @@ mod tests {
             &state_dir,
             "atelier-m100",
             2,
-            "editor@example.com",
+            "actor-v1:example.com/editor",
             MissionPlanReviewEvent::MaterialEditAttribution {
                 previous_graph_revision: previous,
                 graph_revision: current.clone(),
-                editors: vec!["editor@example.com".to_string()],
+                editors: vec!["actor-v1:example.com/editor".to_string()],
             },
         );
         append_event(
             &state_dir,
             "atelier-m100",
             3,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Finding {
                 graph_revision: current.clone(),
                 finding_id: "finding-1".to_string(),
@@ -1201,7 +1609,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             4,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Resolution {
                 graph_revision: current.clone(),
                 target_id: "finding-1".to_string(),
@@ -1212,7 +1620,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             5,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::ChangeRequest {
                 graph_revision: current.clone(),
                 request_id: "change-1".to_string(),
@@ -1224,7 +1632,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             6,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Resolution {
                 graph_revision: current.clone(),
                 target_id: "change-1".to_string(),
@@ -1235,7 +1643,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             7,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: current.clone(),
             },
@@ -1255,15 +1663,15 @@ mod tests {
 
         let state = mission_plan_review_state(&state_dir, "atelier-m100").unwrap();
         assert_eq!(state.current_graph_revision, current);
-        assert_eq!(state.authors, vec!["author@example.com"]);
-        assert_eq!(state.material_editors, vec!["editor@example.com"]);
+        assert_eq!(state.authors, vec!["actor-v1:example.com/author"]);
+        assert_eq!(state.material_editors, vec!["actor-v1:example.com/editor"]);
         assert_eq!(state.findings.len(), 1);
         assert!(state.findings[0].resolution.is_some());
         assert_eq!(state.change_requests.len(), 1);
         assert!(state.change_requests[0].resolution.is_some());
         assert_eq!(
             state.authorization.as_ref().unwrap().actor,
-            "reviewer@example.com"
+            "actor-v1:example.com/reviewer"
         );
         assert_eq!(state.freshness, MissionPlanReviewFreshness::FreshApproval);
         assert!(state.has_current_approval());
@@ -1272,7 +1680,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             ActivityEventType::Note,
-            "observer@example.com",
+            "actor-v1:example.com/observer",
             at(8),
             "Context only",
             "This note does not change the reviewed plan.",
@@ -1297,10 +1705,10 @@ mod tests {
             &state_dir,
             "atelier-m100",
             1,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Request {
                 graph_revision: original.clone(),
-                authors: vec!["author@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
                 material_editors: Vec::new(),
             },
         );
@@ -1308,7 +1716,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             2,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: original,
             },
@@ -1321,7 +1729,10 @@ mod tests {
         let state = mission_plan_review_state(&state_dir, "atelier-m100").unwrap();
         assert_eq!(state.freshness, MissionPlanReviewFreshness::Stale);
         assert!(!state.provenance_complete);
-        assert_eq!(state.authorization.unwrap().actor, "reviewer@example.com");
+        assert_eq!(
+            state.authorization.unwrap().actor,
+            "actor-v1:example.com/reviewer"
+        );
     }
 
     #[test]
@@ -1335,10 +1746,10 @@ mod tests {
             &state_dir,
             "atelier-m100",
             1,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Request {
                 graph_revision: original.clone(),
-                authors: vec!["author@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
                 material_editors: Vec::new(),
             },
         );
@@ -1346,7 +1757,7 @@ mod tests {
             &state_dir,
             "atelier-m100",
             2,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: original.clone(),
             },
@@ -1387,7 +1798,7 @@ mod tests {
 
         let approval = make(
             1,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision.clone(),
             },
@@ -1397,6 +1808,7 @@ mod tests {
             "draft",
             revision.clone(),
             std::slice::from_ref(&approval),
+            None,
         )
         .unwrap_err()
         .to_string();
@@ -1404,16 +1816,16 @@ mod tests {
 
         let request = make(
             0,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Request {
                 graph_revision: revision.clone(),
-                authors: vec!["author@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
                 material_editors: Vec::new(),
             },
         );
         let self_approval = make(
             1,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision.clone(),
             },
@@ -1423,6 +1835,7 @@ mod tests {
             "draft",
             revision.clone(),
             &[request.clone(), self_approval],
+            None,
         )
         .unwrap_err()
         .to_string();
@@ -1430,7 +1843,7 @@ mod tests {
 
         let finding = make(
             1,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Finding {
                 graph_revision: revision.clone(),
                 finding_id: "blocking-1".to_string(),
@@ -1441,7 +1854,7 @@ mod tests {
         );
         let approval = make(
             2,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision.clone(),
             },
@@ -1451,6 +1864,7 @@ mod tests {
             "draft",
             revision,
             &[request, finding, approval],
+            None,
         )
         .unwrap_err()
         .to_string();
@@ -1462,23 +1876,23 @@ mod tests {
         ));
         let request = make(
             0,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Request {
                 graph_revision: revision.clone(),
-                authors: vec!["author@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
                 material_editors: Vec::new(),
             },
         );
         let approval = make(
             1,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision.clone(),
             },
         );
         let later_change = make(
             2,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::ChangeRequest {
                 graph_revision: revision.clone(),
                 request_id: "later-change".to_string(),
@@ -1492,6 +1906,7 @@ mod tests {
                 "draft",
                 revision,
                 &[request, approval, later_change],
+                None,
             )
             .unwrap()
             .freshness,
@@ -1519,16 +1934,16 @@ mod tests {
         };
         let request = make(
             0,
-            "same-actor",
+            "actor-v1:example.com/same-actor",
             MissionPlanReviewEvent::Request {
                 graph_revision: revision.clone(),
-                authors: vec!["same-actor".to_string()],
+                authors: vec!["actor-v1:example.com/same-actor".to_string()],
                 material_editors: Vec::new(),
             },
         );
         let whitespace_alias = make(
             1,
-            "same-actor ",
+            "actor-v1:example.com/same-actor ",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision.clone(),
             },
@@ -1539,11 +1954,82 @@ mod tests {
             "draft",
             revision,
             &[request, whitespace_alias],
+            None,
         )
         .unwrap_err()
         .to_string();
         assert!(error.contains("canonical stable actor identity"));
         assert!(error.contains("whitespace is not allowed"));
+    }
+
+    #[test]
+    fn rejects_default_ignorable_and_non_nfc_actor_aliases_before_independence() {
+        let revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "9".repeat(64)
+        ));
+        let make = |offset, actor: &str, event| IssueActivity {
+            id: format!("20260701T00000{offset}000000Z"),
+            subject_kind: "issue".to_string(),
+            subject_id: "atelier-m100".to_string(),
+            event_type: ActivityEventType::MissionPlanReview,
+            actor: actor.to_string(),
+            created_at: at(offset),
+            summary: "review".to_string(),
+            pr_attribution: None,
+            mission_plan_review: Some(event),
+            body: String::new(),
+        };
+        let request = make(
+            0,
+            "actor-v1:example.com/café",
+            MissionPlanReviewEvent::Request {
+                graph_revision: revision.clone(),
+                authors: vec!["actor-v1:example.com/café".to_string()],
+                material_editors: Vec::new(),
+            },
+        );
+        for (alias, code_point) in [
+            ("actor-v1:example.com/café\u{200B}", "U+200B"),
+            ("actor-v1:example.com/café\u{200D}", "U+200D"),
+        ] {
+            let approval = make(
+                1,
+                alias,
+                MissionPlanReviewEvent::Approval {
+                    graph_revision: revision.clone(),
+                },
+            );
+            let error = project_mission_plan_review(
+                "atelier-m100",
+                "draft",
+                revision.clone(),
+                &[request.clone(), approval],
+                None,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("default-ignorable Unicode"), "{error}");
+            assert!(error.contains(code_point), "{error}");
+        }
+
+        let decomposed_alias = make(
+            1,
+            "actor-v1:example.com/cafe\u{301}",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision.clone(),
+            },
+        );
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            "draft",
+            revision,
+            &[request, decomposed_alias],
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("is not NFC"), "{error}");
     }
 
     #[test]
@@ -1553,17 +2039,15 @@ mod tests {
         std::fs::create_dir_all(&state_dir).unwrap();
         write_graph(&state_dir);
         let revision = mission_graph_revision(&state_dir, "atelier-m100").unwrap();
+        let manifest = cutover_manifest("atelier-m100", revision.clone(), at(1));
+        write_cutover_manifest(&state_dir, &manifest);
         let activity = create_mission_plan_review_activity(
             &state_dir,
             "atelier-m100",
             LEGACY_GRANDFATHER_MIGRATION_ACTOR,
             at(1),
             "Grandfather active mission at review-policy cutover",
-            MissionPlanReviewEvent::LegacyGrandfather {
-                graph_revision: revision.clone(),
-                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
-                migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
-            },
+            grandfather_event(&manifest, "atelier-m100"),
             "Created by the versioned mission-review migration.",
         )
         .unwrap();
@@ -1589,52 +2073,168 @@ mod tests {
             authorization.migration_id.as_deref(),
             Some(LEGACY_GRANDFATHER_MIGRATION_ID)
         );
+        assert_eq!(
+            authorization.cutover_receipt.as_deref(),
+            Some(
+                manifest
+                    .receipt_for(&manifest.eligible_missions[0])
+                    .unwrap()
+                    .as_str()
+            )
+        );
+        validate_mission_plan_reviews(&state_dir).unwrap();
 
         let mut invented_activity = activity.clone();
-        invented_activity.actor = "any-actor".to_string();
+        invented_activity.actor = "actor-v1:example.com/any-actor".to_string();
         let error = project_mission_plan_review(
             "atelier-m100",
             LEGACY_GRANDFATHER_STATUS,
             revision.clone(),
             &[invented_activity],
+            Some(&manifest),
         )
         .unwrap_err()
         .to_string();
         assert!(error.contains("must be produced by migration actor"));
 
-        let activity_path = state_dir.join(crate::activity::record_activity_path(
-            "issue",
-            "atelier-m100",
-            &activity.id,
-        ));
-        let rendered = std::fs::read_to_string(&activity_path).unwrap();
-        std::fs::write(
-            &activity_path,
-            rendered.replace(
-                &format!("legacy_status: {LEGACY_GRANDFATHER_STATUS}"),
-                "legacy_status: not-a-workflow-status",
-            ),
-        )
-        .unwrap();
-        let error = format!(
-            "{:#}",
-            validate_mission_plan_reviews(&state_dir).unwrap_err()
-        );
-        assert!(
-            error.contains("legacy_status must be 'in_progress'"),
-            "unexpected validation error: {error}"
-        );
-
         let bogus_migration = MissionPlanReviewEvent::LegacyGrandfather {
             graph_revision: revision,
             legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
             migration_id: "invented-migration".to_string(),
+            cutover_receipt: format!(
+                "{LEGACY_GRANDFATHER_RECEIPT_VERSION}:sha256:{}",
+                "a".repeat(64)
+            ),
         };
         assert!(bogus_migration
             .validate()
             .unwrap_err()
             .to_string()
             .contains("migration_id must be"));
+    }
+
+    #[test]
+    fn rejects_forged_late_duplicate_and_wrong_mission_grandfather_receipts() {
+        let revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "e".repeat(64)
+        ));
+        let manifest = cutover_manifest("atelier-m100", revision.clone(), at(1));
+        let event = grandfather_event(&manifest, "atelier-m100");
+        let receipt = IssueActivity {
+            id: crate::activity::timestamp_activity_id(at(1)),
+            subject_kind: "issue".to_string(),
+            subject_id: "atelier-m100".to_string(),
+            event_type: ActivityEventType::MissionPlanReview,
+            actor: LEGACY_GRANDFATHER_MIGRATION_ACTOR.to_string(),
+            created_at: at(1),
+            summary: "cutover receipt".to_string(),
+            pr_attribution: None,
+            mission_plan_review: Some(event),
+            body: String::new(),
+        };
+
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            std::slice::from_ref(&receipt),
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("hand-authored or late"));
+
+        let mut late = receipt.clone();
+        late.id = crate::activity::timestamp_activity_id(at(2));
+        late.created_at = at(2);
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            &[late],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("late or forged"));
+
+        let mut post_cutover = receipt.clone();
+        post_cutover.created_at = at(2);
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            &[post_cutover],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("after or outside exact cutover time"));
+
+        let mut forged = receipt.clone();
+        let MissionPlanReviewEvent::LegacyGrandfather {
+            cutover_receipt, ..
+        } = forged.mission_plan_review.as_mut().unwrap()
+        else {
+            unreachable!()
+        };
+        *cutover_receipt = format!(
+            "{LEGACY_GRANDFATHER_RECEIPT_VERSION}:sha256:{}",
+            "f".repeat(64)
+        );
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            &[forged],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("forged cutover receipt"));
+
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            &[receipt.clone(), receipt.clone()],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("duplicate legacy-grandfather receipts"));
+
+        let mut wrong_mission = receipt.clone();
+        wrong_mission.subject_id = "atelier-m999".to_string();
+        let error = project_mission_plan_review(
+            "atelier-m999",
+            LEGACY_GRANDFATHER_STATUS,
+            revision,
+            &[wrong_mission],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("not eligible in the cutover manifest"));
+
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            manifest.eligible_missions[0].graph_revision.clone(),
+            &[],
+            Some(&manifest),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("has no legacy-grandfather receipt"));
+
+        let mut duplicate_eligibility = manifest.clone();
+        duplicate_eligibility
+            .eligible_missions
+            .push(duplicate_eligibility.eligible_missions[0].clone());
+        let error = duplicate_eligibility.validate().unwrap_err().to_string();
+        assert!(error.contains("sorted by mission_id with no duplicates"));
     }
 
     #[test]
@@ -1651,7 +2251,7 @@ id: "20260701T000000000000Z"
 subject_kind: "issue"
 subject_id: "atelier-m100"
 event_type: "mission_plan_review"
-actor: "reviewer@example.com"
+actor: "actor-v1:example.com/reviewer"
 created_at: "2026-07-01T00:00:00.000000Z"
 summary: "Approval"
 ---

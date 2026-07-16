@@ -773,6 +773,13 @@ fn ensure_no_unsupported_canonical_files(
         {
             continue;
         }
+        if relative
+            == Path::new(
+                record_store::mission_plan_review::MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH,
+            )
+        {
+            continue;
+        }
         let in_canonical_dir = record_store::canonical_record_dirs()
             .iter()
             .any(|dir| relative.starts_with(dir));
@@ -1491,8 +1498,12 @@ mod tests {
     };
     use atelier_records::activity::create_mission_plan_review_activity;
     use atelier_records::mission_plan_review::{
-        mission_graph_revision, mission_plan_review_state, MissionPlanFindingSeverity,
-        MissionPlanReviewEvent, MissionPlanReviewFreshness,
+        mission_graph_revision, mission_plan_review_state, LegacyGrandfatherEligibility,
+        MissionPlanFindingSeverity, MissionPlanReviewCutoverManifest, MissionPlanReviewEvent,
+        MissionPlanReviewFreshness, LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+        LEGACY_GRANDFATHER_MIGRATION_ID, LEGACY_GRANDFATHER_STATUS,
+        MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH, MISSION_PLAN_REVIEW_CUTOVER_SCHEMA,
+        MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
     };
     use atelier_records::{CanonicalIssueRecord, RecordStore};
     use chrono::{DateTime, Utc};
@@ -2141,17 +2152,17 @@ mod tests {
         append_plan_event(
             &state_dir,
             1,
-            "planner@example.com",
+            "actor-v1:example.com/planner",
             MissionPlanReviewEvent::Request {
                 graph_revision: revision.clone(),
-                authors: vec!["author@example.com".to_string()],
-                material_editors: vec!["editor@example.com".to_string()],
+                authors: vec!["actor-v1:example.com/author".to_string()],
+                material_editors: vec!["actor-v1:example.com/editor".to_string()],
             },
         );
         append_plan_event(
             &state_dir,
             2,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Finding {
                 graph_revision: revision.clone(),
                 finding_id: "finding-200".to_string(),
@@ -2163,7 +2174,7 @@ mod tests {
         append_plan_event(
             &state_dir,
             3,
-            "author@example.com",
+            "actor-v1:example.com/author",
             MissionPlanReviewEvent::Resolution {
                 graph_revision: revision.clone(),
                 target_id: "finding-200".to_string(),
@@ -2173,7 +2184,7 @@ mod tests {
         append_plan_event(
             &state_dir,
             4,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision,
             },
@@ -2212,7 +2223,7 @@ mod tests {
         append_plan_event(
             &state_dir,
             1,
-            "reviewer@example.com",
+            "actor-v1:example.com/reviewer",
             MissionPlanReviewEvent::Approval {
                 graph_revision: revision,
             },
@@ -2224,5 +2235,75 @@ mod tests {
             "unexpected rebuild error: {error}"
         );
         assert!(!db_path.exists());
+    }
+
+    #[test]
+    fn rebuild_preserves_exactly_once_legacy_cutover_manifest_and_receipt() {
+        let (_directory, state_dir, db_path) = setup();
+        write_plan_issue(
+            &state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships::default(),
+        );
+        let store = RecordStore::new(&state_dir);
+        let mut mission = store.load_issue_by_id("atelier-m200").unwrap();
+        mission.issue.status = LEGACY_GRANDFATHER_STATUS.to_string();
+        store.write_issue_atomic(&mission).unwrap();
+        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
+        let cutover_at = timestamp(20);
+        let manifest = MissionPlanReviewCutoverManifest {
+            schema: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA.to_string(),
+            schema_version: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
+            migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
+            cutover_at,
+            eligible_missions: vec![LegacyGrandfatherEligibility {
+                mission_id: "atelier-m200".to_string(),
+                graph_revision: revision.clone(),
+                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+                receipt_activity_id: atelier_records::activity::timestamp_activity_id(cutover_at),
+            }],
+        };
+        let eligibility = &manifest.eligible_missions[0];
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        create_mission_plan_review_activity(
+            &state_dir,
+            "atelier-m200",
+            LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+            cutover_at,
+            "Versioned mission-review cutover receipt",
+            MissionPlanReviewEvent::LegacyGrandfather {
+                graph_revision: revision,
+                legacy_status: eligibility.legacy_status.clone(),
+                migration_id: manifest.migration_id.clone(),
+                cutover_receipt: manifest.receipt_for(eligibility).unwrap(),
+            },
+            "Receipt is bound to the tracked eligibility manifest.",
+        )
+        .unwrap();
+
+        let before = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(
+            before.freshness,
+            MissionPlanReviewFreshness::FreshGrandfather
+        );
+        run(&state_dir, &db_path).unwrap();
+        let first_cache = snapshot(&Database::open(&db_path).unwrap());
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
+
+        fs::remove_file(&db_path).unwrap();
+        run(&state_dir, &db_path).unwrap();
+        assert_eq!(snapshot(&Database::open(&db_path).unwrap()), first_cache);
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
     }
 }

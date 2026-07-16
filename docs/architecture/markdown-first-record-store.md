@@ -378,13 +378,26 @@ revision it concerns; requests record the complete author/material-editor
 provenance snapshot, attributions chain a new revision to its predecessor,
 findings and change requests carry stable decision IDs and affected issue or
 dependency-path IDs, resolutions target those IDs, and approval identity comes
-from the activity actor. Actor identities are whitespace-free stable IDs;
-non-canonical whitespace variants are rejected rather than treated as distinct
-reviewers. A legacy grandfather is limited to cutover status `in_progress`,
-migration ID `independent-mission-plan-review-v1`, and activity actor
-`atelier-migration`. It is fresh only while the mission still has that exact
-status and graph revision. Lists that represent sets are sorted and unique so
-rendering and rebuild are deterministic. Malformed payloads, missing
+from the activity actor. Actor identities use
+`actor-v1:<authenticated-authority>/<immutable-subject>`. The authority is a
+canonical lowercase DNS-style namespace whose authentication layer owns the
+immutable subject mapping; display names are not actor IDs. Identities must be
+NFC, contain no whitespace, controls, or Unicode
+`Default_Ignorable_Code_Point` characters, and use one canonical spelling, so
+zero-width or decomposed Unicode aliases cannot create false independence.
+
+A legacy grandfather is limited to cutover status `in_progress`, migration ID
+`independent-mission-plan-review-v1`, and activity actor
+`actor-v1:atelier.local/mission-review-migration`. The tracked
+`.atelier/mission-plan-review-cutover.yaml` manifest records the exact cutover
+time and a sorted eligibility entry for each mission, graph revision, status,
+and receipt activity ID. The `legacy_grandfather` event is the exactly-once
+receipt: its timestamp, activity ID, mission, revision, status, migration ID,
+and versioned receipt digest must all match that manifest. Missing, late,
+duplicate, wrong-mission, or forged receipts fail rebuild rather than project
+authority. A valid receipt is fresh only while the mission still has the exact
+eligible status and graph revision. Lists that represent sets are sorted and
+unique so rendering and rebuild are deterministic. Malformed payloads, missing
 provenance, non-independent approval, unresolved blocking decisions at approval
 time, and plan-review events attached to non-mission issues make canonical
 rebuild fail.
