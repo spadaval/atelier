@@ -496,6 +496,11 @@ fn apply_bundle_file(
     let result = (|| {
         copy_state_tree(state_dir, &stage)?;
         let summary = apply_bundle_to_state(&stage, bundle, plan)?;
+        atelier_app::rebuild::validate_canonical_state(&stage).map_err(|error| {
+            anyhow::anyhow!(
+                "Bundle apply rejected the staged canonical state: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
+            )
+        })?;
         install_bundle_stage(&stage, state_dir)?;
         Ok(summary)
     })();

@@ -87,18 +87,26 @@ pub fn validate_mission_plan_execution_state(
     repo_root: &Path,
     issue: &Issue,
 ) -> Result<()> {
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    validate_mission_plan_execution_state_in_state(policy, &state_dir, issue)
+}
+
+pub fn validate_mission_plan_execution_state_in_state(
+    policy: &WorkflowPolicy,
+    state_dir: &Path,
+    issue: &Issue,
+) -> Result<()> {
     if issue.issue_type != "mission"
         || !matches!(issue.status.as_str(), "ready" | "in_progress")
         || !enforces_independent_mission_plan_review(policy)?
     {
         return Ok(());
     }
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let state = mission_plan_review_state(&state_dir, &issue.id)?;
+    let state = mission_plan_review_state(state_dir, &issue.id)?;
     let authorized = match issue.status.as_str() {
         "ready" => state.freshness == MissionPlanReviewFreshness::FreshApproval,
         "in_progress" if state.freshness == MissionPlanReviewFreshness::FreshGrandfather => true,
-        "in_progress" => has_bound_mission_start(&state_dir, &issue.id)?,
+        "in_progress" => has_bound_mission_start(state_dir, &issue.id)?,
         _ => true,
     };
     if !authorized {

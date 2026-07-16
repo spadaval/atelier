@@ -295,7 +295,8 @@ relationships, or evidence links; do not script repeated `issue create`,
 bundle apply` applies create-only v1 bundle resources from a file path after
 the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
-durable relationship buckets, leaves the affected cache facts detectably
+durable relationship buckets, validates the complete staged canonical graph
+before installation, leaves the affected cache facts detectably
 stale after successful record-file writes, and reports recovery detail if an unexpected apply failure
 leaves any created IDs. `atelier issue show <objective-id>` is the rich
 objective detail read: it summarizes evidence, prose planning/checkpoint

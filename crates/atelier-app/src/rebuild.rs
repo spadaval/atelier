@@ -527,9 +527,9 @@ impl<'a> CacheRebuildLoader<'a> {
             .map(|record| record.issue.clone())
             .collect::<Vec<_>>();
         for issue in &self.issues {
-            crate::workflow_policy::validate_mission_plan_execution_state(
+            crate::workflow_policy::validate_mission_plan_execution_state_in_state(
                 &policy,
-                repo_root,
+                self.state_dir,
                 &issue.issue,
             )?;
             if issue.issue.issue_type == "mission"

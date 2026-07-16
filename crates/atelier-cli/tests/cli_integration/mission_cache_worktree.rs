@@ -1,5 +1,42 @@
 use super::*;
 
+fn canonical_tree_snapshot(
+    state_dir: &std::path::Path,
+) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    fn collect(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        snapshot: &mut std::collections::BTreeMap<std::path::PathBuf, Vec<u8>>,
+    ) {
+        let mut entries = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap();
+            if relative.components().count() == 1
+                && matches!(
+                    relative.to_str(),
+                    Some("runtime" | "cache" | "locks" | "diagnostics")
+                )
+            {
+                continue;
+            }
+            if path.is_dir() {
+                collect(root, &path, snapshot);
+            } else {
+                snapshot.insert(relative.to_path_buf(), std::fs::read(path).unwrap());
+            }
+        }
+    }
+
+    let mut snapshot = std::collections::BTreeMap::new();
+    collect(state_dir, state_dir, &mut snapshot);
+    snapshot
+}
+
 fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     let bundle_path = dir.join(format!("mission-fixture-{}.json", title.replace(' ', "-")));
     std::fs::write(
@@ -2620,6 +2657,157 @@ fn test_bundle_rejects_mission_parent_scope() {
         stderr.contains("Mission issue mission.child cannot have parent"),
         "{stderr}"
     );
+}
+
+#[test]
+fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_state() {
+    for status in ["ready", "in_progress"] {
+        let dir = tempdir().unwrap();
+        init_atelier(dir.path());
+        let bundle_path = dir.path().join(format!("executable-mission-{status}.json"));
+        std::fs::write(
+            &bundle_path,
+            format!(
+                r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Executable mission without receipts",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.blocker",
+        "title": "Open bundled blocker",
+        "issue_type": "task",
+        "status": "todo"
+      }},
+      {{
+        "client_ref": "mission.executable",
+        "title": "Unreviewed executable mission",
+        "issue_type": "mission",
+        "status": {status:?},
+        "depends_on": [{{ "client_ref": "issue.blocker" }}]
+      }}
+    ]
+  }}
+}}"#
+            ),
+        )
+        .unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        let canonical_before = canonical_tree_snapshot(&state_dir);
+        let db_before = std::fs::read(&db_path).unwrap();
+
+        let (success, _stdout, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+        );
+
+        assert!(!success, "unreviewed {status} mission must be rejected");
+        assert!(
+            stderr.contains("workflow_mission_plan_review_bypass"),
+            "{stderr}"
+        );
+        assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+        assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
+        assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+    }
+}
+
+#[test]
+fn test_bundle_apply_accepts_non_executable_initial_statuses() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("initial-statuses.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Initial statuses",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "mission.draft",
+        "title": "Draft bundled mission",
+        "issue_type": "mission",
+        "status": "draft"
+      },
+      {
+        "client_ref": "issue.todo",
+        "title": "Todo bundled task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(success, "initial-status bundle should apply: {stderr}");
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "applied initial statuses must rebuild cleanly: {stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Reviewed executable mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check", "--fix"]);
+    assert!(success, "fixture cache refresh failed: {stderr}");
+    let bundle_path = dir.path().join("stale-reviewed-mission.json");
+    std::fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Stale reviewed mission",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.completed-blocker",
+        "title": "Completed graph addition",
+        "issue_type": "task",
+        "status": "done",
+        "blocks": [{{ "id": {mission_id:?} }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let db_path = state_dir.join("runtime/state.db");
+    let canonical_before = canonical_tree_snapshot(&state_dir);
+    let db_before = std::fs::read(&db_path).unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(!success, "stale executable mission review must be rejected");
+    assert!(
+        stderr.contains("workflow_mission_plan_review_bypass"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
+    assert_eq!(std::fs::read(db_path).unwrap(), db_before);
 }
 
 #[test]
