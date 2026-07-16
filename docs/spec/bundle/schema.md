@@ -283,6 +283,13 @@ top of it. A final full-tree fingerprint rejects noncooperative filesystem drift
 instead of overwriting it. Installation backs up both `issues/` and `evidence/`
 as one rollback unit; a failure installing either restores both. Symbolic links,
 special filesystem entries, and non-directory install targets are rejected.
+Once both live directories are installed, backup or staging cleanup is
+post-commit housekeeping: cleanup failure emits a warning naming the retained
+path but does not turn the committed apply into a failure. Backups are retained
+under git-ignored runtime state. Operators must not retry that create-only
+bundle. A retained backup blocks later bundle applies until `atelier check`
+confirms the live tree and the named backup is removed, preventing an unsafe
+retry from creating duplicates.
 
 ## Idempotency And Conflicts
 

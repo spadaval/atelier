@@ -300,8 +300,10 @@ before installation, and holds an exclusive canonical transaction across the
 snapshot and two-directory rollback-capable install so concurrent ordinary
 writers apply afterward instead of being overwritten. It leaves the affected
 cache facts detectably stale after successful record-file writes and reports
-recovery detail if an unexpected apply failure leaves any created IDs. `atelier
-issue show <objective-id>` is the rich
+post-commit cleanup trouble as a committed-success warning with a retained,
+ignored backup path; later applies refuse that recovery artifact until the live
+tree is checked and the backup is removed. `atelier issue show <objective-id>`
+is the rich
 objective detail read: it summarizes evidence, prose planning/checkpoint
 references, and work grouped by ready, blocked, done, and backlog state.
 `atelier issue transition <objective-id>` owns live validator failures,

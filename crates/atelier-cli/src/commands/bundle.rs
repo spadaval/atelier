@@ -493,6 +493,7 @@ fn apply_bundle_file(
     let stage_parent = state_dir
         .parent()
         .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    ensure_no_bundle_backup_artifacts(state_dir)?;
     let stage = create_bundle_stage_dir(stage_parent)?;
     let result = (|| {
         let source_fingerprint =
@@ -511,8 +512,47 @@ fn apply_bundle_file(
         install_bundle_stage(&stage, state_dir)?;
         Ok(summary)
     })();
-    let _ = fs::remove_dir_all(&stage);
+    if let Err(error) = fs::remove_dir_all(&stage) {
+        if result.is_ok() {
+            tracing::warn!(
+                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this create-only bundle; verify with `atelier check`, then remove the leftover staging directory.",
+                stage.display(),
+                error
+            );
+        }
+    }
     result
+}
+
+fn ensure_no_bundle_backup_artifacts(state_dir: &Path) -> Result<()> {
+    let runtime = state_dir.join("runtime");
+    if !runtime.exists() {
+        return Ok(());
+    }
+    let mut backups = fs::read_dir(&runtime)
+        .with_context(|| format!("Failed to read {}", runtime.display()))?
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with(".atelier-bundle-backup-"))
+        })
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    backups.sort();
+    if !backups.is_empty() {
+        bail!(
+            "bundle_recovery_required: leftover committed bundle backup(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records, then remove the named backup before applying a different bundle",
+            backups
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    Ok(())
 }
 
 fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
@@ -759,10 +799,10 @@ fn install_bundle_stage_with(
     state_dir: &Path,
     mut before_install: impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
-    let parent = state_dir
-        .parent()
-        .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
-    let backup = create_bundle_backup_dir(parent)?;
+    let backup_parent = state_dir.join("runtime");
+    fs::create_dir_all(&backup_parent)
+        .with_context(|| format!("Failed to create {}", backup_parent.display()))?;
+    let backup = create_bundle_backup_dir(&backup_parent)?;
     let names = ["issues", "evidence"];
     let result = (|| {
         for name in names {
@@ -818,12 +858,24 @@ fn install_bundle_stage_with(
         Ok(())
     })();
     if result.is_ok() {
-        fs::remove_dir_all(&backup)
-            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+        if let Err(error) = cleanup_bundle_backup(&backup) {
+            tracing::warn!(
+                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this create-only bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
+                backup.display(),
+                error
+            );
+        }
     } else if backup.exists() && fs::read_dir(&backup)?.next().is_none() {
         let _ = fs::remove_dir(&backup);
     }
     result
+}
+
+fn cleanup_bundle_backup(backup: &Path) -> Result<()> {
+    if std::env::var_os("ATELIER_TEST_BUNDLE_BACKUP_CLEANUP_FAILURE").is_some() {
+        bail!("injected bundle backup cleanup failure");
+    }
+    fs::remove_dir_all(backup).with_context(|| format!("Failed to remove {}", backup.display()))
 }
 
 fn create_bundle_backup_dir(parent: &Path) -> Result<PathBuf> {
@@ -1338,7 +1390,7 @@ mod tests {
         assert!(!fs::read_to_string(state.join("issues/sentinel.md"))
             .unwrap()
             .contains("new"));
-        assert!(!fs::read_dir(dir.path())
+        assert!(!fs::read_dir(state.join("runtime"))
             .unwrap()
             .filter_map(|entry| entry.ok())
             .any(|entry| entry
