@@ -16,7 +16,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use crate::activity::{list_issue_activities, ActivityEventType, IssueActivity};
+use crate::activity::{
+    list_issue_activities, validate_activity_timestamp, ActivityEventType, IssueActivity,
+};
 use crate::{CanonicalIssueRecord, RecordStore};
 
 pub const MISSION_GRAPH_REVISION_VERSION: &str = "mission-graph-v2";
@@ -73,6 +75,9 @@ impl MissionPlanReviewCutoverManifest {
         if self.migration_id != LEGACY_GRANDFATHER_MIGRATION_ID {
             bail!("mission-plan cutover migration_id must be '{LEGACY_GRANDFATHER_MIGRATION_ID}'");
         }
+        validate_activity_timestamp(self.cutover_at).context(
+            "mission-plan cutover cutover_at must use canonical activity timestamp precision",
+        )?;
         if self.eligible_missions.is_empty() {
             bail!("mission-plan cutover manifest must contain at least one eligible mission");
         }
@@ -119,6 +124,7 @@ impl MissionPlanReviewCutoverManifest {
     }
 
     pub fn receipt_for(&self, eligibility: &LegacyGrandfatherEligibility) -> Result<String> {
+        self.validate()?;
         let payload = LegacyGrandfatherReceiptPayload {
             version: LEGACY_GRANDFATHER_RECEIPT_VERSION,
             migration_id: &self.migration_id,
@@ -719,6 +725,9 @@ pub fn project_mission_plan_review(
     cutover_manifest: Option<&MissionPlanReviewCutoverManifest>,
 ) -> Result<MissionPlanReviewState> {
     current_graph_revision.validate()?;
+    if let Some(manifest) = cutover_manifest {
+        manifest.validate()?;
+    }
     let mut ordered = activities.iter().collect::<Vec<_>>();
     ordered.sort_by(|left, right| {
         left.created_at
@@ -2235,6 +2244,80 @@ mod tests {
             .push(duplicate_eligibility.eligible_missions[0].clone());
         let error = duplicate_eligibility.validate().unwrap_err().to_string();
         assert!(error.contains("sorted by mission_id with no duplicates"));
+    }
+
+    #[test]
+    fn cutover_manifest_rejects_sub_microsecond_precision_before_receipt_hashing() {
+        let revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "e".repeat(64)
+        ));
+        let cutover_at = DateTime::parse_from_rfc3339("2026-05-28T20:26:41.123456789Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let manifest = cutover_manifest("atelier-m100", revision, cutover_at);
+
+        let error = manifest.validate().unwrap_err();
+        let error = format!("{error:#}");
+        assert!(error.contains("must use microsecond precision"), "{error}");
+        let error = manifest
+            .receipt_for(&manifest.eligible_missions[0])
+            .unwrap_err();
+        let error = format!("{error:#}");
+        assert!(error.contains("must use microsecond precision"), "{error}");
+    }
+
+    #[test]
+    fn rejects_grandfather_receipt_with_wrong_revision_or_legacy_status() {
+        let eligible_revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "e".repeat(64)
+        ));
+        let wrong_revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "d".repeat(64)
+        ));
+        let manifest = cutover_manifest("atelier-m100", eligible_revision.clone(), at(1));
+        let eligibility = &manifest.eligible_missions[0];
+        let receipt = IssueActivity {
+            id: eligibility.receipt_activity_id.clone(),
+            subject_kind: "issue".to_string(),
+            subject_id: "atelier-m100".to_string(),
+            event_type: ActivityEventType::MissionPlanReview,
+            actor: LEGACY_GRANDFATHER_MIGRATION_ACTOR.to_string(),
+            created_at: manifest.cutover_at,
+            summary: "cutover receipt".to_string(),
+            pr_attribution: None,
+            mission_plan_review: None,
+            body: String::new(),
+        };
+        let cutover_receipt = manifest.receipt_for(eligibility).unwrap();
+
+        let error = validate_legacy_grandfather_receipt(
+            &manifest,
+            eligibility,
+            &receipt,
+            &wrong_revision,
+            LEGACY_GRANDFATHER_STATUS,
+            LEGACY_GRANDFATHER_MIGRATION_ID,
+            &cutover_receipt,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("names graph revision"), "{error}");
+
+        let error = validate_legacy_grandfather_receipt(
+            &manifest,
+            eligibility,
+            &receipt,
+            &eligible_revision,
+            "draft",
+            LEGACY_GRANDFATHER_MIGRATION_ID,
+            &cutover_receipt,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("names legacy status 'draft'"), "{error}");
     }
 
     #[test]

@@ -208,6 +208,26 @@ pub fn timestamp_activity_id(created_at: DateTime<Utc>) -> String {
     )
 }
 
+/// Require the precision that canonical activity Markdown can preserve.
+///
+/// Activity timestamps render with exactly six fractional digits. Rejecting
+/// finer precision avoids silently changing timestamps, IDs, or receipt hashes
+/// when records are rendered and loaded again.
+pub fn validate_activity_timestamp(created_at: DateTime<Utc>) -> Result<()> {
+    if !created_at.nanosecond().is_multiple_of(1_000) {
+        bail!(
+            "activity created_at must use microsecond precision; sub-microsecond timestamps cannot round-trip through canonical activity records"
+        );
+    }
+    Ok(())
+}
+
+fn canonical_activity_timestamp(created_at: DateTime<Utc>) -> DateTime<Utc> {
+    created_at
+        .with_nanosecond((created_at.nanosecond() / 1_000) * 1_000)
+        .expect("truncated nanoseconds remain in the valid timestamp range")
+}
+
 pub fn allocate_activity_id(
     state_dir: &Path,
     subject_kind: &str,
@@ -237,6 +257,7 @@ pub fn write_issue_activity(state_dir: &Path, activity: &IssueActivity) -> Resul
 }
 
 pub fn write_record_activity(state_dir: &Path, activity: &IssueActivity) -> Result<PathBuf> {
+    let rendered = activity.to_markdown()?;
     let relative = record_activity_path(&activity.subject_kind, &activity.subject_id, &activity.id);
     let path = state_dir.join(&relative);
     let parent = path.parent().ok_or_else(|| {
@@ -251,7 +272,7 @@ pub fn write_record_activity(state_dir: &Path, activity: &IssueActivity) -> Resu
         .create_new(true)
         .open(&path)
         .with_context(|| format!("Refusing to overwrite {}", display_state_path(&relative)))?;
-    file.write_all(activity.to_markdown()?.as_bytes())
+    file.write_all(rendered.as_bytes())
         .with_context(|| format!("Failed to write {}", display_state_path(&relative)))?;
     Ok(relative)
 }
@@ -304,6 +325,7 @@ pub fn create_mission_plan_review_activity(
     event: MissionPlanReviewEvent,
     body: &str,
 ) -> Result<IssueActivity> {
+    let created_at = canonical_activity_timestamp(created_at);
     let id = allocate_activity_id(state_dir, "issue", mission_id, created_at)?;
     let activity = IssueActivity {
         id,
@@ -356,6 +378,7 @@ pub fn create_record_activity_with_metadata(
     pr_attribution: Option<ActivityPrAttribution>,
     body: &str,
 ) -> Result<IssueActivity> {
+    let created_at = canonical_activity_timestamp(created_at);
     let id = allocate_activity_id(state_dir, subject_kind, subject_id, created_at)?;
     let activity = IssueActivity {
         id,
@@ -419,6 +442,12 @@ impl IssueActivity {
             )
         })?;
         validate_plan_review_metadata(event_type, front.mission_plan_review.as_ref(), relative)?;
+        validate_activity_timestamp(front.created_at).with_context(|| {
+            format!(
+                "Invalid activity timestamp in {}",
+                display_state_path(relative)
+            )
+        })?;
 
         Ok(Self {
             id: front.id,
@@ -447,6 +476,7 @@ impl IssueActivity {
     }
 
     pub fn to_markdown(&self) -> Result<String> {
+        validate_activity_timestamp(self.created_at)?;
         let mut output = String::new();
         output.push_str("---\n");
         write_yaml_scalar(&mut output, "schema", ACTIVITY_SCHEMA)?;
@@ -613,6 +643,58 @@ mod tests {
     #[test]
     fn timestamp_activity_id_uses_utc_microseconds() {
         assert_eq!(timestamp_activity_id(at()), "20260610T181920123456Z");
+    }
+
+    #[test]
+    fn rejects_sub_microsecond_timestamps_before_emission_or_load() {
+        let sub_microsecond = DateTime::parse_from_rfc3339("2026-06-10T18:19:20.123456789Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut invalid = activity();
+        invalid.created_at = sub_microsecond;
+
+        let directory = tempdir().unwrap();
+        let error = write_issue_activity(directory.path(), &invalid)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("must use microsecond precision"), "{error}");
+        assert!(!directory
+            .path()
+            .join(issue_activity_path(&invalid.subject_id, &invalid.id))
+            .exists());
+
+        let created = create_issue_activity(
+            directory.path(),
+            "atelier-qxvj",
+            ActivityEventType::Note,
+            "agent@example.com",
+            sub_microsecond,
+            "Canonicalized producer timestamp",
+            "Round-trippable body",
+        )
+        .unwrap();
+        assert_eq!(created.created_at.nanosecond(), 123_456_000);
+        assert_eq!(created.id, "20260610T181920123456Z");
+        assert_eq!(
+            IssueActivity::load(
+                directory.path(),
+                &issue_activity_path(&created.subject_id, &created.id)
+            )
+            .unwrap(),
+            created
+        );
+
+        let rendered = activity().to_markdown().unwrap().replace(
+            "2026-06-10T18:19:20.123456Z",
+            "2026-06-10T18:19:20.123456789Z",
+        );
+        let error = IssueActivity::from_markdown(
+            &rendered,
+            &issue_activity_path(&invalid.subject_id, &invalid.id),
+        )
+        .unwrap_err();
+        let error = format!("{error:#}");
+        assert!(error.contains("must use microsecond precision"), "{error}");
     }
 
     #[test]

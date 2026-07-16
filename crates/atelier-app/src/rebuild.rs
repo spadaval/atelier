@@ -2117,6 +2117,62 @@ mod tests {
         .unwrap();
     }
 
+    fn write_legacy_cutover_fixture(
+        state_dir: &Path,
+    ) -> (MissionPlanReviewCutoverManifest, PathBuf) {
+        write_plan_issue(
+            state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships::default(),
+        );
+        let store = RecordStore::new(state_dir);
+        let mut mission = store.load_issue_by_id("atelier-m200").unwrap();
+        mission.issue.status = LEGACY_GRANDFATHER_STATUS.to_string();
+        store.write_issue_atomic(&mission).unwrap();
+        let revision = mission_graph_revision(state_dir, "atelier-m200").unwrap();
+        let cutover_at = timestamp(20);
+        let manifest = MissionPlanReviewCutoverManifest {
+            schema: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA.to_string(),
+            schema_version: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
+            migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
+            cutover_at,
+            eligible_missions: vec![LegacyGrandfatherEligibility {
+                mission_id: "atelier-m200".to_string(),
+                graph_revision: revision.clone(),
+                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+                receipt_activity_id: atelier_records::activity::timestamp_activity_id(cutover_at),
+            }],
+        };
+        let eligibility = &manifest.eligible_missions[0];
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        let activity = create_mission_plan_review_activity(
+            state_dir,
+            "atelier-m200",
+            LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+            cutover_at,
+            "Versioned mission-review cutover receipt",
+            MissionPlanReviewEvent::LegacyGrandfather {
+                graph_revision: revision,
+                legacy_status: eligibility.legacy_status.clone(),
+                migration_id: manifest.migration_id.clone(),
+                cutover_receipt: manifest.receipt_for(eligibility).unwrap(),
+            },
+            "Receipt is bound to the tracked eligibility manifest.",
+        )
+        .unwrap();
+        let activity_path = state_dir.join(atelier_records::activity::record_activity_path(
+            "issue",
+            "atelier-m200",
+            &activity.id,
+        ));
+        (manifest, activity_path)
+    }
+
     #[test]
     fn rebuild_preserves_complete_mission_plan_review_projection_deterministically() {
         let (_directory, state_dir, db_path) = setup();
@@ -2240,51 +2296,7 @@ mod tests {
     #[test]
     fn rebuild_preserves_exactly_once_legacy_cutover_manifest_and_receipt() {
         let (_directory, state_dir, db_path) = setup();
-        write_plan_issue(
-            &state_dir,
-            "atelier-m200",
-            "mission",
-            Relationships::default(),
-        );
-        let store = RecordStore::new(&state_dir);
-        let mut mission = store.load_issue_by_id("atelier-m200").unwrap();
-        mission.issue.status = LEGACY_GRANDFATHER_STATUS.to_string();
-        store.write_issue_atomic(&mission).unwrap();
-        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
-        let cutover_at = timestamp(20);
-        let manifest = MissionPlanReviewCutoverManifest {
-            schema: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA.to_string(),
-            schema_version: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
-            migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
-            cutover_at,
-            eligible_missions: vec![LegacyGrandfatherEligibility {
-                mission_id: "atelier-m200".to_string(),
-                graph_revision: revision.clone(),
-                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
-                receipt_activity_id: atelier_records::activity::timestamp_activity_id(cutover_at),
-            }],
-        };
-        let eligibility = &manifest.eligible_missions[0];
-        std::fs::write(
-            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
-            serde_yaml::to_string(&manifest).unwrap(),
-        )
-        .unwrap();
-        create_mission_plan_review_activity(
-            &state_dir,
-            "atelier-m200",
-            LEGACY_GRANDFATHER_MIGRATION_ACTOR,
-            cutover_at,
-            "Versioned mission-review cutover receipt",
-            MissionPlanReviewEvent::LegacyGrandfather {
-                graph_revision: revision,
-                legacy_status: eligibility.legacy_status.clone(),
-                migration_id: manifest.migration_id.clone(),
-                cutover_receipt: manifest.receipt_for(eligibility).unwrap(),
-            },
-            "Receipt is bound to the tracked eligibility manifest.",
-        )
-        .unwrap();
+        let (_manifest, _activity_path) = write_legacy_cutover_fixture(&state_dir);
 
         let before = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
         assert_eq!(
@@ -2305,5 +2317,62 @@ mod tests {
             mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
             before
         );
+    }
+
+    #[test]
+    fn rebuild_rejects_noncanonical_cutover_and_malformed_receipt_bindings() {
+        let (_directory, state_dir, db_path) = setup();
+        let (mut manifest, _activity_path) = write_legacy_cutover_fixture(&state_dir);
+        manifest.cutover_at = DateTime::parse_from_rfc3339("2026-05-28T20:26:41.123456789Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(error.contains("must use microsecond precision"), "{error}");
+            assert!(!db_path.exists());
+        }
+
+        let (_directory, state_dir, db_path) = setup();
+        let (manifest, activity_path) = write_legacy_cutover_fixture(&state_dir);
+        let eligible_revision = manifest.eligible_missions[0].graph_revision.0.clone();
+        let wrong_revision = format!("mission-graph-v2:sha256:{}", "d".repeat(64));
+        let activity = std::fs::read_to_string(&activity_path).unwrap();
+        assert!(activity.contains(&eligible_revision));
+        std::fs::write(
+            &activity_path,
+            activity.replace(&eligible_revision, &wrong_revision),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(error.contains("names graph revision"), "{error}");
+            assert!(!db_path.exists());
+        }
+
+        let (_directory, state_dir, db_path) = setup();
+        let (_manifest, activity_path) = write_legacy_cutover_fixture(&state_dir);
+        let activity = std::fs::read_to_string(&activity_path).unwrap();
+        assert!(activity.contains("legacy_status: in_progress"));
+        std::fs::write(
+            &activity_path,
+            activity.replace("legacy_status: in_progress", "legacy_status: draft"),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(
+                error.contains("legacy_status must be 'in_progress'"),
+                "{error}"
+            );
+            assert!(!db_path.exists());
+        }
     }
 }

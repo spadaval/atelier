@@ -395,8 +395,15 @@ and receipt activity ID. The `legacy_grandfather` event is the exactly-once
 receipt: its timestamp, activity ID, mission, revision, status, migration ID,
 and versioned receipt digest must all match that manifest. Missing, late,
 duplicate, wrong-mission, or forged receipts fail rebuild rather than project
-authority. A valid receipt is fresh only while the mission still has the exact
-eligible status and graph revision. Lists that represent sets are sorted and
+authority. Cutover and activity timestamp values use canonical UTC RFC3339
+precision no finer than microseconds; canonical activity rendering always uses
+six fractional digits. Activity producers truncate their timestamps to that
+precision before ID allocation, while cutover manifests reject finer precision
+before receipt hashing and already-constructed noncanonical records are rejected
+before emission or load. Thus the manifest, digest, rendered activity, and
+rebuild comparison cannot disagree. A valid receipt is
+fresh only while the mission still has the exact eligible status and graph
+revision. Lists that represent sets are sorted and
 unique so rendering and rebuild are deterministic. Malformed payloads, missing
 provenance, non-independent approval, unresolved blocking decisions at approval
 time, and plan-review events attached to non-mission issues make canonical
