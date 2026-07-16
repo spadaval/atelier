@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "agent-factory"
 - "mission-review"
+review:
+  kind: pull_request
+  number: 74
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-p4z2
