@@ -4,6 +4,19 @@ id: "atelier-ikuv"
 issue_type: "epic"
 labels:
 - "superseded-planning"
+review:
+  kind: pull_request
+  number: 72
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-ikuv
+    owner_kind: epic
+    review_target: master
+    work_branch: epic/atelier-ikuv
 priority: "P1"
 relationships:
   blocks: []
@@ -12,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Superseded umbrella: Command surface consolidation and removal"
-updated_at: "2026-06-20T16:50:30.672691136+00:00"
+updated_at: "2026-07-16T18:34:09.077053525+00:00"
 ---
 
 ## Description
