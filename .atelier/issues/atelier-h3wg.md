@@ -32,9 +32,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Add independent mission review to Agent Factory"
-updated_at: "2026-07-16T23:47:32.217970775+00:00"
+updated_at: "2026-07-16T23:55:43.115720511+00:00"
 ---
 
 ## Description
