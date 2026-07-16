@@ -1892,7 +1892,11 @@ Lint rejects malformed canonical state.
         .as_micros() as i64;
     let mut hasher = Sha256::new();
     hasher.update(invalid_markdown.as_bytes());
-    let invalid_hash = format!("{:x}", hasher.finalize());
+    let invalid_hash = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE record_source_index

@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -377,8 +378,30 @@ fn source_entry(root: &Path, path: &Path) -> Result<SourceEntry> {
         id: stat.id,
         size_bytes: stat.size_bytes,
         modified_micros: stat.modified_micros,
-        sha256: format!("{:x}", hasher.finalize()),
+        sha256: lower_hex(&hasher.finalize()),
     })
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
+}
+
+#[cfg(test)]
+mod hash_tests {
+    use super::*;
+
+    #[test]
+    fn sha256_hex_encoding_matches_known_vector() {
+        let digest = Sha256::digest(b"abc");
+        assert_eq!(
+            lower_hex(&digest),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 }
 
 fn source_stat(root: &Path, path: &Path) -> Result<SourceStat> {

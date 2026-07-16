@@ -24,11 +24,11 @@ dotenvy = "0.15"
 fs2 = "0.4"
 icu_normalizer = "2.1"
 icu_properties = "2.1"
-rusqlite = { version = "0.38", features = ["bundled"] }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
-sha2 = "0.10"
+sha2 = "0.11.0"
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

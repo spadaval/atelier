@@ -5,6 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -407,8 +408,16 @@ fn stable_workspace_id(root: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(b"atelier.command_diagnostics.workspace.v1\0");
     hasher.update(canonical.to_string_lossy().as_bytes());
-    let digest = format!("{:x}", hasher.finalize());
+    let digest = lower_hex(&hasher.finalize());
     Ok(digest[..16].to_string())
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 fn event_id(started_at: DateTime<Utc>) -> String {
