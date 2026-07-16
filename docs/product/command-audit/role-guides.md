@@ -113,6 +113,7 @@ Core loop:
 
 ```text
 atelier work ready
+atelier work missions
 atelier work mission <mission-id>
 atelier issue show <id>
 atelier bundle preview <file>
@@ -123,6 +124,11 @@ atelier issue link <blocked-id> <blocker-id>
 atelier issue show <objective-id>
 atelier status
 ```
+
+The plural `work missions` command is the bounded, cross-mission Mission
+Overview: it keeps linked epics collapsed and accounts for direct and outside
+work. The singular `work mission <mission-id>` command is the scoped drill-down
+when the manager needs leaf work or one mission's operational detail.
 
 Manager guidance should make `bundle preview <file>` and
 `bundle apply <file> --yes` the expected path for bulk record creation, such as a

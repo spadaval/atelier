@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-07T06:15:06.274296382+00:00"
+status: "done"
 title: "Align Mission Overview guidance and regression coverage"
-updated_at: "2026-07-06T17:20:25.693972086+00:00"
+updated_at: "2026-07-07T06:15:06.274296382+00:00"
 ---
 
 ## Description
@@ -31,4 +32,8 @@ Align `work missions` help, root examples, role guidance, product docs, and focu
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Help and role-guidance parity: `cargo test -p atelier-cli --test cli_integration setup_guidance::test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped_views -- --exact`.
+- Delivered CLI behavior, including done inclusion, collapsed work, exceptional accounting, quiet output, colorless output, and drill-downs: focused `mission_cache_worktree::test_work_missions_*` integration tests.
+- Projection ordering, limits, membership, cycle safety, and hidden-done accounting: `cargo nextest run -p atelier-app -E 'test(mission_overview)'`.
+- Recorded CLI behavior evidence: `atelier evidence show atelier-r8uf`.
+- Recorded help and role-guidance parity evidence: `atelier evidence show atelier-phev`.

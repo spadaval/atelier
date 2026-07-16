@@ -6,6 +6,15 @@ labels:
 - "bundle"
 - "cli"
 - "safety"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-tcai
+    owner_kind: issue
+    review_target: master
+    work_branch: bug/atelier-tcai
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-16T18:30:27.719305404+00:00"
+status: "done"
 title: "Make bundle preview and apply share a normalized graph plan"
-updated_at: "2026-07-06T17:26:56.041037321+00:00"
+updated_at: "2026-07-16T18:30:27.719305404+00:00"
 ---
 
 ## Description

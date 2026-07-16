@@ -1,26 +1,40 @@
 ---
-created_at: '2026-06-19T19:38:36.424983456+00:00'
-id: atelier-24xn
-issue_type: mission
+created_at: "2026-06-19T19:38:36.424983456+00:00"
+id: "atelier-24xn"
+issue_type: "mission"
 labels:
-- mission
-priority: P2
+- "mission"
+review:
+  kind: pull_request
+  number: 61
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-24xn
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-24xn
+priority: "P2"
 relationships:
   blocks: []
   children: []
   attachments: []
   relates:
-  - kind: issue
-    id: atelier-t3h3
-    type: advances
-  - kind: issue
-    id: atelier-txf6
-    type: advances
-schema: atelier.issue
+  - kind: "issue"
+    id: "atelier-t3h3"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-txf6"
+    type: "advances"
+schema: "atelier.issue"
 schema_version: 1
-status: ready
-title: Prune stale Atelier artifacts and branches
-updated_at: '2026-06-19T19:39:08.969007540+00:00'
+closed_at: "2026-07-09T16:48:09.856721859+00:00"
+status: "publish_review"
+title: "Prune stale Atelier artifacts and branches"
+updated_at: "2026-07-09T16:48:09.856721859+00:00"
 ---
 
 ## Description

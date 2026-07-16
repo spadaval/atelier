@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "cli"
 - "inventory"
+review:
+  kind: pull_request
+  number: 60
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-c0mp
+    integration_target: mission/atelier-c0mp
+    merge_strategy: squash
+    owner_issue_id: atelier-nzu9
+    owner_kind: epic
+    review_target: mission/atelier-c0mp
+    work_branch: epic/atelier-nzu9
 priority: "P1"
 relationships:
   blocks:
@@ -19,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:31:42.961843317+00:00"
+status: "done"
 title: "Epic: Rework issue list as simple inventory"
-updated_at: "2026-07-06T17:20:25.927887135+00:00"
+updated_at: "2026-07-09T16:31:42.961843317+00:00"
 ---
 
 ## Description
@@ -35,4 +49,5 @@ Replace the current grouped queue-style implementation behind `atelier issue lis
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Independent epic scenario classification and CLI transcript summary: evidence `atelier-8k4e`.
+- Focused active integration test for flat inventory, filters, quiet/limit behavior, and removed operational flags: evidence `atelier-mqtk`.

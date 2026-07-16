@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "implementation"
 - "prune"
+review:
+  kind: pull_request
+  number: 63
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-t3h3
+    owner_kind: epic
+    review_target: master
+    work_branch: epic/atelier-t3h3
 priority: "P1"
 relationships:
   blocks: []
@@ -23,9 +36,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:44:14.602201156+00:00"
+status: "done"
 title: "Epic: Prune command implementation"
-updated_at: "2026-06-19T19:39:57.006493999+00:00"
+updated_at: "2026-07-09T16:44:14.602201156+00:00"
 ---
 
 ## Description

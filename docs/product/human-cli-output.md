@@ -244,6 +244,13 @@ work missions` is an epic-first cross-mission overview. Their membership,
 ordering, budgets, and representative shapes are defined in [Issue Inventory
 And Mission Overview](issue-inventory-and-mission-overview.md).
 
+Operator headings and help call the plural `atelier work missions` surface the
+**Mission Overview**. It hides done missions by default, retains collapsed epic
+and exceptional-work facts, and uses `--all` only to include done missions. Use
+`atelier work mission <mission-id>` or `atelier work epic <epic-id>` for scoped
+detail; do not expand leaf rows in the cross-mission default or route hierarchy
+through `atelier issue list` or the legacy broad queue.
+
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
 
