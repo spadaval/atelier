@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "mission-review"
 - "workflow"
+review:
+  kind: pull_request
+  number: 73
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-p4z2
+    integration_target: mission/atelier-p4z2
+    merge_strategy: squash
+    owner_issue_id: atelier-p2wk
+    owner_kind: epic
+    review_target: mission/atelier-p4z2
+    work_branch: epic/atelier-p2wk
 priority: "P1"
 relationships:
   blocks:
@@ -25,9 +38,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-16T23:44:59.726948921+00:00"
+status: "done"
 title: "Epic: Enforce reviewed and dependency-safe mission readiness"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-16T23:44:59.726948921+00:00"
 ---
 
 ## Description

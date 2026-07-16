@@ -122,6 +122,21 @@ than being treated as ready. Re-running migration produces the same canonical
 state, and rebuilding the domain cache preserves provenance, freshness, and the
 grandfather boundary.
 
+Grandfather eligibility is fixed by a tracked, versioned cutover manifest, not
+inferred from a later activity event. The manifest binds every eligible active
+mission to its exact cutover timestamp, status, graph revision, and one expected
+receipt activity. A `legacy_grandfather` event projects authority only as that
+exactly-once receipt; hand-authored, late, duplicate, wrong-mission, or forged
+events fail canonical rebuild. This receipt boundary lets rebuild preserve the
+cutover decision without allowing a post-cutover event to manufacture legacy
+eligibility. Cutover and activity timestamp values use canonical UTC RFC3339
+precision no finer than microseconds; canonical activity rendering uses six
+fractional digits. Activity producers truncate before ID allocation; cutover
+manifests instead reject finer precision before receipt hashing, and canonical
+record emission/loading rejects already-constructed noncanonical timestamps.
+This keeps the manifest, digest, rendered record, and rebuilt projection
+identical.
+
 ### Boundary from other judgments
 
 | Judgment | Owner and artifact | Effect |

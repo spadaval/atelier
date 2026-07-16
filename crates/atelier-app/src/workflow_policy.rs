@@ -3,6 +3,10 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use atelier_core::Issue;
+use atelier_records::activity::list_issue_activities;
+use atelier_records::mission_plan_review::{
+    mission_plan_review_state, MissionPlanReviewEvent, MissionPlanReviewFreshness,
+};
 use atelier_sqlite::Database;
 use serde_json::Value;
 
@@ -32,11 +36,116 @@ pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
     for issue in &issues {
         validate_issue_against_policy(&policy, issue, &policy_path)?;
         validate_issue_hierarchy(db, issue, issue.parent_id.as_deref())?;
+        validate_mission_plan_execution_state(&policy, repo_root, issue)?;
+        validate_mission_execution_dependencies(db, &policy, issue)?;
     }
     Ok(WorkflowCheckReport {
         issue_count: issues.len(),
         policy,
     })
+}
+
+pub fn validate_mission_execution_dependencies(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue: &Issue,
+) -> Result<()> {
+    if issue.issue_type != "mission"
+        || !matches!(issue.status.as_str(), "ready" | "in_progress")
+        || !enforces_independent_mission_plan_review(policy)?
+    {
+        return Ok(());
+    }
+    let closure = crate::objective_graph::dependency_closure(db, policy, &issue.id)?;
+    if let Some(reason) = closure.failure_reason() {
+        return Err(anyhow!(
+            "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
+            issue.id,
+            issue.status
+        ));
+    }
+    Ok(())
+}
+
+pub fn enforces_independent_mission_plan_review(policy: &WorkflowPolicy) -> Result<bool> {
+    let workflow = policy.workflow_for_issue_type("mission")?;
+    Ok(["ready", "start"].into_iter().all(|transition_name| {
+        workflow
+            .transitions
+            .get(transition_name)
+            .is_some_and(|transition| {
+                transition
+                    .validators
+                    .iter()
+                    .any(|validator| validator.builtin == "plan_review.current_approval")
+            })
+    }))
+}
+
+pub fn validate_mission_plan_execution_state(
+    policy: &WorkflowPolicy,
+    repo_root: &Path,
+    issue: &Issue,
+) -> Result<()> {
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    validate_mission_plan_execution_state_in_state(policy, &state_dir, issue)
+}
+
+pub fn validate_mission_plan_execution_state_in_state(
+    policy: &WorkflowPolicy,
+    state_dir: &Path,
+    issue: &Issue,
+) -> Result<()> {
+    if issue.issue_type != "mission"
+        || !matches!(issue.status.as_str(), "ready" | "in_progress")
+        || !enforces_independent_mission_plan_review(policy)?
+    {
+        return Ok(());
+    }
+    let state = mission_plan_review_state(state_dir, &issue.id)?;
+    let authorized = match issue.status.as_str() {
+        "ready" => state.freshness == MissionPlanReviewFreshness::FreshApproval,
+        "in_progress" if state.freshness == MissionPlanReviewFreshness::FreshGrandfather => true,
+        "in_progress" => has_bound_mission_start(state_dir, &issue.id)?,
+        _ => true,
+    };
+    if !authorized {
+        return Err(anyhow!(
+            "workflow_mission_plan_review_bypass: mission {} has executable status '{}' without current independent approval for graph revision {} (review state: {:?}); restore plan_review and use configured transitions",
+            issue.id,
+            issue.status,
+            state.current_graph_revision,
+            state.freshness
+        ));
+    }
+    Ok(())
+}
+
+fn has_bound_mission_start(state_dir: &Path, mission_id: &str) -> Result<bool> {
+    let activities = list_issue_activities(state_dir, mission_id)?;
+    for receipt in &activities {
+        let Some(transition) = receipt.workflow_transition.as_ref() else {
+            continue;
+        };
+        let Some(start) = transition.mission_plan_start.as_ref() else {
+            continue;
+        };
+        let Some(approval) = activities.iter().find(|activity| {
+            activity.id == start.approval_activity_id
+                && activity.created_at <= receipt.created_at
+                && matches!(
+                    activity.mission_plan_review.as_ref(),
+                    Some(MissionPlanReviewEvent::Approval { graph_revision })
+                        if graph_revision == &start.graph_revision
+                )
+        }) else {
+            continue;
+        };
+        if approval.subject_id == mission_id {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 pub fn validate_issue_hierarchy(

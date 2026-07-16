@@ -29,6 +29,7 @@ pub fn apply(
     if !yes {
         bail!("bundle apply requires --yes");
     }
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
     let bundle = load_bundle(input)?;
     validate_bundle(db, &bundle)?;
     let plan = BundleGraphPlan::from_bundle(db, &bundle)?;
@@ -492,15 +493,97 @@ fn apply_bundle_file(
     let stage_parent = state_dir
         .parent()
         .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    ensure_no_bundle_recovery_artifacts(state_dir)?;
     let stage = create_bundle_stage_dir(stage_parent)?;
     let result = (|| {
+        let source_fingerprint =
+            crate::commands::bulk_canonical::canonical_tree_fingerprint(state_dir)?;
         copy_state_tree(state_dir, &stage)?;
+        fs::create_dir_all(stage.join("issues"))?;
+        fs::create_dir_all(stage.join("evidence"))?;
+        crate::commands::bulk_canonical::test_pause_after_snapshot()?;
         let summary = apply_bundle_to_state(&stage, bundle, plan)?;
+        atelier_app::rebuild::validate_canonical_state(&stage).map_err(|error| {
+            anyhow::anyhow!(
+                "Bundle apply rejected the staged canonical state: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
+            )
+        })?;
+        crate::commands::bulk_canonical::ensure_unchanged(state_dir, &source_fingerprint)?;
         install_bundle_stage(&stage, state_dir)?;
         Ok(summary)
     })();
-    let _ = fs::remove_dir_all(&stage);
+    if let Err(error) = cleanup_bundle_stage(&stage) {
+        if result.is_ok() {
+            tracing::warn!(
+                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this create-only bundle; verify with `atelier check`, then remove the leftover staging directory.",
+                stage.display(),
+                error
+            );
+        }
+    }
     result
+}
+
+fn cleanup_bundle_stage(stage: &Path) -> Result<()> {
+    if std::env::var_os("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE").is_some() {
+        bail!("injected bundle stage cleanup failure");
+    }
+    fs::remove_dir_all(stage).with_context(|| format!("Failed to remove {}", stage.display()))
+}
+
+fn ensure_no_bundle_recovery_artifacts(state_dir: &Path) -> Result<()> {
+    let repo_root = state_dir
+        .parent()
+        .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    let runtime = state_dir.join("runtime");
+    let mut artifacts = Vec::new();
+    collect_bundle_recovery_artifacts(repo_root, ".atelier-bundle-stage-", &mut artifacts)?;
+    if runtime.exists() {
+        collect_bundle_recovery_artifacts(&runtime, ".atelier-bundle-backup-", &mut artifacts)?;
+    }
+    artifacts.sort();
+    if !artifacts.is_empty() {
+        bail!(
+            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            artifacts
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn collect_bundle_recovery_artifacts(
+    parent: &Path,
+    prefix: &str,
+    artifacts: &mut Vec<PathBuf>,
+) -> Result<()> {
+    let entries = fs::read_dir(parent)
+        .with_context(|| format!("Failed to read {}", parent.display()))?
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter();
+    for entry in entries {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if !name.starts_with(prefix) {
+            continue;
+        }
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to inspect {}", path.display()))?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            bail!(
+                "bundle_recovery_artifact_unsafe: {} matches a bundle recovery name but is not a real directory. Next: inspect the path without following links and resolve it manually before running bundle apply",
+                path.display()
+            );
+        }
+        artifacts.push(path);
+    }
+    Ok(())
 }
 
 fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
@@ -674,9 +757,17 @@ fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
         }
         let source_path = entry.path();
         let dest_path = dest.join(&name);
-        if source_path.is_dir() {
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to inspect {}", source_path.display()))?;
+        if file_type.is_symlink() {
+            bail!(
+                "Canonical bulk mutation refuses symbolic link {}",
+                source_path.display()
+            );
+        } else if file_type.is_dir() {
             copy_dir_recursive(&source_path, &dest_path)?;
-        } else {
+        } else if file_type.is_file() {
             fs::copy(&source_path, &dest_path).with_context(|| {
                 format!(
                     "Failed to copy {} to {}",
@@ -684,6 +775,11 @@ fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
                     dest_path.display()
                 )
             })?;
+        } else {
+            bail!(
+                "Canonical bulk mutation refuses special filesystem entry {}",
+                source_path.display()
+            );
         }
     }
     Ok(())
@@ -697,9 +793,17 @@ fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
         let entry = entry?;
         let source_path = entry.path();
         let dest_path = dest.join(entry.file_name());
-        if source_path.is_dir() {
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to inspect {}", source_path.display()))?;
+        if file_type.is_symlink() {
+            bail!(
+                "Canonical bulk mutation refuses symbolic link {}",
+                source_path.display()
+            );
+        } else if file_type.is_dir() {
             copy_dir_recursive(&source_path, &dest_path)?;
-        } else {
+        } else if file_type.is_file() {
             fs::copy(&source_path, &dest_path).with_context(|| {
                 format!(
                     "Failed to copy {} to {}",
@@ -707,40 +811,148 @@ fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
                     dest_path.display()
                 )
             })?;
+        } else {
+            bail!(
+                "Canonical bulk mutation refuses special filesystem entry {}",
+                source_path.display()
+            );
         }
     }
     Ok(())
 }
 
 fn install_bundle_stage(stage: &Path, state_dir: &Path) -> Result<()> {
-    for name in ["issues", "evidence"] {
-        replace_dir_from_stage(&stage.join(name), &state_dir.join(name))?;
-    }
-    Ok(())
+    install_bundle_stage_with(stage, state_dir, |_| Ok(()))
 }
 
-fn replace_dir_from_stage(staged: &Path, dest: &Path) -> Result<()> {
-    let backup = dest.with_extension("bundle-backup");
-    if backup.exists() {
-        fs::remove_dir_all(&backup)
-            .with_context(|| format!("Failed to remove {}", backup.display()))?;
-    }
-    if dest.exists() {
-        fs::rename(dest, &backup).with_context(|| {
-            format!("Failed to move {} to {}", dest.display(), backup.display())
-        })?;
-    }
-    let result = fs::rename(staged, dest)
-        .with_context(|| format!("Failed to install staged {}", dest.display()));
-    if let Err(err) = result {
-        if backup.exists() && !dest.exists() {
-            let _ = fs::rename(&backup, dest);
+fn install_bundle_stage_with(
+    stage: &Path,
+    state_dir: &Path,
+    mut before_install: impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let backup_parent = state_dir.join("runtime");
+    fs::create_dir_all(&backup_parent)
+        .with_context(|| format!("Failed to create {}", backup_parent.display()))?;
+    let backup = create_bundle_backup_dir(&backup_parent)?;
+    let names = ["issues", "evidence"];
+    let result = (|| {
+        for name in names {
+            crate::commands::bulk_canonical::validate_directory_path(&stage.join(name), true)?;
+            crate::commands::bulk_canonical::validate_directory_path(&state_dir.join(name), false)?;
         }
-        return Err(err);
+
+        let mut prepared = Vec::new();
+        for name in names {
+            let destination = state_dir.join(name);
+            if destination.exists() {
+                if let Err(error) = fs::rename(&destination, backup.join(name)) {
+                    restore_bundle_backups(&backup, state_dir, &prepared)?;
+                    return Err(error).with_context(|| {
+                        format!(
+                            "Failed to prepare bundle install for {}",
+                            destination.display()
+                        )
+                    });
+                }
+                prepared.push(name);
+            }
+        }
+
+        let mut installed = Vec::new();
+        for name in names {
+            let staged = stage.join(name);
+            let destination = state_dir.join(name);
+            let install_result = before_install(name)
+                .and_then(|()| fs::rename(&staged, &destination).map_err(anyhow::Error::from));
+            if let Err(error) = install_result {
+                for installed_name in installed.iter().rev() {
+                    let installed_path = state_dir.join(installed_name);
+                    if installed_path.exists() {
+                        fs::remove_dir_all(&installed_path).with_context(|| {
+                            format!(
+                                "Failed to remove partially installed {} during rollback",
+                                installed_path.display()
+                            )
+                        })?;
+                    }
+                }
+                restore_bundle_backups(&backup, state_dir, &prepared)?;
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed to install staged bundle at {}",
+                        destination.display()
+                    )
+                });
+            }
+            installed.push(name);
+        }
+        Ok(())
+    })();
+    if result.is_ok() {
+        if let Err(error) = cleanup_bundle_backup(&backup) {
+            tracing::warn!(
+                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this create-only bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
+                backup.display(),
+                error
+            );
+        }
+    } else if backup.exists() && fs::read_dir(&backup)?.next().is_none() {
+        let _ = fs::remove_dir(&backup);
     }
-    if backup.exists() {
-        fs::remove_dir_all(&backup)
-            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+    result
+}
+
+fn cleanup_bundle_backup(backup: &Path) -> Result<()> {
+    if std::env::var_os("ATELIER_TEST_BUNDLE_BACKUP_CLEANUP_FAILURE").is_some() {
+        bail!("injected bundle backup cleanup failure");
+    }
+    fs::remove_dir_all(backup).with_context(|| format!("Failed to remove {}", backup.display()))
+}
+
+fn create_bundle_backup_dir(parent: &Path) -> Result<PathBuf> {
+    let base = format!(
+        ".atelier-bundle-backup-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    create_bundle_backup_dir_with_base(parent, &base)
+}
+
+fn create_bundle_backup_dir_with_base(parent: &Path, base: &str) -> Result<PathBuf> {
+    for suffix in 0..=99 {
+        let candidate = if suffix == 0 {
+            parent.join(&base)
+        } else {
+            parent.join(format!("{base}-{suffix:02}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Failed to create {}", candidate.display()))
+            }
+        }
+    }
+    bail!(
+        "Failed to allocate bundle backup directory in {}",
+        parent.display()
+    )
+}
+
+fn restore_bundle_backups(backup: &Path, state_dir: &Path, names: &[&str]) -> Result<()> {
+    for name in names.iter().rev() {
+        let source = backup.join(name);
+        let destination = state_dir.join(name);
+        if source.exists() {
+            fs::rename(&source, &destination).with_context(|| {
+                format!(
+                    "Failed to restore {} from {} after bundle install failure",
+                    destination.display(),
+                    source.display()
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -1167,4 +1379,161 @@ fn default_issue_type() -> String {
 
 fn default_priority() -> String {
     "medium".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_tree(root: &Path, issues: &str, evidence: &str) {
+        fs::create_dir_all(root.join("issues")).unwrap();
+        fs::create_dir_all(root.join("evidence")).unwrap();
+        fs::write(root.join("issues/sentinel.md"), issues).unwrap();
+        fs::write(root.join("evidence/sentinel.md"), evidence).unwrap();
+    }
+
+    #[test]
+    fn second_directory_install_failure_restores_both_live_directories() {
+        let dir = tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        let stage = dir.path().join("stage");
+        write_tree(&state, "old issues", "old evidence");
+        write_tree(&stage, "new issues", "new evidence");
+
+        let error = install_bundle_stage_with(&stage, &state, |name| {
+            if name == "evidence" {
+                bail!("injected second-directory install failure");
+            }
+            Ok(())
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("second-directory"));
+        assert_eq!(
+            fs::read_to_string(state.join("issues/sentinel.md")).unwrap(),
+            "old issues"
+        );
+        assert_eq!(
+            fs::read_to_string(state.join("evidence/sentinel.md")).unwrap(),
+            "old evidence"
+        );
+        assert!(!fs::read_to_string(state.join("issues/sentinel.md"))
+            .unwrap()
+            .contains("new"));
+        assert!(!fs::read_dir(state.join("runtime"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".atelier-bundle-backup-")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_install_rejects_symlink_and_special_file_destinations_without_touching_targets() {
+        use std::os::unix::fs::symlink;
+
+        for unsafe_kind in ["symlink", "file"] {
+            let dir = tempdir().unwrap();
+            let state = dir.path().join(".atelier");
+            let stage = dir.path().join("stage");
+            fs::create_dir_all(&state).unwrap();
+            write_tree(&stage, "new issues", "new evidence");
+            fs::create_dir_all(state.join("evidence")).unwrap();
+            fs::write(state.join("evidence/sentinel.md"), "old evidence").unwrap();
+            let outside = dir.path().join("outside");
+            if unsafe_kind == "symlink" {
+                fs::create_dir_all(&outside).unwrap();
+                fs::write(outside.join("sentinel.md"), "outside").unwrap();
+                symlink(&outside, state.join("issues")).unwrap();
+            } else {
+                fs::write(state.join("issues"), "not a directory").unwrap();
+            }
+
+            let error = install_bundle_stage(&stage, &state).unwrap_err();
+            assert!(
+                error.to_string().contains("real directory")
+                    || error.to_string().contains("symbolic-link"),
+                "{error:#}"
+            );
+            assert_eq!(
+                fs::read_to_string(state.join("evidence/sentinel.md")).unwrap(),
+                "old evidence"
+            );
+            if unsafe_kind == "symlink" {
+                assert_eq!(
+                    fs::read_to_string(outside.join("sentinel.md")).unwrap(),
+                    "outside"
+                );
+            } else {
+                assert_eq!(
+                    fs::read_to_string(state.join("issues")).unwrap(),
+                    "not a directory"
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_backup_allocator_never_reuses_or_removes_unsafe_collisions() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("sentinel"), "untouched").unwrap();
+        symlink(&outside, dir.path().join("backup-test")).unwrap();
+        fs::write(dir.path().join("backup-test-01"), "special collision").unwrap();
+
+        let allocated = create_bundle_backup_dir_with_base(dir.path(), "backup-test").unwrap();
+
+        assert_eq!(allocated, dir.path().join("backup-test-02"));
+        assert!(allocated.is_dir());
+        assert_eq!(
+            fs::read_to_string(outside.join("sentinel")).unwrap(),
+            "untouched"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("backup-test-01")).unwrap(),
+            "special collision"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_recovery_scan_rejects_unsafe_stage_and_backup_types() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        fs::create_dir_all(state.join("runtime")).unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("sentinel"), "untouched").unwrap();
+        let stage = dir.path().join(".atelier-bundle-stage-unsafe");
+        symlink(&outside, &stage).unwrap();
+
+        let error = ensure_no_bundle_recovery_artifacts(&state).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("bundle_recovery_artifact_unsafe"));
+        assert!(error.to_string().contains(&stage.display().to_string()));
+        assert_eq!(
+            fs::read_to_string(outside.join("sentinel")).unwrap(),
+            "untouched"
+        );
+
+        fs::remove_file(stage).unwrap();
+        let backup = state.join("runtime").join(".atelier-bundle-backup-unsafe");
+        fs::write(&backup, "not a directory").unwrap();
+        let error = ensure_no_bundle_recovery_artifacts(&state).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("bundle_recovery_artifact_unsafe"));
+        assert!(error.to_string().contains(&backup.display().to_string()));
+        assert_eq!(fs::read_to_string(backup).unwrap(), "not a directory");
+    }
 }

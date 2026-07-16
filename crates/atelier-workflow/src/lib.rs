@@ -30,6 +30,9 @@ issue_types:
 statuses:
   draft:
     category: todo
+  plan_review:
+    category: active
+    role: reviewer
   ready:
     category: todo
   todo:
@@ -58,18 +61,27 @@ workflows:
     initial_status: draft
     done_statuses: [publish_review, closed]
     transitions:
-      ready:
+      request_plan_review:
         from: [draft]
-        to: ready
-        description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
+        to: plan_review
+        description: "Submit the exact current mission graph for independent plan review."
         validators:
           - issue.sections_parseable
+      ready:
+        from: [plan_review]
+        to: ready
+        description: "Make an independently approved exact mission graph ready for execution."
+        validators:
+          - plan_review.current_approval
+          - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
-        description: "Start mission execution after the configured repository baseline is green or explicitly waived."
+        description: "Start coordinated mission work."
         validators:
-          - baseline.default_checks
+          - plan_review.current_approval
+          - blockers.transitive_none_open
+          - git.worktree_clean
         actions:
           - git.prepare_branch
       request_publish:
@@ -100,6 +112,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -128,6 +142,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -169,6 +185,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -210,6 +228,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -240,6 +260,7 @@ const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "issue.sections_parseable",
+    "plan_review.current_approval",
     "evidence.attached",
     "review.complete",
     "children.proof_complete",
@@ -247,6 +268,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "objective.work_present",
     "objective.work_terminal",
     "objective.blockers_none_open",
+    "blockers.transitive_none_open",
     "baseline.default_checks",
     "closeout.failures_classified",
     "review.linked_pr_merged",
@@ -485,6 +507,14 @@ impl WorkflowPolicy {
         self.statuses
             .get(status)
             .and_then(|status| status.role.as_deref())
+    }
+
+    pub fn issue_status_is_terminal(&self, issue_type: &str, status: &str) -> Result<bool> {
+        Ok(self
+            .workflow_for_issue_type(issue_type)?
+            .done_statuses
+            .iter()
+            .any(|done_status| done_status == status))
     }
 
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
@@ -2495,7 +2525,7 @@ mod tests {
         );
         assert_eq!(
             validator_names(&policy.workflows["epic"].transitions["start"].validators),
-            Vec::<&str>::new()
+            vec!["blockers.transitive_none_open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
@@ -2745,6 +2775,26 @@ mod tests {
                     "unexpected tracker.current validator for {workflow_name}.{transition_name}: {validator_names:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn starter_policy_requires_independent_review_before_mission_execution() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(policy.status_role("plan_review"), Some("reviewer"));
+        let mission = &policy.workflows["mission"];
+        assert_eq!(mission.transitions["request_plan_review"].from, ["draft"]);
+        assert_eq!(mission.transitions["request_plan_review"].to, "plan_review");
+        assert_eq!(mission.transitions["ready"].from, ["plan_review"]);
+        for transition_name in ["ready", "start"] {
+            assert!(mission.transitions[transition_name]
+                .validators
+                .iter()
+                .any(|validator| validator.builtin == "plan_review.current_approval"));
+            assert!(mission.transitions[transition_name]
+                .validators
+                .iter()
+                .any(|validator| validator.builtin == "blockers.transitive_none_open"));
         }
     }
 

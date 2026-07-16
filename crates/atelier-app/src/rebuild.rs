@@ -301,6 +301,8 @@ impl<'a> CacheRebuildLoader<'a> {
         self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
+        record_store::mission_plan_review::validate_mission_plan_reviews(self.state_dir)?;
+        self.validate_mission_plan_execution_states(&dependency_edges)?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
         self.records.sort_by(|a, b| {
@@ -500,6 +502,54 @@ impl<'a> CacheRebuildLoader<'a> {
                 &issue.issue,
                 &policy_path,
             )?;
+        }
+        Ok(())
+    }
+
+    fn validate_mission_plan_execution_states(
+        &self,
+        dependency_edges: &[(String, String)],
+    ) -> Result<()> {
+        let repo_root = self.state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "Cannot determine repository root for {}",
+                self.state_dir.display()
+            )
+        })?;
+        let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+        if !policy_path.exists() {
+            return Ok(());
+        }
+        let policy = crate::workflow_policy::load(repo_root)?;
+        let issues = self
+            .issues
+            .iter()
+            .map(|record| record.issue.clone())
+            .collect::<Vec<_>>();
+        for issue in &self.issues {
+            crate::workflow_policy::validate_mission_plan_execution_state_in_state(
+                &policy,
+                self.state_dir,
+                &issue.issue,
+            )?;
+            if issue.issue.issue_type == "mission"
+                && matches!(issue.issue.status.as_str(), "ready" | "in_progress")
+                && crate::workflow_policy::enforces_independent_mission_plan_review(&policy)?
+            {
+                let closure = crate::objective_graph::dependency_closure_from_canonical(
+                    &policy,
+                    &issues,
+                    dependency_edges,
+                    &issue.issue.id,
+                )?;
+                if let Some(reason) = closure.failure_reason() {
+                    bail!(
+                        "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
+                        issue.issue.id,
+                        issue.issue.status
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -769,6 +819,13 @@ fn ensure_no_unsupported_canonical_files(
         }
         if relative == Path::new("workflow.yaml")
             || relative == Path::new(crate::workflow_policy::WORKFLOW_POLICY_PATH)
+        {
+            continue;
+        }
+        if relative
+            == Path::new(
+                record_store::mission_plan_review::MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH,
+            )
         {
             continue;
         }
@@ -1488,6 +1545,15 @@ mod tests {
         AttachmentRelationship, EvidenceRecord, EvidenceRecordData, IssueSections, RecordHeader,
         RelatesRelationship, ReviewRecord,
     };
+    use atelier_records::activity::create_mission_plan_review_activity;
+    use atelier_records::mission_plan_review::{
+        mission_graph_revision, mission_plan_review_state, LegacyGrandfatherEligibility,
+        MissionPlanFindingSeverity, MissionPlanReviewCutoverManifest, MissionPlanReviewEvent,
+        MissionPlanReviewFreshness, LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+        LEGACY_GRANDFATHER_MIGRATION_ID, LEGACY_GRANDFATHER_STATUS,
+        MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH, MISSION_PLAN_REVIEW_CUTOVER_SCHEMA,
+        MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
+    };
     use atelier_records::{CanonicalIssueRecord, RecordStore};
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -2042,5 +2108,320 @@ mod tests {
         run(&state_dir, &db_path).unwrap();
         let rebuilt = Database::open(&db_path).unwrap();
         assert!(rebuilt.issue_cache_row(&ids[0]).unwrap().is_some());
+    }
+
+    fn write_plan_issue(
+        state_dir: &Path,
+        id: &str,
+        issue_type: &str,
+        relationships: Relationships,
+    ) {
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: Issue {
+                    id: id.to_string(),
+                    title: format!("Plan fixture {id}"),
+                    description: None,
+                    status: if issue_type == "mission" {
+                        "draft"
+                    } else {
+                        "todo"
+                    }
+                    .to_string(),
+                    issue_type: issue_type.to_string(),
+                    priority: "high".to_string(),
+                    fields: BTreeMap::new(),
+                    parent_id: None,
+                    created_at: timestamp(1),
+                    updated_at: timestamp(1),
+                    closed_at: None,
+                },
+                labels: vec!["mission-review".to_string()],
+                sections: IssueSections {
+                    description: format!("Intent for {id}"),
+                    outcome: format!("Outcome for {id}"),
+                    evidence: format!("Closeout for {id}"),
+                    notes: None,
+                },
+                relationships,
+            })
+            .unwrap();
+    }
+
+    fn append_plan_event(
+        state_dir: &Path,
+        offset: i64,
+        actor: &str,
+        event: MissionPlanReviewEvent,
+    ) {
+        create_mission_plan_review_activity(
+            state_dir,
+            "atelier-m200",
+            actor,
+            timestamp(10 + offset),
+            "Mission plan review fixture",
+            event,
+            "Inspectable canonical event.",
+        )
+        .unwrap();
+    }
+
+    fn write_legacy_cutover_fixture(
+        state_dir: &Path,
+    ) -> (MissionPlanReviewCutoverManifest, PathBuf) {
+        write_plan_issue(
+            state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships::default(),
+        );
+        let store = RecordStore::new(state_dir);
+        let mut mission = store.load_issue_by_id("atelier-m200").unwrap();
+        mission.issue.status = LEGACY_GRANDFATHER_STATUS.to_string();
+        store.write_issue_atomic(&mission).unwrap();
+        let revision = mission_graph_revision(state_dir, "atelier-m200").unwrap();
+        let cutover_at = timestamp(20);
+        let manifest = MissionPlanReviewCutoverManifest {
+            schema: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA.to_string(),
+            schema_version: MISSION_PLAN_REVIEW_CUTOVER_SCHEMA_VERSION,
+            migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
+            cutover_at,
+            eligible_missions: vec![LegacyGrandfatherEligibility {
+                mission_id: "atelier-m200".to_string(),
+                graph_revision: revision.clone(),
+                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+                receipt_activity_id: atelier_records::activity::timestamp_activity_id(cutover_at),
+            }],
+        };
+        let eligibility = &manifest.eligible_missions[0];
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        let activity = create_mission_plan_review_activity(
+            state_dir,
+            "atelier-m200",
+            LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+            cutover_at,
+            "Versioned mission-review cutover receipt",
+            MissionPlanReviewEvent::LegacyGrandfather {
+                graph_revision: revision,
+                legacy_status: eligibility.legacy_status.clone(),
+                migration_id: manifest.migration_id.clone(),
+                cutover_receipt: manifest.receipt_for(eligibility).unwrap(),
+            },
+            "Receipt is bound to the tracked eligibility manifest.",
+        )
+        .unwrap();
+        let activity_path = state_dir.join(atelier_records::activity::record_activity_path(
+            "issue",
+            "atelier-m200",
+            &activity.id,
+        ));
+        (manifest, activity_path)
+    }
+
+    #[test]
+    fn rebuild_preserves_complete_mission_plan_review_projection_deterministically() {
+        let (_directory, state_dir, db_path) = setup();
+        write_plan_issue(
+            &state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships {
+                relates: vec![RelatesRelationship {
+                    kind: "issue".to_string(),
+                    id: "atelier-e200".to_string(),
+                    relation_type: "advances".to_string(),
+                }],
+                ..Relationships::default()
+            },
+        );
+        write_plan_issue(
+            &state_dir,
+            "atelier-e200",
+            "epic",
+            Relationships {
+                children: vec![atelier_records::issue_relationship_target("atelier-t200")],
+                ..Relationships::default()
+            },
+        );
+        write_plan_issue(
+            &state_dir,
+            "atelier-t200",
+            "feature",
+            Relationships::default(),
+        );
+        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
+        append_plan_event(
+            &state_dir,
+            1,
+            "actor-v1:example.com/planner",
+            MissionPlanReviewEvent::Request {
+                graph_revision: revision.clone(),
+                authors: vec!["actor-v1:example.com/author".to_string()],
+                material_editors: vec!["actor-v1:example.com/editor".to_string()],
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            2,
+            "actor-v1:example.com/reviewer",
+            MissionPlanReviewEvent::Finding {
+                graph_revision: revision.clone(),
+                finding_id: "finding-200".to_string(),
+                severity: MissionPlanFindingSeverity::Blocking,
+                affected_issue_ids: vec!["atelier-t200".to_string()],
+                dependency_path: Vec::new(),
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            3,
+            "actor-v1:example.com/author",
+            MissionPlanReviewEvent::Resolution {
+                graph_revision: revision.clone(),
+                target_id: "finding-200".to_string(),
+                disposition: "covered by the feature issue".to_string(),
+            },
+        );
+        append_plan_event(
+            &state_dir,
+            4,
+            "actor-v1:example.com/reviewer",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision,
+            },
+        );
+
+        let before = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(before.freshness, MissionPlanReviewFreshness::FreshApproval);
+        run(&state_dir, &db_path).unwrap();
+        let first_cache = snapshot(&Database::open(&db_path).unwrap());
+        let after = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(after, before);
+
+        fs::remove_file(&db_path).unwrap();
+        run(&state_dir, &db_path).unwrap();
+        assert_eq!(
+            snapshot(&Database::open(&db_path).unwrap()),
+            first_cache,
+            "full cache rebuild is deterministic"
+        );
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn rebuild_rejects_plan_approval_when_provenance_was_lost() {
+        let (_directory, state_dir, db_path) = setup();
+        write_plan_issue(
+            &state_dir,
+            "atelier-m200",
+            "mission",
+            Relationships::default(),
+        );
+        let revision = mission_graph_revision(&state_dir, "atelier-m200").unwrap();
+        append_plan_event(
+            &state_dir,
+            1,
+            "actor-v1:example.com/reviewer",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision,
+            },
+        );
+
+        let error = run(&state_dir, &db_path).unwrap_err().to_string();
+        assert!(
+            error.contains("incomplete author/material-editor provenance"),
+            "unexpected rebuild error: {error}"
+        );
+        assert!(!db_path.exists());
+    }
+
+    #[test]
+    fn rebuild_preserves_exactly_once_legacy_cutover_manifest_and_receipt() {
+        let (_directory, state_dir, db_path) = setup();
+        let (_manifest, _activity_path) = write_legacy_cutover_fixture(&state_dir);
+
+        let before = mission_plan_review_state(&state_dir, "atelier-m200").unwrap();
+        assert_eq!(
+            before.freshness,
+            MissionPlanReviewFreshness::FreshGrandfather
+        );
+        run(&state_dir, &db_path).unwrap();
+        let first_cache = snapshot(&Database::open(&db_path).unwrap());
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
+
+        fs::remove_file(&db_path).unwrap();
+        run(&state_dir, &db_path).unwrap();
+        assert_eq!(snapshot(&Database::open(&db_path).unwrap()), first_cache);
+        assert_eq!(
+            mission_plan_review_state(&state_dir, "atelier-m200").unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn rebuild_rejects_noncanonical_cutover_and_malformed_receipt_bindings() {
+        let (_directory, state_dir, db_path) = setup();
+        let (mut manifest, _activity_path) = write_legacy_cutover_fixture(&state_dir);
+        manifest.cutover_at = DateTime::parse_from_rfc3339("2026-05-28T20:26:41.123456789Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        std::fs::write(
+            state_dir.join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH),
+            serde_yaml::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(error.contains("must use microsecond precision"), "{error}");
+            assert!(!db_path.exists());
+        }
+
+        let (_directory, state_dir, db_path) = setup();
+        let (manifest, activity_path) = write_legacy_cutover_fixture(&state_dir);
+        let eligible_revision = manifest.eligible_missions[0].graph_revision.0.clone();
+        let wrong_revision = format!("mission-graph-v2:sha256:{}", "d".repeat(64));
+        let activity = std::fs::read_to_string(&activity_path).unwrap();
+        assert!(activity.contains(&eligible_revision));
+        std::fs::write(
+            &activity_path,
+            activity.replace(&eligible_revision, &wrong_revision),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(error.contains("names graph revision"), "{error}");
+            assert!(!db_path.exists());
+        }
+
+        let (_directory, state_dir, db_path) = setup();
+        let (_manifest, activity_path) = write_legacy_cutover_fixture(&state_dir);
+        let activity = std::fs::read_to_string(&activity_path).unwrap();
+        assert!(activity.contains("legacy_status: in_progress"));
+        std::fs::write(
+            &activity_path,
+            activity.replace("legacy_status: in_progress", "legacy_status: draft"),
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let error = run(&state_dir, &db_path).unwrap_err();
+            let error = format!("{error:#}");
+            assert!(
+                error.contains("legacy_status must be 'in_progress'"),
+                "{error}"
+            );
+            assert!(!db_path.exists());
+        }
     }
 }
