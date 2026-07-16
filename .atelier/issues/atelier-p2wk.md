@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "mission-review"
 - "workflow"
+review:
+  kind: pull_request
+  number: 73
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-p4z2
