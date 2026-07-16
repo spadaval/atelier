@@ -93,47 +93,23 @@ fn migrate_default_issue_workflow(dir: &Path) {
 }
 
 fn request_and_approve_mission_plan(dir: &Path, mission_id: &str) {
-    use atelier_records::activity::create_mission_plan_review_activity;
-    use atelier_records::mission_plan_review::{mission_graph_revision, MissionPlanReviewEvent};
-
     const PLANNER: &str = "actor-v1:tests.atelier.local/planner-1";
     const REVIEWER: &str = "actor-v1:tests.atelier.local/reviewer-1";
-    let state_dir = dir.join(".atelier");
-    let revision = mission_graph_revision(&state_dir, mission_id).unwrap();
-    create_mission_plan_review_activity(
-        &state_dir,
-        mission_id,
-        PLANNER,
-        chrono::Utc::now(),
-        "Requested independent mission-plan review",
-        MissionPlanReviewEvent::Request {
-            graph_revision: revision.clone(),
-            authors: vec![PLANNER.to_string()],
-            material_editors: vec![PLANNER.to_string()],
-        },
-        "Test fixture review request.",
-    )
-    .unwrap();
-    let (success, _, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier_with_env(
         dir,
-        &["issue", "transition", mission_id, "request_plan_review"],
+        &["issue", "plan-review", mission_id, "request"],
+        &[("ATELIER_AUTHENTICATED_ACTOR", PLANNER)],
     );
     assert!(
         success,
         "mission review request transition failed: {stderr}"
     );
-    create_mission_plan_review_activity(
-        &state_dir,
-        mission_id,
-        REVIEWER,
-        chrono::Utc::now(),
-        "Approved exact mission graph",
-        MissionPlanReviewEvent::Approval {
-            graph_revision: revision,
-        },
-        "Independent test fixture approval.",
-    )
-    .unwrap();
+    let (success, _, stderr) = run_atelier_with_env(
+        dir,
+        &["issue", "plan-review", mission_id, "approve"],
+        &[("ATELIER_AUTHENTICATED_ACTOR", REVIEWER)],
+    );
+    assert!(success, "mission review approval failed: {stderr}");
 }
 
 fn move_reviewed_mission_to_ready(dir: &Path, mission_id: &str) {

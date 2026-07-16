@@ -400,6 +400,14 @@ enum IssueCommands {
         verbose: bool,
     },
 
+    /// Record exact-revision independent mission-plan review decisions
+    PlanReview {
+        /// Mission issue ID
+        id: String,
+        #[command(subcommand)]
+        action: PlanReviewCommands,
+    },
+
     /// Update an issue
     Update {
         /// Issue ID
@@ -474,6 +482,38 @@ enum IssueCommands {
         #[arg(long, default_value = "advances")]
         role: String,
     },
+}
+
+#[derive(Subcommand)]
+enum PlanReviewCommands {
+    /// Submit the current mission graph and move the mission to plan_review
+    Request,
+    /// Record a reviewer finding against the exact current graph
+    Finding {
+        finding_id: String,
+        #[arg(long, default_value = "blocking")]
+        severity: String,
+        #[arg(long = "affected", required = true)]
+        affected_issue_ids: Vec<String>,
+        #[arg(long = "dependency-path")]
+        dependency_path: Vec<String>,
+    },
+    /// Request changes against the exact current graph
+    ChangeRequest {
+        request_id: String,
+        #[arg(long = "affected", required = true)]
+        affected_issue_ids: Vec<String>,
+        #[arg(long = "dependency-path")]
+        dependency_path: Vec<String>,
+    },
+    /// Resolve a finding or change request without granting approval
+    Resolve {
+        target_id: String,
+        #[arg(long)]
+        disposition: String,
+    },
+    /// Approve the exact current graph as an independent reviewer
+    Approve,
 }
 
 #[derive(Subcommand)]
@@ -1258,6 +1298,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
+            IssueCommands::PlanReview { .. } => "issue plan-review",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Link { .. } => "issue link",

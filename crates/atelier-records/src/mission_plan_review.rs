@@ -487,6 +487,10 @@ impl StableActorIdentity {
     }
 }
 
+pub fn validate_stable_actor_identity(value: &str) -> Result<()> {
+    StableActorIdentity::parse("actor", value).map(|_| ())
+}
+
 fn validate_actor_authority(field: &str, value: &str, authority: &str) -> Result<()> {
     let labels = authority.split('.').collect::<Vec<_>>();
     if labels.len() < 2
@@ -1801,6 +1805,7 @@ mod tests {
             created_at: at(offset),
             summary: "review".to_string(),
             pr_attribution: None,
+            workflow_transition: None,
             mission_plan_review: Some(event),
             body: String::new(),
         };
@@ -1938,6 +1943,7 @@ mod tests {
             created_at: at(offset),
             summary: "review".to_string(),
             pr_attribution: None,
+            workflow_transition: None,
             mission_plan_review: Some(event),
             body: String::new(),
         };
@@ -1986,6 +1992,7 @@ mod tests {
             created_at: at(offset),
             summary: "review".to_string(),
             pr_attribution: None,
+            workflow_transition: None,
             mission_plan_review: Some(event),
             body: String::new(),
         };
@@ -2139,6 +2146,7 @@ mod tests {
             created_at: at(1),
             summary: "cutover receipt".to_string(),
             pr_attribution: None,
+            workflow_transition: None,
             mission_plan_review: Some(event),
             body: String::new(),
         };
@@ -2288,6 +2296,7 @@ mod tests {
             created_at: manifest.cutover_at,
             summary: "cutover receipt".to_string(),
             pr_attribution: None,
+            workflow_transition: None,
             mission_plan_review: None,
             body: String::new(),
         };

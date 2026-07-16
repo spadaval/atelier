@@ -302,7 +302,7 @@ impl<'a> CacheRebuildLoader<'a> {
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
         record_store::mission_plan_review::validate_mission_plan_reviews(self.state_dir)?;
-        self.validate_mission_plan_execution_states()?;
+        self.validate_mission_plan_execution_states(&dependency_edges)?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
         self.records.sort_by(|a, b| {
@@ -506,7 +506,10 @@ impl<'a> CacheRebuildLoader<'a> {
         Ok(())
     }
 
-    fn validate_mission_plan_execution_states(&self) -> Result<()> {
+    fn validate_mission_plan_execution_states(
+        &self,
+        dependency_edges: &[(String, String)],
+    ) -> Result<()> {
         let repo_root = self.state_dir.parent().ok_or_else(|| {
             anyhow!(
                 "Cannot determine repository root for {}",
@@ -518,12 +521,35 @@ impl<'a> CacheRebuildLoader<'a> {
             return Ok(());
         }
         let policy = crate::workflow_policy::load(repo_root)?;
+        let issues = self
+            .issues
+            .iter()
+            .map(|record| record.issue.clone())
+            .collect::<Vec<_>>();
         for issue in &self.issues {
             crate::workflow_policy::validate_mission_plan_execution_state(
                 &policy,
                 repo_root,
                 &issue.issue,
             )?;
+            if issue.issue.issue_type == "mission"
+                && matches!(issue.issue.status.as_str(), "ready" | "in_progress")
+                && crate::workflow_policy::enforces_independent_mission_plan_review(&policy)?
+            {
+                let closure = crate::objective_graph::dependency_closure_from_canonical(
+                    &policy,
+                    &issues,
+                    dependency_edges,
+                    &issue.issue.id,
+                )?;
+                if let Some(reason) = closure.failure_reason() {
+                    bail!(
+                        "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
+                        issue.issue.id,
+                        issue.issue.status
+                    );
+                }
+            }
         }
         Ok(())
     }

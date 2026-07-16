@@ -370,6 +370,14 @@ issue activity records only lightweight `evidence_attached` references such as
 `evidence_id` and `result` so operators can follow up with
 `atelier evidence show`.
 
+`transition_applied` activities may carry a strictly typed
+`workflow_transition` front-matter object naming the transition and exact
+from/to statuses. A mission `start` from `ready` to `in_progress` additionally
+carries `mission_plan_start`, bound to the current graph revision and the exact
+prior approval activity ID. Canonical validation accepts active mission state
+only when this receipt resolves to that approval. Free-form Markdown body text,
+including text shaped like transition fields, is never workflow authority.
+
 `mission_plan_review` activities additionally require a strictly typed
 `mission_plan_review` front-matter object. Its event kind is one of `request`,
 `material_edit_attribution`, `finding`, `change_request`, `resolution`,

@@ -13,6 +13,7 @@ pub mod issue_inventory;
 pub mod issue_read;
 pub mod lint;
 pub mod mission_overview;
+pub mod mission_plan_review;
 pub mod objective_graph;
 pub mod pr;
 pub mod project_config;

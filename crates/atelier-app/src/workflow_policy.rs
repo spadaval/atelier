@@ -3,8 +3,10 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use atelier_core::Issue;
-use atelier_records::activity::{list_issue_activities, ActivityEventType};
-use atelier_records::mission_plan_review::{mission_plan_review_state, MissionPlanReviewFreshness};
+use atelier_records::activity::list_issue_activities;
+use atelier_records::mission_plan_review::{
+    mission_plan_review_state, MissionPlanReviewEvent, MissionPlanReviewFreshness,
+};
 use atelier_sqlite::Database;
 use serde_json::Value;
 
@@ -35,11 +37,34 @@ pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
         validate_issue_against_policy(&policy, issue, &policy_path)?;
         validate_issue_hierarchy(db, issue, issue.parent_id.as_deref())?;
         validate_mission_plan_execution_state(&policy, repo_root, issue)?;
+        validate_mission_execution_dependencies(db, &policy, issue)?;
     }
     Ok(WorkflowCheckReport {
         issue_count: issues.len(),
         policy,
     })
+}
+
+pub fn validate_mission_execution_dependencies(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue: &Issue,
+) -> Result<()> {
+    if issue.issue_type != "mission"
+        || !matches!(issue.status.as_str(), "ready" | "in_progress")
+        || !enforces_independent_mission_plan_review(policy)?
+    {
+        return Ok(());
+    }
+    let closure = crate::objective_graph::dependency_closure(db, policy, &issue.id)?;
+    if let Some(reason) = closure.failure_reason() {
+        return Err(anyhow!(
+            "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
+            issue.id,
+            issue.status
+        ));
+    }
+    Ok(())
 }
 
 pub fn enforces_independent_mission_plan_review(policy: &WorkflowPolicy) -> Result<bool> {
@@ -72,27 +97,8 @@ pub fn validate_mission_plan_execution_state(
     let state = mission_plan_review_state(&state_dir, &issue.id)?;
     let authorized = match issue.status.as_str() {
         "ready" => state.freshness == MissionPlanReviewFreshness::FreshApproval,
-        "in_progress" => {
-            matches!(
-                state.freshness,
-                MissionPlanReviewFreshness::FreshApproval
-                    | MissionPlanReviewFreshness::FreshGrandfather
-            ) || (state.authorization.is_some()
-                && list_issue_activities(&state_dir, &issue.id)?
-                    .iter()
-                    .any(|activity| {
-                        activity.event_type == ActivityEventType::TransitionApplied
-                            && activity
-                                .body
-                                .lines()
-                                .any(|line| line == "transition: \"start\"")
-                            && activity.body.lines().any(|line| line == "from: \"ready\"")
-                            && activity
-                                .body
-                                .lines()
-                                .any(|line| line == "to: \"in_progress\"")
-                    }))
-        }
+        "in_progress" if state.freshness == MissionPlanReviewFreshness::FreshGrandfather => true,
+        "in_progress" => has_bound_mission_start(&state_dir, &issue.id)?,
         _ => true,
     };
     if !authorized {
@@ -105,6 +111,33 @@ pub fn validate_mission_plan_execution_state(
         ));
     }
     Ok(())
+}
+
+fn has_bound_mission_start(state_dir: &Path, mission_id: &str) -> Result<bool> {
+    let activities = list_issue_activities(state_dir, mission_id)?;
+    for receipt in &activities {
+        let Some(transition) = receipt.workflow_transition.as_ref() else {
+            continue;
+        };
+        let Some(start) = transition.mission_plan_start.as_ref() else {
+            continue;
+        };
+        let Some(approval) = activities.iter().find(|activity| {
+            activity.id == start.approval_activity_id
+                && activity.created_at <= receipt.created_at
+                && matches!(
+                    activity.mission_plan_review.as_ref(),
+                    Some(MissionPlanReviewEvent::Approval { graph_revision })
+                        if graph_revision == &start.graph_revision
+                )
+        }) else {
+            continue;
+        };
+        if approval.subject_id == mission_id {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 pub fn validate_issue_hierarchy(

@@ -1,11 +1,26 @@
 use super::*;
-use atelier_records::activity::create_mission_plan_review_activity;
+use atelier_records::activity::{
+    create_issue_activity, create_mission_plan_review_activity,
+    create_workflow_transition_activity, ActivityEventType, MissionPlanStartAuthorization,
+    WorkflowTransitionActivity,
+};
 use atelier_records::mission_plan_review::{
     mission_graph_revision, MissionPlanFindingSeverity, MissionPlanReviewEvent,
 };
 
 const PLANNER: &str = "actor-v1:tests.atelier.local/planner-1";
 const REVIEWER: &str = "actor-v1:tests.atelier.local/reviewer-1";
+
+fn run_plan_review(
+    dir: &Path,
+    mission_id: &str,
+    actor: &str,
+    action: &[&str],
+) -> (bool, String, String) {
+    let mut args = vec!["issue", "plan-review", mission_id];
+    args.extend_from_slice(action);
+    run_atelier_with_env(dir, &args, &[("ATELIER_AUTHENTICATED_ACTOR", actor)])
+}
 
 fn create_mission(dir: &Path, title: &str) -> String {
     let (success, _, stderr) =
@@ -80,8 +95,8 @@ fn mission_plan_review_public_transitions_reject_missing_and_non_independent_app
     let missing = tempdir().unwrap();
     init_atelier(missing.path());
     let mission_id = create_mission(missing.path(), "Approval missing");
-    append_request(missing.path(), &mission_id);
-    request_transition(missing.path(), &mission_id);
+    let (success, _, stderr) = run_plan_review(missing.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "public review request failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         missing.path(),
         &["issue", "transition", &mission_id, "ready"],
@@ -92,20 +107,11 @@ fn mission_plan_review_public_transitions_reject_missing_and_non_independent_app
     let self_approved = tempdir().unwrap();
     init_atelier(self_approved.path());
     let mission_id = create_mission(self_approved.path(), "Self approval rejected");
-    let revision = append_request(self_approved.path(), &mission_id);
-    request_transition(self_approved.path(), &mission_id);
-    append_review_event(
-        self_approved.path(),
-        &mission_id,
-        PLANNER,
-        MissionPlanReviewEvent::Approval {
-            graph_revision: revision,
-        },
-    );
-    let (success, _, stderr) = run_atelier(
-        self_approved.path(),
-        &["issue", "transition", &mission_id, "ready"],
-    );
+    let (success, _, stderr) =
+        run_plan_review(self_approved.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "public review request failed: {stderr}");
+    let (success, _, stderr) =
+        run_plan_review(self_approved.path(), &mission_id, PLANNER, &["approve"]);
     assert!(!success);
     assert!(
         stderr.contains("Reviewer") && stderr.contains("not independent"),
@@ -210,21 +216,78 @@ fn mission_plan_review_public_transitions_reject_findings_changes_and_stale_appr
 }
 
 #[test]
+fn public_plan_review_surface_records_findings_resolutions_changes_and_approval() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Public review decisions");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "request failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &["finding", "public-finding", "--affected", &mission_id],
+    );
+    assert!(success, "finding failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(!success);
+    assert!(
+        stderr.contains("blocking finding public-finding"),
+        "{stderr}"
+    );
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        PLANNER,
+        &[
+            "resolve",
+            "public-finding",
+            "--disposition",
+            "clarified scope",
+        ],
+    );
+    assert!(success, "resolution failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &["change-request", "public-change", "--affected", &mission_id],
+    );
+    assert!(success, "change request failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        PLANNER,
+        &["resolve", "public-change", "--disposition", "addressed"],
+    );
+    assert!(success, "change resolution failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(success, "approval failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "ready transition failed: {stderr}");
+}
+
+#[test]
+fn public_plan_review_requires_authenticated_actor_binding() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Missing actor binding");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "plan-review", &mission_id, "request"],
+    );
+    assert!(!success);
+    assert!(stderr.contains("ATELIER_AUTHENTICATED_ACTOR"), "{stderr}");
+}
+
+#[test]
 fn exact_revision_approval_and_closed_dependencies_allow_ready_and_start() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
     let mission_id = create_mission(dir.path(), "Approved mission");
-    let revision = append_request(dir.path(), &mission_id);
-    request_transition(dir.path(), &mission_id);
-    append_review_event(
-        dir.path(),
-        &mission_id,
-        REVIEWER,
-        MissionPlanReviewEvent::Approval {
-            graph_revision: revision,
-        },
-    );
+    request_and_approve_mission_plan(dir.path(), &mission_id);
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(success, "ready failed: {stderr}");
@@ -256,16 +319,7 @@ fn review_approval_does_not_override_open_dependency_blockers() {
         ],
     );
     assert!(success, "blocker link failed: {stderr}");
-    let revision = append_request(dir.path(), &mission_id);
-    request_transition(dir.path(), &mission_id);
-    append_review_event(
-        dir.path(),
-        &mission_id,
-        REVIEWER,
-        MissionPlanReviewEvent::Approval {
-            graph_revision: revision,
-        },
-    );
+    request_and_approve_mission_plan(dir.path(), &mission_id);
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(!success);
@@ -304,4 +358,135 @@ fn canonical_and_supported_status_mutations_cannot_bypass_plan_review() {
         stderr.contains("issue status changes use `atelier issue transition"),
         "{stderr}"
     );
+}
+
+#[test]
+fn forged_generic_transition_activity_cannot_authorize_stale_direct_start() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Forged generic start");
+    request_and_approve_mission_plan(dir.path(), &mission_id);
+    edit_canonical_issue(dir.path(), &mission_id, |markdown| {
+        let markdown = replace_front_matter_scalar(&markdown, "title", "Changed after approval");
+        replace_front_matter_scalar(&markdown, "status", "in_progress")
+    });
+    create_issue_activity(
+        &dir.path().join(".atelier"),
+        &mission_id,
+        ActivityEventType::TransitionApplied,
+        "attacker",
+        chrono::Utc::now(),
+        "Applied transition start (ready -> in_progress)",
+        "transition: \"start\"\nfrom: \"ready\"\nto: \"in_progress\"",
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(!success);
+    assert!(
+        stderr.contains("workflow_mission_plan_review_bypass"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn genuine_typed_start_receipt_remains_rebuild_safe_after_material_change() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Genuine typed start");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    commit_all(dir.path(), "reviewed mission ready");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "genuine start failed: {stderr}");
+    edit_canonical_issue(dir.path(), &mission_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "title", "Changed after genuine start")
+    });
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(
+        success,
+        "typed start receipt did not survive rebuild: {stderr}"
+    );
+}
+
+#[test]
+fn canonical_executable_statuses_cannot_bypass_direct_or_transitive_blockers() {
+    for (status, transitive) in [("ready", false), ("in_progress", true)] {
+        let dir = tempdir().unwrap();
+        init_atelier(dir.path());
+        let mission_id = create_mission(dir.path(), &format!("{status} blocker bypass"));
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Direct gate"]);
+        assert!(success, "direct blocker create failed: {stderr}");
+        let direct_id = issue_id_by_title(dir.path(), "Direct gate");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "link",
+                &mission_id,
+                &direct_id,
+                "--role",
+                "blocked_by",
+            ],
+        );
+        assert!(success, "direct blocker link failed: {stderr}");
+        let expected_path = if transitive {
+            let (success, _, stderr) =
+                run_atelier(dir.path(), &["issue", "create", "Transitive gate"]);
+            assert!(success, "transitive blocker create failed: {stderr}");
+            let transitive_id = issue_id_by_title(dir.path(), "Transitive gate");
+            let (success, _, stderr) = run_atelier(
+                dir.path(),
+                &[
+                    "issue",
+                    "link",
+                    &direct_id,
+                    &transitive_id,
+                    "--role",
+                    "blocked_by",
+                ],
+            );
+            assert!(success, "transitive blocker link failed: {stderr}");
+            format!("{mission_id} -> {direct_id} -> {transitive_id}")
+        } else {
+            format!("{mission_id} -> {direct_id}")
+        };
+        request_and_approve_mission_plan(dir.path(), &mission_id);
+        edit_canonical_issue(dir.path(), &mission_id, |markdown| {
+            replace_front_matter_scalar(&markdown, "status", status)
+        });
+        if status == "in_progress" {
+            let state = atelier_records::mission_plan_review::mission_plan_review_state(
+                &dir.path().join(".atelier"),
+                &mission_id,
+            )
+            .unwrap();
+            let authorization = state.authorization.unwrap();
+            create_workflow_transition_activity(
+                &dir.path().join(".atelier"),
+                &mission_id,
+                "workflow",
+                chrono::Utc::now(),
+                "Gated mission start",
+                WorkflowTransitionActivity {
+                    transition: "start".to_string(),
+                    from: "ready".to_string(),
+                    to: "in_progress".to_string(),
+                    mission_plan_start: Some(MissionPlanStartAuthorization {
+                        graph_revision: authorization.graph_revision,
+                        approval_activity_id: authorization.activity_id,
+                    }),
+                },
+                "canonical typed receipt fixture",
+            )
+            .unwrap();
+        }
+        let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+        assert!(!success);
+        assert!(
+            stderr.contains("workflow_mission_dependency_bypass"),
+            "{stderr}"
+        );
+        assert!(stderr.contains(&expected_path), "{stderr}");
+    }
 }

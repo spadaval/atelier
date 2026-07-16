@@ -122,6 +122,28 @@ mission and name a graph revision. They do not populate the issue `review`
 field, open a room or provider artifact, satisfy `review.complete`, or grant
 merge authority.
 
+The public mutation surface is `atelier issue plan-review <mission-id>` with
+the `request`, `finding`, `change-request`, `resolve`, and `approve`
+subcommands. `request` records the authenticated caller as the author/material
+editor of the submitted revision and applies the configured
+`request_plan_review` transition. Review decisions are projected before their
+activity is appended, so self-approval, stale revisions, unresolved blocking
+findings, and effective change requests fail without adding an invalid event.
+The caller identity comes only from `ATELIER_AUTHENTICATED_ACTOR` in canonical
+`actor-v1:<authority>/<immutable-subject>` form. The launcher or authentication
+adapter owns that environment value; accepting an arbitrary end-user value as
+authenticated identity violates this command contract.
+
+The exact command forms are:
+
+```text
+atelier issue plan-review <mission-id> request
+atelier issue plan-review <mission-id> finding <finding-id> --severity blocking --affected <issue-id> [--dependency-path <issue-id>]...
+atelier issue plan-review <mission-id> change-request <request-id> --affected <issue-id> [--dependency-path <issue-id>]...
+atelier issue plan-review <mission-id> resolve <finding-or-request-id> --disposition <text>
+atelier issue plan-review <mission-id> approve
+```
+
 ## Fixed V3 Shape
 
 The file is strict YAML with explicit schema identity:

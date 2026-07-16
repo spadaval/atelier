@@ -69,6 +69,37 @@ pub fn dependency_closure(
     )
 }
 
+pub fn dependency_closure_from_canonical(
+    policy: &WorkflowPolicy,
+    issues: &[Issue],
+    dependency_edges: &[(String, String)],
+    issue_id: &str,
+) -> Result<DependencyClosure> {
+    let by_id = issues
+        .iter()
+        .map(|issue| (issue.id.as_str(), issue))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    if !by_id.contains_key(issue_id) {
+        bail!("dependency closure references missing issue {issue_id}");
+    }
+    evaluate_dependency_closure(
+        issue_id,
+        |blocked_id| {
+            Ok(dependency_edges
+                .iter()
+                .filter(|(blocked, _)| blocked == blocked_id)
+                .map(|(_, blocker)| blocker.clone())
+                .collect())
+        },
+        |id| {
+            let issue = by_id
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("dependency path references missing issue {id}"))?;
+            policy.issue_status_is_terminal(&issue.issue_type, &issue.status)
+        },
+    )
+}
+
 fn evaluate_dependency_closure(
     issue_id: &str,
     mut blockers_for: impl FnMut(&str) -> Result<Vec<String>>,

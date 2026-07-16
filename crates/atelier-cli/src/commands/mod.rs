@@ -22,7 +22,7 @@ pub mod work;
 pub(crate) mod work_order;
 pub mod workflow;
 pub(crate) mod workflow_actions;
-pub(crate) mod workflow_planning;
+pub mod workflow_planning;
 
 #[cfg(test)]
 pub(crate) mod test_support {
