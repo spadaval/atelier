@@ -38,9 +38,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-16T23:44:59.726948921+00:00"
+status: "done"
 title: "Epic: Enforce reviewed and dependency-safe mission readiness"
-updated_at: "2026-07-16T23:37:05.965865535+00:00"
+updated_at: "2026-07-16T23:44:59.726948921+00:00"
 ---
 
 ## Description
