@@ -270,9 +270,17 @@ event provenance, and the complete migration table.
 Repositories still carrying the legacy direct-ready policy use the hidden,
 one-shot admin command `atelier migrate-mission-plan-review`. It inventories
 canonical mission records, validates a complete staged cutover, and then
-atomically installs the policy, status changes, manifest, and grandfather
-receipts. A repeat invocation validates the installed state and makes no
-canonical changes. On failure, repair the named `.atelier` source, run
+installs the policy, status changes, manifest, and grandfather receipts under
+an exclusive canonical-mutation lock. Original and target bytes are persisted
+in a synchronized recovery journal before any replacement. Prerequisites are
+made durable first, the complete canonical snapshot is compared again, and the
+workflow is activated last. The next invocation deterministically completes an
+exact post-state or rolls back with the workflow deactivated first after a
+process or machine interruption; concurrent unowned bytes are never
+overwritten. Repository-specific mission transitions, actions, validators, and
+roles outside the three lifecycle transitions are preserved. A repeat
+invocation validates the installed state and makes no canonical changes. On
+failure, repair the named `.atelier` source, run
 `atelier check --fix`, and retry; SQLite is disposable and is never a migration
 source.
 

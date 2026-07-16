@@ -12,14 +12,17 @@ use atelier_records::mission_plan_review::{
 };
 use atelier_records::{issue_record_path, render_issue_record, RecordStore};
 use chrono::{DateTime, Timelike, Utc};
+use serde::{Deserialize, Serialize};
 use serde_yaml::{Mapping, Value};
-use std::collections::BTreeSet;
-use std::fs;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const RECOVERY: &str = "No canonical cutover was applied. Repair the reported .atelier file, run `atelier check --fix`, then retry `atelier migrate-mission-plan-review`.";
+const RECOVERY: &str = "Mission-plan cutover is not complete. Retry `atelier migrate-mission-plan-review` first so any durable recovery journal can converge to an exact pre- or post-cutover state. If recovery reports malformed or unowned canonical bytes, repair the named .atelier file, run `atelier check --fix`, then retry the migration.";
+const JOURNAL_DIR: &str = "runtime/mission-plan-review-cutover-journal";
+const JOURNAL_SCHEMA: &str = "atelier.mission-plan-review-cutover-journal";
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MigrationReport {
@@ -36,6 +39,30 @@ struct PlannedWrite {
     path: PathBuf,
     contents: Vec<u8>,
     must_not_exist: bool,
+    original: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CutoverJournal {
+    schema: String,
+    schema_version: u32,
+    entries: Vec<CutoverJournalEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CutoverJournalEntry {
+    relative_path: String,
+    original_existed: bool,
+    workflow_activation: bool,
+}
+
+#[cfg(test)]
+#[derive(Debug, Default)]
+struct MigrationFault {
+    interrupt_after_boundary: Option<usize>,
+    concurrent_edit_before_apply: Option<(PathBuf, Vec<u8>)>,
 }
 
 pub fn run(repo_root: &Path) -> Result<MigrationReport> {
@@ -49,9 +76,12 @@ pub fn run(repo_root: &Path) -> Result<MigrationReport> {
 fn migrate_at(
     repo_root: &Path,
     cutover_at: DateTime<Utc>,
-    fail_after_write: Option<usize>,
+    #[cfg(test)] fault: Option<MigrationFault>,
+    #[cfg(not(test))] _fault: Option<()>,
 ) -> Result<MigrationReport> {
     let state_dir = repo_root.join(".atelier");
+    let _lock = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?;
+    recover_cutover_journal(repo_root).context(RECOVERY)?;
     let policy = crate::workflow_policy::load(repo_root)?;
     let mission_workflow = policy.workflow_for_issue_type("mission")?;
     let terminal = mission_workflow
@@ -131,6 +161,7 @@ fn migrate_at(
                 path: state_dir.join(issue_record_path(&mission.issue.id)),
                 contents: render_issue_record(&migrated)?.into_bytes(),
                 must_not_exist: false,
+                original: None,
             });
         }
     }
@@ -162,6 +193,7 @@ fn migrate_at(
             path: manifest_path,
             contents: serde_yaml::to_string(&manifest)?.into_bytes(),
             must_not_exist: true,
+            original: None,
         });
         for entry in &eligible {
             let activity = IssueActivity {
@@ -191,6 +223,7 @@ fn migrate_at(
                 )),
                 contents: format!("{}\n", activity.to_markdown()?.trim_end()).into_bytes(),
                 must_not_exist: true,
+                original: None,
             });
         }
     }
@@ -201,10 +234,31 @@ fn migrate_at(
         path: workflow_path,
         contents: render_target_workflow(&workflow_text)?.into_bytes(),
         must_not_exist: false,
+        original: None,
     });
 
+    capture_originals(&mut writes).context(RECOVERY)?;
+    let canonical_snapshot = canonical_snapshot(&state_dir)?;
     validate_staged(repo_root, &writes).context(RECOVERY)?;
-    apply_with_rollback(&writes, fail_after_write).context(RECOVERY)?;
+    #[cfg(test)]
+    if let Some((path, contents)) = fault
+        .as_ref()
+        .and_then(|fault| fault.concurrent_edit_before_apply.as_ref())
+    {
+        fs::write(path, contents)?;
+    }
+    apply_journaled(
+        repo_root,
+        &writes,
+        &canonical_snapshot,
+        #[cfg(test)]
+        fault
+            .as_ref()
+            .and_then(|fault| fault.interrupt_after_boundary),
+        #[cfg(not(test))]
+        None,
+    )
+    .context(RECOVERY)?;
     Ok(report)
 }
 
@@ -216,10 +270,17 @@ fn render_target_workflow(text: &str) -> Result<String> {
     let statuses = mapping_value_mut(mapping, "statuses")?
         .as_mapping_mut()
         .ok_or_else(|| anyhow!("Workflow statuses must be a mapping"))?;
-    statuses.insert(
-        Value::String("plan_review".to_string()),
-        serde_yaml::from_str("{ category: active, role: reviewer }")?,
-    );
+    let plan_review_status: Value = serde_yaml::from_str("{ category: active, role: reviewer }")?;
+    let plan_review_key = Value::String("plan_review".to_string());
+    match statuses.get(&plan_review_key) {
+        Some(existing) if existing != &plan_review_status => {
+            bail!("Existing plan_review status conflicts with the cutover contract")
+        }
+        Some(_) => {}
+        None => {
+            statuses.insert(plan_review_key, plan_review_status);
+        }
+    }
     let workflows = mapping_value_mut(mapping, "workflows")?
         .as_mapping_mut()
         .ok_or_else(|| anyhow!("Workflow workflows must be a mapping"))?;
@@ -229,39 +290,139 @@ fn render_target_workflow(text: &str) -> Result<String> {
     let transitions = mapping_value_mut(mission, "transitions")?
         .as_mapping_mut()
         .ok_or_else(|| anyhow!("Mission transitions must be a mapping"))?;
-    let publish = transitions
-        .remove(Value::String("request_publish".to_string()))
-        .ok_or_else(|| anyhow!("Legacy mission workflow is missing request_publish"))?;
-    let target: Mapping = serde_yaml::from_str::<Value>(
+    if transitions.contains_key(Value::String("request_plan_review".to_string())) {
+        bail!("Legacy mission workflow already defines request_plan_review");
+    }
+    let request_plan_review: Value = serde_yaml::from_str(
         r#"
-request_plan_review:
-  from: [draft]
-  to: plan_review
-  description: "Submit the exact current mission graph for independent plan review."
-  validators: [issue.sections_parseable]
-ready:
-  from: [plan_review]
-  to: ready
-  description: "Make an independently approved exact mission graph ready for execution."
-  validators: [plan_review.current_approval, blockers.transitive_none_open]
-start:
-  from: [ready]
-  to: in_progress
-  description: "Start coordinated mission work."
-  validators: [plan_review.current_approval, blockers.transitive_none_open, git.worktree_clean]
-  actions: [git.prepare_branch]
+from: [draft]
+to: plan_review
+description: "Submit the exact current mission graph for independent plan review."
+validators: [issue.sections_parseable]
 "#,
-    )?
-    .as_mapping()
-    .cloned()
-    .unwrap();
+    )?;
+    let preserved = std::mem::take(transitions);
+    let mut target = Mapping::new();
+    for (key, mut transition) in preserved {
+        let name = key.as_str();
+        if name == Some("ready") {
+            target.insert(
+                Value::String("request_plan_review".to_string()),
+                request_plan_review.clone(),
+            );
+            update_ready_transition(&mut transition)?;
+        } else if name == Some("start") {
+            update_start_transition(&mut transition)?;
+        }
+        target.insert(key, transition);
+    }
+    if !target.contains_key(Value::String("request_plan_review".to_string())) {
+        bail!("Legacy mission workflow is missing ready transition");
+    }
     *transitions = target;
-    transitions.insert(Value::String("request_publish".to_string()), publish);
     let mut output = serde_yaml::to_string(&root)?;
     if !output.ends_with('\n') {
         output.push('\n');
     }
     Ok(output)
+}
+
+fn update_ready_transition(value: &mut Value) -> Result<()> {
+    let transition = value
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow!("Mission ready transition must be a mapping"))?;
+    transition.insert(
+        Value::String("from".to_string()),
+        serde_yaml::from_str("[plan_review]")?,
+    );
+    transition.insert(
+        Value::String("to".to_string()),
+        Value::String("ready".to_string()),
+    );
+    transition.insert(
+        Value::String("description".to_string()),
+        Value::String(
+            "Make an independently approved exact mission graph ready for execution.".to_string(),
+        ),
+    );
+    update_validators(
+        transition,
+        &["issue.sections_parseable"],
+        &[
+            "plan_review.current_approval",
+            "blockers.transitive_none_open",
+        ],
+    )
+}
+
+fn update_start_transition(value: &mut Value) -> Result<()> {
+    let transition = value
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow!("Mission start transition must be a mapping"))?;
+    transition.insert(
+        Value::String("from".to_string()),
+        serde_yaml::from_str("[ready]")?,
+    );
+    transition.insert(
+        Value::String("to".to_string()),
+        Value::String("in_progress".to_string()),
+    );
+    transition.insert(
+        Value::String("description".to_string()),
+        Value::String("Start coordinated mission work.".to_string()),
+    );
+    update_validators(
+        transition,
+        &["baseline.default_checks"],
+        &[
+            "plan_review.current_approval",
+            "blockers.transitive_none_open",
+            "git.worktree_clean",
+        ],
+    )?;
+    ensure_sequence_entry(transition, "actions", "git.prepare_branch")
+}
+
+fn update_validators(transition: &mut Mapping, removed: &[&str], required: &[&str]) -> Result<()> {
+    let validators = transition
+        .entry(Value::String("validators".to_string()))
+        .or_insert_with(|| Value::Sequence(Vec::new()))
+        .as_sequence_mut()
+        .ok_or_else(|| anyhow!("Mission transition validators must be a sequence"))?;
+    validators.retain(|validator| {
+        validator_builtin(validator)
+            .is_none_or(|builtin| !removed.contains(&builtin) && !required.contains(&builtin))
+    });
+    for builtin in required.iter().rev() {
+        validators.insert(0, Value::String((*builtin).to_string()));
+    }
+    Ok(())
+}
+
+fn validator_builtin(value: &Value) -> Option<&str> {
+    if let Some(value) = value.as_str() {
+        return Some(value);
+    }
+    let mapping = value.as_mapping()?;
+    if mapping.len() != 1 {
+        return None;
+    }
+    mapping.keys().next()?.as_str()
+}
+
+fn ensure_sequence_entry(mapping: &mut Mapping, field: &str, required: &str) -> Result<()> {
+    let sequence = mapping
+        .entry(Value::String(field.to_string()))
+        .or_insert_with(|| Value::Sequence(Vec::new()))
+        .as_sequence_mut()
+        .ok_or_else(|| anyhow!("Mission transition {field} must be a sequence"))?;
+    if !sequence
+        .iter()
+        .any(|value| value.as_str() == Some(required))
+    {
+        sequence.push(Value::String(required.to_string()));
+    }
+    Ok(())
 }
 
 fn mapping_value_mut<'a>(mapping: &'a mut Mapping, key: &str) -> Result<&'a mut Value> {
@@ -273,7 +434,7 @@ fn mapping_value_mut<'a>(mapping: &'a mut Mapping, key: &str) -> Result<&'a mut 
 fn validate_staged(repo_root: &Path, writes: &[PlannedWrite]) -> Result<()> {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let stage_root = repo_root.join(format!(
-        ".atelier-migration-stage-{}-{nonce}",
+        ".atelier/runtime/mission-plan-review-stage-{}-{nonce}",
         process::id()
     ));
     let stage_state = stage_root.join(".atelier");
@@ -298,59 +459,310 @@ fn validate_staged(repo_root: &Path, writes: &[PlannedWrite]) -> Result<()> {
 }
 
 fn copy_tree(source: &Path, target: &Path) -> Result<()> {
-    fs::create_dir_all(target)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let target_path = target.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_tree(&source_path, &target_path)?;
-        } else if entry.file_type()?.is_file() {
-            fs::copy(source_path, target_path)?;
+    fn copy_canonical(root: &Path, source: &Path, target: &Path) -> Result<()> {
+        fs::create_dir_all(target)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let source_path = entry.path();
+            let relative = source_path.strip_prefix(root)?;
+            if crate::storage_layout::is_local_atelier_path(relative) {
+                continue;
+            }
+            let target_path = target.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_canonical(root, &source_path, &target_path)?;
+            } else if entry.file_type()?.is_file() {
+                fs::copy(source_path, target_path)?;
+            }
         }
+        Ok(())
+    }
+    copy_canonical(source, source, target)
+}
+
+fn capture_originals(writes: &mut [PlannedWrite]) -> Result<()> {
+    for write in writes {
+        let original = fs::read(&write.path).ok();
+        if write.must_not_exist && original.is_some() {
+            bail!(
+                "Refusing to overwrite cutover file {}",
+                write.path.display()
+            );
+        }
+        if !write.must_not_exist && original.is_none() {
+            bail!("Cutover source disappeared: {}", write.path.display());
+        }
+        write.original = original;
     }
     Ok(())
 }
 
-fn apply_with_rollback(writes: &[PlannedWrite], fail_after_write: Option<usize>) -> Result<()> {
-    let originals = writes
+fn canonical_snapshot(state_dir: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
+    fn collect(
+        state_dir: &Path,
+        dir: &Path,
+        snapshot: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let relative = path.strip_prefix(state_dir)?.to_path_buf();
+            if crate::storage_layout::is_local_atelier_path(&relative) {
+                continue;
+            }
+            if entry.file_type()?.is_dir() {
+                collect(state_dir, &path, snapshot)?;
+            } else if entry.file_type()?.is_file() {
+                snapshot.insert(relative, fs::read(path)?);
+            }
+        }
+        Ok(())
+    }
+
+    let mut snapshot = BTreeMap::new();
+    collect(state_dir, state_dir, &mut snapshot)?;
+    Ok(snapshot)
+}
+
+fn expected_snapshot(
+    state_dir: &Path,
+    original: &BTreeMap<PathBuf, Vec<u8>>,
+    writes: &[PlannedWrite],
+    workflow_activated: bool,
+) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
+    let mut expected = original.clone();
+    for write in writes {
+        let relative = write.path.strip_prefix(state_dir)?.to_path_buf();
+        if relative == Path::new("workflow.yaml") && !workflow_activated {
+            continue;
+        }
+        expected.insert(relative, write.contents.clone());
+    }
+    Ok(expected)
+}
+
+fn apply_journaled(
+    repo_root: &Path,
+    writes: &[PlannedWrite],
+    original_snapshot: &BTreeMap<PathBuf, Vec<u8>>,
+    interrupt_after_boundary: Option<usize>,
+) -> Result<()> {
+    let state_dir = repo_root.join(".atelier");
+    prepare_cutover_journal(&state_dir, writes)?;
+    if interrupt_after_boundary == Some(0) {
+        bail!("injected abrupt migration interruption after durable journal");
+    }
+
+    let workflow_index = writes
         .iter()
-        .map(|write| {
-            if write.must_not_exist && write.path.exists() {
-                bail!(
-                    "Refusing to overwrite cutover file {}",
-                    write.path.display()
-                );
-            }
-            Ok((write.path.clone(), fs::read(&write.path).ok()))
-        })
-        .collect::<Result<Vec<_>>>()?;
+        .position(|write| write.path == state_dir.join("workflow.yaml"))
+        .ok_or_else(|| anyhow!("Cutover plan is missing workflow activation"))?;
     let result = (|| -> Result<()> {
+        let mut boundary = 0;
         for (index, write) in writes.iter().enumerate() {
-            if fail_after_write == Some(index) {
-                bail!("injected migration apply failure");
+            if index == workflow_index {
+                continue;
             }
-            if let Some(parent) = write.path.parent() {
-                fs::create_dir_all(parent)?;
+            compare_original(write)?;
+            atomic_replace(&write.path, &write.contents)?;
+            boundary += 1;
+            if interrupt_after_boundary == Some(boundary) {
+                bail!("injected abrupt migration interruption at write boundary {boundary}");
             }
-            let temp = write
-                .path
-                .with_extension(format!("migration-{}-tmp", process::id()));
-            fs::write(&temp, &write.contents)?;
-            fs::rename(&temp, &write.path)?;
+        }
+
+        let expected = expected_snapshot(&state_dir, original_snapshot, writes, false)?;
+        let actual = canonical_snapshot(&state_dir)?;
+        if actual != expected {
+            bail!(
+                "Canonical tracker changed after staged validation; refusing workflow activation"
+            );
+        }
+        let workflow = &writes[workflow_index];
+        compare_original(workflow)?;
+        atomic_replace(&workflow.path, &workflow.contents)?;
+        boundary += 1;
+        if interrupt_after_boundary == Some(boundary) {
+            bail!("injected abrupt migration interruption at workflow activation boundary");
+        }
+        let expected = expected_snapshot(&state_dir, original_snapshot, writes, true)?;
+        if canonical_snapshot(&state_dir)? != expected {
+            bail!("Canonical tracker changed during workflow activation");
         }
         Ok(())
     })();
+
     if let Err(error) = result {
-        for (path, original) in originals.iter().rev() {
-            match original {
-                Some(bytes) => fs::write(path, bytes)?,
-                None if path.exists() => fs::remove_file(path)?,
-                None => {}
-            }
+        if interrupt_after_boundary.is_some() {
+            // Simulate process loss: leave the durable journal and partial
+            // writes for the next invocation's recovery path.
+            return Err(error);
         }
+        recover_cutover_journal(repo_root)?;
         return Err(error);
     }
+    remove_cutover_journal(&state_dir)?;
+    Ok(())
+}
+
+fn compare_original(write: &PlannedWrite) -> Result<()> {
+    let current = fs::read(&write.path).ok();
+    if current != write.original {
+        bail!(
+            "Concurrent canonical mutation detected at {}; refusing cutover",
+            write.path.display()
+        );
+    }
+    Ok(())
+}
+
+fn prepare_cutover_journal(state_dir: &Path, writes: &[PlannedWrite]) -> Result<()> {
+    let final_dir = state_dir.join(JOURNAL_DIR);
+    if final_dir.exists() {
+        bail!(
+            "Cutover recovery journal already exists at {}",
+            final_dir.display()
+        );
+    }
+    let temp_dir = state_dir.join(format!("{JOURNAL_DIR}.{}.tmp", process::id()));
+    if temp_dir.exists() {
+        fs::remove_dir_all(&temp_dir)?;
+    }
+    fs::create_dir_all(&temp_dir)?;
+    let mut entries = Vec::new();
+    for (index, write) in writes.iter().enumerate() {
+        compare_original(write)?;
+        let target_path = temp_dir.join(format!("{index:04}.target"));
+        write_synced(&target_path, &write.contents)?;
+        if let Some(original) = &write.original {
+            write_synced(&temp_dir.join(format!("{index:04}.original")), original)?;
+        }
+        entries.push(CutoverJournalEntry {
+            relative_path: write
+                .path
+                .strip_prefix(state_dir)?
+                .to_string_lossy()
+                .into_owned(),
+            original_existed: write.original.is_some(),
+            workflow_activation: write.path == state_dir.join("workflow.yaml"),
+        });
+    }
+    let journal = CutoverJournal {
+        schema: JOURNAL_SCHEMA.to_string(),
+        schema_version: 1,
+        entries,
+    };
+    write_synced(
+        &temp_dir.join("journal.yaml"),
+        serde_yaml::to_string(&journal)?.as_bytes(),
+    )?;
+    sync_dir(&temp_dir)?;
+    fs::rename(&temp_dir, &final_dir)?;
+    sync_dir(final_dir.parent().expect("journal has parent"))?;
+    Ok(())
+}
+
+fn recover_cutover_journal(repo_root: &Path) -> Result<()> {
+    let state_dir = repo_root.join(".atelier");
+    let journal_dir = state_dir.join(JOURNAL_DIR);
+    if !journal_dir.exists() {
+        return Ok(());
+    }
+    let journal: CutoverJournal =
+        serde_yaml::from_str(&fs::read_to_string(journal_dir.join("journal.yaml"))?)?;
+    if journal.schema != JOURNAL_SCHEMA || journal.schema_version != 1 || journal.entries.is_empty()
+    {
+        bail!("Invalid mission-plan cutover recovery journal");
+    }
+    let mut loaded = Vec::new();
+    for (index, entry) in journal.entries.iter().enumerate() {
+        let relative = PathBuf::from(&entry.relative_path);
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            bail!("Invalid cutover journal path {}", entry.relative_path);
+        }
+        let original = if entry.original_existed {
+            Some(fs::read(journal_dir.join(format!("{index:04}.original")))?)
+        } else {
+            None
+        };
+        let target = fs::read(journal_dir.join(format!("{index:04}.target")))?;
+        loaded.push((
+            state_dir.join(relative),
+            original,
+            target,
+            entry.workflow_activation,
+        ));
+    }
+
+    let exact_post = loaded
+        .iter()
+        .all(|(path, _, target, _)| fs::read(path).ok().as_ref() == Some(target));
+    if exact_post {
+        remove_cutover_journal(&state_dir)?;
+        return Ok(());
+    }
+
+    // Deactivate the target policy first, then restore prerequisites. Every
+    // current byte sequence must be journal-owned; external drift is never
+    // overwritten by recovery.
+    loaded.sort_by_key(|(_, _, _, workflow)| !*workflow);
+    for (path, original, target, _) in &loaded {
+        let current = fs::read(path).ok();
+        if current.as_ref() != original.as_ref() && current.as_ref() != Some(target) {
+            bail!(
+                "Cutover recovery found unowned concurrent bytes at {}; manual recovery required",
+                path.display()
+            );
+        }
+        match original {
+            Some(bytes) => atomic_replace(path, bytes)?,
+            None if path.exists() => {
+                fs::remove_file(path)?;
+                sync_dir(path.parent().expect("cutover path has parent"))?;
+            }
+            None => {}
+        }
+    }
+    remove_cutover_journal(&state_dir)
+}
+
+fn remove_cutover_journal(state_dir: &Path) -> Result<()> {
+    let journal_dir = state_dir.join(JOURNAL_DIR);
+    if journal_dir.exists() {
+        let cleanup = state_dir.join(format!("{JOURNAL_DIR}.{}.complete", process::id()));
+        if cleanup.exists() {
+            fs::remove_dir_all(&cleanup)?;
+        }
+        fs::rename(&journal_dir, &cleanup)?;
+        sync_dir(journal_dir.parent().expect("journal has parent"))?;
+        fs::remove_dir_all(cleanup)?;
+    }
+    Ok(())
+}
+
+fn atomic_replace(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("Path has no parent: {}", path.display()))?;
+    fs::create_dir_all(parent)?;
+    let temp = path.with_extension(format!("migration-{}-tmp", process::id()));
+    write_synced(&temp, contents)?;
+    fs::rename(&temp, path)?;
+    sync_dir(parent)
+}
+
+fn write_synced(path: &Path, contents: &[u8]) -> Result<()> {
+    fs::write(path, contents)?;
+    File::open(path)?.sync_all()?;
+    Ok(())
+}
+
+fn sync_dir(path: &Path) -> Result<()> {
+    File::open(path)?.sync_all()?;
     Ok(())
 }
 
@@ -438,8 +850,7 @@ mod tests {
 
     #[test]
     fn target_workflow_preserves_custom_policy_and_installs_review_gate() {
-        let rendered = render_target_workflow(
-            r#"
+        let input = r#"
 schema: atelier.workflow
 schema_version: 3
 branch_policy: { base_branch: custom, merge_strategy: squash }
@@ -448,27 +859,98 @@ statuses:
   ready: { category: todo }
   in_progress: { category: active, role: worker }
   closed: { category: done }
+  superseded: { category: done }
 workflows:
   mission:
     applies_to: [mission]
     initial_status: draft
-    done_statuses: [closed]
+    done_statuses: [closed, superseded]
     transitions:
-      ready: { from: [draft], to: ready }
-      start: { from: [ready], to: in_progress }
-      request_publish: { from: [in_progress], to: closed }
-"#,
-        )
-        .unwrap();
+      archive_draft:
+        from: [draft]
+        to: superseded
+        validators: [custom.archive]
+        actions: [custom.archive_action]
+      ready:
+        from: [draft]
+        to: ready
+        validators: [issue.sections_parseable, custom.ready, blockers.transitive_none_open]
+        actions: [custom.ready_action]
+      start:
+        from: [ready]
+        to: in_progress
+        validators: [baseline.default_checks, custom.start, blockers.transitive_none_open]
+        actions: [custom.start_action, git.prepare_branch]
+      request_publish:
+        from: [in_progress]
+        to: closed
+        validators: [custom.publish]
+        actions: [custom.publish_action]
+"#;
+        let before: Value = serde_yaml::from_str(input).unwrap();
+        let rendered = render_target_workflow(input).unwrap();
         let value: Value = serde_yaml::from_str(&rendered).unwrap();
         assert_eq!(value["branch_policy"]["base_branch"], "custom");
+        assert_eq!(
+            value["workflows"]["mission"]["transitions"]["archive_draft"],
+            before["workflows"]["mission"]["transitions"]["archive_draft"]
+        );
+        assert_eq!(
+            serde_yaml::to_string(&value["workflows"]["mission"]["transitions"]["archive_draft"])
+                .unwrap(),
+            serde_yaml::to_string(&before["workflows"]["mission"]["transitions"]["archive_draft"])
+                .unwrap()
+        );
+        assert_eq!(
+            value["workflows"]["mission"]["transitions"]["request_publish"],
+            before["workflows"]["mission"]["transitions"]["request_publish"]
+        );
+        let mut statuses_after = value["statuses"].as_mapping().unwrap().clone();
+        statuses_after.remove(Value::String("plan_review".to_string()));
+        assert_eq!(statuses_after, *before["statuses"].as_mapping().unwrap());
         assert_eq!(
             value["workflows"]["mission"]["transitions"]["ready"]["from"][0],
             "plan_review"
         );
+        assert!(
+            value["workflows"]["mission"]["transitions"]["ready"]["validators"]
+                .as_sequence()
+                .unwrap()
+                .contains(&Value::String("custom.ready".to_string()))
+        );
+        assert_eq!(
+            value["workflows"]["mission"]["transitions"]["ready"]["actions"],
+            before["workflows"]["mission"]["transitions"]["ready"]["actions"]
+        );
         assert_eq!(
             value["workflows"]["mission"]["transitions"]["start"]["validators"][0],
             "plan_review.current_approval"
+        );
+        assert!(
+            value["workflows"]["mission"]["transitions"]["start"]["validators"]
+                .as_sequence()
+                .unwrap()
+                .contains(&Value::String("custom.start".to_string()))
+        );
+        assert_eq!(
+            value["workflows"]["mission"]["transitions"]["start"]["actions"],
+            before["workflows"]["mission"]["transitions"]["start"]["actions"]
+        );
+        let transition_order = value["workflows"]["mission"]["transitions"]
+            .as_mapping()
+            .unwrap()
+            .keys()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            transition_order,
+            vec![
+                "archive_draft",
+                "request_plan_review",
+                "ready",
+                "start",
+                "request_publish"
+            ]
         );
     }
 
@@ -589,7 +1071,7 @@ workflows:
         fs::write(&collision, "collision\n").unwrap();
         let workflow_before = bytes(&state.join("workflow.yaml"));
         let error = migrate_at(dir.path(), at(), None).unwrap_err().to_string();
-        assert!(error.contains("No canonical cutover was applied"));
+        assert!(error.contains("Mission-plan cutover is not complete"));
         assert_eq!(bytes(&state.join("workflow.yaml")), workflow_before);
         assert_eq!(bytes(&collision), b"collision\n");
 
@@ -606,27 +1088,76 @@ workflows:
     }
 
     #[test]
-    fn apply_failure_rolls_back_every_canonical_write() {
+    fn interruption_at_every_write_boundary_recovers_to_exact_pre_or_post_state() {
+        for boundary in 0..=4 {
+            let dir = fixture(&[
+                ("atelier-ready", "ready"),
+                ("atelier-active", "in_progress"),
+                ("atelier-done", "closed"),
+            ]);
+            let state = dir.path().join(".atelier");
+            let pre = canonical_snapshot(&state).unwrap();
+            let fault = MigrationFault {
+                interrupt_after_boundary: Some(boundary),
+                ..MigrationFault::default()
+            };
+            assert!(migrate_at(dir.path(), at(), Some(fault)).is_err());
+            assert!(state.join(JOURNAL_DIR).exists());
+
+            recover_cutover_journal(dir.path()).unwrap();
+            if boundary < 4 {
+                assert_eq!(canonical_snapshot(&state).unwrap(), pre);
+            } else {
+                let policy = crate::workflow_policy::load(dir.path()).unwrap();
+                assert!(
+                    crate::workflow_policy::enforces_independent_mission_plan_review(&policy)
+                        .unwrap()
+                );
+            }
+            assert!(!state.join(JOURNAL_DIR).exists());
+
+            migrate_at(dir.path(), at(), None).unwrap();
+            let post = canonical_snapshot(&state).unwrap();
+            let activity_dir = state.join("issues/atelier-active.activity");
+            assert_eq!(
+                fs::read_dir(activity_dir)
+                    .unwrap()
+                    .filter_map(|entry| entry.ok())
+                    .count(),
+                1
+            );
+            assert!(migrate_at(dir.path(), at(), None).unwrap().already_applied);
+            assert_eq!(canonical_snapshot(&state).unwrap(), post);
+        }
+    }
+
+    #[test]
+    fn concurrent_mutation_is_rejected_without_overwrite_or_activation() {
         let dir = fixture(&[
             ("atelier-ready", "ready"),
             ("atelier-active", "in_progress"),
-            ("atelier-done", "closed"),
         ]);
         let state = dir.path().join(".atelier");
-        let ready = state.join(issue_record_path("atelier-ready"));
-        let workflow = state.join("workflow.yaml");
-        let before = (bytes(&ready), bytes(&workflow));
-        assert!(migrate_at(dir.path(), at(), Some(2)).is_err());
-        assert_eq!((bytes(&ready), bytes(&workflow)), before);
+        let ready_path = state.join(issue_record_path("atelier-ready"));
+        let workflow_before = bytes(&state.join("workflow.yaml"));
+        let mut concurrent = RecordStore::new(&state)
+            .load_issue_by_id("atelier-ready")
+            .unwrap();
+        concurrent.issue.title = "Concurrent valid edit".to_string();
+        let concurrent_bytes = render_issue_record(&concurrent).unwrap().into_bytes();
+        let fault = MigrationFault {
+            concurrent_edit_before_apply: Some((ready_path.clone(), concurrent_bytes.clone())),
+            ..MigrationFault::default()
+        };
+        let error = migrate_at(dir.path(), at(), Some(fault))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Mission-plan cutover is not complete"));
+        assert_eq!(bytes(&ready_path), concurrent_bytes);
+        assert_eq!(bytes(&state.join("workflow.yaml")), workflow_before);
+        assert!(!state.join(JOURNAL_DIR).exists());
         assert!(!state
             .join(MISSION_PLAN_REVIEW_CUTOVER_MANIFEST_PATH)
-            .exists());
-        assert!(!state
-            .join(record_activity_path(
-                "issue",
-                "atelier-active",
-                &timestamp_activity_id(at())
-            ))
             .exists());
     }
 }

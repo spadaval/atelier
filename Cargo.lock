@@ -152,6 +152,7 @@ dependencies = [
  "atelier-core",
  "atelier-workflow",
  "chrono",
+ "fs2",
  "icu_normalizer",
  "icu_properties",
  "serde",

@@ -21,6 +21,7 @@ pub mod document;
 pub mod evidence;
 pub mod issue;
 pub mod mission_plan_review;
+pub mod mutation_lock;
 pub mod review;
 pub mod store;
 pub mod validation;
@@ -731,6 +732,7 @@ impl RecordStore {
     }
 
     fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {
+        let _lock = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let path = self.state_dir.join(relative);
         let parent = path
             .parent()
@@ -759,6 +761,7 @@ impl RecordStore {
     }
 
     fn delete_atomic(&self, relative: &Path) -> Result<()> {
+        let _lock = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let path = self.state_dir.join(relative);
         if path.exists() {
             fs::remove_file(&path)

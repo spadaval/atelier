@@ -277,6 +277,7 @@ pub fn write_issue_activity(state_dir: &Path, activity: &IssueActivity) -> Resul
 }
 
 pub fn write_record_activity(state_dir: &Path, activity: &IssueActivity) -> Result<PathBuf> {
+    let _lock = crate::mutation_lock::CanonicalMutationLock::shared(state_dir)?;
     let rendered = activity.to_markdown()?;
     let relative = record_activity_path(&activity.subject_kind, &activity.subject_id, &activity.id);
     let path = state_dir.join(&relative);
