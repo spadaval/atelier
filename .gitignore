@@ -16,6 +16,7 @@
 /.atelier/runtime/
 /.atelier/cache/
 /.atelier-worktrees/
+/.atelier-bundle-stage-*/
 /.atelier-state/cache/
 .dolt/
 .beads-credential-key

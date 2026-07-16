@@ -1,5 +1,70 @@
 use super::*;
 
+fn canonical_tree_snapshot(
+    state_dir: &std::path::Path,
+) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    fn collect(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        snapshot: &mut std::collections::BTreeMap<std::path::PathBuf, Vec<u8>>,
+    ) {
+        let mut entries = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap();
+            if relative.components().count() == 1
+                && matches!(
+                    relative.to_str(),
+                    Some("runtime" | "cache" | "locks" | "diagnostics")
+                )
+            {
+                continue;
+            }
+            if path.is_dir() {
+                collect(root, &path, snapshot);
+            } else {
+                snapshot.insert(relative.to_path_buf(), std::fs::read(path).unwrap());
+            }
+        }
+    }
+
+    let mut snapshot = std::collections::BTreeMap::new();
+    collect(state_dir, state_dir, &mut snapshot);
+    snapshot
+}
+
+fn wait_for_test_marker(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !path.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for {}",
+            path.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+fn assert_bulk_process_holds_exclusive_lock(state_dir: &std::path::Path) {
+    use fs2::FileExt;
+    use std::fs::OpenOptions;
+
+    let lock_path = state_dir.join(atelier_records::mutation_lock::CANONICAL_MUTATION_LOCK_PATH);
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .unwrap();
+    assert!(
+        FileExt::try_lock_shared(&file).is_err(),
+        "bulk process did not retain its exclusive canonical transaction"
+    );
+}
+
 fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     let bundle_path = dir.join(format!("mission-fixture-{}.json", title.replace(' ', "-")));
     std::fs::write(
@@ -30,16 +95,247 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     );
     assert!(success, "mission fixture bundle apply failed: {stderr}");
     let mission_id = issue_id_by_title(dir, title);
-    let (success, _stdout, stderr) =
-        run_atelier(dir, &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission fixture ready transition failed: {stderr}");
+    move_reviewed_mission_to_ready(dir, &mission_id);
     mission_id
 }
 
 fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
-    let (success, _stdout, stderr) =
-        run_atelier(dir, &["issue", "transition", mission_id, "ready"]);
-    assert!(success, "mission ready transition failed: {stderr}");
+    move_reviewed_mission_to_ready(dir, mission_id);
+}
+
+fn set_dependency_fixture_status(dir: &std::path::Path, issue_id: &str, status: &str) {
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", status)
+    });
+}
+
+fn configure_dependency_fixture_terminal_status(dir: &std::path::Path) {
+    let policy_path = dir.join(".atelier/workflow.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    let policy = policy.replace(
+        "  done:\n    category: done\n",
+        "  done:\n    category: done\n  accepted:\n    category: done\n",
+    );
+    let policy = policy.replacen(
+        "  task:\n    applies_to: [bug, feature, task]\n    initial_status: todo\n    done_statuses: [done]",
+        "  task:\n    applies_to: [bug, feature, task]\n    initial_status: todo\n    done_statuses: [accepted]",
+        1,
+    );
+    std::fs::write(policy_path, policy).unwrap();
+}
+
+#[test]
+fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    configure_dependency_fixture_terminal_status(dir.path());
+
+    let mission_id = create_mission_fixture(dir.path(), "Dependency gated mission");
+    for title in [
+        "Direct mission prerequisite",
+        "Transitive mission prerequisite",
+        "Unrelated internal mission work",
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue fixture create failed for {title}: {stderr}");
+    }
+    let direct_id = issue_id_by_title(dir.path(), "Direct mission prerequisite");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive mission prerequisite");
+    let internal_id = issue_id_by_title(dir.path(), "Unrelated internal mission work");
+    for args in [
+        vec![
+            "issue",
+            "link",
+            &mission_id,
+            &direct_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &direct_id,
+            &transitive_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &mission_id,
+            &internal_id,
+            "--role",
+            "advances",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "dependency fixture link failed: {stderr}");
+    }
+    approve_current_mission_revision(dir.path(), &mission_id);
+    commit_all(dir.path(), "mission dependency closure fixture");
+
+    let (success, direct_options, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        direct_options.contains("start [blocked]"),
+        "{direct_options}"
+    );
+    assert!(
+        direct_options.contains(&format!("{mission_id} -> {direct_id}")),
+        "missing direct blocking path:\n{direct_options}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(
+        !success,
+        "mission start should reject an open direct blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{mission_id} -> {direct_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected direct mission start");
+
+    set_dependency_fixture_status(dir.path(), &direct_id, "accepted");
+    set_dependency_fixture_status(dir.path(), &transitive_id, "done");
+    commit_all(dir.path(), "direct mission prerequisite terminal");
+    let (success, transitive_options, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        transitive_options.contains("start [blocked]"),
+        "{transitive_options}"
+    );
+    assert!(
+        transitive_options.contains(&format!("{mission_id} -> {direct_id} -> {transitive_id}")),
+        "missing transitive blocking path:\n{transitive_options}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(
+        !success,
+        "mission start should reject an open transitive blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{mission_id} -> {direct_id} -> {transitive_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected transitive mission start");
+
+    set_dependency_fixture_status(dir.path(), &transitive_id, "accepted");
+    commit_all(dir.path(), "mission dependency closure terminal");
+    let (success, started, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "closed dependency mission start failed: {stderr}");
+    assert!(started.contains("Applied transition start"), "{started}");
+    assert!(
+        read_canonical_record(dir.path(), "issues", &internal_id).contains("status: \"todo\""),
+        "unrelated internal mission work should remain incomplete"
+    );
+}
+
+#[test]
+fn test_issue_ready_work_and_direct_start_require_transitive_dependency_closure() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    configure_dependency_fixture_terminal_status(dir.path());
+
+    for title in [
+        "Dependency gated issue",
+        "Direct issue prerequisite",
+        "Transitive issue prerequisite",
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue fixture create failed for {title}: {stderr}");
+    }
+    let issue_id = issue_id_by_title(dir.path(), "Dependency gated issue");
+    let direct_id = issue_id_by_title(dir.path(), "Direct issue prerequisite");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive issue prerequisite");
+    for args in [
+        vec![
+            "issue",
+            "link",
+            &issue_id,
+            &direct_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &direct_id,
+            &transitive_id,
+            "--role",
+            "blocked_by",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "dependency fixture link failed: {stderr}");
+    }
+    commit_all(dir.path(), "open issue dependency closure fixture");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        !ready.lines().any(|line| line == issue_id),
+        "directly blocked issue was reported ready:\n{ready}"
+    );
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(
+        !success,
+        "direct start should reject an open direct blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{issue_id} -> {direct_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected direct issue start");
+
+    set_dependency_fixture_status(dir.path(), &direct_id, "accepted");
+    set_dependency_fixture_status(dir.path(), &transitive_id, "done");
+    commit_all(dir.path(), "issue dependency closure fixture");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        !ready.lines().any(|line| line == issue_id),
+        "transitively blocked issue was reported ready:\n{ready}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(
+        !success,
+        "direct start should reject an open transitive blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{issue_id} -> {direct_id} -> {transitive_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected transitive issue start");
+
+    set_dependency_fixture_status(dir.path(), &transitive_id, "accepted");
+    commit_all(dir.path(), "issue dependency closure terminal");
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        ready.lines().any(|line| line == issue_id),
+        "dependency-ready issue was omitted:\n{ready}"
+    );
+    let (success, started, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "dependency-ready issue start failed: {stderr}");
+    assert!(started.contains("Applied transition start"), "{started}");
 }
 
 #[test]
@@ -324,8 +620,8 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     std::fs::write(
         &policy_path,
         policy.replacen(
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - blockers.transitive_none_open\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators: [evidence.attached]\n",
             1,
         ),
     )
@@ -688,6 +984,7 @@ fn test_mission_request_publish_uses_configured_objective_validators() {
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission link failed: {stderr}");
+    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "configured validator publish fixture");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -798,6 +1095,7 @@ fn test_mission_publish_enforces_gates() {
     let work_id = issue_id_by_title(dir.path(), "Publish work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
+    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "ready strict mission publish");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -870,6 +1168,7 @@ fn test_dirty_worktree_blocks_mission_publish() {
     let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
+    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -978,6 +1277,7 @@ fn test_mission_publish_still_blocks_hand_edited_issue_markdown() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
+    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty canonical mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -2388,6 +2688,568 @@ fn test_bundle_rejects_mission_parent_scope() {
 }
 
 #[test]
+fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_state() {
+    for status in ["ready", "in_progress"] {
+        let dir = tempdir().unwrap();
+        init_atelier(dir.path());
+        let bundle_path = dir.path().join(format!("executable-mission-{status}.json"));
+        std::fs::write(
+            &bundle_path,
+            format!(
+                r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Executable mission without receipts",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.blocker",
+        "title": "Open bundled blocker",
+        "issue_type": "task",
+        "status": "todo"
+      }},
+      {{
+        "client_ref": "mission.executable",
+        "title": "Unreviewed executable mission",
+        "issue_type": "mission",
+        "status": {status:?},
+        "depends_on": [{{ "client_ref": "issue.blocker" }}]
+      }}
+    ]
+  }}
+}}"#
+            ),
+        )
+        .unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        let canonical_before = canonical_tree_snapshot(&state_dir);
+        let db_before = std::fs::read(&db_path).unwrap();
+
+        let (success, _stdout, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+        );
+
+        assert!(!success, "unreviewed {status} mission must be rejected");
+        assert!(
+            stderr.contains("workflow_mission_plan_review_bypass"),
+            "{stderr}"
+        );
+        assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+        assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
+        assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+    }
+}
+
+#[test]
+fn test_bundle_apply_accepts_non_executable_initial_statuses() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("initial-statuses.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Initial statuses",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "mission.draft",
+        "title": "Draft bundled mission",
+        "issue_type": "mission",
+        "status": "draft"
+      },
+      {
+        "client_ref": "issue.todo",
+        "title": "Todo bundled task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(success, "initial-status bundle should apply: {stderr}");
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "applied initial statuses must rebuild cleanly: {stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Reviewed executable mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check", "--fix"]);
+    assert!(success, "fixture cache refresh failed: {stderr}");
+    let bundle_path = dir.path().join("stale-reviewed-mission.json");
+    std::fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Stale reviewed mission",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.completed-blocker",
+        "title": "Completed graph addition",
+        "issue_type": "task",
+        "status": "done",
+        "blocks": [{{ "id": {mission_id:?} }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let db_path = state_dir.join("runtime/state.db");
+    let canonical_before = canonical_tree_snapshot(&state_dir);
+    let db_before = std::fs::read(&db_path).unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(!success, "stale executable mission review must be rejected");
+    assert!(
+        stderr.contains("workflow_mission_plan_review_bypass"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
+    assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+}
+
+#[test]
+fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("paused-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Paused bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.bulk",
+        "title": "Bulk installed task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let marker = dir.path().join("bundle-snapshot.marker");
+    let release = marker.with_extension("release");
+    let bulk = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"])
+        .env("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT", &marker)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_for_test_marker(&marker);
+    assert_bulk_process_holds_exclusive_lock(&dir.path().join(".atelier"));
+
+    let mut writer = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["issue", "create", "Writer after bundle snapshot"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(
+        writer.try_wait().unwrap().is_none(),
+        "ordinary writer completed while bulk snapshot/swap lock was held"
+    );
+
+    std::fs::write(&release, "release").unwrap();
+    let bulk_output = bulk.wait_with_output().unwrap();
+    assert!(
+        bulk_output.status.success(),
+        "bundle failed: {}",
+        String::from_utf8_lossy(&bulk_output.stderr)
+    );
+    let writer_output = writer.wait_with_output().unwrap();
+    assert!(
+        writer_output.status.success(),
+        "writer failed: {}",
+        String::from_utf8_lossy(&writer_output.stderr)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Bulk installed task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Writer after bundle snapshot"
+    ));
+}
+
+#[test]
+fn test_import_beads_exclusive_snapshot_swap_preserves_later_writer() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let import_path = dir.path().join("paused-import.jsonl");
+    std::fs::write(
+        &import_path,
+        r#"{"_type":"issue","id":"bulk-source","title":"Bulk imported task","status":"open","priority":2,"issue_type":"task"}
+"#,
+    )
+    .unwrap();
+    let marker = dir.path().join("import-snapshot.marker");
+    let release = marker.with_extension("release");
+    let bulk = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["import-beads", import_path.to_str().unwrap()])
+        .env("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT", &marker)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_for_test_marker(&marker);
+    assert_bulk_process_holds_exclusive_lock(&dir.path().join(".atelier"));
+
+    let mut writer = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["issue", "create", "Writer after import snapshot"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(
+        writer.try_wait().unwrap().is_none(),
+        "ordinary writer completed while import snapshot/swap lock was held"
+    );
+
+    std::fs::write(&release, "release").unwrap();
+    let bulk_output = bulk.wait_with_output().unwrap();
+    assert!(
+        bulk_output.status.success(),
+        "import failed: {}",
+        String::from_utf8_lossy(&bulk_output.stderr)
+    );
+    let writer_output = writer.wait_with_output().unwrap();
+    assert!(
+        writer_output.status.success(),
+        "writer failed: {}",
+        String::from_utf8_lossy(&writer_output.stderr)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Bulk imported task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Writer after import snapshot"
+    ));
+}
+
+#[test]
+fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("cleanup-failure-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Cleanup failure bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.cleanup",
+        "title": "Cleanup committed task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ],
+    "evidence": [
+      {
+        "client_ref": "evidence.cleanup",
+        "title": "Cleanup committed evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "body": "Both bundle directories committed before cleanup failed."
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let db_path = state_dir.join("runtime/state.db");
+    let db_before = std::fs::read(&db_path).unwrap();
+    let issue_count = count_markdown_records(dir.path(), "issues");
+    let evidence_count = count_markdown_records(dir.path(), "evidence");
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+        &[("ATELIER_TEST_BUNDLE_BACKUP_CLEANUP_FAILURE", "1")],
+    );
+
+    assert!(success, "post-commit cleanup must not fail apply: {stderr}");
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    assert!(
+        stderr.contains("Bundle apply committed successfully"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Do not retry this create-only bundle"),
+        "{stderr}"
+    );
+    assert_eq!(
+        count_markdown_records(dir.path(), "issues"),
+        issue_count + 1
+    );
+    assert_eq!(
+        count_markdown_records(dir.path(), "evidence"),
+        evidence_count + 1
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Cleanup committed task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "evidence",
+        "Cleanup committed evidence"
+    ));
+    assert_eq!(
+        std::fs::read(&db_path).unwrap(),
+        db_before,
+        "post-commit cleanup changed SQLite before lazy repair"
+    );
+
+    let mut backups = std::fs::read_dir(state_dir.join("runtime"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".atelier-bundle-backup-"))
+        })
+        .collect::<Vec<_>>();
+    backups.sort();
+    assert_eq!(
+        backups.len(),
+        1,
+        "expected one retained backup: {backups:?}"
+    );
+    assert!(
+        stderr.contains(&backups[0].display().to_string()),
+        "{stderr}"
+    );
+    let ignored = std::process::Command::new("git")
+        .current_dir(dir.path())
+        .args(["check-ignore", "-q", backups[0].to_str().unwrap()])
+        .status()
+        .unwrap();
+    assert!(ignored.success(), "retained backup must be git-ignored");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "committed bundle must repair and check cleanly: {stderr}"
+    );
+    let counts_before_retry = (
+        count_markdown_records(dir.path(), "issues"),
+        count_markdown_records(dir.path(), "evidence"),
+    );
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(!success, "retry with retained backup must be refused");
+    assert!(stderr.contains("bundle_recovery_required"), "{stderr}");
+    assert!(
+        stderr.contains(&backups[0].display().to_string()),
+        "{stderr}"
+    );
+    assert_eq!(
+        (
+            count_markdown_records(dir.path(), "issues"),
+            count_markdown_records(dir.path(), "evidence"),
+        ),
+        counts_before_retry,
+        "refused retry created duplicate records"
+    );
+}
+
+#[test]
+fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("stage-cleanup-failure-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Stage cleanup failure bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.stage-cleanup",
+        "title": "Stage cleanup committed task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ],
+    "evidence": [
+      {
+        "client_ref": "evidence.stage-cleanup",
+        "title": "Stage cleanup committed evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "body": "Both live directories committed before stage cleanup failed."
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let db_path = state_dir.join("runtime/state.db");
+    let db_before = std::fs::read(&db_path).unwrap();
+    let counts_before = (
+        count_markdown_records(dir.path(), "issues"),
+        count_markdown_records(dir.path(), "evidence"),
+    );
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+        &[("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE", "1")],
+    );
+
+    assert!(
+        success,
+        "post-commit stage cleanup must not fail apply: {stderr}"
+    );
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    assert!(
+        stderr.contains("Bundle apply committed successfully")
+            && stderr.contains("staging cleanup failed"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Do not retry this create-only bundle"),
+        "{stderr}"
+    );
+    assert_eq!(
+        (
+            count_markdown_records(dir.path(), "issues"),
+            count_markdown_records(dir.path(), "evidence"),
+        ),
+        (counts_before.0 + 1, counts_before.1 + 1)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Stage cleanup committed task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "evidence",
+        "Stage cleanup committed evidence"
+    ));
+    assert_eq!(
+        std::fs::read(&db_path).unwrap(),
+        db_before,
+        "post-commit stage cleanup changed SQLite before lazy repair"
+    );
+
+    let mut stages = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".atelier-bundle-stage-"))
+        })
+        .collect::<Vec<_>>();
+    stages.sort();
+    assert_eq!(stages.len(), 1, "expected one retained stage: {stages:?}");
+    assert!(stages[0].is_dir());
+    assert!(
+        stderr.contains(&stages[0].display().to_string()),
+        "{stderr}"
+    );
+    let ignored = std::process::Command::new("git")
+        .current_dir(dir.path())
+        .args(["check-ignore", "-q", stages[0].to_str().unwrap()])
+        .status()
+        .unwrap();
+    assert!(ignored.success(), "retained stage must be git-ignored");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "committed bundle must repair and check cleanly: {stderr}"
+    );
+    let counts_before_retry = (
+        count_markdown_records(dir.path(), "issues"),
+        count_markdown_records(dir.path(), "evidence"),
+    );
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(!success, "retry with retained stage must be refused");
+    assert!(stderr.contains("bundle_recovery_required"), "{stderr}");
+    assert!(
+        stderr.contains(&stages[0].display().to_string()),
+        "{stderr}"
+    );
+    assert_eq!(
+        (
+            count_markdown_records(dir.path(), "issues"),
+            count_markdown_records(dir.path(), "evidence"),
+        ),
+        counts_before_retry,
+        "refused retry created duplicate records"
+    );
+}
+
+#[test]
 fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2571,9 +3433,7 @@ fn test_mission_start_prepares_mission_branch_from_base() {
     );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = issue_id_by_title(dir.path(), "Integration mission");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission branch baseline");
 
     let (success, start_out, stderr) =
@@ -2634,9 +3494,7 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission scoped baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -2739,9 +3597,7 @@ fn test_epic_close_integrates_into_recorded_mission_branch() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission close target baseline");
 
     let (success, _, stderr) =
@@ -2829,9 +3685,7 @@ fn test_epic_start_requires_started_mission_branch_for_mission_scope() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "wrong branch baseline");
 
     let status = Command::new("git")
@@ -2892,9 +3746,7 @@ fn test_epic_start_from_other_branch_uses_recorded_mission_branch() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
-    assert!(success, "mission ready failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "side branch mission baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);

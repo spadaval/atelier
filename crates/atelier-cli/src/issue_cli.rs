@@ -165,6 +165,123 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             }
         }
 
+        super::IssueCommands::PlanReview { id, action } => {
+            let actor = std::env::var("ATELIER_AUTHENTICATED_ACTOR").map_err(|_| {
+                anyhow::anyhow!(
+                    "mission-plan review requires ATELIER_AUTHENTICATED_ACTOR=actor-v1:<authenticated-authority>/<immutable-subject>"
+                )
+            })?;
+            let cache = use_cases::mutation_cache()?;
+            let mission_id = super::resolve_issue_arg(cache.db(), &id)?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let mission_status = cache.db().require_issue(&mission_id)?.status;
+            let request_transition =
+                matches!(&action, super::PlanReviewCommands::Request) && mission_status == "draft";
+            if request_transition {
+                let options =
+                    commands::workflow_planning::issue_transition_options(cache.db(), &mission_id)?;
+                let option = options
+                    .iter()
+                    .find(|option| option.name == "request_plan_review")
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "mission {} has no configured request_plan_review transition",
+                            mission_id
+                        )
+                    })?;
+                if !option.allowed {
+                    bail!(
+                        "mission {} cannot request plan review: {}",
+                        mission_id,
+                        option.blockers.join("; ")
+                    );
+                }
+            }
+            let approving = matches!(&action, super::PlanReviewCommands::Approve);
+            let mutation = match action {
+                super::PlanReviewCommands::Request => {
+                    if mission_status == "plan_review" {
+                        atelier_app::mission_plan_review::MissionPlanReviewMutation::Rework
+                    } else {
+                        atelier_app::mission_plan_review::MissionPlanReviewMutation::Request
+                    }
+                }
+                super::PlanReviewCommands::Rework => {
+                    atelier_app::mission_plan_review::MissionPlanReviewMutation::Rework
+                }
+                super::PlanReviewCommands::Finding {
+                    finding_id,
+                    severity,
+                    affected_issue_ids,
+                    dependency_path,
+                } => {
+                    let severity = match severity.as_str() {
+                        "blocking" => atelier_records::mission_plan_review::MissionPlanFindingSeverity::Blocking,
+                        "non_blocking" | "non-blocking" => atelier_records::mission_plan_review::MissionPlanFindingSeverity::NonBlocking,
+                        other => bail!("unsupported finding severity '{other}'; expected blocking or non-blocking"),
+                    };
+                    atelier_app::mission_plan_review::MissionPlanReviewMutation::Finding {
+                        finding_id,
+                        severity,
+                        affected_issue_ids,
+                        dependency_path,
+                    }
+                }
+                super::PlanReviewCommands::ChangeRequest {
+                    request_id,
+                    affected_issue_ids,
+                    dependency_path,
+                } => atelier_app::mission_plan_review::MissionPlanReviewMutation::ChangeRequest {
+                    request_id,
+                    affected_issue_ids,
+                    dependency_path,
+                },
+                super::PlanReviewCommands::Resolve {
+                    target_id,
+                    disposition,
+                } => atelier_app::mission_plan_review::MissionPlanReviewMutation::Resolve {
+                    target_id,
+                    disposition,
+                },
+                super::PlanReviewCommands::Approve => {
+                    atelier_app::mission_plan_review::MissionPlanReviewMutation::Approve
+                }
+            };
+            let result = atelier_app::mission_plan_review::mutate(
+                &state_dir,
+                &mission_id,
+                &actor,
+                mutation,
+            )
+            .map_err(|error| {
+                if approving && error.to_string().contains("not independent") {
+                    anyhow::anyhow!(
+                        "mission {mission_id} self-approval rejected: Reviewer {actor} is not independent because it is an author or material editor; use an independent reviewer\nNext: atelier issue plan-review {mission_id} approve"
+                    )
+                } else {
+                    error
+                }
+            })?;
+            if request_transition {
+                commands::workflow::transition_issue(
+                    cache.db(),
+                    &state_dir,
+                    &db_path,
+                    &mission_id,
+                    "request_plan_review",
+                    None,
+                )?;
+            }
+            if quiet {
+                println!("{}", result.activity_id);
+            } else {
+                println!("Recorded mission-plan review event {}", result.activity_id);
+                println!("Mission:  {mission_id}");
+                println!("Revision: {}", result.graph_revision);
+            }
+            Ok(())
+        }
+
         super::IssueCommands::Update {
             id,
             title,

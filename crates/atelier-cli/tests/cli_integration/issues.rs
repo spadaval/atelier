@@ -3188,22 +3188,25 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--ready"]);
     assert!(success, "work mission --ready failed: {stderr}");
-    assert!(ready.contains("Ready mission work"), "{ready}");
+    assert!(ready.contains("Ready Work"), "{ready}");
+    assert!(ready.contains("(none)"), "{ready}");
+    assert!(!ready.contains(&ready_id), "{ready}");
     assert!(!ready.contains("Blocked mission work"), "{ready}");
 
     let (success, blocked, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--blocked"]);
     assert!(success, "work mission --blocked failed: {stderr}");
-    assert!(!blocked.contains("Ready mission work"), "{blocked}");
+    assert!(blocked.contains("Ready mission work"), "{blocked}");
     assert!(blocked.contains("Blocked mission work"), "{blocked}");
     assert!(blocked.contains(&blocker_id), "{blocked}");
 
-    set_issue_status(dir.path(), &mission_id, "ready");
     set_issue_status(dir.path(), &ready_id, "done");
     set_issue_status(dir.path(), &blocked_id, "done");
     set_issue_status(dir.path(), &blocker_id, "done");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after status setup failed: {stderr}");
+    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    commit_all(dir.path(), "reviewed dashboard mission");
     let (success, closeout_ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id]);
     assert!(success, "closeout-ready work mission failed: {stderr}");
@@ -3249,49 +3252,12 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
     let workflow_path = dir.join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path)
         .expect("failed to read workflow policy")
-        .replace("  mission: { label: Mission }\n", "")
-        .replace(
-            r#"  mission:
-    applies_to: [mission]
-    initial_status: draft
-    done_statuses: [publish_review, closed]
-    transitions:
-      ready:
-        from: [draft]
-        to: ready
-        description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
-        validators:
-          - issue.sections_parseable
-      start:
-        from: [ready]
-        to: in_progress
-        description: "Start mission execution after the configured repository baseline is green or explicitly waived."
-        validators:
-          - baseline.default_checks
-        actions:
-          - git.prepare_branch
-      request_publish:
-        from: [ready, in_progress, validation]
-        to: publish_review
-        description: "Open the mission publish review from the mission branch to the configured base branch."
-        validators:
-          - objective.work_present
-          - objective.work_terminal
-          - objective.blockers_none_open
-          - issue.sections_parseable
-          - validation.criteria_satisfied
-          - closeout.failures_classified
-          - lint.none_blocking
-          - command_surface_current
-          - ignored_tests_reviewed
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-          - review.open: { role: manager }
-
-"#,
-            "",
-        );
+        .replace("  mission: { label: Mission }\n", "");
+    let start = workflow
+        .find("  mission:\n    applies_to: [mission]\n")
+        .unwrap();
+    let end = workflow[start..].find("\n  task:\n").unwrap() + start;
+    let workflow = format!("{}{}", &workflow[..start], &workflow[end + 1..]);
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
 

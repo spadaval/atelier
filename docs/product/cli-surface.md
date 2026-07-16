@@ -38,6 +38,7 @@ or mission:
 - `atelier status`
 - `atelier work ...`
 - `atelier issue ...`
+- `atelier issue plan-review <mission-id> ...`
 - `atelier check [id]`
 - `atelier issue create "..." --issue-type mission`
 - `atelier issue show <objective-id>`
@@ -132,7 +133,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
-| `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
+| `issue` | Create, list, show, update, transition, note, manage typed links, and record independent mission-plan review decisions. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. `issue plan-review` owns exact-revision review requests, findings, change requests, resolutions, and approval. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, activity IDs, graph revisions, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `issue plan-review <mission-id> --help`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `review` | Manage the configured review artifact for issue or epic work. | `atelier review open` derives routine artifact fields from issue and workflow state; `atelier review show` owns status/detail and optional comments; `atelier review submit` owns exactly one comment, approval, or change request; resolve and merge keep their distinct jobs. Mutating commands use explicit `--role` or infer role from the owner issue status. Merge enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
@@ -157,6 +158,16 @@ in the command audit:
   [Retention And Prune Policy](retention-and-prune.md).
 - `import-beads`: temporary migration surface; normal setup uses
   `init --import-beads`.
+- `migrate-mission-plan-review`: one-shot hidden admin cutover for repositories
+  carrying the legacy direct mission-ready policy. It stages and validates the
+  full canonical transaction, preserves unrelated configured mission
+  transitions, serializes every repository command across its complete
+  read/validate/write lifetime, and uses a durable recovery journal with workflow
+  activation last. The journal inventories the complete canonical tree by path,
+  type, and file hash. Retry performs deterministic interruption recovery before
+  migration, refuses and preserves any unrelated addition, edit, deletion, or
+  type change for operator repair, and becomes a validation-only no-op after
+  success. Remove it when no supported repository can retain that legacy policy.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
 - `forgejo roles`: hidden provider-specific role-account recovery. Routine review
@@ -284,9 +295,15 @@ relationships, or evidence links; do not script repeated `issue create`,
 bundle apply` applies create-only v1 bundle resources from a file path after
 the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
-durable relationship buckets, leaves the affected cache facts detectably
-stale after successful record-file writes, and reports recovery detail if an unexpected apply failure
-leaves any created IDs. `atelier issue show <objective-id>` is the rich
+durable relationship buckets, validates the complete staged canonical graph
+before installation, and holds an exclusive canonical transaction across the
+snapshot and two-directory rollback-capable install so concurrent ordinary
+writers apply afterward instead of being overwritten. It leaves the affected
+cache facts detectably stale after successful record-file writes and reports
+post-commit cleanup trouble as a committed-success warning with a retained,
+ignored backup or stage path; later applies refuse either recovery artifact
+until the live tree is checked and the named real directory is removed.
+`atelier issue show <objective-id>` is the rich
 objective detail read: it summarizes evidence, prose planning/checkpoint
 references, and work grouped by ready, blocked, done, and backlog state.
 `atelier issue transition <objective-id>` owns live validator failures,
@@ -352,7 +369,18 @@ imports, migration notes, or explicit completion mirroring; normal mission and
 epic readiness reads proof from linked accountable child issues. The command
 mode preserves the old capture behavior by storing the command, exit status,
 success flag, timestamp, result, and bounded stdout/stderr summaries so
-validation proof does not require manual transcript copy/paste.
+validation proof does not require manual transcript copy/paste. Command-backed
+capture first binds and validates the repository association and target; an
+invalid repository or target fails before the child runs. It then releases the
+canonical association transaction while the child executes, so the child may
+itself invoke normal or administrative Atelier commands. After the child exits,
+capture reacquires the same logical repository association, refreshes and
+revalidates the same canonical target identity (kind, ID, schema/version,
+creation timestamp, and record type), and only then appends the evidence and activity under an
+exclusive postflight transaction. An association swap, missing target, or
+delete-and-recreate reuse of the same ID fails closed without writing proof;
+same-record title, status, body, and update-time mutations plus canonical
+subtree imports remain valid when the immutable identity is unchanged.
 Evidence target links use the relation role `validates`; evidence classifications
 such as `validation`, `test`, or `review` belong in `--kind`.
 

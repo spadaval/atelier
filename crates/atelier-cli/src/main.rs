@@ -40,6 +40,7 @@ Maintenance:
 Common commands:
   atelier man
   atelier man worker
+  atelier man planner
   atelier man reviewer
   atelier man validator
   atelier man manager
@@ -145,6 +146,10 @@ enum Commands {
         #[arg(short, long)]
         input: Option<String>,
     },
+
+    /// One-shot independent mission plan-review cutover
+    #[command(hide = true)]
+    MigrateMissionPlanReview,
 
     /// Import Beads JSONL backup into durable record files; cache repair remains lazy
     #[command(hide = true)]
@@ -400,6 +405,14 @@ enum IssueCommands {
         verbose: bool,
     },
 
+    /// Record exact-revision independent mission-plan review decisions
+    PlanReview {
+        /// Mission issue ID
+        id: String,
+        #[command(subcommand)]
+        action: PlanReviewCommands,
+    },
+
     /// Update an issue
     Update {
         /// Issue ID
@@ -474,6 +487,40 @@ enum IssueCommands {
         #[arg(long, default_value = "advances")]
         role: String,
     },
+}
+
+#[derive(Subcommand)]
+enum PlanReviewCommands {
+    /// Submit the current mission graph and move the mission to plan_review
+    Request,
+    /// Attribute material edits and resubmit the current graph for review
+    Rework,
+    /// Record a reviewer finding against the exact current graph
+    Finding {
+        finding_id: String,
+        #[arg(long, default_value = "blocking")]
+        severity: String,
+        #[arg(long = "affected", required = true)]
+        affected_issue_ids: Vec<String>,
+        #[arg(long = "dependency-path")]
+        dependency_path: Vec<String>,
+    },
+    /// Request changes against the exact current graph
+    ChangeRequest {
+        request_id: String,
+        #[arg(long = "affected", required = true)]
+        affected_issue_ids: Vec<String>,
+        #[arg(long = "dependency-path")]
+        dependency_path: Vec<String>,
+    },
+    /// Resolve a finding or change request without granting approval
+    Resolve {
+        target_id: String,
+        #[arg(long)]
+        disposition: String,
+    },
+    /// Approve the exact current graph as an independent reviewer
+    Approve,
 }
 
 #[derive(Subcommand)]
@@ -716,6 +763,30 @@ fn load_dotenv() -> Result<()> {
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
     init_tracing(&cli.log_level, &cli.log_format);
+    // Hold an association transaction across every repository command's
+    // complete read/validate/write lifetime. Ordinary commands share it;
+    // snapshot-and-swap bundle/import commands own it exclusively so a writer
+    // cannot commit between their snapshot and installation. This also
+    // prevents a mutation prepared against pre-cutover bytes from waiting
+    // behind the exclusive migration and then committing stale state after
+    // activation. Repository-associated prune acquires the same lock after its
+    // optional tracker discovery below.
+    let _canonical_transaction_lock = match canonical_transaction_mode(&cli.command) {
+        CanonicalTransactionMode::None => None,
+        mode => {
+            let manager = CacheManager::discover()?;
+            let state_dir = manager.state_dir();
+            Some(match mode {
+                CanonicalTransactionMode::Shared => {
+                    atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?
+                }
+                CanonicalTransactionMode::Exclusive => {
+                    atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?
+                }
+                CanonicalTransactionMode::None => unreachable!(),
+            })
+        }
+    };
     let quiet = cli.quiet;
     let command_name = command_identity(&cli.command);
     let started_at = Utc::now();
@@ -819,6 +890,30 @@ fn run() -> Result<()> {
             commands::issue::rebuild(&state_dir, &db_path)
         }
 
+        Commands::MigrateMissionPlanReview => {
+            let manager = CacheManager::discover()?;
+            let report = atelier_app::mission_plan_migration::run(manager.repo_root())?;
+            atelier_app::rebuild::run(&manager.state_dir(), &manager.db_path())?;
+            if quiet {
+                println!("{}", report.mission_count);
+            } else if report.already_applied {
+                println!(
+                    "Independent mission plan-review cutover already applied ({} missions validated).",
+                    report.mission_count
+                );
+            } else {
+                println!(
+                    "Migrated {} missions: {} terminal unchanged, {} draft unchanged, {} moved to plan_review, {} active grandfathered.",
+                    report.mission_count,
+                    report.terminal_count,
+                    report.draft_count,
+                    report.plan_review_count,
+                    report.active_count
+                );
+            }
+            Ok(())
+        }
+
         Commands::ImportBeads { input, output } => {
             let storage = CacheManager::discover()?;
             let state_dir = output
@@ -857,20 +952,23 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = use_cases::mutation_cache()?;
                 let parsed_target = match target.as_deref() {
-                    Some(target) => {
-                        let target = use_cases::parse_evidence_target_arg(target)?;
-                        let id = use_cases::resolve_evidence_target_ref(
-                            &storage,
-                            &target.kind,
-                            &target.id,
-                        )?;
-                        Some((target.kind, id))
-                    }
+                    Some(target) => Some(use_cases::parse_evidence_target_arg(target)?),
                     None => None,
                 };
                 if command.is_empty() {
+                    let storage = use_cases::mutation_cache()?;
+                    let resolved_target = parsed_target
+                        .as_ref()
+                        .map(|target| {
+                            use_cases::resolve_evidence_target_ref(
+                                &storage,
+                                &target.kind,
+                                &target.id,
+                            )
+                            .map(|id| (target.kind.clone(), id))
+                        })
+                        .transpose()?;
                     let summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
                             bail!("use either --summary or a positional summary, not both")
@@ -888,7 +986,7 @@ fn run() -> Result<()> {
                         path.as_deref(),
                         uri.as_deref(),
                         producer.as_deref(),
-                        parsed_target.as_ref().map(|(kind, id)| {
+                        resolved_target.as_ref().map(|(kind, id)| {
                             commands::evidence::TargetMetadata {
                                 kind,
                                 id,
@@ -896,7 +994,7 @@ fn run() -> Result<()> {
                             }
                         }),
                     )?;
-                    if let Some((kind, id)) = parsed_target {
+                    if let Some((kind, id)) = resolved_target {
                         commands::evidence::attach_silently(
                             &storage.state_dir(),
                             &storage.db_path(),
@@ -917,22 +1015,18 @@ fn run() -> Result<()> {
                         (Some(summary), None) | (None, Some(summary)) => Some(summary),
                         (None, None) => None,
                     };
-                    commands::evidence::capture(
-                        &storage.state_dir(),
-                        &storage.db_path(),
-                        commands::evidence::CaptureOptions {
-                            evidence_kind: &evidence_kind,
-                            summary: command_summary,
-                            path: path.as_deref(),
-                            uri: uri.as_deref(),
-                            producer: producer.as_deref(),
-                            target_kind: parsed_target.as_ref().map(|(kind, _)| kind.as_str()),
-                            target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
-                            role: &role,
-                            command: &command,
-                            quiet,
-                        },
-                    )
+                    commands::evidence::capture(commands::evidence::CaptureOptions {
+                        evidence_kind: &evidence_kind,
+                        summary: command_summary,
+                        path: path.as_deref(),
+                        uri: uri.as_deref(),
+                        producer: producer.as_deref(),
+                        target_kind: parsed_target.as_ref().map(|target| target.kind.as_str()),
+                        target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
+                        role: &role,
+                        command: &command,
+                        quiet,
+                    })
                 }
             }
             EvidenceCommands::Show { id } => {
@@ -1149,9 +1243,20 @@ fn run() -> Result<()> {
             apply,
             retention_days,
         } => {
-            let tracker = match CacheManager::discover()
-                .and_then(|manager| manager.get_cache(CacheUse::Decision))
-            {
+            // Prune can clean local diagnostics without a repository. Once a
+            // tracker is discovered, retain its association lock across cache
+            // acquisition, canonical candidate reads, and any removals.
+            let manager = CacheManager::discover();
+            let _prune_canonical_lock = manager
+                .as_ref()
+                .ok()
+                .map(|manager| {
+                    atelier_records::mutation_lock::CanonicalMutationLock::shared(
+                        &manager.state_dir(),
+                    )
+                })
+                .transpose()?;
+            let tracker = match manager.and_then(|manager| manager.get_cache(CacheUse::Decision)) {
                 Ok(storage) => {
                     let repo_root = storage.repo_root().to_path_buf();
                     let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
@@ -1224,6 +1329,44 @@ fn run() -> Result<()> {
     result
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CanonicalTransactionMode {
+    None,
+    Shared,
+    Exclusive,
+}
+
+fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
+    match command {
+        // Fresh initialization has no repository association to lock. Forced
+        // reconciliation of an existing tracker does.
+        Commands::Init { .. } if std::path::Path::new(".atelier").exists() => {
+            CanonicalTransactionMode::Exclusive
+        }
+        Commands::Init { .. } => CanonicalTransactionMode::None,
+        Commands::Bundle {
+            action: BundleCommands::Apply { .. },
+        }
+        | Commands::ImportBeads { .. } => CanonicalTransactionMode::Exclusive,
+        // Command-backed evidence deliberately executes its arbitrary child
+        // before acquiring an association transaction for the canonical
+        // append. The child may itself be an Atelier writer or migration.
+        Commands::Evidence {
+            action: EvidenceCommands::Record { command, .. },
+        } if !command.is_empty() => CanonicalTransactionMode::None,
+        Commands::Man { .. }
+        | Commands::MigrateMissionPlanReview
+        | Commands::Diagnostics { .. }
+        | Commands::Prune { .. } => CanonicalTransactionMode::None,
+        _ => CanonicalTransactionMode::Shared,
+    }
+}
+
+#[cfg(test)]
+fn command_uses_canonical_transaction(command: &Commands) -> bool {
+    canonical_transaction_mode(command) != CanonicalTransactionMode::None
+}
+
 fn parse_cli_or_exit() -> Cli {
     match Cli::try_parse() {
         Ok(cli) => cli,
@@ -1258,6 +1401,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
+            IssueCommands::PlanReview { .. } => "issue plan-review",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Link { .. } => "issue link",
@@ -1271,6 +1415,7 @@ fn command_identity(command: &Commands) -> &'static str {
             }
         }
         Commands::Rebuild { .. } => "rebuild",
+        Commands::MigrateMissionPlanReview => "migrate-mission-plan-review",
         Commands::ImportBeads { .. } => "import-beads",
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",
@@ -1328,6 +1473,93 @@ fn command_identity(command: &Commands) -> &'static str {
 
 #[cfg(test)]
 mod cache_acquisition_tests {
+    use super::{
+        canonical_transaction_mode, command_uses_canonical_transaction, CanonicalTransactionMode,
+        Cli,
+    };
+    use clap::Parser;
+
+    #[test]
+    fn command_backed_evidence_defers_association_transaction_until_after_child() {
+        let capture = Cli::try_parse_from([
+            "atelier",
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--",
+            "atelier",
+            "migrate-mission-plan-review",
+        ])
+        .expect("command-backed evidence CLI");
+        assert!(!command_uses_canonical_transaction(&capture.command));
+
+        let manual = Cli::try_parse_from([
+            "atelier",
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "manual proof",
+        ])
+        .expect("manual evidence CLI");
+        assert!(command_uses_canonical_transaction(&manual.command));
+    }
+
+    #[test]
+    fn canonical_transaction_lock_precedes_repository_dispatch() {
+        let main = include_str!("main.rs");
+        let production = main
+            .split("mod cache_acquisition_tests")
+            .next()
+            .expect("production dispatch source");
+        let lock = production
+            .find("let _canonical_transaction_lock")
+            .expect("canonical association lock");
+        let dispatch = production
+            .find("let result = match cli.command")
+            .expect("central command dispatch");
+
+        assert!(lock < dispatch, "association lock must precede dispatch");
+        for bulk_surface in [
+            "commands::bundle::apply",
+            "commands::import::run_beads_jsonl",
+        ] {
+            assert!(
+                production[dispatch..].contains(bulk_surface),
+                "missing bulk canonical mutation surface {bulk_surface}"
+            );
+        }
+        let prune_lock = production
+            .find("let _prune_canonical_lock")
+            .expect("optional-repository prune association lock");
+        let prune_run = production
+            .find("commands::prune::run")
+            .expect("prune dispatch");
+        assert!(prune_lock < prune_run, "prune lock must precede prune work");
+    }
+
+    #[test]
+    fn bulk_snapshot_swap_commands_take_exclusive_canonical_transactions() {
+        for args in [
+            vec!["atelier", "bundle", "apply", "bundle.json", "--yes"],
+            vec!["atelier", "import-beads", "issues.jsonl"],
+        ] {
+            let cli = Cli::try_parse_from(args).expect("bulk canonical command");
+            assert_eq!(
+                canonical_transaction_mode(&cli.command),
+                CanonicalTransactionMode::Exclusive
+            );
+        }
+
+        let preview = Cli::try_parse_from(["atelier", "bundle", "preview", "bundle.json"])
+            .expect("bundle preview");
+        assert_eq!(
+            canonical_transaction_mode(&preview.command),
+            CanonicalTransactionMode::Shared
+        );
+    }
+
     #[test]
     fn central_dispatch_has_no_raw_database_open_bypass() {
         let sources = [

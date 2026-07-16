@@ -74,6 +74,7 @@ mod tests {
         assert!(!gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
         assert!(gitignore.contains("/.atelier/runtime/"));
         assert!(gitignore.contains("/.atelier/cache/"));
+        assert!(gitignore.contains("/.atelier-bundle-stage-*/"));
         assert!(!gitignore.contains("/.atelier/rules/"));
         assert!(!gitignore.contains("/.atelier/rules.local/"));
         assert!(!gitignore.contains("/.atelier/hook-config.json"));

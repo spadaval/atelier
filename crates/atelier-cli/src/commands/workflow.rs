@@ -339,6 +339,7 @@ struct TransitionApply<'a> {
 
 impl TransitionApply<'_> {
     fn apply(&self) -> Result<()> {
+        let mission_plan_start = self.mission_plan_start_authorization()?;
         let mut record = app_use_cases::load_canonical_issue(self.state_dir, &self.issue.id)?;
         apply_transition_record(
             self.policy,
@@ -348,7 +349,48 @@ impl TransitionApply<'_> {
             self.close_reason,
         )?;
         record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
-        record_applied_transition(self.issue, self.transition_name, self.transition)
+        record_applied_transition(
+            self.issue,
+            self.transition_name,
+            self.transition,
+            mission_plan_start,
+        )
+    }
+
+    fn mission_plan_start_authorization(
+        &self,
+    ) -> Result<Option<atelier_records::activity::MissionPlanStartAuthorization>> {
+        if self.issue.issue_type != "mission"
+            || self.transition_name != "start"
+            || self.issue.status != "ready"
+            || self.transition.to != "in_progress"
+        {
+            return Ok(None);
+        }
+        let state = atelier_records::mission_plan_review::mission_plan_review_state(
+            self.state_dir,
+            &self.issue.id,
+        )?;
+        if state.freshness
+            != atelier_records::mission_plan_review::MissionPlanReviewFreshness::FreshApproval
+        {
+            bail!(
+                "mission {} cannot record a gated start receipt without current independent approval",
+                self.issue.id
+            );
+        }
+        let authorization = state.authorization.ok_or_else(|| {
+            anyhow!(
+                "mission {} has fresh approval without canonical authorization",
+                self.issue.id
+            )
+        })?;
+        Ok(Some(
+            atelier_records::activity::MissionPlanStartAuthorization {
+                graph_revision: authorization.graph_revision,
+                approval_activity_id: authorization.activity_id,
+            },
+        ))
     }
 }
 
@@ -1032,12 +1074,14 @@ fn record_applied_transition(
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
+    mission_plan_start: Option<atelier_records::activity::MissionPlanStartAuthorization>,
 ) -> Result<()> {
     crate::commands::activity_log::record_transition_applied(
         &issue.id,
         transition_name,
         &issue.status,
         &transition.to,
+        mission_plan_start,
     )
 }
 
@@ -1808,6 +1852,14 @@ fn render_issue_transition_options(
         if option.allowed {
             lines.push("  Requirements: satisfied".to_string());
         } else {
+            if let Some(result) = option
+                .validator_results
+                .iter()
+                .find(|result| !result.passed && result.help.is_some())
+            {
+                lines.push(format!("  Readiness: {}", result.reason));
+                lines.push(format!("  {}", result.help.as_deref().unwrap_or_default()));
+            }
             lines.extend(render_text_list(
                 "Failed Requirements",
                 &failed_requirement_lines(&option.blockers),
@@ -2026,14 +2078,14 @@ fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
-        ("issue", "start") => &["issue.sections_parseable", "blockers.none_open"],
+        ("issue", "start") => &["issue.sections_parseable", "blockers.transitive_none_open"],
         ("issue", "close") => &[
             "issue.sections_parseable",
             "blockers.none_open",
             "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
-        ("mission", _) => &["issue.sections_parseable", "blockers.none_open"],
+        ("mission", _) => &["issue.sections_parseable", "blockers.transitive_none_open"],
         ("evidence", _) => &[],
         ("tracker", "health") => &[
             "lint.none_blocking",
@@ -2521,7 +2573,7 @@ repo = "atelier"
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
             default_validators("issue", "start"),
-            vec!["issue.sections_parseable", "blockers.none_open"]
+            vec!["issue.sections_parseable", "blockers.transitive_none_open"]
         );
         assert_eq!(
             default_validators("issue", "close"),

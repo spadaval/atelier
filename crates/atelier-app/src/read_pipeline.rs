@@ -153,6 +153,11 @@ fn open_blockers(
     workflow_policy: Option<&WorkflowPolicy>,
     issue_id: &str,
 ) -> Result<Vec<String>> {
+    if let Some(policy) = workflow_policy {
+        return Ok(
+            crate::objective_graph::dependency_closure(db, policy, issue_id)?.blocking_ids(),
+        );
+    }
     let mut blockers = db
         .get_blockers(issue_id)?
         .into_iter()
@@ -324,13 +329,25 @@ mod tests {
                 role: None,
             },
         );
+        let mut workflow_by_issue_type = BTreeMap::new();
+        workflow_by_issue_type.insert("task".to_string(), "task".to_string());
+        let mut workflows = BTreeMap::new();
+        workflows.insert(
+            "task".to_string(),
+            crate::workflow_policy::WorkflowDefinition {
+                applies_to: vec!["task".to_string()],
+                initial_status: "todo".to_string(),
+                done_statuses: vec!["done".to_string()],
+                transitions: BTreeMap::new(),
+            },
+        );
         WorkflowPolicy {
             schema_version: 3,
             branch_policy: crate::workflow_policy::BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
+            workflow_by_issue_type,
             statuses,
-            workflows: BTreeMap::new(),
+            workflows,
         }
     }
 
