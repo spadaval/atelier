@@ -309,6 +309,59 @@ fn public_review_reference_failures_are_atomic_and_leave_canonical_state_green()
         ],
     );
     assert!(success, "mission scope link failed: {stderr}");
+    for title in ["Direct prerequisite", "Transitive prerequisite"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "prerequisite creation failed: {stderr}");
+    }
+    let direct_id = issue_id_by_title(dir.path(), "Direct prerequisite");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive prerequisite");
+    for (blocked, blocker) in [
+        (mission_id.as_str(), direct_id.as_str()),
+        (direct_id.as_str(), transitive_id.as_str()),
+    ] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", blocked, blocker, "--role", "blocked_by"],
+        );
+        assert!(success, "dependency link failed: {stderr}");
+    }
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &[
+            "finding",
+            "valid-direct-path",
+            "--severity",
+            "non-blocking",
+            "--affected",
+            &mission_id,
+            "--dependency-path",
+            &mission_id,
+            "--dependency-path",
+            &direct_id,
+        ],
+    );
+    assert!(success, "valid direct path failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &[
+            "change-request",
+            "valid-transitive-path",
+            "--affected",
+            &mission_id,
+            "--dependency-path",
+            &mission_id,
+            "--dependency-path",
+            &direct_id,
+            "--dependency-path",
+            &transitive_id,
+        ],
+    );
+    assert!(success, "valid transitive path failed: {stderr}");
+    assert_check_and_rebuild_green(dir.path());
     let baseline = mission_activity_count(dir.path(), &mission_id);
 
     for (actor, action, expected) in [
@@ -358,7 +411,67 @@ fn public_review_reference_failures_are_atomic_and_leave_canonical_state_green()
                 "--dependency-path",
                 scoped_id.as_str(),
             ],
-            "contains non-edge",
+            "does not follow directed blocked-to-blocker edge",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "finding",
+                "reverse-path",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                direct_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+            ],
+            "does not follow directed blocked-to-blocker edge",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "finding",
+                "cyclic-path",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+                "--dependency-path",
+                direct_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+            ],
+            "paths must be simple and acyclic",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "change-request",
+                "repeated-node-edge",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+                "--dependency-path",
+                direct_id.as_str(),
+                "--dependency-path",
+                transitive_id.as_str(),
+                "--dependency-path",
+                direct_id.as_str(),
+            ],
+            "paths must be simple and acyclic",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "finding",
+                "singleton-path",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+            ],
+            "must contain at least one directed dependency edge",
         ),
     ] {
         let (success, _, stderr) =

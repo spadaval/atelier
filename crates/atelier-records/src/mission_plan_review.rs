@@ -571,7 +571,7 @@ pub fn validate_mission_plan_review_event_references(
 struct MissionReviewReferenceGraph {
     reviewed_issue_ids: BTreeSet<String>,
     referenceable_issue_ids: BTreeSet<String>,
-    dependency_adjacencies: BTreeSet<(String, String)>,
+    dependency_steps: BTreeSet<(String, String)>,
 }
 
 fn mission_review_reference_graph(
@@ -630,58 +630,46 @@ fn mission_review_reference_graph(
         }
     }
 
-    let mut referenceable_issue_ids = reviewed_issue_ids.clone();
-    let mut dependency_adjacencies = BTreeSet::new();
+    let mut all_dependency_steps = BTreeSet::new();
     for record in issues {
         for blocked in &record.relationships.blocks {
             if blocked.kind != "issue" {
-                continue;
+                bail!(
+                    "Issue {} has non-issue dependency target {}/{}",
+                    record.issue.id,
+                    blocked.kind,
+                    blocked.id
+                );
             }
-            if reviewed_issue_ids.contains(&record.issue.id)
-                || reviewed_issue_ids.contains(&blocked.id)
-            {
-                if !by_id.contains_key(blocked.id.as_str()) {
-                    bail!(
-                        "Mission {mission_id} dependency graph references missing issue {}",
-                        blocked.id
-                    );
-                }
-                referenceable_issue_ids.insert(record.issue.id.clone());
-                referenceable_issue_ids.insert(blocked.id.clone());
-                dependency_adjacencies.insert(ordered_pair(&record.issue.id, &blocked.id));
+            if !by_id.contains_key(blocked.id.as_str()) {
+                bail!(
+                    "Mission {mission_id} dependency graph references missing issue {}",
+                    blocked.id
+                );
             }
+            all_dependency_steps.insert((blocked.id.clone(), record.issue.id.clone()));
         }
-        for relation in &record.relationships.relates {
-            if relation.kind == "issue"
-                && relation.relation_type == "blocked_by"
-                && (reviewed_issue_ids.contains(&record.issue.id)
-                    || reviewed_issue_ids.contains(&relation.id))
+    }
+    let mut referenceable_issue_ids = reviewed_issue_ids.clone();
+    let mut dependency_steps = BTreeSet::new();
+    let mut pending = reviewed_issue_ids.iter().cloned().collect::<Vec<_>>();
+    while let Some(blocked_id) = pending.pop() {
+        for (_, blocker_id) in all_dependency_steps
+            .iter()
+            .filter(|(candidate, _)| candidate == &blocked_id)
+        {
+            if dependency_steps.insert((blocked_id.clone(), blocker_id.clone()))
+                && referenceable_issue_ids.insert(blocker_id.clone())
             {
-                if !by_id.contains_key(relation.id.as_str()) {
-                    bail!(
-                        "Mission {mission_id} dependency graph references missing issue {}",
-                        relation.id
-                    );
-                }
-                referenceable_issue_ids.insert(record.issue.id.clone());
-                referenceable_issue_ids.insert(relation.id.clone());
-                dependency_adjacencies.insert(ordered_pair(&record.issue.id, &relation.id));
+                pending.push(blocker_id.clone());
             }
         }
     }
     Ok(MissionReviewReferenceGraph {
         reviewed_issue_ids,
         referenceable_issue_ids,
-        dependency_adjacencies,
+        dependency_steps,
     })
-}
-
-fn ordered_pair(left: &str, right: &str) -> (String, String) {
-    if left <= right {
-        (left.to_string(), right.to_string())
-    } else {
-        (right.to_string(), left.to_string())
-    }
 }
 
 fn validate_event_references_from_records(
@@ -710,13 +698,26 @@ fn validate_event_references_from_records(
             );
         }
     }
+    if path.len() == 1 {
+        bail!(
+            "Mission-plan review dependency path for {mission_id} must contain at least one directed dependency edge"
+        );
+    }
+    let mut path_nodes = BTreeSet::new();
+    for id in path {
+        if !path_nodes.insert(id) {
+            bail!(
+                "Mission-plan review dependency path for {mission_id} repeats issue {id}; paths must be simple and acyclic"
+            );
+        }
+    }
     for step in path.windows(2) {
         if !graph
-            .dependency_adjacencies
-            .contains(&ordered_pair(&step[0], &step[1]))
+            .dependency_steps
+            .contains(&(step[0].clone(), step[1].clone()))
         {
             bail!(
-                "Mission-plan review dependency path for {mission_id} contains non-edge {} -> {}",
+                "Mission-plan review dependency path for {mission_id} does not follow directed blocked-to-blocker edge {} -> {}",
                 step[0],
                 step[1]
             );

@@ -153,9 +153,12 @@ atelier issue plan-review <mission-id> approve
 ```
 
 Affected IDs must belong to the current mission, its `advances`/hierarchy
-reachable work, or a dependency endpoint included by that reviewed graph. A
-dependency path must be made of real dependency adjacencies and touch reviewed
-mission work. A resolution remains bound to the original revision of its
+reachable work, or a transitive prerequisite reachable from that reviewed
+work. A non-empty dependency path contains at least one edge, starts from a
+blocked issue and follows canonical `blocks` ownership toward each successive
+blocker, contains no repeated issue or edge, and touches reviewed mission work.
+Empty paths remain valid for findings that are not about dependency readiness.
+A resolution remains bound to the original revision of its
 finding or change request even after rework; only a mission author or material
 editor other than the decision reviewer may record it.
 

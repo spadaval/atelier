@@ -396,7 +396,11 @@ zero-width or decomposed Unicode aliases cannot create false independence.
 
 Public review mutations validate every affected ID and dependency-path node
 against the exact canonical mission graph before allocating or writing an
-activity file. The same validator runs during canonical rebuild. Material edits
+activity file. Dependency paths use the directed blocked-to-blocker edges
+derived from canonical `blocks` ownership, must be simple and acyclic, and may
+walk through transitive external prerequisites. Symmetric/context relations do
+not manufacture executable path edges. The same validator runs during
+canonical rebuild. Material edits
 made while a mission is in `plan_review` are resubmitted with a typed
 `material_edit_attribution` that links the prior provenance revision to the
 current revision and adds the authenticated editor. Resolutions retain the

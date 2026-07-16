@@ -156,9 +156,11 @@ review under ADR 0018.
 ## Review Output And Closeout Boundary
 
 A plan-review finding names the criterion, affected issue IDs, and the full
-dependency path when the finding is about readiness. An approval says the exact
-graph revision reviewed. The review does not prove implementation outcomes or
-approve code for merge.
+dependency path when the finding is about readiness. Paths use the same
+blocked-issue-to-blocker direction printed by blocker diagnostics and contain
+no repeated nodes, edges, or cycles. An approval says the exact graph revision
+reviewed. The review does not prove implementation outcomes or approve code for
+merge.
 
 When a finding or change request leads to a material graph edit, the planner
 resubmits with `atelier issue plan-review <mission-id> request` (or the explicit
