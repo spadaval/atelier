@@ -1852,6 +1852,14 @@ fn render_issue_transition_options(
         if option.allowed {
             lines.push("  Requirements: satisfied".to_string());
         } else {
+            if let Some(result) = option
+                .validator_results
+                .iter()
+                .find(|result| !result.passed && result.help.is_some())
+            {
+                lines.push(format!("  Readiness: {}", result.reason));
+                lines.push(format!("  {}", result.help.as_deref().unwrap_or_default()));
+            }
             lines.extend(render_text_list(
                 "Failed Requirements",
                 &failed_requirement_lines(&option.blockers),

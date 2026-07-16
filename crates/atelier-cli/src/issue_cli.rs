@@ -197,6 +197,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     );
                 }
             }
+            let approving = matches!(&action, super::PlanReviewCommands::Approve);
             let mutation = match action {
                 super::PlanReviewCommands::Request => {
                     if mission_status == "plan_review" {
@@ -251,7 +252,16 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                 &mission_id,
                 &actor,
                 mutation,
-            )?;
+            )
+            .map_err(|error| {
+                if approving && error.to_string().contains("not independent") {
+                    anyhow::anyhow!(
+                        "mission {mission_id} self-approval rejected: Reviewer {actor} is not independent because it is an author or material editor; use an independent reviewer\nNext: atelier issue plan-review {mission_id} approve"
+                    )
+                } else {
+                    error
+                }
+            })?;
             if request_transition {
                 commands::workflow::transition_issue(
                     cache.db(),

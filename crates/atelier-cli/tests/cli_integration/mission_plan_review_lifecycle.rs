@@ -98,7 +98,7 @@ fn mission_plan_review_public_transitions_reject_missing_and_non_independent_app
     init_atelier(not_requested.path());
     let mission_id = create_mission(not_requested.path(), "Review not requested");
     request_transition(not_requested.path(), &mission_id);
-    let (success, _, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         not_requested.path(),
         &["issue", "transition", &mission_id, "ready"],
     );
@@ -107,18 +107,26 @@ fn mission_plan_review_public_transitions_reject_missing_and_non_independent_app
         stderr.contains("mission-plan review was not requested"),
         "{stderr}"
     );
+    assert_eq!(stdout.matches("Next:").count(), 1, "{stdout}");
+    assert!(stdout.contains(&format!(
+        "Next: atelier issue plan-review {mission_id} request"
+    )));
 
     let missing = tempdir().unwrap();
     init_atelier(missing.path());
     let mission_id = create_mission(missing.path(), "Approval missing");
     let (success, _, stderr) = run_plan_review(missing.path(), &mission_id, PLANNER, &["request"]);
     assert!(success, "public review request failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         missing.path(),
         &["issue", "transition", &mission_id, "ready"],
     );
     assert!(!success);
     assert!(stderr.contains("has no independent approval"), "{stderr}");
+    assert_eq!(stdout.matches("Next:").count(), 1, "{stdout}");
+    assert!(stdout.contains(&format!(
+        "Next: atelier issue plan-review {mission_id} approve"
+    )));
 
     let self_approved = tempdir().unwrap();
     init_atelier(self_approved.path());
@@ -133,6 +141,7 @@ fn mission_plan_review_public_transitions_reject_missing_and_non_independent_app
         stderr.contains("Reviewer") && stderr.contains("not independent"),
         "{stderr}"
     );
+    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
 }
 
 #[test]
@@ -279,7 +288,7 @@ fn public_plan_review_surface_records_findings_resolutions_changes_and_approval(
     assert!(success, "change resolution failed: {stderr}");
     let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
     assert!(success, "approval failed: {stderr}");
-    let (success, _, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(success, "ready transition failed: {stderr}");
 }
@@ -561,7 +570,7 @@ fn public_rework_attributes_material_edits_and_resubmits_exact_revision() {
     assert!(stderr.contains("not independent"), "{stderr}");
     let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
     assert!(success, "independent approval failed: {stderr}");
-    let (success, _, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(success, "ready after rework failed: {stderr}");
     assert_check_and_rebuild_green(dir.path());
@@ -652,13 +661,100 @@ fn review_approval_does_not_override_open_dependency_blockers() {
     );
     assert!(success, "blocker link failed: {stderr}");
     request_and_approve_mission_plan(dir.path(), &mission_id);
-    let (success, _, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(!success);
     assert!(
         stderr.contains(&format!("{mission_id} -> {blocker_id}")),
         "{stderr}"
     );
+    assert!(stdout.contains("has direct blocker path"), "{stdout}");
+    assert_eq!(stdout.matches("Next:").count(), 1, "{stdout}");
+    assert!(stdout.contains(&format!("Next: atelier issue show {blocker_id}")));
+}
+
+#[test]
+fn transitive_dependency_diagnosis_names_full_path_and_terminal_next_command() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Approved but transitively blocked mission");
+    for title in ["Direct dependency", "Terminal dependency"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "dependency creation failed: {stderr}");
+    }
+    let direct_id = issue_id_by_title(dir.path(), "Direct dependency");
+    let terminal_id = issue_id_by_title(dir.path(), "Terminal dependency");
+    for (blocked, blocker) in [
+        (mission_id.as_str(), direct_id.as_str()),
+        (direct_id.as_str(), terminal_id.as_str()),
+    ] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", blocked, blocker, "--role", "blocked_by"],
+        );
+        assert!(success, "dependency link failed: {stderr}");
+    }
+    request_and_approve_mission_plan(dir.path(), &mission_id);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(!success);
+    let path = format!("{mission_id} -> {direct_id} -> {terminal_id}");
+    assert!(stdout.contains("has transitive blocker path"), "{stdout}");
+    assert!(stdout.contains(&path), "{stdout}");
+    assert!(stderr.contains(&path), "{stderr}");
+    assert_eq!(stdout.matches("Next:").count(), 1, "{stdout}");
+    assert!(stdout.contains(&format!("Next: atelier issue show {terminal_id}")));
+}
+
+#[test]
+fn ready_work_hides_unreviewed_and_transitively_blocked_mission_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Ready picker review gate");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Scoped ready work"]);
+    assert!(success, "scoped work creation failed: {stderr}");
+    let scoped_id = issue_id_by_title(dir.path(), "Scoped ready work");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &scoped_id,
+            "--role",
+            "advances",
+        ],
+    );
+    assert!(success, "mission scope link failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
+    assert!(success, "ready picker failed: {stderr}");
+    assert!(!stdout.contains(&scoped_id), "{stdout}");
+
+    request_and_approve_mission_plan(dir.path(), &mission_id);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
+    assert!(success, "approved ready picker failed: {stderr}");
+    assert!(stdout.contains(&scoped_id), "{stdout}");
+
+    for title in ["Direct ready gate", "Transitive ready gate"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "gate creation failed: {stderr}");
+    }
+    let direct_id = issue_id_by_title(dir.path(), "Direct ready gate");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive ready gate");
+    for (blocked, blocker) in [
+        (scoped_id.as_str(), direct_id.as_str()),
+        (direct_id.as_str(), transitive_id.as_str()),
+    ] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", blocked, blocker, "--role", "blocked_by"],
+        );
+        assert!(success, "dependency link failed: {stderr}");
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
+    assert!(success, "blocked ready picker failed: {stderr}");
+    assert!(!stdout.contains(&scoped_id), "{stdout}");
 }
 
 #[test]

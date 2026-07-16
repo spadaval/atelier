@@ -157,7 +157,6 @@ fn evaluate_builtin_with_params(
         }
         "plan_review.current_approval" => {
             plan_review_current_approval(repo_root, target_kind, target_id)
-                .map(without_validator_help)
         }
         "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, repo_root, target_kind, target_id)
@@ -175,7 +174,6 @@ fn evaluate_builtin_with_params(
         }
         "blockers.transitive_none_open" => {
             transitive_blockers_none_open(db, policy, target_kind, target_id)
-                .map(without_validator_help)
         }
         "baseline.default_checks" => {
             baseline_default_checks(db, repo_root).map(without_validator_help)
@@ -204,23 +202,35 @@ fn plan_review_current_approval(
     repo_root: &Path,
     target_kind: &str,
     target_id: &str,
-) -> Result<(bool, String)> {
+) -> Result<(bool, String, Option<String>)> {
     if target_kind != "issue" {
         return Ok((
             false,
             format!("mission-plan approval requires an issue target, found {target_kind}"),
+            None,
         ));
     }
     let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
     let state = mission_plan_review_state(&state_dir, target_id)?;
-    let result = match state.freshness {
-        MissionPlanReviewFreshness::FreshApproval => (
+    if state.freshness == MissionPlanReviewFreshness::FreshApproval {
+        return Ok((
             true,
             format!(
                 "current mission graph {} has independent approval",
                 state.current_graph_revision
             ),
-        ),
+            None,
+        ));
+    }
+    if let Some(diagnosis) = crate::mission_readiness::review_diagnosis(&state_dir, target_id)? {
+        return Ok((
+            false,
+            diagnosis.summary,
+            Some(format!("Next: {}", diagnosis.next_command)),
+        ));
+    }
+    let result = match state.freshness {
+        MissionPlanReviewFreshness::FreshApproval => unreachable!(),
         MissionPlanReviewFreshness::FreshGrandfather => (
             false,
             "legacy grandfathering does not constitute independent approval".to_string(),
@@ -298,7 +308,7 @@ fn plan_review_current_approval(
             )
         }
     };
-    Ok(result)
+    Ok((result.0, result.1, None))
 }
 
 fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
@@ -661,17 +671,25 @@ fn transitive_blockers_none_open(
     policy: &WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
-) -> Result<(bool, String)> {
+) -> Result<(bool, String, Option<String>)> {
     if target_kind != "issue" {
         return Ok((
             true,
             format!("dependency closure does not apply to {target_kind} records"),
+            None,
         ));
     }
-    let closure = crate::objective_graph::dependency_closure(db, policy, target_id)?;
-    match closure.failure_reason() {
-        Some(reason) => Ok((false, reason)),
-        None => Ok((true, "declared dependency closure is terminal".to_string())),
+    match crate::mission_readiness::dependency_diagnosis(db, policy, target_id)? {
+        Some(diagnosis) => Ok((
+            false,
+            diagnosis.summary,
+            Some(format!("Next: {}", diagnosis.next_command)),
+        )),
+        None => Ok((
+            true,
+            "declared dependency closure is terminal".to_string(),
+            None,
+        )),
     }
 }
 

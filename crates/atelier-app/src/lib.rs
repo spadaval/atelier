@@ -15,6 +15,7 @@ pub mod lint;
 pub mod mission_overview;
 pub mod mission_plan_migration;
 pub mod mission_plan_review;
+pub mod mission_readiness;
 pub mod objective_graph;
 pub mod pr;
 pub mod project_config;

@@ -40,6 +40,7 @@ Maintenance:
 Common commands:
   atelier man
   atelier man worker
+  atelier man planner
   atelier man reviewer
   atelier man validator
   atelier man manager

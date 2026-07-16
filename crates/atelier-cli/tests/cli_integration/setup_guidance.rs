@@ -1575,6 +1575,7 @@ fn test_top_level_help_only_shows_core_commands() {
     for common in [
         "atelier man",
         "atelier man worker",
+        "atelier man planner",
         "atelier man reviewer",
         "atelier man validator",
         "atelier man manager",
@@ -2090,13 +2091,34 @@ fn test_man_lists_roles_and_topics() {
     assert!(success, "man failed: {stderr}");
     assert!(stdout.contains("Atelier Man"));
     assert!(stdout.contains("worker"));
+    assert!(stdout.contains("planner"));
     assert!(stdout.contains("reviewer"));
     assert!(stdout.contains("manager"));
     assert!(stdout.contains("admin"));
     assert!(stdout.contains("atelier man worker"));
+    assert!(stdout.contains("atelier man planner"));
     assert!(stdout.contains("Topics"));
     assert!(stdout.contains("work-model"));
     assert!(stdout.contains("atelier man work-model"));
+}
+
+#[test]
+fn test_man_plan_review_roles_explain_independent_handoff() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, planner, stderr) = run_atelier(dir.path(), &["man", "planner"]);
+    assert!(success, "man planner failed: {stderr}");
+    assert!(planner.contains("atelier issue plan-review <mission-id> request"));
+    assert!(planner.contains("atelier issue plan-review <mission-id> rework"));
+    assert!(planner.contains("approval of a graph you authored or materially edited"));
+
+    let (success, reviewer, stderr) = run_atelier(dir.path(), &["man", "reviewer"]);
+    assert!(success, "man reviewer failed: {stderr}");
+    assert!(reviewer.contains("atelier issue plan-review <mission-id> finding"));
+    assert!(reviewer.contains("atelier issue plan-review <mission-id> change-request"));
+    assert!(reviewer.contains("atelier issue plan-review <mission-id> approve"));
+    assert!(reviewer.contains("authoring or materially editing the graph being approved"));
 }
 
 #[test]
@@ -2168,7 +2190,7 @@ fn test_man_rejects_unknown_pages_and_admin_degrades_before_init() {
     assert!(!success, "unknown page should fail");
     assert!(stdout.is_empty());
     assert!(stderr.contains("unknown man page 'bogus'"));
-    assert!(stderr.contains("Valid roles: worker, reviewer, validator, manager, admin"));
+    assert!(stderr.contains("Valid roles: worker, planner, reviewer, validator, manager, admin"));
     assert!(stderr.contains("Valid topics: work-model"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);

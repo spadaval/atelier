@@ -3188,13 +3188,15 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--ready"]);
     assert!(success, "work mission --ready failed: {stderr}");
-    assert!(ready.contains("Ready mission work"), "{ready}");
+    assert!(ready.contains("Ready Work"), "{ready}");
+    assert!(ready.contains("(none)"), "{ready}");
+    assert!(!ready.contains(&ready_id), "{ready}");
     assert!(!ready.contains("Blocked mission work"), "{ready}");
 
     let (success, blocked, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--blocked"]);
     assert!(success, "work mission --blocked failed: {stderr}");
-    assert!(!blocked.contains("Ready mission work"), "{blocked}");
+    assert!(blocked.contains("Ready mission work"), "{blocked}");
     assert!(blocked.contains("Blocked mission work"), "{blocked}");
     assert!(blocked.contains(&blocker_id), "{blocked}");
 

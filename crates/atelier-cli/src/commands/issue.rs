@@ -742,13 +742,24 @@ fn render_transition_readiness(
                     format!("to {}", option.to)
                 } else {
                     option
-                        .blockers
-                        .first()
-                        .cloned()
+                        .validator_results
+                        .iter()
+                        .find(|result| !result.passed && result.help.is_some())
+                        .map(|result| result.reason.clone())
+                        .or_else(|| option.blockers.first().cloned())
                         .unwrap_or_else(|| format!("to {}", option.to))
                 };
                 lines.push(format!("  {}: {} - {}", option.name, state, summary));
-                lines.push(format!("    {}", option.command));
+                if let Some(help) = option
+                    .validator_results
+                    .iter()
+                    .find(|result| !result.passed && result.help.is_some())
+                    .and_then(|result| result.help.as_deref())
+                {
+                    lines.push(format!("    {help}"));
+                } else {
+                    lines.push(format!("    {}", option.command));
+                }
             }
         }
         Err(error) => {
@@ -1526,8 +1537,19 @@ fn filter_ready_rows(
     rows: Vec<QueueRow>,
 ) -> Result<Vec<QueueRow>> {
     let children = children_by_parent(db)?;
+    let mission_allowances = crate::commands::work::mission_execution_allowances(db)?;
     rows.into_iter()
         .map(|row| {
+            if !mission_allowances.get(&row.id).copied().unwrap_or(true) {
+                return Ok((row, false));
+            }
+            if let Some(policy) = workflow_policy {
+                if !atelier_app::objective_graph::dependency_closure(db, policy, &row.id)?
+                    .is_ready()
+                {
+                    return Ok((row, false));
+                }
+            }
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
