@@ -493,7 +493,7 @@ fn apply_bundle_file(
     let stage_parent = state_dir
         .parent()
         .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
-    ensure_no_bundle_backup_artifacts(state_dir)?;
+    ensure_no_bundle_recovery_artifacts(state_dir)?;
     let stage = create_bundle_stage_dir(stage_parent)?;
     let result = (|| {
         let source_fingerprint =
@@ -512,7 +512,7 @@ fn apply_bundle_file(
         install_bundle_stage(&stage, state_dir)?;
         Ok(summary)
     })();
-    if let Err(error) = fs::remove_dir_all(&stage) {
+    if let Err(error) = cleanup_bundle_stage(&stage) {
         if result.is_ok() {
             tracing::warn!(
                 "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this create-only bundle; verify with `atelier check`, then remove the leftover staging directory.",
@@ -524,33 +524,64 @@ fn apply_bundle_file(
     result
 }
 
-fn ensure_no_bundle_backup_artifacts(state_dir: &Path) -> Result<()> {
-    let runtime = state_dir.join("runtime");
-    if !runtime.exists() {
-        return Ok(());
+fn cleanup_bundle_stage(stage: &Path) -> Result<()> {
+    if std::env::var_os("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE").is_some() {
+        bail!("injected bundle stage cleanup failure");
     }
-    let mut backups = fs::read_dir(&runtime)
-        .with_context(|| format!("Failed to read {}", runtime.display()))?
-        .collect::<std::io::Result<Vec<_>>>()?
-        .into_iter()
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.starts_with(".atelier-bundle-backup-"))
-        })
-        .map(|entry| entry.path())
-        .collect::<Vec<_>>();
-    backups.sort();
-    if !backups.is_empty() {
+    fs::remove_dir_all(stage).with_context(|| format!("Failed to remove {}", stage.display()))
+}
+
+fn ensure_no_bundle_recovery_artifacts(state_dir: &Path) -> Result<()> {
+    let repo_root = state_dir
+        .parent()
+        .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    let runtime = state_dir.join("runtime");
+    let mut artifacts = Vec::new();
+    collect_bundle_recovery_artifacts(repo_root, ".atelier-bundle-stage-", &mut artifacts)?;
+    if runtime.exists() {
+        collect_bundle_recovery_artifacts(&runtime, ".atelier-bundle-backup-", &mut artifacts)?;
+    }
+    artifacts.sort();
+    if !artifacts.is_empty() {
         bail!(
-            "bundle_recovery_required: leftover committed bundle backup(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records, then remove the named backup before applying a different bundle",
-            backups
+            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            artifacts
                 .iter()
                 .map(|path| path.display().to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+    }
+    Ok(())
+}
+
+fn collect_bundle_recovery_artifacts(
+    parent: &Path,
+    prefix: &str,
+    artifacts: &mut Vec<PathBuf>,
+) -> Result<()> {
+    let entries = fs::read_dir(parent)
+        .with_context(|| format!("Failed to read {}", parent.display()))?
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter();
+    for entry in entries {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if !name.starts_with(prefix) {
+            continue;
+        }
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to inspect {}", path.display()))?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            bail!(
+                "bundle_recovery_artifact_unsafe: {} matches a bundle recovery name but is not a real directory. Next: inspect the path without following links and resolve it manually before running bundle apply",
+                path.display()
+            );
+        }
+        artifacts.push(path);
     }
     Ok(())
 }
@@ -1469,5 +1500,40 @@ mod tests {
             fs::read_to_string(dir.path().join("backup-test-01")).unwrap(),
             "special collision"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundle_recovery_scan_rejects_unsafe_stage_and_backup_types() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        fs::create_dir_all(state.join("runtime")).unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("sentinel"), "untouched").unwrap();
+        let stage = dir.path().join(".atelier-bundle-stage-unsafe");
+        symlink(&outside, &stage).unwrap();
+
+        let error = ensure_no_bundle_recovery_artifacts(&state).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("bundle_recovery_artifact_unsafe"));
+        assert!(error.to_string().contains(&stage.display().to_string()));
+        assert_eq!(
+            fs::read_to_string(outside.join("sentinel")).unwrap(),
+            "untouched"
+        );
+
+        fs::remove_file(stage).unwrap();
+        let backup = state.join("runtime").join(".atelier-bundle-backup-unsafe");
+        fs::write(&backup, "not a directory").unwrap();
+        let error = ensure_no_bundle_recovery_artifacts(&state).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("bundle_recovery_artifact_unsafe"));
+        assert!(error.to_string().contains(&backup.display().to_string()));
+        assert_eq!(fs::read_to_string(backup).unwrap(), "not a directory");
     }
 }

@@ -3112,6 +3112,144 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
 }
 
 #[test]
+fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("stage-cleanup-failure-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Stage cleanup failure bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.stage-cleanup",
+        "title": "Stage cleanup committed task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ],
+    "evidence": [
+      {
+        "client_ref": "evidence.stage-cleanup",
+        "title": "Stage cleanup committed evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "body": "Both live directories committed before stage cleanup failed."
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let db_path = state_dir.join("runtime/state.db");
+    let db_before = std::fs::read(&db_path).unwrap();
+    let counts_before = (
+        count_markdown_records(dir.path(), "issues"),
+        count_markdown_records(dir.path(), "evidence"),
+    );
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+        &[("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE", "1")],
+    );
+
+    assert!(
+        success,
+        "post-commit stage cleanup must not fail apply: {stderr}"
+    );
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    assert!(
+        stderr.contains("Bundle apply committed successfully")
+            && stderr.contains("staging cleanup failed"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Do not retry this create-only bundle"),
+        "{stderr}"
+    );
+    assert_eq!(
+        (
+            count_markdown_records(dir.path(), "issues"),
+            count_markdown_records(dir.path(), "evidence"),
+        ),
+        (counts_before.0 + 1, counts_before.1 + 1)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Stage cleanup committed task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "evidence",
+        "Stage cleanup committed evidence"
+    ));
+    assert_eq!(
+        std::fs::read(&db_path).unwrap(),
+        db_before,
+        "post-commit stage cleanup changed SQLite before lazy repair"
+    );
+
+    let mut stages = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".atelier-bundle-stage-"))
+        })
+        .collect::<Vec<_>>();
+    stages.sort();
+    assert_eq!(stages.len(), 1, "expected one retained stage: {stages:?}");
+    assert!(stages[0].is_dir());
+    assert!(
+        stderr.contains(&stages[0].display().to_string()),
+        "{stderr}"
+    );
+    let ignored = std::process::Command::new("git")
+        .current_dir(dir.path())
+        .args(["check-ignore", "-q", stages[0].to_str().unwrap()])
+        .status()
+        .unwrap();
+    assert!(ignored.success(), "retained stage must be git-ignored");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "committed bundle must repair and check cleanly: {stderr}"
+    );
+    let counts_before_retry = (
+        count_markdown_records(dir.path(), "issues"),
+        count_markdown_records(dir.path(), "evidence"),
+    );
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(!success, "retry with retained stage must be refused");
+    assert!(stderr.contains("bundle_recovery_required"), "{stderr}");
+    assert!(
+        stderr.contains(&stages[0].display().to_string()),
+        "{stderr}"
+    );
+    assert_eq!(
+        (
+            count_markdown_records(dir.path(), "issues"),
+            count_markdown_records(dir.path(), "evidence"),
+        ),
+        counts_before_retry,
+        "refused retry created duplicate records"
+    );
+}
+
+#[test]
 fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

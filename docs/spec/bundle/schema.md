@@ -286,10 +286,12 @@ special filesystem entries, and non-directory install targets are rejected.
 Once both live directories are installed, backup or staging cleanup is
 post-commit housekeeping: cleanup failure emits a warning naming the retained
 path but does not turn the committed apply into a failure. Backups are retained
-under git-ignored runtime state. Operators must not retry that create-only
-bundle. A retained backup blocks later bundle applies until `atelier check`
-confirms the live tree and the named backup is removed, preventing an unsafe
-retry from creating duplicates.
+under git-ignored runtime state, and repo-root stage directories use the
+git-ignored `.atelier-bundle-stage-*` pattern. Operators must not retry that
+create-only bundle. A retained backup or stage blocks later bundle applies until
+`atelier check` confirms the live tree and the named real directory is removed,
+preventing an unsafe retry from creating duplicates. Matching symlinks and
+special files are rejected without being followed or removed.
 
 ## Idempotency And Conflicts
 
