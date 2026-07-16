@@ -356,6 +356,7 @@ impl RecordStore {
     }
 
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_issue_record(record, Path::new("<record>"))?;
         let spec = canonical_record_kind(ISSUE_KIND.kind)?;
         let relative = canonical_record_path(spec, &record.issue.id)?;
@@ -369,6 +370,7 @@ impl RecordStore {
         summary: &str,
         data: EvidenceRecordData,
     ) -> Result<EvidenceRecord> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let now = Utc::now();
         let record = EvidenceRecord {
             header: RecordHeader {
@@ -389,18 +391,21 @@ impl RecordStore {
     }
 
     pub fn write_evidence_atomic(&self, record: &EvidenceRecord) -> Result<()> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let spec = canonical_record_kind("evidence")?;
         let relative = canonical_record_path(spec, &record.header.id)?;
         self.write_atomic(&relative, render_evidence_record_file(record)?)
     }
 
     pub fn write_review_atomic(&self, record: &ReviewRecord) -> Result<()> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let spec = canonical_record_kind("review")?;
         let relative = canonical_record_path(spec, &record.header.id)?;
         self.write_atomic(&relative, render_review_record_file(record)?)
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let header = record.header();
         let spec = canonical_record_kind(&header.kind)?;
         let relative = canonical_record_path(spec, &header.id)?;
@@ -415,6 +420,7 @@ impl RecordStore {
         target_id: &str,
         role: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_link_type(role)?;
         let mut record = self.load_record_by_id(source_kind, source_id)?;
         let attachment = attachment_relationship(target_kind, target_id, role);
@@ -444,6 +450,7 @@ impl RecordStore {
         target_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_relationship_type(relation_type)?;
         let mut record = self.load_record_by_id(source_kind, source_id)?;
         let relation = relates_relationship(target_kind, target_id, relation_type);
@@ -464,6 +471,7 @@ impl RecordStore {
         target_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_relationship_type(relation_type)?;
         let mut record = self.load_record_by_id(source_kind, source_id)?;
         let original_len = record.header().relationships.relates.len();
@@ -485,6 +493,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         if label.len() > MAX_LABEL_LEN {
             bail!(
                 "Label exceeds maximum length of {} characters",
@@ -501,6 +510,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         if parent_id == child_id {
             bail!("An issue cannot be its own parent");
         }
@@ -517,6 +527,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let target = issue_relationship_target(child_id);
         let mut parent = self.load_issue_by_id(parent_id)?;
         let original_len = parent.relationships.children.len();
@@ -550,6 +561,7 @@ impl RecordStore {
         &self,
         child_ids: &[String],
     ) -> Result<Vec<String>> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
         let mut changed_parents = Vec::new();
         for mut parent in self.load_issues()? {
@@ -578,6 +590,7 @@ impl RecordStore {
         target_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_record_kind(target_kind)?;
         record_id::validate_record_id(target_id)?;
         if is_attachment_role(relation_type) {
@@ -616,6 +629,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let mut record = self.load_issue_by_id(issue_id)?;
         let original_len = record.labels.len();
         record.labels.retain(|existing| existing != label);
@@ -627,6 +641,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         if blocked_id == blocker_id {
             bail!("An issue cannot block itself");
         }
@@ -646,6 +661,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         self.load_issue_by_id(blocked_id)?;
         let target = issue_relationship_target(blocked_id);
         let mut blocker = self.load_issue_by_id(blocker_id)?;
@@ -667,6 +683,7 @@ impl RecordStore {
         related_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_issue_relation_type(relation_type)?;
         if issue_id == related_id {
             bail!("Cannot relate an issue to itself");
@@ -697,6 +714,7 @@ impl RecordStore {
         related_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         validate_relation_type(relation_type)?;
         let mut issue = self.load_issue_by_id(issue_id)?;
         let mut related = self.load_issue_by_id(related_id)?;
@@ -727,6 +745,7 @@ impl RecordStore {
     }
 
     pub fn delete_issue_atomic(&self, id: &str) -> Result<()> {
+        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         record_id::validate_record_id(id)?;
         self.delete_atomic(&issue_record_path(id))
     }

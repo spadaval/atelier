@@ -14,6 +14,7 @@ use atelier_records::{issue_record_path, render_issue_record, RecordStore};
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_yaml::{Mapping, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -48,6 +49,8 @@ struct CutoverJournal {
     schema: String,
     schema_version: u32,
     entries: Vec<CutoverJournalEntry>,
+    original_snapshot: Vec<CanonicalSnapshotEntry>,
+    post_snapshot: Vec<CanonicalSnapshotEntry>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,6 +59,21 @@ struct CutoverJournalEntry {
     relative_path: String,
     original_existed: bool,
     workflow_activation: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalSnapshotEntry {
+    relative_path: String,
+    path_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
+struct CanonicalSnapshot {
+    files: BTreeMap<PathBuf, Vec<u8>>,
+    directories: BTreeSet<PathBuf>,
 }
 
 #[cfg(test)]
@@ -497,12 +515,8 @@ fn capture_originals(writes: &mut [PlannedWrite]) -> Result<()> {
     Ok(())
 }
 
-fn canonical_snapshot(state_dir: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
-    fn collect(
-        state_dir: &Path,
-        dir: &Path,
-        snapshot: &mut BTreeMap<PathBuf, Vec<u8>>,
-    ) -> Result<()> {
+fn canonical_snapshot(state_dir: &Path) -> Result<CanonicalSnapshot> {
+    fn collect(state_dir: &Path, dir: &Path, snapshot: &mut CanonicalSnapshot) -> Result<()> {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -510,33 +524,77 @@ fn canonical_snapshot(state_dir: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
             if crate::storage_layout::is_local_atelier_path(&relative) {
                 continue;
             }
-            if entry.file_type()?.is_dir() {
+            let file_type = entry.file_type()?;
+            if file_type.is_symlink() {
+                bail!(
+                    "Canonical cutover snapshots reject symlinks at {}",
+                    relative.display()
+                );
+            }
+            if file_type.is_dir() {
+                snapshot.directories.insert(relative);
                 collect(state_dir, &path, snapshot)?;
-            } else if entry.file_type()?.is_file() {
-                snapshot.insert(relative, fs::read(path)?);
+            } else if file_type.is_file() {
+                snapshot.files.insert(relative, fs::read(path)?);
+            } else {
+                bail!(
+                    "Canonical cutover snapshots reject special path {}",
+                    relative.display()
+                );
             }
         }
         Ok(())
     }
 
-    let mut snapshot = BTreeMap::new();
+    let mut snapshot = CanonicalSnapshot::default();
     collect(state_dir, state_dir, &mut snapshot)?;
     Ok(snapshot)
 }
 
+fn snapshot_manifest(snapshot: &CanonicalSnapshot) -> Vec<CanonicalSnapshotEntry> {
+    let mut entries = snapshot
+        .directories
+        .iter()
+        .map(|path| CanonicalSnapshotEntry {
+            relative_path: path.to_string_lossy().into_owned(),
+            path_type: "directory".to_string(),
+            sha256: None,
+        })
+        .chain(
+            snapshot
+                .files
+                .iter()
+                .map(|(path, contents)| CanonicalSnapshotEntry {
+                    relative_path: path.to_string_lossy().into_owned(),
+                    path_type: "file".to_string(),
+                    sha256: Some(format!("{:x}", Sha256::digest(contents))),
+                }),
+        )
+        .collect::<Vec<_>>();
+    entries.sort();
+    entries
+}
+
 fn expected_snapshot(
     state_dir: &Path,
-    original: &BTreeMap<PathBuf, Vec<u8>>,
+    original: &CanonicalSnapshot,
     writes: &[PlannedWrite],
     workflow_activated: bool,
-) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
+) -> Result<CanonicalSnapshot> {
     let mut expected = original.clone();
     for write in writes {
         let relative = write.path.strip_prefix(state_dir)?.to_path_buf();
         if relative == Path::new("workflow.yaml") && !workflow_activated {
             continue;
         }
-        expected.insert(relative, write.contents.clone());
+        if let Some(parent) = relative.parent() {
+            let mut current = PathBuf::new();
+            for component in parent.components() {
+                current.push(component);
+                expected.directories.insert(current.clone());
+            }
+        }
+        expected.files.insert(relative, write.contents.clone());
     }
     Ok(expected)
 }
@@ -544,11 +602,12 @@ fn expected_snapshot(
 fn apply_journaled(
     repo_root: &Path,
     writes: &[PlannedWrite],
-    original_snapshot: &BTreeMap<PathBuf, Vec<u8>>,
+    original_snapshot: &CanonicalSnapshot,
     interrupt_after_boundary: Option<usize>,
 ) -> Result<()> {
     let state_dir = repo_root.join(".atelier");
-    prepare_cutover_journal(&state_dir, writes)?;
+    let post_snapshot = expected_snapshot(&state_dir, original_snapshot, writes, true)?;
+    prepare_cutover_journal(&state_dir, writes, original_snapshot, &post_snapshot)?;
     if interrupt_after_boundary == Some(0) {
         bail!("injected abrupt migration interruption after durable journal");
     }
@@ -616,7 +675,12 @@ fn compare_original(write: &PlannedWrite) -> Result<()> {
     Ok(())
 }
 
-fn prepare_cutover_journal(state_dir: &Path, writes: &[PlannedWrite]) -> Result<()> {
+fn prepare_cutover_journal(
+    state_dir: &Path,
+    writes: &[PlannedWrite],
+    original_snapshot: &CanonicalSnapshot,
+    post_snapshot: &CanonicalSnapshot,
+) -> Result<()> {
     let final_dir = state_dir.join(JOURNAL_DIR);
     if final_dir.exists() {
         bail!(
@@ -651,6 +715,8 @@ fn prepare_cutover_journal(state_dir: &Path, writes: &[PlannedWrite]) -> Result<
         schema: JOURNAL_SCHEMA.to_string(),
         schema_version: 1,
         entries,
+        original_snapshot: snapshot_manifest(original_snapshot),
+        post_snapshot: snapshot_manifest(post_snapshot),
     };
     write_synced(
         &temp_dir.join("journal.yaml"),
@@ -674,6 +740,8 @@ fn recover_cutover_journal(repo_root: &Path) -> Result<()> {
     {
         bail!("Invalid mission-plan cutover recovery journal");
     }
+    validate_snapshot_manifest(&journal.original_snapshot)?;
+    validate_snapshot_manifest(&journal.post_snapshot)?;
     let mut loaded = Vec::new();
     for (index, entry) in journal.entries.iter().enumerate() {
         let relative = PathBuf::from(&entry.relative_path);
@@ -698,12 +766,55 @@ fn recover_cutover_journal(repo_root: &Path) -> Result<()> {
         ));
     }
 
-    let exact_post = loaded
-        .iter()
-        .all(|(path, _, target, _)| fs::read(path).ok().as_ref() == Some(target));
+    let live_snapshot = canonical_snapshot(&state_dir)?;
+    let exact_post = snapshot_manifest(&live_snapshot) == journal.post_snapshot;
     if exact_post {
         remove_cutover_journal(&state_dir)?;
         return Ok(());
+    }
+
+    let original_entries = journal
+        .original_snapshot
+        .iter()
+        .map(|entry| (PathBuf::from(&entry.relative_path), entry))
+        .collect::<BTreeMap<_, _>>();
+    let post_entries = journal
+        .post_snapshot
+        .iter()
+        .map(|entry| (PathBuf::from(&entry.relative_path), entry))
+        .collect::<BTreeMap<_, _>>();
+    let live_manifest = snapshot_manifest(&live_snapshot);
+    let live_entries = live_manifest
+        .iter()
+        .map(|entry| (PathBuf::from(&entry.relative_path), entry))
+        .collect::<BTreeMap<_, _>>();
+    let all_paths = original_entries
+        .keys()
+        .chain(post_entries.keys())
+        .chain(live_entries.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    for path in all_paths {
+        let original = original_entries.get(&path).copied();
+        let post = post_entries.get(&path).copied();
+        if original != post {
+            // Planned files and their created parent directories may be in
+            // either journal-owned state until recovery chooses pre or post.
+            continue;
+        }
+        let live = live_entries.get(&path).copied();
+        if live == original {
+            continue;
+        }
+        let drift = match (original, live) {
+            (Some(_), None) => "deletion",
+            (None, Some(_)) => "addition",
+            _ => "concurrent bytes or path type",
+        };
+        bail!(
+            "Cutover recovery found unowned {drift} at {}; manual recovery required",
+            path.display()
+        );
     }
 
     // Deactivate the target policy first, then restore prerequisites. Every
@@ -727,7 +838,60 @@ fn recover_cutover_journal(repo_root: &Path) -> Result<()> {
             None => {}
         }
     }
+    let mut created_directories = journal
+        .post_snapshot
+        .iter()
+        .filter(|entry| {
+            entry.path_type == "directory"
+                && !original_entries.contains_key(Path::new(&entry.relative_path))
+        })
+        .map(|entry| PathBuf::from(&entry.relative_path))
+        .collect::<Vec<_>>();
+    created_directories.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    for relative in created_directories {
+        let path = state_dir.join(relative);
+        if path.is_dir() && fs::read_dir(&path)?.next().is_none() {
+            fs::remove_dir(&path)?;
+            sync_dir(path.parent().expect("cutover directory has parent"))?;
+        }
+    }
+    if snapshot_manifest(&canonical_snapshot(&state_dir)?) != journal.original_snapshot {
+        bail!("Cutover recovery did not restore the exact original canonical snapshot");
+    }
     remove_cutover_journal(&state_dir)
+}
+
+fn validate_snapshot_manifest(entries: &[CanonicalSnapshotEntry]) -> Result<()> {
+    if entries
+        .windows(2)
+        .any(|pair| pair[0].relative_path >= pair[1].relative_path)
+    {
+        bail!("Cutover snapshot manifest paths must be sorted and unique");
+    }
+    for entry in entries {
+        let path = Path::new(&entry.relative_path);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+            || match (entry.path_type.as_str(), entry.sha256.as_deref()) {
+                ("directory", None) => false,
+                ("file", Some(digest)) => {
+                    digest.len() != 64
+                        || !digest
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                }
+                _ => true,
+            }
+        {
+            bail!(
+                "Invalid cutover canonical snapshot entry {}",
+                entry.relative_path
+            );
+        }
+    }
+    Ok(())
 }
 
 fn remove_cutover_journal(state_dir: &Path) -> Result<()> {
@@ -1129,6 +1293,122 @@ workflows:
             assert!(migrate_at(dir.path(), at(), None).unwrap().already_applied);
             assert_eq!(canonical_snapshot(&state).unwrap(), post);
         }
+    }
+
+    #[test]
+    fn recovery_refuses_unrelated_add_edit_and_delete_after_every_boundary() {
+        for boundary in 0..=4 {
+            for drift in ["add", "edit", "delete"] {
+                let dir = fixture(&[
+                    ("atelier-ready", "ready"),
+                    ("atelier-active", "in_progress"),
+                    ("atelier-done", "closed"),
+                ]);
+                let state = dir.path().join(".atelier");
+                let pre = canonical_snapshot(&state).unwrap();
+                let fault = MigrationFault {
+                    interrupt_after_boundary: Some(boundary),
+                    ..MigrationFault::default()
+                };
+                assert!(migrate_at(dir.path(), at(), Some(fault)).is_err());
+
+                let done_path = state.join(issue_record_path("atelier-done"));
+                let done_original = fs::read(&done_path).unwrap();
+                let added_path = state.join("issues/unowned-canonical-addition.md");
+                match drift {
+                    "add" => fs::write(&added_path, b"unowned addition\n").unwrap(),
+                    "edit" => fs::write(&done_path, b"unowned edit\n").unwrap(),
+                    "delete" => fs::remove_file(&done_path).unwrap(),
+                    _ => unreachable!(),
+                }
+                let error = recover_cutover_journal(dir.path()).unwrap_err().to_string();
+                assert!(
+                    error.contains("unowned"),
+                    "{drift} boundary {boundary}: {error}"
+                );
+                assert!(state.join(JOURNAL_DIR).exists());
+                match drift {
+                    "add" => assert_eq!(fs::read(&added_path).unwrap(), b"unowned addition\n"),
+                    "edit" => assert_eq!(fs::read(&done_path).unwrap(), b"unowned edit\n"),
+                    "delete" => assert!(!done_path.exists()),
+                    _ => unreachable!(),
+                }
+
+                // Documented operator repair restores only the named unowned
+                // path. Journal-owned paths then recover deterministically.
+                match drift {
+                    "add" => fs::remove_file(added_path).unwrap(),
+                    "edit" | "delete" => fs::write(done_path, done_original).unwrap(),
+                    _ => unreachable!(),
+                }
+                recover_cutover_journal(dir.path()).unwrap();
+                if boundary < 4 {
+                    assert_eq!(canonical_snapshot(&state).unwrap(), pre);
+                } else {
+                    let policy = crate::workflow_policy::load(dir.path()).unwrap();
+                    assert!(
+                        crate::workflow_policy::enforces_independent_mission_plan_review(&policy)
+                            .unwrap()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn writer_transaction_started_before_cutover_cannot_overwrite_post_cutover_state() {
+        use std::sync::{mpsc, Arc};
+        use std::thread;
+        use std::time::Duration;
+
+        let dir = fixture(&[
+            ("atelier-ready", "ready"),
+            ("atelier-active", "in_progress"),
+        ]);
+        let repo_root = Arc::new(dir.path().to_path_buf());
+        let state = repo_root.join(".atelier");
+        let (read_tx, read_rx) = mpsc::channel();
+        let (write_tx, write_rx) = mpsc::channel();
+        let writer_root = Arc::clone(&repo_root);
+        let writer = thread::spawn(move || {
+            let writer_state = writer_root.join(".atelier");
+            let _transaction =
+                atelier_records::mutation_lock::CanonicalMutationLock::shared(&writer_state)
+                    .unwrap();
+            let mut record = RecordStore::new(&writer_state)
+                .load_issue_by_id("atelier-ready")
+                .unwrap();
+            record.issue.title = "Writer-owned pre-cutover edit".to_string();
+            read_tx.send(()).unwrap();
+            write_rx.recv().unwrap();
+            RecordStore::new(&writer_state)
+                .write_issue_atomic(&record)
+                .unwrap();
+        });
+        read_rx.recv().unwrap();
+
+        let (migration_tx, migration_rx) = mpsc::channel();
+        let migration_root = Arc::clone(&repo_root);
+        let migration = thread::spawn(move || {
+            let result = migrate_at(&migration_root, at(), None);
+            migration_tx.send(result).unwrap();
+        });
+        assert!(migration_rx
+            .recv_timeout(Duration::from_millis(100))
+            .is_err());
+        write_tx.send(()).unwrap();
+        writer.join().unwrap();
+        migration_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        migration.join().unwrap();
+
+        let migrated = RecordStore::new(&state)
+            .load_issue_by_id("atelier-ready")
+            .unwrap();
+        assert_eq!(migrated.issue.status, "plan_review");
+        assert_eq!(migrated.issue.title, "Writer-owned pre-cutover edit");
     }
 
     #[test]

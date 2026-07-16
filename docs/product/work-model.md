@@ -271,14 +271,19 @@ Repositories still carrying the legacy direct-ready policy use the hidden,
 one-shot admin command `atelier migrate-mission-plan-review`. It inventories
 canonical mission records, validates a complete staged cutover, and then
 installs the policy, status changes, manifest, and grandfather receipts under
-an exclusive canonical-mutation lock. Original and target bytes are persisted
-in a synchronized recovery journal before any replacement. Prerequisites are
-made durable first, the complete canonical snapshot is compared again, and the
-workflow is activated last. The next invocation deterministically completes an
-exact post-state or rolls back with the workflow deactivated first after a
-process or machine interruption; concurrent unowned bytes are never
-overwritten. Repository-specific mission transitions, actions, validators, and
-roles outside the three lifecycle transitions are preserved. A repeat
+an exclusive canonical-mutation lock. Normal repository commands hold the
+corresponding shared lock across their complete read, validation, and write
+transaction, including bulk imports and directory swaps. Original and target
+bytes plus a complete canonical-tree manifest of paths, types, and file hashes
+are persisted in a synchronized recovery journal before any replacement;
+symlinks and special files are rejected. Prerequisites are made durable first,
+the complete canonical snapshot is compared again, and the workflow is
+activated last. The next invocation deterministically completes an exact
+post-state or rolls back with the workflow deactivated first after a process or
+machine interruption. Any unrelated addition, edit, deletion, or type change
+is named and left untouched; restore that named path before retrying recovery.
+Repository-specific mission transitions, actions, validators, and roles outside
+the three lifecycle transitions are preserved. A repeat
 invocation validates the installed state and makes no canonical changes. On
 failure, repair the named `.atelier` source, run
 `atelier check --fix`, and retry; SQLite is disposable and is never a migration

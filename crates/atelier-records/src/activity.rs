@@ -346,6 +346,7 @@ pub fn create_mission_plan_review_activity(
     event: MissionPlanReviewEvent,
     body: &str,
 ) -> Result<IssueActivity> {
+    let _transaction = crate::mutation_lock::CanonicalMutationLock::shared(state_dir)?;
     let created_at = canonical_activity_timestamp(created_at);
     let id = allocate_activity_id(state_dir, "issue", mission_id, created_at)?;
     let activity = IssueActivity {
@@ -400,6 +401,7 @@ pub fn create_record_activity_with_metadata(
     pr_attribution: Option<ActivityPrAttribution>,
     body: &str,
 ) -> Result<IssueActivity> {
+    let _transaction = crate::mutation_lock::CanonicalMutationLock::shared(state_dir)?;
     let created_at = canonical_activity_timestamp(created_at);
     let id = allocate_activity_id(state_dir, subject_kind, subject_id, created_at)?;
     let activity = IssueActivity {
@@ -560,6 +562,7 @@ pub fn create_workflow_transition_activity(
     workflow_transition: WorkflowTransitionActivity,
     body: &str,
 ) -> Result<IssueActivity> {
+    let _transaction = crate::mutation_lock::CanonicalMutationLock::shared(state_dir)?;
     let created_at = canonical_activity_timestamp(created_at);
     let id = allocate_activity_id(state_dir, "issue", issue_id, created_at)?;
     let activity = IssueActivity {

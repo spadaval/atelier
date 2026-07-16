@@ -762,6 +762,19 @@ fn load_dotenv() -> Result<()> {
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
     init_tracing(&cli.log_level, &cli.log_format);
+    // Hold one association lock across every repository command's complete
+    // read/validate/write lifetime. This prevents a mutation prepared against
+    // pre-cutover bytes from waiting behind the exclusive migration and then
+    // committing stale state after activation. It also covers bulk import,
+    // bundle directory swaps and repair surfaces that do not write via
+    // RecordStore's final-file helpers. Repository-associated prune acquires
+    // the same lock after its optional tracker discovery below.
+    let _canonical_transaction_lock = if command_uses_canonical_transaction(&cli.command) {
+        let manager = CacheManager::discover()?;
+        Some(atelier_records::mutation_lock::CanonicalMutationLock::shared(&manager.state_dir())?)
+    } else {
+        None
+    };
     let quiet = cli.quiet;
     let command_name = command_identity(&cli.command);
     let started_at = Utc::now();
@@ -1219,9 +1232,20 @@ fn run() -> Result<()> {
             apply,
             retention_days,
         } => {
-            let tracker = match CacheManager::discover()
-                .and_then(|manager| manager.get_cache(CacheUse::Decision))
-            {
+            // Prune can clean local diagnostics without a repository. Once a
+            // tracker is discovered, retain its association lock across cache
+            // acquisition, canonical candidate reads, and any removals.
+            let manager = CacheManager::discover();
+            let _prune_canonical_lock = manager
+                .as_ref()
+                .ok()
+                .map(|manager| {
+                    atelier_records::mutation_lock::CanonicalMutationLock::shared(
+                        &manager.state_dir(),
+                    )
+                })
+                .transpose()?;
+            let tracker = match manager.and_then(|manager| manager.get_cache(CacheUse::Decision)) {
                 Ok(storage) => {
                     let repo_root = storage.repo_root().to_path_buf();
                     let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
@@ -1292,6 +1316,19 @@ fn run() -> Result<()> {
         success,
     );
     result
+}
+
+fn command_uses_canonical_transaction(command: &Commands) -> bool {
+    match command {
+        // Fresh initialization has no repository association to lock. Forced
+        // reconciliation of an existing tracker does.
+        Commands::Init { .. } => std::path::Path::new(".atelier").exists(),
+        Commands::Man { .. }
+        | Commands::MigrateMissionPlanReview
+        | Commands::Diagnostics { .. }
+        | Commands::Prune { .. } => false,
+        _ => true,
+    }
 }
 
 fn parse_cli_or_exit() -> Cli {
@@ -1400,6 +1437,39 @@ fn command_identity(command: &Commands) -> &'static str {
 
 #[cfg(test)]
 mod cache_acquisition_tests {
+    #[test]
+    fn canonical_transaction_lock_precedes_repository_dispatch() {
+        let main = include_str!("main.rs");
+        let production = main
+            .split("mod cache_acquisition_tests")
+            .next()
+            .expect("production dispatch source");
+        let lock = production
+            .find("let _canonical_transaction_lock")
+            .expect("canonical association lock");
+        let dispatch = production
+            .find("let result = match cli.command")
+            .expect("central command dispatch");
+
+        assert!(lock < dispatch, "association lock must precede dispatch");
+        for bulk_surface in [
+            "commands::bundle::apply",
+            "commands::import::run_beads_jsonl",
+        ] {
+            assert!(
+                production[dispatch..].contains(bulk_surface),
+                "missing bulk canonical mutation surface {bulk_surface}"
+            );
+        }
+        let prune_lock = production
+            .find("let _prune_canonical_lock")
+            .expect("optional-repository prune association lock");
+        let prune_run = production
+            .find("commands::prune::run")
+            .expect("prune dispatch");
+        assert!(prune_lock < prune_run, "prune lock must precede prune work");
+    }
+
     #[test]
     fn central_dispatch_has_no_raw_database_open_bypass() {
         let sources = [

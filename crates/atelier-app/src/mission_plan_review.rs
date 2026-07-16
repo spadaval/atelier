@@ -8,6 +8,7 @@ use atelier_records::mission_plan_review::{
     validate_mission_plan_review_event_references, validate_stable_actor_identity,
     MissionGraphRevision, MissionPlanFindingSeverity, MissionPlanReviewEvent,
 };
+use atelier_records::mutation_lock::CanonicalMutationLock;
 use atelier_records::RecordStore;
 use chrono::{Timelike, Utc};
 use std::path::Path;
@@ -46,6 +47,9 @@ pub fn mutate(
     authenticated_actor: &str,
     mutation: MissionPlanReviewMutation,
 ) -> Result<MissionPlanReviewMutationResult> {
+    // Keep the mission/revision reads and the resulting activity append in one
+    // association transaction for direct library callers as well as the CLI.
+    let _transaction_lock = CanonicalMutationLock::shared(state_dir)?;
     validate_stable_actor_identity(authenticated_actor)
         .context("ATELIER_AUTHENTICATED_ACTOR is invalid")?;
     let mission = RecordStore::new(state_dir).load_issue_by_id(mission_id)?;

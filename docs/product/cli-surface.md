@@ -161,11 +161,13 @@ in the command audit:
 - `migrate-mission-plan-review`: one-shot hidden admin cutover for repositories
   carrying the legacy direct mission-ready policy. It stages and validates the
   full canonical transaction, preserves unrelated configured mission
-  transitions, serializes canonical writers, and uses a durable recovery
-  journal with workflow activation last. Retry performs deterministic
-  interruption recovery before migration and becomes a validation-only no-op
-  after success. Remove it when no supported repository can retain that legacy
-  policy.
+  transitions, serializes every repository command across its complete
+  read/validate/write lifetime, and uses a durable recovery journal with workflow
+  activation last. The journal inventories the complete canonical tree by path,
+  type, and file hash. Retry performs deterministic interruption recovery before
+  migration, refuses and preserves any unrelated addition, edit, deletion, or
+  type change for operator repair, and becomes a validation-only no-op after
+  success. Remove it when no supported repository can retain that legacy policy.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
 - `forgejo roles`: hidden provider-specific role-account recovery. Routine review
