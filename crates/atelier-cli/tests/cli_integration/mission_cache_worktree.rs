@@ -43,6 +43,268 @@ fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
 }
 
 #[test]
+fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_output() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let long_title = "X".repeat(100);
+
+    for args in [
+        vec![
+            "issue",
+            "create",
+            "Overview mission",
+            "--issue-type",
+            "mission",
+            "--priority",
+            "high",
+        ],
+        vec![
+            "issue",
+            "create",
+            long_title.as_str(),
+            "--issue-type",
+            "mission",
+            "--priority",
+            "medium",
+        ],
+        vec![
+            "issue",
+            "create",
+            "Overview epic",
+            "--issue-type",
+            "epic",
+            "--priority",
+            "medium",
+        ],
+        vec!["issue", "create", "Direct mission work"],
+        vec!["issue", "create", "Unassigned work"],
+        vec!["issue", "create", "Epic blocker"],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "fixture command {args:?} failed: {stderr}");
+    }
+
+    let mission_id = issue_id_by_title(dir.path(), "Overview mission");
+    let long_title_mission_id = issue_id_by_title(dir.path(), &long_title);
+    let epic_id = issue_id_by_title(dir.path(), "Overview epic");
+    let direct_id = issue_id_by_title(dir.path(), "Direct mission work");
+    let blocker_id = issue_id_by_title(dir.path(), "Epic blocker");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Collapsed epic child",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "child fixture create failed: {stderr}");
+
+    for args in [
+        vec!["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+        vec![
+            "issue",
+            "link",
+            &mission_id,
+            &direct_id,
+            "--role",
+            "advances",
+        ],
+        vec![
+            "issue",
+            "link",
+            &epic_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "fixture command {args:?} failed: {stderr}");
+    }
+
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "work missions failed: {stderr}");
+    assert!(
+        overview.starts_with("Mission Overview\n================"),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!(
+            "{mission_id}  todo  high  Overview mission\n  Status: draft"
+        )),
+        "{overview}"
+    );
+    assert!(
+        overview.contains("Progress: 0 active · 2 todo · 0 done · 1 blocked"),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!("  {epic_id}  epic  todo  medium  Overview epic")),
+        "{overview}"
+    );
+    assert!(
+        overview.contains("Children: 1 issue · 0 active · 1 todo · 0 done · 0 blocked"),
+        "{overview}"
+    );
+    assert!(overview.contains("Blockers: 1 open blocker"), "{overview}");
+    assert!(
+        overview.contains("Direct work: 1 root · 0 active · 1 todo · 0 done · 0 blocked"),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!("Drill down: atelier work epic {epic_id}"))
+            && overview.contains(&format!("Drill down: atelier work mission {mission_id}")),
+        "{overview}"
+    );
+    assert!(
+        overview.contains("Outside visible missions")
+            && overview.contains("Unassigned: 2 nonterminal issues")
+            && overview.contains("Linked only to done missions: 0 nonterminal issues"),
+        "{overview}"
+    );
+    assert!(!overview.contains("Collapsed epic child"), "{overview}");
+    assert!(!overview.contains('\u{1b}'), "{overview:?}");
+
+    let (success, no_color, stderr) =
+        run_atelier_with_env(dir.path(), &["work", "missions"], &[("NO_COLOR", "")]);
+    assert!(success, "NO_COLOR work missions failed: {stderr}");
+    assert_eq!(no_color, overview);
+    assert!(!no_color.contains('\u{1b}'), "{no_color:?}");
+
+    let (success, narrow, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["work", "missions"],
+        &[("COLUMNS", "40"), ("NO_COLOR", "")],
+    );
+    assert!(success, "40-column work missions failed: {stderr}");
+    assert!(
+        narrow.lines().all(|line| line.chars().count() <= 40),
+        "40-column output contains an over-width line:\n{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "{mission_id}\n  State: todo\n  Priority: high\n  Title: Overview mission"
+        )),
+        "{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "  {epic_id}  epic\n    State: todo\n    Priority: medium\n    Title: Overview epic"
+        )),
+        "{narrow}"
+    );
+    assert!(
+        narrow.contains(&format!(
+            "    Drill down:\n      atelier work epic {epic_id}"
+        )) && narrow.contains(&format!(
+            "  Drill down:\n    atelier work mission {mission_id}"
+        )),
+        "{narrow}"
+    );
+    assert!(narrow.contains("  Status: draft"), "{narrow}");
+    assert!(narrow.contains("Outside visible missions"), "{narrow}");
+    assert!(!narrow.contains("Collapsed epic child"), "{narrow}");
+    assert!(!narrow.contains('\u{1b}'), "{narrow:?}");
+    let rendered_long_title = narrow
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && line.chars().all(|character| character == 'X'))
+        .collect::<String>();
+    assert_eq!(rendered_long_title, long_title, "{narrow}");
+
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "missions"]);
+    assert!(success, "quiet work missions failed: {stderr}");
+    assert_eq!(
+        quiet.lines().collect::<Vec<_>>(),
+        vec![mission_id.as_str(), long_title_mission_id.as_str()]
+    );
+    assert!(!quiet.contains('\u{1b}'), "{quiet:?}");
+}
+
+#[test]
+fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expanding_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Published overview mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission fixture create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Published overview mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Work linked only to done mission"],
+    );
+    assert!(success, "linked work fixture create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Work linked only to done mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &work_id, "--role", "advances"],
+    );
+    assert!(success, "mission advances fixture failed: {stderr}");
+
+    let mission_path = canonical_issue_path(dir.path(), &mission_id);
+    let markdown = std::fs::read_to_string(&mission_path).unwrap();
+    let published = markdown.replacen("status: \"draft\"", "status: \"publish_review\"", 1);
+    assert_ne!(published, markdown, "mission fixture status was not draft");
+    std::fs::write(&mission_path, published).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(
+        success,
+        "rebuild published mission fixture failed: {stderr}"
+    );
+
+    let (success, default, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "default Mission Overview failed: {stderr}");
+    assert!(
+        default.contains("No missions match the current overview."),
+        "{default}"
+    );
+    assert!(!default.contains(&mission_id), "{default}");
+    assert!(!default.contains("Published overview mission"), "{default}");
+    assert!(
+        !default.contains("Work linked only to done mission"),
+        "{default}"
+    );
+    assert!(
+        default.contains("Linked only to done missions: 1 nonterminal issue"),
+        "{default}"
+    );
+
+    let (success, default_quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "work", "missions"]);
+    assert!(success, "default quiet Mission Overview failed: {stderr}");
+    assert!(default_quiet.is_empty(), "{default_quiet:?}");
+
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "--all Mission Overview failed: {stderr}");
+    assert!(
+        all.contains(&format!(
+            "{mission_id}  done  medium  Published overview mission"
+        )),
+        "{all}"
+    );
+    assert!(all.contains("Status: publish_review"), "{all}");
+    assert!(all.contains("Direct work: 1 root"), "{all}");
+    assert!(!all.contains("Work linked only to done mission"), "{all}");
+    assert!(!all.contains("Outside visible missions"), "{all}");
+
+    let (success, all_quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "work", "missions", "--all"]);
+    assert!(success, "--all quiet Mission Overview failed: {stderr}");
+    assert_eq!(all_quiet.trim(), mission_id);
+}
+
+#[test]
 fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

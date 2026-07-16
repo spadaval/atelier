@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-06T17:56:16.823459185+00:00"
+status: "done"
 title: "Prune stale branches and removable worktrees"
-updated_at: "2026-06-19T19:39:44.792922880+00:00"
+updated_at: "2026-07-06T17:56:16.823459185+00:00"
 ---
 
 ## Description

@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:43:46.428584150+00:00"
+status: "done"
 title: "Validate pruning safeguards end to end"
-updated_at: "2026-06-19T19:39:57.005628760+00:00"
+updated_at: "2026-07-09T16:43:46.428584150+00:00"
 ---
 
 ## Description

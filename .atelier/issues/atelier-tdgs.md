@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-07T05:34:40.262572798+00:00"
+status: "done"
 title: "Build the mission-to-epic overview projection"
-updated_at: "2026-07-06T17:20:25.692343496+00:00"
+updated_at: "2026-07-07T05:34:40.262572798+00:00"
 ---
 
 ## Description
@@ -34,4 +35,7 @@ Add a dedicated overview model that selects non-done missions by default, resolv
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Partial implementation evidence `atelier-mvt3` records 5 passing directed membership, descendant collapse, overlap/shared-scope, exceptional-work, ordering, budget, and cycle-safety projection tests.
+- Independent review evidence `atelier-nm2w` records a pass with no severity findings for checkpoint `0fd1e8ee` and names the intentionally unclaimed adapter, renderer, and CLI risks.
+- Evidence `atelier-1hwe` records 6 passing projection and decision-cache acquisition tests, including directed link preservation, parent-edge acquisition, live blocker classification, default done-mission omission, and explicit inclusion.
+- Evidence `atelier-dhck` and `atelier-rmqc` record passing default and `--all` quiet `atelier work missions` command transcripts from the wired projected model.
