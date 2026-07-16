@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+closed_at: "2026-07-16T23:52:36.713694141+00:00"
+status: "done"
 title: "Separate mission authorship, review, and orchestration handoffs"
-updated_at: "2026-07-16T18:48:47.884962040+00:00"
+updated_at: "2026-07-16T23:52:36.713694141+00:00"
 ---
 
 ## Description
