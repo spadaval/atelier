@@ -36,7 +36,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Enforce reviewed and dependency-safe mission readiness"
-updated_at: "2026-07-09T17:10:24.348738019+00:00"
+updated_at: "2026-07-16T18:42:14.148592795+00:00"
 ---
 
 ## Description

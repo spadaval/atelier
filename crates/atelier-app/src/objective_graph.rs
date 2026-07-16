@@ -1,9 +1,136 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use atelier_core::{Issue, RecordLink};
 use atelier_sqlite::Database;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::workflow_policy::WorkflowPolicy;
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct DependencyClosure {
+    pub open_paths: Vec<Vec<String>>,
+    pub cycle_paths: Vec<Vec<String>>,
+}
+
+impl DependencyClosure {
+    pub fn is_ready(&self) -> bool {
+        self.open_paths.is_empty() && self.cycle_paths.is_empty()
+    }
+
+    pub fn blocking_ids(&self) -> Vec<String> {
+        let mut ids = self
+            .open_paths
+            .iter()
+            .filter_map(|path| path.last().cloned())
+            .collect::<BTreeSet<_>>();
+        for path in &self.cycle_paths {
+            if let Some(id) = path.last() {
+                ids.insert(id.clone());
+            }
+        }
+        ids.into_iter().collect()
+    }
+
+    pub fn failure_reason(&self) -> Option<String> {
+        if self.is_ready() {
+            return None;
+        }
+        let mut reasons = Vec::new();
+        if !self.open_paths.is_empty() {
+            reasons.push(format!(
+                "incomplete dependency path(s): {}",
+                format_dependency_paths(&self.open_paths)
+            ));
+        }
+        if !self.cycle_paths.is_empty() {
+            reasons.push(format!(
+                "dependency cycle(s): {}; repair the declared blocked_by relationships",
+                format_dependency_paths(&self.cycle_paths)
+            ));
+        }
+        Some(reasons.join("; "))
+    }
+}
+
+pub fn dependency_closure(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue_id: &str,
+) -> Result<DependencyClosure> {
+    db.require_issue(issue_id)?;
+    evaluate_dependency_closure(
+        issue_id,
+        |id| db.get_blockers(id),
+        |id| {
+            let issue = db
+                .require_issue(id)
+                .with_context(|| format!("dependency path references missing issue {id}"))?;
+            policy.issue_status_is_terminal(&issue.issue_type, &issue.status)
+        },
+    )
+}
+
+fn evaluate_dependency_closure(
+    issue_id: &str,
+    mut blockers_for: impl FnMut(&str) -> Result<Vec<String>>,
+    mut is_terminal: impl FnMut(&str) -> Result<bool>,
+) -> Result<DependencyClosure> {
+    fn visit(
+        current: &str,
+        blockers_for: &mut impl FnMut(&str) -> Result<Vec<String>>,
+        is_terminal: &mut impl FnMut(&str) -> Result<bool>,
+        visited: &mut HashSet<String>,
+        path: &mut Vec<String>,
+        closure: &mut DependencyClosure,
+    ) -> Result<()> {
+        visited.insert(current.to_string());
+        let mut blockers = blockers_for(current)?;
+        blockers.sort();
+        blockers.dedup();
+        for blocker in blockers {
+            if path.iter().any(|id| id == &blocker) {
+                let mut cycle_path = path[..].to_vec();
+                cycle_path.push(blocker);
+                closure.cycle_paths.push(cycle_path);
+                continue;
+            }
+
+            path.push(blocker.clone());
+            if !is_terminal(&blocker)? {
+                closure.open_paths.push(path.clone());
+            }
+            if !visited.contains(&blocker) {
+                visit(&blocker, blockers_for, is_terminal, visited, path, closure)?;
+            }
+            path.pop();
+        }
+        Ok(())
+    }
+
+    let mut closure = DependencyClosure::default();
+    let mut visited = HashSet::new();
+    let mut path = vec![issue_id.to_string()];
+    visit(
+        issue_id,
+        &mut blockers_for,
+        &mut is_terminal,
+        &mut visited,
+        &mut path,
+        &mut closure,
+    )?;
+    closure.open_paths.sort();
+    closure.open_paths.dedup();
+    closure.cycle_paths.sort();
+    closure.cycle_paths.dedup();
+    Ok(closure)
+}
+
+fn format_dependency_paths(paths: &[Vec<String>]) -> String {
+    paths
+        .iter()
+        .map(|path| path.join(" -> "))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 pub fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
     mission_objective_kind(db, mission_id)?;
@@ -126,5 +253,87 @@ fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str
         Some((&link.source_kind, &link.source_id))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    #[test]
+    fn dependency_closure_reports_complete_direct_and_transitive_paths() {
+        let graph = BTreeMap::from([
+            ("mission", vec!["direct"]),
+            ("direct", vec!["transitive"]),
+            ("transitive", Vec::new()),
+        ]);
+        let terminal = BTreeSet::from(["direct"]);
+
+        let closure = evaluate_dependency_closure(
+            "mission",
+            |id| {
+                Ok(graph
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect())
+            },
+            |id| Ok(terminal.contains(id)),
+        )
+        .unwrap();
+
+        assert_eq!(
+            closure.open_paths,
+            vec![vec![
+                "mission".to_string(),
+                "direct".to_string(),
+                "transitive".to_string(),
+            ]]
+        );
+        assert!(closure.cycle_paths.is_empty());
+    }
+
+    #[test]
+    fn dependency_closure_fails_safely_with_an_actionable_cycle_path() {
+        let graph = BTreeMap::from([
+            ("consumer", vec!["first"]),
+            ("first", vec!["second"]),
+            ("second", vec!["first"]),
+        ]);
+
+        let closure = evaluate_dependency_closure(
+            "consumer",
+            |id| {
+                Ok(graph
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect())
+            },
+            |_id| Ok(true),
+        )
+        .unwrap();
+
+        assert!(!closure.is_ready());
+        assert_eq!(
+            closure.cycle_paths,
+            vec![vec![
+                "consumer".to_string(),
+                "first".to_string(),
+                "second".to_string(),
+                "first".to_string(),
+            ]]
+        );
+        assert_eq!(
+            closure.failure_reason().as_deref(),
+            Some(
+                "dependency cycle(s): consumer -> first -> second -> first; repair the declared blocked_by relationships"
+            )
+        );
     }
 }

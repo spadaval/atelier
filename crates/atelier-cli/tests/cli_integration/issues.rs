@@ -3262,12 +3262,14 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
         description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
         validators:
           - issue.sections_parseable
+          - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start mission execution after the configured repository baseline is green or explicitly waived."
         validators:
           - baseline.default_checks
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       request_publish:

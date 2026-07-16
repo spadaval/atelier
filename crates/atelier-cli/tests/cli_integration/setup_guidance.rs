@@ -2552,8 +2552,8 @@ fn test_root_start_reports_workflow_validator_failure() {
     std::fs::write(
         &policy_path,
         policy.replacen(
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - blockers.transitive_none_open\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators: [evidence.attached]\n",
             1,
         ),
     )

@@ -388,6 +388,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
       close:
         from: [in_progress, validation]
         to: done
@@ -407,6 +409,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
       request_review:
         from: [in_progress]
         to: review
@@ -437,6 +441,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
       request_review:
         from: [in_progress]
         to: review
@@ -467,6 +473,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
       request_review:
         from: [in_progress]
         to: review

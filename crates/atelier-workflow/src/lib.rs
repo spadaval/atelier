@@ -64,12 +64,14 @@ workflows:
         description: "Move a mission from drafted planning into ready execution when the Outcome is worker-usable."
         validators:
           - issue.sections_parseable
+          - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start mission execution after the configured repository baseline is green or explicitly waived."
         validators:
           - baseline.default_checks
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       request_publish:
@@ -100,6 +102,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -128,6 +132,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -169,6 +175,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -210,6 +218,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -247,6 +257,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "objective.work_present",
     "objective.work_terminal",
     "objective.blockers_none_open",
+    "blockers.transitive_none_open",
     "baseline.default_checks",
     "closeout.failures_classified",
     "review.linked_pr_merged",
@@ -485,6 +496,14 @@ impl WorkflowPolicy {
         self.statuses
             .get(status)
             .and_then(|status| status.role.as_deref())
+    }
+
+    pub fn issue_status_is_terminal(&self, issue_type: &str, status: &str) -> Result<bool> {
+        Ok(self
+            .workflow_for_issue_type(issue_type)?
+            .done_statuses
+            .iter()
+            .any(|done_status| done_status == status))
     }
 
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
@@ -2495,7 +2514,7 @@ mod tests {
         );
         assert_eq!(
             validator_names(&policy.workflows["epic"].transitions["start"].validators),
-            Vec::<&str>::new()
+            vec!["blockers.transitive_none_open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");

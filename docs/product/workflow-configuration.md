@@ -106,6 +106,15 @@ Status `role` is allowed only when `category: active`. Valid role values are
 explicit `--role` first; when omitted, they infer the role from the linked owner
 issue's current status role and fail if that status has none.
 
+`blockers.transitive_none_open` walks only declared `blocked_by` dependency
+edges. It rejects an incomplete direct or transitive prerequisite with the full
+path from the issue being started, and rejects a dependency cycle with its
+cycle path instead of treating the graph as ready. A prerequisite is complete
+only when its status is listed in its issue type workflow's `done_statuses`;
+the shared status category alone does not make it terminal. Mission `advances`
+scope and ordinary hierarchy are not dependency edges, so incomplete internal
+mission work does not block starting the mission shell.
+
 Mission-plan review is separate from the review backend selected in
 `.atelier/config.toml`. Its append-only request, attribution, finding,
 resolution, change-request, approval, and migration events are linked to the
@@ -212,6 +221,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -236,6 +247,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -280,6 +293,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:
@@ -317,6 +332,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - blockers.transitive_none_open
         actions:
           - git.prepare_branch
       block:

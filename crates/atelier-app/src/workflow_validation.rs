@@ -166,6 +166,10 @@ fn evaluate_builtin_with_params(
             objective_direct_blockers_none_open(db, policy, target_kind, target_id)
                 .map(without_validator_help)
         }
+        "blockers.transitive_none_open" => {
+            transitive_blockers_none_open(db, policy, target_kind, target_id)
+                .map(without_validator_help)
+        }
         "baseline.default_checks" => {
             baseline_default_checks(db, repo_root).map(without_validator_help)
         }
@@ -541,6 +545,25 @@ fn objective_direct_blockers_none_open(
                 open.join(", ")
             ),
         ))
+    }
+}
+
+fn transitive_blockers_none_open(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("dependency closure does not apply to {target_kind} records"),
+        ));
+    }
+    let closure = crate::objective_graph::dependency_closure(db, policy, target_id)?;
+    match closure.failure_reason() {
+        Some(reason) => Ok((false, reason)),
+        None => Ok((true, "declared dependency closure is terminal".to_string())),
     }
 }
 

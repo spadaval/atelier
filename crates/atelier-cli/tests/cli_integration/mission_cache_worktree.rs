@@ -42,6 +42,240 @@ fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
     assert!(success, "mission ready transition failed: {stderr}");
 }
 
+fn set_dependency_fixture_status(dir: &std::path::Path, issue_id: &str, status: &str) {
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", status)
+    });
+}
+
+fn configure_dependency_fixture_terminal_status(dir: &std::path::Path) {
+    let policy_path = dir.join(".atelier/workflow.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    let policy = policy.replace(
+        "  done:\n    category: done\n",
+        "  done:\n    category: done\n  accepted:\n    category: done\n",
+    );
+    let policy = policy.replacen(
+        "  task:\n    applies_to: [bug, feature, task]\n    initial_status: todo\n    done_statuses: [done]",
+        "  task:\n    applies_to: [bug, feature, task]\n    initial_status: todo\n    done_statuses: [accepted]",
+        1,
+    );
+    std::fs::write(policy_path, policy).unwrap();
+}
+
+#[test]
+fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    configure_dependency_fixture_terminal_status(dir.path());
+
+    let mission_id = create_mission_fixture(dir.path(), "Dependency gated mission");
+    for title in [
+        "Direct mission prerequisite",
+        "Transitive mission prerequisite",
+        "Unrelated internal mission work",
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue fixture create failed for {title}: {stderr}");
+    }
+    let direct_id = issue_id_by_title(dir.path(), "Direct mission prerequisite");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive mission prerequisite");
+    let internal_id = issue_id_by_title(dir.path(), "Unrelated internal mission work");
+    for args in [
+        vec![
+            "issue",
+            "link",
+            &mission_id,
+            &direct_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &direct_id,
+            &transitive_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &mission_id,
+            &internal_id,
+            "--role",
+            "advances",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "dependency fixture link failed: {stderr}");
+    }
+    commit_all(dir.path(), "mission dependency closure fixture");
+
+    let (success, direct_options, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        direct_options.contains("start [blocked]"),
+        "{direct_options}"
+    );
+    assert!(
+        direct_options.contains(&format!("{mission_id} -> {direct_id}")),
+        "missing direct blocking path:\n{direct_options}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(
+        !success,
+        "mission start should reject an open direct blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{mission_id} -> {direct_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected direct mission start");
+
+    set_dependency_fixture_status(dir.path(), &direct_id, "accepted");
+    set_dependency_fixture_status(dir.path(), &transitive_id, "done");
+    commit_all(dir.path(), "direct mission prerequisite terminal");
+    let (success, transitive_options, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        transitive_options.contains("start [blocked]"),
+        "{transitive_options}"
+    );
+    assert!(
+        transitive_options.contains(&format!("{mission_id} -> {direct_id} -> {transitive_id}")),
+        "missing transitive blocking path:\n{transitive_options}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(
+        !success,
+        "mission start should reject an open transitive blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{mission_id} -> {direct_id} -> {transitive_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected transitive mission start");
+
+    set_dependency_fixture_status(dir.path(), &transitive_id, "accepted");
+    commit_all(dir.path(), "mission dependency closure terminal");
+    let (success, started, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "closed dependency mission start failed: {stderr}");
+    assert!(started.contains("Applied transition start"), "{started}");
+    assert!(
+        read_canonical_record(dir.path(), "issues", &internal_id).contains("status: \"todo\""),
+        "unrelated internal mission work should remain incomplete"
+    );
+}
+
+#[test]
+fn test_issue_ready_work_and_direct_start_require_transitive_dependency_closure() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    configure_dependency_fixture_terminal_status(dir.path());
+
+    for title in [
+        "Dependency gated issue",
+        "Direct issue prerequisite",
+        "Transitive issue prerequisite",
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue fixture create failed for {title}: {stderr}");
+    }
+    let issue_id = issue_id_by_title(dir.path(), "Dependency gated issue");
+    let direct_id = issue_id_by_title(dir.path(), "Direct issue prerequisite");
+    let transitive_id = issue_id_by_title(dir.path(), "Transitive issue prerequisite");
+    for args in [
+        vec![
+            "issue",
+            "link",
+            &issue_id,
+            &direct_id,
+            "--role",
+            "blocked_by",
+        ],
+        vec![
+            "issue",
+            "link",
+            &direct_id,
+            &transitive_id,
+            "--role",
+            "blocked_by",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "dependency fixture link failed: {stderr}");
+    }
+    commit_all(dir.path(), "open issue dependency closure fixture");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        !ready.lines().any(|line| line == issue_id),
+        "directly blocked issue was reported ready:\n{ready}"
+    );
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(
+        !success,
+        "direct start should reject an open direct blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{issue_id} -> {direct_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected direct issue start");
+
+    set_dependency_fixture_status(dir.path(), &direct_id, "accepted");
+    set_dependency_fixture_status(dir.path(), &transitive_id, "done");
+    commit_all(dir.path(), "issue dependency closure fixture");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        !ready.lines().any(|line| line == issue_id),
+        "transitively blocked issue was reported ready:\n{ready}"
+    );
+
+    let (success, rejected, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(
+        !success,
+        "direct start should reject an open transitive blocker"
+    );
+    assert!(
+        rejected.contains(&format!("{issue_id} -> {direct_id} -> {transitive_id}")),
+        "{rejected}\n{stderr}"
+    );
+    commit_all(dir.path(), "record rejected transitive issue start");
+
+    set_dependency_fixture_status(dir.path(), &transitive_id, "accepted");
+    commit_all(dir.path(), "issue dependency closure terminal");
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "work ready failed: {stderr}");
+    assert!(
+        ready.lines().any(|line| line == issue_id),
+        "dependency-ready issue was omitted:\n{ready}"
+    );
+    let (success, started, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "dependency-ready issue start failed: {stderr}");
+    assert!(started.contains("Applied transition start"), "{started}");
+}
+
 #[test]
 fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_output() {
     let dir = tempdir().unwrap();
@@ -324,8 +558,8 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     std::fs::write(
         &policy_path,
         policy.replacen(
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - blockers.transitive_none_open\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators: [evidence.attached]\n",
             1,
         ),
     )

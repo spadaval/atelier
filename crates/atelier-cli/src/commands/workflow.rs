@@ -2026,14 +2026,14 @@ fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
-        ("issue", "start") => &["issue.sections_parseable", "blockers.none_open"],
+        ("issue", "start") => &["issue.sections_parseable", "blockers.transitive_none_open"],
         ("issue", "close") => &[
             "issue.sections_parseable",
             "blockers.none_open",
             "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
-        ("mission", _) => &["issue.sections_parseable", "blockers.none_open"],
+        ("mission", _) => &["issue.sections_parseable", "blockers.transitive_none_open"],
         ("evidence", _) => &[],
         ("tracker", "health") => &[
             "lint.none_blocking",
@@ -2521,7 +2521,7 @@ repo = "atelier"
     fn default_validators_are_target_and_transition_aware() {
         assert_eq!(
             default_validators("issue", "start"),
-            vec!["issue.sections_parseable", "blockers.none_open"]
+            vec!["issue.sections_parseable", "blockers.transitive_none_open"]
         );
         assert_eq!(
             default_validators("issue", "close"),
