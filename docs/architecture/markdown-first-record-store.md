@@ -378,19 +378,27 @@ revision it concerns; requests record the complete author/material-editor
 provenance snapshot, attributions chain a new revision to its predecessor,
 findings and change requests carry stable decision IDs and affected issue or
 dependency-path IDs, resolutions target those IDs, and approval identity comes
-from the activity actor. Lists that represent sets are sorted and unique so
+from the activity actor. Actor identities are whitespace-free stable IDs;
+non-canonical whitespace variants are rejected rather than treated as distinct
+reviewers. A legacy grandfather is limited to cutover status `in_progress`,
+migration ID `independent-mission-plan-review-v1`, and activity actor
+`atelier-migration`. It is fresh only while the mission still has that exact
+status and graph revision. Lists that represent sets are sorted and unique so
 rendering and rebuild are deterministic. Malformed payloads, missing
 provenance, non-independent approval, unresolved blocking decisions at approval
 time, and plan-review events attached to non-mission issues make canonical
 rebuild fail.
 
-The graph revision string is `mission-graph-v1:sha256:<digest>`. The hashed
+The graph revision string is `mission-graph-v2:sha256:<digest>`. The hashed
 payload uses stable-ID ordering and contains the mission and reachable authored
 planning sections, direct roots, hierarchy and `advances` edges, and blocker
-edges touching reviewed scope. Status, timestamps, notes, evidence receipts,
-code-review fields, context-only links, activity, and cache state are excluded.
-The current review projection is rebuilt directly from canonical issue records
-and sidecars; it is not a mutable snapshot or a SQLite activity table.
+edges touching reviewed scope. Blocker inputs include directional canonical
+`blocks` buckets and direct `blocked_by` links; the revision version changed so
+an approval produced under the incomplete V1 inputs cannot silently remain
+fresh. Status, timestamps, notes, evidence receipts, code-review fields,
+context-only links, activity, and cache state are excluded. The current review
+projection is rebuilt directly from canonical issue records and sidecars; it is
+not a mutable snapshot or a SQLite activity table.
 
 `atelier issue show` uses the same sidecars for its bounded recent activity
 preview. It does not fall back to SQLite notes or comments.

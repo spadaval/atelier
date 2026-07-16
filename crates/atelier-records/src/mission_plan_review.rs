@@ -14,7 +14,10 @@ use std::path::Path;
 use crate::activity::{list_issue_activities, ActivityEventType, IssueActivity};
 use crate::{CanonicalIssueRecord, RecordStore};
 
-pub const MISSION_GRAPH_REVISION_VERSION: &str = "mission-graph-v1";
+pub const MISSION_GRAPH_REVISION_VERSION: &str = "mission-graph-v2";
+pub const LEGACY_GRANDFATHER_STATUS: &str = "in_progress";
+pub const LEGACY_GRANDFATHER_MIGRATION_ID: &str = "independent-mission-plan-review-v1";
+pub const LEGACY_GRANDFATHER_MIGRATION_ACTOR: &str = "atelier-migration";
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -96,6 +99,7 @@ pub enum MissionPlanReviewEvent {
     LegacyGrandfather {
         graph_revision: MissionGraphRevision,
         legacy_status: String,
+        migration_id: String,
     },
 }
 
@@ -163,8 +167,22 @@ impl MissionPlanReviewEvent {
                 validate_nonempty("disposition", disposition)
             }
             Self::Approval { .. } => Ok(()),
-            Self::LegacyGrandfather { legacy_status, .. } => {
-                validate_nonempty("legacy_status", legacy_status)
+            Self::LegacyGrandfather {
+                legacy_status,
+                migration_id,
+                ..
+            } => {
+                if legacy_status != LEGACY_GRANDFATHER_STATUS {
+                    bail!(
+                        "legacy_status must be '{LEGACY_GRANDFATHER_STATUS}' for mission-plan grandfathering"
+                    );
+                }
+                if migration_id != LEGACY_GRANDFATHER_MIGRATION_ID {
+                    bail!(
+                        "migration_id must be '{LEGACY_GRANDFATHER_MIGRATION_ID}' for mission-plan grandfathering"
+                    );
+                }
+                Ok(())
             }
         }
     }
@@ -211,6 +229,10 @@ pub struct MissionPlanAuthorization {
     pub graph_revision: MissionGraphRevision,
     pub actor: String,
     pub activity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migration_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
@@ -245,8 +267,28 @@ impl MissionPlanReviewState {
 
 #[derive(Debug, Clone)]
 struct Provenance {
-    authors: BTreeSet<String>,
-    editors: BTreeSet<String>,
+    authors: BTreeSet<StableActorIdentity>,
+    editors: BTreeSet<StableActorIdentity>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+struct StableActorIdentity(String);
+
+impl StableActorIdentity {
+    fn parse(field: &str, value: &str) -> Result<Self> {
+        validate_nonempty(field, value)?;
+        if value.trim() != value || value.chars().any(char::is_whitespace) {
+            bail!(
+                "{field} '{value}' is not a canonical stable actor identity; whitespace is not allowed"
+            );
+        }
+        if value.chars().any(char::is_control) {
+            bail!(
+                "{field} '{value}' is not a canonical stable actor identity; control characters are not allowed"
+            );
+        }
+        Ok(Self(value.to_string()))
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -257,7 +299,20 @@ struct RevisionPayload<'a> {
     records: BTreeMap<String, RevisionRecord<'a>>,
     hierarchy_edges: BTreeSet<(String, String)>,
     advances_edges: BTreeSet<(String, String)>,
-    dependency_edges: BTreeSet<(String, String)>,
+    dependency_edges: BTreeSet<RevisionDependencyEdge>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum RevisionDependencyEdge {
+    Blocks {
+        blocker_id: String,
+        blocked_id: String,
+    },
+    BlockedBy {
+        left_id: String,
+        right_id: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -385,7 +440,23 @@ fn graph_revision_from_records(
             if blocked.kind == "issue"
                 && (reviewed.contains(&record.issue.id) || reviewed.contains(&blocked.id))
             {
-                dependency_edges.insert((record.issue.id.clone(), blocked.id.clone()));
+                dependency_edges.insert(RevisionDependencyEdge::Blocks {
+                    blocker_id: record.issue.id.clone(),
+                    blocked_id: blocked.id.clone(),
+                });
+            }
+        }
+        for relation in &record.relationships.relates {
+            if relation.kind == "issue"
+                && relation.relation_type == "blocked_by"
+                && (reviewed.contains(&record.issue.id) || reviewed.contains(&relation.id))
+            {
+                let (left_id, right_id) = if record.issue.id < relation.id {
+                    (record.issue.id.clone(), relation.id.clone())
+                } else {
+                    (relation.id.clone(), record.issue.id.clone())
+                };
+                dependency_edges.insert(RevisionDependencyEdge::BlockedBy { left_id, right_id });
             }
         }
     }
@@ -412,13 +483,15 @@ pub fn mission_plan_review_state(
     state_dir: &Path,
     mission_id: &str,
 ) -> Result<MissionPlanReviewState> {
+    let mission = RecordStore::new(state_dir).load_issue_by_id(mission_id)?;
     let revision = mission_graph_revision(state_dir, mission_id)?;
     let activities = list_issue_activities(state_dir, mission_id)?;
-    project_mission_plan_review(mission_id, revision, &activities)
+    project_mission_plan_review(mission_id, &mission.issue.status, revision, &activities)
 }
 
 pub fn project_mission_plan_review(
     mission_id: &str,
+    mission_status: &str,
     current_graph_revision: MissionGraphRevision,
     activities: &[IssueActivity],
 ) -> Result<MissionPlanReviewState> {
@@ -431,8 +504,10 @@ pub fn project_mission_plan_review(
     });
 
     let mut requests = BTreeMap::<MissionGraphRevision, Provenance>::new();
-    let mut attributions =
-        BTreeMap::<MissionGraphRevision, (MissionGraphRevision, BTreeSet<String>)>::new();
+    let mut attributions = BTreeMap::<
+        MissionGraphRevision,
+        (MissionGraphRevision, BTreeSet<StableActorIdentity>),
+    >::new();
     let mut findings = Vec::<MissionPlanFindingState>::new();
     let mut changes = Vec::<MissionPlanChangeRequestState>::new();
     let mut ids = BTreeSet::new();
@@ -445,7 +520,7 @@ pub fn project_mission_plan_review(
         if activity.event_type != ActivityEventType::MissionPlanReview {
             continue;
         }
-        validate_nonempty("activity actor", &activity.actor)?;
+        let activity_actor = StableActorIdentity::parse("activity actor", &activity.actor)?;
         let event = activity.mission_plan_review.as_ref().ok_or_else(|| {
             anyhow!(
                 "Mission-plan review activity {} is missing typed metadata",
@@ -462,8 +537,8 @@ pub fn project_mission_plan_review(
                 material_editors,
             } => {
                 let provenance = Provenance {
-                    authors: authors.iter().cloned().collect(),
-                    editors: material_editors.iter().cloned().collect(),
+                    authors: stable_actor_set("authors", authors)?,
+                    editors: stable_actor_set("material_editors", material_editors)?,
                 };
                 if requests
                     .insert(graph_revision.clone(), provenance)
@@ -482,7 +557,7 @@ pub fn project_mission_plan_review(
                         graph_revision.clone(),
                         (
                             previous_graph_revision.clone(),
-                            editors.iter().cloned().collect(),
+                            stable_actor_set("editors", editors)?,
                         ),
                     )
                     .is_some()
@@ -570,8 +645,8 @@ pub fn project_mission_plan_review(
                             activity.actor
                         )
                     })?;
-                if provenance.authors.contains(&activity.actor)
-                    || provenance.editors.contains(&activity.actor)
+                if provenance.authors.contains(&activity_actor)
+                    || provenance.editors.contains(&activity_actor)
                 {
                     bail!(
                         "Reviewer '{}' is not independent for {graph_revision}; reviewer matches an author or material editor",
@@ -584,14 +659,28 @@ pub fn project_mission_plan_review(
                     graph_revision: graph_revision.clone(),
                     actor: activity.actor.clone(),
                     activity_id: activity.id.clone(),
+                    legacy_status: None,
+                    migration_id: None,
                 });
             }
-            MissionPlanReviewEvent::LegacyGrandfather { graph_revision, .. } => {
+            MissionPlanReviewEvent::LegacyGrandfather {
+                graph_revision,
+                legacy_status,
+                migration_id,
+            } => {
+                if activity_actor.0 != LEGACY_GRANDFATHER_MIGRATION_ACTOR {
+                    bail!(
+                        "Legacy grandfather activity {} must be produced by migration actor '{LEGACY_GRANDFATHER_MIGRATION_ACTOR}'",
+                        activity.id
+                    );
+                }
                 authorizations.push(MissionPlanAuthorization {
                     kind: MissionPlanAuthorizationKind::LegacyGrandfather,
                     graph_revision: graph_revision.clone(),
                     actor: activity.actor.clone(),
                     activity_id: activity.id.clone(),
+                    legacy_status: Some(legacy_status.clone()),
+                    migration_id: Some(migration_id.clone()),
                 });
             }
         }
@@ -623,8 +712,10 @@ pub fn project_mission_plan_review(
                         authorization.graph_revision
                     )
                 })?;
-        if provenance.authors.contains(&authorization.actor)
-            || provenance.editors.contains(&authorization.actor)
+        let authorization_actor =
+            StableActorIdentity::parse("authorization actor", &authorization.actor)?;
+        if provenance.authors.contains(&authorization_actor)
+            || provenance.editors.contains(&authorization_actor)
         {
             bail!(
                 "Reviewer '{}' is not independent for {}; reviewer matches an author or material editor",
@@ -639,8 +730,8 @@ pub fn project_mission_plan_review(
     let (authors, material_editors) = provenance
         .map(|value| {
             (
-                value.authors.into_iter().collect(),
-                value.editors.into_iter().collect(),
+                value.authors.into_iter().map(|actor| actor.0).collect(),
+                value.editors.into_iter().map(|actor| actor.0).collect(),
             )
         })
         .unwrap_or_default();
@@ -657,8 +748,13 @@ pub fn project_mission_plan_review(
                     MissionPlanAuthorizationKind::Approval => {
                         MissionPlanReviewFreshness::FreshApproval
                     }
-                    MissionPlanAuthorizationKind::LegacyGrandfather => {
+                    MissionPlanAuthorizationKind::LegacyGrandfather
+                        if value.legacy_status.as_deref() == Some(mission_status) =>
+                    {
                         MissionPlanReviewFreshness::FreshGrandfather
+                    }
+                    MissionPlanAuthorizationKind::LegacyGrandfather => {
+                        MissionPlanReviewFreshness::Stale
                     }
                 }
             }
@@ -732,7 +828,7 @@ pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
             }
         }
         let revision = graph_revision_from_records(&issues, &issue.issue.id)?;
-        project_mission_plan_review(&issue.issue.id, revision, &activities)?;
+        project_mission_plan_review(&issue.issue.id, &issue.issue.status, revision, &activities)?;
     }
     Ok(())
 }
@@ -740,12 +836,18 @@ pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
 fn resolve_provenance(
     revision: &MissionGraphRevision,
     requests: &BTreeMap<MissionGraphRevision, Provenance>,
-    attributions: &BTreeMap<MissionGraphRevision, (MissionGraphRevision, BTreeSet<String>)>,
+    attributions: &BTreeMap<
+        MissionGraphRevision,
+        (MissionGraphRevision, BTreeSet<StableActorIdentity>),
+    >,
 ) -> Result<Option<Provenance>> {
     fn visit(
         revision: &MissionGraphRevision,
         requests: &BTreeMap<MissionGraphRevision, Provenance>,
-        attributions: &BTreeMap<MissionGraphRevision, (MissionGraphRevision, BTreeSet<String>)>,
+        attributions: &BTreeMap<
+            MissionGraphRevision,
+            (MissionGraphRevision, BTreeSet<StableActorIdentity>),
+        >,
         visiting: &mut BTreeSet<MissionGraphRevision>,
     ) -> Result<Option<Provenance>> {
         if let Some(provenance) = requests.get(revision) {
@@ -814,9 +916,16 @@ fn validate_actor_list(field: &str, values: &[String], allow_empty: bool) -> Res
     }
     validate_sorted_unique(field, values)?;
     for value in values {
-        validate_nonempty(field, value)?;
+        StableActorIdentity::parse(field, value)?;
     }
     Ok(())
+}
+
+fn stable_actor_set(field: &str, values: &[String]) -> Result<BTreeSet<StableActorIdentity>> {
+    values
+        .iter()
+        .map(|value| StableActorIdentity::parse(field, value))
+        .collect()
 }
 
 fn validate_sorted_unique(field: &str, values: &[String]) -> Result<()> {
@@ -984,6 +1093,17 @@ mod tests {
         let mut blockers = baseline.clone();
         blockers[4].relationships.blocks.clear();
         assert_ne!(revision(&blockers), expected, "dependency/blocker edges");
+
+        let mut direct_mission_blocker = baseline.clone();
+        direct_mission_blocker[0]
+            .relationships
+            .relates
+            .push(issue_relates_relationship("atelier-x100", "blocked_by"));
+        assert_ne!(
+            revision(&direct_mission_blocker),
+            expected,
+            "direct mission blocked_by edge"
+        );
 
         let mut closeout = baseline.clone();
         closeout[3].sections.evidence.push_str(" changed");
@@ -1205,6 +1325,48 @@ mod tests {
     }
 
     #[test]
+    fn direct_mission_blocked_by_change_stales_approval() {
+        let directory = tempdir().unwrap();
+        let state_dir = directory.path().join(".atelier");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        write_graph(&state_dir);
+        let original = mission_graph_revision(&state_dir, "atelier-m100").unwrap();
+        append_event(
+            &state_dir,
+            "atelier-m100",
+            1,
+            "author@example.com",
+            MissionPlanReviewEvent::Request {
+                graph_revision: original.clone(),
+                authors: vec!["author@example.com".to_string()],
+                material_editors: Vec::new(),
+            },
+        );
+        append_event(
+            &state_dir,
+            "atelier-m100",
+            2,
+            "reviewer@example.com",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: original.clone(),
+            },
+        );
+
+        let store = RecordStore::new(&state_dir);
+        let mut mission = store.load_issue_by_id("atelier-m100").unwrap();
+        mission
+            .relationships
+            .relates
+            .push(issue_relates_relationship("atelier-x100", "blocked_by"));
+        store.write_issue_atomic(&mission).unwrap();
+
+        let state = mission_plan_review_state(&state_dir, "atelier-m100").unwrap();
+        assert_ne!(state.current_graph_revision, original);
+        assert_eq!(state.freshness, MissionPlanReviewFreshness::Stale);
+        assert!(!state.provenance_complete);
+    }
+
+    #[test]
     fn rejects_provenance_loss_non_independent_approval_and_unresolved_findings() {
         let revision = MissionGraphRevision(format!(
             "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
@@ -1232,6 +1394,7 @@ mod tests {
         );
         let error = project_mission_plan_review(
             "atelier-m100",
+            "draft",
             revision.clone(),
             std::slice::from_ref(&approval),
         )
@@ -1257,6 +1420,7 @@ mod tests {
         );
         let error = project_mission_plan_review(
             "atelier-m100",
+            "draft",
             revision.clone(),
             &[request.clone(), self_approval],
         )
@@ -1282,10 +1446,14 @@ mod tests {
                 graph_revision: revision.clone(),
             },
         );
-        let error =
-            project_mission_plan_review("atelier-m100", revision, &[request, finding, approval])
-                .unwrap_err()
-                .to_string();
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            "draft",
+            revision,
+            &[request, finding, approval],
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("blocking finding blocking-1 is unresolved"));
 
         let revision = MissionGraphRevision(format!(
@@ -1321,6 +1489,7 @@ mod tests {
         assert_eq!(
             project_mission_plan_review(
                 "atelier-m100",
+                "draft",
                 revision,
                 &[request, approval, later_change],
             )
@@ -1328,6 +1497,144 @@ mod tests {
             .freshness,
             MissionPlanReviewFreshness::BlockedByReview
         );
+    }
+
+    #[test]
+    fn rejects_whitespace_variant_self_approval() {
+        let revision = MissionGraphRevision(format!(
+            "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+            "d".repeat(64)
+        ));
+        let make = |offset, actor: &str, event| IssueActivity {
+            id: format!("20260701T00000{offset}000000Z"),
+            subject_kind: "issue".to_string(),
+            subject_id: "atelier-m100".to_string(),
+            event_type: ActivityEventType::MissionPlanReview,
+            actor: actor.to_string(),
+            created_at: at(offset),
+            summary: "review".to_string(),
+            pr_attribution: None,
+            mission_plan_review: Some(event),
+            body: String::new(),
+        };
+        let request = make(
+            0,
+            "same-actor",
+            MissionPlanReviewEvent::Request {
+                graph_revision: revision.clone(),
+                authors: vec!["same-actor".to_string()],
+                material_editors: Vec::new(),
+            },
+        );
+        let whitespace_alias = make(
+            1,
+            "same-actor ",
+            MissionPlanReviewEvent::Approval {
+                graph_revision: revision.clone(),
+            },
+        );
+
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            "draft",
+            revision,
+            &[request, whitespace_alias],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("canonical stable actor identity"));
+        assert!(error.contains("whitespace is not allowed"));
+    }
+
+    #[test]
+    fn grandfather_requires_exact_cutover_status_and_migration_provenance() {
+        let directory = tempdir().unwrap();
+        let state_dir = directory.path().join(".atelier");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        write_graph(&state_dir);
+        let revision = mission_graph_revision(&state_dir, "atelier-m100").unwrap();
+        let activity = create_mission_plan_review_activity(
+            &state_dir,
+            "atelier-m100",
+            LEGACY_GRANDFATHER_MIGRATION_ACTOR,
+            at(1),
+            "Grandfather active mission at review-policy cutover",
+            MissionPlanReviewEvent::LegacyGrandfather {
+                graph_revision: revision.clone(),
+                legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+                migration_id: LEGACY_GRANDFATHER_MIGRATION_ID.to_string(),
+            },
+            "Created by the versioned mission-review migration.",
+        )
+        .unwrap();
+
+        let draft_state = mission_plan_review_state(&state_dir, "atelier-m100").unwrap();
+        assert_eq!(draft_state.freshness, MissionPlanReviewFreshness::Stale);
+
+        let store = RecordStore::new(&state_dir);
+        let mut mission = store.load_issue_by_id("atelier-m100").unwrap();
+        mission.issue.status = LEGACY_GRANDFATHER_STATUS.to_string();
+        store.write_issue_atomic(&mission).unwrap();
+        let active_state = mission_plan_review_state(&state_dir, "atelier-m100").unwrap();
+        assert_eq!(
+            active_state.freshness,
+            MissionPlanReviewFreshness::FreshGrandfather
+        );
+        let authorization = active_state.authorization.unwrap();
+        assert_eq!(
+            authorization.legacy_status.as_deref(),
+            Some(LEGACY_GRANDFATHER_STATUS)
+        );
+        assert_eq!(
+            authorization.migration_id.as_deref(),
+            Some(LEGACY_GRANDFATHER_MIGRATION_ID)
+        );
+
+        let mut invented_activity = activity.clone();
+        invented_activity.actor = "any-actor".to_string();
+        let error = project_mission_plan_review(
+            "atelier-m100",
+            LEGACY_GRANDFATHER_STATUS,
+            revision.clone(),
+            &[invented_activity],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("must be produced by migration actor"));
+
+        let activity_path = state_dir.join(crate::activity::record_activity_path(
+            "issue",
+            "atelier-m100",
+            &activity.id,
+        ));
+        let rendered = std::fs::read_to_string(&activity_path).unwrap();
+        std::fs::write(
+            &activity_path,
+            rendered.replace(
+                &format!("legacy_status: {LEGACY_GRANDFATHER_STATUS}"),
+                "legacy_status: not-a-workflow-status",
+            ),
+        )
+        .unwrap();
+        let error = format!(
+            "{:#}",
+            validate_mission_plan_reviews(&state_dir).unwrap_err()
+        );
+        assert!(
+            error.contains("legacy_status must be 'in_progress'"),
+            "unexpected validation error: {error}"
+        );
+
+        let bogus_migration = MissionPlanReviewEvent::LegacyGrandfather {
+            graph_revision: revision,
+            legacy_status: LEGACY_GRANDFATHER_STATUS.to_string(),
+            migration_id: "invented-migration".to_string(),
+        };
+        assert!(bogus_migration
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("migration_id must be"));
     }
 
     #[test]
