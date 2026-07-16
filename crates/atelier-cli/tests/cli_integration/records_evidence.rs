@@ -1,5 +1,51 @@
 use super::*;
 
+fn run_atelier_with_deadlock_timeout(dir: &Path, args: &[&str]) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("failed to spawn timed Atelier command");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        if child
+            .try_wait()
+            .expect("failed to inspect timed Atelier command")
+            .is_some()
+        {
+            return child
+                .wait_with_output()
+                .expect("failed to collect timed Atelier command output");
+        }
+        if std::time::Instant::now() >= deadline {
+            child
+                .kill()
+                .expect("failed to kill deadlocked Atelier command");
+            let output = child
+                .wait_with_output()
+                .expect("failed to collect deadlocked Atelier command output");
+            panic!(
+                "Atelier command exceeded deadlock deadline; stdout: {}; stderr: {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+fn evidence_tree_contains(root: &Path, text: &str) -> bool {
+    let evidence_dir = root.join("evidence");
+    fs::read_dir(evidence_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| fs::read_to_string(entry.path()).ok())
+        .any(|contents| contents.contains(text))
+}
+
 // ==================== Additional Edge Case Coverage ====================
 
 // --- relate.rs: Error cases ---
@@ -1202,42 +1248,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
 
 #[test]
 fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
-    fn run_with_timeout(dir: &Path, args: &[&str]) -> std::process::Output {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
-            .current_dir(dir)
-            .args(args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .expect("failed to spawn timed Atelier command");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-        loop {
-            if child
-                .try_wait()
-                .expect("failed to inspect timed Atelier command")
-                .is_some()
-            {
-                return child
-                    .wait_with_output()
-                    .expect("failed to collect timed Atelier command output");
-            }
-            if std::time::Instant::now() >= deadline {
-                child
-                    .kill()
-                    .expect("failed to kill deadlocked Atelier command");
-                let output = child
-                    .wait_with_output()
-                    .expect("failed to collect deadlocked Atelier command output");
-                panic!(
-                    "Atelier command exceeded deadlock deadline; stdout: {}; stderr: {}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    }
-
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, _, stderr) = run_atelier(
@@ -1248,7 +1258,7 @@ fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
     let target_id = issue_id_by_title(dir.path(), "Capture target");
     let executable = env!("CARGO_BIN_EXE_atelier");
 
-    let migration = run_with_timeout(
+    let migration = run_atelier_with_deadlock_timeout(
         dir.path(),
         &[
             "evidence",
@@ -1272,7 +1282,7 @@ fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
     assert!(String::from_utf8_lossy(&migration.stdout)
         .contains("Independent mission plan-review cutover already applied"));
 
-    let mutation = run_with_timeout(
+    let mutation = run_atelier_with_deadlock_timeout(
         dir.path(),
         &[
             "evidence",
@@ -1314,6 +1324,222 @@ fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
         healthy,
         "nested capture left invalid canonical state: {stderr}"
     );
+}
+
+#[test]
+fn test_evidence_capture_preflight_rejects_invalid_association_without_running_child() {
+    let initialized = tempdir().unwrap();
+    init_atelier(initialized.path());
+    let marker = initialized.path().join("invalid-target-child-ran");
+    let invalid_target = run_atelier_with_deadlock_timeout(
+        initialized.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--target",
+            "issue/atelier-missing",
+            "--",
+            "sh",
+            "-c",
+            &format!("sleep 1; touch {}", marker.display()),
+        ],
+    );
+    assert!(!invalid_target.status.success());
+    assert!(
+        String::from_utf8_lossy(&invalid_target.stderr).contains("command was not executed"),
+        "{}",
+        String::from_utf8_lossy(&invalid_target.stderr)
+    );
+    assert!(!marker.exists(), "invalid target still executed child");
+
+    let uninitialized = tempdir().unwrap();
+    let marker = uninitialized.path().join("non-repo-child-ran");
+    let non_repo = run_atelier_with_deadlock_timeout(
+        uninitialized.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--",
+            "sh",
+            "-c",
+            &format!("sleep 1; touch {}", marker.display()),
+        ],
+    );
+    assert!(!non_repo.status.success());
+    assert!(
+        String::from_utf8_lossy(&non_repo.stderr).contains("command was not executed"),
+        "{}",
+        String::from_utf8_lossy(&non_repo.stderr)
+    );
+    assert!(
+        !marker.exists(),
+        "non-repository capture still executed child"
+    );
+}
+
+#[test]
+fn test_evidence_capture_postflight_refuses_association_swap_and_deleted_target() {
+    let swapped = tempdir().unwrap();
+    init_atelier(swapped.path());
+    let swap = run_atelier_with_deadlock_timeout(
+        swapped.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Must not land after association swap",
+            "--",
+            "sh",
+            "-c",
+            "mv .atelier .atelier-before-capture; cp -a .atelier-before-capture .atelier",
+        ],
+    );
+    assert!(!swap.status.success());
+    assert!(
+        String::from_utf8_lossy(&swap.stderr).contains("evidence_capture_association_changed"),
+        "{}",
+        String::from_utf8_lossy(&swap.stderr)
+    );
+    assert!(!evidence_tree_contains(
+        &swapped.path().join(".atelier"),
+        "Must not land after association swap"
+    ));
+    assert!(!evidence_tree_contains(
+        &swapped.path().join(".atelier-before-capture"),
+        "Must not land after association swap"
+    ));
+
+    let deleted = tempdir().unwrap();
+    init_atelier(deleted.path());
+    let (success, _, stderr) = run_atelier(
+        deleted.path(),
+        &[
+            "issue",
+            "create",
+            "Delete capture target",
+            "--issue-type",
+            "task",
+        ],
+    );
+    assert!(success, "target create failed: {stderr}");
+    let target_id = issue_id_by_title(deleted.path(), "Delete capture target");
+    let deletion = run_atelier_with_deadlock_timeout(
+        deleted.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Must not land after target deletion",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            "rm",
+            &format!(".atelier/issues/{target_id}.md"),
+        ],
+    );
+    assert!(!deletion.status.success());
+    assert!(
+        String::from_utf8_lossy(&deletion.stderr).contains("postflight target validation failed"),
+        "{}",
+        String::from_utf8_lossy(&deletion.stderr)
+    );
+    assert!(!evidence_tree_contains(
+        &deleted.path().join(".atelier"),
+        "Must not land after target deletion"
+    ));
+}
+
+#[test]
+fn test_evidence_capture_postflight_accepts_same_target_material_mutation() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Mutable capture target",
+            "--issue-type",
+            "task",
+        ],
+    );
+    assert!(success, "target create failed: {stderr}");
+    let target_id = issue_id_by_title(dir.path(), "Mutable capture target");
+    let capture = run_atelier_with_deadlock_timeout(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Proof after same-target mutation",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            env!("CARGO_BIN_EXE_atelier"),
+            "issue",
+            "update",
+            &target_id,
+            "--title",
+            "Mutated capture target",
+        ],
+    );
+    assert!(
+        capture.status.success(),
+        "same-target capture failed: {}",
+        String::from_utf8_lossy(&capture.stderr)
+    );
+    let evidence_id =
+        record_id_by_title(dir.path(), "evidence", "Proof after same-target mutation");
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(shown.contains(&format!("Target:      issue/{target_id} (validates)")));
+    assert_eq!(
+        issue_id_by_title(dir.path(), "Mutated capture target"),
+        target_id
+    );
+
+    let fixture =
+        workspace_root().join("crates/atelier-cli/tests/fixtures/beads/issues.manual.jsonl");
+    let import_capture = run_atelier_with_deadlock_timeout(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "Proof after same-repository import swap",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--",
+            env!("CARGO_BIN_EXE_atelier"),
+            "import-beads",
+            fixture.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        import_capture.status.success(),
+        "same-repository import capture failed: {}",
+        String::from_utf8_lossy(&import_capture.stderr)
+    );
+    assert!(record_id_by_title(
+        dir.path(),
+        "evidence",
+        "Proof after same-repository import swap"
+    )
+    .starts_with("atelier-"));
+    let (healthy, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(healthy, "same-target capture left invalid state: {stderr}");
 }
 
 #[test]

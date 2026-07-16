@@ -364,10 +364,15 @@ epic readiness reads proof from linked accountable child issues. The command
 mode preserves the old capture behavior by storing the command, exit status,
 success flag, timestamp, result, and bounded stdout/stderr summaries so
 validation proof does not require manual transcript copy/paste. Command-backed
-capture runs the child without holding a canonical association transaction, so
-the child may itself invoke normal or administrative Atelier commands. After
-the child exits, capture acquires the transaction, refreshes and revalidates the
-current repository and target, and only then appends the evidence and activity.
+capture first binds and validates the repository association and target; an
+invalid repository or target fails before the child runs. It then releases the
+canonical association transaction while the child executes, so the child may
+itself invoke normal or administrative Atelier commands. After the child exits,
+capture reacquires the same logical repository association, refreshes and
+revalidates the same canonical target ID, and only then appends the evidence and
+activity. An association swap or missing target fails closed without writing
+proof; same-repository target mutations and canonical subtree imports remain
+valid when the target still resolves to the bound ID.
 Evidence target links use the relation role `validates`; evidence classifications
 such as `validation`, `test`, or `review` belong in `--kind`.
 

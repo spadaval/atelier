@@ -1,5 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::BTreeSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -43,6 +44,28 @@ struct EvidenceMetadata<'a> {
     agent_identity: Option<&'a str>,
     residual_risks: Vec<String>,
     follow_up_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct CaptureAssociation {
+    repo_root: PathBuf,
+    state_dir: PathBuf,
+    git_dir: Option<PathBuf>,
+    project_slug: String,
+    #[cfg(unix)]
+    repo_device: u64,
+    #[cfg(unix)]
+    repo_inode: u64,
+    #[cfg(unix)]
+    state_device: u64,
+    #[cfg(unix)]
+    state_inode: u64,
+}
+
+#[derive(Debug)]
+struct CaptureBinding {
+    association: CaptureAssociation,
+    resolved_target_id: Option<String>,
 }
 
 impl<'a> EvidenceMetadata<'a> {
@@ -110,6 +133,9 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         bail!("--target-kind and --target-id must be supplied together");
     }
 
+    // Bind and validate the exact repository/target before executing anything.
+    // This transaction is deliberately released before the arbitrary child.
+    let binding = capture_preflight(&options)?;
     let command_display = format_command(options.command);
     let captured_at = chrono::Utc::now().to_rfc3339();
     let command_output = Command::new(&options.command[0])
@@ -133,22 +159,43 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     // child: the child may be a normal Atelier writer or the exclusive
     // migration. Once it exits, acquire one transaction and rebuild/revalidate
     // current repository and target state before allocating or appending proof.
-    let manager = CacheManager::discover()?;
+    let manager = CacheManager::discover().context(
+        "evidence capture postflight could not rediscover the original repository; no evidence was written",
+    )?;
     let state_dir = manager.state_dir();
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
+    let association = capture_association(&manager)?;
+    if association != binding.association {
+        bail!(
+            "evidence_capture_association_changed: the command completed, but the repository or .atelier association changed before proof could be recorded; no evidence was written. Return to {} and inspect the child command's effects before retrying evidence capture.",
+            binding.association.repo_root.display()
+        );
+    }
     let storage = manager.get_cache(CacheUse::Decision)?;
     let resolved_target_id = match (options.target_kind, options.target_id) {
-        (Some(kind), Some(id)) => Some(app_use_cases::resolve_evidence_target_ref(
-            &storage, kind, id,
-        )?),
+        (Some(kind), Some(id)) => Some(
+            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+                "evidence capture postflight target validation failed after the command completed; no evidence was written",
+            )?,
+        ),
         (None, None) => None,
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
+    if resolved_target_id != binding.resolved_target_id {
+        bail!(
+            "evidence_capture_target_changed: the command changed target resolution from {:?} to {:?}; no evidence was written. Inspect the child command's effects and retry against the intended canonical target ID.",
+            binding.resolved_target_id,
+            resolved_target_id
+        );
+    }
     let target = capture_target(
         &storage.db_path(),
         options.target_kind,
         resolved_target_id.as_deref(),
         options.role,
+    )
+    .context(
+        "evidence capture postflight target validation failed after the command completed; no evidence was written",
     )?;
 
     let summary = options
@@ -206,6 +253,105 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         )?;
     }
     print_record_without_cache(&created, options.quiet)
+}
+
+fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
+    let manager = CacheManager::discover().context(
+        "evidence capture preflight could not discover an Atelier repository; the command was not executed",
+    )?;
+    let state_dir = manager.state_dir();
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
+    let association = capture_association(&manager)?;
+    let storage = manager.get_cache(CacheUse::Decision)?;
+    let resolved_target_id = match (options.target_kind, options.target_id) {
+        (Some(kind), Some(id)) => Some(
+            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+                "evidence capture preflight target validation failed; the command was not executed",
+            )?,
+        ),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    capture_target(
+        &storage.db_path(),
+        options.target_kind,
+        resolved_target_id.as_deref(),
+        options.role,
+    )
+    .context("evidence capture preflight target validation failed; the command was not executed")?;
+    Ok(CaptureBinding {
+        association,
+        resolved_target_id,
+    })
+}
+
+fn capture_association(manager: &CacheManager) -> Result<CaptureAssociation> {
+    let repo_root = fs::canonicalize(manager.repo_root()).with_context(|| {
+        format!(
+            "failed to resolve evidence repository root {}",
+            manager.repo_root().display()
+        )
+    })?;
+    let state_dir = fs::canonicalize(manager.state_dir()).with_context(|| {
+        format!(
+            "failed to resolve evidence canonical state {}",
+            manager.state_dir().display()
+        )
+    })?;
+    let project_slug = atelier_app::project_config::ProjectConfig::load(&repo_root)?.project_slug;
+    let git_dir = git_dir_identity(&repo_root)?;
+    #[cfg(unix)]
+    {
+        // Root identities catch wholesale workspace/.atelier replacement while
+        // allowing legitimate atomic swaps of canonical subtrees such as
+        // issues/ and evidence/ during import or bundle application.
+        use std::os::unix::fs::MetadataExt;
+        let repo_metadata = fs::metadata(&repo_root)?;
+        let state_metadata = fs::metadata(&state_dir)?;
+        Ok(CaptureAssociation {
+            repo_root,
+            state_dir,
+            git_dir,
+            project_slug,
+            repo_device: repo_metadata.dev(),
+            repo_inode: repo_metadata.ino(),
+            state_device: state_metadata.dev(),
+            state_inode: state_metadata.ino(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(CaptureAssociation {
+            repo_root,
+            state_dir,
+            git_dir,
+            project_slug,
+        })
+    }
+}
+
+fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
+    let dot_git = repo_root.join(".git");
+    if !dot_git.exists() {
+        return Ok(None);
+    }
+    if dot_git.is_dir() {
+        return Ok(Some(fs::canonicalize(dot_git)?));
+    }
+    let pointer = fs::read_to_string(&dot_git)
+        .with_context(|| format!("failed to read Git worktree pointer {}", dot_git.display()))?;
+    let git_dir = pointer
+        .trim()
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .context("invalid Git worktree pointer while binding evidence repository")?;
+    let git_dir = Path::new(git_dir);
+    let git_dir = if git_dir.is_absolute() {
+        git_dir.to_path_buf()
+    } else {
+        repo_root.join(git_dir)
+    };
+    Ok(Some(fs::canonicalize(git_dir)?))
 }
 
 pub fn show(db: &Database, id: &str, quiet: bool) -> Result<()> {
