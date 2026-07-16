@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-16T18:41:03.225693508+00:00"
+status: "done"
 title: "Superseded umbrella: Command surface consolidation and removal"
-updated_at: "2026-07-16T18:38:38.662150924+00:00"
+updated_at: "2026-07-16T18:41:03.225693508+00:00"
 ---
 
 ## Description
