@@ -174,7 +174,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             let cache = use_cases::mutation_cache()?;
             let mission_id = super::resolve_issue_arg(cache.db(), &id)?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            let request_transition = matches!(&action, super::PlanReviewCommands::Request);
+            let mission_status = cache.db().require_issue(&mission_id)?.status;
+            let request_transition =
+                matches!(&action, super::PlanReviewCommands::Request) && mission_status == "draft";
             if request_transition {
                 let options =
                     commands::workflow_planning::issue_transition_options(cache.db(), &mission_id)?;
@@ -197,7 +199,14 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             }
             let mutation = match action {
                 super::PlanReviewCommands::Request => {
-                    atelier_app::mission_plan_review::MissionPlanReviewMutation::Request
+                    if mission_status == "plan_review" {
+                        atelier_app::mission_plan_review::MissionPlanReviewMutation::Rework
+                    } else {
+                        atelier_app::mission_plan_review::MissionPlanReviewMutation::Request
+                    }
+                }
+                super::PlanReviewCommands::Rework => {
+                    atelier_app::mission_plan_review::MissionPlanReviewMutation::Rework
                 }
                 super::PlanReviewCommands::Finding {
                     finding_id,

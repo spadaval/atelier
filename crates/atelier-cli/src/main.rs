@@ -488,6 +488,8 @@ enum IssueCommands {
 enum PlanReviewCommands {
     /// Submit the current mission graph and move the mission to plan_review
     Request,
+    /// Attribute material edits and resubmit the current graph for review
+    Rework,
     /// Record a reviewer finding against the exact current graph
     Finding {
         finding_id: String,

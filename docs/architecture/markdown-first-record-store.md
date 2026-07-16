@@ -394,6 +394,15 @@ NFC, contain no whitespace, controls, or Unicode
 `Default_Ignorable_Code_Point` characters, and use one canonical spelling, so
 zero-width or decomposed Unicode aliases cannot create false independence.
 
+Public review mutations validate every affected ID and dependency-path node
+against the exact canonical mission graph before allocating or writing an
+activity file. The same validator runs during canonical rebuild. Material edits
+made while a mission is in `plan_review` are resubmitted with a typed
+`material_edit_attribution` that links the prior provenance revision to the
+current revision and adds the authenticated editor. Resolutions retain the
+target decision's original graph revision across that rework boundary; they do
+not rewrite the decision or make a stale approval current.
+
 A legacy grandfather is limited to cutover status `in_progress`, migration ID
 `independent-mission-plan-review-v1`, and activity actor
 `actor-v1:atelier.local/mission-review-migration`. The tracked

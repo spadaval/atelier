@@ -123,12 +123,19 @@ field, open a room or provider artifact, satisfy `review.complete`, or grant
 merge authority.
 
 The public mutation surface is `atelier issue plan-review <mission-id>` with
-the `request`, `finding`, `change-request`, `resolve`, and `approve`
-subcommands. `request` records the authenticated caller as the author/material
-editor of the submitted revision and applies the configured
-`request_plan_review` transition. Review decisions are projected before their
-activity is appended, so self-approval, stale revisions, unresolved blocking
-findings, and effective change requests fail without adding an invalid event.
+the `request`, `rework`, `finding`, `change-request`, `resolve`, and `approve`
+subcommands. The initial `request` records the authenticated caller as the
+author/material editor of the submitted revision and applies the configured
+`request_plan_review` transition. After a material edit in `plan_review`,
+`request` and the explicit `rework` spelling both append a typed material-edit
+attribution from the last provenance-complete revision to the exact current
+revision and resubmit it without a status round trip. The attribution adds the
+authenticated editor to inherited provenance; it never retargets an old
+approval. Review decisions and graph references are projected and validated
+before their activity is appended, so self-approval, stale revisions,
+unresolved blocking findings, effective change requests, nonexistent IDs,
+out-of-scope IDs, and malformed dependency paths fail without adding an invalid
+event.
 The caller identity comes only from `ATELIER_AUTHENTICATED_ACTOR` in canonical
 `actor-v1:<authority>/<immutable-subject>` form. The launcher or authentication
 adapter owns that environment value; accepting an arbitrary end-user value as
@@ -138,11 +145,19 @@ The exact command forms are:
 
 ```text
 atelier issue plan-review <mission-id> request
+atelier issue plan-review <mission-id> rework
 atelier issue plan-review <mission-id> finding <finding-id> --severity blocking --affected <issue-id> [--dependency-path <issue-id>]...
 atelier issue plan-review <mission-id> change-request <request-id> --affected <issue-id> [--dependency-path <issue-id>]...
 atelier issue plan-review <mission-id> resolve <finding-or-request-id> --disposition <text>
 atelier issue plan-review <mission-id> approve
 ```
+
+Affected IDs must belong to the current mission, its `advances`/hierarchy
+reachable work, or a dependency endpoint included by that reviewed graph. A
+dependency path must be made of real dependency adjacencies and touch reviewed
+mission work. A resolution remains bound to the original revision of its
+finding or change request even after rework; only a mission author or material
+editor other than the decision reviewer may record it.
 
 ## Fixed V3 Shape
 

@@ -558,6 +558,178 @@ pub fn mission_graph_revision(state_dir: &Path, mission_id: &str) -> Result<Miss
     graph_revision_from_records(&issues, mission_id)
 }
 
+pub fn validate_mission_plan_review_event_references(
+    state_dir: &Path,
+    mission_id: &str,
+    event: &MissionPlanReviewEvent,
+) -> Result<()> {
+    let issues = RecordStore::new(state_dir).load_issues()?;
+    validate_event_references_from_records(&issues, mission_id, event)
+}
+
+#[derive(Debug)]
+struct MissionReviewReferenceGraph {
+    reviewed_issue_ids: BTreeSet<String>,
+    referenceable_issue_ids: BTreeSet<String>,
+    dependency_adjacencies: BTreeSet<(String, String)>,
+}
+
+fn mission_review_reference_graph(
+    issues: &[CanonicalIssueRecord],
+    mission_id: &str,
+) -> Result<MissionReviewReferenceGraph> {
+    let by_id = issues
+        .iter()
+        .map(|record| (record.issue.id.as_str(), record))
+        .collect::<BTreeMap<_, _>>();
+    let mission = by_id
+        .get(mission_id)
+        .copied()
+        .ok_or_else(|| anyhow!("Mission-plan review references missing mission {mission_id}"))?;
+    if mission.issue.issue_type != "mission" {
+        bail!(
+            "Mission-plan review subject {mission_id} has issue_type '{}'; expected mission",
+            mission.issue.issue_type
+        );
+    }
+
+    let mut reviewed_issue_ids = BTreeSet::from([mission_id.to_string()]);
+    let mut pending = mission
+        .relationships
+        .relates
+        .iter()
+        .filter(|relation| relation.relation_type == "advances")
+        .map(|relation| {
+            if relation.kind != "issue" {
+                bail!(
+                    "Mission {mission_id} advances non-issue target {}/{}",
+                    relation.kind,
+                    relation.id
+                );
+            }
+            Ok(relation.id.clone())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    while let Some(id) = pending.pop() {
+        if !reviewed_issue_ids.insert(id.clone()) {
+            continue;
+        }
+        let record = by_id
+            .get(id.as_str())
+            .copied()
+            .ok_or_else(|| anyhow!("Mission {mission_id} reaches missing issue {id}"))?;
+        for child in &record.relationships.children {
+            if child.kind != "issue" {
+                bail!(
+                    "Issue {id} has non-issue hierarchy target {}/{}",
+                    child.kind,
+                    child.id
+                );
+            }
+            pending.push(child.id.clone());
+        }
+    }
+
+    let mut referenceable_issue_ids = reviewed_issue_ids.clone();
+    let mut dependency_adjacencies = BTreeSet::new();
+    for record in issues {
+        for blocked in &record.relationships.blocks {
+            if blocked.kind != "issue" {
+                continue;
+            }
+            if reviewed_issue_ids.contains(&record.issue.id)
+                || reviewed_issue_ids.contains(&blocked.id)
+            {
+                if !by_id.contains_key(blocked.id.as_str()) {
+                    bail!(
+                        "Mission {mission_id} dependency graph references missing issue {}",
+                        blocked.id
+                    );
+                }
+                referenceable_issue_ids.insert(record.issue.id.clone());
+                referenceable_issue_ids.insert(blocked.id.clone());
+                dependency_adjacencies.insert(ordered_pair(&record.issue.id, &blocked.id));
+            }
+        }
+        for relation in &record.relationships.relates {
+            if relation.kind == "issue"
+                && relation.relation_type == "blocked_by"
+                && (reviewed_issue_ids.contains(&record.issue.id)
+                    || reviewed_issue_ids.contains(&relation.id))
+            {
+                if !by_id.contains_key(relation.id.as_str()) {
+                    bail!(
+                        "Mission {mission_id} dependency graph references missing issue {}",
+                        relation.id
+                    );
+                }
+                referenceable_issue_ids.insert(record.issue.id.clone());
+                referenceable_issue_ids.insert(relation.id.clone());
+                dependency_adjacencies.insert(ordered_pair(&record.issue.id, &relation.id));
+            }
+        }
+    }
+    Ok(MissionReviewReferenceGraph {
+        reviewed_issue_ids,
+        referenceable_issue_ids,
+        dependency_adjacencies,
+    })
+}
+
+fn ordered_pair(left: &str, right: &str) -> (String, String) {
+    if left <= right {
+        (left.to_string(), right.to_string())
+    } else {
+        (right.to_string(), left.to_string())
+    }
+}
+
+fn validate_event_references_from_records(
+    issues: &[CanonicalIssueRecord],
+    mission_id: &str,
+    event: &MissionPlanReviewEvent,
+) -> Result<()> {
+    let (affected, path): (&[String], &[String]) = match event {
+        MissionPlanReviewEvent::Finding {
+            affected_issue_ids,
+            dependency_path,
+            ..
+        }
+        | MissionPlanReviewEvent::ChangeRequest {
+            affected_issue_ids,
+            dependency_path,
+            ..
+        } => (affected_issue_ids, dependency_path),
+        _ => return Ok(()),
+    };
+    let graph = mission_review_reference_graph(issues, mission_id)?;
+    for id in affected.iter().chain(path) {
+        if !graph.referenceable_issue_ids.contains(id) {
+            bail!(
+                "Mission-plan review for {mission_id} references issue {id} outside the current mission graph"
+            );
+        }
+    }
+    for step in path.windows(2) {
+        if !graph
+            .dependency_adjacencies
+            .contains(&ordered_pair(&step[0], &step[1]))
+        {
+            bail!(
+                "Mission-plan review dependency path for {mission_id} contains non-edge {} -> {}",
+                step[0],
+                step[1]
+            );
+        }
+    }
+    if !path.is_empty() && !path.iter().any(|id| graph.reviewed_issue_ids.contains(id)) {
+        bail!(
+            "Mission-plan review dependency path for {mission_id} does not reach reviewed mission work"
+        );
+    }
+    Ok(())
+}
+
 fn graph_revision_from_records(
     issues: &[CanonicalIssueRecord],
     mission_id: &str,
@@ -845,33 +1017,52 @@ pub fn project_mission_plan_review(
                 target_id,
                 disposition,
             } => {
+                let (target_revision, target_reviewer) = findings
+                    .iter()
+                    .find(|item| item.id == *target_id)
+                    .map(|item| (&item.graph_revision, item.reviewer.as_str()))
+                    .or_else(|| {
+                        changes
+                            .iter()
+                            .find(|item| item.id == *target_id)
+                            .map(|item| (&item.graph_revision, item.reviewer.as_str()))
+                    })
+                    .ok_or_else(|| {
+                        anyhow!("Resolution references unknown mission-plan decision {target_id}")
+                    })?;
+                if target_revision != graph_revision {
+                    bail!(
+                        "Resolution {target_id} names revision {graph_revision}, but the decision belongs to {target_revision}"
+                    );
+                }
+                let provenance = resolve_provenance(target_revision, &requests, &attributions)?
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Resolution {target_id} has incomplete author/material-editor provenance"
+                        )
+                    })?;
+                if target_reviewer == activity.actor
+                    || (!provenance.authors.contains(&activity_actor)
+                        && !provenance.editors.contains(&activity_actor))
+                {
+                    bail!(
+                        "Actor '{}' cannot resolve {target_id}; a mission author or material editor other than the decision reviewer must resolve it",
+                        activity.actor
+                    );
+                }
                 let resolution = MissionPlanResolution {
                     actor: activity.actor.clone(),
                     activity_id: activity.id.clone(),
                     disposition: disposition.clone(),
                 };
                 if let Some(finding) = findings.iter_mut().find(|item| item.id == *target_id) {
-                    if finding.graph_revision != *graph_revision {
-                        bail!(
-                            "Resolution {target_id} names revision {graph_revision}, but the finding belongs to {}",
-                            finding.graph_revision
-                        );
-                    }
                     if finding.resolution.replace(resolution).is_some() {
                         bail!("Mission-plan review decision {target_id} has multiple resolutions");
                     }
                 } else if let Some(change) = changes.iter_mut().find(|item| item.id == *target_id) {
-                    if change.graph_revision != *graph_revision {
-                        bail!(
-                            "Resolution {target_id} names revision {graph_revision}, but the change request belongs to {}",
-                            change.graph_revision
-                        );
-                    }
                     if change.resolution.replace(resolution).is_some() {
                         bail!("Mission-plan review decision {target_id} has multiple resolutions");
                     }
-                } else {
-                    bail!("Resolution references unknown mission-plan decision {target_id}");
                 }
             }
             MissionPlanReviewEvent::Approval { graph_revision } => {
@@ -1058,10 +1249,6 @@ pub fn project_mission_plan_review(
 pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
     let issues = RecordStore::new(state_dir).load_issues()?;
     let cutover_manifest = load_mission_plan_review_cutover_manifest(state_dir)?;
-    let known_ids = issues
-        .iter()
-        .map(|record| record.issue.id.as_str())
-        .collect::<BTreeSet<_>>();
     if let Some(manifest) = cutover_manifest.as_ref() {
         for eligibility in &manifest.eligible_missions {
             let issue = issues
@@ -1102,29 +1289,14 @@ pub fn validate_mission_plan_reviews(state_dir: &Path) -> Result<()> {
             let Some(event) = activity.mission_plan_review.as_ref() else {
                 continue;
             };
-            let (affected, path): (&[String], &[String]) = match event {
-                MissionPlanReviewEvent::Finding {
-                    affected_issue_ids,
-                    dependency_path,
-                    ..
-                }
-                | MissionPlanReviewEvent::ChangeRequest {
-                    affected_issue_ids,
-                    dependency_path,
-                    ..
-                } => (affected_issue_ids, dependency_path),
-                _ => (&[], &[]),
-            };
-            for id in affected.iter().chain(path) {
-                if !known_ids.contains(id.as_str()) {
-                    bail!(
-                        "Mission-plan review activity {} for {} references missing issue {}",
-                        activity.id,
-                        issue.issue.id,
-                        id
-                    );
-                }
-            }
+            validate_event_references_from_records(&issues, &issue.issue.id, event).with_context(
+                || {
+                    format!(
+                        "Invalid mission-plan review activity {} for {}",
+                        activity.id, issue.issue.id
+                    )
+                },
+            )?;
         }
         let revision = graph_revision_from_records(&issues, &issue.issue.id)?;
         project_mission_plan_review(

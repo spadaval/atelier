@@ -29,6 +29,22 @@ fn create_mission(dir: &Path, title: &str) -> String {
     issue_id_by_title(dir, title)
 }
 
+fn mission_activity_count(dir: &Path, mission_id: &str) -> usize {
+    let activity_dir = dir
+        .join(".atelier/issues")
+        .join(format!("{mission_id}.activity"));
+    std::fs::read_dir(activity_dir)
+        .map(|entries| entries.count())
+        .unwrap_or(0)
+}
+
+fn assert_check_and_rebuild_green(dir: &Path) {
+    for args in [vec!["check"], vec!["rebuild"]] {
+        let (success, _, stderr) = run_atelier(dir, &args);
+        assert!(success, "{} failed: {stderr}", args.join(" "));
+    }
+}
+
 fn append_review_event(dir: &Path, mission_id: &str, actor: &str, event: MissionPlanReviewEvent) {
     create_mission_plan_review_activity(
         &dir.join(".atelier"),
@@ -266,6 +282,209 @@ fn public_plan_review_surface_records_findings_resolutions_changes_and_approval(
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
     assert!(success, "ready transition failed: {stderr}");
+}
+
+#[test]
+fn public_review_reference_failures_are_atomic_and_leave_canonical_state_green() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Reference validation");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "request failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Unrelated issue"]);
+    assert!(success, "unrelated issue creation failed: {stderr}");
+    let unrelated_id = issue_id_by_title(dir.path(), "Unrelated issue");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Scoped issue"]);
+    assert!(success, "scoped issue creation failed: {stderr}");
+    let scoped_id = issue_id_by_title(dir.path(), "Scoped issue");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &scoped_id,
+            "--role",
+            "advances",
+        ],
+    );
+    assert!(success, "mission scope link failed: {stderr}");
+    let baseline = mission_activity_count(dir.path(), &mission_id);
+
+    for (actor, action, expected) in [
+        (
+            REVIEWER,
+            vec![
+                "finding",
+                "missing-affected",
+                "--affected",
+                "atelier-does-not-exist",
+            ],
+            "outside the current mission graph",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "change-request",
+                "missing-path",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+                "--dependency-path",
+                "atelier-does-not-exist",
+            ],
+            "outside the current mission graph",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "finding",
+                "unreachable-affected",
+                "--affected",
+                unrelated_id.as_str(),
+            ],
+            "outside the current mission graph",
+        ),
+        (
+            REVIEWER,
+            vec![
+                "change-request",
+                "non-edge-path",
+                "--affected",
+                mission_id.as_str(),
+                "--dependency-path",
+                mission_id.as_str(),
+                "--dependency-path",
+                scoped_id.as_str(),
+            ],
+            "contains non-edge",
+        ),
+    ] {
+        let (success, _, stderr) =
+            run_plan_review(dir.path(), &mission_id, actor, action.as_slice());
+        assert!(!success, "invalid reference unexpectedly succeeded");
+        assert!(stderr.contains(expected), "{stderr}");
+        assert_eq!(mission_activity_count(dir.path(), &mission_id), baseline);
+        assert_check_and_rebuild_green(dir.path());
+    }
+}
+
+#[test]
+fn public_rework_attributes_material_edits_and_resubmits_exact_revision() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Rework lifecycle");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "request failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &["change-request", "rework-change", "--affected", &mission_id],
+    );
+    assert!(success, "change request failed: {stderr}");
+    let baseline = mission_activity_count(dir.path(), &mission_id);
+
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        REVIEWER,
+        &[
+            "resolve",
+            "rework-change",
+            "--disposition",
+            "reviewer cannot resolve own request",
+        ],
+    );
+    assert!(!success);
+    assert!(stderr.contains("cannot resolve rework-change"), "{stderr}");
+    assert_eq!(mission_activity_count(dir.path(), &mission_id), baseline);
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        PLANNER,
+        &["resolve", "unknown-change", "--disposition", "not valid"],
+    );
+    assert!(!success);
+    assert!(stderr.contains("unknown mission-plan decision"), "{stderr}");
+    assert_eq!(mission_activity_count(dir.path(), &mission_id), baseline);
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &mission_id,
+            "--title",
+            "Reworked mission lifecycle",
+        ],
+    );
+    assert!(success, "material edit failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(!success);
+    assert!(
+        stderr.contains("incomplete author/material-editor provenance"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_plan_review(
+        dir.path(),
+        &mission_id,
+        PLANNER,
+        &[
+            "resolve",
+            "rework-change",
+            "--disposition",
+            "material edit addresses requested change",
+        ],
+    );
+    assert!(success, "cross-revision resolution failed: {stderr}");
+    let (success, stdout, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "re-request failed: {stderr}");
+    assert!(stdout.contains("Revision:"), "{stdout}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["approve"]);
+    assert!(!success);
+    assert!(stderr.contains("not independent"), "{stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(success, "independent approval failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(success, "ready after rework failed: {stderr}");
+    assert_check_and_rebuild_green(dir.path());
+}
+
+#[test]
+fn rework_does_not_retarget_stale_prior_approval() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission(dir.path(), "Stale approval rework");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["request"]);
+    assert!(success, "request failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(success, "initial approval failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &mission_id,
+            "--title",
+            "Stale approval reworked",
+        ],
+    );
+    assert!(success, "material edit failed: {stderr}");
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, PLANNER, &["rework"]);
+    assert!(success, "rework failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "ready"]);
+    assert!(!success);
+    assert!(
+        stderr.contains("mission-plan approval is stale"),
+        "{stderr}"
+    );
+    let (success, _, stderr) = run_plan_review(dir.path(), &mission_id, REVIEWER, &["approve"]);
+    assert!(success, "fresh approval failed: {stderr}");
 }
 
 #[test]
