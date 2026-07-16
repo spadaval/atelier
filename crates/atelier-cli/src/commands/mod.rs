@@ -1,4 +1,5 @@
 pub mod activity_log;
+pub(crate) mod bulk_canonical;
 pub mod bundle;
 pub mod comment;
 pub mod create;

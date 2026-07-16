@@ -37,6 +37,34 @@ fn canonical_tree_snapshot(
     snapshot
 }
 
+fn wait_for_test_marker(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !path.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for {}",
+            path.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+fn assert_bulk_process_holds_exclusive_lock(state_dir: &std::path::Path) {
+    use fs2::FileExt;
+    use std::fs::OpenOptions;
+
+    let lock_path = state_dir.join(atelier_records::mutation_lock::CANONICAL_MUTATION_LOCK_PATH);
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .unwrap();
+    assert!(
+        FileExt::try_lock_shared(&file).is_err(),
+        "bulk process did not retain its exclusive canonical transaction"
+    );
+}
+
 fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     let bundle_path = dir.join(format!("mission-fixture-{}.json", title.replace(' ', "-")));
     std::fs::write(
@@ -2808,6 +2836,143 @@ fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() 
     assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
     assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
     assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+}
+
+#[test]
+fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("paused-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Paused bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.bulk",
+        "title": "Bulk installed task",
+        "issue_type": "task",
+        "status": "todo"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+    let marker = dir.path().join("bundle-snapshot.marker");
+    let release = marker.with_extension("release");
+    let bulk = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"])
+        .env("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT", &marker)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_for_test_marker(&marker);
+    assert_bulk_process_holds_exclusive_lock(&dir.path().join(".atelier"));
+
+    let mut writer = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["issue", "create", "Writer after bundle snapshot"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(
+        writer.try_wait().unwrap().is_none(),
+        "ordinary writer completed while bulk snapshot/swap lock was held"
+    );
+
+    std::fs::write(&release, "release").unwrap();
+    let bulk_output = bulk.wait_with_output().unwrap();
+    assert!(
+        bulk_output.status.success(),
+        "bundle failed: {}",
+        String::from_utf8_lossy(&bulk_output.stderr)
+    );
+    let writer_output = writer.wait_with_output().unwrap();
+    assert!(
+        writer_output.status.success(),
+        "writer failed: {}",
+        String::from_utf8_lossy(&writer_output.stderr)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Bulk installed task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Writer after bundle snapshot"
+    ));
+}
+
+#[test]
+fn test_import_beads_exclusive_snapshot_swap_preserves_later_writer() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let import_path = dir.path().join("paused-import.jsonl");
+    std::fs::write(
+        &import_path,
+        r#"{"_type":"issue","id":"bulk-source","title":"Bulk imported task","status":"open","priority":2,"issue_type":"task"}
+"#,
+    )
+    .unwrap();
+    let marker = dir.path().join("import-snapshot.marker");
+    let release = marker.with_extension("release");
+    let bulk = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["import-beads", import_path.to_str().unwrap()])
+        .env("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT", &marker)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_for_test_marker(&marker);
+    assert_bulk_process_holds_exclusive_lock(&dir.path().join(".atelier"));
+
+    let mut writer = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir.path())
+        .args(["issue", "create", "Writer after import snapshot"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(
+        writer.try_wait().unwrap().is_none(),
+        "ordinary writer completed while import snapshot/swap lock was held"
+    );
+
+    std::fs::write(&release, "release").unwrap();
+    let bulk_output = bulk.wait_with_output().unwrap();
+    assert!(
+        bulk_output.status.success(),
+        "import failed: {}",
+        String::from_utf8_lossy(&bulk_output.stderr)
+    );
+    let writer_output = writer.wait_with_output().unwrap();
+    assert!(
+        writer_output.status.success(),
+        "writer failed: {}",
+        String::from_utf8_lossy(&writer_output.stderr)
+    );
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Bulk imported task"
+    ));
+    assert!(canonical_directory_contains(
+        dir.path(),
+        "issues",
+        "Writer after import snapshot"
+    ));
 }
 
 #[test]

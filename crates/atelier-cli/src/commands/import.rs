@@ -90,6 +90,7 @@ struct BeadsImportPlan {
 }
 
 pub fn run_beads_jsonl(input_path: &Path, state_dir: &Path) -> Result<()> {
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
     let plan = parse_beads_jsonl(input_path)?;
     write_import_plan(state_dir, &plan)?;
     let report = &plan.report;
@@ -227,8 +228,12 @@ fn write_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
 
     let stage = create_import_stage_dir(state_dir)?;
     let result = (|| {
+        let source_fingerprint =
+            crate::commands::bulk_canonical::canonical_tree_fingerprint(state_dir)?;
         copy_issue_tree(state_dir, &stage)?;
+        crate::commands::bulk_canonical::test_pause_after_snapshot()?;
         apply_import_plan(&stage, plan)?;
+        crate::commands::bulk_canonical::ensure_unchanged(state_dir, &source_fingerprint)?;
         install_import_stage(state_dir, &stage)
     })();
     if let Err(error) = fs::remove_dir_all(&stage) {
@@ -315,9 +320,17 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
         let entry = entry?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Failed to inspect {}", source_path.display()))?;
+        if file_type.is_symlink() {
+            bail!(
+                "Canonical bulk mutation refuses symbolic link {}",
+                source_path.display()
+            );
+        } else if file_type.is_dir() {
             copy_dir_recursive(&source_path, &destination_path)?;
-        } else {
+        } else if file_type.is_file() {
             fs::copy(&source_path, &destination_path).with_context(|| {
                 format!(
                     "Failed to copy {} to {}",
@@ -325,6 +338,11 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
                     destination_path.display()
                 )
             })?;
+        } else {
+            bail!(
+                "Canonical bulk mutation refuses special filesystem entry {}",
+                source_path.display()
+            );
         }
     }
     Ok(())
@@ -333,6 +351,8 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
 fn install_import_stage(state_dir: &Path, stage: &Path) -> Result<()> {
     let staged_issues = stage.join("issues");
     let issues = state_dir.join("issues");
+    crate::commands::bulk_canonical::validate_directory_path(&staged_issues, true)?;
+    crate::commands::bulk_canonical::validate_directory_path(&issues, false)?;
     let backup = stage.with_file_name(format!(
         ".beads-import-backup-{}-{}",
         std::process::id(),

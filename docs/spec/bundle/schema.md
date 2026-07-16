@@ -276,7 +276,13 @@ Apply builds and validates a complete staged canonical tree before installing
 its record directories. The validation is the same canonical rebuild contract
 used by tracker health checks, including workflow execution state, review
 freshness, dependency closure, and record references. If staging or validation
-fails, the live canonical tree and SQLite cache remain unchanged.
+fails, the live canonical tree and SQLite cache remain unchanged. Apply holds
+an exclusive canonical mutation transaction from snapshot through installation,
+so ordinary Atelier writers resume only after the new tree is live and apply on
+top of it. A final full-tree fingerprint rejects noncooperative filesystem drift
+instead of overwriting it. Installation backs up both `issues/` and `evidence/`
+as one rollback unit; a failure installing either restores both. Symbolic links,
+special filesystem entries, and non-directory install targets are rejected.
 
 ## Idempotency And Conflicts
 

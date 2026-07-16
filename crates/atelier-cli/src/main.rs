@@ -763,18 +763,29 @@ fn load_dotenv() -> Result<()> {
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
     init_tracing(&cli.log_level, &cli.log_format);
-    // Hold one association lock across every repository command's complete
-    // read/validate/write lifetime. This prevents a mutation prepared against
-    // pre-cutover bytes from waiting behind the exclusive migration and then
-    // committing stale state after activation. It also covers bulk import,
-    // bundle directory swaps and repair surfaces that do not write via
-    // RecordStore's final-file helpers. Repository-associated prune acquires
-    // the same lock after its optional tracker discovery below.
-    let _canonical_transaction_lock = if command_uses_canonical_transaction(&cli.command) {
-        let manager = CacheManager::discover()?;
-        Some(atelier_records::mutation_lock::CanonicalMutationLock::shared(&manager.state_dir())?)
-    } else {
-        None
+    // Hold an association transaction across every repository command's
+    // complete read/validate/write lifetime. Ordinary commands share it;
+    // snapshot-and-swap bundle/import commands own it exclusively so a writer
+    // cannot commit between their snapshot and installation. This also
+    // prevents a mutation prepared against pre-cutover bytes from waiting
+    // behind the exclusive migration and then committing stale state after
+    // activation. Repository-associated prune acquires the same lock after its
+    // optional tracker discovery below.
+    let _canonical_transaction_lock = match canonical_transaction_mode(&cli.command) {
+        CanonicalTransactionMode::None => None,
+        mode => {
+            let manager = CacheManager::discover()?;
+            let state_dir = manager.state_dir();
+            Some(match mode {
+                CanonicalTransactionMode::Shared => {
+                    atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?
+                }
+                CanonicalTransactionMode::Exclusive => {
+                    atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?
+                }
+                CanonicalTransactionMode::None => unreachable!(),
+            })
+        }
     };
     let quiet = cli.quiet;
     let command_name = command_identity(&cli.command);
@@ -1318,23 +1329,42 @@ fn run() -> Result<()> {
     result
 }
 
-fn command_uses_canonical_transaction(command: &Commands) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CanonicalTransactionMode {
+    None,
+    Shared,
+    Exclusive,
+}
+
+fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
     match command {
         // Fresh initialization has no repository association to lock. Forced
         // reconciliation of an existing tracker does.
-        Commands::Init { .. } => std::path::Path::new(".atelier").exists(),
+        Commands::Init { .. } if std::path::Path::new(".atelier").exists() => {
+            CanonicalTransactionMode::Exclusive
+        }
+        Commands::Init { .. } => CanonicalTransactionMode::None,
+        Commands::Bundle {
+            action: BundleCommands::Apply { .. },
+        }
+        | Commands::ImportBeads { .. } => CanonicalTransactionMode::Exclusive,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
         // append. The child may itself be an Atelier writer or migration.
         Commands::Evidence {
             action: EvidenceCommands::Record { command, .. },
-        } if !command.is_empty() => false,
+        } if !command.is_empty() => CanonicalTransactionMode::None,
         Commands::Man { .. }
         | Commands::MigrateMissionPlanReview
         | Commands::Diagnostics { .. }
-        | Commands::Prune { .. } => false,
-        _ => true,
+        | Commands::Prune { .. } => CanonicalTransactionMode::None,
+        _ => CanonicalTransactionMode::Shared,
     }
+}
+
+#[cfg(test)]
+fn command_uses_canonical_transaction(command: &Commands) -> bool {
+    canonical_transaction_mode(command) != CanonicalTransactionMode::None
 }
 
 fn parse_cli_or_exit() -> Cli {
@@ -1443,7 +1473,10 @@ fn command_identity(command: &Commands) -> &'static str {
 
 #[cfg(test)]
 mod cache_acquisition_tests {
-    use super::{command_uses_canonical_transaction, Cli};
+    use super::{
+        canonical_transaction_mode, command_uses_canonical_transaction, CanonicalTransactionMode,
+        Cli,
+    };
     use clap::Parser;
 
     #[test]
@@ -1504,6 +1537,27 @@ mod cache_acquisition_tests {
             .find("commands::prune::run")
             .expect("prune dispatch");
         assert!(prune_lock < prune_run, "prune lock must precede prune work");
+    }
+
+    #[test]
+    fn bulk_snapshot_swap_commands_take_exclusive_canonical_transactions() {
+        for args in [
+            vec!["atelier", "bundle", "apply", "bundle.json", "--yes"],
+            vec!["atelier", "import-beads", "issues.jsonl"],
+        ] {
+            let cli = Cli::try_parse_from(args).expect("bulk canonical command");
+            assert_eq!(
+                canonical_transaction_mode(&cli.command),
+                CanonicalTransactionMode::Exclusive
+            );
+        }
+
+        let preview = Cli::try_parse_from(["atelier", "bundle", "preview", "bundle.json"])
+            .expect("bundle preview");
+        assert_eq!(
+            canonical_transaction_mode(&preview.command),
+            CanonicalTransactionMode::Shared
+        );
     }
 
     #[test]

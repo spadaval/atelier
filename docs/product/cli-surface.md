@@ -296,9 +296,12 @@ bundle apply` applies create-only v1 bundle resources from a file path after
 the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
 durable relationship buckets, validates the complete staged canonical graph
-before installation, leaves the affected cache facts detectably
-stale after successful record-file writes, and reports recovery detail if an unexpected apply failure
-leaves any created IDs. `atelier issue show <objective-id>` is the rich
+before installation, and holds an exclusive canonical transaction across the
+snapshot and two-directory rollback-capable install so concurrent ordinary
+writers apply afterward instead of being overwritten. It leaves the affected
+cache facts detectably stale after successful record-file writes and reports
+recovery detail if an unexpected apply failure leaves any created IDs. `atelier
+issue show <objective-id>` is the rich
 objective detail read: it summarizes evidence, prose planning/checkpoint
 references, and work grouped by ready, blocked, done, and backlog state.
 `atelier issue transition <objective-id>` owns live validator failures,
