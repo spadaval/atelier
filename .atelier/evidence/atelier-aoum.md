@@ -1,9 +1,9 @@
 ---
-created_at: "2026-07-16T22:32:41.924828241+00:00"
-id: "atelier-xw9q"
+created_at: "2026-07-16T22:46:22.575489860+00:00"
+id: "atelier-aoum"
 evidence_type: "validation"
-captured_at: "2026-07-16T22:32:38.570612521+00:00"
-command: "target/debug/atelier check"
+captured_at: "2026-07-16T22:46:22.489718714+00:00"
+command: "git diff 'HEAD^' --check"
 exit_status: "0"
 target:
   kind: "issue"
@@ -20,31 +20,29 @@ relationships:
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
-title: "target/debug/atelier check"
-updated_at: "2026-07-16T22:32:41.926547363+00:00"
+title: "git diff 'HEAD^' --check"
+updated_at: "2026-07-16T22:46:22.577313741+00:00"
 ---
 
 ## Summary
 
-target/debug/atelier check
+git diff 'HEAD^' --check
 
 ## Command
 
 ```console
-target/debug/atelier check
+git diff 'HEAD^' --check
 ```
 
 Exit status: 0
 
 ## Stdout
 
-Bytes: 13
+Bytes: 0
 Truncated: no
 
 ```text
-Lint passed.
 ```
-
 ## Stderr
 
 Bytes: 0

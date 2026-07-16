@@ -881,8 +881,26 @@ pub fn mission_plan_review_state(
     state_dir: &Path,
     mission_id: &str,
 ) -> Result<MissionPlanReviewState> {
-    let mission = RecordStore::new(state_dir).load_issue_by_id(mission_id)?;
-    let revision = mission_graph_revision(state_dir, mission_id)?;
+    let issues = RecordStore::new(state_dir).load_issues()?;
+    mission_plan_review_state_from_records(state_dir, mission_id, &issues)
+}
+
+/// Project review state from a caller-provided canonical graph slice.
+///
+/// The slice must include the mission, its complete advances/child scope, and
+/// every dependency endpoint touching that scope. This preserves the revision
+/// contract while allowing decision-safe readers to avoid reparsing unrelated
+/// repository records.
+pub fn mission_plan_review_state_from_records(
+    state_dir: &Path,
+    mission_id: &str,
+    issues: &[CanonicalIssueRecord],
+) -> Result<MissionPlanReviewState> {
+    let mission = issues
+        .iter()
+        .find(|record| record.issue.id == mission_id)
+        .ok_or_else(|| anyhow!("Mission-plan review references missing mission {mission_id}"))?;
+    let revision = graph_revision_from_records(issues, mission_id)?;
     let activities = list_issue_activities(state_dir, mission_id)?;
     let cutover_manifest = load_mission_plan_review_cutover_manifest(state_dir)?;
     project_mission_plan_review(

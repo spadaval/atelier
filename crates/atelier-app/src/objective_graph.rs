@@ -11,6 +11,97 @@ pub struct DependencyClosure {
     pub cycle_paths: Vec<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct DependencyReadinessBatch {
+    pub ready_by_issue: std::collections::BTreeMap<String, bool>,
+    pub nodes_evaluated: usize,
+}
+
+/// Evaluate dependency readiness for many objectives from one cache snapshot.
+/// Shared dependency tails are memoized, so each graph node is evaluated at
+/// most once for a request.
+pub fn dependency_readiness_batch(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue_ids: impl IntoIterator<Item = String>,
+) -> Result<DependencyReadinessBatch> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let issues = db.list_issues(Some("all"), None, None)?;
+    let terminal = issues
+        .iter()
+        .map(|issue| {
+            Ok((
+                issue.id.clone(),
+                policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?,
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let mut blockers = BTreeMap::<String, Vec<String>>::new();
+    for (blocked, blocker) in db.list_issue_dependencies()? {
+        if !terminal.contains_key(&blocked) {
+            bail!("dependency closure references missing issue {blocked}");
+        }
+        if !terminal.contains_key(&blocker) {
+            bail!("dependency path references missing issue {blocker}");
+        }
+        blockers.entry(blocked).or_default().push(blocker);
+    }
+
+    fn visit(
+        id: &str,
+        terminal: &BTreeMap<String, bool>,
+        blockers: &BTreeMap<String, Vec<String>>,
+        memo: &mut BTreeMap<String, bool>,
+        visiting: &mut BTreeSet<String>,
+        nodes_evaluated: &mut usize,
+    ) -> Result<bool> {
+        if let Some(ready) = memo.get(id) {
+            return Ok(*ready);
+        }
+        if !visiting.insert(id.to_string()) {
+            return Ok(false);
+        }
+        *nodes_evaluated += 1;
+        let mut ready = true;
+        for blocker in blockers.get(id).into_iter().flatten() {
+            let blocker_terminal = terminal.get(blocker).copied().ok_or_else(|| {
+                anyhow::anyhow!("dependency path references missing issue {blocker}")
+            })?;
+            if !blocker_terminal
+                || !visit(blocker, terminal, blockers, memo, visiting, nodes_evaluated)?
+            {
+                ready = false;
+            }
+        }
+        visiting.remove(id);
+        memo.insert(id.to_string(), ready);
+        Ok(ready)
+    }
+
+    let mut memo = BTreeMap::new();
+    let mut ready_by_issue = BTreeMap::new();
+    let mut nodes_evaluated = 0;
+    for id in issue_ids {
+        if !terminal.contains_key(&id) {
+            bail!("dependency closure references missing issue {id}");
+        }
+        let ready = visit(
+            &id,
+            &terminal,
+            &blockers,
+            &mut memo,
+            &mut BTreeSet::new(),
+            &mut nodes_evaluated,
+        )?;
+        ready_by_issue.insert(id, ready);
+    }
+    Ok(DependencyReadinessBatch {
+        ready_by_issue,
+        nodes_evaluated,
+    })
+}
+
 impl DependencyClosure {
     pub fn is_ready(&self) -> bool {
         self.open_paths.is_empty() && self.cycle_paths.is_empty()
@@ -290,7 +381,79 @@ fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workflow_policy::{
+        BranchLifecycleConfig, StatusDefinition, WorkflowDefinition, WorkflowPolicy,
+    };
+    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
+    use chrono::Utc;
     use std::collections::{BTreeMap, BTreeSet};
+    use tempfile::tempdir;
+
+    fn batch_policy() -> WorkflowPolicy {
+        let statuses = BTreeMap::from([
+            (
+                "todo".to_string(),
+                StatusDefinition {
+                    category: "todo".to_string(),
+                    role: None,
+                },
+            ),
+            (
+                "done".to_string(),
+                StatusDefinition {
+                    category: "done".to_string(),
+                    role: None,
+                },
+            ),
+        ]);
+        WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig::default(),
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::from([("task".to_string(), "task".to_string())]),
+            statuses,
+            workflows: BTreeMap::from([(
+                "task".to_string(),
+                WorkflowDefinition {
+                    applies_to: vec!["task".to_string()],
+                    initial_status: "todo".to_string(),
+                    done_statuses: vec!["done".to_string()],
+                    transitions: BTreeMap::new(),
+                },
+            )]),
+        }
+    }
+
+    fn index_batch_issue(db: &Database, id: &str, status: &str) {
+        let now = Utc::now();
+        db.index_issue(
+            &IssueCacheRow {
+                id: id.to_string(),
+                title: id.to_string(),
+                status: status.to_string(),
+                issue_type: "task".to_string(),
+                priority: "medium".to_string(),
+                fields: BTreeMap::new(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{id}.md"),
+                record_kind: "issue".to_string(),
+                record_id: id.to_string(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
+        )
+        .unwrap();
+    }
 
     #[test]
     fn dependency_closure_reports_complete_direct_and_transitive_paths() {
@@ -366,5 +529,29 @@ mod tests {
                 "dependency cycle(s): consumer -> first -> second -> first; repair the declared blocked_by relationships"
             )
         );
+    }
+
+    #[test]
+    fn batch_dependency_readiness_memoizes_shared_graph_for_large_candidate_set() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        let policy = batch_policy();
+        index_batch_issue(&db, "atelier-shared", "done");
+        let candidates = (0..600)
+            .map(|index| format!("atelier-c{index:04}"))
+            .collect::<Vec<_>>();
+        for id in &candidates {
+            index_batch_issue(&db, id, "todo");
+            db.add_dependency(id, "atelier-shared").unwrap();
+        }
+        for index in 0..400 {
+            index_batch_issue(&db, &format!("atelier-u{index:04}"), "todo");
+        }
+
+        let batch = dependency_readiness_batch(&db, &policy, candidates.clone()).unwrap();
+
+        assert_eq!(batch.ready_by_issue.len(), 600);
+        assert!(batch.ready_by_issue.values().all(|ready| *ready));
+        assert_eq!(batch.nodes_evaluated, 601);
     }
 }

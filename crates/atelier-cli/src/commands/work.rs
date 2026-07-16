@@ -158,7 +158,11 @@ pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()
 pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut buckets = atelier_app::read_pipeline::work_buckets(db, policy.as_ref())?;
-    apply_ready_execution_gates(db, policy.as_ref(), &mut buckets)?;
+    if bucket_needs_execution_gates(bucket) {
+        if let Some(policy) = policy.as_ref() {
+            apply_ready_execution_gates(db, policy, &mut buckets)?;
+        }
+    }
     if quiet {
         print_quiet(bucket, &buckets);
         return Ok(());
@@ -188,21 +192,46 @@ pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+fn bucket_needs_execution_gates(bucket: &str) -> bool {
+    matches!(bucket, "ready" | "all")
+}
+
 fn apply_ready_execution_gates(
     db: &Database,
-    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     buckets: &mut WorkBuckets,
 ) -> Result<()> {
-    let allowances = mission_execution_allowances(db)?;
+    let candidate_ids = buckets
+        .ready
+        .iter()
+        .map(|row| row.id.clone())
+        .collect::<BTreeSet<_>>();
+    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
+    let allowances = atelier_app::mission_readiness::execution_allowances_for_candidates(
+        db,
+        &state_dir,
+        policy,
+        &candidate_ids,
+    )?;
+    let dependency = atelier_app::objective_graph::dependency_readiness_batch(
+        db,
+        policy,
+        candidate_ids.iter().cloned(),
+    )?;
     let mut ready = Vec::new();
     for mut row in std::mem::take(&mut buckets.ready) {
-        let dependency_ready = match policy {
-            Some(policy) => {
-                atelier_app::objective_graph::dependency_closure(db, policy, &row.id)?.is_ready()
-            }
-            None => row.open_blockers.is_empty(),
-        };
-        if allowances.get(&row.id).copied().unwrap_or(true) && dependency_ready {
+        let dependency_ready = dependency
+            .ready_by_issue
+            .get(&row.id)
+            .copied()
+            .unwrap_or(false);
+        if allowances
+            .allowed_by_issue
+            .get(&row.id)
+            .copied()
+            .unwrap_or(true)
+            && dependency_ready
+        {
             ready.push(row);
         } else {
             row.open_blockers.push("readiness gate".to_string());
@@ -219,7 +248,9 @@ fn apply_ready_execution_gates(
 pub(crate) fn executable_ready_count(db: &Database) -> Result<usize> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut buckets = atelier_app::read_pipeline::work_buckets(db, policy.as_ref())?;
-    apply_ready_execution_gates(db, policy.as_ref(), &mut buckets)?;
+    if let Some(policy) = policy.as_ref() {
+        apply_ready_execution_gates(db, policy, &mut buckets)?;
+    }
     Ok(buckets.ready.len())
 }
 
@@ -538,8 +569,7 @@ pub fn mission_dashboard(
         );
     }
     let scoped = mission_scoped_issues(db, &mission.id)?;
-    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
-    let execution_allowed = mission_review_state_allows(&state_dir, &mission.id, &mission.status)?;
+    let execution_allowed = mission_review_allows_execution(db, &mission.id)?;
     let filtered = filter_dashboard_issues(db, &scoped, filter, execution_allowed)?;
     if quiet {
         if filter == DashboardFilter::Summary {
@@ -887,42 +917,24 @@ fn issue_category(
 }
 
 fn mission_review_allows_execution(db: &Database, issue_id: &str) -> Result<bool> {
-    Ok(mission_execution_allowances(db)?
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let Some(policy) = policy.as_ref() else {
+        return Ok(true);
+    };
+    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
+    let candidates = BTreeSet::from([issue_id.to_string()]);
+    Ok(
+        atelier_app::mission_readiness::execution_allowances_for_candidates(
+            db,
+            &state_dir,
+            policy,
+            &candidates,
+        )?
+        .allowed_by_issue
         .get(issue_id)
         .copied()
-        .unwrap_or(true))
-}
-
-pub(crate) fn mission_execution_allowances(db: &Database) -> Result<BTreeMap<String, bool>> {
-    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
-    let mut allowances = BTreeMap::new();
-    for mission in db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| issue.issue_type == "mission" && issue.status != "closed")
-    {
-        let allowed = mission_review_state_allows(&state_dir, &mission.id, &mission.status)?;
-        allowances.insert(mission.id.clone(), allowed);
-        for issue_id in crate::commands::objective_status::mission_issue_ids(db, &mission.id)? {
-            allowances
-                .entry(issue_id)
-                .and_modify(|current| *current &= allowed)
-                .or_insert(allowed);
-        }
-    }
-    Ok(allowances)
-}
-
-fn mission_review_state_allows(state_dir: &Path, mission_id: &str, status: &str) -> Result<bool> {
-    let state =
-        atelier_records::mission_plan_review::mission_plan_review_state(state_dir, mission_id)?;
-    Ok(match state.freshness {
-        atelier_records::mission_plan_review::MissionPlanReviewFreshness::FreshApproval => true,
-        atelier_records::mission_plan_review::MissionPlanReviewFreshness::FreshGrandfather => {
-            status == "in_progress"
-        }
-        _ => false,
-    })
+        .unwrap_or(true),
+    )
 }
 
 fn mission_scoped_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
@@ -1217,6 +1229,15 @@ mod mission_overview_render_tests {
     use atelier_app::mission_overview::{
         DirectWorkSummary, MissionOverviewEpic, MissionOverviewMission, OutsideVisibleMissions,
     };
+
+    #[test]
+    fn only_views_rendering_ready_work_pay_execution_gate_cost() {
+        assert!(bucket_needs_execution_gates("ready"));
+        assert!(bucket_needs_execution_gates("all"));
+        for bucket in ["blocked", "active", "backlog"] {
+            assert!(!bucket_needs_execution_gates(bucket), "{bucket}");
+        }
+    }
 
     fn fixture_overview() -> MissionOverview {
         MissionOverview {

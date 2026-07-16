@@ -33,7 +33,6 @@ cargo nextest run
 ```console
 cargo nextest run
 ```
-
 Exit status: 0
 
 ## Stdout
@@ -87,4 +86,3 @@ Truncated: yes
         PASS [   0.021s] ( 30/763) atelier-app forgejo::tests::comments_and_reviews_with_distinct_sudo_authorship
         PASS [   0.013s] ( 31/763) atelier-app mission_overview::tests::excludes_done_missions_and_reports_exceptional_work_until_all_is_requested
 ```
-
