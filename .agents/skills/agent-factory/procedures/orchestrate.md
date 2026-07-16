@@ -31,6 +31,38 @@ repositories, start from `atelier man manager`, `atelier status`, focused
   validation, and clean handoff state are visible through repository-owned
   product surfaces.
 
+## Mission Authoring, Review, and Execution
+
+Treat mission authorship, mission review, and orchestration as separate
+handoffs. A planner creates or repairs an authored draft and requests review;
+it does not approve its own graph, make that graph ready, or authorize
+execution. Assign the exact draft to a separately assigned `mission-review`
+agent, rather than substituting code `review` or outcome `validate`.
+
+A mission-review assignment must extend the normal assignment block with all
+of these inputs:
+
+```text
+Repository: <absolute path>
+Mission ID: <mission-id>
+Exact graph revision: <revision algorithm version and digest>
+Complete graph scope: <mission, direct advances roots, every reachable
+  hierarchy descendant, and workflow-driving internal/external prerequisites>
+Evidence destination: <where revision-bound findings or approval are recorded>
+Independence context: <initial author, every material editor, assigned reviewer>
+Independence requirement: reviewer is independent of the author and every
+  material editor
+```
+
+Do not fill in absent scope, revision, or provenance from private context. A
+review finding returns the graph to a separately assigned planner/material
+editor; a material edit invalidates the previous result. Before assigning
+execution, use Atelier's current manager/status/mission surfaces to confirm the
+exact mission has current independent approval and is reported ready. An
+authored draft, an old approval, or a reviewer statement alone is not execution
+authority. When Atelier does not report current approval and ready state, stop
+and route the next action to the planner or reviewer outcome it reports.
+
 ## Assignment Block
 
 Every delegated worker prompt must include:

@@ -16,11 +16,21 @@ Check whether a fresh agent can locate:
 - docs map, architecture docs, validation policy, ADRs, and code standards;
 - current tracker status and role guidance;
 - runnable validation commands and focused role/status commands.
+- when mission planning is in scope, a lifecycle that shows authored draft
+  state, revision-bound independent review, and current readiness before work
+  can execute.
 
 In Atelier repositories, prefer `atelier man <role>`, `atelier status`,
 focused `atelier issue show <objective-id>`, and `atelier check` for live
 operability. Do not treat hidden diagnostics, local-state repair, or
 maintenance commands as normal readiness paths.
+
+Do not rate a repository fully operable for mission planning if a fresh agent
+cannot discover, through those owned surfaces, how an authored draft is
+reviewed independently and how current approval and ready state are reported.
+Report the specific missing lifecycle capability and recommend the owning
+repository artifact or tracker work; do not replace it with private Agent
+Factory instructions.
 
 ## Report
 
