@@ -16,12 +16,15 @@ relationships:
   - kind: "issue"
     id: "atelier-qi40"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-t876"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "env CARGO_TARGET_DIR=/root/atelier-worktrees/atelier-p2wk/target cargo nextest run -p atelier-cli -E 'test(test_man_plan_review_roles_explain_independent_handoff) or test(public_plan_review_surface_records_findings_resolutions_changes_and_approval) or test(exact_revision_approval_and_closed_dependencies_allow_ready_and_start) or test(review_approval_does_not_override_open_dependency_blockers) or test(ready_work_hides_unreviewed_and_transitively_blocked_mission_work)'"
-updated_at: "2026-07-16T23:51:18.368090303+00:00"
+updated_at: "2026-07-17T00:14:28.891758036+00:00"
 ---
 
 ## Summary
