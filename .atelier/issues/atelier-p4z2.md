@@ -7,6 +7,10 @@ labels:
 - "mission-review"
 - "planning"
 - "workflow"
+review:
+  kind: pull_request
+  number: 76
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: master
