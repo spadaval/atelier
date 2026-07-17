@@ -69,12 +69,14 @@ policy remain owned by the repository and its product surfaces.
    it.
 2. If no subskill is named and none of the rules below clearly applies, ask for
    the assigned subskill.
-3. If work spans a mission, epic, or multiple tracker items, use `orchestrate`.
-4. If the work creates, splits, sequences, clarifies, or repairs tracker scope,
-   use `plan`.
-5. If the work starts from an exact mission draft and its complete reachable
+3. If the work starts from an exact mission draft and its complete reachable
    issue graph, and asks whether that graph is ready to execute, use
-   `mission-review`. This is neither code `review` nor scenario `validate`.
+   `mission-review`. This rule takes precedence over generic mission, epic, or
+   multi-item `orchestrate` routing. This is neither code `review` nor scenario
+   `validate`.
+4. If work spans a mission, epic, or multiple tracker items, use `orchestrate`.
+5. If the work creates, splits, sequences, clarifies, or repairs tracker scope,
+   use `plan`.
 6. If the work starts from a diff, use `review`.
 7. If the work starts from a scenario, behavior claim, or completion claim, use
    `validate`.

@@ -5,6 +5,22 @@ demonstrate the role boundary required for a mission graph; they are not a
 substitute for an Atelier lifecycle event or first-class evidence in a live
 repository. Live lifecycle behavior remains deferred to `atelier-72k4`.
 
+## Selection Precedence Assertion
+
+```text
+Input: Inspect exact mission draft mission-plan-graph-v1:sha256:fixture and its
+  complete reachable multi-item graph, then decide whether it is ready to
+  execute.
+Generic match: the request spans a mission and multiple tracker items.
+Exact-draft match: the request asks whether a named exact draft and its complete
+  reachable issue graph are ready to execute.
+Expected route: mission-review.
+Forbidden route: orchestrate until Atelier reports current independent approval
+  and ready state.
+Assertion: exact-draft mission-review routing takes precedence over generic
+  mission, epic, or multi-item orchestrate routing.
+```
+
 ## Supported Lifecycle: Draft to Execution
 
 ```text
