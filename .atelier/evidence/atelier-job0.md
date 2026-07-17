@@ -16,12 +16,15 @@ relationships:
   - kind: "issue"
     id: "atelier-2uim"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-t876"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "pass: independent rerun at efddfa3f adjudicates atelier-uxgk resolved and all 13 retained/amended/superseded legacy rows pass; proof boundaries remain intact; executable behavior deferred to atelier-t876; see refreshed claim matrix in this evidence record"
-updated_at: "2026-07-09T16:41:15.812328588+00:00"
+updated_at: "2026-07-17T00:14:29.085885578+00:00"
 ---
 
 ## Result

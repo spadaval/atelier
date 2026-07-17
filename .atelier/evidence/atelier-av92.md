@@ -16,12 +16,15 @@ relationships:
   - kind: "issue"
     id: "atelier-qi40"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-t876"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "Static fixture inspection passed: the documented handoff distinguishes draft before the repository review request from plan_review after it, binds all handoff stages to one full digest, and classifies live lifecycle behavior as deferred to atelier-72k4; it does not prove live lifecycle behavior."
-updated_at: "2026-07-16T18:48:34.372831441+00:00"
+updated_at: "2026-07-17T00:14:29.002720790+00:00"
 ---
 
 ## Summary
