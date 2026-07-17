@@ -29,9 +29,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-07-17T00:26:19.204072521+00:00"
+status: "done"
 title: "Validate independent mission planning and readiness end to end"
-updated_at: "2026-07-17T00:25:21.245998289+00:00"
+updated_at: "2026-07-17T00:26:19.204072521+00:00"
 ---
 
 ## Description
