@@ -18,6 +18,13 @@ A short root instruction file should point to, rather than duplicate:
 - validation routing and executable checks; and
 - durable versus ignored/rebuildable state.
 
+When the repository supports mission planning, the tracker entry point must
+also make its lifecycle capability discoverable: authored draft state,
+revision-bound independent review, and the current ready state that gates
+execution. A repository missing any of those capabilities is not fully
+operable for that workflow; record the gap in its tracker instead of teaching a
+parallel lifecycle here.
+
 Keep this entry map compact. Repository-specific command cookbooks and product
 policy belong in their owning executable help or documentation.
 
@@ -56,6 +63,8 @@ A fresh agent should be able to answer, from the entry map and linked sources:
 5. Why were important non-obvious choices made?
 6. Which standards apply, and what proves this change?
 7. Which state is durable, and how is local derived state repaired?
+8. For a mission draft, who may author, independently review, and begin
+   execution, and where does the tracker report current approval and readiness?
 
 A missing responsibility is a repository-readiness gap even when the code is
 otherwise buildable. Record the gap in the repository's tracker instead of

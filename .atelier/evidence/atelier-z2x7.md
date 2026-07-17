@@ -1,0 +1,25 @@
+---
+created_at: "2026-07-17T00:14:47.958481725+00:00"
+id: "atelier-z2x7"
+evidence_type: "validation"
+captured_at: "2026-07-17T00:14:47.958445215+00:00"
+target:
+  kind: "issue"
+  id: "atelier-t876"
+  role: "validates"
+relationships:
+  blocks: []
+  children: []
+  attachments:
+  - kind: "issue"
+    id: "atelier-t876"
+    role: "validates"
+  relates: []
+schema: "atelier.evidence"
+schema_version: 1
+status: "recorded"
+title: "PASS fresh-context Agent Factory rubric audit at mission integration base 65759498. Complete packet classification: PASS. The exact-revision complete fixture has an observable mission Outcome and explicit non-scope; three coherent roots; accountable contract, lifecycle, migration, docs, cleanup, validation, and closeout work; explicit integration owners; acyclic sequencing; independently owned validation; and initially parallel disjoint slices. It is approvable only by fixture-independent-reviewer, distinct from fixture-author, fixture-editor, and fixture-plan-repair, and only for mission-plan-graph-v1:sha256:5f2a625447f52a44e6b17ca868c54128a6d98db78ded4a0d245268a355cab40b. Defective packet classification: FAIL as designed, with blocking findings: reviewer fixture-author is the author/material editor; mission Outcome is vague; provider contract is mentioned but not a declared external prerequisite; schema and cache slices race on a shared boundary without dependency/integration; removal, migration, documentation, and closeout coverage are absent; validation Outcome Tests pass does not independently classify public claims. Agent Factory boundary classification: PASS. SKILL selection routes exact-draft readiness to mission-review before generic orchestration; plan authors and leaves draft pending review; mission-review is independent/read-only and revision-bound; orchestrate requires repository-reported current approval and ready state; review judges a changeset; validate derives scenario proof after implementation; merge authority remains separate. Supported handoff fixture includes repository, mission, exact revision, complete roots/reachable IDs/external prerequisites, evidence destination, and author/editor/reviewer independence. Unsupported lifecycle fixture correctly reports not fully operable and routes a tracker gap rather than simulating approval. Artifacts inspected: .agents/skills/agent-factory/SKILL.md; procedures/plan.md, mission-review.md, orchestrate.md, review.md, validate.md; fixtures/mission-review-dogfood.md and mission-review-handoffs.md; docs/product/mission-authoring.md; docs/architecture/quality/validation.md. Rechecked prior evidence atelier-av92, atelier-a5is, atelier-62ap before reuse. No defect, follow-up, deferred claim, or residual risk."
+updated_at: "2026-07-17T00:14:47.960818242+00:00"
+---
+
+PASS fresh-context Agent Factory rubric audit at mission integration base 65759498. Complete packet classification: PASS. The exact-revision complete fixture has an observable mission Outcome and explicit non-scope; three coherent roots; accountable contract, lifecycle, migration, docs, cleanup, validation, and closeout work; explicit integration owners; acyclic sequencing; independently owned validation; and initially parallel disjoint slices. It is approvable only by fixture-independent-reviewer, distinct from fixture-author, fixture-editor, and fixture-plan-repair, and only for mission-plan-graph-v1:sha256:5f2a625447f52a44e6b17ca868c54128a6d98db78ded4a0d245268a355cab40b. Defective packet classification: FAIL as designed, with blocking findings: reviewer fixture-author is the author/material editor; mission Outcome is vague; provider contract is mentioned but not a declared external prerequisite; schema and cache slices race on a shared boundary without dependency/integration; removal, migration, documentation, and closeout coverage are absent; validation Outcome Tests pass does not independently classify public claims. Agent Factory boundary classification: PASS. SKILL selection routes exact-draft readiness to mission-review before generic orchestration; plan authors and leaves draft pending review; mission-review is independent/read-only and revision-bound; orchestrate requires repository-reported current approval and ready state; review judges a changeset; validate derives scenario proof after implementation; merge authority remains separate. Supported handoff fixture includes repository, mission, exact revision, complete roots/reachable IDs/external prerequisites, evidence destination, and author/editor/reviewer independence. Unsupported lifecycle fixture correctly reports not fully operable and routes a tracker gap rather than simulating approval. Artifacts inspected: .agents/skills/agent-factory/SKILL.md; procedures/plan.md, mission-review.md, orchestrate.md, review.md, validate.md; fixtures/mission-review-dogfood.md and mission-review-handoffs.md; docs/product/mission-authoring.md; docs/architecture/quality/validation.md. Rechecked prior evidence atelier-av92, atelier-a5is, atelier-62ap before reuse. No defect, follow-up, deferred claim, or residual risk.

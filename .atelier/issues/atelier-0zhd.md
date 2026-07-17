@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:21:09.823456030+00:00"
+status: "done"
 title: "Adopt the independent mission-plan review architecture"
-updated_at: "2026-07-07T05:42:00.000000000+00:00"
+updated_at: "2026-07-09T16:21:09.823456030+00:00"
 ---
 
 ## Description

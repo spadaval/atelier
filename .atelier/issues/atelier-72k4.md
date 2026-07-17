@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-16T22:33:12.412577433+00:00"
+status: "done"
 title: "Explain mission review and dependency readiness failures"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-16T22:33:12.412577433+00:00"
 ---
 
 ## Description

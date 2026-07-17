@@ -11,11 +11,11 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-2uim"
+  - kind: "issue"
     id: "atelier-amfw"
   - kind: "issue"
     id: "atelier-l5mw"
-  - kind: "issue"
-    id: "atelier-2uim"
   - kind: "issue"
     id: "atelier-wyxn"
   children: []
@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T16:26:13.518884051+00:00"
+status: "done"
 title: "Publish mission and issue-set authoring standards"
-updated_at: "2026-07-07T05:42:00.000000000+00:00"
+updated_at: "2026-07-09T16:26:13.518884051+00:00"
 ---
 
 ## Description

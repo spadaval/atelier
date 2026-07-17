@@ -42,6 +42,7 @@ pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/runtime/",
     "/.atelier/cache/",
     "/.atelier-worktrees/",
+    "/.atelier-bundle-stage-*/",
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]

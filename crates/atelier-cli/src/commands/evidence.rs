@@ -1,9 +1,11 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::BTreeSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::human_output;
+use atelier_app::cache_manager::{CacheManager, CacheUse};
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
@@ -42,6 +44,38 @@ struct EvidenceMetadata<'a> {
     agent_identity: Option<&'a str>,
     residual_risks: Vec<String>,
     follow_up_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct CaptureAssociation {
+    repo_root: PathBuf,
+    state_dir: PathBuf,
+    git_dir: Option<PathBuf>,
+    project_slug: String,
+    #[cfg(unix)]
+    repo_device: u64,
+    #[cfg(unix)]
+    repo_inode: u64,
+    #[cfg(unix)]
+    state_device: u64,
+    #[cfg(unix)]
+    state_inode: u64,
+}
+
+#[derive(Debug)]
+struct CaptureBinding {
+    association: CaptureAssociation,
+    target_identity: Option<CaptureTargetIdentity>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct CaptureTargetIdentity {
+    canonical_kind: String,
+    id: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    schema: String,
+    schema_version: i64,
+    record_type: String,
 }
 
 impl<'a> EvidenceMetadata<'a> {
@@ -97,17 +131,21 @@ pub fn add_returning_id(
     Ok(id)
 }
 
-pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) -> Result<()> {
+pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     if options.command.is_empty() {
         bail!("evidence capture requires a command after --");
     }
+    validate_evidence_relation_role(options.role)?;
+    if matches!(
+        (options.target_kind, options.target_id),
+        (Some(_), None) | (None, Some(_))
+    ) {
+        bail!("--target-kind and --target-id must be supplied together");
+    }
 
-    let target = capture_target(
-        db_path,
-        options.target_kind,
-        options.target_id,
-        options.role,
-    )?;
+    // Bind and validate the exact repository/target before executing anything.
+    // This transaction is deliberately released before the arbitrary child.
+    let binding = capture_preflight(&options)?;
     let command_display = format_command(options.command);
     let captured_at = chrono::Utc::now().to_rfc3339();
     let command_output = Command::new(&options.command[0])
@@ -126,6 +164,53 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
                 Some(error.to_string()),
             ),
         };
+
+    // Never hold the canonical association lock while waiting for an arbitrary
+    // child: the child may be a normal Atelier writer or the exclusive
+    // migration. Once it exits, acquire one transaction and rebuild/revalidate
+    // current repository and target state before allocating or appending proof.
+    let manager = CacheManager::discover().context(
+        "evidence capture postflight could not rediscover the original repository; no evidence was written",
+    )?;
+    let state_dir = manager.state_dir();
+    // No child remains to wait on. Hold the exclusive association transaction
+    // across final identity validation and every canonical append so no normal
+    // writer can replace the target between the check and attachment.
+    let _transaction =
+        atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?;
+    let association = capture_association(&manager)?;
+    if association != binding.association {
+        bail!(
+            "evidence_capture_association_changed: the command completed, but the repository or .atelier association changed before proof could be recorded; no evidence was written. Return to {} and inspect the child command's effects before retrying evidence capture.",
+            binding.association.repo_root.display()
+        );
+    }
+    let storage = manager.get_cache(CacheUse::Decision)?;
+    let resolved_target_id = match (options.target_kind, options.target_id) {
+        (Some(kind), Some(id)) => Some(
+            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+                "evidence capture postflight target validation failed after the command completed; no evidence was written",
+            )?,
+        ),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    let (target, target_identity) = capture_target_and_identity(
+        storage.db(),
+        options.target_kind,
+        resolved_target_id.as_deref(),
+        options.role,
+    )
+    .context(
+        "evidence capture postflight target validation failed after the command completed; no evidence was written",
+    )?;
+    if target_identity != binding.target_identity {
+        bail!(
+            "evidence_capture_target_changed: the command replaced the bound target identity {:?} with {:?}; no evidence was written. Inspect the child command's effects and retry against the intended canonical target.",
+            binding.target_identity,
+            target_identity
+        );
+    }
 
     let summary = options
         .summary
@@ -170,11 +255,11 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
     };
 
     let created =
-        app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
+        app_use_cases::create_evidence_record(&state_dir, &summary, "recorded", &body, data)?;
     if let Some(target) = target {
         attach_silently(
-            state_dir,
-            db_path,
+            &state_dir,
+            &storage.db_path(),
             &created.header.id,
             &target.display_kind,
             &target.id,
@@ -182,6 +267,146 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         )?;
     }
     print_record_without_cache(&created, options.quiet)
+}
+
+fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
+    let manager = CacheManager::discover().context(
+        "evidence capture preflight could not discover an Atelier repository; the command was not executed",
+    )?;
+    let state_dir = manager.state_dir();
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
+    let association = capture_association(&manager)?;
+    let storage = manager.get_cache(CacheUse::Decision)?;
+    let resolved_target_id = match (options.target_kind, options.target_id) {
+        (Some(kind), Some(id)) => Some(
+            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+                "evidence capture preflight target validation failed; the command was not executed",
+            )?,
+        ),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    let (_, target_identity) = capture_target_and_identity(
+        storage.db(),
+        options.target_kind,
+        resolved_target_id.as_deref(),
+        options.role,
+    )
+    .context("evidence capture preflight target validation failed; the command was not executed")?;
+    Ok(CaptureBinding {
+        association,
+        target_identity,
+    })
+}
+
+fn capture_target_and_identity<'a>(
+    db: &Database,
+    target_kind: Option<&'a str>,
+    target_id: Option<&'a str>,
+    role: &'a str,
+) -> Result<(Option<TargetRef<'a>>, Option<CaptureTargetIdentity>)> {
+    let target = match (target_kind, target_id) {
+        (Some(kind), Some(id)) => Some(validate_record_ref(db, kind, id, role)?),
+        (None, None) => None,
+        _ => bail!("--target-kind and --target-id must be supplied together"),
+    };
+    let identity = match target.as_ref() {
+        Some(target) if target.canonical_kind == "issue" => {
+            let issue = db.require_issue(target.id)?;
+            let spec = atelier_records::canonical_record_kind("issue")?;
+            Some(CaptureTargetIdentity {
+                canonical_kind: "issue".to_string(),
+                id: issue.id,
+                created_at: issue.created_at,
+                schema: spec.schema.to_string(),
+                schema_version: spec.schema_version,
+                record_type: issue.issue_type,
+            })
+        }
+        Some(target) => {
+            let record = db.require_record(target.canonical_kind, target.id)?;
+            let spec = atelier_records::canonical_record_kind(target.canonical_kind)?;
+            Some(CaptureTargetIdentity {
+                canonical_kind: record.kind.clone(),
+                id: record.id,
+                created_at: record.created_at,
+                schema: spec.schema.to_string(),
+                schema_version: spec.schema_version,
+                record_type: record.kind,
+            })
+        }
+        None => None,
+    };
+    Ok((target, identity))
+}
+
+fn capture_association(manager: &CacheManager) -> Result<CaptureAssociation> {
+    let repo_root = fs::canonicalize(manager.repo_root()).with_context(|| {
+        format!(
+            "failed to resolve evidence repository root {}",
+            manager.repo_root().display()
+        )
+    })?;
+    let state_dir = fs::canonicalize(manager.state_dir()).with_context(|| {
+        format!(
+            "failed to resolve evidence canonical state {}",
+            manager.state_dir().display()
+        )
+    })?;
+    let project_slug = atelier_app::project_config::ProjectConfig::load(&repo_root)?.project_slug;
+    let git_dir = git_dir_identity(&repo_root)?;
+    #[cfg(unix)]
+    {
+        // Root identities catch wholesale workspace/.atelier replacement while
+        // allowing legitimate atomic swaps of canonical subtrees such as
+        // issues/ and evidence/ during import or bundle application.
+        use std::os::unix::fs::MetadataExt;
+        let repo_metadata = fs::metadata(&repo_root)?;
+        let state_metadata = fs::metadata(&state_dir)?;
+        Ok(CaptureAssociation {
+            repo_root,
+            state_dir,
+            git_dir,
+            project_slug,
+            repo_device: repo_metadata.dev(),
+            repo_inode: repo_metadata.ino(),
+            state_device: state_metadata.dev(),
+            state_inode: state_metadata.ino(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(CaptureAssociation {
+            repo_root,
+            state_dir,
+            git_dir,
+            project_slug,
+        })
+    }
+}
+
+fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
+    let dot_git = repo_root.join(".git");
+    if !dot_git.exists() {
+        return Ok(None);
+    }
+    if dot_git.is_dir() {
+        return Ok(Some(fs::canonicalize(dot_git)?));
+    }
+    let pointer = fs::read_to_string(&dot_git)
+        .with_context(|| format!("failed to read Git worktree pointer {}", dot_git.display()))?;
+    let git_dir = pointer
+        .trim()
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .context("invalid Git worktree pointer while binding evidence repository")?;
+    let git_dir = Path::new(git_dir);
+    let git_dir = if git_dir.is_absolute() {
+        git_dir.to_path_buf()
+    } else {
+        repo_root.join(git_dir)
+    };
+    Ok(Some(fs::canonicalize(git_dir)?))
 }
 
 pub fn show(db: &Database, id: &str, quiet: bool) -> Result<()> {
@@ -488,22 +713,6 @@ fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {
         data.agent_identity = data.producer.clone();
     }
     data
-}
-
-fn capture_target<'a>(
-    db_path: &Path,
-    target_kind: Option<&'a str>,
-    target_id: Option<&'a str>,
-    role: &'a str,
-) -> Result<Option<TargetRef<'a>>> {
-    match (target_kind, target_id) {
-        (Some(kind), Some(id)) => {
-            let db = app_use_cases::open_database(db_path)?;
-            Ok(Some(validate_record_ref(&db, kind, id, role)?))
-        }
-        (None, None) => Ok(None),
-        _ => bail!("--target-kind and --target-id must be supplied together"),
-    }
 }
 
 fn command_result_metadata(

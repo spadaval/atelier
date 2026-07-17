@@ -139,7 +139,17 @@ Optional fields:
 | `depends_on` | array of references | Records that must complete before this issue is ready. |
 | `blocks` | array of references | Records blocked by this issue. |
 | `notes` | array of note objects | Durable handoff notes appended in order after the issue is created. |
-| `status` | string | Optional initial state. Defaults to repository policy, normally `todo`. Non-initial statuses may be rejected by workflow policy. |
+| `status` | string | Optional initial state. Defaults to repository policy, normally `todo`. Apply accepts statuses only when the complete staged canonical graph satisfies workflow policy. |
+
+Bundles do not carry typed workflow-transition or mission-plan-review receipts.
+Use initial and other non-executable statuses (normally `todo` for work items
+and `draft` for missions) when creating records. A mission in `ready` or
+`in_progress` is rejected unless the staged canonical state already contains
+the required current authorization, which create-only v1 bundles cannot add.
+After apply, use `atelier issue plan-review` and `atelier issue transition` to
+enter executable mission states. Apply also rejects graph changes that would
+make an existing executable mission's approval stale or introduce an
+unsatisfied direct or transitive blocker.
 
 `depends_on` and `blocks` describe sequencing dependencies. They must not be
 used for semantic contribution, validation, duplicate, supersession, or planning
@@ -262,12 +272,26 @@ roles as preview, with authored `client_ref` values replaced by their allocated
 durable IDs. Mutating apply persists durable records under tracked `.atelier/`,
 where those mappings can be audited.
 
-Apply is atomic at the canonical-record level. If validation fails, nothing is
-written. If an unexpected write failure occurs after mutation starts, the
-command must stop, report the first failed operation, list any created durable
-IDs, and print recovery guidance. A later issue may strengthen this into a
-transactional temporary-directory swap, but v1 must never silently leave partial
-state without a recovery summary.
+Apply builds and validates a complete staged canonical tree before installing
+its record directories. The validation is the same canonical rebuild contract
+used by tracker health checks, including workflow execution state, review
+freshness, dependency closure, and record references. If staging or validation
+fails, the live canonical tree and SQLite cache remain unchanged. Apply holds
+an exclusive canonical mutation transaction from snapshot through installation,
+so ordinary Atelier writers resume only after the new tree is live and apply on
+top of it. A final full-tree fingerprint rejects noncooperative filesystem drift
+instead of overwriting it. Installation backs up both `issues/` and `evidence/`
+as one rollback unit; a failure installing either restores both. Symbolic links,
+special filesystem entries, and non-directory install targets are rejected.
+Once both live directories are installed, backup or staging cleanup is
+post-commit housekeeping: cleanup failure emits a warning naming the retained
+path but does not turn the committed apply into a failure. Backups are retained
+under git-ignored runtime state, and repo-root stage directories use the
+git-ignored `.atelier-bundle-stage-*` pattern. Operators must not retry that
+create-only bundle. A retained backup or stage blocks later bundle applies until
+`atelier check` confirms the live tree and the named real directory is removed,
+preventing an unsafe retry from creating duplicates. Matching symlinks and
+special files are rejected without being followed or removed.
 
 ## Idempotency And Conflicts
 

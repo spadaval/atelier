@@ -18,6 +18,9 @@ Verify or create concise repository instructions that name:
   repair command owns it;
 - any repository-specific constraints that an agent must know before invoking
   the tracker.
+- for repositories that use mission planning, whether the lifecycle can keep
+  authored drafts separate from revision-bound independent review and report a
+  current ready state before execution.
 
 For Atelier repositories, `AGENTS.md` and `docs/index.md` are the map, while
 `atelier man`, `atelier status`, focused `atelier issue show <objective-id>`,
@@ -33,9 +36,16 @@ operation.
   instead of hiding the gap in private notes.
 - Do not install compatibility shims or old command aliases unless explicitly
   requested by a human.
+- Do not claim full mission-planning operability when the tracker cannot expose
+  a draft, attribute an independent review to an exact revision, and report
+  current approval plus ready state. Report the missing capability as a
+  readiness gap and route operators to the repository-owned lifecycle surfaces
+  for recovery or follow-up work.
 
 ## Handoff
 
 Report the sources found or created, admin setup/repair checks used, remaining
 gaps, follow-up tracker IDs, and the commands or docs an agent should use to
-orient in the repository.
+orient in the repository. State whether the repository supports the required
+authorship/review/execution separation; if not, name the missing lifecycle
+capability without inventing a parallel workflow.

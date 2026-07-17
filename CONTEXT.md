@@ -106,6 +106,25 @@
   active-focus pointer, or universal evidence rule outside the workflow model.
   A mission may still be the shared background workspace boundary when
   repository workflow and operator assignment choose that coordination shape.
+- Mission graph revision: the versioned deterministic digest of one mission's
+  authored planning content, direct `advances` roots, every uniquely reachable
+  issue's authored planning content, and workflow-driving hierarchy and
+  blocker/dependency edges. Workflow status, activity, notes, evidence,
+  code-review state, timestamps, cache state, and context-only links are not
+  graph-revision inputs.
+- Mission-plan review: independent readiness judgment over an exact mission
+  graph revision before execution. It records attributed authors/material
+  editors, findings, resolutions, change requests, and approval in canonical
+  tracked events. It is distinct from code review and outcome validation.
+- Material plan edit: a change to a mission graph revision input, including
+  intent, Outcome, scope, reachable work content, hierarchy, dependencies,
+  validation, or closeout coverage. It invalidates approval for the previous
+  revision. Notes, activity, evidence receipts, execution status, and code
+  commits are non-material to plan approval.
+- Independent mission reviewer: an actor with stable identity who is distinct
+  from the mission plan author and every material editor contributing to the
+  reviewed revision. Missing or untrusted edit attribution cannot establish
+  independence.
 - Epic: the normal branch and review boundary beneath a mission. One epic
   normally owns one reviewable branch or PR-equivalent changeset.
 - Issue: a durable accountability unit and implementation slice. It does not
@@ -134,6 +153,11 @@
   provider-local review number plus provider kind. Review artifacts are code
   review workspaces, not Atelier workflow transitions, and they do not replace
   evidence records.
+- Mission-plan approval: a revision-bound decision by an independent mission
+  reviewer with no unresolved blocking finding or effective later change
+  request. It permits the configured mission transition toward execution but
+  is not an issue `review` artifact, evidence receipt, outcome-validation
+  result, or merge authority.
 - Review room: a native Atelier review artifact stored as tracked YAML under
   `.atelier/reviews/<id>.yaml`. Its current state is derived from room metadata
   plus ordered events such as comments, findings, approvals, change requests,
@@ -208,8 +232,9 @@
   use `blocks` for issue-owned blockers, `children` for hierarchy and mission
   work, `attachments` for evidence, and `relates` for peer semantic
   relationships.
-- Missions, issues, evidence, workflow policy, review artifacts, and activity
-  sidecars are the v1 first-class durable concepts. Milestone/checkpoint
+- Missions, issues, evidence, workflow policy, review artifacts, mission-plan
+  review events, and activity sidecars are the v1 first-class durable concepts.
+  Milestone/checkpoint
   records, first-class plan records, sessions, attempts, and runs remain
   deferred until a later contract reintroduces them directly.
 - Validators belong to workflow policy. Checkpoint or plan prose may describe
@@ -250,6 +275,12 @@
   objective graph summaries and migration helpers, but the valid statuses,
   transitions, validators, and evidence requirements for mission-shaped work
   come from `.atelier/workflow.yaml`.
+- This repository's accepted target pre-execution mission lifecycle is
+  `draft -> plan_review -> ready -> in_progress`. `ready` and `start` require a
+  current independent approval of the exact mission graph revision; `start`
+  rechecks freshness and declared dependency closure. This is a bounded
+  repository workflow choice, not a hidden universal mission lifecycle. The
+  executable workflow adopts it atomically with validator and migration support.
 - Branch policy is workflow-owned rather than a separate routine setup step.
   Operators inspect `atelier issue transition <id>` and execute the configured
   transition that enters active work; its `git.prepare_branch` action prepares

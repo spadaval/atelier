@@ -51,6 +51,12 @@ specific contract, risk, or workflow gate requires it.
 
 ## Mission Creation
 
+For Atelier repositories, [Mission And Issue-Set Authoring
+Standard](../../../../docs/product/mission-authoring.md) is the single normative
+checklist for mission Outcome coverage, decomposition, ownership, dependencies,
+initial parallelism, validation, and closeout. This procedure routes to that
+standard; it does not restate or override its criteria.
+
 Create a mission only when the objective is larger than a single accountable
 issue and needs at least one epic or equivalent workstream beneath it. Smaller
 objectives should remain ordinary issues.
@@ -69,27 +75,32 @@ open, create artifact-update work and block dependent implementation on it.
 Do not bury unresolved decisions inside implementation tasks.
 
 A mission must make the desired finished state concrete enough for another
-agent to plan, implement, and validate without private context. Capture:
+agent to plan, implement, and validate without private context. Apply the
+standard before submitting the mission for independent plan review. Validation
+derives its checks from the mission or issue `Outcome`; only predefine a
+scenario, command, file, artifact, or evidence class when it is itself the
+product contract or a known risk that would otherwise be ambiguous.
 
-- The outcome the repository should have when the mission is complete.
-- Constraints and explicit non-scope.
-- Current risks or unknowns that could change sequencing.
-- The linked epics, implementation issues, documentation work, validation work,
-  migration work, review work, or audit work needed to reach the outcome.
+## Mission-Review Handoff
 
-Validation work should derive its checks from the mission or issue `Outcome`.
-Only predefine a scenario, command, file, artifact, or evidence class when it is
-itself the product contract or a known risk that would otherwise be ambiguous.
-A criterion such as "the feature works end-to-end" is not ready because it does
-not describe the finished behavior; rewrite it as the user-visible state,
-command result, file content, workflow transition, or documentation surface that
-must be true.
+The planner authors or repairs the graph, records its material changes, and
+leaves it in the repository-reported draft state. Completing `plan` does not
+authorize the planner to approve that same graph, make it ready, or begin its
+execution.
 
-For missions that touch public command behavior, workflow policy, storage or
-migration contracts, agent guidance, validation rules, or multiple subsystems,
-include explicit closeout coverage for an independent validation or audit issue.
-Do not add audit work by rote to tiny missions; when omitting it, the mission
-should still name the closeout proof that makes the omission reasonable.
+Hand the authored draft to a separately assigned `mission-review` agent. Give
+that assignment the exact inputs required by
+[`mission-review`](mission-review.md), including the mission ID, exact graph
+revision, complete reachable graph scope, evidence destination, and attributed
+author/editor identities needed to establish independence. The planner reports
+the authored revision and requested review in its handoff; the repository's
+live lifecycle surfaces own the review request, result, and any readiness
+transition.
+
+After the reviewer records a revision-bound finding or approval, return repairs
+to a planner or other material editor. A material repair requires fresh review.
+Only an orchestrator may use the current repository-reported approval and ready
+state to decide whether execution can be assigned.
 
 ## Examples
 
@@ -147,4 +158,6 @@ diff locations inspected.
 
 Report items created or changed, dependency changes, unresolved choices,
 validation or lint run, evidence receipts produced, and follow-up artifact
-tasks.
+tasks. For a mission draft, also report its exact graph revision, its
+author/editor provenance, the review destination or request state, and that it
+remains an authored draft pending independent review.

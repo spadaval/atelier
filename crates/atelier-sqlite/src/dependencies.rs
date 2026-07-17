@@ -5,6 +5,17 @@ use super::Database;
 use atelier_core::Issue;
 
 impl Database {
+    /// Return every directed dependency as `(blocked_id, blocker_id)`.
+    pub fn list_issue_dependencies(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT blocked_id, blocker_id FROM issue_block_index ORDER BY blocked_id, blocker_id",
+        )?;
+        let dependencies = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(dependencies)
+    }
+
     pub fn add_dependency(
         &self,
         blocked_id: impl ToString,

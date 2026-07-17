@@ -7,6 +7,19 @@ labels:
 - "mission-review"
 - "planning"
 - "workflow"
+review:
+  kind: pull_request
+  number: 76
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-p4z2
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-p4z2
 priority: "P1"
 relationships:
   blocks: []
@@ -27,9 +40,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+closed_at: "2026-07-17T00:27:55.696014444+00:00"
+status: "publish_review"
 title: "Mission: Require independent review before mission execution"
-updated_at: "2026-07-07T05:55:25.405692460+00:00"
+updated_at: "2026-07-17T00:27:55.696014444+00:00"
 ---
 
 ## Description

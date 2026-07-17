@@ -141,10 +141,12 @@ canonical vocabulary is `P0`, `P1`, `P2`, and `P3`; human-facing terms such as
 separate canonical fields.
 
 Issue status is durable workflow state owned by `.atelier/workflow.yaml`. The
-current repository-defined values are `todo`, `in_progress`, `blocked`,
-`review`, `validation`, and `done`. Human-ready groupings such as `todo`,
+repository-defined vocabulary includes `draft`, `plan_review`, `ready`,
+`todo`, `in_progress`, `blocked`, `review`, `publish_review`, `validation`,
+`done`, `closed`, and `superseded`. Human-ready groupings such as `todo`,
 `active`, `blocked`, and `done` are derived categories, not alternate stored
-tokens; `review` and `validation` are workflow statuses in the active category.
+tokens; `plan_review`, `review`, and `validation` are workflow statuses in the
+active category.
 
 ### Mission Records
 
@@ -154,12 +156,18 @@ tokens; `review` and `validation` are workflow statuses in the active category.
 | Optional front matter | None in V1 beyond record-generic labels and relationships. |
 | Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
 | Optional body | `## Terminal Notes` and `## Notes`. |
-| Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
+| Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`; current mission-plan review state from canonical revision-bound review events. |
 | Migration input | None. |
 | Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose may reference plan/checkpoint Markdown by path, but must not become a shadow graph. |
 
-Mission objective status is type-aware issue workflow state. The current
-durable vocabulary is `draft`, `ready`, `active`, `superseded`, and `closed`.
+Mission objective status is type-aware issue workflow state. This repository's
+accepted target planning path is `draft`, `plan_review`, `ready`, and
+`in_progress`, with terminal states declared by workflow policy. Mission-plan request,
+authorship/material-edit attribution, finding, change-request, resolution,
+approval, and migration events are tracked canonical history linked to the
+mission in its `.atelier/issues/<mission-id>.activity/` sidecar stream; they do
+not create first-class plan records, a mutable review snapshot, or use the
+code-review artifact field.
 
 ### Deferred Plan Records
 
@@ -350,7 +358,8 @@ Activity front matter uses `schema: "atelier.activity"` and
 - `subject_id`: canonical issue ID.
 - `event_type`: one of `comment`, `note`, `handoff`, `plan`,
   `close_reason`, `status_changed`, `field_changed`, `work_started`,
-  `work_finished`, or `evidence_attached`.
+  `work_finished`, `work_abandoned`, `evidence_attached`,
+  `transition_applied`, `transition_blocked`, or `mission_plan_review`.
 - `actor`: user or agent identity that produced the event.
 - `created_at`: RFC3339 timestamp.
 - `summary`: one-line event summary.
@@ -360,6 +369,77 @@ Evidence remains a rich first-class record under `.atelier/evidence/`;
 issue activity records only lightweight `evidence_attached` references such as
 `evidence_id` and `result` so operators can follow up with
 `atelier evidence show`.
+
+`transition_applied` activities may carry a strictly typed
+`workflow_transition` front-matter object naming the transition and exact
+from/to statuses. A mission `start` from `ready` to `in_progress` additionally
+carries `mission_plan_start`, bound to the current graph revision and the exact
+prior approval activity ID. Canonical validation accepts active mission state
+only when this receipt resolves to that approval. Free-form Markdown body text,
+including text shaped like transition fields, is never workflow authority.
+
+`mission_plan_review` activities additionally require a strictly typed
+`mission_plan_review` front-matter object. Its event kind is one of `request`,
+`material_edit_attribution`, `finding`, `change_request`, `resolution`,
+`approval`, or `legacy_grandfather`. Every kind names the versioned graph
+revision it concerns; requests record the complete author/material-editor
+provenance snapshot, attributions chain a new revision to its predecessor,
+findings and change requests carry stable decision IDs and affected issue or
+dependency-path IDs, resolutions target those IDs, and approval identity comes
+from the activity actor. Actor identities use
+`actor-v1:<authenticated-authority>/<immutable-subject>`. The authority is a
+canonical lowercase DNS-style namespace whose authentication layer owns the
+immutable subject mapping; display names are not actor IDs. Identities must be
+NFC, contain no whitespace, controls, or Unicode
+`Default_Ignorable_Code_Point` characters, and use one canonical spelling, so
+zero-width or decomposed Unicode aliases cannot create false independence.
+
+Public review mutations validate every affected ID and dependency-path node
+against the exact canonical mission graph before allocating or writing an
+activity file. Dependency paths use the directed blocked-to-blocker edges
+derived from canonical `blocks` ownership, must be simple and acyclic, and may
+walk through transitive external prerequisites. Symmetric/context relations do
+not manufacture executable path edges. The same validator runs during
+canonical rebuild. Material edits
+made while a mission is in `plan_review` are resubmitted with a typed
+`material_edit_attribution` that links the prior provenance revision to the
+current revision and adds the authenticated editor. Resolutions retain the
+target decision's original graph revision across that rework boundary; they do
+not rewrite the decision or make a stale approval current.
+
+A legacy grandfather is limited to cutover status `in_progress`, migration ID
+`independent-mission-plan-review-v1`, and activity actor
+`actor-v1:atelier.local/mission-review-migration`. The tracked
+`.atelier/mission-plan-review-cutover.yaml` manifest records the exact cutover
+time and a sorted eligibility entry for each mission, graph revision, status,
+and receipt activity ID. The `legacy_grandfather` event is the exactly-once
+receipt: its timestamp, activity ID, mission, revision, status, migration ID,
+and versioned receipt digest must all match that manifest. Missing, late,
+duplicate, wrong-mission, or forged receipts fail rebuild rather than project
+authority. Cutover and activity timestamp values use canonical UTC RFC3339
+precision no finer than microseconds; canonical activity rendering always uses
+six fractional digits. Activity producers truncate their timestamps to that
+precision before ID allocation, while cutover manifests reject finer precision
+before receipt hashing and already-constructed noncanonical records are rejected
+before emission or load. Thus the manifest, digest, rendered activity, and
+rebuild comparison cannot disagree. A valid receipt is
+fresh only while the mission still has the exact eligible status and graph
+revision. Lists that represent sets are sorted and
+unique so rendering and rebuild are deterministic. Malformed payloads, missing
+provenance, non-independent approval, unresolved blocking decisions at approval
+time, and plan-review events attached to non-mission issues make canonical
+rebuild fail.
+
+The graph revision string is `mission-graph-v2:sha256:<digest>`. The hashed
+payload uses stable-ID ordering and contains the mission and reachable authored
+planning sections, direct roots, hierarchy and `advances` edges, and blocker
+edges touching reviewed scope. Blocker inputs include directional canonical
+`blocks` buckets and direct `blocked_by` links; the revision version changed so
+an approval produced under the incomplete V1 inputs cannot silently remain
+fresh. Status, timestamps, notes, evidence receipts, code-review fields,
+context-only links, activity, and cache state are excluded. The current review
+projection is rebuilt directly from canonical issue records and sidecars; it is
+not a mutable snapshot or a SQLite activity table.
 
 `atelier issue show` uses the same sidecars for its bounded recent activity
 preview. It does not fall back to SQLite notes or comments.

@@ -5,6 +5,19 @@ issue_type: "epic"
 labels:
 - "agent-factory"
 - "mission-review"
+review:
+  kind: pull_request
+  number: 74
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-p4z2
+    integration_target: mission/atelier-p4z2
+    merge_strategy: squash
+    owner_issue_id: atelier-h3wg
+    owner_kind: epic
+    review_target: mission/atelier-p4z2
+    work_branch: epic/atelier-h3wg
 priority: "P1"
 relationships:
   blocks:
@@ -19,9 +32,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-17T00:07:31.078468481+00:00"
+status: "done"
 title: "Epic: Add independent mission review to Agent Factory"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-17T00:07:31.078468481+00:00"
 ---
 
 ## Description

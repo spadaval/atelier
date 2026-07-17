@@ -1,5 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_core::{EvidenceRecord, Issue};
+use atelier_records::mission_plan_review::{
+    mission_plan_review_state, MissionPlanFindingSeverity, MissionPlanReviewFreshness,
+};
 use atelier_records::IssueSections;
 use atelier_sqlite::Database;
 use serde::Serialize;
@@ -152,6 +155,9 @@ fn evaluate_builtin_with_params(
             issue_sections_parseable(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
         }
+        "plan_review.current_approval" => {
+            plan_review_current_approval(repo_root, target_kind, target_id)
+        }
         "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
@@ -165,6 +171,9 @@ fn evaluate_builtin_with_params(
         "objective.blockers_none_open" => {
             objective_direct_blockers_none_open(db, policy, target_kind, target_id)
                 .map(without_validator_help)
+        }
+        "blockers.transitive_none_open" => {
+            transitive_blockers_none_open(db, policy, target_kind, target_id)
         }
         "baseline.default_checks" => {
             baseline_default_checks(db, repo_root).map(without_validator_help)
@@ -187,6 +196,119 @@ fn evaluate_builtin_with_params(
             None,
         )),
     }
+}
+
+fn plan_review_current_approval(
+    repo_root: &Path,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    if target_kind != "issue" {
+        return Ok((
+            false,
+            format!("mission-plan approval requires an issue target, found {target_kind}"),
+            None,
+        ));
+    }
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let state = mission_plan_review_state(&state_dir, target_id)?;
+    if state.freshness == MissionPlanReviewFreshness::FreshApproval {
+        return Ok((
+            true,
+            format!(
+                "current mission graph {} has independent approval",
+                state.current_graph_revision
+            ),
+            None,
+        ));
+    }
+    if let Some(diagnosis) = crate::mission_readiness::review_diagnosis(&state_dir, target_id)? {
+        return Ok((
+            false,
+            diagnosis.summary,
+            Some(format!("Next: {}", diagnosis.next_command)),
+        ));
+    }
+    let result = match state.freshness {
+        MissionPlanReviewFreshness::FreshApproval => unreachable!(),
+        MissionPlanReviewFreshness::FreshGrandfather => (
+            false,
+            "legacy grandfathering does not constitute independent approval".to_string(),
+        ),
+        MissionPlanReviewFreshness::Stale => (
+            false,
+            format!(
+                "mission-plan approval is stale; current graph revision is {}",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::Unapproved => (
+            false,
+            format!(
+                "mission graph {} was submitted for review but has no independent approval",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::ProvenanceIncomplete
+            if state.authors.is_empty()
+                && state.material_editors.is_empty()
+                && state.authorization.is_none() =>
+        {
+            (
+                false,
+                format!(
+                    "mission-plan review was not requested for current graph revision {}",
+                    state.current_graph_revision
+                ),
+            )
+        }
+        MissionPlanReviewFreshness::ProvenanceIncomplete => (
+            false,
+            format!(
+                "mission-plan author and material-editor provenance is incomplete for current graph revision {}",
+                state.current_graph_revision
+            ),
+        ),
+        MissionPlanReviewFreshness::BlockedByReview => {
+            let revision = &state.current_graph_revision;
+            let blocking_findings = state
+                .findings
+                .iter()
+                .filter(|finding| {
+                    finding.graph_revision == *revision
+                        && finding.severity == MissionPlanFindingSeverity::Blocking
+                        && finding.resolution.is_none()
+                })
+                .map(|finding| finding.id.as_str())
+                .collect::<Vec<_>>();
+            let change_requests = state
+                .change_requests
+                .iter()
+                .filter(|request| {
+                    request.graph_revision == *revision && request.resolution.is_none()
+                })
+                .map(|request| request.id.as_str())
+                .collect::<Vec<_>>();
+            let mut causes = Vec::new();
+            if !blocking_findings.is_empty() {
+                causes.push(format!(
+                    "unresolved blocking findings: {}",
+                    blocking_findings.join(", ")
+                ));
+            }
+            if !change_requests.is_empty() {
+                causes.push(format!(
+                    "unresolved change requests: {}",
+                    change_requests.join(", ")
+                ));
+            }
+            (
+                false,
+                format!("mission-plan approval is blocked by {}", causes.join("; ")),
+            )
+        }
+    };
+    Ok((result.0, result.1, None))
 }
 
 fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
@@ -541,6 +663,33 @@ fn objective_direct_blockers_none_open(
                 open.join(", ")
             ),
         ))
+    }
+}
+
+fn transitive_blockers_none_open(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("dependency closure does not apply to {target_kind} records"),
+            None,
+        ));
+    }
+    match crate::mission_readiness::dependency_diagnosis(db, policy, target_id)? {
+        Some(diagnosis) => Ok((
+            false,
+            diagnosis.summary,
+            Some(format!("Next: {}", diagnosis.next_command)),
+        )),
+        None => Ok((
+            true,
+            "declared dependency closure is terminal".to_string(),
+            None,
+        )),
     }
 }
 

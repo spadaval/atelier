@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-07-09T17:09:56.662865537+00:00"
+status: "done"
 title: "Add the Agent Factory mission-review subskill"
-updated_at: "2026-07-07T05:28:00.000000000+00:00"
+updated_at: "2026-07-09T17:09:56.662865537+00:00"
 ---
 
 ## Description
