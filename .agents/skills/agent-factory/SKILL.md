@@ -54,6 +54,7 @@ policy remain owned by the repository and its product surfaces.
 | `install` | Connect Agent Factory to a repository's durable sources | [procedures/install.md](procedures/install.md) |
 | `plan` | Shape missions, epics, issues, dependencies, and artifact-update work | [procedures/plan.md](procedures/plan.md) |
 | `orchestrate` | Run a mission, epic, or multi-item workstream | [procedures/orchestrate.md](procedures/orchestrate.md) |
+| `mission-review` | Independently falsify the readiness of an exact mission draft and its reachable issue graph | [procedures/mission-review.md](procedures/mission-review.md) |
 | `implement` | Execute one assigned implementation slice | [procedures/implement.md](procedures/implement.md) |
 | `migrate` | Demolition, reconnect, intentional temporary breakage, or migration closeout | [procedures/migrate.md](procedures/migrate.md) |
 | `review` | Independent diff, design, security, test, or proof review | [procedures/review.md](procedures/review.md) |
@@ -68,12 +69,17 @@ policy remain owned by the repository and its product surfaces.
    it.
 2. If no subskill is named and none of the rules below clearly applies, ask for
    the assigned subskill.
-3. If work spans a mission, epic, or multiple tracker items, use `orchestrate`.
-4. If the work creates, splits, sequences, clarifies, or repairs tracker scope,
-   use `plan`.
-5. If the work starts from a diff, use `review`.
-6. If the work starts from a scenario, behavior claim, or completion claim, use
+3. If the work starts from an exact mission draft and its complete reachable
+   issue graph, and asks whether that graph is ready to execute, use
+   `mission-review`. This rule takes precedence over generic mission, epic, or
+   multi-item `orchestrate` routing. This is neither code `review` nor scenario
    `validate`.
-7. If the work intentionally permits breakage, closes a migration, or asks for
+4. If work spans a mission, epic, or multiple tracker items, use `orchestrate`.
+5. If the work creates, splits, sequences, clarifies, or repairs tracker scope,
+   use `plan`.
+6. If the work starts from a diff, use `review`.
+7. If the work starts from a scenario, behavior claim, or completion claim, use
+   `validate`.
+8. If the work intentionally permits breakage, closes a migration, or asks for
    demolition/reconnect classification, use `migrate`.
-8. If the user asks to set up Agent Factory bindings, use `install`.
+9. If the user asks to set up Agent Factory bindings, use `install`.

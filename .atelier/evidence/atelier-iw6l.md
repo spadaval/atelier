@@ -16,12 +16,15 @@ relationships:
   - kind: "issue"
     id: "atelier-72k4"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-qi40"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "target/debug/atelier man manager"
-updated_at: "2026-07-16T22:32:38.303236070+00:00"
+updated_at: "2026-07-16T23:52:03.680200652+00:00"
 ---
 
 ## Summary

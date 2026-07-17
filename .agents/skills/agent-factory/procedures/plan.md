@@ -81,6 +81,27 @@ derives its checks from the mission or issue `Outcome`; only predefine a
 scenario, command, file, artifact, or evidence class when it is itself the
 product contract or a known risk that would otherwise be ambiguous.
 
+## Mission-Review Handoff
+
+The planner authors or repairs the graph, records its material changes, and
+leaves it in the repository-reported draft state. Completing `plan` does not
+authorize the planner to approve that same graph, make it ready, or begin its
+execution.
+
+Hand the authored draft to a separately assigned `mission-review` agent. Give
+that assignment the exact inputs required by
+[`mission-review`](mission-review.md), including the mission ID, exact graph
+revision, complete reachable graph scope, evidence destination, and attributed
+author/editor identities needed to establish independence. The planner reports
+the authored revision and requested review in its handoff; the repository's
+live lifecycle surfaces own the review request, result, and any readiness
+transition.
+
+After the reviewer records a revision-bound finding or approval, return repairs
+to a planner or other material editor. A material repair requires fresh review.
+Only an orchestrator may use the current repository-reported approval and ready
+state to decide whether execution can be assigned.
+
 ## Examples
 
 Concrete mission outcome:
@@ -137,4 +158,6 @@ diff locations inspected.
 
 Report items created or changed, dependency changes, unresolved choices,
 validation or lint run, evidence receipts produced, and follow-up artifact
-tasks.
+tasks. For a mission draft, also report its exact graph revision, its
+author/editor provenance, the review destination or request state, and that it
+remains an authored draft pending independent review.
