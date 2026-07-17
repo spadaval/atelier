@@ -13,6 +13,7 @@ use icu_properties::CodePointSetData;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -138,7 +139,8 @@ impl MissionPlanReviewCutoverManifest {
             .context("Failed to render mission-plan cutover receipt")?;
         let digest = Sha256::digest(bytes);
         Ok(format!(
-            "{LEGACY_GRANDFATHER_RECEIPT_VERSION}:sha256:{digest:x}"
+            "{LEGACY_GRANDFATHER_RECEIPT_VERSION}:sha256:{}",
+            lower_hex(&digest)
         ))
     }
 }
@@ -871,8 +873,17 @@ fn graph_revision_from_records(
     let bytes = serde_json::to_vec(&payload).context("Failed to render mission graph revision")?;
     let digest = Sha256::digest(bytes);
     Ok(MissionGraphRevision(format!(
-        "{MISSION_GRAPH_REVISION_VERSION}:sha256:{digest:x}"
+        "{MISSION_GRAPH_REVISION_VERSION}:sha256:{}",
+        lower_hex(&digest)
     )))
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 /// Rebuild current mission-plan state directly from canonical records and

@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::{Mapping, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process;
@@ -567,12 +568,20 @@ fn snapshot_manifest(snapshot: &CanonicalSnapshot) -> Vec<CanonicalSnapshotEntry
                 .map(|(path, contents)| CanonicalSnapshotEntry {
                     relative_path: path.to_string_lossy().into_owned(),
                     path_type: "file".to_string(),
-                    sha256: Some(format!("{:x}", Sha256::digest(contents))),
+                    sha256: Some(lower_hex(&Sha256::digest(contents))),
                 }),
         )
         .collect::<Vec<_>>();
     entries.sort();
     entries
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 fn expected_snapshot(

@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -16,7 +17,15 @@ pub(crate) fn canonical_tree_fingerprint(state_dir: &Path) -> Result<String> {
     }
     let mut hasher = Sha256::new();
     hash_directory(state_dir, state_dir, &mut hasher)?;
-    Ok(format!("sha256:{:x}", hasher.finalize()))
+    Ok(format!("sha256:{}", lower_hex(&hasher.finalize())))
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 fn hash_directory(root: &Path, directory: &Path, hasher: &mut Sha256) -> Result<()> {
