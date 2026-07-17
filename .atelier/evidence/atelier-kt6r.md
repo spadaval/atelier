@@ -84,4 +84,3 @@ Truncated: yes
         PASS [   0.011s] (26/57) atelier-records mission_plan_review::tests::rejects_provenance_loss_non_independent_approval_and_unresolved_findings
         PASS [   0.013s] (27/57) atelier-records mission_plan_review::tests::rejects_whitespace_varia
 ```
-

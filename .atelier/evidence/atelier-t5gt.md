@@ -164,4 +164,3 @@ Truncated: no
 ```text
 bash: line 15: review: command not found
 ```
-

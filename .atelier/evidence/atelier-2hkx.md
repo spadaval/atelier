@@ -89,4 +89,3 @@ Truncated: yes
         PASS [   0.031s] ( 28/781) atelier-app command_surface::tests::extracts_visible_roots_without_removed_or_hidden_sections
         PASS [   0.051s] ( 29/781)
 ```
-

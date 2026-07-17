@@ -88,4 +88,3 @@ Truncated: yes
         PASS [   0.029s] ( 31/781) atelier-app forgejo::tests::finds_and_shows_pull_request_state
         PASS [   0.0
 ```
-
