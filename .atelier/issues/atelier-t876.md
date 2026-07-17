@@ -8,6 +8,10 @@ labels:
 - "subskill-validate"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 75
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-p4z2
@@ -25,9 +29,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Validate independent mission planning and readiness end to end"
-updated_at: "2026-07-17T00:09:39.233600435+00:00"
+updated_at: "2026-07-17T00:16:13.863284980+00:00"
 ---
 
 ## Description
