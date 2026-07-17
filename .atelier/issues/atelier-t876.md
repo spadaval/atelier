@@ -8,6 +8,15 @@ labels:
 - "subskill-validate"
 - "validation"
 - "workflow"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-p4z2
+    integration_target: mission/atelier-p4z2
+    merge_strategy: squash
+    owner_issue_id: atelier-t876
+    owner_kind: issue
+    review_target: mission/atelier-p4z2
+    work_branch: validation/atelier-t876
 priority: "P1"
 relationships:
   blocks: []
@@ -16,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate independent mission planning and readiness end to end"
-updated_at: "2026-07-07T05:42:00.000000000+00:00"
+updated_at: "2026-07-17T00:09:39.233600435+00:00"
 ---
 
 ## Description
