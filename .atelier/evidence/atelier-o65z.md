@@ -88,4 +88,3 @@ Truncated: yes
         PASS [   0.011s] ( 31/781) atelier-app mission_overview::tests::projects_directed_epics_direct_work_descendants_and_blocker_state
         PASS [   0.011s] (
 ```
-

@@ -60,4 +60,3 @@ Truncated: no
 error: no tests to run
 (hint: use `--no-tests` to customize)
 ```
-

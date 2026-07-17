@@ -83,4 +83,3 @@ Truncated: yes
         PASS [   0.582s] (26/37) atelier-cli::cli_integration mission_plan_review_lifecycle::transitive_dependency_diagnosis_names_full_path_and_terminal_next_command
         PASS [   0.598s] (27/37) atelier-cli::cli_inte
 ```
-
