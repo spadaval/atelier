@@ -44,9 +44,6 @@ statuses:
     category: done
   superseded:
     category: done
-  plan_review:
-    category: active
-    role: reviewer
 workflows:
   mission:
     applies_to:
@@ -57,20 +54,13 @@ workflows:
     - closed
     - superseded
     transitions:
-      request_plan_review:
-        from:
-        - draft
-        to: plan_review
-        description: Submit the exact current mission graph for independent plan review.
-        validators:
-        - issue.sections_parseable
       ready:
         from:
-        - plan_review
+        - draft
         to: ready
-        description: Make an independently approved exact mission graph ready for execution.
+        description: Make a worker-usable mission ready for execution.
         validators:
-        - plan_review.current_approval
+        - issue.sections_parseable
         - blockers.transitive_none_open
       start:
         from:
@@ -78,7 +68,6 @@ workflows:
         to: in_progress
         description: Start coordinated mission work.
         validators:
-        - plan_review.current_approval
         - blockers.transitive_none_open
         - git.worktree_clean
         actions:

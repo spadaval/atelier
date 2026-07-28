@@ -29,15 +29,6 @@ independent judgment is required. Direct evidence on a mission is legacy,
 migration-only, or explicitly workflow-configured; it is not the normal way to
 satisfy mission proof.
 
-Mission-plan review is a readiness judgment, not execution proof. Before a
-configured mission becomes executable, an independent reviewer applies the
-normative [Mission And Issue-Set Authoring
-Standard](../../product/mission-authoring.md) to the exact current mission
-graph. Its findings, resolutions, and approval are canonical plan-review
-events. They do not replace implementation evidence, code review, or
-validator-authored outcome proof, and the plan author does not prewrite the
-later validation transcript.
-
 Session `show` and `list` are read-only inspection surfaces over derived issue
 activity. They can support attribution proof, but they do not create, end, or
 mutate workflow state.
@@ -50,7 +41,6 @@ detail at every parent layer.
 | Layer | Owns | Avoid |
 | --- | --- | --- |
 | Mission `Outcome` | Mission-level target state, explicit non-scope, and the root work directly linked by `advances`; descendants of those roots carry detailed work. | Child implementation steps, exact file lists, every command each issue must run, or prewritten validation paperwork. |
-| Mission-plan review | Independent readiness judgment over the exact mission and reachable issue graph, including findings with affected IDs or dependency paths and revision-bound approval. | Editing the authored graph, reviewing code, defining validator transcripts, recording implementation proof, or granting merge authority. |
 | Epic `Outcome` | Cohesive product, process, or architecture result and branch/review scope. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
 | Executable issue `Outcome`/explicit `Evidence` | The local observable result and any named check for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
 | Dedicated validation issue `Outcome` | Independent judgment derived from the target Outcome, claim classification, evaluator context, baseline or scenario setup when needed, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |

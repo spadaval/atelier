@@ -147,10 +147,6 @@ enum Commands {
         input: Option<String>,
     },
 
-    /// One-shot independent mission plan-review cutover
-    #[command(hide = true)]
-    MigrateMissionPlanReview,
-
     /// Import Beads JSONL backup into durable record files; cache repair remains lazy
     #[command(hide = true)]
     ImportBeads {
@@ -405,14 +401,6 @@ enum IssueCommands {
         verbose: bool,
     },
 
-    /// Record exact-revision independent mission-plan review decisions
-    PlanReview {
-        /// Mission issue ID
-        id: String,
-        #[command(subcommand)]
-        action: PlanReviewCommands,
-    },
-
     /// Update an issue
     Update {
         /// Issue ID
@@ -487,40 +475,6 @@ enum IssueCommands {
         #[arg(long, default_value = "advances")]
         role: String,
     },
-}
-
-#[derive(Subcommand)]
-enum PlanReviewCommands {
-    /// Submit the current mission graph and move the mission to plan_review
-    Request,
-    /// Attribute material edits and resubmit the current graph for review
-    Rework,
-    /// Record a reviewer finding against the exact current graph
-    Finding {
-        finding_id: String,
-        #[arg(long, default_value = "blocking")]
-        severity: String,
-        #[arg(long = "affected", required = true)]
-        affected_issue_ids: Vec<String>,
-        #[arg(long = "dependency-path")]
-        dependency_path: Vec<String>,
-    },
-    /// Request changes against the exact current graph
-    ChangeRequest {
-        request_id: String,
-        #[arg(long = "affected", required = true)]
-        affected_issue_ids: Vec<String>,
-        #[arg(long = "dependency-path")]
-        dependency_path: Vec<String>,
-    },
-    /// Resolve a finding or change request without granting approval
-    Resolve {
-        target_id: String,
-        #[arg(long)]
-        disposition: String,
-    },
-    /// Approve the exact current graph as an independent reviewer
-    Approve,
 }
 
 #[derive(Subcommand)]
@@ -888,30 +842,6 @@ fn run() -> Result<()> {
                 .unwrap_or_else(|| storage.state_dir());
             let db_path = storage.db_path();
             commands::issue::rebuild(&state_dir, &db_path)
-        }
-
-        Commands::MigrateMissionPlanReview => {
-            let manager = CacheManager::discover()?;
-            let report = atelier_app::mission_plan_migration::run(manager.repo_root())?;
-            atelier_app::rebuild::run(&manager.state_dir(), &manager.db_path())?;
-            if quiet {
-                println!("{}", report.mission_count);
-            } else if report.already_applied {
-                println!(
-                    "Independent mission plan-review cutover already applied ({} missions validated).",
-                    report.mission_count
-                );
-            } else {
-                println!(
-                    "Migrated {} missions: {} terminal unchanged, {} draft unchanged, {} moved to plan_review, {} active grandfathered.",
-                    report.mission_count,
-                    report.terminal_count,
-                    report.draft_count,
-                    report.plan_review_count,
-                    report.active_count
-                );
-            }
-            Ok(())
         }
 
         Commands::ImportBeads { input, output } => {
@@ -1354,10 +1284,9 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Evidence {
             action: EvidenceCommands::Record { command, .. },
         } if !command.is_empty() => CanonicalTransactionMode::None,
-        Commands::Man { .. }
-        | Commands::MigrateMissionPlanReview
-        | Commands::Diagnostics { .. }
-        | Commands::Prune { .. } => CanonicalTransactionMode::None,
+        Commands::Man { .. } | Commands::Diagnostics { .. } | Commands::Prune { .. } => {
+            CanonicalTransactionMode::None
+        }
         _ => CanonicalTransactionMode::Shared,
     }
 }
@@ -1401,7 +1330,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
-            IssueCommands::PlanReview { .. } => "issue plan-review",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Link { .. } => "issue link",
@@ -1415,7 +1343,6 @@ fn command_identity(command: &Commands) -> &'static str {
             }
         }
         Commands::Rebuild { .. } => "rebuild",
-        Commands::MigrateMissionPlanReview => "migrate-mission-plan-review",
         Commands::ImportBeads { .. } => "import-beads",
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",
@@ -1482,14 +1409,7 @@ mod cache_acquisition_tests {
     #[test]
     fn command_backed_evidence_defers_association_transaction_until_after_child() {
         let capture = Cli::try_parse_from([
-            "atelier",
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "--",
-            "atelier",
-            "migrate-mission-plan-review",
+            "atelier", "evidence", "record", "--kind", "test", "--", "atelier", "status",
         ])
         .expect("command-backed evidence CLI");
         assert!(!command_uses_canonical_transaction(&capture.command));

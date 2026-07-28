@@ -3189,14 +3189,13 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--ready"]);
     assert!(success, "work mission --ready failed: {stderr}");
     assert!(ready.contains("Ready Work"), "{ready}");
-    assert!(ready.contains("(none)"), "{ready}");
-    assert!(!ready.contains(&ready_id), "{ready}");
+    assert!(ready.contains(&ready_id), "{ready}");
     assert!(!ready.contains("Blocked mission work"), "{ready}");
 
     let (success, blocked, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id, "--blocked"]);
     assert!(success, "work mission --blocked failed: {stderr}");
-    assert!(blocked.contains("Ready mission work"), "{blocked}");
+    assert!(!blocked.contains("Ready mission work"), "{blocked}");
     assert!(blocked.contains("Blocked mission work"), "{blocked}");
     assert!(blocked.contains(&blocker_id), "{blocked}");
 
@@ -3205,7 +3204,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     set_issue_status(dir.path(), &blocker_id, "done");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after status setup failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "reviewed dashboard mission");
     let (success, closeout_ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id]);

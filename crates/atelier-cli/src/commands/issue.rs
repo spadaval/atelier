@@ -1541,19 +1541,6 @@ fn filter_ready_rows(
         .iter()
         .map(|row| row.id.clone())
         .collect::<BTreeSet<_>>();
-    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
-    let mission_allowances = match workflow_policy {
-        Some(policy) => {
-            atelier_app::mission_readiness::execution_allowances_for_candidates(
-                db,
-                &state_dir,
-                policy,
-                &candidate_ids,
-            )?
-            .allowed_by_issue
-        }
-        None => BTreeMap::new(),
-    };
     let dependency_ready = match workflow_policy {
         Some(policy) => {
             atelier_app::objective_graph::dependency_readiness_batch(
@@ -1567,9 +1554,6 @@ fn filter_ready_rows(
     };
     rows.into_iter()
         .map(|row| {
-            if !mission_allowances.get(&row.id).copied().unwrap_or(true) {
-                return Ok((row, false));
-            }
             if workflow_policy.is_some() && !dependency_ready.get(&row.id).copied().unwrap_or(false)
             {
                 return Ok((row, false));

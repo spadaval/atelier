@@ -7,8 +7,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::mission_plan_review::{MissionGraphRevision, MissionPlanReviewEvent};
-
 const ACTIVITY_SCHEMA: &str = "atelier.activity";
 const ACTIVITY_SCHEMA_VERSION: i64 = 1;
 
@@ -23,7 +21,6 @@ pub struct IssueActivity {
     pub summary: String,
     pub pr_attribution: Option<ActivityPrAttribution>,
     pub workflow_transition: Option<WorkflowTransitionActivity>,
-    pub mission_plan_review: Option<MissionPlanReviewEvent>,
     pub body: String,
 }
 
@@ -40,19 +37,10 @@ pub struct ActivityPrAttribution {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct MissionPlanStartAuthorization {
-    pub graph_revision: MissionGraphRevision,
-    pub approval_activity_id: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct WorkflowTransitionActivity {
     pub transition: String,
     pub from: String,
     pub to: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mission_plan_start: Option<MissionPlanStartAuthorization>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -70,7 +58,6 @@ pub enum ActivityEventType {
     EvidenceAttached,
     TransitionApplied,
     TransitionBlocked,
-    MissionPlanReview,
 }
 
 impl ActivityEventType {
@@ -89,7 +76,6 @@ impl ActivityEventType {
             Self::EvidenceAttached => "evidence_attached",
             Self::TransitionApplied => "transition_applied",
             Self::TransitionBlocked => "transition_blocked",
-            Self::MissionPlanReview => "mission_plan_review",
         }
     }
 }
@@ -118,7 +104,6 @@ impl FromStr for ActivityEventType {
             "evidence_attached" => Ok(Self::EvidenceAttached),
             "transition_applied" => Ok(Self::TransitionApplied),
             "transition_blocked" => Ok(Self::TransitionBlocked),
-            "mission_plan_review" => Ok(Self::MissionPlanReview),
             other => bail!("Unsupported activity event_type '{}'", other),
         }
     }
@@ -140,8 +125,6 @@ struct ActivityFrontMatter {
     pr_attribution: Option<ActivityPrAttribution>,
     #[serde(default)]
     workflow_transition: Option<WorkflowTransitionActivity>,
-    #[serde(default)]
-    mission_plan_review: Option<MissionPlanReviewEvent>,
 }
 
 #[cfg(test)]
@@ -336,36 +319,6 @@ pub fn create_issue_activity_with_metadata(
     )
 }
 
-/// Append one typed mission-plan review event to a mission's activity stream.
-pub fn create_mission_plan_review_activity(
-    state_dir: &Path,
-    mission_id: &str,
-    actor: &str,
-    created_at: DateTime<Utc>,
-    summary: &str,
-    event: MissionPlanReviewEvent,
-    body: &str,
-) -> Result<IssueActivity> {
-    let _transaction = crate::mutation_lock::CanonicalMutationLock::shared(state_dir)?;
-    let created_at = canonical_activity_timestamp(created_at);
-    let id = allocate_activity_id(state_dir, "issue", mission_id, created_at)?;
-    let activity = IssueActivity {
-        id,
-        subject_kind: "issue".to_string(),
-        subject_id: mission_id.to_string(),
-        event_type: ActivityEventType::MissionPlanReview,
-        actor: actor.to_string(),
-        created_at,
-        summary: summary.to_string(),
-        pr_attribution: None,
-        workflow_transition: None,
-        mission_plan_review: Some(event),
-        body: normalize_body(body),
-    };
-    write_record_activity(state_dir, &activity)?;
-    Ok(activity)
-}
-
 pub fn create_record_activity(
     state_dir: &Path,
     subject_kind: &str,
@@ -414,7 +367,6 @@ pub fn create_record_activity_with_metadata(
         summary: summary.to_string(),
         pr_attribution,
         workflow_transition: None,
-        mission_plan_review: None,
         body: normalize_body(body),
     };
     write_record_activity(state_dir, &activity)?;
@@ -471,7 +423,6 @@ impl IssueActivity {
             front.workflow_transition.as_ref(),
             relative,
         )?;
-        validate_plan_review_metadata(event_type, front.mission_plan_review.as_ref(), relative)?;
         validate_activity_timestamp(front.created_at).with_context(|| {
             format!(
                 "Invalid activity timestamp in {}",
@@ -489,7 +440,6 @@ impl IssueActivity {
             summary: front.summary,
             pr_attribution: front.pr_attribution,
             workflow_transition: front.workflow_transition,
-            mission_plan_review: front.mission_plan_review,
             body: body.to_string(),
         })
     }
@@ -535,16 +485,6 @@ impl IssueActivity {
             "workflow_transition",
             self.workflow_transition.as_ref(),
         )?;
-        validate_plan_review_metadata(
-            self.event_type,
-            self.mission_plan_review.as_ref(),
-            Path::new("<generated>"),
-        )?;
-        write_yaml_struct_if_some(
-            &mut output,
-            "mission_plan_review",
-            self.mission_plan_review.as_ref(),
-        )?;
         output.push_str("---\n\n");
         output.push_str(&normalize_body(&self.body));
         output.push('\n');
@@ -575,38 +515,10 @@ pub fn create_workflow_transition_activity(
         summary: summary.to_string(),
         pr_attribution: None,
         workflow_transition: Some(workflow_transition),
-        mission_plan_review: None,
         body: normalize_body(body),
     };
     write_record_activity(state_dir, &activity)?;
     Ok(activity)
-}
-
-fn validate_plan_review_metadata(
-    event_type: ActivityEventType,
-    event: Option<&MissionPlanReviewEvent>,
-    relative: &Path,
-) -> Result<()> {
-    match (event_type, event) {
-        (ActivityEventType::MissionPlanReview, Some(event)) => {
-            event.validate().with_context(|| {
-                format!(
-                    "Invalid mission-plan review event in {}",
-                    display_state_path(relative)
-                )
-            })
-        }
-        (ActivityEventType::MissionPlanReview, None) => bail!(
-            "Mission-plan review activity in {} is missing mission_plan_review metadata",
-            display_state_path(relative)
-        ),
-        (_, Some(_)) => bail!(
-            "Activity in {} has mission_plan_review metadata but event_type is '{}'",
-            display_state_path(relative),
-            event_type
-        ),
-        (_, None) => Ok(()),
-    }
 }
 
 fn validate_workflow_transition_metadata(
@@ -632,24 +544,6 @@ fn validate_workflow_transition_metadata(
         if value.trim().is_empty() {
             bail!(
                 "workflow_transition.{field} in {} must not be empty",
-                display_state_path(relative)
-            );
-        }
-    }
-    if let Some(authorization) = &transition.mission_plan_start {
-        if transition.transition != "start"
-            || transition.from != "ready"
-            || transition.to != "in_progress"
-        {
-            bail!(
-                "mission_plan_start in {} is valid only for start (ready -> in_progress)",
-                display_state_path(relative)
-            );
-        }
-        authorization.graph_revision.validate()?;
-        if authorization.approval_activity_id.trim().is_empty() {
-            bail!(
-                "mission_plan_start.approval_activity_id in {} must not be empty",
                 display_state_path(relative)
             );
         }
@@ -755,7 +649,6 @@ mod tests {
             summary: "Implemented activity sidecars".to_string(),
             pr_attribution: None,
             workflow_transition: None,
-            mission_plan_review: None,
             body: "Line one\n\nLine two".to_string(),
         }
     }
@@ -842,61 +735,6 @@ mod tests {
         .unwrap();
         assert_eq!(parsed, activity);
         assert_eq!(parsed.to_markdown().unwrap(), rendered);
-    }
-
-    #[test]
-    fn mission_start_authorization_round_trips_as_typed_transition_metadata() {
-        let authorization = MissionPlanStartAuthorization {
-            graph_revision: MissionGraphRevision(format!(
-                "mission-graph-v2:sha256:{}",
-                "a".repeat(64)
-            )),
-            approval_activity_id: "20260610T181919123456Z".to_string(),
-        };
-        let transition = WorkflowTransitionActivity {
-            transition: "start".to_string(),
-            from: "ready".to_string(),
-            to: "in_progress".to_string(),
-            mission_plan_start: Some(authorization),
-        };
-        let mut activity = activity();
-        activity.event_type = ActivityEventType::TransitionApplied;
-        activity.workflow_transition = Some(transition);
-
-        let rendered = activity.to_markdown().unwrap();
-        assert!(rendered.contains("workflow_transition:"));
-        assert!(rendered.contains("mission_plan_start:"));
-        assert!(rendered.contains("approval_activity_id:"));
-        let parsed = IssueActivity::from_markdown(
-            &rendered,
-            &issue_activity_path(&activity.subject_id, &activity.id),
-        )
-        .unwrap();
-        assert_eq!(parsed, activity);
-    }
-
-    #[test]
-    fn mission_start_authorization_is_rejected_outside_exact_start_transition() {
-        let mut activity = activity();
-        activity.event_type = ActivityEventType::TransitionApplied;
-        activity.workflow_transition = Some(WorkflowTransitionActivity {
-            transition: "ready".to_string(),
-            from: "plan_review".to_string(),
-            to: "ready".to_string(),
-            mission_plan_start: Some(MissionPlanStartAuthorization {
-                graph_revision: MissionGraphRevision(format!(
-                    "mission-graph-v2:sha256:{}",
-                    "b".repeat(64)
-                )),
-                approval_activity_id: "20260610T181919123456Z".to_string(),
-            }),
-        });
-
-        let error = activity.to_markdown().unwrap_err().to_string();
-        assert!(
-            error.contains("valid only for start (ready -> in_progress)"),
-            "{error}"
-        );
     }
 
     #[test]

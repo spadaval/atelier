@@ -95,12 +95,12 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     );
     assert!(success, "mission fixture bundle apply failed: {stderr}");
     let mission_id = issue_id_by_title(dir, title);
-    move_reviewed_mission_to_ready(dir, &mission_id);
+    move_mission_directly_to_ready(dir, &mission_id);
     mission_id
 }
 
 fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
-    move_reviewed_mission_to_ready(dir, mission_id);
+    move_mission_directly_to_ready(dir, mission_id);
 }
 
 fn set_dependency_fixture_status(dir: &std::path::Path, issue_id: &str, status: &str) {
@@ -172,7 +172,6 @@ fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "dependency fixture link failed: {stderr}");
     }
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "mission dependency closure fixture");
 
     let (success, direct_options, stderr) = run_atelier(
@@ -984,7 +983,6 @@ fn test_mission_request_publish_uses_configured_objective_validators() {
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission link failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "configured validator publish fixture");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1095,7 +1093,6 @@ fn test_mission_publish_enforces_gates() {
     let work_id = issue_id_by_title(dir.path(), "Publish work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "ready strict mission publish");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1168,7 +1165,6 @@ fn test_dirty_worktree_blocks_mission_publish() {
     let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1277,7 +1273,6 @@ fn test_mission_publish_still_blocks_hand_edited_issue_markdown() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty canonical mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -2692,7 +2687,7 @@ fn test_bundle_rejects_mission_parent_scope() {
 }
 
 #[test]
-fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_state() {
+fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserves_state() {
     for status in ["ready", "in_progress"] {
         let dir = tempdir().unwrap();
         init_atelier(dir.path());
@@ -2735,9 +2730,9 @@ fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_st
             &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
         );
 
-        assert!(!success, "unreviewed {status} mission must be rejected");
+        assert!(!success, "blocked {status} mission must be rejected");
         assert!(
-            stderr.contains("workflow_mission_plan_review_bypass"),
+            stderr.contains("workflow_mission_dependency_bypass"),
             "{stderr}"
         );
         assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
@@ -2792,7 +2787,7 @@ fn test_bundle_apply_accepts_non_executable_initial_statuses() {
 }
 
 #[test]
-fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() {
+fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2825,21 +2820,15 @@ fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() 
     let state_dir = dir.path().join(".atelier");
     let db_path = state_dir.join("runtime/state.db");
     let canonical_before = canonical_tree_snapshot(&state_dir);
-    let db_before = std::fs::read(&db_path).unwrap();
 
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
         &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
     );
 
-    assert!(!success, "stale executable mission review must be rejected");
-    assert!(
-        stderr.contains("workflow_mission_plan_review_bypass"),
-        "{stderr}"
-    );
-    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
-    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
-    assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+    assert!(success, "ordinary graph edit should apply: {stderr}");
+    assert_ne!(canonical_tree_snapshot(&state_dir), canonical_before);
+    assert!(db_path.exists());
 }
 
 #[test]
@@ -3437,7 +3426,7 @@ fn test_mission_start_prepares_mission_branch_from_base() {
     );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = issue_id_by_title(dir.path(), "Integration mission");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission branch baseline");
 
     let (success, start_out, stderr) =
@@ -3498,7 +3487,7 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission scoped baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -3601,7 +3590,7 @@ fn test_epic_close_integrates_into_recorded_mission_branch() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission close target baseline");
 
     let (success, _, stderr) =
@@ -3689,7 +3678,7 @@ fn test_epic_start_requires_started_mission_branch_for_mission_scope() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "wrong branch baseline");
 
     let status = Command::new("git")
@@ -3750,7 +3739,7 @@ fn test_epic_start_from_other_branch_uses_recorded_mission_branch() {
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "side branch mission baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);

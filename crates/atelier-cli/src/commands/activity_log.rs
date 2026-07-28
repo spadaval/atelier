@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use atelier_records::activity::{
     create_issue_activity_with_metadata, create_workflow_transition_activity, ActivityEventType,
-    ActivityPrAttribution, MissionPlanStartAuthorization, WorkflowTransitionActivity,
+    ActivityPrAttribution, WorkflowTransitionActivity,
 };
 
 pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
@@ -138,7 +138,6 @@ pub fn record_transition_applied(
     transition: &str,
     from: &str,
     to: &str,
-    mission_plan_start: Option<MissionPlanStartAuthorization>,
 ) -> Result<()> {
     if transition == "request_review" || transition == "request_validation" || done_status(to) {
         record(
@@ -161,7 +160,6 @@ pub fn record_transition_applied(
             transition: transition.to_string(),
             from: from.to_string(),
             to: to.to_string(),
-            mission_plan_start,
         },
         &transition_body(transition, from, Some(to), None),
     )?;

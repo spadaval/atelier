@@ -2103,22 +2103,18 @@ fn test_man_lists_roles_and_topics() {
 }
 
 #[test]
-fn test_man_plan_review_roles_explain_independent_handoff() {
+fn test_man_planning_guidance_keeps_mission_flow_direct() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     let (success, planner, stderr) = run_atelier(dir.path(), &["man", "planner"]);
     assert!(success, "man planner failed: {stderr}");
-    assert!(planner.contains("atelier issue plan-review <mission-id> request"));
-    assert!(planner.contains("atelier issue plan-review <mission-id> rework"));
-    assert!(planner.contains("approval of a graph you authored or materially edited"));
+    assert!(planner.contains("atelier issue transition <mission-id> ready"));
+    assert!(!planner.contains("plan-review"));
 
     let (success, reviewer, stderr) = run_atelier(dir.path(), &["man", "reviewer"]);
     assert!(success, "man reviewer failed: {stderr}");
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> finding"));
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> change-request"));
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> approve"));
-    assert!(reviewer.contains("authoring or materially editing the graph being approved"));
+    assert!(!reviewer.contains("plan-review"));
 }
 
 #[test]

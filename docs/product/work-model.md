@@ -13,9 +13,6 @@ separate issue hierarchy.
   descendants of those linked roots. It may be the shared background workspace
   boundary when the repository workflow and assignment model choose that
   coordination shape.
-- Mission-plan review: independent judgment of an exact mission graph revision
-  before that graph becomes executable. It evaluates the complete issue set and
-  records findings or approval; it is not code review or outcome validation.
 - Status role: optional workflow policy on an active status that names the role
   currently responsible for that work state. Status roles are displayed by
   status/man surfaces and used as the default role for review attribution.
@@ -113,14 +110,6 @@ transition actions run, and explicit validation approval applies only when
 Mission `Outcome` prose is the target state validators read; planner-authored
 validation scenarios are optional and reserved for explicit product contracts
 or known risks.
-
-Pre-execution plan approval is a separate readiness input. It asks an
-independent reviewer to inspect the Outcome and its complete reachable issue
-set against the normative [Mission And Issue-Set Authoring
-Standard](mission-authoring.md). The reviewer approves one exact graph revision.
-This broader readiness judgment does not move execution proof into the plan:
-validators still derive scenarios after implementation, and evidence remains a
-receipt for a check that actually ran.
 
 Missions do not have a hidden built-in lifecycle. If a repository wants
 mission-shaped work, it declares the issue type, statuses, done statuses,
@@ -241,53 +230,19 @@ completion state harder to scan.
 
 ## Mission Planning Lifecycle
 
-This repository's accepted target configures
-`draft -> plan_review -> ready -> in_progress` for mission-shaped issues. A
-draft and its advancing work remain outside executable mission work selection
-until a current independent approval exists.
+Mission-shaped issues use `draft -> ready -> in_progress`. Moving to `ready`
+checks that the mission's required sections are readable and its declared
+blockers are clear. Starting rechecks blockers and performs configured branch
+preparation.
 
-The plan-review revision includes authored mission and reachable-work content,
-scope roots, hierarchy, and workflow-driving blocker/dependency edges. Material
-changes to those inputs make approval stale. Notes, activity, status changes,
-evidence receipts, code commits, and context-only links do not. `ready` and
-`start` both check current approval; `start` also checks the transitive closure
-of declared mission blockers. Internal advancing work is the work to execute,
-not a prerequisite that must already be complete.
+Planning is not frozen at mission start. Managers may edit the mission graph as
+evidence arrives: add or split work, change sequencing, record blockers, and
+supersede obsolete speculative issues. These are ordinary planning-file
+changes, not authorization events.
 
-The reviewer must be distinct from the plan author and every attributed
-material editor. Missing attribution blocks approval rather than establishing
-independence. Blocking findings must be resolved, and a later change request
-must no longer be effective, before approval can satisfy readiness.
-
-Migration does not invent approval. Legacy drafts remain drafts, ready missions
-move to `plan_review`, active missions retain only an explicit grandfather for
-their exact cutover revision, and terminal history is unchanged. A material
-edit makes an active mission's grandfather stale and blocks not-yet-started
-graph work until the current revision receives independent approval. See
-[ADR 0018](../adr/0018-independent-mission-plan-review.md) for canonical inputs,
-event provenance, and the complete migration table.
-
-Repositories still carrying the legacy direct-ready policy use the hidden,
-one-shot admin command `atelier migrate-mission-plan-review`. It inventories
-canonical mission records, validates a complete staged cutover, and then
-installs the policy, status changes, manifest, and grandfather receipts under
-an exclusive canonical-mutation lock. Normal repository commands hold the
-corresponding shared lock across their complete read, validation, and write
-transaction, including bulk imports and directory swaps. Original and target
-bytes plus a complete canonical-tree manifest of paths, types, and file hashes
-are persisted in a synchronized recovery journal before any replacement;
-symlinks and special files are rejected. Prerequisites are made durable first,
-the complete canonical snapshot is compared again, and the workflow is
-activated last. The next invocation deterministically completes an exact
-post-state or rolls back with the workflow deactivated first after a process or
-machine interruption. Any unrelated addition, edit, deletion, or type change
-is named and left untouched; restore that named path before retrying recovery.
-Repository-specific mission transitions, actions, validators, and roles outside
-the three lifecycle transitions are preserved. A repeat
-invocation validates the installed state and makes no canonical changes. On
-failure, repair the named `.atelier` source, run
-`atelier check --fix`, and retry; SQLite is disposable and is never a migration
-source.
+Review and validation remain available as accountable work when risk warrants
+them. They judge code or behavior; they do not grant permission to plan or
+execute a mission.
 
 ## Workspace, Branch, And Review Boundaries
 

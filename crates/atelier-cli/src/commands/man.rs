@@ -270,13 +270,13 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!(
                 "  1. atelier work mission <mission-id> - Inspect the authored mission graph."
             );
-            println!("  2. atelier issue plan-review <mission-id> request - Hand the exact graph to review.");
-            println!("  3. atelier issue show <mission-id> - Follow the current review diagnosis.");
+            println!("  2. atelier bundle preview <file> - Check a multi-record planning change.");
+            println!("  3. atelier issue transition <mission-id> ready - Mark a worker-usable mission ready.");
         }
         Role::Reviewer => {
-            println!("  1. atelier issue show <mission-id> - Inspect the exact graph and review diagnosis.");
-            println!("  2. atelier issue plan-review <mission-id> finding <finding-id> --affected <issue-id> - Record a graph finding.");
-            println!("  3. atelier issue plan-review <mission-id> approve - Approve as an independent reviewer.");
+            println!("  1. atelier issue show <id> - Inspect the work and linked review artifact.");
+            println!("  2. atelier review show <review-id> - Inspect the configured code review.");
+            println!("  3. atelier issue transition <id> - Follow current review-state guidance.");
         }
         Role::Validator => {
             println!("  1. atelier issue show <id> - Read the target Outcome and linked proof.");
@@ -286,7 +286,9 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         Role::Manager => {
             println!("  1. atelier work missions - Compare mission scope and readiness.");
             println!("  2. atelier work mission <mission-id> - Inspect dependency-safe work.");
-            println!("  3. atelier issue show <mission-id> - Follow the review diagnosis.");
+            println!(
+                "  3. atelier issue show <mission-id> - Inspect state, blockers, and next action."
+            );
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
@@ -312,17 +314,15 @@ fn print_normal_loop(role: Role) {
         }
         Role::Planner => {
             println!("  atelier work mission <mission-id>");
-            println!("  atelier issue plan-review <mission-id> request");
-            println!("  atelier issue plan-review <mission-id> rework");
-            println!("  atelier issue plan-review <mission-id> resolve <decision-id> --disposition \"...\"");
+            println!("  atelier bundle preview <file>");
+            println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue show <mission-id>");
+            println!("  atelier issue transition <mission-id> ready");
         }
         Role::Reviewer => {
-            println!("  atelier issue show <mission-id>");
-            println!("  atelier issue plan-review <mission-id> finding <finding-id> --affected <issue-id>");
-            println!("  atelier issue plan-review <mission-id> change-request <request-id> --affected <issue-id>");
-            println!("  atelier issue plan-review <mission-id> approve");
-            println!("  atelier history --issue <mission-id>");
+            println!("  atelier issue show <id>");
+            println!("  atelier review show <review-id>");
+            println!("  atelier history --issue <id>");
         }
         Role::Validator => {
             println!("  atelier issue show <id>");
@@ -366,18 +366,15 @@ fn print_not_usually(role: Role) {
             println!("  diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Planner => {
-            println!("  approval of a graph you authored or materially edited");
+            println!("  implementation and validation outside the planned scope");
         }
         Role::Reviewer => {
-            println!("  authoring or materially editing the graph being approved");
+            println!("  implementation changes while acting as an independent code reviewer");
         }
         Role::Validator => {
             println!("  issue creation, mission scope mutation, merge decisions outside assigned validation");
         }
         Role::Manager => {
-            println!(
-                "  mission-plan approval; planners author and reviewers independently approve"
-            );
             println!("  diagnostics slow, rebuild; shell loops for bulk graph creation");
         }
         Role::Admin => {

@@ -30,9 +30,6 @@ issue_types:
 statuses:
   draft:
     category: todo
-  plan_review:
-    category: active
-    role: reviewer
   ready:
     category: todo
   todo:
@@ -61,25 +58,18 @@ workflows:
     initial_status: draft
     done_statuses: [publish_review, closed]
     transitions:
-      request_plan_review:
+      ready:
         from: [draft]
-        to: plan_review
-        description: "Submit the exact current mission graph for independent plan review."
+        to: ready
+        description: "Make a worker-usable mission ready for execution."
         validators:
           - issue.sections_parseable
-      ready:
-        from: [plan_review]
-        to: ready
-        description: "Make an independently approved exact mission graph ready for execution."
-        validators:
-          - plan_review.current_approval
           - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - plan_review.current_approval
           - blockers.transitive_none_open
           - git.worktree_clean
         actions:
@@ -260,7 +250,6 @@ const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "issue.sections_parseable",
-    "plan_review.current_approval",
     "evidence.attached",
     "review.complete",
     "children.proof_complete",
@@ -2779,23 +2768,18 @@ mod tests {
     }
 
     #[test]
-    fn starter_policy_requires_independent_review_before_mission_execution() {
+    fn starter_policy_keeps_mission_planning_lightweight() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        assert_eq!(policy.status_role("plan_review"), Some("reviewer"));
         let mission = &policy.workflows["mission"];
-        assert_eq!(mission.transitions["request_plan_review"].from, ["draft"]);
-        assert_eq!(mission.transitions["request_plan_review"].to, "plan_review");
-        assert_eq!(mission.transitions["ready"].from, ["plan_review"]);
-        for transition_name in ["ready", "start"] {
-            assert!(mission.transitions[transition_name]
-                .validators
-                .iter()
-                .any(|validator| validator.builtin == "plan_review.current_approval"));
-            assert!(mission.transitions[transition_name]
-                .validators
-                .iter()
-                .any(|validator| validator.builtin == "blockers.transitive_none_open"));
-        }
+        assert_eq!(mission.transitions["ready"].from, ["draft"]);
+        assert!(mission.transitions["ready"]
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "issue.sections_parseable"));
+        assert!(mission.transitions["start"]
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "blockers.transitive_none_open"));
     }
 
     #[test]
