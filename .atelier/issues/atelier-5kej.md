@@ -6,6 +6,15 @@ labels:
 - "agent-factory"
 - "mission-control"
 - "planning"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-5kej
+    owner_kind: mission
+    review_target: master
+    work_branch: mission/atelier-5kej
 priority: "P1"
 relationships:
   blocks: []
@@ -26,9 +35,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Align Atelier with adaptive Agent Factory missions"
-updated_at: "2026-07-28T16:40:25.246916410+00:00"
+updated_at: "2026-08-05T18:02:11.358862444+00:00"
 ---
 
 ## Description
