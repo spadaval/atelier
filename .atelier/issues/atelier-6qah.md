@@ -20,6 +20,8 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-2pvp"
+  - kind: "issue"
     id: "atelier-ekg7"
   - kind: "issue"
     id: "atelier-lho9"
@@ -29,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T19:57:40.633541041+00:00"
+updated_at: "2026-08-05T20:11:43.925194086+00:00"
 ---
 
 ## Description
