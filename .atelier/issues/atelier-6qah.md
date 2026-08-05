@@ -33,9 +33,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T20:29:08.299907484+00:00"
+updated_at: "2026-08-05T20:38:59.873366910+00:00"
 ---
 
 ## Description
