@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T18:06:54.100828316+00:00"
+status: "done"
 title: "Publish the lightweight strategy and planning-layer contract"
-updated_at: "2026-08-05T18:06:15.032650870+00:00"
+updated_at: "2026-08-05T18:06:54.100828316+00:00"
 ---
 
 ## Description
