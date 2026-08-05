@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T19:12:08.305784903+00:00"
+status: "done"
 title: "Require proof route before epic readiness"
-updated_at: "2026-08-05T18:47:42.075297849+00:00"
+updated_at: "2026-08-05T19:12:08.305784903+00:00"
 ---
 
 ## Description

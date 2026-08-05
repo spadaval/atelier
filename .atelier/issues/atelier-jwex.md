@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T19:12:10.681413437+00:00"
+status: "done"
 title: "Unify blocked readiness across work views"
-updated_at: "2026-08-05T18:47:48.988741910+00:00"
+updated_at: "2026-08-05T19:12:10.681413437+00:00"
 ---
 
 ## Description
