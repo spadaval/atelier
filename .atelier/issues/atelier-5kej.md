@@ -6,6 +6,10 @@ labels:
 - "agent-factory"
 - "mission-control"
 - "planning"
+review:
+  kind: pull_request
+  number: 79
+  provider: forgejo
 strategy:
   path: docs/strategies/agent-factory-adaptive-missions.md
   revision: 2
