@@ -128,12 +128,12 @@ always from the source record to the target record named in that entry.
 | Slice | Ownership |
 | --- | --- |
 | Required front matter | Common fields plus `priority` and `issue_type`. |
-| Optional front matter | None in V1 beyond record-generic labels and relationships. |
+| Optional front matter | `strategy: {path, revision}` on mission issue records, plus record-generic labels and relationships. |
 | Required body | `## Description` and `## Outcome`. |
 | Optional body | `## Evidence` and `## Notes`; workflow policy and issue contracts may still require attached proof or authored proof prose for specific work. |
 | Derived | Workflow status category from `.atelier/workflow.yaml`; display priority bucket; inverse blockers/parents; recent activity preview from sidecars. |
 | Migration input | Legacy SQLite `description` values and unstructured imported prose must be converted to required record-file sections before target readers accept them. |
-| Forbidden | Front matter or duplicate body fields named `description`, `outcome`, `acceptance`, `evidence_required`, `depends_on`, or `blocked_by`. |
+| Forbidden | Front matter or duplicate body fields named `description`, `outcome`, `acceptance`, `evidence_required`, `depends_on`, or `blocked_by`. The typed `strategy` field is mission-only. |
 
 Issue priority is durable front matter owned by the issue record. The current
 canonical vocabulary is `P0`, `P1`, `P2`, and `P3`; human-facing terms such as
@@ -151,13 +151,13 @@ tokens; `review` and `validation` are workflow statuses in the active category.
 
 | Slice | Ownership |
 | --- | --- |
-| Required front matter | Common fields only. Mission semantics do not own extra scalar or JSON payload keys in front matter. |
-| Optional front matter | None in V1 beyond record-generic labels and relationships. |
+| Required front matter | Common fields only. |
+| Optional front matter | Typed `strategy: {path, revision}` plus record-generic labels and relationships. The reference identifies governing repository Markdown without copying its contents into tracker state. |
 | Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
 | Optional body | `## Terminal Notes` and `## Notes`. |
 | Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
 | Migration input | None. |
-| Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose may reference plan/checkpoint Markdown by path, but must not become a shadow graph. |
+| Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Strategy content and issue inventories stay out of mission front matter. |
 
 Mission objective status is type-aware issue workflow state. This repository's
 accepted target planning path is `draft`, `ready`, and `in_progress`, with

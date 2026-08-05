@@ -1198,14 +1198,12 @@ fn issue_description(issue: &BundleIssue) -> Option<String> {
     } else {
         bullet_list(&issue.outcome)
     };
-    let evidence = if issue.evidence.is_empty() {
-        "Evidence was not specified in the bundle.".to_string()
-    } else {
-        bullet_list(&issue.evidence)
-    };
-    Some(format!(
-        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n{evidence}"
-    ))
+    let mut body = format!("## Description\n\n{description}\n\n## Outcome\n\n{outcome}");
+    if !issue.evidence.is_empty() {
+        body.push_str("\n\n## Evidence\n\n");
+        body.push_str(&bullet_list(&issue.evidence));
+    }
+    Some(body)
 }
 
 fn bullet_list(values: &[String]) -> String {
@@ -1391,6 +1389,24 @@ mod tests {
         fs::create_dir_all(root.join("evidence")).unwrap();
         fs::write(root.join("issues/sentinel.md"), issues).unwrap();
         fs::write(root.join("evidence/sentinel.md"), evidence).unwrap();
+    }
+
+    #[test]
+    fn bundle_issue_omits_evidence_section_when_no_proof_is_planned() {
+        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({
+            "client_ref": "future.epic",
+            "title": "Future outcome",
+            "issue_type": "epic",
+            "description": "A meaningful draft outcome.",
+            "outcome": ["The future result is explicit."]
+        }))
+        .unwrap();
+
+        let body = issue_description(&issue).unwrap();
+
+        assert!(body.contains("## Outcome"));
+        assert!(!body.contains("## Evidence"));
+        assert!(!body.contains("Evidence was not specified"));
     }
 
     #[test]

@@ -9,6 +9,8 @@
   result states.
 - `agent-factory-atelier-validation.md`: scenario proof that Agent Factory can
   operate through Atelier.
+- `adaptive-mission-gap-analysis.md`: operator-scenario audit for governing
+  strategy, draft epics, ready horizons, expansion, replanning, and proof.
 - `cli-zen-audit-2026-06-14.md`: CLI surface audit against the Zen of Atelier,
   including command hierarchy, relationship ownership, proof capture, and
   recovery-surface findings.

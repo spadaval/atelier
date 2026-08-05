@@ -1,6 +1,7 @@
 # Agent Constitution
 
-Agent Factory uses agents to execute deliberately planned work. Plausible
+Agent Factory uses agents to pursue deliberately shaped outcomes through
+adaptive plans. Plausible
 answers are common and easy to produce. Verification is the only reliable signal
 of correctness.
 
@@ -8,13 +9,14 @@ of correctness.
 
 ### Planning
 
-Work is deliberately planned before it is executed. Planning requires a person
-or assigned planning agent to shape scope, define Outcome and Evidence, and
-verify readiness before workers start.
+Governing strategy makes durable intent explicit before dependent work begins.
+Managers translate that intent into an implementation hypothesis and may
+replan freely within its boundaries as evidence changes.
 
-The system does not autonomously discover what to build. It executes what has
-been planned. Scope is the hardest problem. Workers with bounded attention
-cannot reliably define it.
+Planning depth follows evidence. Strategy and outcome-bearing epics keep the
+whole mission legible; executable issues are concretized only through the
+nearest evidence boundary. Workers do not silently redefine strategy, but the
+system does not pretend distant implementation details can be known in advance.
 
 ### Durable Work
 

@@ -21,6 +21,12 @@ for the current checkout and work item.
 
 - Use repository instructions to locate the tracker, product docs, architecture
   docs, validation policy, and code standards.
+- For a substantial mission, locate its governing strategy path and revision.
+  Strategy owns durable intent and adaptation authority; epics and issues are
+  the current implementation hypothesis.
+- Keep later product-facing and internal outcomes as draft epics. Refine an
+  epic's outcome, immediate work, dependencies, and proof route together before
+  making it executable.
 - Assign exactly one subskill to each role-specific subagent.
 - A subagent loads only the assigned subskill reference unless the assignment
   explicitly names additional sources.
@@ -43,6 +49,7 @@ Load these only when the assignment needs the named cross-cutting guidance:
 | --- | --- |
 | [Submodel selection](references/submodel-selection.md) | Choosing or reviewing a delegated model and reasoning effort. |
 | [Repository shape](references/repository-shape.md) | Installing Agent Factory, mapping durable repository guidance, or auditing agent readiness. |
+| [Strategic plans](references/strategic-plans.md) | Creating or executing a substantial adaptive mission. |
 
 Repository-specific work types, relationship semantics, commands, and lifecycle
 policy remain owned by the repository and its product surfaces.

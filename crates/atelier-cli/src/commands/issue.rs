@@ -1561,11 +1561,12 @@ fn filter_ready_rows(
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
-                let is_ready = external.is_empty() && queue_row_is_todo(workflow_policy, &row);
+                let is_ready =
+                    external.is_empty() && queue_row_can_enter_active(workflow_policy, &row)?;
                 Ok((row, is_ready))
             } else {
-                let is_ready =
-                    row.open_blockers.is_empty() && queue_row_is_todo(workflow_policy, &row);
+                let is_ready = row.open_blockers.is_empty()
+                    && queue_row_can_enter_active(workflow_policy, &row)?;
                 Ok((row, is_ready))
             }
         })
@@ -1577,10 +1578,13 @@ fn filter_ready_rows(
         .collect()
 }
 
-fn queue_row_is_todo(workflow_policy: Option<&WorkflowPolicy>, row: &QueueRow) -> bool {
+fn queue_row_can_enter_active(
+    workflow_policy: Option<&WorkflowPolicy>,
+    row: &QueueRow,
+) -> Result<bool> {
     match workflow_policy {
-        Some(_) => row.status_category.as_deref() == Some("todo"),
-        None => row.status == "todo",
+        Some(policy) => policy.can_enter_active(&row.issue_type, &row.status),
+        None => Ok(row.status == "todo"),
     }
 }
 

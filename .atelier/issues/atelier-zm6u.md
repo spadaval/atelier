@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "draft"
 title: "Support routine replanning and just-in-time expansion"
-updated_at: "2026-07-28T16:39:31.739752508+00:00"
+updated_at: "2026-08-05T16:43:27.127727601+00:00"
 ---
 
 ## Description
@@ -34,7 +34,3 @@ Expansion condition: expand after the adaptive contract defines the required sce
 - A Manager can add, split, resequence, block, defer, or supersede implementation work as evidence changes.
 - Ready and blocked views immediately reflect the reconciled graph without a whole-plan resubmission or completeness check.
 - Obsolete speculative work remains historically legible and no longer appears as current execution.
-
-## Evidence
-
-Evidence was not specified in the bundle.

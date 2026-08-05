@@ -6,6 +6,10 @@ separate issue hierarchy.
 
 ## Concepts
 
+- Strategy: governing mission-scoped Markdown for the finished outcome, target
+  system, durable decisions and tradeoffs, boundaries, adaptation authority,
+  and mission-level assurance. It is referenced by a mission but is not a
+  tracker backlog.
 - Mission: a long-running objective declared through issue/workflow policy. It
   carries a target `Outcome`, explicit non-scope, current health, active root
   work, risks, and validation links through normal objective fields, sections,
@@ -19,9 +23,11 @@ separate issue hierarchy.
 - Checkpoint semantics: deferred v1 product language for intermediate target
   states. Checkpoint prose may live in missions, epics, issues, or evidence, but
   there is no active first-class milestone record table.
-- Epic: a coordinated work package and the normal branch/review boundary.
-  Epics group implementation, documentation, review, validation, and completion
-  tasks that deliver a coherent change on one reviewable branch.
+- Epic: an outcome-bearing delivery increment and the normal branch, review,
+  and parent-validation boundary. Product-facing, system, architecture,
+  operational, and explicitly behavior-preserving work uses the same epic
+  shape. A draft epic may describe a provisional future outcome without child
+  work or exact proof; expansion refines the increment and makes it ready.
 - Issue: the actual accountability unit for work. Ordinary implementation
   issues are local slices on an epic branch; tasks, bugs, reviews,
   validations, completions, and artifact updates are issue-shaped until a more
@@ -77,6 +83,12 @@ manual review fills `summary`, `proof_scope`, `independence_level`, and
 checked, action taken, result, and inspectable artifact or rationale.
 
 ## Proof Routing
+
+Strategy states mission-level assurance. Draft epics are not executable and may
+omit exact proof criteria. When a Manager expands the next epic, proof planning
+happens with outcome refinement, child work, and dependency selection; ordinary
+issue proof can still be chosen by the Worker unless an exact check is part of
+the contract.
 
 Atelier routes proof by risk and scope. Ordinary executable issues prove their
 own `Outcome` on the issue: the worker runs the narrowest checks that support
