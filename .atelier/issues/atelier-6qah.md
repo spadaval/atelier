@@ -6,6 +6,15 @@ labels:
 - "agent-factory"
 - "docs"
 - "validation"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-5kej
+    integration_target: mission/atelier-5kej
+    merge_strategy: squash
+    owner_issue_id: atelier-6qah
+    owner_kind: epic
+    review_target: mission/atelier-5kej
+    work_branch: epic/atelier-6qah
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +27,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "in_progress"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T19:49:30.770288395+00:00"
+updated_at: "2026-08-05T19:50:05.094791740+00:00"
 ---
 
 ## Description

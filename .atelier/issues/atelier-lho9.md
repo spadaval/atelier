@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Reconcile adaptive Agent Factory guidance and surfaces"
-updated_at: "2026-08-05T19:48:53.687788854+00:00"
+updated_at: "2026-08-05T19:50:05.095493451+00:00"
 ---
 
 ## Description
