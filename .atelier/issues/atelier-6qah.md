@@ -6,10 +6,25 @@ labels:
 - "agent-factory"
 - "docs"
 - "validation"
+review:
+  kind: pull_request
+  number: 78
+  provider: forgejo
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-5kej
+    integration_target: mission/atelier-5kej
+    merge_strategy: squash
+    owner_issue_id: atelier-6qah
+    owner_kind: epic
+    review_target: mission/atelier-5kej
+    work_branch: epic/atelier-6qah
 priority: "P2"
 relationships:
   blocks: []
   children:
+  - kind: "issue"
+    id: "atelier-2pvp"
   - kind: "issue"
     id: "atelier-ekg7"
   - kind: "issue"
@@ -18,9 +33,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "ready"
+status: "review"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T19:49:30.770288395+00:00"
+updated_at: "2026-08-05T20:29:08.299907484+00:00"
 ---
 
 ## Description

@@ -136,7 +136,7 @@ pub fn resolve_branch_lifecycle(
     let mut base_branch = policy.branch_policy.base_branch.clone();
     let mut merge_strategy = policy.branch_policy.merge_strategy;
     if owner_kind != BranchOwnerKind::Mission {
-        if let Some(mission) = containing_mission(db, &issue.id)? {
+        if let Some(mission) = containing_mission(db, &owner.id)? {
             if let Some(branch) = recorded_workflow_branch(&mission)? {
                 base_branch = branch.work_branch;
                 merge_strategy = branch.merge_strategy;
@@ -528,6 +528,54 @@ mod tests {
             Some("atelier-epic"),
             BTreeMap::new(),
         );
+        let policy = WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig {
+                base_branch: "main".to_string(),
+                ..BranchLifecycleConfig::default()
+            },
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::new(),
+            statuses: BTreeMap::new(),
+            workflows: BTreeMap::new(),
+        };
+
+        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-child").unwrap();
+
+        assert_eq!(resolution.owner_id, "atelier-epic");
+        assert_eq!(resolution.expected_branch, "epic/atelier-epic");
+        assert_eq!(resolution.base_branch, "mission/atelier-mission");
+        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
+        assert!(resolution.nested_under_epic);
+    }
+
+    #[test]
+    fn branch_lifecycle_resolves_nested_work_through_its_mission_scoped_epic() {
+        let (db, _dir) = setup_test_db();
+        let mut mission_fields = BTreeMap::new();
+        mission_fields.insert(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({
+                "owner_issue_id": "atelier-mission",
+                "work_branch": "mission/atelier-mission",
+                "branch_base": "main",
+                "review_target": "main",
+                "integration_target": "main",
+                "owner_kind": "mission",
+                "merge_strategy": "merge_commit",
+            }),
+        );
+        insert_issue(&db, "atelier-mission", "mission", None, mission_fields);
+        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
+        insert_issue(
+            &db,
+            "atelier-child",
+            "task",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+        db.add_typed_relation("atelier-mission", "atelier-epic", "advances")
+            .unwrap();
         let policy = WorkflowPolicy {
             schema_version: 3,
             branch_policy: BranchLifecycleConfig {

@@ -510,6 +510,16 @@ fn prepare_branch_action(
         return Ok(format!("already on branch {}", action.expected_branch));
     }
     if branch_exists_at(repo_root, &action.expected_branch)? {
+        if action.branch_owner_id != issue.id {
+            ensure_branch_contains_transition_issue(
+                repo_root,
+                &action.expected_branch,
+                &current,
+                issue,
+                action,
+                "switch to the existing owner branch",
+            )?;
+        }
         git_checked(repo_root, &["switch", &action.expected_branch], "checkout action branch")
             .with_context(|| {
                 format!(
@@ -526,6 +536,16 @@ fn prepare_branch_action(
             action.name, action.base_branch, issue.id
         )
     })?;
+    if action.branch_owner_id != issue.id && current != action.base_branch {
+        ensure_branch_contains_transition_issue(
+            repo_root,
+            &action.base_branch,
+            &current,
+            issue,
+            action,
+            "create the owner branch from its selected base",
+        )?;
+    }
     git_checked(
         repo_root,
         &["switch", "-c", &action.expected_branch, &action.base_branch],
@@ -542,6 +562,40 @@ fn prepare_branch_action(
         "created branch {} from {}",
         action.expected_branch, action.base_branch
     ))
+}
+
+fn ensure_branch_contains_transition_issue(
+    repo_root: &Path,
+    selected_branch: &str,
+    current_branch: &str,
+    issue: &Issue,
+    action: &PlannedAction,
+    operation: &str,
+) -> Result<()> {
+    let record_path = format!(".atelier/issues/{}.md", issue.id);
+    let object = format!("{selected_branch}:{record_path}");
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["cat-file", "-e", &object])
+        .output()
+        .with_context(|| {
+            format!(
+                "action {} failed while checking whether branch '{}' contains {}",
+                action.name, selected_branch, record_path
+            )
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    bail!(
+        "action {} refused to {operation} because branch '{}' does not contain the transition target's canonical record '{}'.\nCheckout remains on branch '{}'.\nRecovery: ensure '{}' is committed on the branch that owns this work, or repair the parent/`advances` links so branch lifecycle selects a branch that contains it; then retry `atelier issue transition {} start`.",
+        action.name,
+        selected_branch,
+        record_path,
+        current_branch,
+        record_path,
+        issue.id
+    )
 }
 
 fn persist_workflow_branch_field(state_dir: &Path, action: &PlannedAction) -> Result<()> {
