@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T19:32:58.280433869+00:00"
+status: "done"
 title: "Retire superseded descendants from execution semantics"
-updated_at: "2026-08-05T19:19:37.544296532+00:00"
+updated_at: "2026-08-05T19:32:58.280433869+00:00"
 ---
 
 ## Description
