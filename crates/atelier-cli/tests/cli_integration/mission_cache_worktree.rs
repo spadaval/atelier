@@ -3558,6 +3558,99 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
 }
 
 #[test]
+fn test_nested_work_created_on_mission_branch_starts_on_mission_scoped_epic_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Adaptive mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Adaptive mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "First executable horizon",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "First executable horizon");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission advances link failed: {stderr}");
+    move_mission_directly_to_ready(dir.path(), &mission_id);
+    commit_all(dir.path(), "adaptive mission baseline");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Deliver first horizon",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "expanded child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Deliver first horizon");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
+    commit_all(dir.path(), "expand first executable horizon");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &child_id, "start"]);
+    assert!(success, "nested child start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains(&format!(
+            "created branch epic/{epic_id} from mission/{mission_id}"
+        )),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Branch owner: epic {epic_id} (epic)")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Base branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "nested child show failed: {stderr}");
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+    let workflow_branch =
+        &canonical_record_front_matter(dir.path(), "issues", &epic_id)["fields"]["workflow_branch"];
+    assert_eq!(workflow_branch["owner_issue_id"], epic_id);
+    assert_eq!(workflow_branch["work_branch"], format!("epic/{epic_id}"));
+    assert_eq!(
+        workflow_branch["branch_base"],
+        format!("mission/{mission_id}")
+    );
+}
+
+#[test]
 fn test_epic_close_integrates_into_recorded_mission_branch() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -3850,6 +3943,76 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
     assert_eq!(git_current_branch(dir.path()), "main");
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
+}
+
+#[test]
+fn test_start_refuses_owner_branch_that_lacks_transition_target_record() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Existing owner epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Existing owner epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
+    commit_all(dir.path(), "owner epic baseline");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic start failed: {stderr}");
+    commit_all(dir.path(), "prepared owner epic branch");
+    let owner_head = git_rev_parse(dir.path(), &format!("epic/{epic_id}"));
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch back to main failed");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Child expanded on wrong branch",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Child expanded on wrong branch");
+    commit_all(dir.path(), "misplaced child expansion");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &child_id, "start"]);
+    assert!(
+        !success,
+        "misplaced child start unexpectedly succeeded:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("action git.prepare_branch refused to switch")
+            && stderr.contains(&format!("epic/{epic_id}"))
+            && stderr.contains(&format!(".atelier/issues/{child_id}.md"))
+            && stderr.contains("Checkout remains on branch 'main'")
+            && stderr.contains("repair the parent/`advances` links"),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert_eq!(
+        git_rev_parse(dir.path(), &format!("epic/{epic_id}")),
+        owner_head
+    );
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "child show failed: {stderr}");
     assert!(show_out.contains("Status:   todo"), "{show_out}");
 }
 

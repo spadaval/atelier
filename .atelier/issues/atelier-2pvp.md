@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T20:21:31.372434679+00:00"
+status: "done"
 title: "Preserve mission branch ownership for newly linked epics"
-updated_at: "2026-08-05T20:11:43.925903702+00:00"
+updated_at: "2026-08-05T20:21:31.372434679+00:00"
 ---
 
 ## Description
