@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-08-05T20:38:26.467826808+00:00"
+status: "done"
 title: "Prove the adaptive mission loop from fresh state"
-updated_at: "2026-08-05T19:57:40.634242618+00:00"
+updated_at: "2026-08-05T20:38:26.467826808+00:00"
 ---
 
 ## Description
