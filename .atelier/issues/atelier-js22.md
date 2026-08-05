@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+status: "in_progress"
 title: "Audit Atelier against adaptive mission scenarios"
-updated_at: "2026-08-05T18:06:00.446512228+00:00"
+updated_at: "2026-08-05T18:33:15.245194945+00:00"
 ---
 
 ## Description
