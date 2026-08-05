@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T19:50:05.094791740+00:00"
+updated_at: "2026-08-05T19:57:40.633541041+00:00"
 ---
 
 ## Description
