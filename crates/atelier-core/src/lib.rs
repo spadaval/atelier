@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::{Component, Path};
 
 pub type IssueId = String;
 
@@ -135,6 +136,64 @@ pub struct Issue {
 }
 
 pub const ISSUE_REVIEW_FIELD: &str = "review";
+pub const ISSUE_STRATEGY_FIELD: &str = "strategy";
+
+/// A mission's governing strategy document at the revision used to commission it.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IssueStrategy {
+    pub path: String,
+    pub revision: u64,
+}
+
+impl IssueStrategy {
+    pub fn new(path: impl Into<String>, revision: u64) -> Result<Self, IssueFieldError> {
+        let path = path.into();
+        let parsed = Path::new(&path);
+        let path_is_repo_relative = !path.trim().is_empty()
+            && !parsed.is_absolute()
+            && parsed
+                .components()
+                .all(|component| matches!(component, Component::Normal(_) | Component::CurDir));
+        if !path_is_repo_relative {
+            return Err(IssueFieldError::InvalidStrategy(
+                "path must be a non-empty repository-relative path without parent traversal"
+                    .to_string(),
+            ));
+        }
+        if revision == 0 {
+            return Err(IssueFieldError::InvalidStrategy(
+                "revision must be a positive integer".to_string(),
+            ));
+        }
+        Ok(Self { path, revision })
+    }
+
+    pub fn from_value(value: &serde_json::Value) -> Result<Self, IssueFieldError> {
+        let object = value.as_object().ok_or_else(|| {
+            IssueFieldError::InvalidStrategy("strategy must be an object".to_string())
+        })?;
+        if object.len() != 2 || !object.contains_key("path") || !object.contains_key("revision") {
+            return Err(IssueFieldError::InvalidStrategy(
+                "strategy must contain exactly path and revision".to_string(),
+            ));
+        }
+        let path = object
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| IssueFieldError::InvalidStrategy("path must be a string".to_string()))?;
+        let revision = object
+            .get("revision")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or_else(|| {
+                IssueFieldError::InvalidStrategy("revision must be a positive integer".to_string())
+            })?;
+        Self::new(path, revision)
+    }
+
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::json!({ "path": self.path, "revision": self.revision })
+    }
+}
 
 /// The review artifact linked from an issue record.
 ///
@@ -211,12 +270,14 @@ impl IssueReview {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IssueFieldError {
     InvalidReview(String),
+    InvalidStrategy(String),
 }
 
 impl fmt::Display for IssueFieldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidReview(detail) => write!(f, "invalid issue review field: {detail}"),
+            Self::InvalidStrategy(detail) => write!(f, "invalid issue strategy field: {detail}"),
         }
     }
 }
@@ -240,6 +301,24 @@ impl Issue {
         self.fields
             .remove(ISSUE_REVIEW_FIELD)
             .and_then(|value| IssueReview::from_value(&value).ok())
+    }
+
+    pub fn strategy(&self) -> Result<Option<IssueStrategy>, IssueFieldError> {
+        self.fields
+            .get(ISSUE_STRATEGY_FIELD)
+            .map(IssueStrategy::from_value)
+            .transpose()
+    }
+
+    pub fn set_strategy(&mut self, strategy: IssueStrategy) {
+        self.fields
+            .insert(ISSUE_STRATEGY_FIELD.to_string(), strategy.to_value());
+    }
+
+    pub fn clear_strategy(&mut self) -> Option<IssueStrategy> {
+        self.fields
+            .remove(ISSUE_STRATEGY_FIELD)
+            .and_then(|value| IssueStrategy::from_value(&value).ok())
     }
 }
 

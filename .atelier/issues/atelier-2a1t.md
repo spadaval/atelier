@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Validate the adaptive contract against Atelier's red line"
-updated_at: "2026-07-28T16:39:31.753798677+00:00"
+updated_at: "2026-08-05T16:43:27.127727601+00:00"
 ---
 
 ## Description
@@ -30,4 +30,5 @@ Independently compare the published contract with the evolved Agent Factory stra
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Compare strategy revision 2, ADR 0018, `docs/product/zen.md`, product contracts, workflow behavior, and focused tests.
+- Record supported, contradicted, and deliberately deferred behaviors with exact source locations and residual risks.

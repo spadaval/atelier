@@ -16,6 +16,7 @@ pub struct WorkRow {
     pub status_category: Option<String>,
     pub priority: String,
     pub open_blockers: Vec<String>,
+    pub can_enter_active: bool,
 }
 
 impl WorkRow {
@@ -24,7 +25,7 @@ impl WorkRow {
             "active"
         } else if !self.open_blockers.is_empty() {
             "blocked"
-        } else if self.status_category.as_deref() == Some("todo") {
+        } else if self.can_enter_active {
             "ready"
         } else if self.status_category.as_deref() == Some("done") {
             "done"
@@ -137,6 +138,10 @@ fn work_row(
     let status_category = workflow_policy
         .and_then(|policy| policy.status_category(&issue.status))
         .map(str::to_string);
+    let can_enter_active = match workflow_policy {
+        Some(policy) => policy.can_enter_active(&issue.issue_type, &issue.status)?,
+        None => issue.status == "todo",
+    };
     Ok(WorkRow {
         id: issue.id.clone(),
         title: issue.title,
@@ -145,6 +150,7 @@ fn work_row(
         status_category,
         priority: issue.priority,
         open_blockers: open_blockers(db, workflow_policy, &issue.id)?,
+        can_enter_active,
     })
 }
 
@@ -338,7 +344,17 @@ mod tests {
                 applies_to: vec!["task".to_string()],
                 initial_status: "todo".to_string(),
                 done_statuses: vec!["done".to_string()],
-                transitions: BTreeMap::new(),
+                transitions: BTreeMap::from([(
+                    "start".to_string(),
+                    crate::workflow_policy::TransitionDefinition {
+                        from: vec!["ready".to_string(), "todo".to_string()],
+                        to: "in_progress".to_string(),
+                        required_fields: Vec::new(),
+                        description: None,
+                        validators: Vec::new(),
+                        actions: Vec::new(),
+                    },
+                )]),
             },
         );
         WorkflowPolicy {

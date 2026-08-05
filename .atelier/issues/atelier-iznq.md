@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Publish the lightweight strategy and planning-layer contract"
-updated_at: "2026-07-28T16:39:31.749240322+00:00"
+updated_at: "2026-08-05T16:43:27.127727601+00:00"
 ---
 
 ## Description
@@ -28,9 +28,10 @@ Update the owning product, domain, architecture, and command-surface sources usi
 ## Outcome
 
 - Durable repository guidance cleanly separates strategic product intent, outcome maps, current implementation tasks, and proof.
-- The contract specifies how missions reference strategy, how epics state expansion conditions, and how Managers replan within adaptation authority.
+- The contract specifies how missions reference strategy, how draft epics become ready through expansion, and how Managers replan within adaptation authority.
 - The documented workflow remains ordinary Markdown plus typed issue relationships and introduces no approval or identity gate.
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- Strategy revision 2, ADR 0018, product intent, domain language, mission authoring, validation, workflow, and persistence guidance agree on the adaptive model.
+- Documentation residue searches find no requirement for expansion flags, validation profiles, work dispositions, or replanning records.

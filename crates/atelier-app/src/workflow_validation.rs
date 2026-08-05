@@ -469,17 +469,26 @@ fn objective_work_present(
 ) -> Result<(bool, String)> {
     let work = objective_work_ids(db, target_kind, target_id)?;
     if work.is_empty() {
-        Ok((
-            false,
-            format!(
-                "no advancing work linked to {target_kind} {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
+        let guidance = match target_kind {
+            "mission" => format!(
+                "no advancing work linked to mission {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
             ),
-        ))
+            "issue" => format!(
+                "no child work belongs to issue {target_id}; create or move immediate work with `atelier issue create \"...\" --parent {target_id}` or `atelier issue update <issue-id> --parent {target_id}`"
+            ),
+            _ => format!("no accountable work linked to {target_kind} {target_id}"),
+        };
+        Ok((false, guidance))
     } else {
+        let relationship = if target_kind == "mission" {
+            "advances"
+        } else {
+            "hierarchy"
+        };
         Ok((
             true,
             format!(
-                "advancing work linked via advances: {}",
+                "accountable work linked via {relationship}: {}",
                 work.into_iter().collect::<Vec<_>>().join(", ")
             ),
         ))

@@ -223,6 +223,9 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
         &["issue", "create", "Child work", "--parent", &parent_id],
     );
     assert!(success, "child create failed: {stderr}");
+    edit_canonical_issue(dir.path(), &parent_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "blocked")
+    });
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -237,9 +240,10 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
 
     let parent_path = canonical_issue_path(dir.path(), &parent_id);
     let parent_markdown = std::fs::read_to_string(&parent_path).unwrap();
+    let corrupted = parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\"");
     std::fs::write(
         &parent_path,
-        parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\""),
+        replace_front_matter_scalar(&corrupted, "status", "todo"),
     )
     .unwrap();
 
@@ -435,9 +439,11 @@ fn test_list_issues() {
 
     assert!(success);
     assert!(stdout.contains("Work Queue"));
-    assert!(stdout.contains("2 total"));
+    assert!(stdout.contains("1 total"));
     assert!(stdout.contains("atelier-"));
     assert!(stdout.contains("[task] atelier-"));
+    // The draft epic remains as grouping context, but is not included in the
+    // executable total.
     assert!(stdout.contains("Issue 1"));
     assert!(stdout.contains("Issue 2"));
 
@@ -445,7 +451,7 @@ fn test_list_issues() {
     assert!(success, "quiet work queue failed: {stderr}");
     assert!(!quiet_out.contains("Work Queue"));
     assert!(!quiet_out.contains("Issue 1"));
-    assert_eq!(quiet_out.lines().count(), 2);
+    assert_eq!(quiet_out.lines().count(), 1);
     assert!(quiet_out.lines().all(|line| line.starts_with("atelier-")));
 }
 
@@ -1386,7 +1392,7 @@ fn test_show_issue_rich_human_output() {
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
-    assert!(stdout.contains("Status:   todo"));
+    assert!(stdout.contains("Status:   draft"));
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
@@ -1439,6 +1445,7 @@ fn test_issue_show_summarizes_dirty_checkout_state() {
         ],
     );
     let issue_id = issue_id_by_title(dir.path(), "Dirty checkout issue");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     std::fs::write(dir.path().join("tracked.txt"), "clean").unwrap();
     commit_all(dir.path(), "baseline");
     std::fs::write(dir.path().join("tracked.txt"), "dirty").unwrap();
@@ -2900,12 +2907,15 @@ fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(
-        status_out.contains("Ready work:    2"),
+        status_out.contains("Ready work:    1"),
         "status should keep ready work visible while active work is present:\n{status_out}"
     );
 
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
     assert!(success, "ready list failed: {stderr}");
+    // The draft parent remains visible as grouping context; only its ready
+    // child contributes to the queue total.
+    assert!(ready_out.contains("1 total"), "{ready_out}");
     assert!(ready_out.contains("Parent epic"), "{ready_out}");
     assert!(ready_out.contains("Ready child"), "{ready_out}");
     assert!(!ready_out.contains("Sequenced child"), "{ready_out}");
@@ -3126,12 +3136,30 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = issue_id_by_title(dir.path(), "Mission: Dashboard cleanup");
+    let mission_path = canonical_issue_path(dir.path(), &mission_id);
+    let mission_text = std::fs::read_to_string(&mission_path).unwrap();
+    let mission_text = mission_text.replace(
+        "status: \"draft\"\n",
+        "status: \"draft\"\nstrategy:\n  path: \"docs/strategies/dashboard-cleanup.md\"\n  revision: 3\n",
+    );
+    std::fs::write(&mission_path, mission_text).unwrap();
     run_atelier(dir.path(), &["issue", "create", "Ready mission work"]);
     run_atelier(dir.path(), &["issue", "create", "Blocked mission work"]);
     run_atelier(dir.path(), &["issue", "create", "Mission blocker"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Future mission outcome",
+            "--issue-type",
+            "epic",
+        ],
+    );
     let ready_id = issue_id_by_title(dir.path(), "Ready mission work");
     let blocked_id = issue_id_by_title(dir.path(), "Blocked mission work");
     let blocker_id = issue_id_by_title(dir.path(), "Mission blocker");
+    let draft_epic_id = issue_id_by_title(dir.path(), "Future mission outcome");
     run_atelier(
         dir.path(),
         &[
@@ -3139,6 +3167,17 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
             "link",
             &mission_id,
             &ready_id,
+            "--role",
+            "advances",
+        ],
+    );
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &draft_epic_id,
             "--role",
             "advances",
         ],
@@ -3169,6 +3208,10 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
     assert!(success, "work mission failed: {stderr}");
     assert!(dashboard.contains(&format!("{mission_id} [mission] draft - Dashboard cleanup")));
+    assert!(
+        dashboard.contains("docs/strategies/dashboard-cleanup.md (revision 3)"),
+        "{dashboard}"
+    );
     assert!(!dashboard.contains("Work Mission"), "{dashboard}");
     assert!(!dashboard.contains("Proof gaps"), "{dashboard}");
     assert!(!dashboard.contains("Health"), "{dashboard}");
@@ -3176,6 +3219,9 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(!dashboard.contains("Closeout"), "{dashboard}");
     assert!(dashboard.contains("Ready mission work"), "{dashboard}");
     assert!(dashboard.contains("Blocked mission work"), "{dashboard}");
+    assert!(dashboard.contains("Backlog Work"), "{dashboard}");
+    assert!(dashboard.contains("Future mission outcome"), "{dashboard}");
+    assert!(dashboard.contains("[draft]"), "{dashboard}");
     assert!(
         dashboard.contains(&format!("blockers: {blocker_id}")),
         "{dashboard}"
@@ -3190,6 +3236,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(success, "work mission --ready failed: {stderr}");
     assert!(ready.contains("Ready Work"), "{ready}");
     assert!(ready.contains(&ready_id), "{ready}");
+    assert!(!ready.contains(&draft_epic_id), "{ready}");
     assert!(!ready.contains("Blocked mission work"), "{ready}");
 
     let (success, blocked, stderr) =
@@ -3202,6 +3249,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     set_issue_status(dir.path(), &ready_id, "done");
     set_issue_status(dir.path(), &blocked_id, "done");
     set_issue_status(dir.path(), &blocker_id, "done");
+    set_issue_status(dir.path(), &draft_epic_id, "done");
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after status setup failed: {stderr}");
     move_mission_directly_to_ready(dir.path(), &mission_id);

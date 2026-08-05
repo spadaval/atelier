@@ -17,9 +17,14 @@ Value and outcomes first.
 Missions exist for a reason.
 Issues are accountable steps toward that reason.
 
+Intent is durable; plans are adaptive.
+State outcomes, boundaries, and decision authority explicitly.
+Treat implementation plans as hypotheses that change with evidence.
+Concretize work only as far as current understanding supports.
+
 Model the domain, don't flatten it.
-Missions, epics, issues, and evidence are different shapes because they
-answer different questions.
+Strategies, missions, epics, issues, and evidence are different shapes because
+they answer different questions.
 
 Domain truth is not UI.
 Domain services say what is true, allowed, blocked, or required.

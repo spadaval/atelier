@@ -106,8 +106,22 @@
   active-focus pointer, or universal evidence rule outside the workflow model.
   A mission may still be the shared background workspace boundary when
   repository workflow and operator assignment choose that coordination shape.
-- Epic: the normal branch and review boundary beneath a mission. One epic
-  normally owns one reviewable branch or PR-equivalent changeset.
+- Strategy: durable mission-scoped Markdown that owns the finished outcome,
+  target system, governing tradeoffs, boundaries, adaptation authority, and
+  mission-level assurance. Strategy is not a first-class tracker record or a
+  backlog of implementation work.
+- Epic: an outcome-bearing delivery increment and the normal branch and review
+  boundary beneath a mission. Its outcome may be product-facing, system,
+  architecture, operational, quantitative, destructive, or explicitly
+  behavior-preserving. One epic normally owns one reviewable branch or
+  PR-equivalent changeset.
+- Draft epic: a structurally valid provisional outcome whose implementation and
+  proof route are not yet ready. A draft epic may omit children and exact
+  Evidence content and must not appear as executable ready work.
+- Epic expansion: the ordinary graph work that refines an epic's outcome and
+  preservation claims, creates its immediate evidence-backed child work,
+  represents dependencies, selects a proof route, and transitions the epic from
+  `draft` to `ready`. It is not a separate record or stored flag.
 - Issue: a durable accountability unit and implementation slice. It does not
   have to map one-to-one to an agent run, worktree, branch, or independent
   review.
@@ -254,6 +268,10 @@
 - This repository's pre-execution mission lifecycle is
   `draft -> ready -> in_progress`. Readiness requires understandable planning
   files and clear declared blockers, not a separate approval subsystem.
+- This repository's epic planning lifecycle begins
+  `draft -> ready -> in_progress`. Draft permits incomplete implementation and
+  proof planning; ready means expansion has made the next increment executable.
+  Todo-category status alone does not establish ready-work eligibility.
 - Branch policy is workflow-owned rather than a separate routine setup step.
   Operators inspect `atelier issue transition <id>` and execute the configured
   transition that enters active work; its `git.prepare_branch` action prepares

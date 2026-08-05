@@ -20,23 +20,23 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "ready"
 title: "Define the adaptive mission contract"
-updated_at: "2026-07-28T16:39:31.765296404+00:00"
+updated_at: "2026-08-05T16:43:27.127727601+00:00"
 ---
 
 ## Description
 
-Own the durable product and architecture boundary between governing strategy, outcome-oriented epics, and the evidence-backed issue horizon.
-
-Expansion condition: immediate; this is the first evidence horizon.
+Own the durable product and architecture boundary between governing strategy, outcome-bearing epics, and the evidence-backed issue horizon. This ready epic is the first expanded evidence horizon.
 
 ## Outcome
 
 - Product and architecture sources state what belongs in strategy, mission and epic outcomes, executable issues, and evidence.
-- The contract defines lightweight strategy references, expansion conditions, routine graph maintenance, and preservation of completed or superseded history.
+- The contract defines typed strategy references, draft-to-ready expansion, routine graph maintenance, and preservation of completed or superseded history.
 - The anti-red-tape boundary explicitly excludes plan approval, actor authorization, graph digests, frozen plans, and mandatory speculative decomposition.
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- `docs/architecture/quality/adaptive-mission-gap-analysis.md` maps the required scenarios to existing and missing behavior.
+- Focused workflow, record-store, ready-queue, bundle, and mission-dashboard tests prove the implemented contract.
+- `atelier-2a1t` independently validates the resulting contract against the strategy and Zen.

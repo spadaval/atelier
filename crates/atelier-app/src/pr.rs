@@ -1202,7 +1202,7 @@ mod tests {
             &state_dir,
             &epic,
             "epic",
-            "todo",
+            "ready",
             None,
             BTreeMap::new(),
         );

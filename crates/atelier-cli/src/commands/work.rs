@@ -593,6 +593,12 @@ pub fn mission_dashboard(
                 counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
             ),
         );
+    if let Some(strategy) = mission.strategy()? {
+        metadata = metadata.row(
+            "Strategy",
+            format!("{} (revision {})", strategy.path, strategy.revision),
+        );
+    }
     if scoped_work_is_terminal(&counts) {
         metadata = metadata.row(
             "Publish",
@@ -872,6 +878,11 @@ fn issue_category(
     if let Some(policy) = policy {
         if !atelier_app::objective_graph::dependency_closure(db, policy, &issue.id)?.is_ready() {
             return Ok("blocked".to_string());
+        }
+        if policy.status_category(&issue.status) == Some("todo")
+            && !policy.can_enter_active(&issue.issue_type, &issue.status)?
+        {
+            return Ok("backlog".to_string());
         }
     }
     Ok(

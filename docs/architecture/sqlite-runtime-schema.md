@@ -18,7 +18,7 @@ same physical index.
 
 | Table | Cached facts | Why it is cached |
 | --- | --- | --- |
-| `issue_index` | `id`, `title`, `status`, `issue_type`, `priority`, timestamps, and parent/structural identity when applicable | Work queues, ready-work filtering, status/priority ordering, workflow checks, and Mission Control summaries. |
+| `issue_index` | `id`, `title`, `status`, `issue_type`, `priority`, timestamps, parent/structural identity, normalized review and workflow-branch fields, and the mission strategy path/revision when present | Work queues, transition-aware ready filtering, status/priority ordering, workflow checks, focused strategy display, and Mission Control summaries. |
 | `issue_label_index` | issue ID and label | Label filters and facets. |
 | `issue_block_index` | blocker ID and blocked ID | Ready-work calculation, dependency views, cycle checks, and impact traversal. |
 | `issue_relation_index` | source issue, target issue, relation type, and ordering/timestamp facts | Typed-link traversal and impact views. |

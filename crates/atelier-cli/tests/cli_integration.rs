@@ -97,6 +97,16 @@ fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
     assert!(success, "mission ready transition failed: {stderr}");
 }
 
+/// Put an epic fixture at the execution boundary without exercising expansion.
+///
+/// Lifecycle integration tests use this when their subject is branching, review,
+/// or closeout rather than the draft-to-ready validators themselves.
+fn move_epic_directly_to_ready(dir: &Path, epic_id: &str) {
+    edit_canonical_issue(dir, epic_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "ready")
+    });
+}
+
 fn init_git_repo(dir: &Path) {
     if !dir.join(".git").exists() {
         let status = Command::new("git")
@@ -1102,6 +1112,7 @@ fn provider_review_open_action_reads_workflow_config_and_global_secret() {
     );
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Provider epic");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
 
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
@@ -1155,6 +1166,7 @@ fn provider_request_review_pushes_source_before_opening_pr() {
     );
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Provider ordered epic");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
 
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
@@ -1279,6 +1291,7 @@ fn request_review_preserves_review_artifact_field() {
     );
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Review field epic");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
 
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
@@ -1319,6 +1332,7 @@ fn review_surface_derives_open_context_and_uses_submit_and_show() {
     );
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Review surface epic");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
 
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
