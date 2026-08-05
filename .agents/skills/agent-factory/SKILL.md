@@ -24,6 +24,9 @@ for the current checkout and work item.
 - For a substantial mission, locate its governing strategy path and revision.
   Strategy owns durable intent and adaptation authority; epics and issues are
   the current implementation hypothesis.
+- Publish or semantically revise strategy only in a human-commissioned strategy
+  session. Routine task traffic and implementation replanning within the active
+  strategy do not commission a strategy change.
 - Keep later product-facing and internal outcomes as draft epics. Refine an
   epic's outcome, immediate work, dependencies, and proof route together before
   making it executable.

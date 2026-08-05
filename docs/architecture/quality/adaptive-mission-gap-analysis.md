@@ -1,7 +1,8 @@
 # Adaptive Mission Gap Analysis
 
-This audit maps the adaptive Agent Factory strategy to observable Atelier
-behavior. It is the planning evidence for `atelier-js22`, not a second backlog.
+This audit recorded the pre-implementation gaps between the adaptive Agent
+Factory strategy and observable Atelier behavior. It is planning evidence for
+the completed `atelier-js22`, not a current status report or a second backlog.
 The governing design is
 [ADR 0018](../../adr/0018-strategy-draft-epics-and-adaptive-expansion.md).
 
@@ -23,10 +24,11 @@ authorization, graph digests, or whole-mission completeness gates. Workflow
 state, authored outcomes, typed relationships, evidence, notes, and Git history
 already own the required facts.
 
-## Remaining Evidence Horizon
+## Evidence Horizon At Audit Time
 
-The current contract epic can close after focused tests cover the typed strategy
-round trip and display, draft/ready queue classification, relaxed bundle output,
-and workflow transitions, followed by independent red-line validation. The
-later presentation, replanning, and Agent Factory epics remain draft until that
-evidence justifies their exact work and proof routes.
+At the time of this audit, the contract epic could close after focused tests
+covered the typed strategy round trip and display, draft/ready queue
+classification, relaxed bundle output, and workflow transitions, followed by
+independent red-line validation. The later presentation, replanning, and Agent
+Factory epics were to remain draft until that evidence justified their exact
+work and proof routes.
