@@ -6,6 +6,10 @@ labels:
 - "agent-factory"
 - "docs"
 - "validation"
+review:
+  kind: pull_request
+  number: 78
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-5kej
@@ -29,9 +33,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T20:11:43.925194086+00:00"
+updated_at: "2026-08-05T20:29:08.299907484+00:00"
 ---
 
 ## Description
