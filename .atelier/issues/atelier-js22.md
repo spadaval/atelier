@@ -8,17 +8,15 @@ labels:
 - "planning"
 priority: "P1"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "atelier-iznq"
+  blocks: []
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "blocked"
 title: "Audit Atelier against adaptive mission scenarios"
-updated_at: "2026-08-05T18:04:22.102823941+00:00"
+updated_at: "2026-08-05T18:06:00.446512228+00:00"
 ---
 
 ## Description
