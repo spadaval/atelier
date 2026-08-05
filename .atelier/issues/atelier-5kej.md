@@ -6,6 +6,9 @@ labels:
 - "agent-factory"
 - "mission-control"
 - "planning"
+strategy:
+  path: docs/strategies/agent-factory-adaptive-missions.md
+  revision: 2
 fields:
   workflow_branch:
     branch_base: master
@@ -35,12 +38,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
-strategy:
-  path: "docs/strategies/agent-factory-adaptive-missions.md"
-  revision: 2
+closed_at: "2026-08-05T20:40:53.483912287+00:00"
+status: "publish_review"
 title: "Align Atelier with adaptive Agent Factory missions"
-updated_at: "2026-08-05T18:02:11.358862444+00:00"
+updated_at: "2026-08-05T20:40:53.483912287+00:00"
 ---
 
 ## Description
