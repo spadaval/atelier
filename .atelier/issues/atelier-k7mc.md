@@ -26,16 +26,24 @@ relationships:
   - kind: "issue"
     id: "atelier-2a1t"
   - kind: "issue"
+    id: "atelier-8zyx"
+  - kind: "issue"
+    id: "atelier-f9hk"
+  - kind: "issue"
     id: "atelier-iznq"
   - kind: "issue"
     id: "atelier-js22"
+  - kind: "issue"
+    id: "atelier-jwex"
+  - kind: "issue"
+    id: "atelier-puot"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Define the adaptive mission contract"
-updated_at: "2026-08-05T18:34:17.090328474+00:00"
+updated_at: "2026-08-05T18:47:09.178999833+00:00"
 ---
 
 ## Description
