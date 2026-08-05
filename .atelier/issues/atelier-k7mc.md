@@ -35,7 +35,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Define the adaptive mission contract"
-updated_at: "2026-08-05T18:33:15.244498245+00:00"
+updated_at: "2026-08-05T18:34:17.090328474+00:00"
 ---
 
 ## Description
