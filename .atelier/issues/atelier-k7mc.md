@@ -6,6 +6,10 @@ labels:
 - "agent-factory"
 - "planning"
 - "product-contract"
+review:
+  kind: pull_request
+  number: 77
+  provider: forgejo
 fields:
   workflow_branch:
     branch_base: mission/atelier-5kej
