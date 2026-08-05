@@ -140,15 +140,14 @@ pub(crate) fn current_work_issues(
     db: &Database,
     workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<Vec<Issue>> {
-    let issues = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| {
-            commands::issue_workflow::issue_status_category(workflow_policy, &issue.status)
-                .as_deref()
-                == Some("active")
-        })
-        .collect::<Vec<_>>();
+    let mut issues = Vec::new();
+    for issue in db.list_issues(Some("all"), None, None)? {
+        if atelier_app::read_pipeline::classify_issue(db, workflow_policy, &issue)?.classification
+            == atelier_app::read_pipeline::WorkClassification::Active
+        {
+            issues.push(issue);
+        }
+    }
     commands::objective_status::order_issues_by_work(db, workflow_policy, issues)
 }
 

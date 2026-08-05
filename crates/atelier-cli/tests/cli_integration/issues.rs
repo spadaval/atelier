@@ -1434,7 +1434,7 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
-    assert!(stdout.contains("1 total | status: todo=1 | priority: low=1"));
+    assert!(stdout.contains("1 total | status: ready=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
     assert!(stdout.contains("Downstream issue"));
@@ -3344,6 +3344,8 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     for (title, parent) in [
         ("Explicit blocker-free blocked work", &active_epic_id),
         ("Retired open speculation", &retired_epic_id),
+        ("Retired blocked speculation", &retired_epic_id),
+        ("Retired active speculation", &retired_epic_id),
         ("Retired completed history", &retired_epic_id),
     ] {
         let (success, _, stderr) =
@@ -3352,6 +3354,8 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     }
     let blocked_id = issue_id_by_title(dir.path(), "Explicit blocker-free blocked work");
     let open_id = issue_id_by_title(dir.path(), "Retired open speculation");
+    let retired_blocked_id = issue_id_by_title(dir.path(), "Retired blocked speculation");
+    let retired_active_id = issue_id_by_title(dir.path(), "Retired active speculation");
     let done_id = issue_id_by_title(dir.path(), "Retired completed history");
 
     for epic_id in [&active_epic_id, &retired_epic_id] {
@@ -3374,6 +3378,11 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         ],
     );
     assert!(success, "completed-child evidence record failed: {stderr}");
+    let evidence_id = record_id_by_title(
+        dir.path(),
+        "evidence",
+        "Completed history remains inspectable",
+    );
 
     for (issue_id, status) in [
         (&mission_id, "in_progress"),
@@ -3381,6 +3390,8 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         (&blocked_id, "blocked"),
         (&retired_epic_id, "superseded"),
         (&open_id, "todo"),
+        (&retired_blocked_id, "blocked"),
+        (&retired_active_id, "in_progress"),
         (&done_id, "done"),
     ] {
         set_issue_status(dir.path(), issue_id, status);
@@ -3401,6 +3412,10 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(success, "global work blocked failed: {stderr}");
     assert!(blocked.lines().any(|id| id == blocked_id), "{blocked}");
     assert!(!blocked.lines().any(|id| id == open_id), "{blocked}");
+    assert!(
+        !blocked.lines().any(|id| id == retired_blocked_id),
+        "{blocked}"
+    );
 
     let (success, mission_ready, stderr) = run_atelier(
         dir.path(),
@@ -3416,6 +3431,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(success, "mission blocked view failed: {stderr}");
     assert!(mission_blocked.lines().any(|id| id == blocked_id));
     assert!(!mission_blocked.lines().any(|id| id == open_id));
+    assert!(!mission_blocked.lines().any(|id| id == retired_blocked_id));
 
     let (success, active_epic, stderr) =
         run_atelier(dir.path(), &["work", "epic", &active_epic_id]);
@@ -3424,12 +3440,122 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(active_epic.contains(&blocked_id), "{active_epic}");
     assert!(!active_epic.contains("Ready Work"), "{active_epic}");
 
+    for role in ["worker", "manager"] {
+        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
+        assert!(success, "man {role} failed: {stderr}");
+        assert!(guide.contains(&active_epic_id), "{guide}");
+        assert!(!guide.contains(&retired_active_id), "{guide}");
+    }
+
+    for issue_id in [&open_id, &retired_blocked_id] {
+        let (success, options, stderr) =
+            run_atelier(dir.path(), &["issue", "transition", issue_id]);
+        assert!(success, "retired child transition options failed: {stderr}");
+        assert!(options.contains("start [blocked]"), "{options}");
+        assert!(options.contains(&format!("terminal ancestor {retired_epic_id}")));
+        assert!(options.contains("cannot enter active-category status 'in_progress'"));
+        assert!(options.contains(&format!("atelier issue show {retired_epic_id}")));
+    }
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &open_id, "start"]);
+    assert!(
+        !success,
+        "retired child start should be blocked: stdout:\n{start_out}\nstderr:\n{stderr}"
+    );
+    for output in [&start_out, &stderr] {
+        assert!(
+            output.contains(&format!("terminal ancestor {retired_epic_id}")),
+            "stdout:\n{start_out}\nstderr:\n{stderr}"
+        );
+    }
+
+    let workflow_path = dir.path().join(".atelier/workflow.yaml");
+    let workflow = std::fs::read_to_string(&workflow_path).unwrap();
+    let task_close = r#"      close:
+        from: [in_progress, validation]
+        to: done
+        required_fields: [close_reason]
+        description: "Closing requires attached evidence and no open blockers."
+        validators:
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+        actions:
+          - tracker.commit
+          - branch_integrate"#;
+    assert!(workflow.contains(task_close));
+    std::fs::write(
+        &workflow_path,
+        workflow.replace(
+            task_close,
+            r#"      close:
+        from: [todo, in_progress, validation]
+        to: done
+        required_fields: [close_reason]
+        description: "Retire work without re-entering execution.""#,
+        ),
+    )
+    .unwrap();
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &open_id,
+            "close",
+            "--reason",
+            "retired with its ancestor",
+        ],
+    );
+    assert!(
+        success,
+        "terminal transition beneath terminal ancestor failed: stdout:\n{close_out}\nstderr:\n{stderr}"
+    );
+    assert!(
+        close_out.contains("Applied transition close"),
+        "{close_out}"
+    );
+
+    let (success, publish_blocked, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "mission publish options failed: {stderr}");
+    assert!(publish_blocked.contains("fail  objective.work_terminal"));
+    let terminal_reason = publish_blocked
+        .lines()
+        .find(|line| line.contains("open advancing work via advances"))
+        .unwrap();
+    assert!(terminal_reason.contains(&active_epic_id));
+    assert!(terminal_reason.contains(&blocked_id));
+    for retired_id in [&retired_blocked_id, &retired_active_id] {
+        assert!(!terminal_reason.contains(retired_id), "{publish_blocked}");
+    }
+
+    for issue_id in [&active_epic_id, &blocked_id] {
+        set_issue_status(dir.path(), issue_id, "done");
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "terminal mission fixture rebuild failed: {stderr}");
+    let (success, publish_retired, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--verbose"],
+    );
+    assert!(success, "retired mission publish options failed: {stderr}");
+    assert!(
+        publish_retired.contains("pass  objective.work_terminal"),
+        "{publish_retired}"
+    );
+
     let (success, retired_epic, stderr) =
         run_atelier(dir.path(), &["work", "epic", &retired_epic_id]);
     assert!(success, "retired epic view failed: {stderr}");
     assert!(retired_epic.contains("Backlog Work"), "{retired_epic}");
-    assert!(retired_epic.contains(&open_id), "{retired_epic}");
+    assert!(retired_epic.contains(&retired_blocked_id), "{retired_epic}");
+    assert!(retired_epic.contains(&retired_active_id), "{retired_epic}");
     assert!(retired_epic.contains("Done Work"), "{retired_epic}");
+    assert!(retired_epic.contains(&open_id), "{retired_epic}");
     assert!(retired_epic.contains(&done_id), "{retired_epic}");
     assert!(!retired_epic.contains("Ready Work"), "{retired_epic}");
 
@@ -3437,7 +3563,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         run_atelier(dir.path(), &["issue", "show", &retired_epic_id]);
     assert!(success, "retired epic issue show failed: {stderr}");
     assert!(
-        retired_show.contains("active 0, ready 0, blocked 0, done 1, backlog 1"),
+        retired_show.contains("active 0, ready 0, blocked 0, done 2, backlog 2"),
         "{retired_show}"
     );
     assert!(
@@ -3447,6 +3573,29 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(
         retired_show.contains("Retired completed history"),
         "{retired_show}"
+    );
+    let subissues = retired_show
+        .split("Subissues\n---------")
+        .nth(1)
+        .and_then(|output| output.split("\nImpact\n------").next())
+        .unwrap();
+    assert!(
+        subissues.contains("status: backlog=2, done=2"),
+        "{subissues}"
+    );
+    assert!(
+        subissues.contains(&format!("shown for context {retired_blocked_id} [backlog]")),
+        "{subissues}"
+    );
+    assert!(!subissues.contains("[blocked]"), "{subissues}");
+    assert!(!subissues.contains("[in_progress]"), "{subissues}");
+
+    let (success, evidence_show, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
+    assert!(success, "retired descendant evidence show failed: {stderr}");
+    assert!(
+        evidence_show.contains("Completed history remains inspectable"),
+        "{evidence_show}"
     );
 }
 

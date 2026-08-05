@@ -507,11 +507,13 @@ fn objective_work_terminal(
     let mut open = objective_work_ids(db, target_kind, target_id)?
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-            Ok(true) => Some(Ok(issue.id)),
-            Ok(false) => None,
-            Err(error) => Some(Err(error)),
-        })
+        .filter_map(
+            |issue| match issue_is_open_advancing_work(db, policy, &issue) {
+                Ok(true) => Some(Ok(issue.id)),
+                Ok(false) => None,
+                Err(error) => Some(Err(error)),
+            },
+        )
         .collect::<Result<Vec<_>>>()?;
     open.sort();
     if open.is_empty() {
@@ -528,6 +530,15 @@ fn objective_work_terminal(
             ),
         ))
     }
+}
+
+fn issue_is_open_advancing_work(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue: &Issue,
+) -> Result<bool> {
+    Ok(issue_is_open_for_workflow(policy, issue)?
+        && crate::read_pipeline::terminal_ancestor(db, Some(policy), issue)?.is_none())
 }
 
 fn objective_direct_blockers_none_open(

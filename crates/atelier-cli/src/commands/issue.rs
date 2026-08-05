@@ -974,19 +974,37 @@ fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
         return Ok(());
     }
 
-    let summary = subissue_summary(&subissues);
     subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
-    let rows = subissues
-        .iter()
+    let classified_subissues = subissues
+        .into_iter()
         .map(|subissue| {
-            let row = work_order_row_for_issue(db, workflow_policy.as_ref(), subissue)?;
+            let classified = atelier_app::read_pipeline::classify_issue(
+                db,
+                workflow_policy.as_ref(),
+                &subissue,
+            )?;
+            Ok((subissue, classified))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let summary = subissue_summary(
+        classified_subissues.len(),
+        classified_subissues.iter().map(|(subissue, classified)| {
+            (
+                classified.classification.label(),
+                subissue.priority.as_str(),
+            )
+        }),
+    );
+    let rows = classified_subissues
+        .iter()
+        .map(|(subissue, classified)| {
             Ok(IssueListRow {
-                role: display_role_for_bucket(row.state().label()),
+                role: display_role_for_bucket(classified.classification.label()),
                 id: format_issue_id(&subissue.id),
-                status: Some(subissue.status.clone()),
+                status: Some(classified.classification.label().to_string()),
                 priority: subissue.priority.clone(),
                 title: subissue.title.clone(),
-                blockers: row.open_blockers.len(),
+                blockers: classified.open_blockers.len(),
                 depth: 1,
             })
         })
@@ -1080,16 +1098,19 @@ fn work_order_row_for_issue(
     })
 }
 
-fn subissue_summary(subissues: &[Issue]) -> String {
+fn subissue_summary<'a>(
+    total: usize,
+    subissues: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> String {
     let mut statuses = BTreeMap::<String, usize>::new();
     let mut priorities = BTreeMap::<String, usize>::new();
-    for subissue in subissues {
-        *statuses.entry(subissue.status.clone()).or_default() += 1;
-        *priorities.entry(subissue.priority.clone()).or_default() += 1;
+    for (status, priority) in subissues {
+        *statuses.entry(status.to_string()).or_default() += 1;
+        *priorities.entry(priority.to_string()).or_default() += 1;
     }
     format!(
         "{} total | status: {} | priority: {}",
-        subissues.len(),
+        total,
         joined_counts(statuses),
         joined_counts(priorities)
     )
@@ -2736,7 +2757,12 @@ mod tests {
         db.cache_fixture_close(&child_b).unwrap();
 
         let subissues = db.get_subissues(&parent).unwrap();
-        let summary = subissue_summary(&subissues);
+        let summary = subissue_summary(
+            subissues.len(),
+            subissues
+                .iter()
+                .map(|issue| (issue.status.as_str(), issue.priority.as_str())),
+        );
 
         assert!(summary.contains("2 total"));
         assert!(summary.contains("done=1"));

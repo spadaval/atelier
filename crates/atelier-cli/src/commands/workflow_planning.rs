@@ -68,6 +68,11 @@ pub fn issue_transition_options(
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let mut blockers =
             crate::commands::workflow::required_field_failures(&record, transition, None)?;
+        if let Some(blocker) = crate::commands::workflow::active_transition_ancestor_blocker(
+            db, &policy, &issue, transition,
+        )? {
+            blockers.push(blocker);
+        }
         let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
         blockers.extend(branch_context_blockers(
             db,

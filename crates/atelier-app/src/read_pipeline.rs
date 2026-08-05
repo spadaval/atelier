@@ -239,7 +239,11 @@ pub fn classify_issue(
     })
 }
 
-fn terminal_ancestor(
+/// Returns the nearest done-category hierarchy ancestor, if one exists.
+///
+/// Completed descendants remain independently terminal and inspectable; callers
+/// use this fact only to retire nonterminal descendants from execution.
+pub fn terminal_ancestor(
     db: &Database,
     workflow_policy: Option<&WorkflowPolicy>,
     issue: &Issue,
