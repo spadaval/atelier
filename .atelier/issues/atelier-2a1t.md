@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate the adaptive contract against Atelier's red line"
-updated_at: "2026-08-05T16:43:27.127727601+00:00"
+updated_at: "2026-08-05T18:07:24.381125866+00:00"
 ---
 
 ## Description
