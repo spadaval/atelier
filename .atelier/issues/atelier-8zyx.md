@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Repair mission authoring and contract residue"
-updated_at: "2026-08-05T18:47:09.160608343+00:00"
+updated_at: "2026-08-05T18:47:55.909804593+00:00"
 ---
 
 ## Description

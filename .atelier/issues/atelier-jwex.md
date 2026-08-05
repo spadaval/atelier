@@ -12,21 +12,21 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
-title: "Unify readiness and retire superseded descendants"
-updated_at: "2026-08-05T18:46:52.084817342+00:00"
+status: "in_progress"
+title: "Unify blocked readiness across work views"
+updated_at: "2026-08-05T18:47:48.988741910+00:00"
 ---
 
 ## Description
 
-Repair the blocking PR 77 findings that normal views disagree about blocker-free `blocked` work and that descendants of a superseded epic remain executable. Put the classification behind one domain rule and preserve completed descendant history while suppressing open speculative descendants from ready selection.
+Repair the blocking PR 77 finding that normal views disagree about blocker-free `blocked` work. Put the classification behind one domain rule shared by status, global work views, and focused mission/epic views.
 
 ## Outcome
 
 - Status, global work views, mission views, and epic views classify explicit blocked states consistently.
-- Open descendants of a terminal or superseded ancestor cannot enter ready projections; completed descendants and evidence remain inspectable.
-- Cross-surface CLI regressions cover both cases.
+- A workflow transition out of `blocked` does not make the record ready until its status changes.
+- Cross-surface CLI regressions cover the shared rule.
 
 ## Evidence
 
-- Fresh global, mission, and epic view scenarios agree on blocked and superseded-descendant classifications.
+- Fresh global, mission, and epic view scenarios agree on blocker-free blocked classification.
