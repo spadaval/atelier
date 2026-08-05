@@ -7,7 +7,7 @@ use crate::{parse_datetime, Database};
 
 /// Domain-cache schema identity. A mismatch means the ignored cache must be rebuilt.
 pub const CACHE_APPLICATION_ID: i32 = 0x4154_4c52; // "ATLR"
-pub const CACHE_SCHEMA_VERSION: i32 = 2;
+pub const CACHE_SCHEMA_VERSION: i32 = 3;
 
 pub const DOMAIN_CACHE_TABLES: &[&str] = &[
     "issue_index",
@@ -153,6 +153,8 @@ impl Database {
                 review_id TEXT,
                 review_provider TEXT,
                 review_number INTEGER,
+                strategy_path TEXT,
+                strategy_revision INTEGER,
                 workflow_owner_issue_id TEXT,
                 workflow_work_branch TEXT,
                 workflow_branch_base TEXT,
@@ -281,10 +283,10 @@ impl Database {
             self.conn.execute(
                 "INSERT INTO issue_index
                  (id, title, status, issue_type, priority, review_kind, review_id, review_provider,
-                  review_number, workflow_owner_issue_id, workflow_work_branch, workflow_branch_base,
+                  review_number, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch, workflow_branch_base,
                   workflow_review_target, workflow_integration_target, workflow_owner_kind,
                   workflow_merge_strategy, parent_id, created_at, updated_at, closed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
                 params![
                     issue.id,
                     issue.title,
@@ -310,6 +312,12 @@ impl Database {
                         .fields
                         .get("review")
                         .and_then(|value| value.get("number"))
+                        .and_then(serde_json::Value::as_i64),
+                    field_str(&issue.fields, "strategy", "path"),
+                    issue
+                        .fields
+                        .get("strategy")
+                        .and_then(|value| value.get("revision"))
                         .and_then(serde_json::Value::as_i64),
                     field_str(&issue.fields, "workflow_branch", "owner_issue_id"),
                     field_str(&issue.fields, "workflow_branch", "work_branch"),
@@ -392,7 +400,7 @@ impl Database {
         self.conn
             .query_row(
                 "SELECT id, title, status, issue_type, priority, review_kind, review_id,
-                        review_provider, review_number, workflow_owner_issue_id, workflow_work_branch,
+                        review_provider, review_number, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch,
                         workflow_branch_base, workflow_review_target, workflow_integration_target,
                         workflow_owner_kind, workflow_merge_strategy, parent_id, created_at, updated_at, closed_at
                  FROM issue_index WHERE id = ?1",
@@ -438,7 +446,7 @@ impl Database {
     pub fn query_issue_cache(&self, query: &IssueCacheQuery<'_>) -> Result<Vec<IssueCacheRow>> {
         let mut sql = String::from(
             "SELECT DISTINCT i.id, i.title, i.status, i.issue_type, i.priority, i.review_kind,
-                    i.review_id, i.review_provider, i.review_number, i.workflow_owner_issue_id,
+                    i.review_id, i.review_provider, i.review_number, i.strategy_path, i.strategy_revision, i.workflow_owner_issue_id,
                     i.workflow_work_branch, i.workflow_branch_base, i.workflow_review_target,
                     i.workflow_integration_target, i.workflow_owner_kind, i.workflow_merge_strategy,
                     i.parent_id, i.created_at, i.updated_at, i.closed_at
@@ -899,14 +907,25 @@ fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
         }
         fields.insert("review".to_string(), serde_json::Value::Object(review));
     }
+    if let Some(path) = row.get::<_, Option<String>>(9)? {
+        let mut strategy = serde_json::Map::new();
+        strategy.insert("path".to_string(), serde_json::Value::String(path));
+        if let Some(revision) = row.get::<_, Option<i64>>(10)? {
+            strategy.insert(
+                "revision".to_string(),
+                serde_json::Value::Number(revision.into()),
+            );
+        }
+        fields.insert("strategy".to_string(), serde_json::Value::Object(strategy));
+    }
     let workflow_values = [
-        ("owner_issue_id", 9),
-        ("work_branch", 10),
-        ("branch_base", 11),
-        ("review_target", 12),
-        ("integration_target", 13),
-        ("owner_kind", 14),
-        ("merge_strategy", 15),
+        ("owner_issue_id", 11),
+        ("work_branch", 12),
+        ("branch_base", 13),
+        ("review_target", 14),
+        ("integration_target", 15),
+        ("owner_kind", 16),
+        ("merge_strategy", 17),
     ];
     let mut workflow = serde_json::Map::new();
     for (name, index) in workflow_values {
@@ -927,10 +946,10 @@ fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
         issue_type: row.get(3)?,
         priority: row.get(4)?,
         fields,
-        parent_id: row.get(16)?,
-        created_at: parse_datetime(row.get(17)?),
-        updated_at: parse_datetime(row.get(18)?),
-        closed_at: row.get::<_, Option<String>>(19)?.map(parse_datetime),
+        parent_id: row.get(18)?,
+        created_at: parse_datetime(row.get(19)?),
+        updated_at: parse_datetime(row.get(20)?),
+        closed_at: row.get::<_, Option<String>>(21)?.map(parse_datetime),
     })
 }
 
@@ -1224,6 +1243,35 @@ mod tests {
                 found: 0,
                 expected: CACHE_APPLICATION_ID,
             })
+        );
+    }
+
+    #[test]
+    fn issue_cache_round_trips_typed_strategy_projection() {
+        let (_directory, database) = database();
+        let mut row = issue("atelier-mission", "Adaptive mission", 2);
+        row.issue_type = "mission".to_string();
+        row.fields.insert(
+            "strategy".to_string(),
+            serde_json::json!({
+                "path": "docs/strategies/adaptive-mission.md",
+                "revision": 2
+            }),
+        );
+
+        database
+            .index_issue(
+                &row,
+                &[],
+                &[],
+                &[],
+                &source("issue", &row.id, "issues/atelier-mission.md", 2),
+            )
+            .unwrap();
+
+        assert_eq!(
+            database.issue_cache_row(&row.id).unwrap().unwrap().fields,
+            row.fields
         );
     }
 

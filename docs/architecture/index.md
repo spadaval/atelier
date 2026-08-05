@@ -60,6 +60,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0014: Status Role Attribution Replaces Sessions](../adr/0014-status-role-attribution-replaces-sessions.md)
 - [ADR 0015: Missions Are Declared Workflow Policy](../adr/0015-missions-are-declared-workflow-policy.md)
 - [ADR 0017: SQLite Domain Cache And Hard Removal](../adr/0017-sqlite-domain-cache-and-hard-removal.md)
+- [ADR 0018: Strategy, Draft Epics, And Adaptive Expansion](../adr/0018-strategy-draft-epics-and-adaptive-expansion.md)
 
 ## Target Architecture
 

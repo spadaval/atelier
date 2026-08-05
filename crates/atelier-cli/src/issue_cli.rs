@@ -12,7 +12,7 @@ fn issue_create_parts(
     body: Option<&str>,
     labels: &[String],
     issue_type: Option<&str>,
-) -> Result<(String, Option<String>, Vec<String>, String)> {
+) -> Result<(String, Option<String>, Option<String>, Vec<String>, String)> {
     if description.is_some() && body.is_some() {
         bail!("--description and --body cannot be combined");
     }
@@ -42,10 +42,12 @@ fn issue_create_parts(
         } else {
             (priority.to_string(), None, None)
         };
-    let final_description = description
-        .or(body)
-        .map(str::to_string)
-        .or(final_description);
+    let final_description = if body.is_some() {
+        None
+    } else {
+        description.map(str::to_string).or(final_description)
+    };
+    let final_body = body.map(str::to_string);
 
     IssuePriority::from_cli_input(&final_priority)?;
     let final_issue_type = match (issue_type, template_issue_type) {
@@ -59,7 +61,13 @@ fn issue_create_parts(
         (None, Some(default)) => default.to_string(),
         (None, None) => "task".to_string(),
     };
-    Ok((final_priority, final_description, labels, final_issue_type))
+    Ok((
+        final_priority,
+        final_description,
+        final_body,
+        labels,
+        final_issue_type,
+    ))
 }
 
 fn template_default_issue_type(template: &str) -> &'static str {
@@ -90,20 +98,22 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             let cache = use_cases::mutation_cache()?;
             drop(cache);
             let (state_dir, db_path) = state_and_db_paths()?;
-            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
-                &priority,
-                template.as_deref(),
-                description.as_deref(),
-                body.as_deref(),
-                &label,
-                issue_type.as_deref(),
-            )?;
+            let (final_priority, final_description, final_body, labels, issue_type) =
+                issue_create_parts(
+                    &priority,
+                    template.as_deref(),
+                    description.as_deref(),
+                    body.as_deref(),
+                    &label,
+                    issue_type.as_deref(),
+                )?;
             commands::issue::create_lifecycle(
                 &state_dir,
                 &db_path,
                 commands::issue::LifecycleCreateInput {
                     title: &title,
                     description: final_description.as_deref(),
+                    body: final_body.as_deref(),
                     priority: &final_priority,
                     issue_type: &issue_type,
                     labels: &labels,

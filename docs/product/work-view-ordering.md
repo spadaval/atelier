@@ -54,14 +54,17 @@ visible group.
 
 Work views use one readable row state label:
 
-- `ready`: todo-category work with no open blockers in the row state context;
+- `ready`: work whose exact configured status exposes a direct transition into
+  an active-category status and has no open blockers in the row state context;
 - `blocked`: work with one or more open blockers, including hidden blockers
   outside the visible set;
 - `active`: active-category work, including configured workflow statuses such
   as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;
 - `not-ready`: work that is not startable and does not fit a more specific
-  work-view state.
+  work-view state. Draft epics are the primary planning example: their status
+  may share the `todo` category, but their next transition refines them to
+  `ready` rather than entering active execution.
 
 Human queue rows should not print duplicate category/status tokens such as
 `todo/todo` or `active/in_progress`. Exact configured workflow status is the

@@ -260,14 +260,21 @@ such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
 tokens such as `in_progress` are not category aliases. The legacy `work queue`
 is neither the normal inventory nor the Mission Overview.
 `atelier issue create` has one work-type decision. Use `--issue-type` for the
-canonical type (`bug`, `completion`, `epic`, `feature`, `spike`, `task`, or
-`validation`) or use a template preset whose default type is documented by the
+canonical type (`bug`, `completion`, `epic`, `feature`, `mission`, `spike`,
+`task`, or `validation`) or use a template preset whose default type is
+documented by the
 template name (`bug` -> `bug`, `feature` -> `feature`, research/investigation ->
 `spike`, audit -> `validation`, refactor/continuation -> `task`). Templates
 also provide default labels, priorities, and body scaffolding, and those
 defaults still apply when `--parent` or a matching explicit `--issue-type` is
 supplied. Conflicting type choices fail with guidance rather than silently
 creating a surprising record.
+For mission creation, an unsectioned `--body` supplies Description prose. A
+sectioned `--body` preserves authored `## Description`, `## Outcome`, optional
+`## Evidence`, and optional `## Notes` content; when Description is omitted,
+creation supplies the standard non-empty Description placeholder. A successful
+create always writes a body that satisfies the canonical issue section
+contract.
 
 First-class mission, evidence, relationship, and work lifecycle
 commands are now core as a staged implementation. Mission,
@@ -313,7 +320,7 @@ handoff transcript.
 State-specific next actions are part of the command contract:
 
 - `draft`: show missing readiness fields and point to record editing,
-  `atelier check <mission-id>`, or `atelier issue update <id> --status ready`.
+  `atelier check <mission-id>`, or `atelier issue transition <id> ready`.
 - `ready`: show ready work and the command to transition an issue into active
   work or inspect issue show <objective-id> explicitly.
 - `active`: show active work, ready work, blockers, configured validator

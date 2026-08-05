@@ -8,17 +8,15 @@ labels:
 - "planning"
 priority: "P1"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "atelier-iznq"
+  blocks: []
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Audit Atelier against adaptive mission scenarios"
-updated_at: "2026-07-28T16:39:31.744381815+00:00"
+updated_at: "2026-08-05T18:33:34.933029074+00:00"
 ---
 
 ## Description
@@ -33,4 +31,4 @@ Inspect current mission records, issue bodies, status and work views, bundle cre
 
 ## Evidence
 
-Evidence was not specified in the bundle.
+- `docs/architecture/quality/adaptive-mission-gap-analysis.md` records the scenario matrix, reused capabilities, smallest required changes, and rejected machinery.

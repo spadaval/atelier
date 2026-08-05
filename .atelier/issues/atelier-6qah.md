@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "draft"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-07-28T16:39:31.725432928+00:00"
+updated_at: "2026-08-05T16:43:27.127727601+00:00"
 ---
 
 ## Description
@@ -32,7 +32,3 @@ Expansion condition: expand when the legibility and replanning outcomes are impl
 - The embedded Agent Factory binding routes strategy, replanning, and expansion behavior through the correct Atelier surfaces.
 - A fresh agent can create a strategic mission, execute the current horizon, expand an epic from evidence, reconcile changed work, and continue without private context.
 - Residue checks find no conflicting frozen-plan, whole-graph-completeness, or planning-approval guidance.
-
-## Evidence
-
-Evidence was not specified in the bundle.

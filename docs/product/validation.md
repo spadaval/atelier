@@ -13,8 +13,10 @@ work graph is described in [Work Model](work-model.md).
 ## Core Terms
 
 Outcome is the desired observable result of a work item. It says what should be
-true when the work is done. Outcomes should describe product, command, file,
-workflow, or coordination behavior, not the private implementation path.
+true when the work is done. Outcomes may describe product, command, file,
+workflow, system, architecture, operational, quantitative, destructive, or
+explicitly behavior-preserving results, but not the private implementation
+path.
 
 Evidence requirement is the expected way to prove an outcome. It may live in an
 issue `Evidence` section, a workflow validator, or an explicit validation issue
@@ -68,7 +70,15 @@ validation rather than duplicating every child proof record.
 
 ## Product Rule
 
-Proof requirements must be visible before completion.
+Proof requirements must be visible before completion. They need not be invented
+before the intended increment is understood.
+
+Strategy owns mission-level assurance and known durable risks. A draft epic may
+omit exact proof criteria because it is not executable. Epic expansion chooses
+the proof route together with the refined outcome, immediate work, and
+dependencies; the `draft -> ready` transition checks that this current horizon
+is concrete enough to execute. Later discoveries may still revise proof within
+strategy authority.
 
 Agents should not discover required proof only after `atelier issue transition
 <id> <close-transition> --reason "..."` fails. The normal workflow surfaces

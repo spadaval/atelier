@@ -7,9 +7,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
-use atelier_core::{Issue, IssuePriority};
+use atelier_core::IssuePriority;
 use atelier_sqlite::Database;
 
+use crate::read_pipeline::WorkClassification;
 use crate::workflow_policy::WorkflowPolicy;
 
 pub const MISSION_OVERVIEW_MISSION_LIMIT: usize = 20;
@@ -36,6 +37,7 @@ pub struct MissionOverviewIssue {
     pub status_category: String,
     pub priority: String,
     pub open_blocker_count: usize,
+    pub work_classification: WorkClassification,
 }
 
 /// A directed membership fact: `mission_id` advances `root_id`.
@@ -99,6 +101,7 @@ pub struct MissionOverviewCounts {
     pub blocked: usize,
     pub todo: usize,
     pub done: usize,
+    pub backlog: usize,
     pub unknown: usize,
 }
 
@@ -129,6 +132,7 @@ pub fn acquire_mission_overview_input(
                 child_id: issue.id.clone(),
             });
         }
+        let classified = crate::read_pipeline::classify_issue(db, workflow_policy, issue)?;
         issues.push(MissionOverviewIssue {
             id: issue.id.clone(),
             title: issue.title.clone(),
@@ -136,7 +140,8 @@ pub fn acquire_mission_overview_input(
             status: issue.status.clone(),
             status_category: status_category(workflow_policy, &issue.status),
             priority: issue.priority.clone(),
-            open_blocker_count: open_blocker_count(db, workflow_policy, issue)?,
+            open_blocker_count: classified.open_blockers.len(),
+            work_classification: classified.classification,
         });
     }
 
@@ -171,23 +176,6 @@ pub fn mission_overview(
 ) -> Result<MissionOverview> {
     let input = acquire_mission_overview_input(db, workflow_policy)?;
     Ok(project_mission_overview(request, &input))
-}
-
-fn open_blocker_count(
-    db: &Database,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issue: &Issue,
-) -> Result<usize> {
-    let mut count = 0;
-    for blocker_id in db.get_blockers(&issue.id)? {
-        let Some(blocker) = db.get_issue(&blocker_id)? else {
-            continue;
-        };
-        if status_category(workflow_policy, &blocker.status) != "done" {
-            count += 1;
-        }
-    }
-    Ok(count)
 }
 
 fn status_category(workflow_policy: Option<&WorkflowPolicy>, status: &str) -> String {
@@ -453,6 +441,7 @@ fn counts_for_ids<'a>(
             WorkState::Blocked => counts.blocked += 1,
             WorkState::Todo => counts.todo += 1,
             WorkState::Done => counts.done += 1,
+            WorkState::Backlog => counts.backlog += 1,
             WorkState::Unknown => counts.unknown += 1,
         }
     }
@@ -465,17 +454,19 @@ enum WorkState {
     Blocked,
     Todo,
     Done,
+    Backlog,
     Unknown,
 }
 
 fn work_state(issue: &MissionOverviewIssue) -> WorkState {
-    match issue.status_category.as_str() {
-        "active" => WorkState::Active,
-        "done" => WorkState::Done,
-        "blocked" => WorkState::Blocked,
-        _ if issue.open_blocker_count > 0 => WorkState::Blocked,
-        "todo" => WorkState::Todo,
-        _ => WorkState::Unknown,
+    match issue.work_classification {
+        WorkClassification::Active => WorkState::Active,
+        WorkClassification::Done => WorkState::Done,
+        WorkClassification::Blocked => WorkState::Blocked,
+        WorkClassification::Ready if issue.open_blocker_count > 0 => WorkState::Blocked,
+        WorkClassification::Ready => WorkState::Todo,
+        WorkClassification::Backlog if issue.status_category == "unknown" => WorkState::Unknown,
+        WorkClassification::Backlog => WorkState::Backlog,
     }
 }
 
@@ -519,7 +510,9 @@ mod tests {
 
     use atelier_sqlite::{IssueCacheRow, IssueRelationCacheRow, RecordSourceCacheRow};
 
-    use crate::workflow_policy::{BranchLifecycleConfig, StatusDefinition};
+    use crate::workflow_policy::{
+        BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
+    };
 
     fn issue(
         id: impl Into<String>,
@@ -536,6 +529,13 @@ mod tests {
             status_category: category.to_string(),
             priority: priority.to_string(),
             open_blocker_count: 0,
+            work_classification: match category {
+                "active" => WorkClassification::Active,
+                "blocked" => WorkClassification::Blocked,
+                "todo" => WorkClassification::Ready,
+                "done" => WorkClassification::Done,
+                _ => WorkClassification::Backlog,
+            },
         }
     }
 
@@ -967,13 +967,40 @@ mod tests {
                 },
             );
         }
+        let workflow_by_issue_type = ["mission", "epic", "task"]
+            .into_iter()
+            .map(|issue_type| (issue_type.to_string(), "work".to_string()))
+            .collect();
+        let workflows = BTreeMap::from([(
+            "work".to_string(),
+            WorkflowDefinition {
+                applies_to: vec![
+                    "mission".to_string(),
+                    "epic".to_string(),
+                    "task".to_string(),
+                ],
+                initial_status: "todo".to_string(),
+                done_statuses: vec!["done".to_string()],
+                transitions: BTreeMap::from([(
+                    "start".to_string(),
+                    TransitionDefinition {
+                        from: vec!["todo".to_string()],
+                        to: "in_progress".to_string(),
+                        required_fields: Vec::new(),
+                        description: None,
+                        validators: Vec::new(),
+                        actions: Vec::new(),
+                    },
+                )]),
+            },
+        )]);
         WorkflowPolicy {
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
+            workflow_by_issue_type,
             statuses,
-            workflows: BTreeMap::new(),
+            workflows,
         }
     }
 }

@@ -9,11 +9,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
-    ISSUE_PRIORITY_LABELS,
+    ISSUE_PRIORITY_LABELS, ISSUE_STRATEGY_FIELD,
 };
 pub use atelier_core::{
     EvidenceRecord, IssueFieldError, IssueRecord, IssueReview, IssueSectionName, IssueSectionState,
-    IssueSections, Record, RecordHeader, ReviewRecord,
+    IssueSections, IssueStrategy, Record, RecordHeader, ReviewRecord,
 };
 
 pub mod activity;
@@ -862,6 +862,11 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
             &review.to_value(),
         )?;
     }
+    if let Some(strategy) = fields.remove(ISSUE_STRATEGY_FIELD) {
+        let strategy = IssueStrategy::from_value(&strategy)
+            .context("Invalid issue strategy field while rendering record file")?;
+        write_yaml_value(&mut output, ISSUE_STRATEGY_FIELD, &strategy.to_value())?;
+    }
     write_yaml_map_if_not_empty(&mut output, "fields", &fields)?;
     write_yaml_scalar(
         &mut output,
@@ -1069,6 +1074,18 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
                 error
             )
         })?;
+    let strategy = front_matter
+        .get(ISSUE_STRATEGY_FIELD)
+        .map(IssueStrategy::from_value)
+        .transpose()
+        .map_err(|error| {
+            anyhow!(
+                "workflow_issue_field_invalid: issue {} has an invalid strategy field in {}: {}",
+                id,
+                display_state_path(relative),
+                error
+            )
+        })?;
     let sections = parse_issue_sections(body, relative)?;
 
     let mut issue = Issue {
@@ -1087,6 +1104,9 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     };
     if let Some(review) = review {
         issue.set_review(review);
+    }
+    if let Some(strategy) = strategy {
+        issue.set_strategy(strategy);
     }
 
     Ok(CanonicalIssueRecord {
@@ -3101,6 +3121,28 @@ updated_at: "2026-06-10T13:00:00+00:00"
             store.discover_record_paths("review").unwrap(),
             vec![PathBuf::from("reviews/atelier-rvw1.yaml")]
         );
+    }
+
+    #[test]
+    fn mission_record_round_trips_typed_strategy_reference() {
+        let mut record = issue_record("atelier-strg");
+        record.issue.issue_type = "mission".to_string();
+        record.issue.status = "draft".to_string();
+        record
+            .issue
+            .set_strategy(IssueStrategy::new("docs/strategies/adaptive-mission.md", 2).unwrap());
+
+        let text = render_issue_record(&record).unwrap();
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-strg")).unwrap();
+
+        assert!(text
+            .contains("strategy:\n  path: docs/strategies/adaptive-mission.md\n  revision: 2\n"));
+        assert!(!text.contains("fields:\n"));
+        assert_eq!(
+            parsed.issue.strategy().unwrap(),
+            record.issue.strategy().unwrap()
+        );
+        assert_eq!(render_issue_record(&parsed).unwrap(), text);
     }
 
     #[test]

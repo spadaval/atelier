@@ -36,7 +36,9 @@ Use the smallest record shape that makes accountability clear:
 - Mission: a target state and scope boundary for work large enough to need at
   least one epic or equivalent root work item. Mission scope is the direct
   `advances` links plus the descendants of those roots.
-- Epic: a coherent branch, review, or integration package under a mission.
+- Epic: an outcome-bearing delivery increment and one coherent branch, review,
+  and validation boundary under a mission. Product-facing and pure-engineering
+  outcomes use the same epic shape.
 - Ordinary issue: one accountable implementation, docs, migration, or artifact
   update slice with a local Outcome.
 - Validation issue: independent judgment derived from the target Outcome or
@@ -45,9 +47,22 @@ Use the smallest record shape that makes accountability clear:
   claim checked, action taken, result, and transcript or artifact.
 
 Do not add `Evidence` or `Validation` prose as default paperwork for every new
-mission or ordinary issue. Workers and validators choose and record proof while
-doing the work; planners write the target state and only call out proof when a
-specific contract, risk, or workflow gate requires it.
+record. Strategy owns mission-level assurance. A draft epic may omit exact
+proof; expansion selects proof together with the refined increment. Workers and
+validators choose and record focused proof while doing ordinary work unless a
+specific contract, risk, or workflow gate requires it earlier.
+
+## Planning Horizon
+
+Create outcome-bearing epics for the visible mission shape, but create ordinary
+issues only through the nearest evidence boundary. Later epics remain in the
+repository's draft state with a meaningful preliminary outcome, constraints,
+and unknowns; they do not need children or exact proof.
+
+Expand a draft epic by refining its outcome and preservation claims, creating
+only immediate child work, representing known dependencies, choosing its proof
+route, and using the ordinary transition to ready. Do not add an expansion
+flag, approval, validation profile, or second implementation-plan document.
 
 ## Mission Creation
 
@@ -140,5 +155,5 @@ diff locations inspected.
 
 Report items created or changed, dependency changes, unresolved choices,
 validation or lint run, evidence receipts produced, and follow-up artifact
-tasks. For a mission draft, also report its current scope, unresolved choices,
-and whether its Outcome and immediate work are clear enough to mark ready.
+tasks. Report the draft outcome map separately from the executable horizon and
+name proof routes selected for newly ready epics.

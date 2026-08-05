@@ -31,6 +31,5 @@ product policy in the linked sources instead of duplicating it here.
 - Local debug binary: `target/debug/atelier`
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`
-- Extended ignored tests: `cargo nextest run --profile extended --run-ignored=only`
 - Whitespace check: `git diff --check`
 - Tracker check: `atelier check`

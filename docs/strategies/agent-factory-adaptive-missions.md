@@ -1,7 +1,7 @@
 ---
 strategy: agent-factory-adaptive-missions
 mission: atelier-5kej
-revision: 1
+revision: 2
 status: active
 sources:
   - PRODUCT_INTENT.md
@@ -29,11 +29,19 @@ freezing the whole plan.
 
 - Strategy is durable mission-scoped Markdown referenced by the mission. It
   owns the intended outcome, target shape, governing tradeoffs, boundaries,
-  adaptation authority, and assurance.
-- Missions and epics describe product outcomes. An epic may remain unexpanded
-  when its constraints, unknowns, and expansion condition are clear.
-- Ordinary issues are the current implementation hypothesis. They are created
-  only through the nearest evidence boundary and own bounded executable work.
+  adaptation authority, and mission-level assurance. It is not a backlog or a
+  container for user stories.
+- Epics are outcome-bearing delivery increments. The outcome may be product,
+  system, architecture, operational, quantitative, destructive, or explicitly
+  behavior-preserving, but it must fit one coherent branch, review, and parent
+  validation boundary.
+- Draft epics form the visible provisional outcome map. A draft has a
+  meaningful outcome and known uncertainty, but it need not have child work,
+  an implementation route, or exact proof criteria and is not executable.
+- Ready epics and their ordinary issues are the current implementation
+  hypothesis. Expanding an epic refines its outcome, preservation claims,
+  immediate work, dependencies, and proof route together through the nearest
+  evidence boundary.
 - Typed relationships remain the source of truth for mission scope,
   dependencies, and hierarchy.
 - Normal Atelier views make the strategy reference, outcome map, executable
@@ -45,22 +53,29 @@ freezing the whole plan.
 
 # Governing Decisions
 
-1. Product requirements and implementation tasks are separate layers.
-   Strategy and outcome records say what must become true. Issues say what one
-   Worker can presently do to advance it.
+1. Governing strategy and delivery planning are separate layers. Strategy says
+   what governs every plausible route. An epic says what one coherent increment
+   must make true. An ordinary issue says what one Worker can presently do to
+   advance it.
 2. Plan the full outcome, not the full task graph. Distant implementation work
    is not created merely to make a mission appear complete.
-3. Prefer conventions and presentation over new persistent machinery. Add
-   schema or commands only when an observed operator scenario cannot be made
-   clear with existing Markdown and typed relationships.
-4. Replanning is ordinary Manager work. It does not require an approval state,
+3. Use one epic type for product-facing and pure-engineering outcomes. Vary the
+   authored outcome and proof, not the lifecycle shape, unless evidence later
+   demonstrates a genuinely different workflow.
+4. Prefer workflow state, existing Markdown sections, typed relationships, and
+   presentation over new persistent machinery. Add schema or commands only
+   when an observed operator scenario cannot be made clear with those facts.
+5. Replanning is ordinary Manager work. It does not require an approval state,
    authenticated planning actor, graph digest, or provenance ceremony.
-5. Strategy revision and implementation replanning are different. Changes to
+6. Strategy revision and implementation replanning are different. Changes to
    outcome, target system, governing tradeoffs, boundaries, assurance, or
    adaptation authority return to a commissioned strategy session. Changes to
    issues, dependencies, sequencing, proof, or expansion within those bounds
    do not.
-6. Atelier owns tracker mechanics and repository-specific command guidance.
+7. Proof planning is part of epic expansion. Draft work carries only the
+   mission-level assurance and known risks that are currently meaningful;
+   exact epic and issue proof is authored when the intended increment is clear.
+8. Atelier owns tracker mechanics and repository-specific command guidance.
    Agent Factory owns portable orchestration behavior and routes to Atelier
    rather than duplicating its command manual.
 
@@ -71,8 +86,10 @@ freezing the whole plan.
 - Do not require whole-mission task completeness before execution.
 - Do not add planning approval, reviewer identity, actor authorization, graph
   freezing, exact graph digests, or stale-plan invalidation.
-- Do not turn expansion conditions into workflow gates. They are coordination
-  information for Managers.
+- Do not add an `expanded` flag, a validation profile, outcome anchors, work
+  dispositions, or a replanning record. Draft/ready workflow state, authored
+  outcomes, relationships, evidence, Git history, and optional mission notes
+  carry the required truth.
 - Do not redesign code review, provider authentication, evidence capture, or
   mission publication except where their existing presentation directly
   contradicts the adaptive planning model.
@@ -94,15 +111,16 @@ freezing the whole plan.
 
 ## Managers May Change
 
-- The exact Markdown conventions used to reference strategy or describe an
-  epic's expansion condition.
+- The exact representation used to reference strategy and present draft epic
+  uncertainty, provided the durable source remains direct and inspectable.
 - CLI wording and the placement of strategy, horizon, and expansion information
   in normal mission views.
 - The current issue decomposition, dependency graph, sequencing, proof
   expectations, and ready-work buffer.
 - Whether a demonstrated gap needs documentation, presentation, workflow, or
   persistence changes.
-- The order and size of increments after the contract epic supplies evidence.
+- The order and size of outcome-bearing increments after the current horizon
+  supplies evidence.
 
 ## Return To Strategy When
 
@@ -120,13 +138,15 @@ freezing the whole plan.
 The mission must demonstrate, from a fresh repository state, that a Manager
 can:
 
-1. Create a mission that references a governing strategy and advances
-   outcome-oriented epics.
-2. Inspect the strategy revision, outcome map, current ready horizon, blockers,
-   and an unexpanded epic's expansion condition through normal product
-   surfaces.
-3. Complete an increment, use its evidence to expand the next epic, and add or
-   resequence only the newly justified issues.
+1. Create a mission that references a governing strategy and advances both
+   product-facing and pure-engineering outcome epics.
+2. Inspect the strategy revision, draft outcome map, current ready horizon, and
+   blockers through normal product surfaces without treating draft epics as
+   executable work.
+3. Keep a draft epic structurally valid without requiring child work or exact
+   proof, then use predecessor evidence to refine its outcome, preservation
+   claims, immediate issues, dependencies, and validation route before making
+   it ready.
 4. Supersede obsolete speculative work while preserving completed work and
    evidence.
 5. Continue execution without plan approval, actor identity, graph digest,
@@ -144,3 +164,8 @@ not sufficient.
   removing the independent plan-review subsystem. The initial execution
   horizon is the contract epic; later epics expand only after that contract and
   its red-line validation produce evidence.
+- Revision 2 — Defined strategy as governing intent rather than a backlog;
+  defined one outcome-bearing epic type for product and engineering work;
+  introduced draft-to-ready expansion with just-in-time proof planning; and
+  rejected outcome anchors, validation profiles, work dispositions, and
+  persistent replanning records.

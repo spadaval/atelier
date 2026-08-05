@@ -148,8 +148,9 @@ to be an issue.
 
 A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain a concrete target
-`Outcome`, explicit non-scope, current risks, status, direct `advances` links to
-root work, explicit validation work when required, and current health. Mission
+`Outcome`, an optional governing strategy reference for substantial work,
+explicit non-scope, current risks, status, direct `advances` links to root work,
+explicit validation work when required, and current health. Mission
 scope is those direct root links plus their descendants. A mission is also the
 normal shared background workspace boundary: one mission owns one shared Git
 worktree or equivalent background checkout where coordinated agents can operate
@@ -169,11 +170,22 @@ Atelier does not require a separate approval ceremony for those edits.
 
 ### Epic
 
-An epic is the normal branch and review boundary beneath a mission. It groups a
-coherent changeset that can be reviewed, validated, and merged as a unit, often
-mapping directly to a PR-equivalent branch. Epic review and validation gates
-own the parent judgment for the grouped change; child issues contribute local
-proof rather than each carrying an independent review requirement by default.
+An epic is an outcome-bearing delivery increment and the normal branch and
+review boundary beneath a mission. Its desired result may be product-facing,
+system, architecture, operational, quantitative, destructive, or explicitly
+behavior-preserving. It must still fit a coherent changeset that can be
+reviewed, validated, and merged as a unit, often mapping directly to a
+PR-equivalent branch. Epic review and validation gates own the parent judgment
+for the grouped change; child issues contribute local proof rather than each
+carrying an independent review requirement by default.
+
+Epics begin as drafts. A draft epic has a meaningful preliminary Outcome but
+may omit child work, an implementation route, exact dependencies, and an
+`Evidence` section. Expanding the epic refines its Outcome and preservation
+claims, adds immediate evidence-backed child work and dependencies, and selects
+the proof route. The ordinary transition to `ready` records that the epic is
+executable; there is no separate expansion flag, plan approval, or validation
+profile.
 
 ### Checkpoint Semantics
 
@@ -197,11 +209,11 @@ validation, migration, or other explicitly risk-escalated item.
 ### Plans
 
 Plans are ordinary Markdown artifacts or prose inside accountable work and
-evidence records in v1. They may still be durable when committed to the
-repository, but they are not `.atelier/plans/` records and they do not have a
-first-class plan command group. Reference plan Markdown by path or prose from a
-mission, epic, issue, or evidence body when the execution intent matters beyond
-ephemeral context.
+evidence records in v1. A substantial mission may reference one governing
+strategy document that owns durable intent, boundaries, adaptation authority,
+and assurance without becoming a backlog. Plans may still be durable when
+committed to the repository, but they are not `.atelier/plans/` records and they
+do not have a first-class plan command group.
 
 ### Evidence
 
@@ -390,15 +402,29 @@ workflows:
 
   epic:
     applies_to: [epic]
-    initial_status: todo
-    done_statuses: [done]
+    initial_status: draft
+    done_statuses: [done, superseded]
     transitions:
+      ready:
+        from: [draft]
+        to: ready
+        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
+        validators:
+          - issue.sections_parseable
+          - objective.work_present
+          - blockers.transitive_none_open
+          - lint.none_blocking
       start:
-        from: [todo, blocked]
+        from: [ready, blocked]
         to: in_progress
         description: "Start active work on this item."
         validators:
           - blockers.transitive_none_open
+      supersede:
+        from: [draft, ready, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
       request_review:
         from: [in_progress]
         to: review

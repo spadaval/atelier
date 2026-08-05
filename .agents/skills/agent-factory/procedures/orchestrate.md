@@ -31,6 +31,29 @@ repositories, start from `atelier man manager`, `atelier status`, focused
   validation, and clean handoff state are visible through repository-owned
   product surfaces.
 
+## Replanning And Expansion
+
+After an integrated increment, material discovery, failed assumption, or new
+blocker, compare evidence with the active strategy and change only the smallest
+affected layer. Directly revise issues, dependencies, sequencing, and proof
+within strategy authority; preserve completed history and failed evidence.
+
+Keep later outcomes as draft epics. Expand only the next justified epic by
+refining its outcome and preservation claims, creating immediate child work and
+dependencies, choosing focused proof and any justified independent validation,
+then using the repository's ordinary draft-to-ready transition.
+
+- Rescope when the outcome and review boundary remain coherent; split when a
+  partial result needs independent ownership, sequencing, or proof.
+- Defer valuable but unnecessary or premature work outside the executable
+  horizon, retaining its reason and return condition.
+- Supersede obsolete speculative work instead of rewriting history.
+- Repair a discovered bug in the current branch only when it is required to
+  deliver or prove the assigned outcome and fits its boundary. Otherwise track
+  it and use its own repository-appropriate owner branch.
+- Return to strategy for changes to outcome, target system, governing tradeoff,
+  boundary, assurance, adaptation authority, or accepted ADR.
+
 ## Assignment Block
 
 Every delegated worker prompt must include:

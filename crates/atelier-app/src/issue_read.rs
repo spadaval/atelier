@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
+use crate::read_pipeline::{classify_issue, WorkClassification};
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, RecordLink};
 use atelier_sqlite::Database;
@@ -157,8 +158,8 @@ fn scope_summary(
         let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
-        let open_blockers = open_issue_blockers(db, &issue.id, workflow_policy)?;
-        let bucket = issue_bucket(&issue, &open_blockers, workflow_policy, active_issue_ids);
+        let classified = classify_issue(db, workflow_policy, &issue)?;
+        let bucket = issue_bucket(&issue, &classified, active_issue_ids);
         let issue_summary = ObjectiveIssueSummary {
             id: issue.id,
             title: issue.title,
@@ -167,7 +168,7 @@ fn scope_summary(
             priority: issue.priority,
             parent_id: issue.parent_id,
             bucket,
-            open_blockers,
+            open_blockers: classified.open_blockers,
             updated_at: issue.updated_at,
         };
         match bucket {
@@ -199,23 +200,21 @@ fn scope_summary(
 
 fn issue_bucket(
     issue: &Issue,
-    open_blockers: &[String],
-    workflow_policy: Option<&WorkflowPolicy>,
+    classified: &crate::read_pipeline::ClassifiedWork,
     active_issue_ids: &BTreeSet<&str>,
 ) -> ObjectiveIssueBucket {
-    if active_issue_ids.contains(issue.id.as_str()) {
+    if active_issue_ids.contains(issue.id.as_str())
+        && classified.classification != WorkClassification::Done
+        && classified.terminal_ancestor.is_none()
+    {
         return ObjectiveIssueBucket::Active;
     }
-    if issue_is_done(workflow_policy, issue) {
-        return ObjectiveIssueBucket::Done;
-    }
-    if !open_blockers.is_empty() {
-        return ObjectiveIssueBucket::Blocked;
-    }
-    if issue_status_category(workflow_policy, &issue.status).as_deref() == Some("todo") {
-        ObjectiveIssueBucket::Ready
-    } else {
-        ObjectiveIssueBucket::Backlog
+    match classified.classification {
+        WorkClassification::Active => ObjectiveIssueBucket::Active,
+        WorkClassification::Ready => ObjectiveIssueBucket::Ready,
+        WorkClassification::Blocked => ObjectiveIssueBucket::Blocked,
+        WorkClassification::Done => ObjectiveIssueBucket::Done,
+        WorkClassification::Backlog => ObjectiveIssueBucket::Backlog,
     }
 }
 
@@ -354,22 +353,6 @@ fn collect_issue_and_descendants(
     Ok(())
 }
 
-fn open_issue_blockers(
-    db: &Database,
-    issue_id: &str,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Vec<String>> {
-    let mut blockers = db
-        .get_blockers(issue_id)?
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| issue_blocks_work(workflow_policy, issue))
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    blockers.sort();
-    Ok(blockers)
-}
-
 fn order_issue_summaries(mut issues: Vec<ObjectiveIssueSummary>) -> Vec<ObjectiveIssueSummary> {
     issues.sort_by_key(|issue| {
         (
@@ -433,7 +416,10 @@ fn link_touches_evidence(link: &RecordLink) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow_policy::{BranchLifecycleConfig, StatusDefinition, WorkflowPolicy};
+    use crate::workflow_policy::{
+        BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
+        WorkflowPolicy,
+    };
     use atelier_core::Issue;
     use atelier_sqlite::{
         EvidenceCacheRow, EvidenceTargetCacheRow, IssueCacheRow, RecordSourceCacheRow,
@@ -473,13 +459,40 @@ mod tests {
                 role: None,
             },
         );
+        let workflow_by_issue_type = ["mission", "epic", "task"]
+            .into_iter()
+            .map(|issue_type| (issue_type.to_string(), "work".to_string()))
+            .collect();
+        let workflows = BTreeMap::from([(
+            "work".to_string(),
+            WorkflowDefinition {
+                applies_to: vec![
+                    "mission".to_string(),
+                    "epic".to_string(),
+                    "task".to_string(),
+                ],
+                initial_status: "todo".to_string(),
+                done_statuses: vec!["done".to_string()],
+                transitions: BTreeMap::from([(
+                    "start".to_string(),
+                    TransitionDefinition {
+                        from: vec!["todo".to_string()],
+                        to: "in_progress".to_string(),
+                        required_fields: Vec::new(),
+                        description: None,
+                        validators: Vec::new(),
+                        actions: Vec::new(),
+                    },
+                )]),
+            },
+        )]);
         WorkflowPolicy {
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
+            workflow_by_issue_type,
             statuses,
-            workflows: BTreeMap::new(),
+            workflows,
         }
     }
 

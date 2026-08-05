@@ -76,6 +76,7 @@ pub fn transition_issue(
     let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
+        &before,
         &record,
         transition_name,
         transition,
@@ -263,12 +264,16 @@ fn ensure_transition_available(
 fn transition_blockers(
     db: &Database,
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
     record: &CanonicalIssueRecord,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
     let mut blockers = required_field_failures(record, transition, close_reason)?;
+    if let Some(blocker) = active_transition_ancestor_blocker(db, policy, issue, transition)? {
+        blockers.push(blocker);
+    }
     let validator_results = evaluate_policy_transition(
         db,
         policy,
@@ -284,6 +289,27 @@ fn transition_blockers(
             .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
     );
     Ok((blockers, validator_results))
+}
+
+pub(crate) fn active_transition_ancestor_blocker(
+    db: &Database,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+) -> Result<Option<String>> {
+    if policy.status_category(&issue.status) == Some("done")
+        || policy.status_category(&transition.to) != Some("active")
+    {
+        return Ok(None);
+    }
+    Ok(
+        atelier_app::read_pipeline::terminal_ancestor(db, Some(policy), issue)?.map(|ancestor_id| {
+            format!(
+                "terminal ancestor {ancestor_id} retires nonterminal descendant {}; cannot enter active-category status '{}'; inspect `atelier issue show {ancestor_id}`",
+                issue.id, transition.to
+            )
+        }),
+    )
 }
 
 fn report_blocked_transition(

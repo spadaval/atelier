@@ -1,11 +1,41 @@
 use anyhow::Result;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 use crate::workflow_policy::WorkflowPolicy;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkClassification {
+    Active,
+    Ready,
+    Blocked,
+    Backlog,
+    Done,
+}
+
+impl WorkClassification {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Ready => "ready",
+            Self::Blocked => "blocked",
+            Self::Backlog => "backlog",
+            Self::Done => "done",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClassifiedWork {
+    pub classification: WorkClassification,
+    pub status_category: Option<String>,
+    pub open_blockers: Vec<String>,
+    pub can_enter_active: bool,
+    pub terminal_ancestor: Option<String>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkRow {
@@ -16,21 +46,13 @@ pub struct WorkRow {
     pub status_category: Option<String>,
     pub priority: String,
     pub open_blockers: Vec<String>,
+    pub can_enter_active: bool,
+    pub classification: WorkClassification,
 }
 
 impl WorkRow {
     pub fn state_label(&self) -> &'static str {
-        if self.status_category.as_deref() == Some("active") {
-            "active"
-        } else if !self.open_blockers.is_empty() {
-            "blocked"
-        } else if self.status_category.as_deref() == Some("todo") {
-            "ready"
-        } else if self.status_category.as_deref() == Some("done") {
-            "done"
-        } else {
-            "backlog"
-        }
+        self.classification.label()
     }
 }
 
@@ -134,18 +156,115 @@ fn work_row(
     workflow_policy: Option<&WorkflowPolicy>,
     issue: Issue,
 ) -> Result<WorkRow> {
-    let status_category = workflow_policy
-        .and_then(|policy| policy.status_category(&issue.status))
-        .map(str::to_string);
+    let classified = classify_issue(db, workflow_policy, &issue)?;
     Ok(WorkRow {
         id: issue.id.clone(),
         title: issue.title,
         issue_type: issue.issue_type,
         status: issue.status,
-        status_category,
+        status_category: classified.status_category,
         priority: issue.priority,
-        open_blockers: open_blockers(db, workflow_policy, &issue.id)?,
+        open_blockers: classified.open_blockers,
+        can_enter_active: classified.can_enter_active,
+        classification: classified.classification,
     })
+}
+
+/// Classifies one issue for every executable-work projection.
+///
+/// Canonical status categories are authoritative. A completed record remains
+/// historical evidence; a nonterminal record below a terminal parent becomes
+/// context-only backlog; and only todo-category records are refined by
+/// blocker and direct-start eligibility.
+pub fn classify_issue(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<ClassifiedWork> {
+    let status_category = workflow_policy
+        .and_then(|policy| policy.status_category(&issue.status))
+        .map(str::to_string);
+    let open_blockers = open_blockers(db, workflow_policy, &issue.id)?;
+
+    if status_category.as_deref() == Some("done") {
+        return Ok(ClassifiedWork {
+            classification: WorkClassification::Done,
+            status_category,
+            open_blockers,
+            can_enter_active: false,
+            terminal_ancestor: None,
+        });
+    }
+
+    let terminal_ancestor = terminal_ancestor(db, workflow_policy, issue)?;
+    if terminal_ancestor.is_some() {
+        return Ok(ClassifiedWork {
+            classification: WorkClassification::Backlog,
+            status_category,
+            open_blockers,
+            can_enter_active: false,
+            terminal_ancestor,
+        });
+    }
+
+    let classification = match status_category.as_deref() {
+        Some("active") => WorkClassification::Active,
+        Some("blocked") => WorkClassification::Blocked,
+        Some("todo") => {
+            if !open_blockers.is_empty() {
+                WorkClassification::Blocked
+            } else {
+                let can_enter_active = match workflow_policy {
+                    Some(policy) => policy.can_enter_active(&issue.issue_type, &issue.status)?,
+                    None => issue.status == "todo",
+                };
+                if can_enter_active {
+                    WorkClassification::Ready
+                } else {
+                    WorkClassification::Backlog
+                }
+            }
+        }
+        _ if !open_blockers.is_empty() => WorkClassification::Blocked,
+        _ if workflow_policy.is_none() && issue.status == "todo" => WorkClassification::Ready,
+        _ => WorkClassification::Backlog,
+    };
+    let can_enter_active = classification == WorkClassification::Ready;
+    Ok(ClassifiedWork {
+        classification,
+        status_category,
+        open_blockers,
+        can_enter_active,
+        terminal_ancestor: None,
+    })
+}
+
+/// Returns the nearest done-category hierarchy ancestor, if one exists.
+///
+/// Completed descendants remain independently terminal and inspectable; callers
+/// use this fact only to retire nonterminal descendants from execution.
+pub fn terminal_ancestor(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<Option<String>> {
+    let mut parent_id = issue.parent_id.clone();
+    let mut visited = BTreeSet::new();
+    while let Some(id) = parent_id {
+        if !visited.insert(id.clone()) {
+            anyhow::bail!(
+                "issue hierarchy cycle encountered while classifying {}",
+                issue.id
+            );
+        }
+        let parent = db.require_issue(&id)?;
+        if workflow_policy.and_then(|policy| policy.status_category(&parent.status)) == Some("done")
+        {
+            return Ok(Some(parent.id));
+        }
+        parent_id = parent.parent_id;
+    }
+    Ok(None)
 }
 
 fn open_blockers(
@@ -329,8 +448,23 @@ mod tests {
                 role: None,
             },
         );
+        statuses.insert(
+            "blocked".to_string(),
+            crate::workflow_policy::StatusDefinition {
+                category: "blocked".to_string(),
+                role: None,
+            },
+        );
+        statuses.insert(
+            "superseded".to_string(),
+            crate::workflow_policy::StatusDefinition {
+                category: "done".to_string(),
+                role: None,
+            },
+        );
         let mut workflow_by_issue_type = BTreeMap::new();
         workflow_by_issue_type.insert("task".to_string(), "task".to_string());
+        workflow_by_issue_type.insert("epic".to_string(), "task".to_string());
         let mut workflows = BTreeMap::new();
         workflows.insert(
             "task".to_string(),
@@ -338,7 +472,21 @@ mod tests {
                 applies_to: vec!["task".to_string()],
                 initial_status: "todo".to_string(),
                 done_statuses: vec!["done".to_string()],
-                transitions: BTreeMap::new(),
+                transitions: BTreeMap::from([(
+                    "start".to_string(),
+                    crate::workflow_policy::TransitionDefinition {
+                        from: vec![
+                            "ready".to_string(),
+                            "todo".to_string(),
+                            "blocked".to_string(),
+                        ],
+                        to: "in_progress".to_string(),
+                        required_fields: Vec::new(),
+                        description: None,
+                        validators: Vec::new(),
+                        actions: Vec::new(),
+                    },
+                )]),
             },
         );
         WorkflowPolicy {
@@ -378,5 +526,46 @@ mod tests {
         );
         assert_eq!(view.tracker_state, "current");
         assert_eq!(view.active_role_counts.get("worker"), Some(&1));
+    }
+
+    #[test]
+    fn explicit_blocked_status_wins_over_direct_start_eligibility() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        index_issue(
+            &db,
+            issue(
+                "atelier-explicit-blocked",
+                "Explicit blocked",
+                "blocked",
+                "high",
+            ),
+        );
+
+        let buckets = work_buckets(&db, Some(&test_policy())).unwrap();
+
+        assert!(buckets.ready.is_empty());
+        assert_eq!(buckets.blocked[0].id, "atelier-explicit-blocked");
+    }
+
+    #[test]
+    fn terminal_ancestor_retires_open_descendant_but_preserves_done_descendant() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        let mut epic = issue("atelier-epic", "Superseded epic", "superseded", "high");
+        epic.issue_type = "epic".to_string();
+        index_issue(&db, epic);
+        let mut open = issue("atelier-open", "Open speculation", "todo", "medium");
+        open.parent_id = Some("atelier-epic".to_string());
+        index_issue(&db, open);
+        let mut done = issue("atelier-history", "Completed history", "done", "medium");
+        done.parent_id = Some("atelier-epic".to_string());
+        index_issue(&db, done);
+
+        let buckets = work_buckets(&db, Some(&test_policy())).unwrap();
+
+        assert!(buckets.ready.is_empty());
+        assert_eq!(buckets.backlog[0].id, "atelier-open");
+        assert!(buckets.done.iter().any(|row| row.id == "atelier-history"));
     }
 }

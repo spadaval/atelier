@@ -7,7 +7,7 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use atelier_core::Issue;
+use atelier_core::{Issue, IssueStrategy, ISSUE_STRATEGY_FIELD};
 
 pub use atelier_core::RecordId;
 
@@ -50,6 +50,8 @@ statuses:
   done:
     category: done
   closed:
+    category: done
+  superseded:
     category: done
 
 workflows:
@@ -125,11 +127,25 @@ workflows:
 
   epic:
     applies_to: [epic]
-    initial_status: todo
-    done_statuses: [done]
+    initial_status: draft
+    done_statuses: [done, superseded]
     transitions:
+      adopt_draft:
+        from: [todo]
+        to: draft
+        description: "Adopt a legacy unexpanded epic into the draft outcome map."
+      ready:
+        from: [draft]
+        to: ready
+        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
+        validators:
+          - issue.sections_parseable
+          - objective.work_present
+          - epic.proof_route_present
+          - blockers.transitive_none_open
+          - lint.none_blocking
       start:
-        from: [todo, blocked]
+        from: [ready, blocked]
         to: in_progress
         description: "Start active work on this item."
         validators:
@@ -137,9 +153,14 @@ workflows:
         actions:
           - git.prepare_branch
       block:
-        from: [todo, in_progress, review, validation]
+        from: [ready, in_progress, review, validation]
         to: blocked
         description: "Mark work blocked while preserving current proof expectations."
+      supersede:
+        from: [draft, ready, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
       request_review:
         from: [in_progress]
         to: review
@@ -253,6 +274,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "evidence.attached",
     "review.complete",
     "children.proof_complete",
+    "epic.proof_route_present",
     "validation.criteria_satisfied",
     "objective.work_present",
     "objective.work_terminal",
@@ -522,6 +544,18 @@ impl WorkflowPolicy {
             .filter(|(_, transition)| transition.from.iter().any(|from| from == status))
             .map(|(name, transition)| (name.as_str(), transition))
             .collect())
+    }
+
+    /// Returns whether work in this state can move directly into active execution.
+    ///
+    /// Status categories alone are not enough to answer this question: a planning
+    /// state such as `draft` can intentionally share the `todo` category with an
+    /// execution-ready state while requiring a separate refinement transition.
+    pub fn can_enter_active(&self, issue_type: &str, status: &str) -> Result<bool> {
+        Ok(self
+            .transitions_from_status(issue_type, status)?
+            .into_iter()
+            .any(|(_, transition)| self.status_category(&transition.to) == Some("active")))
     }
 
     pub fn transition_for_issue_type(
@@ -2056,6 +2090,8 @@ fn validate_issue_fields_against_policy(
     for (field_name, value) in &issue.fields {
         if field_name == "review" {
             validate_review_field(value, issue, policy_path)?;
+        } else if field_name == ISSUE_STRATEGY_FIELD {
+            validate_strategy_field(value, issue, policy_path)?;
         } else if field_name == WORKFLOW_BRANCH_FIELD {
             validate_workflow_branch_field(value, issue, policy_path)?;
         } else if field_name == "pull_request" {
@@ -2077,7 +2113,7 @@ fn validate_issue_fields_against_policy(
                 code: "workflow_issue_field_unknown",
                 path: policy_path.display().to_string(),
                 message: format!(
-                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'review' and 'workflow_branch'",
+                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'review', 'strategy', and 'workflow_branch'",
                     issue.id, field_name
                 ),
                 field: Some(field_name.to_string()),
@@ -2089,6 +2125,43 @@ fn validate_issue_fields_against_policy(
         }
     }
     Ok(())
+}
+
+fn validate_strategy_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
+    if issue.issue_type != "mission" {
+        return invalid_strategy_field(
+            issue,
+            policy_path,
+            "field 'strategy' is only valid on issue_type 'mission'",
+        );
+    }
+    IssueStrategy::from_value(value)
+        .map(|_| ())
+        .map_err(|error| {
+            WorkflowPolicyError {
+                code: "workflow_issue_field_invalid",
+                path: policy_path.display().to_string(),
+                message: format!("issue {} field 'strategy' is invalid: {}", issue.id, error),
+                field: Some(ISSUE_STRATEGY_FIELD.to_string()),
+                reference: Some(issue.id.clone()),
+                line: None,
+                column: None,
+            }
+            .into()
+        })
+}
+
+fn invalid_strategy_field(issue: &Issue, policy_path: &Path, reason: &str) -> Result<()> {
+    Err(WorkflowPolicyError {
+        code: "workflow_issue_field_invalid",
+        path: policy_path.display().to_string(),
+        message: format!("issue {} field 'strategy' is invalid: {}", issue.id, reason),
+        field: Some(ISSUE_STRATEGY_FIELD.to_string()),
+        reference: Some(issue.id.clone()),
+        line: None,
+        column: None,
+    }
+    .into())
 }
 
 fn validate_workflow_branch_field(
@@ -2783,6 +2856,27 @@ mod tests {
     }
 
     #[test]
+    fn starter_policy_distinguishes_draft_epics_from_execution_ready_epics() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        assert!(!policy.can_enter_active("epic", "draft").unwrap());
+        assert!(policy.can_enter_active("epic", "ready").unwrap());
+    }
+
+    #[test]
+    fn starter_policy_checks_proof_route_only_when_epic_becomes_ready() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let epic = &policy.workflows["epic"];
+
+        assert_eq!(epic.initial_status, "draft");
+        assert!(epic.transitions["ready"]
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "epic.proof_route_present"));
+        assert!(epic.transitions["adopt_draft"].validators.is_empty());
+    }
+
+    #[test]
     fn validates_review_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
@@ -2793,6 +2887,31 @@ mod tests {
         let issue = issue_with_fields(fields);
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
+    }
+
+    #[test]
+    fn validates_strategy_field_as_mission_only() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let mut issue = issue_with_fields(BTreeMap::from([(
+            ISSUE_STRATEGY_FIELD.to_string(),
+            serde_json::json!({
+                "path": "docs/strategies/adaptive-mission.md",
+                "revision": 2
+            }),
+        )]));
+        issue.issue_type = "mission".to_string();
+        issue.status = "draft".to_string();
+
+        validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
+
+        issue.issue_type = "epic".to_string();
+        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("only valid on issue_type 'mission'"),
+            "{error}"
+        );
     }
 
     #[test]
