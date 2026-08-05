@@ -343,7 +343,6 @@ diagnostics, or command families that belong to a different record kind.
 | `git diff --check -- '*.md'` | Markdown whitespace hygiene |
 | `cargo fmt -- --check` | Rust formatting |
 | `cargo nextest run` | default Rust unit, integration, and smoke test suite |
-| `cargo nextest run --profile extended --run-ignored=only` | opt-in extended property tests marked `prop_extended_` |
 | `cargo test` | Cargo/libtest compatibility check |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |

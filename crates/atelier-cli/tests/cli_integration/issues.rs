@@ -1038,6 +1038,44 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
 }
 
 #[test]
+fn test_issue_create_mission_sectioned_body_preserves_outcome_and_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let outcome = "Mission authoring preserves the supplied outcome.";
+    let evidence = "- `atelier check` accepts the created mission record.";
+    let body = format!("## Outcome\n\n{outcome}\n\n## Evidence\n\n{evidence}");
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Sectioned mission body",
+            "--issue-type",
+            "mission",
+            "--body",
+            &body,
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Sectioned mission body");
+    let mission = read_canonical_record(dir.path(), "issues", &mission_id);
+
+    assert_eq!(mission.matches("## Description").count(), 1, "{mission}");
+    assert_eq!(mission.matches("## Outcome").count(), 1, "{mission}");
+    assert_eq!(mission.matches("## Evidence").count(), 1, "{mission}");
+    assert!(mission.contains("## Description\n\nNo description provided."));
+    assert!(mission.contains(&format!("## Outcome\n\n{outcome}")));
+    assert!(mission.contains(&format!("## Evidence\n\n{evidence}")));
+
+    let (success, check_out, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "atelier check rejected mission created by a successful command:\nstdout:\n{check_out}\nstderr:\n{stderr}\ncreate output:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_bundle_apply_accepts_configured_custom_issue_type() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3278,6 +3316,138 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(success, "verbose issue transition failed: {stderr}");
     assert!(verbose.contains("Validators"), "{verbose}");
     assert!(verbose.contains("Description"), "{verbose}");
+}
+
+#[test]
+fn test_work_classification_agrees_across_global_mission_and_epic_views() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for args in [
+        vec![
+            "issue",
+            "create",
+            "Mission: Classification truth",
+            "--issue-type",
+            "mission",
+        ],
+        vec!["issue", "create", "Active outcome", "--issue-type", "epic"],
+        vec!["issue", "create", "Retired outcome", "--issue-type", "epic"],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "objective fixture create failed: {stderr}");
+    }
+    let mission_id = issue_id_by_title(dir.path(), "Mission: Classification truth");
+    let active_epic_id = issue_id_by_title(dir.path(), "Active outcome");
+    let retired_epic_id = issue_id_by_title(dir.path(), "Retired outcome");
+
+    for (title, parent) in [
+        ("Explicit blocker-free blocked work", &active_epic_id),
+        ("Retired open speculation", &retired_epic_id),
+        ("Retired completed history", &retired_epic_id),
+    ] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "create", title, "--parent", parent]);
+        assert!(success, "child fixture create failed: {stderr}");
+    }
+    let blocked_id = issue_id_by_title(dir.path(), "Explicit blocker-free blocked work");
+    let open_id = issue_id_by_title(dir.path(), "Retired open speculation");
+    let done_id = issue_id_by_title(dir.path(), "Retired completed history");
+
+    for epic_id in [&active_epic_id, &retired_epic_id] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", &mission_id, epic_id, "--role", "advances"],
+        );
+        assert!(success, "mission advances link failed: {stderr}");
+    }
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{done_id}"),
+            "--kind",
+            "validation",
+            "Completed history remains inspectable",
+        ],
+    );
+    assert!(success, "completed-child evidence record failed: {stderr}");
+
+    for (issue_id, status) in [
+        (&mission_id, "in_progress"),
+        (&active_epic_id, "in_progress"),
+        (&blocked_id, "blocked"),
+        (&retired_epic_id, "superseded"),
+        (&open_id, "todo"),
+        (&done_id, "done"),
+    ] {
+        set_issue_status(dir.path(), issue_id, status);
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "classification fixture rebuild failed: {stderr}");
+
+    let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status.contains("Ready work:    0"), "{status}");
+    assert!(status.contains("atelier work blocked"), "{status}");
+
+    let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    assert!(success, "global work ready failed: {stderr}");
+    assert!(!ready.lines().any(|id| id == blocked_id), "{ready}");
+    assert!(!ready.lines().any(|id| id == open_id), "{ready}");
+    let (success, blocked, stderr) = run_atelier(dir.path(), &["--quiet", "work", "blocked"]);
+    assert!(success, "global work blocked failed: {stderr}");
+    assert!(blocked.lines().any(|id| id == blocked_id), "{blocked}");
+    assert!(!blocked.lines().any(|id| id == open_id), "{blocked}");
+
+    let (success, mission_ready, stderr) = run_atelier(
+        dir.path(),
+        &["--quiet", "work", "mission", &mission_id, "--ready"],
+    );
+    assert!(success, "mission ready view failed: {stderr}");
+    assert!(!mission_ready.lines().any(|id| id == blocked_id));
+    assert!(!mission_ready.lines().any(|id| id == open_id));
+    let (success, mission_blocked, stderr) = run_atelier(
+        dir.path(),
+        &["--quiet", "work", "mission", &mission_id, "--blocked"],
+    );
+    assert!(success, "mission blocked view failed: {stderr}");
+    assert!(mission_blocked.lines().any(|id| id == blocked_id));
+    assert!(!mission_blocked.lines().any(|id| id == open_id));
+
+    let (success, active_epic, stderr) =
+        run_atelier(dir.path(), &["work", "epic", &active_epic_id]);
+    assert!(success, "active epic view failed: {stderr}");
+    assert!(active_epic.contains("Blocked Work"), "{active_epic}");
+    assert!(active_epic.contains(&blocked_id), "{active_epic}");
+    assert!(!active_epic.contains("Ready Work"), "{active_epic}");
+
+    let (success, retired_epic, stderr) =
+        run_atelier(dir.path(), &["work", "epic", &retired_epic_id]);
+    assert!(success, "retired epic view failed: {stderr}");
+    assert!(retired_epic.contains("Backlog Work"), "{retired_epic}");
+    assert!(retired_epic.contains(&open_id), "{retired_epic}");
+    assert!(retired_epic.contains("Done Work"), "{retired_epic}");
+    assert!(retired_epic.contains(&done_id), "{retired_epic}");
+    assert!(!retired_epic.contains("Ready Work"), "{retired_epic}");
+
+    let (success, retired_show, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &retired_epic_id]);
+    assert!(success, "retired epic issue show failed: {stderr}");
+    assert!(
+        retired_show.contains("active 0, ready 0, blocked 0, done 1, backlog 1"),
+        "{retired_show}"
+    );
+    assert!(
+        retired_show.contains("linked validating evidence 1"),
+        "{retired_show}"
+    );
+    assert!(
+        retired_show.contains("Retired completed history"),
+        "{retired_show}"
+    );
 }
 
 fn write_incident_issue_type_workflow(dir: &std::path::Path) {

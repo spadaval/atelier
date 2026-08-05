@@ -147,17 +147,17 @@ repository-defined vocabulary includes `draft`, `ready`,
 `active`, `blocked`, and `done` are derived categories, not alternate stored
 tokens; `review` and `validation` are workflow statuses in the active category.
 
-### Mission Records
+### Mission-Typed Issue Records
 
 | Slice | Ownership |
 | --- | --- |
-| Required front matter | Common fields only. |
+| Required front matter | The issue contract: common fields plus `priority` and `issue_type: "mission"`. |
 | Optional front matter | Typed `strategy: {path, revision}` plus record-generic labels and relationships. The reference identifies governing repository Markdown without copying its contents into tracker state. |
-| Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
-| Optional body | `## Terminal Notes` and `## Notes`. |
+| Required body | The current issue contract: `## Description` and `## Outcome`. |
+| Optional body | `## Evidence` and `## Notes`; mission-specific constraints, risks, non-scope, and validation intent remain prose inside these issue sections rather than defining a second body schema. |
 | Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
-| Migration input | None. |
-| Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Strategy content and issue inventories stay out of mission front matter. |
+| Migration input | Legacy first-class mission bodies must be converted to the issue Description/Outcome contract. |
+| Forbidden | A second mission-only body schema; escaped mission `data` payloads; front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`; and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Strategy content and issue inventories stay out of mission front matter. |
 
 Mission objective status is type-aware issue workflow state. This repository's
 accepted target planning path is `draft`, `ready`, and `in_progress`, with

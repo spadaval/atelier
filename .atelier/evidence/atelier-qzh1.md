@@ -89,4 +89,3 @@ Truncated: yes
         PASS [   0.011s] ( 31/743) atelier-app objective_graph::tests::dependency_closure_reports_complete_direct_and_transitive_paths
         PASS [   0.023s] ( 32/743) atelier-app command_surface::tests::extracts_vi
 ```
-

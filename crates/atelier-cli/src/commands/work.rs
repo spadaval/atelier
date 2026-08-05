@@ -7,7 +7,7 @@ use std::process::Command;
 use atelier_app::mission_overview::{
     mission_overview, MissionOverview, MissionOverviewCounts, MissionOverviewRequest,
 };
-use atelier_app::read_pipeline::{WorkBuckets, WorkRow};
+use atelier_app::read_pipeline::{WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 
@@ -488,6 +488,9 @@ fn render_counts(counts: MissionOverviewCounts) -> String {
         format!("{} done", counts.done),
         format!("{} blocked", counts.blocked),
     ];
+    if counts.backlog > 0 {
+        parts.push(format!("{} backlog", counts.backlog));
+    }
     if counts.unknown > 0 {
         parts.push(format!("{} unknown", counts.unknown));
     }
@@ -870,25 +873,12 @@ fn issue_category(
     policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
     issue: &Issue,
 ) -> Result<String> {
-    let open_blockers =
-        crate::commands::issue_workflow::open_blocker_ids_with_policy(db, policy, &issue.id)?;
-    if !open_blockers.is_empty() {
-        return Ok("blocked".to_string());
+    let classified = atelier_app::read_pipeline::classify_issue(db, policy, issue)?;
+    Ok(match classified.classification {
+        WorkClassification::Ready => "todo",
+        other => other.label(),
     }
-    if let Some(policy) = policy {
-        if !atelier_app::objective_graph::dependency_closure(db, policy, &issue.id)?.is_ready() {
-            return Ok("blocked".to_string());
-        }
-        if policy.status_category(&issue.status) == Some("todo")
-            && !policy.can_enter_active(&issue.issue_type, &issue.status)?
-        {
-            return Ok("backlog".to_string());
-        }
-    }
-    Ok(
-        crate::commands::issue_workflow::issue_status_category(policy, &issue.status)
-            .unwrap_or_else(|| "todo".to_string()),
-    )
+    .to_string())
 }
 
 fn mission_scoped_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
@@ -1208,6 +1198,7 @@ mod mission_overview_render_tests {
                     blocked: 1,
                     todo: 2,
                     done: 1,
+                    backlog: 0,
                     unknown: 1,
                 },
                 epics: vec![MissionOverviewEpic {
@@ -1224,6 +1215,7 @@ mod mission_overview_render_tests {
                         blocked: 1,
                         todo: 0,
                         done: 1,
+                        backlog: 0,
                         unknown: 0,
                     },
                 }],
@@ -1237,6 +1229,7 @@ mod mission_overview_render_tests {
                         blocked: 0,
                         todo: 1,
                         done: 0,
+                        backlog: 0,
                         unknown: 0,
                     },
                 },

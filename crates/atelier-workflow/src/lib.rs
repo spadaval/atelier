@@ -141,6 +141,7 @@ workflows:
         validators:
           - issue.sections_parseable
           - objective.work_present
+          - epic.proof_route_present
           - blockers.transitive_none_open
           - lint.none_blocking
       start:
@@ -273,6 +274,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "evidence.attached",
     "review.complete",
     "children.proof_complete",
+    "epic.proof_route_present",
     "validation.criteria_satisfied",
     "objective.work_present",
     "objective.work_terminal",
@@ -2859,6 +2861,19 @@ mod tests {
 
         assert!(!policy.can_enter_active("epic", "draft").unwrap());
         assert!(policy.can_enter_active("epic", "ready").unwrap());
+    }
+
+    #[test]
+    fn starter_policy_checks_proof_route_only_when_epic_becomes_ready() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let epic = &policy.workflows["epic"];
+
+        assert_eq!(epic.initial_status, "draft");
+        assert!(epic.transitions["ready"]
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "epic.proof_route_present"));
+        assert!(epic.transitions["adopt_draft"].validators.is_empty());
     }
 
     #[test]

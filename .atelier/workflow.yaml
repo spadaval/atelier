@@ -161,6 +161,7 @@ workflows:
         validators:
         - issue.sections_parseable
         - objective.work_present
+        - epic.proof_route_present
         - blockers.transitive_none_open
         - lint.none_blocking
       start:

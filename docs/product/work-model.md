@@ -249,8 +249,10 @@ preparation.
 
 Planning is not frozen at mission start. Managers may edit the mission graph as
 evidence arrives: add or split work, change sequencing, record blockers, and
-supersede obsolete speculative issues. These are ordinary planning-file
-changes, not authorization events.
+supersede an obsolete outcome. Superseding an outcome retires its open
+descendants from ready, blocked, and active execution projections; it does not
+give ordinary issues a general-purpose supersede transition. These are
+ordinary planning-file changes, not authorization events.
 
 Review and validation remain available as accountable work when risk warrants
 them. They judge code or behavior; they do not grant permission to plan or

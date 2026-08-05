@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,7 +23,9 @@ use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
+use atelier_records::{
+    parse_issue_sections, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
+};
 use atelier_sqlite::{validate_issue_type, Database};
 
 const MAX_ISSUE_TITLE_LEN: usize = 512;
@@ -1431,16 +1433,25 @@ fn list_blocked_filtered_with_title(
         .list_issues(Some("all"), label, priority)?
         .into_iter()
         .filter(|issue| issue_type.is_none_or(|issue_type| issue.issue_type == issue_type))
-        .map(|issue| issue_summary(db, issue))
-        .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
+        .map(|issue| {
+            let classification =
+                atelier_app::read_pipeline::classify_issue(db, workflow_policy.as_ref(), &issue)?
+                    .classification;
+            Ok((issue, classification))
+        })
+        .map(|result: Result<_>| {
+            result.and_then(|(issue, classification)| {
+                issue_summary(db, issue).map(|summary| (summary, classification))
+            })
+        })
+        .map(|result| {
+            result.and_then(|(issue, classification)| {
+                queue_row(db, workflow_policy.as_ref(), issue).map(|row| (row, classification))
+            })
+        })
         .filter_map(|result| match result {
-            Ok(row)
-                if !row.open_blockers.is_empty()
-                    || row.status_category.as_deref() == Some("blocked") =>
-            {
-                Some(Ok(row))
-            }
-            Ok(_) => None,
+            Ok((row, atelier_app::read_pipeline::WorkClassification::Blocked)) => Some(Ok(row)),
+            Ok((_row, _)) => None,
             Err(error) => Some(Err(error)),
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1554,6 +1565,13 @@ fn filter_ready_rows(
     };
     rows.into_iter()
         .map(|row| {
+            let issue = db.require_issue(&row.id)?;
+            if atelier_app::read_pipeline::classify_issue(db, workflow_policy, &issue)?
+                .classification
+                != atelier_app::read_pipeline::WorkClassification::Ready
+            {
+                return Ok((row, false));
+            }
             if workflow_policy.is_some() && !dependency_ready.get(&row.id).copied().unwrap_or(false)
             {
                 return Ok((row, false));
@@ -1950,6 +1968,7 @@ fn activity_scalar_line_value(line: &str, key: &str) -> Option<Option<String>> {
 pub struct LifecycleCreateInput<'a> {
     pub title: &'a str,
     pub description: Option<&'a str>,
+    pub body: Option<&'a str>,
     pub priority: &'a str,
     pub issue_type: &'a str,
     pub labels: &'a [String],
@@ -2000,6 +2019,7 @@ pub fn create_lifecycle(
             MAX_ISSUE_DESCRIPTION_LEN
         );
     }
+    let sections = lifecycle_issue_sections(&input)?;
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
@@ -2015,7 +2035,7 @@ pub fn create_lifecycle(
             closed_at: None,
         },
         labels: input.labels.to_vec(),
-        sections: IssueSections::unchecked_from_body(description.as_deref()),
+        sections,
         relationships: Relationships::default(),
     };
     atelier_app::workflow_policy::validate_issue_hierarchy(
@@ -2083,10 +2103,10 @@ pub fn create_lifecycle(
 
 fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<String> {
     if input.issue_type != "mission" {
-        return input.description.map(str::to_string);
+        return input.description.or(input.body).map(str::to_string);
     }
     let mut lines = Vec::new();
-    if let Some(description) = input.description {
+    if let Some(description) = input.description.or(input.body) {
         let description = description.trim();
         if !description.is_empty() {
             lines.push(description.to_string());
@@ -2100,6 +2120,56 @@ fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<Strin
     } else {
         Some(lines.join("\n\n"))
     }
+}
+
+fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {
+    if input.issue_type != "mission" {
+        let description = lifecycle_issue_description(input);
+        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
+    }
+    let Some(body) = input.body.filter(|body| has_level_two_heading(body)) else {
+        let description = lifecycle_issue_description(input);
+        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
+    };
+
+    let normalized = if has_issue_section(body, "Description") {
+        body.to_string()
+    } else {
+        format!(
+            "## Description\n\nNo description provided.\n\n{}",
+            body.trim()
+        )
+    };
+    let mut sections = parse_issue_sections(&normalized, Path::new("<issue create --body>"))
+        .context("Invalid sectioned mission --body")?;
+
+    let mut additions = Vec::new();
+    append_named_list(&mut additions, "Constraints", &input.constraints);
+    append_named_list(&mut additions, "Risks", &input.risks);
+    append_named_list(&mut additions, "Validation", &input.validation);
+    if !additions.is_empty() {
+        sections.description.push_str("\n\n");
+        sections.description.push_str(&additions.join("\n\n"));
+    }
+    Ok(sections)
+}
+
+fn has_level_two_heading(body: &str) -> bool {
+    body.lines().any(|line| {
+        let Some(rest) = line.strip_prefix("##") else {
+            return false;
+        };
+        !rest.starts_with('#')
+            && (rest.is_empty() || rest.chars().next().is_some_and(char::is_whitespace))
+    })
+}
+
+fn has_issue_section(body: &str, name: &str) -> bool {
+    body.lines().any(|line| {
+        line.strip_prefix("##")
+            .filter(|rest| !rest.starts_with('#'))
+            .is_some_and(|rest| rest.trim() == name)
+    })
 }
 
 fn append_named_list(lines: &mut Vec<String>, title: &str, values: &[String]) {
