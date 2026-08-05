@@ -6,6 +6,15 @@ labels:
 - "agent-factory"
 - "planning"
 - "product-contract"
+fields:
+  workflow_branch:
+    branch_base: mission/atelier-5kej
+    integration_target: mission/atelier-5kej
+    merge_strategy: squash
+    owner_issue_id: atelier-k7mc
+    owner_kind: epic
+    review_target: mission/atelier-5kej
+    work_branch: epic/atelier-k7mc
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +29,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define the adaptive mission contract"
-updated_at: "2026-07-28T16:39:31.765296404+00:00"
+updated_at: "2026-08-05T18:02:17.383956977+00:00"
 ---
 
 ## Description
