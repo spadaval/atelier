@@ -43,9 +43,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Define the adaptive mission contract"
-updated_at: "2026-08-05T19:19:37.543529637+00:00"
+updated_at: "2026-08-05T19:44:41.045455961+00:00"
 ---
 
 ## Description
