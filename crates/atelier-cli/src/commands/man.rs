@@ -131,7 +131,7 @@ fn print_index() {
     println!("Roles");
     println!("-----");
     println!("  worker    Implement assigned or ready issue work.");
-    println!("  planner   Author mission graphs and hand them to an independent reviewer.");
+    println!("  planner   Shape strategy, draft outcomes, and the current execution horizon.");
     println!("  reviewer  Check proof, review outputs, and validate transitions.");
     println!("  validator Run explicit validation and record validation proof.");
     println!(
@@ -163,8 +163,8 @@ fn print_work_model() {
     println!("----------");
     println!("  Mission  A long-running objective spanning multiple coordinated work packages.");
     println!("           It owns the target outcome and links root work with `advances`.");
-    println!("  Epic     A coherent work package and the normal branch/review boundary.");
-    println!("           It owns executable child issues that deliver one reviewable change.");
+    println!("  Epic     An outcome-bearing increment and the normal branch/review boundary.");
+    println!("           Draft epics map future outcomes; ready epics own executable children.");
     println!("  Issue    The accountability unit for implementation, docs, review, validation,");
     println!("           migration, or other locally provable work.");
     println!();
@@ -176,6 +176,8 @@ fn print_work_model() {
     println!("  A mission is not the hierarchy parent of its work. Its scope is each direct");
     println!("  `advances` root plus that root's descendants. Epics own ordinary child issues.");
     println!("  Dependencies and `blocked_by` links express sequencing or gates, not ownership.");
+    println!("  Draft epics are planning context, not ready work. Expand the next justified epic");
+    println!("  by refining its outcome, children, dependencies, and proof route together.");
     println!();
     println!("Sizing");
     println!("------");
@@ -185,6 +187,7 @@ fn print_work_model() {
     println!();
     println!("Proof");
     println!("-----");
+    println!("  Strategy owns mission-level assurance. Epic expansion selects focused proof.");
     println!("  Issues own local proof. Epic completion maps child proof to the epic outcome and");
     println!("  review boundary. Mission completion synthesizes terminal linked work, clear");
     println!("  blockers, configured health gates, and explicit validation when required.");
@@ -270,13 +273,13 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!(
                 "  1. atelier work mission <mission-id> - Inspect the authored mission graph."
             );
-            println!("  2. atelier issue plan-review <mission-id> request - Hand the exact graph to review.");
-            println!("  3. atelier issue show <mission-id> - Follow the current review diagnosis.");
+            println!("  2. atelier bundle preview <file> - Check a multi-record planning change.");
+            println!("  3. atelier issue transition <epic-id> ready - Make the next expanded epic executable.");
         }
         Role::Reviewer => {
-            println!("  1. atelier issue show <mission-id> - Inspect the exact graph and review diagnosis.");
-            println!("  2. atelier issue plan-review <mission-id> finding <finding-id> --affected <issue-id> - Record a graph finding.");
-            println!("  3. atelier issue plan-review <mission-id> approve - Approve as an independent reviewer.");
+            println!("  1. atelier issue show <id> - Inspect the work and linked review artifact.");
+            println!("  2. atelier review show <review-id> - Inspect the configured code review.");
+            println!("  3. atelier issue transition <id> - Follow current review-state guidance.");
         }
         Role::Validator => {
             println!("  1. atelier issue show <id> - Read the target Outcome and linked proof.");
@@ -284,9 +287,11 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!("  3. atelier issue transition <id> - Follow current workflow guidance.");
         }
         Role::Manager => {
-            println!("  1. atelier work missions - Compare mission scope and readiness.");
-            println!("  2. atelier work mission <mission-id> - Inspect dependency-safe work.");
-            println!("  3. atelier issue show <mission-id> - Follow the review diagnosis.");
+            println!("  1. atelier work missions - Compare mission outcome maps and readiness.");
+            println!("  2. atelier work mission <mission-id> - Inspect strategy, draft outcomes, and executable work.");
+            println!(
+                "  3. atelier issue transition <epic-id> - Inspect expansion or execution readiness."
+            );
         }
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
@@ -312,17 +317,15 @@ fn print_normal_loop(role: Role) {
         }
         Role::Planner => {
             println!("  atelier work mission <mission-id>");
-            println!("  atelier issue plan-review <mission-id> request");
-            println!("  atelier issue plan-review <mission-id> rework");
-            println!("  atelier issue plan-review <mission-id> resolve <decision-id> --disposition \"...\"");
+            println!("  atelier bundle preview <file>");
+            println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue show <mission-id>");
+            println!("  atelier issue transition <epic-id> ready");
         }
         Role::Reviewer => {
-            println!("  atelier issue show <mission-id>");
-            println!("  atelier issue plan-review <mission-id> finding <finding-id> --affected <issue-id>");
-            println!("  atelier issue plan-review <mission-id> change-request <request-id> --affected <issue-id>");
-            println!("  atelier issue plan-review <mission-id> approve");
-            println!("  atelier history --issue <mission-id>");
+            println!("  atelier issue show <id>");
+            println!("  atelier review show <review-id>");
+            println!("  atelier history --issue <id>");
         }
         Role::Validator => {
             println!("  atelier issue show <id>");
@@ -339,6 +342,8 @@ fn print_normal_loop(role: Role) {
             println!("  atelier work ready");
             println!("  atelier work blocked");
             println!("  atelier issue show <objective-id>");
+            println!("  atelier issue transition <epic-id>");
+            println!("  atelier issue transition <epic-id> ready");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
@@ -366,18 +371,15 @@ fn print_not_usually(role: Role) {
             println!("  diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Planner => {
-            println!("  approval of a graph you authored or materially edited");
+            println!("  implementation and validation outside the planned scope");
         }
         Role::Reviewer => {
-            println!("  authoring or materially editing the graph being approved");
+            println!("  implementation changes while acting as an independent code reviewer");
         }
         Role::Validator => {
             println!("  issue creation, mission scope mutation, merge decisions outside assigned validation");
         }
         Role::Manager => {
-            println!(
-                "  mission-plan approval; planners author and reviewers independently approve"
-            );
             println!("  diagnostics slow, rebuild; shell loops for bulk graph creation");
         }
         Role::Admin => {

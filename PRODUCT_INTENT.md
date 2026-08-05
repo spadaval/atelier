@@ -148,8 +148,9 @@ to be an issue.
 
 A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain a concrete target
-`Outcome`, explicit non-scope, current risks, status, direct `advances` links to
-root work, explicit validation work when required, and current health. Mission
+`Outcome`, an optional governing strategy reference for substantial work,
+explicit non-scope, current risks, status, direct `advances` links to root work,
+explicit validation work when required, and current health. Mission
 scope is those direct root links plus their descendants. A mission is also the
 normal shared background workspace boundary: one mission owns one shared Git
 worktree or equivalent background checkout where coordinated agents can operate
@@ -162,23 +163,29 @@ one epic of accountable work beneath it. Smaller work should stay as an issue,
 while mission execution should be split into epics, tasks, validation, review,
 documentation, or migration issues linked back to the mission.
 
-For this repository, authored missions begin as non-executable drafts. A
-mission-plan reviewer independent of the author and every material editor must
-approve the exact current mission and reachable issue graph before the mission
-can become ready or start. Review judges whether the Outcome-led issue set is
-complete, decomposed, sequenced, dependency-safe, and independently
-validatable. It does not make plans into first-class records, require planners
-to author execution proof, approve a code changeset, or confer merge authority.
-The durable lifecycle and migration contract is
-[ADR 0018](docs/adr/0018-independent-mission-plan-review.md).
+Authored missions begin as drafts. They become ready when their Outcome and
+immediate work are understandable and declared blockers are clear. Planning
+files may change during execution as evidence changes the implementation route;
+Atelier does not require a separate approval ceremony for those edits.
 
 ### Epic
 
-An epic is the normal branch and review boundary beneath a mission. It groups a
-coherent changeset that can be reviewed, validated, and merged as a unit, often
-mapping directly to a PR-equivalent branch. Epic review and validation gates
-own the parent judgment for the grouped change; child issues contribute local
-proof rather than each carrying an independent review requirement by default.
+An epic is an outcome-bearing delivery increment and the normal branch and
+review boundary beneath a mission. Its desired result may be product-facing,
+system, architecture, operational, quantitative, destructive, or explicitly
+behavior-preserving. It must still fit a coherent changeset that can be
+reviewed, validated, and merged as a unit, often mapping directly to a
+PR-equivalent branch. Epic review and validation gates own the parent judgment
+for the grouped change; child issues contribute local proof rather than each
+carrying an independent review requirement by default.
+
+Epics begin as drafts. A draft epic has a meaningful preliminary Outcome but
+may omit child work, an implementation route, exact dependencies, and an
+`Evidence` section. Expanding the epic refines its Outcome and preservation
+claims, adds immediate evidence-backed child work and dependencies, and selects
+the proof route. The ordinary transition to `ready` records that the epic is
+executable; there is no separate expansion flag, plan approval, or validation
+profile.
 
 ### Checkpoint Semantics
 
@@ -202,11 +209,11 @@ validation, migration, or other explicitly risk-escalated item.
 ### Plans
 
 Plans are ordinary Markdown artifacts or prose inside accountable work and
-evidence records in v1. They may still be durable when committed to the
-repository, but they are not `.atelier/plans/` records and they do not have a
-first-class plan command group. Reference plan Markdown by path or prose from a
-mission, epic, issue, or evidence body when the execution intent matters beyond
-ephemeral context.
+evidence records in v1. A substantial mission may reference one governing
+strategy document that owns durable intent, boundaries, adaptation authority,
+and assurance without becoming a backlog. Plans may still be durable when
+committed to the repository, but they are not `.atelier/plans/` records and they
+do not have a first-class plan command group.
 
 ### Evidence
 
@@ -324,7 +331,6 @@ issue_types:
 
 statuses:
   draft: { category: todo }
-  plan_review: { category: active, role: reviewer }
   ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active }
@@ -341,23 +347,17 @@ workflows:
     initial_status: draft
     done_statuses: [closed, superseded]
     transitions:
-      request_plan_review:
-        from: [draft]
-        to: plan_review
-        validators:
-          - issue.sections_parseable
       ready:
-        from: [plan_review]
+        from: [draft]
         to: ready
         validators:
-          - plan_review.current_approval
+          - issue.sections_parseable
           - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - plan_review.current_approval
           - blockers.transitive_none_open
           - git.on_base
           - git.worktree_clean
@@ -402,15 +402,29 @@ workflows:
 
   epic:
     applies_to: [epic]
-    initial_status: todo
-    done_statuses: [done]
+    initial_status: draft
+    done_statuses: [done, superseded]
     transitions:
+      ready:
+        from: [draft]
+        to: ready
+        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
+        validators:
+          - issue.sections_parseable
+          - objective.work_present
+          - blockers.transitive_none_open
+          - lint.none_blocking
       start:
-        from: [todo, blocked]
+        from: [ready, blocked]
         to: in_progress
         description: "Start active work on this item."
         validators:
           - blockers.transitive_none_open
+      supersede:
+        from: [draft, ready, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
       request_review:
         from: [in_progress]
         to: review

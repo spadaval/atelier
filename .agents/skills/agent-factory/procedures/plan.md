@@ -36,7 +36,9 @@ Use the smallest record shape that makes accountability clear:
 - Mission: a target state and scope boundary for work large enough to need at
   least one epic or equivalent root work item. Mission scope is the direct
   `advances` links plus the descendants of those roots.
-- Epic: a coherent branch, review, or integration package under a mission.
+- Epic: an outcome-bearing delivery increment and one coherent branch, review,
+  and validation boundary under a mission. Product-facing and pure-engineering
+  outcomes use the same epic shape.
 - Ordinary issue: one accountable implementation, docs, migration, or artifact
   update slice with a local Outcome.
 - Validation issue: independent judgment derived from the target Outcome or
@@ -45,9 +47,22 @@ Use the smallest record shape that makes accountability clear:
   claim checked, action taken, result, and transcript or artifact.
 
 Do not add `Evidence` or `Validation` prose as default paperwork for every new
-mission or ordinary issue. Workers and validators choose and record proof while
-doing the work; planners write the target state and only call out proof when a
-specific contract, risk, or workflow gate requires it.
+record. Strategy owns mission-level assurance. A draft epic may omit exact
+proof; expansion selects proof together with the refined increment. Workers and
+validators choose and record focused proof while doing ordinary work unless a
+specific contract, risk, or workflow gate requires it earlier.
+
+## Planning Horizon
+
+Create outcome-bearing epics for the visible mission shape, but create ordinary
+issues only through the nearest evidence boundary. Later epics remain in the
+repository's draft state with a meaningful preliminary outcome, constraints,
+and unknowns; they do not need children or exact proof.
+
+Expand a draft epic by refining its outcome and preservation claims, creating
+only immediate child work, representing known dependencies, choosing its proof
+route, and using the ordinary transition to ready. Do not add an expansion
+flag, approval, validation profile, or second implementation-plan document.
 
 ## Mission Creation
 
@@ -75,32 +90,14 @@ open, create artifact-update work and block dependent implementation on it.
 Do not bury unresolved decisions inside implementation tasks.
 
 A mission must make the desired finished state concrete enough for another
-agent to plan, implement, and validate without private context. Apply the
-standard before submitting the mission for independent plan review. Validation
+agent to plan, implement, and validate without private context. Validation
 derives its checks from the mission or issue `Outcome`; only predefine a
 scenario, command, file, artifact, or evidence class when it is itself the
 product contract or a known risk that would otherwise be ambiguous.
 
-## Mission-Review Handoff
-
-The planner authors or repairs the graph, records its material changes, and
-leaves it in the repository-reported draft state. Completing `plan` does not
-authorize the planner to approve that same graph, make it ready, or begin its
-execution.
-
-Hand the authored draft to a separately assigned `mission-review` agent. Give
-that assignment the exact inputs required by
-[`mission-review`](mission-review.md), including the mission ID, exact graph
-revision, complete reachable graph scope, evidence destination, and attributed
-author/editor identities needed to establish independence. The planner reports
-the authored revision and requested review in its handoff; the repository's
-live lifecycle surfaces own the review request, result, and any readiness
-transition.
-
-After the reviewer records a revision-bound finding or approval, return repairs
-to a planner or other material editor. A material repair requires fresh review.
-Only an orchestrator may use the current repository-reported approval and ready
-state to decide whether execution can be assigned.
+When the immediate work is clear and dependencies are explicit, use the
+repository's normal transition to mark the mission ready. Planning-file edits
+during execution are ordinary graph maintenance.
 
 ## Examples
 
@@ -158,6 +155,5 @@ diff locations inspected.
 
 Report items created or changed, dependency changes, unresolved choices,
 validation or lint run, evidence receipts produced, and follow-up artifact
-tasks. For a mission draft, also report its exact graph revision, its
-author/editor provenance, the review destination or request state, and that it
-remains an authored draft pending independent review.
+tasks. Report the draft outcome map separately from the executable horizon and
+name proof routes selected for newly ready epics.

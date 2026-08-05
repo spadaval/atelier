@@ -1,8 +1,5 @@
 use anyhow::{bail, Result};
 use atelier_core::{EvidenceRecord, Issue};
-use atelier_records::mission_plan_review::{
-    mission_plan_review_state, MissionPlanFindingSeverity, MissionPlanReviewFreshness,
-};
 use atelier_records::IssueSections;
 use atelier_sqlite::Database;
 use serde::Serialize;
@@ -155,9 +152,6 @@ fn evaluate_builtin_with_params(
             issue_sections_parseable(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
         }
-        "plan_review.current_approval" => {
-            plan_review_current_approval(repo_root, target_kind, target_id)
-        }
         "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
@@ -190,125 +184,15 @@ fn evaluate_builtin_with_params(
             epic_child_proof_complete(db, repo_root, policy, target_kind, target_id)
                 .map(without_validator_help)
         }
+        "epic.proof_route_present" => {
+            epic_proof_route_present(db, repo_root, target_kind, target_id)
+        }
         other => Ok((
             false,
             format!("unsupported builtin validator: {other}"),
             None,
         )),
     }
-}
-
-fn plan_review_current_approval(
-    repo_root: &Path,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String, Option<String>)> {
-    if target_kind != "issue" {
-        return Ok((
-            false,
-            format!("mission-plan approval requires an issue target, found {target_kind}"),
-            None,
-        ));
-    }
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let state = mission_plan_review_state(&state_dir, target_id)?;
-    if state.freshness == MissionPlanReviewFreshness::FreshApproval {
-        return Ok((
-            true,
-            format!(
-                "current mission graph {} has independent approval",
-                state.current_graph_revision
-            ),
-            None,
-        ));
-    }
-    if let Some(diagnosis) = crate::mission_readiness::review_diagnosis(&state_dir, target_id)? {
-        return Ok((
-            false,
-            diagnosis.summary,
-            Some(format!("Next: {}", diagnosis.next_command)),
-        ));
-    }
-    let result = match state.freshness {
-        MissionPlanReviewFreshness::FreshApproval => unreachable!(),
-        MissionPlanReviewFreshness::FreshGrandfather => (
-            false,
-            "legacy grandfathering does not constitute independent approval".to_string(),
-        ),
-        MissionPlanReviewFreshness::Stale => (
-            false,
-            format!(
-                "mission-plan approval is stale; current graph revision is {}",
-                state.current_graph_revision
-            ),
-        ),
-        MissionPlanReviewFreshness::Unapproved => (
-            false,
-            format!(
-                "mission graph {} was submitted for review but has no independent approval",
-                state.current_graph_revision
-            ),
-        ),
-        MissionPlanReviewFreshness::ProvenanceIncomplete
-            if state.authors.is_empty()
-                && state.material_editors.is_empty()
-                && state.authorization.is_none() =>
-        {
-            (
-                false,
-                format!(
-                    "mission-plan review was not requested for current graph revision {}",
-                    state.current_graph_revision
-                ),
-            )
-        }
-        MissionPlanReviewFreshness::ProvenanceIncomplete => (
-            false,
-            format!(
-                "mission-plan author and material-editor provenance is incomplete for current graph revision {}",
-                state.current_graph_revision
-            ),
-        ),
-        MissionPlanReviewFreshness::BlockedByReview => {
-            let revision = &state.current_graph_revision;
-            let blocking_findings = state
-                .findings
-                .iter()
-                .filter(|finding| {
-                    finding.graph_revision == *revision
-                        && finding.severity == MissionPlanFindingSeverity::Blocking
-                        && finding.resolution.is_none()
-                })
-                .map(|finding| finding.id.as_str())
-                .collect::<Vec<_>>();
-            let change_requests = state
-                .change_requests
-                .iter()
-                .filter(|request| {
-                    request.graph_revision == *revision && request.resolution.is_none()
-                })
-                .map(|request| request.id.as_str())
-                .collect::<Vec<_>>();
-            let mut causes = Vec::new();
-            if !blocking_findings.is_empty() {
-                causes.push(format!(
-                    "unresolved blocking findings: {}",
-                    blocking_findings.join(", ")
-                ));
-            }
-            if !change_requests.is_empty() {
-                causes.push(format!(
-                    "unresolved change requests: {}",
-                    change_requests.join(", ")
-                ));
-            }
-            (
-                false,
-                format!("mission-plan approval is blocked by {}", causes.join("; ")),
-            )
-        }
-    };
-    Ok((result.0, result.1, None))
 }
 
 fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
@@ -588,17 +472,26 @@ fn objective_work_present(
 ) -> Result<(bool, String)> {
     let work = objective_work_ids(db, target_kind, target_id)?;
     if work.is_empty() {
-        Ok((
-            false,
-            format!(
-                "no advancing work linked to {target_kind} {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
+        let guidance = match target_kind {
+            "mission" => format!(
+                "no advancing work linked to mission {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
             ),
-        ))
+            "issue" => format!(
+                "no child work belongs to issue {target_id}; create or move immediate work with `atelier issue create \"...\" --parent {target_id}` or `atelier issue update <issue-id> --parent {target_id}`"
+            ),
+            _ => format!("no accountable work linked to {target_kind} {target_id}"),
+        };
+        Ok((false, guidance))
     } else {
+        let relationship = if target_kind == "mission" {
+            "advances"
+        } else {
+            "hierarchy"
+        };
         Ok((
             true,
             format!(
-                "advancing work linked via advances: {}",
+                "accountable work linked via {relationship}: {}",
                 work.into_iter().collect::<Vec<_>>().join(", ")
             ),
         ))
@@ -614,11 +507,13 @@ fn objective_work_terminal(
     let mut open = objective_work_ids(db, target_kind, target_id)?
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
-            Ok(true) => Some(Ok(issue.id)),
-            Ok(false) => None,
-            Err(error) => Some(Err(error)),
-        })
+        .filter_map(
+            |issue| match issue_is_open_advancing_work(db, policy, &issue) {
+                Ok(true) => Some(Ok(issue.id)),
+                Ok(false) => None,
+                Err(error) => Some(Err(error)),
+            },
+        )
         .collect::<Result<Vec<_>>>()?;
     open.sort();
     if open.is_empty() {
@@ -635,6 +530,15 @@ fn objective_work_terminal(
             ),
         ))
     }
+}
+
+fn issue_is_open_advancing_work(
+    db: &Database,
+    policy: &WorkflowPolicy,
+    issue: &Issue,
+) -> Result<bool> {
+    Ok(issue_is_open_for_workflow(policy, issue)?
+        && crate::read_pipeline::terminal_ancestor(db, Some(policy), issue)?.is_none())
 }
 
 fn objective_direct_blockers_none_open(
@@ -728,6 +632,83 @@ fn epic_child_proof_complete(
             format!("epic child proof incomplete: {}", missing.join(", ")),
         ))
     }
+}
+
+fn epic_proof_route_present(
+    db: &Database,
+    repo_root: &Path,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("epic proof route does not apply to {target_kind} records"),
+            None,
+        ));
+    }
+    let epic = db.require_issue(target_id)?;
+    if epic.issue_type != "epic" {
+        return Ok((
+            true,
+            "epic proof route does not apply to non-epic issues".to_string(),
+            None,
+        ));
+    }
+    let children = db.get_subissues(target_id)?;
+    if children.is_empty() {
+        return Ok((
+            true,
+            "no immediate child work; objective.work_present owns the expansion gate".to_string(),
+            None,
+        ));
+    }
+
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let epic_record = crate::use_cases::load_canonical_issue(&state_dir, target_id)?;
+    if evidence_guidance_present(&epic_record.sections) {
+        return Ok((
+            true,
+            "epic Evidence guidance selects the proof route".to_string(),
+            None,
+        ));
+    }
+    for child in children {
+        if child.issue_type == "validation" {
+            return Ok((
+                true,
+                format!(
+                    "immediate validation child {} selects the proof route",
+                    child.id
+                ),
+                None,
+            ));
+        }
+        let child_record = crate::use_cases::load_canonical_issue(&state_dir, &child.id)?;
+        if evidence_guidance_present(&child_record.sections) {
+            return Ok((
+                true,
+                format!(
+                    "immediate child {} Evidence guidance selects the proof route",
+                    child.id
+                ),
+                None,
+            ));
+        }
+    }
+
+    Ok((
+        false,
+        format!("epic {target_id} has immediate child work but no inspectable proof route"),
+        Some(format!(
+            "Add concrete `## Evidence` guidance to `.atelier/issues/{target_id}.md` or an immediate child, or create an immediate validation child with `atelier issue create --parent {target_id} --issue-type validation \"Validate the increment\"`; then retry `atelier issue transition {target_id} ready`."
+        )),
+    ))
+}
+
+fn evidence_guidance_present(sections: &IssueSections) -> bool {
+    let evidence = sections.evidence.trim();
+    !evidence.is_empty() && evidence != "Evidence was not specified."
 }
 
 fn collect_missing_child_proof(
@@ -1141,10 +1122,105 @@ fn repo_root() -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::baseline_default_checks;
-    use atelier_sqlite::Database;
+    use super::{baseline_default_checks, epic_proof_route_present, evidence_guidance_present};
+    use atelier_core::{Issue, Relationships};
+    use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
+    use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
+    use chrono::Utc;
+    use std::collections::BTreeMap;
+    use std::fs;
     use std::process::Command;
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
+
+    fn proof_route_fixture(
+        epic_evidence: &str,
+        child_type: &str,
+        child_evidence: &str,
+    ) -> (TempDir, Database) {
+        let repo = tempdir().unwrap();
+        let state_dir = repo.path().join(".atelier");
+        fs::create_dir_all(state_dir.join("runtime")).unwrap();
+        let db = Database::open(&state_dir.join("runtime/test.db")).unwrap();
+        write_issue(&db, &state_dir, "atelier-epic", "epic", None, epic_evidence);
+        write_issue(
+            &db,
+            &state_dir,
+            "atelier-child",
+            child_type,
+            Some("atelier-epic"),
+            child_evidence,
+        );
+        (repo, db)
+    }
+
+    fn write_issue(
+        db: &Database,
+        state_dir: &std::path::Path,
+        id: &str,
+        issue_type: &str,
+        parent_id: Option<&str>,
+        evidence: &str,
+    ) {
+        let now = Utc::now();
+        let issue = Issue {
+            id: id.to_string(),
+            title: id.to_string(),
+            description: None,
+            status: if issue_type == "epic" {
+                "draft"
+            } else {
+                "todo"
+            }
+            .to_string(),
+            issue_type: issue_type.to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: parent_id.map(str::to_string),
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        };
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: issue.clone(),
+                labels: Vec::new(),
+                sections: IssueSections {
+                    description: "Fixture description".to_string(),
+                    outcome: "Fixture outcome".to_string(),
+                    evidence: evidence.to_string(),
+                    notes: None,
+                },
+                relationships: Relationships::default(),
+            })
+            .unwrap();
+        db.index_issue(
+            &IssueCacheRow {
+                id: issue.id.clone(),
+                title: issue.title,
+                status: issue.status,
+                issue_type: issue.issue_type,
+                priority: issue.priority,
+                fields: issue.fields,
+                parent_id: issue.parent_id,
+                created_at: issue.created_at,
+                updated_at: issue.updated_at,
+                closed_at: issue.closed_at,
+            },
+            &[],
+            &[],
+            &[],
+            &RecordSourceCacheRow {
+                path: format!("issues/{id}.md"),
+                record_kind: "issue".to_string(),
+                record_id: id.to_string(),
+                size_bytes: 0,
+                modified_micros: None,
+                content_hash: None,
+                indexed_at: now,
+            },
+        )
+        .unwrap();
+    }
 
     #[test]
     fn baseline_default_checks_do_not_report_projection_freshness() {
@@ -1165,5 +1241,71 @@ mod tests {
         assert!(reason.contains("git diff --check"));
         assert!(!reason.contains("tracker.current"));
         assert!(!reason.contains("projection freshness"));
+    }
+
+    #[test]
+    fn proof_route_requires_authored_evidence_guidance() {
+        let sections = |evidence: &str| IssueSections {
+            description: "Description".to_string(),
+            outcome: "Outcome".to_string(),
+            evidence: evidence.to_string(),
+            notes: None,
+        };
+
+        assert!(!evidence_guidance_present(&sections("")));
+        assert!(!evidence_guidance_present(&sections(
+            "Evidence was not specified."
+        )));
+        assert!(evidence_guidance_present(&sections(
+            "- `cargo test --test proof_route` passes."
+        )));
+    }
+
+    #[test]
+    fn epic_ready_blocks_without_an_inspectable_proof_route() {
+        let (repo, db) = proof_route_fixture("", "task", "");
+
+        let (passed, reason, help) =
+            epic_proof_route_present(&db, repo.path(), "issue", "atelier-epic").unwrap();
+
+        assert!(!passed);
+        assert!(reason.contains("immediate child work but no inspectable proof route"));
+        assert!(help.unwrap().contains("--issue-type validation"));
+    }
+
+    #[test]
+    fn epic_ready_accepts_epic_evidence_guidance() {
+        let (repo, db) = proof_route_fixture("- `cargo test` passes.", "task", "");
+
+        let (passed, reason, help) =
+            epic_proof_route_present(&db, repo.path(), "issue", "atelier-epic").unwrap();
+
+        assert!(passed, "{reason}");
+        assert!(reason.contains("epic Evidence guidance"));
+        assert!(help.is_none());
+    }
+
+    #[test]
+    fn epic_ready_accepts_immediate_child_evidence_guidance() {
+        let (repo, db) = proof_route_fixture("", "task", "- manual check transcript");
+
+        let (passed, reason, help) =
+            epic_proof_route_present(&db, repo.path(), "issue", "atelier-epic").unwrap();
+
+        assert!(passed, "{reason}");
+        assert!(reason.contains("atelier-child Evidence guidance"));
+        assert!(help.is_none());
+    }
+
+    #[test]
+    fn epic_ready_accepts_immediate_validation_child() {
+        let (repo, db) = proof_route_fixture("", "validation", "");
+
+        let (passed, reason, help) =
+            epic_proof_route_present(&db, repo.path(), "issue", "atelier-epic").unwrap();
+
+        assert!(passed, "{reason}");
+        assert!(reason.contains("immediate validation child atelier-child"));
+        assert!(help.is_none());
     }
 }

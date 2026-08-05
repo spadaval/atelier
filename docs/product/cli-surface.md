@@ -38,7 +38,6 @@ or mission:
 - `atelier status`
 - `atelier work ...`
 - `atelier issue ...`
-- `atelier issue plan-review <mission-id> ...`
 - `atelier check [id]`
 - `atelier issue create "..." --issue-type mission`
 - `atelier issue show <objective-id>`
@@ -133,7 +132,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
-| `issue` | Create, list, show, update, transition, note, manage typed links, and record independent mission-plan review decisions. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. `issue plan-review` owns exact-revision review requests, findings, change requests, resolutions, and approval. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, activity IDs, graph revisions, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `issue plan-review <mission-id> --help`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
+| `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, activity IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `review` | Manage the configured review artifact for issue or epic work. | `atelier review open` derives routine artifact fields from issue and workflow state; `atelier review show` owns status/detail and optional comments; `atelier review submit` owns exactly one comment, approval, or change request; resolve and merge keep their distinct jobs. Mutating commands use explicit `--role` or infer role from the owner issue status. Merge enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
@@ -158,16 +157,6 @@ in the command audit:
   [Retention And Prune Policy](retention-and-prune.md).
 - `import-beads`: temporary migration surface; normal setup uses
   `init --import-beads`.
-- `migrate-mission-plan-review`: one-shot hidden admin cutover for repositories
-  carrying the legacy direct mission-ready policy. It stages and validates the
-  full canonical transaction, preserves unrelated configured mission
-  transitions, serializes every repository command across its complete
-  read/validate/write lifetime, and uses a durable recovery journal with workflow
-  activation last. The journal inventories the complete canonical tree by path,
-  type, and file hash. Retry performs deterministic interruption recovery before
-  migration, refuses and preserves any unrelated addition, edit, deletion, or
-  type change for operator repair, and becomes a validation-only no-op after
-  success. Remove it when no supported repository can retain that legacy policy.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
 - `forgejo roles`: hidden provider-specific role-account recovery. Routine review
@@ -271,14 +260,21 @@ such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
 tokens such as `in_progress` are not category aliases. The legacy `work queue`
 is neither the normal inventory nor the Mission Overview.
 `atelier issue create` has one work-type decision. Use `--issue-type` for the
-canonical type (`bug`, `completion`, `epic`, `feature`, `spike`, `task`, or
-`validation`) or use a template preset whose default type is documented by the
+canonical type (`bug`, `completion`, `epic`, `feature`, `mission`, `spike`,
+`task`, or `validation`) or use a template preset whose default type is
+documented by the
 template name (`bug` -> `bug`, `feature` -> `feature`, research/investigation ->
 `spike`, audit -> `validation`, refactor/continuation -> `task`). Templates
 also provide default labels, priorities, and body scaffolding, and those
 defaults still apply when `--parent` or a matching explicit `--issue-type` is
 supplied. Conflicting type choices fail with guidance rather than silently
 creating a surprising record.
+For mission creation, an unsectioned `--body` supplies Description prose. A
+sectioned `--body` preserves authored `## Description`, `## Outcome`, optional
+`## Evidence`, and optional `## Notes` content; when Description is omitted,
+creation supplies the standard non-empty Description placeholder. A successful
+create always writes a body that satisfies the canonical issue section
+contract.
 
 First-class mission, evidence, relationship, and work lifecycle
 commands are now core as a staged implementation. Mission,
@@ -324,7 +320,7 @@ handoff transcript.
 State-specific next actions are part of the command contract:
 
 - `draft`: show missing readiness fields and point to record editing,
-  `atelier check <mission-id>`, or `atelier issue update <id> --status ready`.
+  `atelier check <mission-id>`, or `atelier issue transition <id> ready`.
 - `ready`: show ready work and the command to transition an issue into active
   work or inspect issue show <objective-id> explicitly.
 - `active`: show active work, ready work, blockers, configured validator

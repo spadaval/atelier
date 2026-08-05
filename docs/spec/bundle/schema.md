@@ -141,15 +141,11 @@ Optional fields:
 | `notes` | array of note objects | Durable handoff notes appended in order after the issue is created. |
 | `status` | string | Optional initial state. Defaults to repository policy, normally `todo`. Apply accepts statuses only when the complete staged canonical graph satisfies workflow policy. |
 
-Bundles do not carry typed workflow-transition or mission-plan-review receipts.
+Bundles do not carry typed workflow-transition receipts.
 Use initial and other non-executable statuses (normally `todo` for work items
-and `draft` for missions) when creating records. A mission in `ready` or
-`in_progress` is rejected unless the staged canonical state already contains
-the required current authorization, which create-only v1 bundles cannot add.
-After apply, use `atelier issue plan-review` and `atelier issue transition` to
-enter executable mission states. Apply also rejects graph changes that would
-make an existing executable mission's approval stale or introduce an
-unsatisfied direct or transitive blocker.
+and `draft` for missions) when creating records. After apply, use
+`atelier issue transition` to enter executable mission states. Apply rejects
+an executable mission with an unsatisfied direct or transitive blocker.
 
 `depends_on` and `blocks` describe sequencing dependencies. They must not be
 used for semantic contribution, validation, duplicate, supersession, or planning

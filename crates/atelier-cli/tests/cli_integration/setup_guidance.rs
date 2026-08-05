@@ -2103,22 +2103,18 @@ fn test_man_lists_roles_and_topics() {
 }
 
 #[test]
-fn test_man_plan_review_roles_explain_independent_handoff() {
+fn test_man_planning_guidance_keeps_mission_flow_direct() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     let (success, planner, stderr) = run_atelier(dir.path(), &["man", "planner"]);
     assert!(success, "man planner failed: {stderr}");
-    assert!(planner.contains("atelier issue plan-review <mission-id> request"));
-    assert!(planner.contains("atelier issue plan-review <mission-id> rework"));
-    assert!(planner.contains("approval of a graph you authored or materially edited"));
+    assert!(planner.contains("atelier issue transition <epic-id> ready"));
+    assert!(!planner.contains("plan-review"));
 
     let (success, reviewer, stderr) = run_atelier(dir.path(), &["man", "reviewer"]);
     assert!(success, "man reviewer failed: {stderr}");
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> finding"));
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> change-request"));
-    assert!(reviewer.contains("atelier issue plan-review <mission-id> approve"));
-    assert!(reviewer.contains("authoring or materially editing the graph being approved"));
+    assert!(!reviewer.contains("plan-review"));
 }
 
 #[test]
@@ -2134,6 +2130,8 @@ fn test_man_work_model_explains_scope_and_runs_without_tracker_state() {
     assert!(stdout.contains("mission --advances--> epic --children--> issue"));
     assert!(stdout.contains("A mission is not the hierarchy parent of its work"));
     assert!(stdout.contains("Dependencies and `blocked_by` links"));
+    assert!(stdout.contains("Draft epics are planning context, not ready work"));
+    assert!(stdout.contains("Epic expansion selects focused proof"));
     assert!(stdout.contains("atelier issue link <mission-id> <work-id> --role advances"));
     assert!(stdout.contains("atelier work mission <mission-id>"));
 }
@@ -2325,6 +2323,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Options read-only item");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "options read-only baseline");
 
@@ -2649,6 +2648,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Validator blocked item");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
 
     let (success, _, stderr) =
@@ -2724,6 +2724,7 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Blocked close item");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
 
     for args in [
@@ -2785,6 +2786,7 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Closable workflow item");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready close item");
 
@@ -3021,6 +3023,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Guided transition item");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     for args in [
         vec!["issue", "transition", &issue_id, "start"],
         vec!["issue", "transition", &issue_id, "request_review"],

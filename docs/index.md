@@ -28,6 +28,9 @@
   accepted current contract that record files are durable state, SQLite is a
   disposable lazy domain cache, and obsolete dual-write/projection paths have
   no compatibility window.
+- [docs/adr/0018-strategy-draft-epics-and-adaptive-expansion.md](adr/0018-strategy-draft-epics-and-adaptive-expansion.md):
+  accepted adaptive-planning contract for governing strategy, outcome-bearing
+  epics, draft-to-ready expansion, just-in-time proof, and direct replanning.
 - [docs/adr/0011-native-review-modes-and-room-authority.md](adr/0011-native-review-modes-and-room-authority.md):
   accepted choice that projects configure exactly one review mode, native
   rooms live under `.atelier/reviews/`, the public command surface is
@@ -41,10 +44,6 @@
   mission integration branches are opt-in through workflow policy, branch base
   is recorded context, and domain-cache freshness is an internal command
   concern rather than workflow policy.
-- [docs/adr/0018-independent-mission-plan-review.md](adr/0018-independent-mission-plan-review.md):
-  accepted choice that configured mission execution requires independent,
-  exact-revision plan approval with durable provenance, freshness, and explicit
-  legacy-state migration.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required

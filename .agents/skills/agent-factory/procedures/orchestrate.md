@@ -31,37 +31,28 @@ repositories, start from `atelier man manager`, `atelier status`, focused
   validation, and clean handoff state are visible through repository-owned
   product surfaces.
 
-## Mission Authoring, Review, and Execution
+## Replanning And Expansion
 
-Treat mission authorship, mission review, and orchestration as separate
-handoffs. A planner creates or repairs an authored draft and requests review;
-it does not approve its own graph, make that graph ready, or authorize
-execution. Assign the exact draft to a separately assigned `mission-review`
-agent, rather than substituting code `review` or outcome `validate`.
+After an integrated increment, material discovery, failed assumption, or new
+blocker, compare evidence with the active strategy and change only the smallest
+affected layer. Directly revise issues, dependencies, sequencing, and proof
+within strategy authority; preserve completed history and failed evidence.
 
-A mission-review assignment must extend the normal assignment block with all
-of these inputs:
+Keep later outcomes as draft epics. Expand only the next justified epic by
+refining its outcome and preservation claims, creating immediate child work and
+dependencies, choosing focused proof and any justified independent validation,
+then using the repository's ordinary draft-to-ready transition.
 
-```text
-Repository: <absolute path>
-Mission ID: <mission-id>
-Exact graph revision: <revision algorithm version and digest>
-Complete graph scope: <mission, direct advances roots, every reachable
-  hierarchy descendant, and workflow-driving internal/external prerequisites>
-Evidence destination: <where revision-bound findings or approval are recorded>
-Independence context: <initial author, every material editor, assigned reviewer>
-Independence requirement: reviewer is independent of the author and every
-  material editor
-```
-
-Do not fill in absent scope, revision, or provenance from private context. A
-review finding returns the graph to a separately assigned planner/material
-editor; a material edit invalidates the previous result. Before assigning
-execution, use Atelier's current manager/status/mission surfaces to confirm the
-exact mission has current independent approval and is reported ready. An
-authored draft, an old approval, or a reviewer statement alone is not execution
-authority. When Atelier does not report current approval and ready state, stop
-and route the next action to the planner or reviewer outcome it reports.
+- Rescope when the outcome and review boundary remain coherent; split when a
+  partial result needs independent ownership, sequencing, or proof.
+- Defer valuable but unnecessary or premature work outside the executable
+  horizon, retaining its reason and return condition.
+- Supersede obsolete speculative work instead of rewriting history.
+- Repair a discovered bug in the current branch only when it is required to
+  deliver or prove the assigned outcome and fits its boundary. Otherwise track
+  it and use its own repository-appropriate owner branch.
+- Return to strategy for changes to outcome, target system, governing tradeoff,
+  boundary, assurance, adaptation authority, or accepted ADR.
 
 ## Assignment Block
 

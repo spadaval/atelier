@@ -95,12 +95,12 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
     );
     assert!(success, "mission fixture bundle apply failed: {stderr}");
     let mission_id = issue_id_by_title(dir, title);
-    move_reviewed_mission_to_ready(dir, &mission_id);
+    move_mission_directly_to_ready(dir, &mission_id);
     mission_id
 }
 
 fn move_mission_to_ready(dir: &std::path::Path, mission_id: &str) {
-    move_reviewed_mission_to_ready(dir, mission_id);
+    move_mission_directly_to_ready(dir, mission_id);
 }
 
 fn set_dependency_fixture_status(dir: &std::path::Path, issue_id: &str, status: &str) {
@@ -172,7 +172,6 @@ fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "dependency fixture link failed: {stderr}");
     }
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "mission dependency closure fixture");
 
     let (success, direct_options, stderr) = run_atelier(
@@ -884,6 +883,7 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Invalid closeout");
+    move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready invalid closeout");
     let (success, _, stderr) =
@@ -984,7 +984,6 @@ fn test_mission_request_publish_uses_configured_objective_validators() {
     let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission link failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "configured validator publish fixture");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1095,7 +1094,6 @@ fn test_mission_publish_enforces_gates() {
     let work_id = issue_id_by_title(dir.path(), "Publish work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "ready strict mission publish");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1168,7 +1166,6 @@ fn test_dirty_worktree_blocks_mission_publish() {
     let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -1277,7 +1274,6 @@ fn test_mission_publish_still_blocks_hand_edited_issue_markdown() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
-    approve_current_mission_revision(dir.path(), &mission_id);
     commit_all(dir.path(), "dirty canonical mission publish ready");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -2692,7 +2688,7 @@ fn test_bundle_rejects_mission_parent_scope() {
 }
 
 #[test]
-fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_state() {
+fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserves_state() {
     for status in ["ready", "in_progress"] {
         let dir = tempdir().unwrap();
         init_atelier(dir.path());
@@ -2735,9 +2731,9 @@ fn test_bundle_apply_rejects_executable_missions_without_review_and_preserves_st
             &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
         );
 
-        assert!(!success, "unreviewed {status} mission must be rejected");
+        assert!(!success, "blocked {status} mission must be rejected");
         assert!(
-            stderr.contains("workflow_mission_plan_review_bypass"),
+            stderr.contains("workflow_mission_dependency_bypass"),
             "{stderr}"
         );
         assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
@@ -2792,7 +2788,7 @@ fn test_bundle_apply_accepts_non_executable_initial_statuses() {
 }
 
 #[test]
-fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() {
+fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2825,21 +2821,15 @@ fn test_bundle_apply_rejects_graph_edit_that_stales_executable_mission_review() 
     let state_dir = dir.path().join(".atelier");
     let db_path = state_dir.join("runtime/state.db");
     let canonical_before = canonical_tree_snapshot(&state_dir);
-    let db_before = std::fs::read(&db_path).unwrap();
 
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
         &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
     );
 
-    assert!(!success, "stale executable mission review must be rejected");
-    assert!(
-        stderr.contains("workflow_mission_plan_review_bypass"),
-        "{stderr}"
-    );
-    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
-    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
-    assert_eq!(std::fs::read(db_path).unwrap(), db_before);
+    assert!(success, "ordinary graph edit should apply: {stderr}");
+    assert_ne!(canonical_tree_snapshot(&state_dir), canonical_before);
+    assert!(db_path.exists());
 }
 
 #[test]
@@ -3356,6 +3346,7 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
         &["issue", "create", "Child work", "--parent", &epic_id],
     );
     assert!(success, "child create failed: {stderr}");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     let child_id = issue_id_by_title(dir.path(), "Child work");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Standalone work"]);
     assert!(success, "standalone create failed: {stderr}");
@@ -3437,7 +3428,7 @@ fn test_mission_start_prepares_mission_branch_from_base() {
     );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = issue_id_by_title(dir.path(), "Integration mission");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission branch baseline");
 
     let (success, start_out, stderr) =
@@ -3493,12 +3484,13 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Scoped epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission scoped baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -3566,6 +3558,99 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
 }
 
 #[test]
+fn test_nested_work_created_on_mission_branch_starts_on_mission_scoped_epic_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Adaptive mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Adaptive mission");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "First executable horizon",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "First executable horizon");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
+    );
+    assert!(success, "mission advances link failed: {stderr}");
+    move_mission_directly_to_ready(dir.path(), &mission_id);
+    commit_all(dir.path(), "adaptive mission baseline");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
+    assert!(success, "mission start failed: {stderr}");
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("mission/{mission_id}")
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Deliver first horizon",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "expanded child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Deliver first horizon");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
+    commit_all(dir.path(), "expand first executable horizon");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &child_id, "start"]);
+    assert!(success, "nested child start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains(&format!(
+            "created branch epic/{epic_id} from mission/{mission_id}"
+        )),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Branch owner: epic {epic_id} (epic)")),
+        "{start_out}"
+    );
+    assert!(
+        start_out.contains(&format!("Base branch: mission/{mission_id}")),
+        "{start_out}"
+    );
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "nested child show failed: {stderr}");
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+    let workflow_branch =
+        &canonical_record_front_matter(dir.path(), "issues", &epic_id)["fields"]["workflow_branch"];
+    assert_eq!(workflow_branch["owner_issue_id"], epic_id);
+    assert_eq!(workflow_branch["work_branch"], format!("epic/{epic_id}"));
+    assert_eq!(
+        workflow_branch["branch_base"],
+        format!("mission/{mission_id}")
+    );
+}
+
+#[test]
 fn test_epic_close_integrates_into_recorded_mission_branch() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -3596,12 +3681,13 @@ fn test_epic_close_integrates_into_recorded_mission_branch() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Close target epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "mission close target baseline");
 
     let (success, _, stderr) =
@@ -3684,12 +3770,13 @@ fn test_epic_start_requires_started_mission_branch_for_mission_scope() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Wrong branch epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "wrong branch baseline");
 
     let status = Command::new("git")
@@ -3711,7 +3798,7 @@ fn test_epic_start_requires_started_mission_branch_for_mission_scope() {
     assert_eq!(git_current_branch(dir.path()), "side-start");
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
     assert!(success, "epic show failed: {stderr}");
-    assert!(show_out.contains("Status:   todo"), "{show_out}");
+    assert!(show_out.contains("Status:   ready"), "{show_out}");
 }
 
 #[test]
@@ -3745,12 +3832,13 @@ fn test_epic_start_from_other_branch_uses_recorded_mission_branch() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Side branch epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &mission_id, &epic_id, "--role", "advances"],
     );
     assert!(success, "mission link failed: {stderr}");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "side branch mission baseline");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id, "start"]);
@@ -3859,6 +3947,76 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
 }
 
 #[test]
+fn test_start_refuses_owner_branch_that_lacks_transition_target_record() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_mission_branch_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Existing owner epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Existing owner epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
+    commit_all(dir.path(), "owner epic baseline");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic start failed: {stderr}");
+    commit_all(dir.path(), "prepared owner epic branch");
+    let owner_head = git_rev_parse(dir.path(), &format!("epic/{epic_id}"));
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch back to main failed");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Child expanded on wrong branch",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Child expanded on wrong branch");
+    commit_all(dir.path(), "misplaced child expansion");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &child_id, "start"]);
+    assert!(
+        !success,
+        "misplaced child start unexpectedly succeeded:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("action git.prepare_branch refused to switch")
+            && stderr.contains(&format!("epic/{epic_id}"))
+            && stderr.contains(&format!(".atelier/issues/{child_id}.md"))
+            && stderr.contains("Checkout remains on branch 'main'")
+            && stderr.contains("repair the parent/`advances` links"),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert_eq!(
+        git_rev_parse(dir.path(), &format!("epic/{epic_id}")),
+        owner_head
+    );
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "child show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
+}
+
+#[test]
 fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -3882,6 +4040,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Action integrated epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     commit_all(dir.path(), "initial tracker state");
 
     let (success, start_out, stderr) =
@@ -3985,6 +4144,7 @@ fn test_epic_start_from_side_branch_uses_configured_base_branch() {
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Base gated epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
     commit_all(dir.path(), "initial epic tracker state");
 
     let status = Command::new("git")

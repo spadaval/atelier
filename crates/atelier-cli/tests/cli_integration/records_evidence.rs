@@ -1247,7 +1247,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
 }
 
 #[test]
-fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
+fn test_evidence_capture_allows_reentrant_mutation_children() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, _, stderr) = run_atelier(
@@ -1257,30 +1257,6 @@ fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
     assert!(success, "target create failed: {stderr}");
     let target_id = issue_id_by_title(dir.path(), "Capture target");
     let executable = env!("CARGO_BIN_EXE_atelier");
-
-    let migration = run_atelier_with_deadlock_timeout(
-        dir.path(),
-        &[
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "--summary",
-            "Nested migration proof",
-            "--target",
-            &format!("issue/{target_id}"),
-            "--",
-            executable,
-            "migrate-mission-plan-review",
-        ],
-    );
-    assert!(
-        migration.status.success(),
-        "migration capture failed: {}",
-        String::from_utf8_lossy(&migration.stderr)
-    );
-    assert!(String::from_utf8_lossy(&migration.stdout)
-        .contains("Independent mission plan-review cutover already applied"));
 
     let mutation = run_atelier_with_deadlock_timeout(
         dir.path(),
@@ -1310,10 +1286,6 @@ fn test_evidence_capture_allows_reentrant_migration_and_mutation_children() {
     assert!(
         issue_id_by_title(dir.path(), "Nested child issue").starts_with("atelier-"),
         "nested mutation did not commit"
-    );
-    assert!(
-        record_id_by_title(dir.path(), "evidence", "Nested migration proof")
-            .starts_with("atelier-")
     );
     assert!(
         record_id_by_title(dir.path(), "evidence", "Nested mutation proof").starts_with("atelier-")
@@ -2127,7 +2099,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Stale test closeout");
-    move_reviewed_mission_to_ready(dir.path(), &mission_id);
+    move_mission_directly_to_ready(dir.path(), &mission_id);
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),

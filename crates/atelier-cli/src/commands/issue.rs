@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,7 +23,9 @@ use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
+use atelier_records::{
+    parse_issue_sections, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
+};
 use atelier_sqlite::{validate_issue_type, Database};
 
 const MAX_ISSUE_TITLE_LEN: usize = 512;
@@ -972,19 +974,37 @@ fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
         return Ok(());
     }
 
-    let summary = subissue_summary(&subissues);
     subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
-    let rows = subissues
-        .iter()
+    let classified_subissues = subissues
+        .into_iter()
         .map(|subissue| {
-            let row = work_order_row_for_issue(db, workflow_policy.as_ref(), subissue)?;
+            let classified = atelier_app::read_pipeline::classify_issue(
+                db,
+                workflow_policy.as_ref(),
+                &subissue,
+            )?;
+            Ok((subissue, classified))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let summary = subissue_summary(
+        classified_subissues.len(),
+        classified_subissues.iter().map(|(subissue, classified)| {
+            (
+                classified.classification.label(),
+                subissue.priority.as_str(),
+            )
+        }),
+    );
+    let rows = classified_subissues
+        .iter()
+        .map(|(subissue, classified)| {
             Ok(IssueListRow {
-                role: display_role_for_bucket(row.state().label()),
+                role: display_role_for_bucket(classified.classification.label()),
                 id: format_issue_id(&subissue.id),
-                status: Some(subissue.status.clone()),
+                status: Some(classified.classification.label().to_string()),
                 priority: subissue.priority.clone(),
                 title: subissue.title.clone(),
-                blockers: row.open_blockers.len(),
+                blockers: classified.open_blockers.len(),
                 depth: 1,
             })
         })
@@ -1078,16 +1098,19 @@ fn work_order_row_for_issue(
     })
 }
 
-fn subissue_summary(subissues: &[Issue]) -> String {
+fn subissue_summary<'a>(
+    total: usize,
+    subissues: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> String {
     let mut statuses = BTreeMap::<String, usize>::new();
     let mut priorities = BTreeMap::<String, usize>::new();
-    for subissue in subissues {
-        *statuses.entry(subissue.status.clone()).or_default() += 1;
-        *priorities.entry(subissue.priority.clone()).or_default() += 1;
+    for (status, priority) in subissues {
+        *statuses.entry(status.to_string()).or_default() += 1;
+        *priorities.entry(priority.to_string()).or_default() += 1;
     }
     format!(
         "{} total | status: {} | priority: {}",
-        subissues.len(),
+        total,
         joined_counts(statuses),
         joined_counts(priorities)
     )
@@ -1431,16 +1454,25 @@ fn list_blocked_filtered_with_title(
         .list_issues(Some("all"), label, priority)?
         .into_iter()
         .filter(|issue| issue_type.is_none_or(|issue_type| issue.issue_type == issue_type))
-        .map(|issue| issue_summary(db, issue))
-        .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
+        .map(|issue| {
+            let classification =
+                atelier_app::read_pipeline::classify_issue(db, workflow_policy.as_ref(), &issue)?
+                    .classification;
+            Ok((issue, classification))
+        })
+        .map(|result: Result<_>| {
+            result.and_then(|(issue, classification)| {
+                issue_summary(db, issue).map(|summary| (summary, classification))
+            })
+        })
+        .map(|result| {
+            result.and_then(|(issue, classification)| {
+                queue_row(db, workflow_policy.as_ref(), issue).map(|row| (row, classification))
+            })
+        })
         .filter_map(|result| match result {
-            Ok(row)
-                if !row.open_blockers.is_empty()
-                    || row.status_category.as_deref() == Some("blocked") =>
-            {
-                Some(Ok(row))
-            }
-            Ok(_) => None,
+            Ok((row, atelier_app::read_pipeline::WorkClassification::Blocked)) => Some(Ok(row)),
+            Ok((_row, _)) => None,
             Err(error) => Some(Err(error)),
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1541,19 +1573,6 @@ fn filter_ready_rows(
         .iter()
         .map(|row| row.id.clone())
         .collect::<BTreeSet<_>>();
-    let state_dir = atelier_app::cache_manager::CacheManager::discover()?.state_dir();
-    let mission_allowances = match workflow_policy {
-        Some(policy) => {
-            atelier_app::mission_readiness::execution_allowances_for_candidates(
-                db,
-                &state_dir,
-                policy,
-                &candidate_ids,
-            )?
-            .allowed_by_issue
-        }
-        None => BTreeMap::new(),
-    };
     let dependency_ready = match workflow_policy {
         Some(policy) => {
             atelier_app::objective_graph::dependency_readiness_batch(
@@ -1567,7 +1586,11 @@ fn filter_ready_rows(
     };
     rows.into_iter()
         .map(|row| {
-            if !mission_allowances.get(&row.id).copied().unwrap_or(true) {
+            let issue = db.require_issue(&row.id)?;
+            if atelier_app::read_pipeline::classify_issue(db, workflow_policy, &issue)?
+                .classification
+                != atelier_app::read_pipeline::WorkClassification::Ready
+            {
                 return Ok((row, false));
             }
             if workflow_policy.is_some() && !dependency_ready.get(&row.id).copied().unwrap_or(false)
@@ -1577,11 +1600,12 @@ fn filter_ready_rows(
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
-                let is_ready = external.is_empty() && queue_row_is_todo(workflow_policy, &row);
+                let is_ready =
+                    external.is_empty() && queue_row_can_enter_active(workflow_policy, &row)?;
                 Ok((row, is_ready))
             } else {
-                let is_ready =
-                    row.open_blockers.is_empty() && queue_row_is_todo(workflow_policy, &row);
+                let is_ready = row.open_blockers.is_empty()
+                    && queue_row_can_enter_active(workflow_policy, &row)?;
                 Ok((row, is_ready))
             }
         })
@@ -1593,10 +1617,13 @@ fn filter_ready_rows(
         .collect()
 }
 
-fn queue_row_is_todo(workflow_policy: Option<&WorkflowPolicy>, row: &QueueRow) -> bool {
+fn queue_row_can_enter_active(
+    workflow_policy: Option<&WorkflowPolicy>,
+    row: &QueueRow,
+) -> Result<bool> {
     match workflow_policy {
-        Some(_) => row.status_category.as_deref() == Some("todo"),
-        None => row.status == "todo",
+        Some(policy) => policy.can_enter_active(&row.issue_type, &row.status),
+        None => Ok(row.status == "todo"),
     }
 }
 
@@ -1962,6 +1989,7 @@ fn activity_scalar_line_value(line: &str, key: &str) -> Option<Option<String>> {
 pub struct LifecycleCreateInput<'a> {
     pub title: &'a str,
     pub description: Option<&'a str>,
+    pub body: Option<&'a str>,
     pub priority: &'a str,
     pub issue_type: &'a str,
     pub labels: &'a [String],
@@ -2012,6 +2040,7 @@ pub fn create_lifecycle(
             MAX_ISSUE_DESCRIPTION_LEN
         );
     }
+    let sections = lifecycle_issue_sections(&input)?;
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
@@ -2027,7 +2056,7 @@ pub fn create_lifecycle(
             closed_at: None,
         },
         labels: input.labels.to_vec(),
-        sections: IssueSections::unchecked_from_body(description.as_deref()),
+        sections,
         relationships: Relationships::default(),
     };
     atelier_app::workflow_policy::validate_issue_hierarchy(
@@ -2095,10 +2124,10 @@ pub fn create_lifecycle(
 
 fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<String> {
     if input.issue_type != "mission" {
-        return input.description.map(str::to_string);
+        return input.description.or(input.body).map(str::to_string);
     }
     let mut lines = Vec::new();
-    if let Some(description) = input.description {
+    if let Some(description) = input.description.or(input.body) {
         let description = description.trim();
         if !description.is_empty() {
             lines.push(description.to_string());
@@ -2112,6 +2141,56 @@ fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<Strin
     } else {
         Some(lines.join("\n\n"))
     }
+}
+
+fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {
+    if input.issue_type != "mission" {
+        let description = lifecycle_issue_description(input);
+        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
+    }
+    let Some(body) = input.body.filter(|body| has_level_two_heading(body)) else {
+        let description = lifecycle_issue_description(input);
+        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
+    };
+
+    let normalized = if has_issue_section(body, "Description") {
+        body.to_string()
+    } else {
+        format!(
+            "## Description\n\nNo description provided.\n\n{}",
+            body.trim()
+        )
+    };
+    let mut sections = parse_issue_sections(&normalized, Path::new("<issue create --body>"))
+        .context("Invalid sectioned mission --body")?;
+
+    let mut additions = Vec::new();
+    append_named_list(&mut additions, "Constraints", &input.constraints);
+    append_named_list(&mut additions, "Risks", &input.risks);
+    append_named_list(&mut additions, "Validation", &input.validation);
+    if !additions.is_empty() {
+        sections.description.push_str("\n\n");
+        sections.description.push_str(&additions.join("\n\n"));
+    }
+    Ok(sections)
+}
+
+fn has_level_two_heading(body: &str) -> bool {
+    body.lines().any(|line| {
+        let Some(rest) = line.strip_prefix("##") else {
+            return false;
+        };
+        !rest.starts_with('#')
+            && (rest.is_empty() || rest.chars().next().is_some_and(char::is_whitespace))
+    })
+}
+
+fn has_issue_section(body: &str, name: &str) -> bool {
+    body.lines().any(|line| {
+        line.strip_prefix("##")
+            .filter(|rest| !rest.starts_with('#'))
+            .is_some_and(|rest| rest.trim() == name)
+    })
 }
 
 fn append_named_list(lines: &mut Vec<String>, title: &str, values: &[String]) {
@@ -2678,7 +2757,12 @@ mod tests {
         db.cache_fixture_close(&child_b).unwrap();
 
         let subissues = db.get_subissues(&parent).unwrap();
-        let summary = subissue_summary(&subissues);
+        let summary = subissue_summary(
+            subissues.len(),
+            subissues
+                .iter()
+                .map(|issue| (issue.status.as_str(), issue.priority.as_str())),
+        );
 
         assert!(summary.contains("2 total"));
         assert!(summary.contains("done=1"));

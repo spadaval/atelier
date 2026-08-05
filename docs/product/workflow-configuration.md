@@ -13,12 +13,6 @@ state or execute issue transitions load and validate this file directly. If the
 file is missing, obsolete, or invalid, the command fails with a workflow config
 error.
 
-The target repository policy includes the mission-plan review capabilities
-accepted in [ADR 0018](../adr/0018-independent-mission-plan-review.md). The
-workflow file, validators, canonical event support, and legacy-state migration
-must cut over atomically; contract-first documentation does not make an
-unsupported partial workflow configuration valid.
-
 ## Ownership Boundary
 
 Atelier has three separate configuration surfaces. A setting belongs to exactly
@@ -115,52 +109,17 @@ the shared status category alone does not make it terminal. Mission `advances`
 scope and ordinary hierarchy are not dependency edges, so incomplete internal
 mission work does not block starting the mission shell.
 
-Mission-plan review is separate from the review backend selected in
-`.atelier/config.toml`. Its append-only request, attribution, finding,
-resolution, change-request, approval, and migration events are linked to the
-mission and name a graph revision. They do not populate the issue `review`
-field, open a room or provider artifact, satisfy `review.complete`, or grant
-merge authority.
+Mission planning uses the ordinary issue workflow. Draft missions move directly to ready when their planning sections are readable and declared blockers are clear. Planning-file edits do not require a separate review or identity ceremony.
 
-The public mutation surface is `atelier issue plan-review <mission-id>` with
-the `request`, `rework`, `finding`, `change-request`, `resolve`, and `approve`
-subcommands. The initial `request` records the authenticated caller as the
-author/material editor of the submitted revision and applies the configured
-`request_plan_review` transition. After a material edit in `plan_review`,
-`request` and the explicit `rework` spelling both append a typed material-edit
-attribution from the last provenance-complete revision to the exact current
-revision and resubmit it without a status round trip. The attribution adds the
-authenticated editor to inherited provenance; it never retargets an old
-approval. Review decisions and graph references are projected and validated
-before their activity is appended, so self-approval, stale revisions,
-unresolved blocking findings, effective change requests, nonexistent IDs,
-out-of-scope IDs, and malformed dependency paths fail without adding an invalid
-event.
-The caller identity comes only from `ATELIER_AUTHENTICATED_ACTOR` in canonical
-`actor-v1:<authority>/<immutable-subject>` form. The launcher or authentication
-adapter owns that environment value; accepting an arbitrary end-user value as
-authenticated identity violates this command contract.
-
-The exact command forms are:
-
-```text
-atelier issue plan-review <mission-id> request
-atelier issue plan-review <mission-id> rework
-atelier issue plan-review <mission-id> finding <finding-id> --severity blocking --affected <issue-id> [--dependency-path <issue-id>]...
-atelier issue plan-review <mission-id> change-request <request-id> --affected <issue-id> [--dependency-path <issue-id>]...
-atelier issue plan-review <mission-id> resolve <finding-or-request-id> --disposition <text>
-atelier issue plan-review <mission-id> approve
-```
-
-Affected IDs must belong to the current mission, its `advances`/hierarchy
-reachable work, or a transitive prerequisite reachable from that reviewed
-work. A non-empty dependency path contains at least one edge, starts from a
-blocked issue and follows canonical `blocks` ownership toward each successive
-blocker, contains no repeated issue or edge, and touches reviewed mission work.
-Empty paths remain valid for findings that are not about dependency readiness.
-A resolution remains bound to the original revision of its
-finding or change request even after rework; only a mission author or material
-editor other than the decision reviewer may record it.
+Epic proof planning remains just in time. A draft epic may omit child work and
+Evidence entirely. On the `draft -> ready` transition,
+`epic.proof_route_present` requires the now-expanded epic to expose one durable
+route: authored `## Evidence` guidance on the epic, authored Evidence guidance
+on an immediate child, or an immediate child whose issue type is `validation`.
+The validator recognizes where proof will be produced; issue lint remains
+responsible for judging whether authored Evidence entries name concrete,
+observable proof targets. A blocked transition points to the records to edit or
+the command for creating an immediate validation child.
 
 ## Fixed V3 Shape
 
@@ -185,7 +144,6 @@ issue_types:
 
 statuses:
   draft: { category: todo }
-  plan_review: { category: active, role: reviewer }
   ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active, role: worker }
@@ -203,25 +161,18 @@ workflows:
     initial_status: draft
     done_statuses: [publish_review, closed, superseded]
     transitions:
-      request_plan_review:
+      ready:
         from: [draft]
-        to: plan_review
-        description: "Submit the exact current mission graph for independent plan review."
+        to: ready
+        description: "Make a worker-usable mission ready for execution."
         validators:
           - issue.sections_parseable
-      ready:
-        from: [plan_review]
-        to: ready
-        description: "Make an independently approved exact mission graph ready for execution."
-        validators:
-          - plan_review.current_approval
           - blockers.transitive_none_open
       start:
         from: [ready]
         to: in_progress
         description: "Start coordinated mission work."
         validators:
-          - plan_review.current_approval
           - blockers.transitive_none_open
           - git.worktree_clean
         actions:
@@ -280,11 +231,25 @@ workflows:
 
   epic:
     applies_to: [epic]
-    initial_status: todo
-    done_statuses: [done]
+    initial_status: draft
+    done_statuses: [done, superseded]
     transitions:
+      adopt_draft:
+        from: [todo]
+        to: draft
+        description: "Adopt a legacy unexpanded epic into the draft outcome map."
+      ready:
+        from: [draft]
+        to: ready
+        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
+        validators:
+          - issue.sections_parseable
+          - objective.work_present
+          - epic.proof_route_present
+          - blockers.transitive_none_open
+          - lint.none_blocking
       start:
-        from: [todo, blocked]
+        from: [ready, blocked]
         to: in_progress
         description: "Start active work on this item."
         validators:
@@ -292,9 +257,14 @@ workflows:
         actions:
           - git.prepare_branch
       block:
-        from: [todo, in_progress, review, validation]
+        from: [ready, in_progress, review, validation]
         to: blocked
         description: "Mark work blocked while preserving current proof expectations."
+      supersede:
+        from: [draft, ready, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
       request_review:
         from: [in_progress]
         to: review
