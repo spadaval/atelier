@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "draft"
+closed_at: "2026-08-05T18:10:18.326908153+00:00"
+status: "superseded"
 title: "Support routine replanning and just-in-time expansion"
-updated_at: "2026-08-05T16:43:27.127727601+00:00"
+updated_at: "2026-08-05T18:10:18.326908153+00:00"
 ---
 
 ## Description
