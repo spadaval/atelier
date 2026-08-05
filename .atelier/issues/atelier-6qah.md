@@ -9,14 +9,18 @@ labels:
 priority: "P2"
 relationships:
   blocks: []
-  children: []
+  children:
+  - kind: "issue"
+    id: "atelier-ekg7"
+  - kind: "issue"
+    id: "atelier-lho9"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "draft"
+status: "ready"
 title: "Align Agent Factory guidance and prove the adaptive loop"
-updated_at: "2026-08-05T16:43:27.127727601+00:00"
+updated_at: "2026-08-05T19:49:30.770288395+00:00"
 ---
 
 ## Description
@@ -32,3 +36,9 @@ Expansion condition: expand when the legibility and replanning outcomes are impl
 - The embedded Agent Factory binding routes strategy, replanning, and expansion behavior through the correct Atelier surfaces.
 - A fresh agent can create a strategic mission, execute the current horizon, expand an epic from evidence, reconcile changed work, and continue without private context.
 - Residue checks find no conflicting frozen-plan, whole-graph-completeness, or planning-approval guidance.
+
+## Evidence
+
+- `atelier-lho9` records semantic parity across the repository Agent Factory binding, Atelier role guidance, and durable product/architecture sources.
+- `atelier-ekg7` independently executes the complete adaptive loop from a disposable repository at the exact candidate revision.
+- Focused command-surface and tracker checks pass, and any contradictory behavior is repaired before this epic closes.
