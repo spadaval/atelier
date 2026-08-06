@@ -6,7 +6,12 @@
 
 These notes are based on the public article as read on 2026-06-08.
 
-## Relevant Ideas
+> Historical design input only. This file is not current Atelier policy.
+> [ADR 0018](../adr/0018-strategy-draft-epics-and-adaptive-expansion.md) and
+> the active product documentation supersede the scope-approval, durable-plan,
+> and mandatory milestone-validation ideas considered below.
+
+## Historical Ideas Considered
 
 - The product model is goal, scope approval, decomposition, execution, and
   validation. Atelier should make missions and milestones durable enough that a
@@ -35,7 +40,10 @@ These notes are based on the public article as read on 2026-06-08.
 - Do not imply that autonomous execution is complete when an agent command exits.
   Completion should be a workflow-defined handoff or validation result.
 
-## Follow-Up Beads
+## Historical Follow-Up Beads
+
+These identifiers record the work that followed the original source review;
+they are not a current execution plan.
 
 - `atelier-v72a`: keep missions, milestones, plans, evidence, and workflow
   validators explicit enough to support milestone validation.

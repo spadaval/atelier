@@ -2305,6 +2305,112 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
 }
 
 #[test]
+fn test_parented_validation_completes_inside_epic_review_boundary() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Review-owning epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Review-owning epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Validate epic outcome",
+            "--issue-type",
+            "validation",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "validation create failed: {stderr}");
+    let validation_id = issue_id_by_title(dir.path(), "Validate epic outcome");
+    commit_all(dir.path(), "parented validation setup");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "start"],
+    );
+    assert!(success, "validation start failed: {stderr}");
+    commit_all(dir.path(), "start parented validation");
+    attach_issue_pass_evidence(dir.path(), &validation_id);
+    commit_all(dir.path(), "prove parented validation");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "complete_parented"],
+    );
+    assert!(success, "parented validation completion failed: {stderr}");
+    assert!(
+        stdout.contains("Applied transition complete_parented"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("To:       done"), "{stdout}");
+
+    let issue_text =
+        std::fs::read_to_string(canonical_issue_path(dir.path(), &validation_id)).unwrap();
+    assert!(issue_text.contains("status: \"done\""), "{issue_text}");
+}
+
+#[test]
+fn test_standalone_validation_cannot_bypass_its_review_path() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Standalone validation",
+            "--issue-type",
+            "validation",
+        ],
+    );
+    assert!(success, "validation create failed: {stderr}");
+    let validation_id = issue_id_by_title(dir.path(), "Standalone validation");
+    commit_all(dir.path(), "standalone validation setup");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "start"],
+    );
+    assert!(success, "validation start failed: {stderr}");
+    commit_all(dir.path(), "start standalone validation");
+    attach_issue_pass_evidence(dir.path(), &validation_id);
+    commit_all(dir.path(), "prove standalone validation");
+
+    let (success, options, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "--verbose"],
+    );
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options.contains("request_review [allowed]"), "{options}");
+    assert!(options.contains("complete_parented [blocked]"), "{options}");
+    assert!(options.contains("standalone validation"), "{options}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "complete_parented"],
+    );
+    assert!(!success, "standalone validation bypassed review");
+    assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(stderr.contains("validation.parent_epic"), "{stderr}");
+}
+
+#[test]
 fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -2741,17 +2847,11 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
-    assert!(!success, "close should be blocked without reason and proof");
+    assert!(!success, "close should be blocked by the dirty worktree");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(
-        stdout.contains("expected at least 1 validating evidence record(s); found 0"),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
-        "{stdout}"
-    );
-    assert!(stderr.contains("evidence.attached"), "{stderr}");
+    assert!(stdout.contains("pass  children.proof_complete"), "{stdout}");
+    assert!(!stdout.contains("evidence.attached"), "{stdout}");
+    assert!(!stderr.contains("evidence.attached"), "{stderr}");
     assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
@@ -2761,7 +2861,6 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         &[
             "Blocked transition close from validation",
             "transition: \"close\"",
-            "reason: \"validator evidence.attached failed:",
             "validator git.worktree_clean failed:",
         ],
     );
@@ -3043,9 +3142,8 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out.contains(
-            "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
-        ),
+        options_out
+            .contains("Closing requires complete child proof, review merge, and a clean worktree."),
         "{options_out}"
     );
     assert!(options_out.contains(&format!(

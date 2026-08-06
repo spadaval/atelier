@@ -47,6 +47,11 @@ separate issue hierarchy.
   completion evidence rather than from direct proof pasted onto the parent
   objective.
 
+A validation issue owned by an epic may complete with its evidence while the
+epic retains the shared review boundary. Standalone validation retains its own
+review path. Epic completion consumes complete child proof without requiring
+the same evidence to be attached to the epic a second time.
+
 Sessions and attempts are not separate work queues or workflow records. Current
 work, role ownership, and completion remain derived from canonical issue status,
 configured status roles, workflow transitions, and evidence.

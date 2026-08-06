@@ -440,7 +440,6 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - evidence.attached: { min_count: 1 }
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
@@ -467,13 +466,22 @@ workflows:
         from: [in_progress, review]
         to: validation
         description: "Move reviewed work into validation after review is complete."
+      complete_parented:
+        from: [in_progress]
+        to: done
+        description: "Complete validation whose parent epic owns the review boundary."
+        validators:
+          - validation.parent_epic
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - git.worktree_clean
       close:
         from: [validation]
         to: done
         required_fields: [close_reason]
         validators:
           - evidence.attached: { min_count: 1 }
-          - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
           - git.worktree_clean
@@ -744,6 +752,7 @@ Version 1 built-in validators include:
 - `review.linked_pr_merged`
 - `evidence.attached`
 - `validation.criteria_satisfied`
+- `validation.parent_epic`
 - `blockers.none_open`
 - `lint.none_blocking`
 - `git.worktree_clean`

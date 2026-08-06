@@ -156,6 +156,7 @@ fn evaluate_builtin_with_params(
             validation_criteria_satisfied(db, repo_root, target_kind, target_id)
                 .map(without_validator_help)
         }
+        "validation.parent_epic" => validation_parent_epic(db, target_kind, target_id),
         "objective.work_present" => {
             objective_work_present(db, target_kind, target_id).map(without_validator_help)
         }
@@ -594,6 +595,57 @@ fn transitive_blockers_none_open(
             "declared dependency closure is terminal".to_string(),
             None,
         )),
+    }
+}
+
+fn validation_parent_epic(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    if target_kind != "issue" {
+        return Ok((
+            false,
+            format!("parent-owned validation requires an issue target, found {target_kind}"),
+            None,
+        ));
+    }
+    let issue = db.require_issue(target_id)?;
+    if issue.issue_type != "validation" {
+        return Ok((
+            false,
+            format!(
+                "parent-owned validation requires issue_type validation, found {}",
+                issue.issue_type
+            ),
+            None,
+        ));
+    }
+    let Some(parent_id) = issue.parent_id else {
+        return Ok((
+            false,
+            "standalone validation has no parent epic review boundary".to_string(),
+            Some(format!(
+                "Use `atelier issue transition {target_id} request_review` for standalone validation."
+            )),
+        ));
+    };
+    let parent = db.require_issue(&parent_id)?;
+    if parent.issue_type == "epic" {
+        Ok((
+            true,
+            format!("parent epic {parent_id} owns the review boundary"),
+            None,
+        ))
+    } else {
+        Ok((
+            false,
+            format!(
+                "validation parent {parent_id} is {}, not an epic review boundary",
+                parent.issue_type
+            ),
+            None,
+        ))
     }
 }
 
@@ -1122,7 +1174,10 @@ fn repo_root() -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{baseline_default_checks, epic_proof_route_present, evidence_guidance_present};
+    use super::{
+        baseline_default_checks, epic_proof_route_present, evidence_guidance_present,
+        validation_parent_epic,
+    };
     use atelier_core::{Issue, Relationships};
     use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
     use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
@@ -1307,5 +1362,40 @@ mod tests {
         assert!(passed, "{reason}");
         assert!(reason.contains("immediate validation child atelier-child"));
         assert!(help.is_none());
+    }
+
+    #[test]
+    fn parent_epic_allows_validation_to_use_parent_review_boundary() {
+        let (repo, db) = proof_route_fixture("", "validation", "");
+
+        let (passed, reason, help) = validation_parent_epic(&db, "issue", "atelier-child").unwrap();
+
+        assert!(passed, "{reason}");
+        assert!(reason.contains("parent epic atelier-epic"));
+        assert!(help.is_none());
+        drop(repo);
+    }
+
+    #[test]
+    fn standalone_validation_keeps_its_review_path() {
+        let repo = tempdir().unwrap();
+        let state_dir = repo.path().join(".atelier");
+        fs::create_dir_all(state_dir.join("runtime")).unwrap();
+        let db = Database::open(&state_dir.join("runtime/test.db")).unwrap();
+        write_issue(
+            &db,
+            &state_dir,
+            "atelier-validation",
+            "validation",
+            None,
+            "",
+        );
+
+        let (passed, reason, help) =
+            validation_parent_epic(&db, "issue", "atelier-validation").unwrap();
+
+        assert!(!passed);
+        assert!(reason.contains("standalone validation"));
+        assert!(help.unwrap().contains("request_review"));
     }
 }

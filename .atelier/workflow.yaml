@@ -220,10 +220,8 @@ workflows:
         from:
         - validation
         to: done
-        description: Closing requires attached evidence, complete child proof, validation, review merge, and a clean worktree.
+        description: Closing requires complete child proof, validation, review merge, and a clean worktree.
         validators:
-        - evidence.attached:
-            min_count: 1
         - children.proof_complete
         - blockers.none_open
         - lint.none_blocking
@@ -283,15 +281,28 @@ workflows:
         description: Move reviewed work into validation after review is complete.
         validators:
         - review.complete
+      complete_parented:
+        from:
+        - in_progress
+        to: done
+        description: Complete validation whose parent epic owns the review boundary.
+        validators:
+        - validation.parent_epic
+        - evidence.attached:
+            min_count: 1
+        - blockers.none_open
+        - lint.none_blocking
+        - git.worktree_clean
+        actions:
+        - tracker.commit
       close:
         from:
         - validation
         to: done
-        description: Closing requires attached evidence, complete child proof, review merge, and a clean worktree.
+        description: Closing standalone validation requires attached evidence, complete review, and a clean worktree.
         validators:
         - evidence.attached:
             min_count: 1
-        - children.proof_complete
         - blockers.none_open
         - lint.none_blocking
         - git.worktree_clean

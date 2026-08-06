@@ -1,7 +1,7 @@
 ---
 strategy: agent-factory-adaptive-missions
 mission: atelier-5kej
-revision: 2
+revision: 3
 status: active
 sources:
   - PRODUCT_INTENT.md
@@ -69,9 +69,10 @@ freezing the whole plan.
    authenticated planning actor, graph digest, or provenance ceremony.
 6. Strategy revision and implementation replanning are different. Changes to
    outcome, target system, governing tradeoffs, boundaries, assurance, or
-   adaptation authority return to a commissioned strategy session. Changes to
-   issues, dependencies, sequencing, proof, or expansion within those bounds
-   do not.
+   adaptation authority require either authority explicitly recorded by the
+   active strategy or explicit human direction. The revision records that
+   authority and its rationale. Changes to issues, dependencies, sequencing,
+   proof, or expansion within those bounds do not revise strategy.
 7. Proof planning is part of epic expansion. Draft work carries only the
    mission-level assurance and known risks that are currently meaningful;
    exact epic and issue proof is authored when the intended increment is clear.
@@ -169,3 +170,6 @@ not sufficient.
   introduced draft-to-ready expansion with just-in-time proof planning; and
   rejected outcome anchors, validation profiles, work dispositions, and
   persistent replanning records.
+- Revision 3 — Replaced the conversational "commissioned strategy session"
+  boundary with durable adaptation authority or explicit human direction, and
+  required the strategy revision itself to record that authority and rationale.

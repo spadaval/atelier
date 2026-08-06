@@ -176,9 +176,8 @@ workflows:
       close:
         from: [validation]
         to: done
-        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
+        description: "Closing requires complete child proof, review merge, and a clean worktree."
         validators:
-          - evidence.attached: { min_count: 1 }
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
@@ -216,13 +215,24 @@ workflows:
         description: "Move reviewed work into validation after review is complete."
         validators:
           - review.complete
+      complete_parented:
+        from: [in_progress]
+        to: done
+        description: "Complete validation whose parent epic owns the review boundary."
+        validators:
+          - validation.parent_epic
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - git.worktree_clean
+        actions:
+          - tracker.commit
       close:
         from: [validation]
         to: done
-        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        description: "Closing standalone validation requires attached evidence, complete review, and a clean worktree."
         validators:
           - evidence.attached: { min_count: 1 }
-          - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
           - git.worktree_clean
@@ -276,6 +286,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "children.proof_complete",
     "epic.proof_route_present",
     "validation.criteria_satisfied",
+    "validation.parent_epic",
     "objective.work_present",
     "objective.work_terminal",
     "objective.blockers_none_open",
@@ -2874,6 +2885,38 @@ mod tests {
             .iter()
             .any(|validator| validator.builtin == "epic.proof_route_present"));
         assert!(epic.transitions["adopt_draft"].validators.is_empty());
+    }
+
+    #[test]
+    fn starter_policy_avoids_duplicate_epic_proof_and_parented_validation_review() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let epic_close = &policy.workflows["epic"].transitions["close"];
+        let epic_validators = epic_close
+            .validators
+            .iter()
+            .map(|validator| validator.builtin.as_str())
+            .collect::<Vec<_>>();
+        assert!(epic_validators.contains(&"children.proof_complete"));
+        assert!(!epic_validators.contains(&"evidence.attached"));
+
+        let validation = &policy.workflows["validation"];
+        let parented = &validation.transitions["complete_parented"];
+        assert_eq!(parented.from, ["in_progress"]);
+        assert_eq!(parented.to, "done");
+        assert!(parented
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "validation.parent_epic"));
+        assert!(parented
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "evidence.attached"));
+
+        let standalone_close = &validation.transitions["close"];
+        assert!(standalone_close
+            .validators
+            .iter()
+            .all(|validator| validator.builtin != "children.proof_complete"));
     }
 
     #[test]

@@ -286,9 +286,8 @@ workflows:
       close:
         from: [validation]
         to: done
-        description: "Closing requires attached evidence, complete child proof, review completion, and a clean worktree."
+        description: "Closing requires complete child proof, review completion, and a clean worktree."
         validators:
-          - evidence.attached: { min_count: 1 }
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
@@ -322,13 +321,24 @@ workflows:
         to: validation
         description: "Move reviewed work into validation after review is complete."
         validators: [review.complete]
+      complete_parented:
+        from: [in_progress]
+        to: done
+        description: "Complete validation whose parent epic owns the review boundary."
+        validators:
+          - validation.parent_epic
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - git.worktree_clean
+        actions:
+          - tracker.commit
       close:
         from: [validation]
         to: done
-        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        description: "Closing standalone validation requires attached evidence, complete review, and a clean worktree."
         validators:
           - evidence.attached: { min_count: 1 }
-          - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
           - git.worktree_clean
@@ -621,6 +631,7 @@ Supported built-ins include:
 | `evidence.attached` | Required evidence is attached; supports `min_count`. |
 | `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
 | `children.proof_complete` | Child work is closed with validating proof. |
+| `validation.parent_epic` | The validation issue is owned by a parent epic whose review boundary can carry the validation result. |
 | `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
 | `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
 | `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
