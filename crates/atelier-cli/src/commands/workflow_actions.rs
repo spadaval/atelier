@@ -76,12 +76,6 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
                 action.name
             ))
         }
-        _ if action.name == "git.integrate" && review_config_is_provider(repo_root) => {
-            Some(
-                "action git.integrate failed preflight: local branch integration is only valid for room review workflows"
-                    .to_string(),
-            )
-        }
         _ if action.name == "git.integrate"
             && action.merge_owned
             && !crate::commands::workflow::branch_exists_at(repo_root, &action.base_branch)

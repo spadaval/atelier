@@ -30,8 +30,8 @@ updated_at: "2026-09-02T19:06:12.013919036+00:00"
 
 ## Description
 
-Rename the public built-in workflow action `branch_integrate` to `git.integrate` across policy parsing, planning, execution, output, tests, and current target-state documentation. Update this repository’s task close transition to run `tracker.commit` followed by `git.integrate`. Preserve historical activity records as authored data, but do not accept the obsolete action name as a compatibility alias.
+Rename the public built-in workflow action `branch_integrate` to `git.integrate` across policy parsing, planning, execution, output, tests, and current target-state documentation. Update this repository’s task close transition to run `tracker.commit` followed by `git.integrate`. Permit an explicitly declared local integration transition in a repository whose other workflows use provider review; provider-owned terminal transitions still use their provider action sequence. Preserve historical activity records as authored data, but do not accept the obsolete action name as a compatibility alias.
 
 ## Outcome
 
-Workflow configuration consistently uses the namespaced `git.integrate` action. The starter policy and this repository’s task close transition integrate locally owned branches after committing tracker state, obsolete `branch_integrate` configuration is rejected, and focused tests prove successful integration plus rejection of the old name.
+Workflow configuration consistently uses the namespaced `git.integrate` action. The starter policy and this repository’s task close transition integrate locally owned branches after committing tracker state, including an explicitly local task boundary in a provider-configured repository. Obsolete `branch_integrate` configuration is rejected, provider-owned transitions retain their push/merge/sync authority, and focused tests prove successful integration plus rejection of the old name.

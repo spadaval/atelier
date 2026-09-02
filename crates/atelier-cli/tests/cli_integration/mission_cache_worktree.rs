@@ -4306,10 +4306,11 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
 }
 
 #[test]
-fn test_standalone_issue_close_squash_merges_to_base() {
+fn test_standalone_issue_close_squash_merges_to_base_in_provider_configured_repo() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
+    write_provider_config_without_role_authors(dir.path());
     Command::new("git")
         .current_dir(dir.path())
         .args(["branch", "-M", "main"])

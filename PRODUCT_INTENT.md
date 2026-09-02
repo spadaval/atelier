@@ -566,8 +566,8 @@ Version 1 built-in actions include:
 - `git.sync`: synchronize the local base branch after provider-owned merge
   completion.
 - `git.integrate`: integrate the owner branch to the configured base
-  branch using the configured merge strategy for local review-room workflows
-  only.
+  branch using the configured merge strategy when a transition explicitly owns
+  local integration.
 - `review.open`: open or reuse the branch owner's configured review
   artifact and write the canonical `review` link.
 
@@ -589,11 +589,12 @@ resolve findings, merge review artifacts, bypass configured close transitions,
 or replace `atelier issue transition`. PR aliases and broad automation hooks
 are non-goals for v1.
 
-Terminal merge behavior follows the review mode. Provider-backed workflows use
-provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
+Terminal merge behavior follows the declaring transition. Provider-owned review
+transitions use actions such as `tracker.commit`, `git.push`, `review.merge`,
 and `git.sync`; they do not use local `git.integrate` as a substitute for
-provider merge authority. Local review-room workflows may still declare
-`git.integrate`, but only as an explicit local integration action.
+provider merge authority. A repository may still declare `git.integrate` on a
+different transition that explicitly owns a local branch boundary, including
+when other workflows in the repository use provider review.
 
 Failure semantics are explicit:
 

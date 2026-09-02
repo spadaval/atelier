@@ -61,7 +61,8 @@ context is computed from the work graph plus repository branch policy.
    - `git.sync`: synchronize the local base branch after provider-owned merge
      completion.
    - `git.integrate`: integrate the owner branch to its recorded branch base
-     using the configured merge strategy for local review-room workflows only.
+     using the configured merge strategy when the declaring transition owns
+     local integration.
    - `review.open`: open or reuse the branch owner's configured review
      artifact and write the canonical `review` field.
 
