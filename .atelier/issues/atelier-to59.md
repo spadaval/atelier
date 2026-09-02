@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-09-02T19:11:58.479721149+00:00"
+status: "done"
 title: "Namespace the local Git integration action"
-updated_at: "2026-09-02T19:06:12.013919036+00:00"
+updated_at: "2026-09-02T19:11:58.479721149+00:00"
 ---
 
 ## Description
