@@ -2411,7 +2411,7 @@ fn test_standalone_validation_cannot_bypass_its_review_path() {
 }
 
 #[test]
-fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
+fn test_issue_transition_options_and_blocked_attempts_do_not_write() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2448,6 +2448,8 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
+    let activities_before = issue_activity_texts(dir.path(), &issue_id);
+    let git_before = git_status_short(dir.path());
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2458,16 +2460,15 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
     assert!(stderr.contains("review.complete"), "{stderr}");
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_blocked",
-        &[
-            "Blocked transition request_validation from in_progress",
-            "transition: \"request_validation\"",
-            "reason: \"validator review.complete failed:",
-        ],
+    assert_eq!(
+        activities_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "blocked transition should not append canonical activity"
+    );
+    assert_eq!(
+        git_before,
+        git_status_short(dir.path()),
+        "blocked transition should leave the git worktree unchanged"
     );
 }
 
@@ -2610,12 +2611,18 @@ fn test_root_start_same_issue_reports_already_started_work() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "first start failed: {stderr}");
+    let activities_before = issue_activity_texts(dir.path(), &issue_id);
     let (success, restart_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "second start should be guarded:\n{restart_out}");
     assert!(
         stderr.contains("Transition 'start' is not available from status 'in_progress'"),
         "{stderr}"
+    );
+    assert_eq!(
+        activities_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "unavailable transition should not append canonical activity"
     );
 }
 
@@ -2718,14 +2725,10 @@ fn test_root_start_reports_workflow_validator_failure() {
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_blocked",
-        &[
-            "Blocked transition start from todo",
-            "transition: \"start\"",
-            "reason: \"validator evidence.attached failed:",
-        ],
+    assert!(
+        activities.is_empty(),
+        "blocked start should not record canonical activity:\n{}",
+        activities.join("\n--- activity ---\n")
     );
     assert!(
         !activities
@@ -2737,7 +2740,7 @@ fn test_root_start_reports_workflow_validator_failure() {
 }
 
 #[test]
-fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
+fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2772,6 +2775,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
                 .unwrap_or(false)
         })
         .count();
+    let activities_before = issue_activity_texts(dir.path(), &issue_id);
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -2785,15 +2789,10 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
     assert!(stderr.contains("review.complete"), "{stderr}");
     assert!(stderr.contains("blocked"), "{stderr}");
 
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_blocked",
-        &[
-            "Blocked transition request_validation from in_progress",
-            "transition: \"request_validation\"",
-            "reason: \"validator review.complete failed:",
-        ],
+    assert_eq!(
+        activities_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "blocked transition should not append canonical activity"
     );
 
     let evidence_after = std::fs::read_dir(&evidence_dir)
@@ -2813,7 +2812,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
 }
 
 #[test]
-fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
+fn test_issue_transition_close_reports_blockers_without_recording_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2845,6 +2844,7 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         }
     }
 
+    let activities_before = issue_activity_texts(dir.path(), &issue_id);
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked by the dirty worktree");
@@ -2854,15 +2854,10 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
     assert!(!stderr.contains("evidence.attached"), "{stderr}");
     assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_blocked",
-        &[
-            "Blocked transition close from validation",
-            "transition: \"close\"",
-            "validator git.worktree_clean failed:",
-        ],
+    assert_eq!(
+        activities_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "blocked close should not append canonical activity"
     );
 }
 

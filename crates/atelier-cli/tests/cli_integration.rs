@@ -1483,6 +1483,9 @@ fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
         .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.activity"));
+    if !activity_dir.exists() {
+        return Vec::new();
+    }
     let mut paths = std::fs::read_dir(&activity_dir)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", activity_dir.display()))
         .map(|entry| entry.unwrap().path())

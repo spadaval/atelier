@@ -68,10 +68,10 @@ atelier issue transition <id>
 the issue's current status. Each option reports whether the transition is
 currently allowed, configured read-only validator results, configured
 transition actions, static transition descriptions, branch context, and the
-next command to run. A blocked attempt records a `transition_blocked` issue
-activity entry without running actions. A successful attempt runs declared
-actions in order, records a `transition_applied` activity entry, and updates
-the canonical issue `status`.
+next command to run. A blocked preflight attempt reports its failed requirements
+without mutating canonical records or running actions. A successful attempt
+runs declared actions in order, records a `transition_applied` activity entry,
+and updates the canonical issue `status`.
 
 ## Scope
 

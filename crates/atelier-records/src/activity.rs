@@ -738,6 +738,21 @@ mod tests {
     }
 
     #[test]
+    fn reads_historical_transition_blocked_activity() {
+        let historical = activity().to_markdown().unwrap().replace(
+            "event_type: \"handoff\"",
+            "event_type: \"transition_blocked\"",
+        );
+        let parsed = IssueActivity::from_markdown(
+            &historical,
+            &issue_activity_path("atelier-qxvj", "20260610T181920123456Z"),
+        )
+        .unwrap();
+
+        assert_eq!(parsed.event_type, ActivityEventType::TransitionBlocked);
+    }
+
+    #[test]
     fn rejects_invalid_schema_version_subject_and_event_type() {
         let rendered = activity().to_markdown().unwrap();
         let relative = issue_activity_path("atelier-qxvj", "20260610T181920123456Z");
