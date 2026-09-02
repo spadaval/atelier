@@ -3483,7 +3483,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
           - lint.none_blocking
         actions:
           - tracker.commit
-          - branch_integrate"#;
+          - git.integrate"#;
     assert!(workflow.contains(task_close));
     std::fs::write(
         &workflow_path,

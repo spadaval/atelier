@@ -3721,7 +3721,7 @@ fn test_epic_close_integrates_into_recorded_mission_branch() {
     );
     assert!(
         close_out.contains("Action:   tracker.commit")
-            && close_out.contains("Action:   branch_integrate squash commit"),
+            && close_out.contains("Action:   git.integrate squash commit"),
         "{close_out}"
     );
     assert_ne!(
@@ -4070,7 +4070,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
         "{close_out}"
     );
     assert!(
-        close_out.contains("Action:   branch_integrate squash commit"),
+        close_out.contains("Action:   git.integrate squash commit"),
         "{close_out}"
     );
     let main_log = git_log_oneline(dir.path(), "main", 2);
@@ -4169,7 +4169,7 @@ fn test_epic_start_from_side_branch_uses_configured_base_branch() {
 }
 
 #[test]
-fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
+fn test_git_integrate_action_failure_rolls_back_status_with_recovery() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -4225,7 +4225,7 @@ fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
         "conflicting action close unexpectedly succeeded:\n{stdout}"
     );
     assert!(
-        stderr.contains("action branch_integrate failed during squash merge")
+        stderr.contains("action git.integrate failed during squash merge")
             && stderr.contains("Recovery:")
             && stderr.contains(&format!("transition for {issue_id}")),
         "{stderr}"
@@ -4294,7 +4294,7 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
         "{close_out}"
     );
     assert!(
-        close_out.contains("Action:   branch_integrate deferred to parent branch close"),
+        close_out.contains("Action:   git.integrate deferred to parent branch close"),
         "{close_out}"
     );
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
@@ -4306,10 +4306,11 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
 }
 
 #[test]
-fn test_standalone_issue_close_squash_merges_to_base() {
+fn test_standalone_issue_close_squash_merges_to_base_in_provider_configured_repo() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
+    write_provider_config_without_role_authors(dir.path());
     Command::new("git")
         .current_dir(dir.path())
         .args(["branch", "-M", "main"])
@@ -4347,7 +4348,7 @@ fn test_standalone_issue_close_squash_merges_to_base() {
         "{close_out}"
     );
     assert!(
-        close_out.contains("Action:   branch_integrate squash commit"),
+        close_out.contains("Action:   git.integrate squash commit"),
         "{close_out}"
     );
     let main_log = git_log_oneline(dir.path(), "main", 2);

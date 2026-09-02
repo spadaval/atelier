@@ -13,7 +13,7 @@ pub(crate) fn action_preflight_blockers(
         .filter_map(|action| match action.name.as_str() {
             "git.prepare_branch" => branch_prepare_preflight(repo_root, action),
             "tracker.commit" | "git.push" | "review.merge" | "git.sync"
-            | "branch_integrate" => branch_post_action_preflight(repo_root, action),
+            | "git.integrate" => branch_post_action_preflight(repo_root, action),
             "review.open" => review_open_preflight(repo_root, action),
             other => Some(format!(
                 "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
@@ -76,13 +76,7 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
                 action.name
             ))
         }
-        _ if action.name == "branch_integrate" && review_config_is_provider(repo_root) => {
-            Some(
-                "action branch_integrate failed preflight: local branch integration is only valid for room review workflows"
-                    .to_string(),
-            )
-        }
-        _ if action.name == "branch_integrate"
+        _ if action.name == "git.integrate"
             && action.merge_owned
             && !crate::commands::workflow::branch_exists_at(repo_root, &action.base_branch)
                 .unwrap_or(false) =>

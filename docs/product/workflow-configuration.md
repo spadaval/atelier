@@ -517,7 +517,7 @@ Built-in actions are:
 | `git.push` | Push the workflow-derived owner branch to the configured review provider remote. |
 | `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
 | `git.sync` | Synchronize the local base branch after provider-owned merge completion. |
-| `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` for local review-room workflows only. |
+| `git.integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` when the declaring transition owns local integration. |
 | `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
 
 The workflow engine intrinsically writes the canonical issue status and
@@ -539,12 +539,12 @@ approve, comment, request changes, resolve findings, merge review artifacts,
 close issues, add `pr` aliases, or replace explicit
 `atelier issue transition`.
 
-Merge authority is mode-specific. Provider-backed terminal workflows must use
-provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
-and `git.sync`; they must not perform local base integration through
-`branch_integrate`. Local review-room workflows may keep `branch_integrate`, but
-only as an explicit workflow action that records local branch integration under
-room authority.
+Merge authority is transition-specific. Provider-owned review transitions use
+actions such as `tracker.commit`, `git.push`, `review.merge`, and `git.sync`;
+they must not use `git.integrate` as a substitute for provider merge authority.
+A separate transition may explicitly own a local branch boundary with
+`git.integrate`, including in a repository where other workflows use provider
+review.
 
 Review artifact actions require parameter objects. Room-mode actions declare
 the local Atelier role:
