@@ -517,7 +517,7 @@ Built-in actions are:
 | `git.push` | Push the workflow-derived owner branch to the configured review provider remote. |
 | `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
 | `git.sync` | Synchronize the local base branch after provider-owned merge completion. |
-| `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` for local review-room workflows only. |
+| `git.integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` for local review-room workflows only. |
 | `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
 
 The workflow engine intrinsically writes the canonical issue status and
@@ -542,7 +542,7 @@ close issues, add `pr` aliases, or replace explicit
 Merge authority is mode-specific. Provider-backed terminal workflows must use
 provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
 and `git.sync`; they must not perform local base integration through
-`branch_integrate`. Local review-room workflows may keep `branch_integrate`, but
+`git.integrate`. Local review-room workflows may keep `git.integrate`, but
 only as an explicit workflow action that records local branch integration under
 room authority.
 

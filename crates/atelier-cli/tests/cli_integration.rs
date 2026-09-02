@@ -1080,11 +1080,11 @@ fn write_branch_action_workflow(dir: &Path) {
     let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
         "          - lint.none_blocking\n\n  epic:",
-        "          - lint.none_blocking\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic:",
+        "          - lint.none_blocking\n        actions:\n          - tracker.commit\n          - git.integrate\n\n  epic:",
     );
     workflow = workflow.replace(
         "          - tracker.commit\n          - git.push\n          - review.merge\n          - git.sync",
-        "          - tracker.commit\n          - branch_integrate",
+        "          - tracker.commit\n          - git.integrate",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

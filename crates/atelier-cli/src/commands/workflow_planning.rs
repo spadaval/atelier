@@ -186,7 +186,7 @@ pub(crate) fn plan_actions_for_resolution(
                     .and_then(|review| review.provider.clone()),
                 review_artifact_role: review_artifact.as_ref().map(|review| review.role.clone()),
                 forgejo_role_authors: review_artifact.and_then(|review| review.role_authors),
-                confirmation_required: action.builtin == "branch_integrate",
+                confirmation_required: action.builtin == "git.integrate",
                 skip_reason: None,
                 block_reason: None,
             }
@@ -418,7 +418,7 @@ pub(crate) fn planned_actions_need_branch_context(planned_actions: &[PlannedActi
                 | "git.push"
                 | "review.merge"
                 | "git.sync"
-                | "branch_integrate"
+                | "git.integrate"
                 | "review.open"
         )
     })
@@ -507,7 +507,7 @@ mod tests {
             merge_owned: true,
             nested_under_epic: false,
         };
-        let actions = vec![review_action(), action("branch_integrate")];
+        let actions = vec![review_action(), action("git.integrate")];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
 
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(plan[0].review_artifact_role.as_deref(), Some("worker"));
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
-        assert_eq!(plan[1].name, "branch_integrate");
+        assert_eq!(plan[1].name, "git.integrate");
         assert!(plan[1].review_artifact_target.is_none());
         assert!(plan[1].review_artifact_role.is_none());
         assert!(plan[1].confirmation_required);
@@ -628,7 +628,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_terminal_actions_plan_without_local_branch_integrate() {
+    fn provider_terminal_actions_plan_without_local_git_integrate() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -657,6 +657,6 @@ mod tests {
             vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
-        assert!(plan.iter().all(|action| action.name != "branch_integrate"));
+        assert!(plan.iter().all(|action| action.name != "git.integrate"));
     }
 }

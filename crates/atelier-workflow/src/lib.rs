@@ -123,7 +123,7 @@ workflows:
           - lint.none_blocking
         actions:
           - tracker.commit
-          - branch_integrate
+          - git.integrate
 
   epic:
     applies_to: [epic]
@@ -184,7 +184,7 @@ workflows:
           - git.worktree_clean
         actions:
           - tracker.commit
-          - branch_integrate
+          - git.integrate
 
   validation:
     applies_to: [validation]
@@ -238,7 +238,7 @@ workflows:
           - git.worktree_clean
         actions:
           - tracker.commit
-          - branch_integrate
+          - git.integrate
 
   spike:
     applies_to: [spike]
@@ -308,7 +308,7 @@ const BUILTIN_ACTIONS: &[&str] = &[
     "git.push",
     "review.merge",
     "git.sync",
-    "branch_integrate",
+    "git.integrate",
     "review.open",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
@@ -2758,7 +2758,12 @@ mod tests {
 
     #[test]
     fn rejects_obsolete_git_action_names() {
-        for obsolete in ["branch.prepare", "branch.push", "base.sync"] {
+        for obsolete in [
+            "branch.prepare",
+            "branch.push",
+            "base.sync",
+            "branch_integrate",
+        ] {
             let policy =
                 valid_policy().replace(review_action_line(), &format!("          - {obsolete}"));
             let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)

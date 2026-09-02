@@ -424,7 +424,7 @@ fn execute_transition_actions(
                     detail,
                 })
             }
-            "branch_integrate" => {
+            "git.integrate" => {
                 let detail = integrate_branch_action(repo_root, issue, action)?;
                 Ok(AppliedAction {
                     name: action.name.clone(),
@@ -473,7 +473,7 @@ fn execute_transition_actions(
 fn action_requires_applied_transition(name: &str) -> bool {
     matches!(
         name,
-        "tracker.commit" | "review.merge" | "git.sync" | "branch_integrate"
+        "tracker.commit" | "review.merge" | "git.sync" | "git.integrate"
     )
 }
 
@@ -1209,7 +1209,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
+            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "git.integrate"
         )
     })
 }
@@ -1217,7 +1217,7 @@ fn transition_declares_branch_git_actions(
 fn transition_git_action_names(name: &str) -> bool {
     matches!(
         name,
-        "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "branch_integrate"
+        "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "git.integrate"
     )
 }
 
@@ -2635,7 +2635,7 @@ repo = "atelier"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let actions = vec![review_action(), action("branch_integrate")];
+        let actions = vec![review_action(), action("git.integrate")];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
 
@@ -2653,7 +2653,7 @@ repo = "atelier"
         assert_eq!(plan[0].review_artifact_role.as_deref(), Some("worker"));
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
-        assert_eq!(plan[1].name, "branch_integrate");
+        assert_eq!(plan[1].name, "git.integrate");
         assert!(plan[1].review_artifact_target.is_none());
         assert!(plan[1].review_artifact_role.is_none());
         assert!(plan[1].confirmation_required);
@@ -2662,7 +2662,7 @@ repo = "atelier"
     }
 
     #[test]
-    fn provider_terminal_actions_plan_without_local_branch_integrate() {
+    fn provider_terminal_actions_plan_without_local_git_integrate() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2691,7 +2691,7 @@ repo = "atelier"
             vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
-        assert!(plan.iter().all(|action| action.name != "branch_integrate"));
+        assert!(plan.iter().all(|action| action.name != "git.integrate"));
     }
 
     #[test]
@@ -2702,7 +2702,7 @@ repo = "atelier"
         assert!(action_requires_applied_transition("tracker.commit"));
         assert!(action_requires_applied_transition("review.merge"));
         assert!(action_requires_applied_transition("git.sync"));
-        assert!(action_requires_applied_transition("branch_integrate"));
+        assert!(action_requires_applied_transition("git.integrate"));
     }
 
     #[test]
@@ -2780,10 +2780,10 @@ repo = "atelier"
         assert!(action_preflight_blockers(dir.path(), &[]).is_empty());
 
         let unsupported =
-            plan_actions_for_resolution(&issue, &resolution, &[action("branch_integrate")], 1);
+            plan_actions_for_resolution(&issue, &resolution, &[action("git.integrate")], 1);
         let blockers = action_preflight_blockers(dir.path(), &unsupported);
         assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("branch_integrate"));
+        assert!(blockers[0].contains("git.integrate"));
         assert!(blockers[0].contains("git repository is required"));
     }
 

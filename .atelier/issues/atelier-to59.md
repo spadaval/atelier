@@ -6,6 +6,15 @@ labels:
 - "bug"
 - "git"
 - "workflow"
+fields:
+  workflow_branch:
+    branch_base: master
+    integration_target: master
+    merge_strategy: squash
+    owner_issue_id: atelier-to59
+    owner_kind: issue
+    review_target: master
+    work_branch: bug/atelier-to59
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +23,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Namespace the local Git integration action"
-updated_at: "2026-09-02T19:05:56.297585459+00:00"
+updated_at: "2026-09-02T19:06:12.013919036+00:00"
 ---
 
 ## Description

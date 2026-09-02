@@ -565,7 +565,7 @@ Version 1 built-in actions include:
   completion for the branch owner's review artifact.
 - `git.sync`: synchronize the local base branch after provider-owned merge
   completion.
-- `branch_integrate`: integrate the owner branch to the configured base
+- `git.integrate`: integrate the owner branch to the configured base
   branch using the configured merge strategy for local review-room workflows
   only.
 - `review.open`: open or reuse the branch owner's configured review
@@ -591,9 +591,9 @@ are non-goals for v1.
 
 Terminal merge behavior follows the review mode. Provider-backed workflows use
 provider-owned actions such as `tracker.commit`, `git.push`, `review.merge`,
-and `git.sync`; they do not use local `branch_integrate` as a substitute for
+and `git.sync`; they do not use local `git.integrate` as a substitute for
 provider merge authority. Local review-room workflows may still declare
-`branch_integrate`, but only as an explicit local integration action.
+`git.integrate`, but only as an explicit local integration action.
 
 Failure semantics are explicit:
 

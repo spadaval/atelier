@@ -168,7 +168,7 @@
 - Provider terminal actions: provider-backed workflow actions such as
   `tracker.commit`, `git.push`, `review.merge`, and `git.sync` that make
   the provider review artifact and remote base branch the integration
-  authority. They are not aliases for local `branch_integrate`.
+  authority. They are not aliases for local `git.integrate`.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -279,7 +279,7 @@
   branch, standalone issues use an issue branch, and epics use an epic branch.
   Terminal transitions commit tracker state through explicit workflow actions.
   Child issues normally stop at the owner branch; standalone issues and epics
-  use provider terminal actions in provider mode or explicit `branch_integrate`
+  use provider terminal actions in provider mode or explicit `git.integrate`
   in local room mode. Squash merge is the default local integration strategy,
   with repository policy able to select merge alternatives but not configurable
   branch-name templates. Owner branches use canonical

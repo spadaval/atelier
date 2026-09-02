@@ -140,6 +140,9 @@ workflows:
             min_count: 1
         - blockers.none_open
         - lint.none_blocking
+        actions:
+        - tracker.commit
+        - git.integrate
   epic:
     applies_to:
     - epic
