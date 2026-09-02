@@ -166,21 +166,6 @@ pub fn record_transition_applied(
     Ok(())
 }
 
-pub fn record_transition_blocked(
-    issue_id: &str,
-    transition: &str,
-    from: &str,
-    to: Option<&str>,
-    reason: &str,
-) -> Result<()> {
-    record(
-        issue_id,
-        ActivityEventType::TransitionBlocked,
-        &format!("Blocked transition {transition} from {from}"),
-        &transition_body(transition, from, to, Some(reason)),
-    )
-}
-
 fn record(issue_id: &str, event_type: ActivityEventType, summary: &str, body: &str) -> Result<()> {
     let Some(state_dir) = current_state_dir_for_issue(issue_id) else {
         return Ok(());

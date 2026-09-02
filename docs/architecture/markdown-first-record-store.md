@@ -354,7 +354,9 @@ Activity front matter uses `schema: "atelier.activity"` and
 - `event_type`: one of `comment`, `note`, `handoff`, `plan`,
   `close_reason`, `status_changed`, `field_changed`, `work_started`,
   `work_finished`, `work_abandoned`, `evidence_attached`,
-  `transition_applied`, or `transition_blocked`.
+  or `transition_applied`. Readers continue to accept the historical
+  `transition_blocked` value in existing canonical history, but commands do not
+  create new entries for preflight-rejected transitions.
 - `actor`: user or agent identity that produced the event.
 - `created_at`: RFC3339 timestamp.
 - `summary`: one-line event summary.

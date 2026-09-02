@@ -86,7 +86,6 @@ pub fn transition_issue(
     blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
     if !blockers.is_empty() {
         report_blocked_transition(
-            &policy,
             &before,
             transition_name,
             transition,
@@ -242,17 +241,6 @@ fn ensure_transition_available(
     if transition.from.iter().any(|from| from == &issue.status) {
         return Ok(());
     }
-    let reason = format!(
-        "transition '{}' is not available from status '{}'",
-        transition_name, issue.status
-    );
-    crate::commands::activity_log::record_transition_blocked(
-        &issue.id,
-        transition_name,
-        &issue.status,
-        Some(&transition.to),
-        &reason,
-    )?;
     bail!(
         "Transition '{}' is not available from status '{}' for issue {}",
         transition_name,
@@ -313,7 +301,6 @@ pub(crate) fn active_transition_ancestor_blocker(
 }
 
 fn report_blocked_transition(
-    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
@@ -322,13 +309,6 @@ fn report_blocked_transition(
     planned_actions: &[PlannedAction],
 ) -> Result<()> {
     let reason = blockers.join("; ");
-    crate::commands::activity_log::record_transition_blocked(
-        &issue.id,
-        transition_name,
-        &issue.status,
-        Some(&transition.to),
-        &reason,
-    )?;
     print_transition_attempt(
         issue,
         transition_name,
