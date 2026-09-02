@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-09-02T15:05:47.364998366+00:00"
+status: "done"
 title: "Avoid failed transition activity records blocking clean-worktree retries"
-updated_at: "2026-09-02T14:57:04.049643582+00:00"
+updated_at: "2026-09-02T15:05:47.364998366+00:00"
 ---
 
 ## Description
