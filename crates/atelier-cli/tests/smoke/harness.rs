@@ -127,6 +127,8 @@ impl SmokeHarness {
         let evidence = self.run_ok(&[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--target",

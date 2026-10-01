@@ -9,8 +9,8 @@ use atelier_app::record_index::RecordIndex;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
-    EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
-    EvidenceTarget, RecordLink,
+    EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceResult,
+    EvidenceStreamSummary, EvidenceTarget, RecordLink,
 };
 use atelier_records::validate_record_kind;
 
@@ -67,6 +67,7 @@ struct CaptureAssociation {
 struct CaptureBinding {
     association: CaptureAssociation,
     target_identity: Option<CaptureTargetIdentity>,
+    commit: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -94,6 +95,7 @@ pub fn add_returning_id(
     state_dir: &Path,
     evidence_kind: &str,
     summary: &str,
+    result: EvidenceResult,
     path: Option<&str>,
     uri: Option<&str>,
     producer: Option<&str>,
@@ -104,6 +106,12 @@ pub fn add_returning_id(
     }
     let metadata = EvidenceMetadata::from_producer(producer);
     let data = EvidenceRecordData {
+        commit: atelier_app::git_freshness::head_commit(
+            state_dir
+                .parent()
+                .context("state directory has no repository parent")?,
+        )?,
+        result,
         evidence_type: evidence_kind.to_string(),
         captured_at: chrono::Utc::now(),
         command: None,
@@ -180,13 +188,16 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     let _transaction =
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?;
     let association = capture_association(&layout)?;
+    if atelier_app::git_freshness::head_commit(layout.repo_root())? != binding.commit {
+        bail!("evidence capture command changed HEAD; no evidence was written. Commit the intended changes and rerun the check.");
+    }
     if association != binding.association {
         bail!(
             "evidence_capture_association_changed: the command completed, but the repository or .atelier association changed before proof could be recorded; no evidence was written. Return to {} and inspect the child command's effects before retrying evidence capture.",
             binding.association.repo_root.display()
         );
     }
-    let index = RecordIndex::load(&state_dir)?;
+    let index = RecordIndex::load(&state_dir).context("evidence capture postflight could not load records; no evidence was written. Run `atelier check` and repair the record files before retrying")?;
     let resolved_target_id = match (options.target_kind, options.target_id) {
         (Some(kind), Some(id)) => Some(
             app_use_cases::resolve_evidence_target_ref(&index, kind, id).context(
@@ -213,6 +224,12 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         );
     }
 
+    if atelier_app::git_freshness::working_paths(layout.repo_root())?
+        .iter()
+        .any(|path| !atelier_app::git_freshness::is_record_path(path))
+    {
+        bail!("evidence capture command changed code or policy; no evidence was written. Commit the relevant changes and rerun the check.");
+    }
     let summary = options
         .summary
         .map(str::to_string)
@@ -227,6 +244,14 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         spawn_error.as_deref(),
     );
     let data = EvidenceRecordData {
+        commit: binding.commit.clone(),
+        result: if spawn_error.is_some() {
+            EvidenceResult::Blocked
+        } else if success {
+            EvidenceResult::Pass
+        } else {
+            EvidenceResult::Fail
+        },
         evidence_type: options.evidence_kind.to_string(),
         captured_at: chrono::DateTime::parse_from_rfc3339(&captured_at)?
             .with_timezone(&chrono::Utc),
@@ -277,7 +302,7 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
     let state_dir = layout.canonical_dir();
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
     let association = capture_association(&layout)?;
-    let index = RecordIndex::load(&state_dir)?;
+    let index = RecordIndex::load(&state_dir).context("evidence capture preflight could not load records; the command was not executed. Run `atelier check` and repair the record files before retrying")?;
     let resolved_target_id = match (options.target_kind, options.target_id) {
         (Some(kind), Some(id)) => Some(
             app_use_cases::resolve_evidence_target_ref(&index, kind, id).context(
@@ -294,7 +319,16 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
         options.role,
     )
     .context("evidence capture preflight target validation failed; the command was not executed")?;
+    let dirty = atelier_app::git_freshness::working_paths(layout.repo_root())?;
+    if dirty
+        .iter()
+        .any(|path| !atelier_app::git_freshness::is_record_path(path))
+    {
+        bail!("evidence capture requires committed code and policy; commit the relevant changes before running the check");
+    }
+    let commit = atelier_app::git_freshness::head_commit(layout.repo_root())?;
     Ok(CaptureBinding {
+        commit,
         association,
         target_identity,
     })
@@ -531,11 +565,11 @@ pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
     )
 }
 
-pub fn list(index: &RecordIndex, status: Option<&str>, quiet: bool) -> Result<()> {
+pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) -> Result<()> {
     let records = index
         .evidence_records()
         .into_iter()
-        .filter(|record| status.is_none_or(|status| record.header.status == status))
+        .filter(|record| result.is_none_or(|result| record.data.result == result))
         .collect::<Vec<_>>();
     if quiet {
         for record in records {
@@ -569,7 +603,13 @@ pub fn list(index: &RecordIndex, status: Option<&str>, quiet: bool) -> Result<()
         };
         println!(
             "  {:<14} {:<13} {:<10} exit {} target {} command {} - {}",
-            record.header.id, record.header.status, kind, exit_status, target, command, title
+            record.header.id,
+            data.result.as_str(),
+            kind,
+            exit_status,
+            target,
+            command,
+            title
         );
     }
     if records.len() > EVIDENCE_LIST_LIMIT {
@@ -583,7 +623,7 @@ pub fn list(index: &RecordIndex, status: Option<&str>, quiet: bool) -> Result<()
     println!("Next Commands");
     println!("-------------");
     println!("  Show proof detail: atelier evidence show <evidence-id>");
-    println!("  Filter by status: atelier evidence list --status <status>");
+    println!("  Filter by result: atelier evidence list --result <result>");
     println!("  List matching IDs: atelier --quiet evidence list");
     Ok(())
 }
@@ -667,6 +707,8 @@ fn print_record_with_targets(
         )
     );
     println!("Status:      {}", record.header.status);
+    println!("Result:      {}", data.result.as_str());
+    println!("Commit:      {}", data.commit);
     println!("Kind:        {}", data.evidence_type);
     println!("Captured:    {}", data.captured_at.to_rfc3339());
     if let Some(command) = data.command.as_deref() {

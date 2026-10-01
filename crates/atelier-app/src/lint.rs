@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use atelier_records::{
-    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
-};
+use atelier_records::{issue_record_path, CanonicalIssueRecord, IssueSectionName};
 
 use crate::record_index::{read_record_files, RecordIndex};
 
@@ -22,56 +20,6 @@ pub struct LintFinding {
     pub id: String,
     pub message: String,
 }
-
-const EVIDENCE_PROOF_TARGET_HINT: &str = "command, transcript, evidence record, test, \
-review artifact, file change, or manual check";
-
-const CONCRETE_EVIDENCE_MARKERS: &[&str] = &[
-    "command",
-    "transcript",
-    "evidence record",
-    "evidence id",
-    "test",
-    "tests",
-    "nextest",
-    "lint",
-    "doctor",
-    "export",
-    "review artifact",
-    "review",
-    "artifact",
-    "file change",
-    "file diff",
-    "manual check",
-    "manual validation",
-    "screenshot",
-    "stdout",
-    "stderr",
-    "command output",
-    "help text",
-    "atelier ",
-    "`atelier ",
-    "cargo ",
-    "git diff",
-    "target/debug/atelier",
-    ".rs",
-    ".md",
-    ".toml",
-    ".json",
-    ".yaml",
-    ".yml",
-];
-
-const VAGUE_EVIDENCE_MARKERS: &[&str] = &[
-    "not specified",
-    "to be determined",
-    "tbd",
-    "todo",
-    "none yet",
-    "will be added",
-    "add later",
-    "later",
-];
 
 /// Reports every invalid record file, record-graph integrity errors, and
 /// per-issue findings. Unlike other commands, lint never stops at the first
@@ -166,7 +114,7 @@ pub fn lint(
 
 /// Per-issue findings: empty titles, workflow-policy violations, and
 /// required sections. `scoped` adds the stricter single-issue checks
-/// (placeholder sections and unobservable evidence entries).
+/// (placeholder acceptance sections).
 pub fn issue_findings<'a>(
     records: impl IntoIterator<Item = &'a CanonicalIssueRecord>,
     repo_root: &Path,
@@ -199,54 +147,46 @@ pub fn issue_findings<'a>(
                 )));
             }
         }
+        if issue.issue_type == "mission"
+            && issue.strategy.is_none()
+            && record
+                .sections
+                .section(IssueSectionName::SuccessCriteria)
+                .is_none()
+        {
+            findings.push(finding(
+                "Mission requires Success criteria or a linked strategy".to_string(),
+            ));
+        }
+        if issue.issue_type == "epic"
+            && issue.status != "draft"
+            && record.sections.section(IssueSectionName::Proof).is_none()
+        {
+            findings.push(finding("Ready epic requires Proof".to_string()));
+        }
         if !scoped {
             continue;
         }
-        for (name, value) in [
-            (
-                IssueSectionName::Description,
-                record.sections.description.as_str(),
-            ),
-            (IssueSectionName::Outcome, record.sections.outcome.as_str()),
-        ] {
-            if issue_section_placeholder(name, value) {
+        let mut required = record.sections.required_names();
+        if issue.issue_type == "epic" && issue.status != "draft" {
+            required.push(IssueSectionName::Proof);
+        }
+        if issue.issue_type == "mission" && issue.strategy.is_none() {
+            required.push(IssueSectionName::SuccessCriteria);
+        }
+        for name in required {
+            if record.sections.section(name).is_none_or(|value| {
+                value.trim().ends_with("was not specified.")
+                    || value.trim().ends_with("were not specified.")
+            }) {
                 findings.push(finding(format!(
                     "Issue section {} must be present and non-empty",
                     name.title()
                 )));
             }
         }
-        let Some(evidence) = record.sections.section(IssueSectionName::Evidence) else {
-            continue;
-        };
-        if issue_section_placeholder(IssueSectionName::Evidence, evidence) {
-            continue;
-        }
-        for (position, entry) in evidence_entries(evidence).iter().enumerate() {
-            if !evidence_entry_names_observable_target(entry) {
-                findings.push(finding(issue_section_diagnostic(
-                    Some(&issue.id),
-                    IssueSectionName::Evidence.title(),
-                    &issue_record_path(&issue.id),
-                    &format!(
-                        "Issue section Evidence entry {} must name an observable proof target ({})",
-                        position + 1,
-                        EVIDENCE_PROOF_TARGET_HINT
-                    ),
-                )));
-            }
-        }
     }
     findings
-}
-
-fn issue_section_placeholder(name: IssueSectionName, value: &str) -> bool {
-    matches!(
-        (name, value.trim()),
-        (IssueSectionName::Description, "No description provided.")
-            | (IssueSectionName::Outcome, "Outcome was not specified.")
-            | (IssueSectionName::Evidence, "Evidence was not specified.")
-    )
 }
 
 /// Resolves an issue reference against the record files, including files
@@ -312,73 +252,4 @@ fn resolve_issue_id(files: &crate::record_index::RecordFiles, issue_ref: &str) -
         return Ok(issue_ref.to_string());
     }
     Err(anyhow!("Issue {issue_ref} was not found"))
-}
-
-fn evidence_entries(evidence: &str) -> Vec<String> {
-    if evidence
-        .lines()
-        .any(|line| strip_markdown_list_marker(line.trim()).is_some())
-    {
-        let mut entries = Vec::new();
-        let mut current = String::new();
-        for line in evidence.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Some(item) = strip_markdown_list_marker(trimmed) {
-                if !current.trim().is_empty() {
-                    entries.push(current.trim().to_string());
-                }
-                current = item.trim().to_string();
-            } else if current.trim().is_empty() {
-                current = trimmed.to_string();
-            } else {
-                current.push(' ');
-                current.push_str(trimmed);
-            }
-        }
-        if !current.trim().is_empty() {
-            entries.push(current.trim().to_string());
-        }
-        entries
-    } else {
-        evidence
-            .split("\n\n")
-            .map(str::trim)
-            .filter(|entry| !entry.is_empty())
-            .map(str::to_string)
-            .collect()
-    }
-}
-
-fn strip_markdown_list_marker(line: &str) -> Option<&str> {
-    for prefix in ["- ", "* ", "+ "] {
-        if let Some(rest) = line.strip_prefix(prefix) {
-            return Some(rest);
-        }
-    }
-
-    let (digits, rest) = line.split_once('.')?;
-    if !digits.is_empty()
-        && digits.chars().all(|character| character.is_ascii_digit())
-        && rest.starts_with(' ')
-    {
-        Some(rest.trim_start())
-    } else {
-        None
-    }
-}
-
-fn evidence_entry_names_observable_target(entry: &str) -> bool {
-    let lower = entry.to_lowercase();
-    if VAGUE_EVIDENCE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
-    {
-        return false;
-    }
-    CONCRETE_EVIDENCE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
 }

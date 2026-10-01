@@ -589,10 +589,7 @@ pub fn mission_dashboard(
             ),
         );
     if let Some(strategy) = mission.strategy()? {
-        metadata = metadata.row(
-            "Strategy",
-            format!("{} (revision {})", strategy.path, strategy.revision),
-        );
+        metadata = metadata.row("Strategy", strategy.path);
     }
     let mut page = Page::new(format!(
         "{} [mission] {} - {}",

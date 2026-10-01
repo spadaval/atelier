@@ -20,16 +20,16 @@ fn test_create_issue() {
     assert!(stdout.contains(&format!("atelier check {issue_id}")));
     assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
-    assert!(issue_text.contains("## Description\n\nNo description provided."));
-    assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
-    assert!(!issue_text.contains("## Evidence"));
+    assert!(issue_text.contains("## Goal\n\nGoal was not specified."));
+    assert!(issue_text.contains("## Done when\n\nDone when was not specified."));
+    assert!(!issue_text.contains("## Context"));
 
     let (success, lint_out, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "placeholder scaffold should be under-specified");
     assert!(stderr.contains("Lint failed"));
-    assert!(lint_out.contains("Issue section Description must be present and non-empty"));
-    assert!(lint_out.contains("Issue section Outcome must be present and non-empty"));
-    assert!(!lint_out.contains("Issue section Evidence must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Goal must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Done when must be present and non-empty"));
+    assert!(!lint_out.contains("Issue section Context must be present and non-empty"));
 }
 
 #[test]
@@ -95,12 +95,12 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
     let text = std::fs::read_to_string(&path).unwrap();
     let text = text
         .replace(
-            "No description provided.",
+            "Goal was not specified.",
             "Describe the markdown-first issue.",
         )
         .replace(
-            "Outcome was not specified.",
-            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier check <id>` passes after section edits.",
+            "Done when was not specified.",
+            "Issue sections are populated by editing canonical Markdown.\n\n## Context\n\n- `atelier check <id>` passes after section edits.",
         );
     std::fs::write(&path, text).unwrap();
 
@@ -243,7 +243,10 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
     let corrupted = parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\"");
     std::fs::write(
         &parent_path,
-        replace_front_matter_scalar(&corrupted, "status", "todo"),
+        replace_markdown_body(
+            &replace_front_matter_scalar(&corrupted, "status", "todo"),
+            "## Goal\n\nCorrupted hierarchy\n\n## Done when\n\nHierarchy validates.",
+        ),
     )
     .unwrap();
 
@@ -723,10 +726,10 @@ fn test_show_issue() {
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
     edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
-        text.replace("No description provided.", "Description")
+        text.replace("Goal was not specified.", "Description")
             .replace(
-                "Outcome was not specified.",
-                "The issue show command renders parsed sections.\n\n## Evidence\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
+                "Done when was not specified.",
+                "The issue show command renders parsed sections.\n\n## Context\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
             )
     });
 
@@ -734,10 +737,10 @@ fn test_show_issue() {
 
     assert!(success);
     assert!(stdout.contains("Test issue"));
-    assert!(stdout.contains("Description"));
-    assert!(stdout.contains("Outcome"));
+    assert!(stdout.contains("Goal"));
+    assert!(stdout.contains("Done when"));
     assert!(stdout.contains("The issue show command renders parsed sections."));
-    assert!(stdout.contains("Evidence"));
+    assert!(stdout.contains("Context"));
     assert!(stdout.contains("- Show output contains the section headings."));
     assert!(stdout.contains("Notes"));
     assert!(stdout.contains("CLI display context."));
@@ -755,12 +758,12 @@ fn test_issue_show_surfaces_evidence_status() {
     let issue_id = issue_id_by_title(dir.path(), "Evidence status issue");
     edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
         text.replace(
-            "No description provided.",
+            "Goal was not specified.",
             "Exercise issue show evidence state.",
         )
         .replace(
-            "Outcome was not specified.",
-            "Issue show renders attached proof state and next commands.\n\n## Evidence\n\n- Manual check: issue show and transition options report missing and attached validation evidence.",
+            "Done when was not specified.",
+            "Issue show renders attached proof state and next commands.\n\n## Context\n\n- Manual check: issue show and transition options report missing and attached validation evidence.",
         )
     });
     commit_all(dir.path(), "evidence status issue setup");
@@ -779,9 +782,9 @@ fn test_issue_show_surfaces_evidence_status() {
     );
     assert!(transitions.contains("close"));
     assert!(transitions.contains("fail  evidence.attached"));
-    assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
+    assert!(transitions.contains("expected at least 1 fresh passing evidence record(s); found 0"));
     assert!(
-        transitions.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        transitions.contains("Hint: Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`"),
         "{transitions}"
     );
 
@@ -790,6 +793,8 @@ fn test_issue_show_surfaces_evidence_status() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--target",
             &format!("issue/{issue_id}"),
             "--kind",
@@ -890,13 +895,13 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
         format!(
             r#"{{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Partial key bundle apply",
   "resources": {{
     "issues": [
       {{
         "client_ref": "issue.partial",
-        "title": "Partial key dependent",
+        "title": "Partial key dependent", "body": "\u0023\u0023 Goal\n\nPartial key dependent\n\n## Done when\n\nChecks pass.",
         "issue_type": "task",
         "priority": "medium",
         "depends_on": [{{ "id": "{issue_key}" }}]
@@ -1042,7 +1047,7 @@ fn test_issue_create_mission_sectioned_body_preserves_outcome_and_evidence() {
 
     let outcome = "Mission authoring preserves the supplied outcome.";
     let evidence = "- `atelier check` accepts the created mission record.";
-    let body = format!("## Outcome\n\n{outcome}\n\n## Evidence\n\n{evidence}");
+    let body = format!("## Outcome\n\nMission result.\n\n## Success criteria\n\n{outcome}\n\n## Epics\n\n{evidence}");
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1059,12 +1064,16 @@ fn test_issue_create_mission_sectioned_body_preserves_outcome_and_evidence() {
     let mission_id = issue_id_by_title(dir.path(), "Sectioned mission body");
     let mission = read_canonical_record(dir.path(), "issues", &mission_id);
 
-    assert_eq!(mission.matches("## Description").count(), 1, "{mission}");
     assert_eq!(mission.matches("## Outcome").count(), 1, "{mission}");
-    assert_eq!(mission.matches("## Evidence").count(), 1, "{mission}");
-    assert!(mission.contains("## Description\n\nNo description provided."));
-    assert!(mission.contains(&format!("## Outcome\n\n{outcome}")));
-    assert!(mission.contains(&format!("## Evidence\n\n{evidence}")));
+    assert_eq!(
+        mission.matches("## Success criteria").count(),
+        1,
+        "{mission}"
+    );
+    assert_eq!(mission.matches("## Epics").count(), 1, "{mission}");
+    assert!(mission.contains("## Outcome\n\nMission result."));
+    assert!(mission.contains(&format!("## Success criteria\n\n{outcome}")));
+    assert!(mission.contains(&format!("## Epics\n\n{evidence}")));
 
     let (success, check_out, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
@@ -1083,7 +1092,7 @@ fn test_bundle_apply_accepts_configured_custom_issue_type() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Custom type bundle",
   "resources": {
     "issues": [
@@ -1091,7 +1100,8 @@ fn test_bundle_apply_accepts_configured_custom_issue_type() {
         "client_ref": "issue.incident",
         "title": "Bundled incident",
         "issue_type": "incident",
-        "priority": "high"
+        "priority": "high",
+        "body": "\u0023\u0023 Goal\n\nBundled incident\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1205,12 +1215,22 @@ fn test_bundle_preview_rejects_plan_and_milestone_resources() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Invalid bundle",
   "resources": {
     "issues": [],
-    "plans": [{ "client_ref": "plan.invalid", "title": "No plan resources" }],
-    "milestones": [{ "client_ref": "milestone.invalid", "title": "No milestones" }]
+    "plans": [
+      {
+        "client_ref": "plan.invalid",
+        "title": "No plan resources"
+      }
+    ],
+    "milestones": [
+      {
+        "client_ref": "milestone.invalid",
+        "title": "No milestones"
+      }
+    ]
   }
 }"#,
     )
@@ -1240,7 +1260,7 @@ fn test_bundle_preview_rejects_duplicate_client_refs() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Duplicate client ref bundle",
   "resources": {
     "issues": [
@@ -1248,13 +1268,15 @@ fn test_bundle_preview_rejects_duplicate_client_refs() {
         "client_ref": "issue.duplicate",
         "title": "Duplicate one",
         "issue_type": "task",
-        "priority": "high"
+        "priority": "high",
+        "body": "\u0023\u0023 Goal\n\nDuplicate one\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.duplicate",
         "title": "Duplicate two",
         "issue_type": "task",
-        "priority": "high"
+        "priority": "high",
+        "body": "\u0023\u0023 Goal\n\nDuplicate two\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1286,7 +1308,7 @@ fn test_bundle_preview_rejects_missing_client_ref() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Missing client ref bundle",
   "resources": {
     "issues": [
@@ -1295,7 +1317,12 @@ fn test_bundle_preview_rejects_missing_client_ref() {
         "title": "Missing reference user",
         "issue_type": "task",
         "priority": "high",
-        "depends_on": [{ "client_ref": "issue.missing" }]
+        "depends_on": [
+          {
+            "client_ref": "issue.missing"
+          }
+        ],
+        "body": "\u0023\u0023 Goal\n\nMissing reference user\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1324,7 +1351,7 @@ fn test_bundle_preview_rejects_status_outside_workflow_policy() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Invalid status bundle",
   "resources": {
     "issues": [
@@ -1333,7 +1360,8 @@ fn test_bundle_preview_rejects_status_outside_workflow_policy() {
         "title": "Invalid status",
         "issue_type": "task",
         "priority": "high",
-        "status": "not_real"
+        "status": "not_real",
+        "body": "\u0023\u0023 Goal\n\nInvalid status\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1448,14 +1476,14 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     run_atelier(dir.path(), &["issue", "create", "JSON issue"]);
     let issue_id = issue_id_by_title(dir.path(), "JSON issue");
     edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
-        text.replace("No description provided.", "JSON description")
+        text.replace("Goal was not specified.", "JSON description")
     });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("JSON issue"));
-    assert!(stdout.contains("Description"));
+    assert!(stdout.contains("Goal"));
     assert!(stdout.contains("JSON description"));
     assert!(stdout.contains("Blocked by"));
     assert!(stdout.contains("Blocking"));
@@ -1470,7 +1498,7 @@ fn test_issue_show_reads_detail_body_from_record_store() {
     run_atelier(dir.path(), &["issue", "create", "Canonical detail issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Canonical detail issue");
     edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
-        text.replace("No description provided.", "Canonical Markdown body")
+        text.replace("Goal was not specified.", "Canonical Markdown body")
     });
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
 
@@ -1495,10 +1523,10 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit() {
     let edited_evidence = "- `atelier issue show` reads the edited record file.";
     let issue_text = std::fs::read_to_string(&issue_path)
         .unwrap()
-        .replace("No description provided.", edited_body)
+        .replace("Goal was not specified.", edited_body)
         .replace(
-            "Outcome was not specified.",
-            &format!("{edited_outcome}\n\n## Evidence\n\n{edited_evidence}"),
+            "Done when was not specified.",
+            &format!("{edited_outcome}\n\n## Context\n\n{edited_evidence}"),
         );
     std::fs::write(&issue_path, issue_text).unwrap();
 
@@ -1536,6 +1564,8 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "test",
             "Canonical evidence summary",
@@ -2582,7 +2612,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let mission_text = std::fs::read_to_string(&mission_path).unwrap();
     let mission_text = mission_text.replace(
         "status: \"draft\"\n",
-        "status: \"draft\"\nstrategy:\n  path: \"docs/strategies/dashboard-cleanup.md\"\n  revision: 3\n",
+        "status: \"draft\"\nstrategy:\n  path: \"docs/strategies/dashboard-cleanup.md\"\n",
     );
     std::fs::write(&mission_path, mission_text).unwrap();
     run_atelier(dir.path(), &["issue", "create", "Ready mission work"]);
@@ -2651,7 +2681,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(success, "work mission failed: {stderr}");
     assert!(dashboard.contains(&format!("{mission_id} [mission] draft - Dashboard cleanup")));
     assert!(
-        dashboard.contains("docs/strategies/dashboard-cleanup.md (revision 3)"),
+        dashboard.contains("docs/strategies/dashboard-cleanup.md"),
         "{dashboard}"
     );
     assert!(!dashboard.contains("Work Mission"), "{dashboard}");
@@ -2766,6 +2796,8 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--target",
             &format!("issue/{done_id}"),
             "--kind",

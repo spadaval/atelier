@@ -2,7 +2,6 @@ use anyhow::{anyhow, Result};
 use std::collections::BTreeSet;
 
 use atelier_core::Issue;
-use serde_json::Value;
 
 use crate::record_index::RecordIndex;
 
@@ -114,25 +113,10 @@ pub fn resolve_work_branch(
 
 /// Returns the `(work_branch, branch_base)` pair recorded on a branch owner.
 fn recorded_workflow_branch(issue: &Issue) -> Result<Option<(String, String)>> {
-    let Some(field) = issue.fields.get(WORKFLOW_BRANCH_FIELD) else {
-        return Ok(None);
-    };
-    let value = |key: &str| {
-        field
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .map(str::to_string)
-            .ok_or_else(|| {
-                anyhow!(
-                    "workflow_branch_invalid: issue {} field '{}.{}' must be a non-empty string",
-                    issue.id,
-                    WORKFLOW_BRANCH_FIELD,
-                    key
-                )
-            })
-    };
-    Ok(Some((value("work_branch")?, value("branch_base")?)))
+    Ok(issue
+        .workflow_branch
+        .as_ref()
+        .map(|branch| (branch.work_branch.clone(), branch.branch_base.clone())))
 }
 
 fn nearest_parent_epic(index: &RecordIndex, issue: &Issue) -> Result<Issue> {
@@ -251,10 +235,13 @@ mod tests {
     #[test]
     fn recorded_owner_branch_wins_over_derived_name() {
         let mut records = Records::default();
-        records.issue("atelier-epic", "epic", "todo").issue.fields = BTreeMap::from([(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({"work_branch": "epic/renamed", "branch_base": "trunk"}),
-        )]);
+        records
+            .issue("atelier-epic", "epic", "todo")
+            .issue
+            .workflow_branch = Some(atelier_core::WorkflowBranch {
+            work_branch: "epic/renamed".to_string(),
+            branch_base: "trunk".to_string(),
+        });
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-epic");
 

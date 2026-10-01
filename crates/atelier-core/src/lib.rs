@@ -4,7 +4,6 @@
 //! dependencies. Concrete domain types move here as the migration advances.
 
 use chrono::{DateTime, NaiveDate, Utc};
-use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Component, Path};
 
@@ -118,7 +117,9 @@ pub struct Issue {
     pub issue_type: String,
     pub priority: String,
     #[serde(default)]
-    pub fields: BTreeMap<String, serde_json::Value>,
+    pub strategy: Option<IssueStrategy>,
+    #[serde(default)]
+    pub workflow_branch: Option<WorkflowBranch>,
     pub parent_id: Option<IssueId>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -127,89 +128,60 @@ pub struct Issue {
 
 pub const ISSUE_STRATEGY_FIELD: &str = "strategy";
 
-/// A mission's governing strategy document at the revision used to commission it.
-#[derive(Debug, Clone, Eq, PartialEq)]
+/// A repository-relative strategy link. Strategy revisions live in Git.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IssueStrategy {
     pub path: String,
-    pub revision: u64,
 }
 
 impl IssueStrategy {
-    pub fn new(path: impl Into<String>, revision: u64) -> Result<Self, IssueFieldError> {
+    pub fn new(path: impl Into<String>) -> Result<Self, IssueFieldError> {
         let path = path.into();
         let parsed = Path::new(&path);
-        let path_is_repo_relative = !path.trim().is_empty()
-            && !parsed.is_absolute()
-            && parsed
+        if path.trim().is_empty()
+            || parsed.is_absolute()
+            || !parsed
                 .components()
-                .all(|component| matches!(component, Component::Normal(_) | Component::CurDir));
-        if !path_is_repo_relative {
+                .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+        {
             return Err(IssueFieldError::InvalidStrategy(
                 "path must be a non-empty repository-relative path without parent traversal"
                     .to_string(),
             ));
         }
-        if revision == 0 {
-            return Err(IssueFieldError::InvalidStrategy(
-                "revision must be a positive integer".to_string(),
-            ));
-        }
-        Ok(Self { path, revision })
+        Ok(Self { path })
     }
+}
 
-    pub fn from_value(value: &serde_json::Value) -> Result<Self, IssueFieldError> {
-        let object = value.as_object().ok_or_else(|| {
-            IssueFieldError::InvalidStrategy("strategy must be an object".to_string())
-        })?;
-        if object.len() != 2 || !object.contains_key("path") || !object.contains_key("revision") {
-            return Err(IssueFieldError::InvalidStrategy(
-                "strategy must contain exactly path and revision".to_string(),
-            ));
-        }
-        let path = object
-            .get("path")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| IssueFieldError::InvalidStrategy("path must be a string".to_string()))?;
-        let revision = object
-            .get("revision")
-            .and_then(serde_json::Value::as_u64)
-            .ok_or_else(|| {
-                IssueFieldError::InvalidStrategy("revision must be a positive integer".to_string())
-            })?;
-        Self::new(path, revision)
-    }
-
-    pub fn to_value(&self) -> serde_json::Value {
-        serde_json::json!({ "path": self.path, "revision": self.revision })
-    }
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowBranch {
+    pub work_branch: String,
+    pub branch_base: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IssueFieldError {
     InvalidStrategy(String),
 }
-
 impl fmt::Display for IssueFieldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidStrategy(detail) => write!(f, "invalid issue strategy field: {detail}"),
+            Self::InvalidStrategy(detail) => write!(f, "invalid issue strategy: {detail}"),
         }
     }
 }
-
 impl std::error::Error for IssueFieldError {}
-
 impl Issue {
     pub fn strategy(&self) -> Result<Option<IssueStrategy>, IssueFieldError> {
-        self.fields
-            .get(ISSUE_STRATEGY_FIELD)
-            .map(IssueStrategy::from_value)
+        self.strategy
+            .as_ref()
+            .map(|strategy| IssueStrategy::new(&strategy.path))
             .transpose()
     }
-
     pub fn set_strategy(&mut self, strategy: IssueStrategy) {
-        self.fields
-            .insert(ISSUE_STRATEGY_FIELD.to_string(), strategy.to_value());
+        self.strategy = Some(strategy);
     }
 }
 
@@ -297,7 +269,9 @@ pub struct IssueRecord {
     pub issue_type: String,
     pub priority: String,
     #[serde(default)]
-    pub fields: BTreeMap<String, serde_json::Value>,
+    pub strategy: Option<IssueStrategy>,
+    #[serde(default)]
+    pub workflow_branch: Option<WorkflowBranch>,
     pub closed_at: Option<DateTime<Utc>>,
     pub sections: IssueSections,
 }
@@ -309,20 +283,51 @@ pub struct EvidenceRecord {
     pub summary: String,
 }
 
+/// Acceptance content is typed by work kind; lifecycle notes are separate.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IssueSections {
-    pub description: String,
-    pub outcome: String,
-    pub evidence: String,
+    pub body: IssueBody,
     pub notes: Option<String>,
     pub close_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum IssueBody {
+    Issue {
+        goal: String,
+        done_when: String,
+        scope: Option<String>,
+        context: Option<String>,
+    },
+    Epic {
+        outcome: String,
+        proof: Option<String>,
+        delivers: Option<String>,
+        scope: Option<String>,
+        unknowns: Option<String>,
+        design: Option<String>,
+    },
+    Mission {
+        outcome: String,
+        success_criteria: Option<String>,
+        epics: Option<String>,
+    },
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum IssueSectionName {
-    Description,
+    Goal,
+    DoneWhen,
+    Scope,
+    Context,
     Outcome,
-    Evidence,
+    Proof,
+    Delivers,
+    Unknowns,
+    Design,
+    SuccessCriteria,
+    Epics,
     Notes,
     CloseReason,
 }
@@ -348,31 +353,119 @@ pub struct IssueSectionState {
 }
 
 impl IssueSections {
-    pub const REQUIRED_NAMES: [IssueSectionName; 2] =
-        [IssueSectionName::Description, IssueSectionName::Outcome];
-
-    pub const ALL_NAMES: [IssueSectionName; 5] = [
-        IssueSectionName::Description,
+    pub const ALL_NAMES: [IssueSectionName; 13] = [
+        IssueSectionName::Goal,
+        IssueSectionName::DoneWhen,
+        IssueSectionName::Scope,
+        IssueSectionName::Context,
         IssueSectionName::Outcome,
-        IssueSectionName::Evidence,
+        IssueSectionName::Proof,
+        IssueSectionName::Delivers,
+        IssueSectionName::Unknowns,
+        IssueSectionName::Design,
+        IssueSectionName::SuccessCriteria,
+        IssueSectionName::Epics,
         IssueSectionName::Notes,
         IssueSectionName::CloseReason,
     ];
 
     pub fn unchecked_from_body(body: Option<&str>) -> Self {
-        if let Some(parsed) = body.and_then(parse_issue_sections_lenient) {
-            return parsed;
-        }
-        let description = body
+        Self::for_type("task", body)
+    }
+
+    pub fn for_type(issue_type: &str, text: Option<&str>) -> Self {
+        let goal = text
             .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("No description provided.");
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Goal was not specified.")
+            .to_string();
+        let body = match issue_type {
+            "epic" => IssueBody::Epic {
+                outcome: goal,
+                proof: None,
+                delivers: None,
+                scope: None,
+                unknowns: None,
+                design: None,
+            },
+            "mission" => IssueBody::Mission {
+                outcome: goal,
+                success_criteria: Some("Success criteria were not specified.".to_string()),
+                epics: None,
+            },
+            _ => IssueBody::Issue {
+                goal,
+                done_when: "Done when was not specified.".to_string(),
+                scope: None,
+                context: None,
+            },
+        };
         Self {
-            description: description.to_string(),
-            outcome: "Outcome was not specified.".to_string(),
-            evidence: String::new(),
+            body,
             notes: None,
             close_reason: None,
+        }
+    }
+
+    /// Preserve acceptance text when an explicit type update changes its shape.
+    pub fn change_type(&mut self, issue_type: &str) {
+        if self.matches_type(issue_type) {
+            return;
+        }
+        let (goal, proof, scope) = match &self.body {
+            IssueBody::Issue {
+                goal,
+                done_when,
+                scope,
+                ..
+            } => (goal.clone(), Some(done_when.clone()), scope.clone()),
+            IssueBody::Epic {
+                outcome,
+                proof,
+                scope,
+                ..
+            } => (outcome.clone(), proof.clone(), scope.clone()),
+            IssueBody::Mission {
+                outcome,
+                success_criteria,
+                ..
+            } => (outcome.clone(), success_criteria.clone(), None),
+        };
+        self.body = match issue_type {
+            "epic" => IssueBody::Epic {
+                outcome: goal,
+                proof,
+                scope,
+                delivers: None,
+                unknowns: None,
+                design: None,
+            },
+            "mission" => IssueBody::Mission {
+                outcome: goal,
+                success_criteria: proof,
+                epics: None,
+            },
+            _ => IssueBody::Issue {
+                goal,
+                done_when: proof.unwrap_or_else(|| "Done when was not specified.".to_string()),
+                scope,
+                context: None,
+            },
+        };
+    }
+
+    pub fn matches_type(&self, issue_type: &str) -> bool {
+        matches!(
+            (&self.body, issue_type),
+            (IssueBody::Epic { .. }, "epic") | (IssueBody::Mission { .. }, "mission")
+        ) || (matches!(self.body, IssueBody::Issue { .. })
+            && !matches!(issue_type, "epic" | "mission"))
+    }
+
+    pub fn required_names(&self) -> Vec<IssueSectionName> {
+        match self.body {
+            IssueBody::Issue { .. } => vec![IssueSectionName::Goal, IssueSectionName::DoneWhen],
+            IssueBody::Epic { .. } | IssueBody::Mission { .. } => vec![IssueSectionName::Outcome],
         }
     }
 
@@ -400,17 +493,33 @@ impl IssueSections {
     }
 
     pub fn section(&self, name: IssueSectionName) -> Option<&str> {
-        match name {
-            IssueSectionName::Description => Some(&self.description),
-            IssueSectionName::Outcome => Some(&self.outcome),
-            IssueSectionName::Evidence => {
-                (!self.evidence.trim().is_empty()).then_some(&self.evidence)
+        use IssueSectionName::*;
+        match (&self.body, name) {
+            (IssueBody::Issue { goal, .. }, Goal) => Some(goal),
+            (IssueBody::Issue { done_when, .. }, DoneWhen) => Some(done_when),
+            (IssueBody::Issue { scope, .. } | IssueBody::Epic { scope, .. }, Scope) => {
+                scope.as_deref()
             }
-            IssueSectionName::Notes => self.notes.as_deref(),
-            IssueSectionName::CloseReason => self.close_reason.as_deref(),
+            (IssueBody::Issue { context, .. }, Context) => context.as_deref(),
+            (IssueBody::Epic { outcome, .. } | IssueBody::Mission { outcome, .. }, Outcome) => {
+                Some(outcome)
+            }
+            (IssueBody::Epic { proof, .. }, Proof) => proof.as_deref(),
+            (IssueBody::Epic { delivers, .. }, Delivers) => delivers.as_deref(),
+            (IssueBody::Epic { unknowns, .. }, Unknowns) => unknowns.as_deref(),
+            (IssueBody::Epic { design, .. }, Design) => design.as_deref(),
+            (
+                IssueBody::Mission {
+                    success_criteria, ..
+                },
+                SuccessCriteria,
+            ) => success_criteria.as_deref(),
+            (IssueBody::Mission { epics, .. }, Epics) => epics.as_deref(),
+            (_, Notes) => self.notes.as_deref(),
+            (_, CloseReason) => self.close_reason.as_deref(),
+            _ => None,
         }
     }
-
     pub fn section_states(&self) -> Vec<IssueSectionState> {
         Self::ALL_NAMES
             .into_iter()
@@ -418,14 +527,13 @@ impl IssueSections {
                 let value = self.section(name);
                 IssueSectionState {
                     name,
-                    required: name.required(),
+                    required: self.required_names().contains(&name),
                     present: value.is_some(),
                     empty: value.map(str::trim).is_none_or(str::is_empty),
                 }
             })
             .collect()
     }
-
     pub fn searchable_text(&self) -> String {
         Self::ALL_NAMES
             .into_iter()
@@ -434,98 +542,54 @@ impl IssueSections {
             .join("\n")
     }
 }
-
-fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
-    let mut current: Option<&str> = None;
-    let mut description = String::new();
-    let mut outcome = String::new();
-    let mut evidence = String::new();
-    let mut notes = String::new();
-    let mut close_reason = String::new();
-
-    for line in body.lines() {
-        if let Some(heading) = line.strip_prefix("## ") {
-            current = match heading.trim() {
-                "Description" => Some("description"),
-                "Outcome" => Some("outcome"),
-                "Evidence" => Some("evidence"),
-                "Notes" => Some("notes"),
-                "Close Reason" => Some("close_reason"),
-                _ => return None,
-            };
-            break;
-        }
-    }
-
-    let mut current = current?;
-    for line in body.lines().skip_while(|line| !line.starts_with("## ")) {
-        if let Some(heading) = line.strip_prefix("## ") {
-            current = match heading.trim() {
-                "Description" => "description",
-                "Outcome" => "outcome",
-                "Evidence" => "evidence",
-                "Notes" => "notes",
-                "Close Reason" => "close_reason",
-                _ => return None,
-            };
-            continue;
-        }
-        match current {
-            "description" => {
-                description.push_str(line);
-                description.push('\n');
-            }
-            "outcome" => {
-                outcome.push_str(line);
-                outcome.push('\n');
-            }
-            "evidence" => {
-                evidence.push_str(line);
-                evidence.push('\n');
-            }
-            "notes" => {
-                notes.push_str(line);
-                notes.push('\n');
-            }
-            "close_reason" => {
-                close_reason.push_str(line);
-                close_reason.push('\n');
-            }
-            _ => {}
-        }
-    }
-
-    let description = description.trim().to_string();
-    let outcome = outcome.trim().to_string();
-    let evidence = evidence.trim().to_string();
-    if description.is_empty() || outcome.is_empty() {
-        return None;
-    }
-    Some(IssueSections {
-        description,
-        outcome,
-        evidence,
-        notes: (!notes.trim().is_empty()).then(|| notes.trim().to_string()),
-        close_reason: (!close_reason.trim().is_empty()).then(|| close_reason.trim().to_string()),
-    })
-}
-
 impl IssueSectionName {
     pub fn title(self) -> &'static str {
         match self {
-            IssueSectionName::Description => "Description",
-            IssueSectionName::Outcome => "Outcome",
-            IssueSectionName::Evidence => "Evidence",
-            IssueSectionName::Notes => "Notes",
-            IssueSectionName::CloseReason => "Close Reason",
+            Self::Goal => "Goal",
+            Self::DoneWhen => "Done when",
+            Self::Scope => "Scope",
+            Self::Context => "Context",
+            Self::Outcome => "Outcome",
+            Self::Proof => "Proof",
+            Self::Delivers => "Delivers",
+            Self::Unknowns => "Unknowns",
+            Self::Design => "Design",
+            Self::SuccessCriteria => "Success criteria",
+            Self::Epics => "Epics",
+            Self::Notes => "Notes",
+            Self::CloseReason => "Close Reason",
         }
     }
+}
 
-    pub fn required(self) -> bool {
-        matches!(
-            self,
-            IssueSectionName::Description | IssueSectionName::Outcome
-        )
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EvidenceResult {
+    Pass,
+    Fail,
+    Blocked,
+    NotApplicable,
+}
+impl EvidenceResult {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Fail => "fail",
+            Self::Blocked => "blocked",
+            Self::NotApplicable => "not-applicable",
+        }
+    }
+}
+impl std::str::FromStr for EvidenceResult {
+    type Err = String;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "pass" => Ok(Self::Pass),
+            "fail" => Ok(Self::Fail),
+            "blocked" => Ok(Self::Blocked),
+            "not-applicable" => Ok(Self::NotApplicable),
+            _ => Err("result must be pass, fail, blocked, or not-applicable".to_string()),
+        }
     }
 }
 
@@ -557,6 +621,8 @@ fn default_evidence_target_role() -> String {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EvidenceRecordData {
+    pub commit: String,
+    pub result: EvidenceResult,
     #[serde(alias = "kind")]
     pub evidence_type: String,
     pub captured_at: DateTime<Utc>,

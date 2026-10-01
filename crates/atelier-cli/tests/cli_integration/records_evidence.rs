@@ -1,6 +1,7 @@
 use super::*;
 
 fn run_atelier_with_deadlock_timeout(dir: &Path, args: &[&str]) -> std::process::Output {
+    ensure_git_for_workflow_fixture(dir, args);
     let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
         .args(args)
@@ -656,7 +657,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "--label",
             "agent-factory",
             "--description",
-            "## Description\n\nWork item.\n\n## Outcome\n\nFactory task remains valid for human command-result checks.\n\n## Evidence\n\n- `atelier check` passes for the command-result fixture.",
+            "## Goal\n\nWork item.\n\n## Done when\n\nFactory task remains valid for human command-result checks.\n\n## Context\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
     assert!(success, "create failed: {stderr}");
@@ -709,7 +710,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "create",
             "Blocker",
             "--description",
-            "## Description\n\nBlocking fixture issue.\n\n## Outcome\n\nBlocker issue participates in dependency command-result checks.\n\n## Evidence\n\n- `atelier check` passes for the command-result fixture.",
+            "## Goal\n\nBlocking fixture issue.\n\n## Done when\n\nBlocker issue participates in dependency command-result checks.\n\n## Context\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
     assert!(success, "blocker create failed: {stderr}");
@@ -789,7 +790,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
             "create",
             "Corrective issue",
             "--description",
-            "## Description\n\nIssue fixture.\n\n## Outcome\n\nWrong-kind command output is corrective.\n\n## Evidence\n\n- Focused CLI checks pass.",
+            "## Goal\n\nIssue fixture.\n\n## Done when\n\nWrong-kind command output is corrective.\n\n## Context\n\n- Focused CLI checks pass.",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -801,6 +802,8 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "test",
             "wrong-kind fixture evidence",
@@ -1040,6 +1043,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--target",
@@ -1076,6 +1081,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--summary",
@@ -1124,6 +1131,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             manual_epic_summary,
@@ -1153,6 +1162,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--summary",
@@ -1431,7 +1442,7 @@ fn test_evidence_capture_postflight_refuses_association_swap_and_deleted_target(
             "sh",
             "-c",
             &format!(
-                "sed -e 's/^created_at: .*/created_at: \"2000-01-01T00:00:00Z\"/' -e 's/^issue_type: \"task\"/issue_type: \"epic\"/' {target_path} > {target_path}.replacement && mv {target_path}.replacement {target_path}"
+                "sed -e 's/^created_at: .*/created_at: \"2000-01-01T00:00:00Z\"/' {target_path} > {target_path}.replacement && mv {target_path}.replacement {target_path}"
             ),
         ],
     );
@@ -1606,7 +1617,15 @@ fn test_evidence_list_bounds_default_output() {
         let summary = format!("bounded evidence proof {index:02}");
         let (success, _, stderr) = run_atelier(
             dir.path(),
-            &["evidence", "record", "--kind", "validation", &summary],
+            &[
+                "evidence",
+                "record",
+                "--result",
+                "pass",
+                "--kind",
+                "validation",
+                &summary,
+            ],
         );
         assert!(success, "evidence record {index} failed: {stderr}");
         let evidence_id = record_id_by_title(dir.path(), "evidence", &summary);
@@ -1642,7 +1661,7 @@ fn test_evidence_list_bounds_default_output() {
     assert!(
         evidence_list.contains("Omitted: 1 older evidence record(s) hidden by default limit 20")
     );
-    assert!(evidence_list.contains("Filter by status: atelier evidence list --status <status>"));
+    assert!(evidence_list.contains("Filter by result: atelier evidence list --result <result>"));
     assert!(evidence_list.contains("List matching IDs: atelier --quiet evidence list"));
 
     let (success, quiet_list, stderr) = run_atelier(dir.path(), &["--quiet", "evidence", "list"]);
@@ -1669,6 +1688,8 @@ fn test_evidence_quiet_output_is_a_stable_id_composition_path() {
             "--quiet",
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--target",
@@ -1726,6 +1747,8 @@ fn test_evidence_relation_role_errors_are_corrective() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--target",
@@ -1750,6 +1773,8 @@ fn test_evidence_relation_role_errors_are_corrective() {
         &[
             "evidence",
             "record",
+            "--result",
+            "pass",
             "--kind",
             "validation",
             "--target",
@@ -1866,7 +1891,12 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains("recorded"));
+    assert!(
+        evidence_list
+            .lines()
+            .any(|line| line.contains("fail") && line.contains("invalid input is rejected")),
+        "{evidence_list}"
+    );
     assert!(evidence_list.contains("exit 3"));
     assert!(evidence_list.contains("invalid input is rejected"));
 }
@@ -1906,7 +1936,7 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
         "issue closeout must reject evidence linked only to another issue"
     );
     assert!(
-        stderr.contains("expected at least 1 passing evidence record")
+        stderr.contains("expected at least 1 fresh passing evidence record")
             || stderr.contains("expected at least 1 validating evidence record")
             || stderr.contains("no validating evidence link found"),
         "{stderr}"
@@ -1940,7 +1970,7 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let issue_body = "## Description\n\nEvidence gate body.\n\n## Outcome\n\nThe issue can close after workflow proof is attached.\n\n## Evidence\n\n- A focused command transcript proves the workflow change.";
+    let issue_body = "## Goal\n\nEvidence gate body.\n\n## Done when\n\nThe issue can close after workflow proof is attached.\n\n## Context\n\n- A focused command transcript proves the workflow change.";
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1985,7 +2015,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     init_atelier(dir.path());
     write_evidence_gated_workflow(dir.path());
 
-    let issue_body = "## Description\n\nValidation blocker body.\n\n## Outcome\n\nThe issue does not close without passing evidence.\n\n## Evidence\n\n- A passing transcript proves closeout readiness.";
+    let issue_body = "## Goal\n\nValidation blocker body.\n\n## Done when\n\nThe issue does not close without passing evidence.\n\n## Context\n\n- A passing transcript proves closeout readiness.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -2013,7 +2043,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("expected at least 1 passing evidence record"));
+    assert!(transitions.contains("expected at least 1 fresh passing evidence record"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2030,7 +2060,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
         !success,
         "closeout must reject evidence that is attached but not passing"
     );
-    assert!(stderr.contains("expected at least 1 passing evidence record"));
+    assert!(stderr.contains("expected at least 1 fresh passing evidence record"));
 }
 
 #[test]

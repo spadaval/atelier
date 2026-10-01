@@ -1,7 +1,5 @@
 //! Record fixtures for app-layer unit tests.
 
-use std::collections::BTreeMap;
-
 use atelier_core::{EvidenceRecord, EvidenceRecordData, Issue, IssueSections, RecordHeader};
 use atelier_records::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
@@ -21,16 +19,15 @@ pub fn issue_record(id: &str, issue_type: &str, status: &str) -> CanonicalIssueR
             status: status.to_string(),
             issue_type: issue_type.to_string(),
             priority: "medium".to_string(),
-            fields: BTreeMap::new(),
+            strategy: None,
+            workflow_branch: None,
             parent_id: None,
             created_at: now,
             updated_at: now,
             closed_at: None,
         },
         labels: Vec::new(),
-        sections: IssueSections::unchecked_from_body(Some(
-            "## Description\n\nFixture issue.\n\n## Outcome\n\nFixture outcome.",
-        )),
+        sections: IssueSections::for_type(issue_type, Some("Fixture issue.")),
         relationships: Relationships::default(),
     }
 }
@@ -53,6 +50,8 @@ pub fn evidence_record(id: &str, issue_id: &str, role: &str) -> EvidenceRecord {
             updated_at: now,
         },
         data: EvidenceRecordData {
+            commit: "a".repeat(40),
+            result: atelier_core::EvidenceResult::Pass,
             evidence_type: "validation".to_string(),
             captured_at: now,
             command: None,

@@ -165,6 +165,13 @@ fn transition_blockers(
     close_reason: Option<&str>,
 ) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
     let mut blockers = required_field_failures(transition, close_reason)?;
+    if policy.status_category(&transition.to) == Some("done") && transition.to != "superseded" {
+        if let Some(evidence_id) =
+            atelier_app::evidence_freshness::newest_failure(index, repo_root, &issue.id)?
+        {
+            blockers.push(format!("newer failing evidence {evidence_id} blocks completion; rerun the failed check and record an explicit pass"));
+        }
+    }
     if let Some(blocker) = active_transition_ancestor_blocker(index, policy, issue, transition)? {
         blockers.push(blocker);
     }
@@ -526,7 +533,6 @@ mod tests {
     use super::*;
     use crate::human_output::ColorChoice;
     use atelier_records::{IssueSections, RecordStore, Relationships};
-    use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
 
     fn test_issue(id: &str) -> Issue {
@@ -537,7 +543,8 @@ mod tests {
             status: "in_progress".to_string(),
             priority: "medium".to_string(),
             issue_type: "epic".to_string(),
-            fields: BTreeMap::new(),
+            strategy: None,
+            workflow_branch: None,
             parent_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -630,12 +637,11 @@ state_root = ".atelier"
     }
 
     fn insert_canonical_issue(state_dir: &Path, issue: Issue) {
+        let sections = IssueSections::for_type(&issue.issue_type, Some("Workflow fixture."));
         let record = CanonicalIssueRecord {
             issue,
             labels: Vec::new(),
-            sections: IssueSections::unchecked_from_body(Some(
-                "## Description\n\nbody\n\n## Outcome\n\nworks\n\n## Evidence\n\nproof",
-            )),
+            sections,
             relationships: Relationships::default(),
         };
         RecordStore::new(state_dir)

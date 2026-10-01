@@ -52,6 +52,14 @@ def issue_markdown(issue):
 
     labels = "".join(f'- "{label}"\n' for label in issue["labels"])
     closed = f'closed_at: "{issue["updated"]}"\n' if issue["status"] == "done" else ""
+    goal = f"{issue['title']} covers one bounded slice of the benchmark mission."
+    proof = "The focused regression test fails without the change and passes after it."
+    if issue["type"] == "mission":
+        body = f"## Outcome\n\n{goal}\n\n## Success criteria\n\n{proof}\n"
+    elif issue["type"] == "epic":
+        body = f"## Outcome\n\n{goal}\n\n## Proof\n\n{proof}\n"
+    else:
+        body = f"## Goal\n\n{goal}\n\n## Done when\n\n{proof}\n\n## Scope\n\nBenchmark fixture.\n\n## Context\n\nGenerated record fixture.\n"
     return (
         "---\n"
         f'{closed}created_at: "{issue["created"]}"\n'
@@ -65,30 +73,23 @@ def issue_markdown(issue):
         + "  attachments: []\n"
         + bucket("relates", rel["advances"], ("type", "advances"))
         + 'schema: "atelier.issue"\n'
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         f'status: "{issue["status"]}"\n'
         f'title: "{issue["title"]}"\n'
         f'updated_at: "{issue["updated"]}"\n'
         "---\n\n"
-        "## Description\n\n"
-        f"{issue['title']} covers one bounded slice of the benchmark mission. "
-        "It names the files it touches, the behavior it changes, and the "
-        "follow-up it defers so a reviewer can judge scope quickly.\n\n"
-        "## Outcome\n\n"
-        "The behavior is implemented, documented, and covered by a focused "
-        "regression test that fails without the change.\n\n"
-        "## Evidence\n\n"
-        "- Command proof: `cargo nextest run` passes.\n"
-        "- File proof: `docs/product/cli-surface.md` describes the behavior.\n"
+        + body
     )
 
 
-def evidence_markdown(evidence_id, target, created):
+def evidence_markdown(evidence_id, target, created, commit):
     return (
         "---\n"
         f'created_at: "{created}"\n'
         f'id: "{evidence_id}"\n'
         'evidence_type: "test"\n'
+        f'commit: "{commit}"\n'
+        'result: "pass"\n'
         f'captured_at: "{created}"\n'
         'command: "cargo nextest run"\n'
         'exit_status: "0"\n'
@@ -106,7 +107,7 @@ def evidence_markdown(evidence_id, target, created):
         '    role: "validates"\n'
         "  relates: []\n"
         'schema: "atelier.evidence"\n'
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         'status: "pass"\n'
         'title: "cargo nextest run"\n'
         f'updated_at: "{created}"\n'
@@ -177,12 +178,15 @@ def generate(repo, total_issues):
     issue_dir = repo / ".atelier" / "issues"
     for issue in issues.values():
         (issue_dir / f"{issue['id']}.md").write_text(issue_markdown(issue))
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "user.email=b@b", "-c", "user.name=b", "commit", "-qm", "fixture acceptance"], cwd=repo, check=True)
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     evidence_dir = repo / ".atelier" / "evidence"
     done = [i for i in work if issues[i]["status"] == "done"]
     for n, target in enumerate(rng.sample(done, min(200, len(done)))):
         evidence_id = f"atelier-v{n:03d}"
         (evidence_dir / f"{evidence_id}.md").write_text(
-            evidence_markdown(evidence_id, target, ts(base, 6000 + n))
+            evidence_markdown(evidence_id, target, ts(base, 6000 + n), commit)
         )
     epic_with_children = max(epics, key=lambda e: len(issues[e]["rel"]["children"]))
     return len(issues), missions[0], epic_with_children

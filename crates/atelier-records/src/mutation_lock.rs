@@ -1,8 +1,8 @@
 //! Cooperative repository lock for canonical tracker mutations.
 //!
-//! Ordinary record writers take a shared lock. Repository-wide
-//! migrations take the exclusive form so their validated snapshot cannot be
-//! interleaved with another Atelier mutation.
+//! Read commands take a shared lock. Every writer takes the exclusive form
+//! across its full read/validate/write lifetime, so concurrent mutations cannot
+//! overwrite changes read from an older snapshot.
 
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;

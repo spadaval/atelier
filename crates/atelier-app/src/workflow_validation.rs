@@ -1,6 +1,4 @@
 use anyhow::{bail, Result};
-use atelier_core::EvidenceRecord;
-use atelier_records::IssueSections;
 use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
@@ -68,7 +66,9 @@ fn evaluate_builtin(
             }
         }
         "blockers.transitive_none_open" => transitive_blockers_none_open(index, policy, issue_id),
-        "evidence.attached" => evidence_attached(index, issue_id, definition.params.as_ref()),
+        "evidence.attached" => {
+            evidence_attached(index, repo_root, issue_id, definition.params.as_ref())
+        }
         "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
         "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
@@ -82,94 +82,20 @@ fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Op
 
 fn evidence_attached(
     index: &RecordIndex,
+    repo_root: &Path,
     issue_id: &str,
     params: Option<&ValidatorParams>,
 ) -> Result<(bool, String, Option<String>)> {
-    if let Some(ValidatorParams::EvidenceAttached { min_count, kind }) = params {
-        let validating_count = linked_evidence_records(index, issue_id, kind.as_deref())?.len();
-        if validating_count < *min_count as usize {
-            return Ok((
-                false,
-                format!(
-                    "expected at least {} validating evidence record(s){}; found {}",
-                    min_count,
-                    kind.as_deref()
-                        .map(|value| format!(" of kind {}", value))
-                        .unwrap_or_default(),
-                    validating_count
-                ),
-                Some(evidence_help_hint()),
-            ));
+    let (min_count, kind) = match params {
+        Some(ValidatorParams::EvidenceAttached { min_count, kind }) => {
+            (*min_count as usize, kind.as_deref())
         }
-    }
-    let gate = issue_evidence_gate_status(index, issue_id)?;
-    Ok((gate.passed, gate.reason, gate.help))
-}
-
-#[derive(Debug, Clone)]
-struct EvidenceGateStatus {
-    passed: bool,
-    reason: String,
-    help: Option<String>,
-}
-
-fn issue_evidence_gate_status(index: &RecordIndex, issue_id: &str) -> Result<EvidenceGateStatus> {
-    let evidence = linked_evidence_records(index, issue_id, None)?;
-    if evidence.is_empty() {
-        return Ok(EvidenceGateStatus {
-            passed: false,
-            reason: "no validating evidence link found".to_string(),
-            help: Some(evidence_help_hint()),
-        });
-    }
-    let passing = evidence.iter().any(|record| {
-        record.data.success.unwrap_or_else(|| {
-            !matches!(record.header.status.as_str(), "blocked" | "fail" | "failed")
-        })
-    });
-    if passing {
-        Ok(EvidenceGateStatus {
-            passed: true,
-            reason: "passing validating evidence is linked".to_string(),
-            help: None,
-        })
-    } else {
-        Ok(EvidenceGateStatus {
-            passed: false,
-            reason: "expected at least 1 passing evidence record".to_string(),
-            help: Some(evidence_help_hint()),
-        })
-    }
-}
-
-fn evidence_help_hint() -> String {
-    "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
-}
-
-fn linked_evidence_records<'a>(
-    index: &'a RecordIndex,
-    issue_id: &str,
-    required_kind: Option<&str>,
-) -> Result<Vec<&'a EvidenceRecord>> {
-    let mut records = Vec::new();
-    for link in index.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        let evidence_id = if link.source_kind == "evidence" {
-            link.source_id
-        } else if link.target_kind == "evidence" {
-            link.target_id
-        } else {
-            continue;
-        };
-        let record = index.require_evidence(&evidence_id)?;
-        if required_kind.is_some_and(|kind| record.data.evidence_type != kind) {
-            continue;
-        }
-        records.push(record);
-    }
-    Ok(records)
+        _ => (1, None),
+    };
+    let gate = crate::evidence_freshness::issue_evidence_gate_status(
+        index, repo_root, issue_id, min_count, kind,
+    )?;
+    Ok((gate.passed, gate.reason, (!gate.passed).then(|| "Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`".to_string())))
 }
 
 fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
@@ -193,12 +119,23 @@ fn issue_sections_parseable(
     let record = index
         .issue_record(issue_id)
         .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
-    let invalid = record
-        .sections
-        .section_states()
-        .into_iter()
-        .filter(|state| state.required && (!state.present || state.empty))
-        .map(|state| state.name.title().to_string())
+    let mut required = record.sections.required_names();
+    if record.issue.issue_type == "epic" {
+        required.push(atelier_core::IssueSectionName::Proof);
+    }
+    if record.issue.issue_type == "mission" && record.issue.strategy.is_none() {
+        required.push(atelier_core::IssueSectionName::SuccessCriteria);
+    }
+    let invalid = required
+        .iter()
+        .filter(|name| {
+            record.sections.section(**name).is_none_or(|text| {
+                text.trim().is_empty()
+                    || text.trim().ends_with("was not specified.")
+                    || text.trim().ends_with("were not specified.")
+            })
+        })
+        .map(|name| name.title().to_string())
         .collect::<Vec<_>>();
     if !invalid.is_empty() {
         let path = state_dir.join("issues").join(format!("{issue_id}.md"));
@@ -215,7 +152,7 @@ fn issue_sections_parseable(
         true,
         format!(
             "parsed required sections {} are present and non-empty",
-            IssueSections::REQUIRED_NAMES
+            required
                 .into_iter()
                 .map(|name| name.title())
                 .collect::<Vec<_>>()

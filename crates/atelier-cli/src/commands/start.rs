@@ -117,10 +117,10 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         .with_context(|| format!("Issue {} not found", work_branch.owner_id))?;
     let record_branch = work_branch.recorded_base.is_none();
     if record_branch {
-        owner.issue.fields.insert(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({ "work_branch": branch, "branch_base": base }),
-        );
+        owner.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
+            work_branch: branch.clone(),
+            branch_base: base.clone(),
+        });
         owner.issue.updated_at = Utc::now();
     }
     let mut writes: Vec<CanonicalIssueRecord> = Vec::new();

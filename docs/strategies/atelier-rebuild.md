@@ -110,8 +110,9 @@ daemon needs the human.
 # Plan
 
 Tracked here until S8 (this section is the temporary tracker, not strategy).
-Work happens on branch `mission/atelier-rebuild`; every code commit has had
-an independent review.
+Work happens on branch `mission/atelier-rebuild`. Each non-trivial increment
+is independently reviewed before it reaches `master`; current candidates may
+await review on the mission branch.
 
 1. [done] Simplify this repository's `workflow.yaml`; archive terminal
    records and activity files.
@@ -121,8 +122,29 @@ an independent review.
    28–42 ms, max under 52 ms, release build, 32 cores).
 5. [done] Delete leftovers: import, export, telemetry, `doctor`, `rules`,
    `man`, hidden `branch` commands, `history`.
-6. Reshape records and evidence (S3, S7). Absorb open issue `atelier-a0h0`
-   (generic `fields` map).
+6. [implemented; author proof complete; independent review pending] Reshape
+   records and evidence (S3, S7), absorbing `atelier-a0h0`. Issue, evidence,
+   and bundle schema version 2 replaces the generic fields map and old body
+   shape atomically. Tasks use Goal / Done when / Scope / Context; epics use
+   Outcome / Proof; missions use Outcome and Success criteria or a strategy
+   path without a revision. Draft epics may omit Proof until readiness.
+   Evidence has a full Git commit and an explicit pass, fail, blocked, or
+   not-applicable result; command capture derives its result and manual proof
+   requires `--result`. Freshness checks every post-pin commit edge and current
+   acceptance/code/policy changes, including committed edits later reverted.
+   New failures block completion even without a configured presence gate;
+   stale passes cannot clear failures. Status, notes, and record attachments
+   do not invalidate proof. Author regression proof includes 24 concurrent
+   label updates (the shared-lock version loses labels), stale code/policy/
+   acceptance, explicit non-pass results, and clean capture failures. The
+   migrated 1,000-issue/200-evidence release fixture has medians of
+   29.1–37.7 ms and a maximum of 46.2 ms across 10 runs. All 481 workspace
+   tests, formatting, whitespace, tracker lint, and dead/unused-code checks pass.
+   All writes now own an exclusive read/validate/write transaction. Policy
+   rejects close reasons on non-terminal transitions; evidence capture load
+   failures include `atelier check` recovery guidance. Public bundle examples
+   preview/apply/check successfully; the negative example rejects its intended
+   unsupported resource. Full logs are in `/tmp/step6-*.log` for review.
 7. In-repo review records, gates as graph nodes, `atelier merge` (S1, S2).
 8. Policy from the base branch; shell checks.
 9. `prime`, `land`, `setup` (S6); cross-branch status.
@@ -130,20 +152,15 @@ an independent review.
 
 Deferred review findings to resolve in later steps:
 
-- Read-modify-write under a shared lock in `issue update`, link/unlink, and
-  transitions (concurrent writers can lose changes).
 - `start` treats a remote-only branch as new and branches from HEAD.
 - `start` writes owner and issue records separately after switching.
 - `work.terminal` passes for an empty mission; no gate uses it yet (step 7).
-- `close_reason` may be required on a non-done transition and is then
-  dropped; reject in policy validation.
 - `check` reports only the first graph error when several exist.
 - Leftover ignored files from the old model (`.atelier/state.db`,
   `.atelier/cache/`, `.atelier/rules/`, `.activity/` directories, `[review]`
   config) now fail commands; needed for the one-time migration of other repos.
 - Git-cleanup failures in `prune` still exit 0; prune gives no branch
   recovery hint.
-- Recovery hint missing on the evidence-capture load path.
 - `nearest_parent_epic` has branches made unreachable by load-time checks.
 - Test hooks (`ATELIER_TEST_*` env vars) ship in the production binary.
 - Docs still describing removed behavior: `workflow-configuration.md` review

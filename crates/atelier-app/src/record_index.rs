@@ -536,10 +536,9 @@ impl RecordIndex {
         let policy_path = repo_root.join(WORKFLOW_POLICY_PATH);
         let policy_exists = policy_path.exists();
         if !policy_exists
-            && self
-                .issues
-                .values()
-                .all(|record| record.issue.fields.is_empty())
+            && self.issues.values().all(|record| {
+                record.issue.strategy.is_none() && record.issue.workflow_branch.is_none()
+            })
         {
             return Ok(());
         }

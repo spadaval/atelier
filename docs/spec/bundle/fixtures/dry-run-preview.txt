@@ -1,0 +1,18 @@
+Bundle preview is valid.
+Applied:       false
+Preview:       true
+
+Records
+-------
+  issues: 4
+  evidence: 1
+  relationships: 5
+  notes: 1
+
+Relationships
+-------------
+  evidence/evidence.bundle-contract -> issue/issue.define-schema (validates)
+  issue/epic.bundle-contract -> issue/issue.define-schema (parent)
+  issue/epic.bundle-contract -> issue/issue.validate-fixtures (parent)
+  issue/issue.define-schema -> issue/issue.validate-fixtures (blocks)
+  issue/mission.bundle-contract -> issue/epic.bundle-contract (advances)

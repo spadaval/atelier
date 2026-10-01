@@ -21,11 +21,9 @@ use atelier_app::issue_inventory::{
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{EvidenceRecord, Issue, IssuePriority, ISSUE_NOTE_KINDS};
+use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::validate_issue_type;
-use atelier_records::{
-    parse_issue_sections, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
-};
+use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
@@ -388,11 +386,9 @@ fn render_issue_show_human(
     render_transition_readiness(index, canonical_id, object)?;
 
     if let Some(sections) = &object.sections {
-        print_text_section("Description", Some(&sections.description));
-        print_text_section("Outcome", Some(&sections.outcome));
-        print_text_section("Evidence", Some(&sections.evidence));
-        print_text_section("Notes", sections.notes.as_deref());
-        print_text_section("Close Reason", sections.close_reason.as_deref());
+        for name in IssueSections::ALL_NAMES {
+            print_text_section(name.title(), sections.section(name));
+        }
     } else {
         print_text_section("Description", object.description.as_deref());
     }
@@ -613,28 +609,6 @@ fn render_transition_readiness(
     Ok(())
 }
 
-fn linked_validating_evidence(index: &RecordIndex, issue_id: &str) -> Result<Vec<EvidenceRecord>> {
-    let mut evidence = Vec::new();
-    for link in index.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        let evidence_id = if link.source_kind == "evidence" {
-            Some(link.source_id)
-        } else if link.target_kind == "evidence" {
-            Some(link.target_id)
-        } else {
-            None
-        };
-        if let Some(evidence_id) = evidence_id {
-            evidence.push(index.require_evidence(&evidence_id)?.clone());
-        }
-    }
-    evidence.sort_by(|a, b| a.header.id.cmp(&b.header.id));
-    evidence.dedup_by(|a, b| a.header.id == b.header.id);
-    Ok(evidence)
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct EvidenceGateStatus {
     pub passed: bool,
@@ -645,53 +619,18 @@ pub(crate) fn issue_evidence_gate_status(
     issue: &Issue,
     sections: Option<&IssueSections>,
 ) -> Result<EvidenceGateStatus> {
-    let evidence = linked_validating_evidence(index, &issue.id)?;
-    Ok(issue_evidence_gate_status_from_records(
-        issue, sections, &evidence,
-    ))
-}
-
-fn issue_evidence_gate_status_from_records(
-    issue: &Issue,
-    sections: Option<&IssueSections>,
-    evidence: &[EvidenceRecord],
-) -> EvidenceGateStatus {
-    if evidence.is_empty() {
-        return evidence_gate(
-            false,
-            "no validating evidence link found",
-            Some(evidence_help_hint()),
-        );
-    }
-
-    let _ = issue;
     let _ = sections;
-    let passing = evidence.iter().any(|record| {
-        record.data.success.unwrap_or_else(|| {
-            !matches!(record.header.status.as_str(), "blocked" | "fail" | "failed")
-        })
-    });
-    if passing {
-        evidence_gate(true, "passing validating evidence is linked", None)
-    } else {
-        evidence_gate(
-            false,
-            "expected at least 1 passing evidence record",
-            Some(evidence_help_hint()),
-        )
-    }
-}
-
-pub(crate) fn evidence_help_hint() -> String {
-    "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
-}
-
-fn evidence_gate(
-    passed: bool,
-    _reason: impl Into<String>,
-    _help: Option<String>,
-) -> EvidenceGateStatus {
-    EvidenceGateStatus { passed }
+    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    let gate = atelier_app::evidence_freshness::issue_evidence_gate_status(
+        index,
+        layout.repo_root(),
+        &issue.id,
+        1,
+        None,
+    )?;
+    Ok(EvidenceGateStatus {
+        passed: gate.passed,
+    })
 }
 
 fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> {
@@ -1695,7 +1634,8 @@ pub fn create_lifecycle(
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
-            fields: Default::default(),
+            strategy: None,
+            workflow_branch: None,
             parent_id: None,
             created_at: now,
             updated_at: now,
@@ -1789,35 +1729,27 @@ fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<Strin
 }
 
 fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {
-    if input.issue_type != "mission" {
-        let description = lifecycle_issue_description(input);
-        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
-    }
-    let Some(body) = input.body.filter(|body| has_level_two_heading(body)) else {
-        let description = lifecycle_issue_description(input);
-        return Ok(IssueSections::unchecked_from_body(description.as_deref()));
-    };
-
-    let normalized = if has_issue_section(body, "Description") {
-        body.to_string()
-    } else {
-        format!(
-            "## Description\n\nNo description provided.\n\n{}",
-            body.trim()
+    if let Some(body) = input
+        .body
+        .or(input.description)
+        .filter(|body| has_level_two_heading(body))
+    {
+        if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty()
+        {
+            bail!("sectioned mission content cannot be combined with mission section flags; put the content in --body");
+        }
+        return atelier_records::parse_issue_sections_for_type(
+            body,
+            Path::new("<issue create --body>"),
+            input.issue_type,
         )
-    };
-    let mut sections = parse_issue_sections(&normalized, Path::new("<issue create --body>"))
-        .context("Invalid sectioned mission --body")?;
-
-    let mut additions = Vec::new();
-    append_named_list(&mut additions, "Constraints", &input.constraints);
-    append_named_list(&mut additions, "Risks", &input.risks);
-    append_named_list(&mut additions, "Validation", &input.validation);
-    if !additions.is_empty() {
-        sections.description.push_str("\n\n");
-        sections.description.push_str(&additions.join("\n\n"));
+        .context("Invalid sectioned --body");
     }
-    Ok(sections)
+    let description = lifecycle_issue_description(input);
+    Ok(IssueSections::for_type(
+        input.issue_type,
+        description.as_deref(),
+    ))
 }
 
 fn has_level_two_heading(body: &str) -> bool {
@@ -1827,14 +1759,6 @@ fn has_level_two_heading(body: &str) -> bool {
         };
         !rest.starts_with('#')
             && (rest.is_empty() || rest.chars().next().is_some_and(char::is_whitespace))
-    })
-}
-
-fn has_issue_section(body: &str, name: &str) -> bool {
-    body.lines().any(|line| {
-        line.strip_prefix("##")
-            .filter(|rest| !rest.starts_with('#'))
-            .is_some_and(|rest| rest.trim() == name)
     })
 }
 
@@ -1957,6 +1881,7 @@ pub fn update_lifecycle(
     }
     if let Some(issue_type) = input.issue_type {
         validate_configured_issue_type(state_dir, issue_type)?;
+        record.sections.change_type(issue_type);
         record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
     }
@@ -2091,16 +2016,19 @@ mod tests {
                 status: status.to_string(),
                 issue_type: "task".to_string(),
                 priority: priority.to_string(),
-                fields: BTreeMap::new(),
+                strategy: None,
+                workflow_branch: None,
                 parent_id: None,
                 created_at: now,
                 updated_at: now,
                 closed_at: None,
             },
             labels: Vec::new(),
-            sections: IssueSections::unchecked_from_body(Some(
-                "## Description\n\nFixture.\n\n## Outcome\n\nFixture.",
-            )),
+            sections: atelier_records::parse_issue_sections(
+                "## Goal\n\nFixture.\n\n## Done when\n\nFixture.",
+                Path::new("<fixture>"),
+            )
+            .unwrap(),
             relationships: Relationships::default(),
         }
     }
@@ -2119,16 +2047,19 @@ mod tests {
                     status: "todo".to_string(),
                     issue_type: "task".to_string(),
                     priority: "medium".to_string(),
-                    fields: BTreeMap::new(),
+                    strategy: None,
+                    workflow_branch: None,
                     parent_id: None,
                     created_at: now,
                     updated_at: now,
                     closed_at: None,
                 },
                 labels: Vec::new(),
-                sections: IssueSections::unchecked_from_body(Some(
-                    "## Description\n\nNotes race.\n\n## Outcome\n\nNo note is lost.",
-                )),
+                sections: atelier_records::parse_issue_sections(
+                    "## Goal\n\nNotes race.\n\n## Done when\n\nNo note is lost.",
+                    Path::new("<fixture>"),
+                )
+                .unwrap(),
                 relationships: Relationships::default(),
             })
             .unwrap();

@@ -17,22 +17,14 @@
           {
             "client_ref": "issue.define-schema"
           }
-        ]
+        ],
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     ],
     "issues": [
       {
-        "blocks": [
-          {
-            "id": "atelier-z1p8"
-          }
-        ],
         "client_ref": "issue.define-schema",
         "depends_on": [],
-        "description": "Define the JSON shape for authored bundle files.",
-        "evidence": [
-          "Diff whitespace checks pass."
-        ],
         "issue_type": "task",
         "labels": [
           "bundle",
@@ -47,10 +39,11 @@
         ],
         "operation": "create",
         "parent": {
-          "id": "atelier-k7mq"
+          "client_ref": "epic.bundle-contract"
         },
         "priority": "medium",
-        "title": "Define bundle JSON schema"
+        "title": "Define bundle JSON schema",
+        "body": "## Goal\n\nDefine the JSON shape for authored bundle files.\n\n## Done when\n\n- Diff whitespace checks pass."
       },
       {
         "client_ref": "issue.validate-fixtures",
@@ -59,46 +52,39 @@
             "client_ref": "issue.define-schema"
           }
         ],
-        "description": "Prove diagnostics and preview shape with compact JSON examples.",
-        "evidence": [
-          "Validation errors include JSON paths and client refs."
-        ],
         "issue_type": "validation",
         "labels": [
           "bundle",
           "fixtures"
         ],
         "notes": [],
-        "outcome": [
-          "Bundle fixtures cover valid input, invalid input, and preview output."
-        ],
         "parent": {
-          "client_ref": "issue.define-schema"
+          "client_ref": "epic.bundle-contract"
         },
         "priority": "low",
-        "title": "Validate bundle fixtures"
-      }
-    ],
-    "missions": [
+        "title": "Validate bundle fixtures",
+        "body": "## Goal\n\nProve diagnostics and preview shape with compact JSON examples.\n\n## Done when\n\n- Bundle fixtures cover valid input, invalid input, and preview output."
+      },
       {
-        "body": "Coordinate the bundle contract work with implementation and validation issues.",
+        "client_ref": "epic.bundle-contract",
+        "title": "Bundle contract increment",
+        "issue_type": "epic",
+        "body": "## Outcome\n\nThe authored bundle schema and fixtures describe actual preview and apply behavior.\n\n## Proof\n\nThe positive fixture previews and applies; the negative fixture reports an unsupported resource."
+      },
+      {
         "client_ref": "mission.bundle-contract",
-        "labels": [
-          "bundle"
-        ],
         "title": "Bundle contract mission",
-        "work": [
+        "issue_type": "mission",
+        "body": "## Outcome\n\nThe bundle format can express a complete local plan.\n\n## Success criteria\n\nFixtures demonstrate the current authoring contract.",
+        "advances": [
           {
-            "client_ref": "issue.define-schema"
-          },
-          {
-            "client_ref": "issue.validate-fixtures"
+            "client_ref": "epic.bundle-contract"
           }
         ]
       }
     ]
   },
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Bundle contract fixture"
 }

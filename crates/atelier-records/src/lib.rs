@@ -9,11 +9,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
-    ISSUE_PRIORITY_LABELS, ISSUE_STRATEGY_FIELD,
+    ISSUE_PRIORITY_LABELS,
 };
 pub use atelier_core::{
-    EvidenceRecord, IssueFieldError, IssueRecord, IssueSectionName, IssueSectionState,
-    IssueSections, IssueStrategy, Record, RecordHeader,
+    EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueRecord, IssueSectionName,
+    IssueSectionState, IssueSections, IssueStrategy, Record, RecordHeader, WorkflowBranch,
 };
 
 pub mod document;
@@ -226,7 +226,8 @@ impl CanonicalIssueRecord {
             },
             issue_type: self.issue.issue_type,
             priority: self.issue.priority,
-            fields: self.issue.fields,
+            strategy: self.issue.strategy,
+            workflow_branch: self.issue.workflow_branch,
             closed_at: self.issue.closed_at,
             sections: self.sections,
         })
@@ -335,7 +336,7 @@ impl RecordStore {
     }
 
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_issue_record(record, Path::new("<record>"))?;
         let spec = canonical_record_kind(ISSUE_KIND.kind)?;
         let relative = canonical_record_path(spec, &record.issue.id)?;
@@ -349,7 +350,7 @@ impl RecordStore {
         summary: &str,
         data: EvidenceRecordData,
     ) -> Result<EvidenceRecord> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let now = Utc::now();
         let record = EvidenceRecord {
             header: RecordHeader {
@@ -357,7 +358,7 @@ impl RecordStore {
                 id: self.allocate_record_id()?,
                 title: title.to_string(),
                 status: status.to_string(),
-                labels: default_record_labels("evidence"),
+                labels: Vec::new(),
                 relationships: Relationships::default(),
                 created_at: now,
                 updated_at: now,
@@ -370,14 +371,14 @@ impl RecordStore {
     }
 
     pub fn write_evidence_atomic(&self, record: &EvidenceRecord) -> Result<()> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let spec = canonical_record_kind("evidence")?;
         let relative = canonical_record_path(spec, &record.header.id)?;
         self.write_atomic(&relative, render_evidence_record_file(record)?)
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let header = record.header();
         let spec = canonical_record_kind(&header.kind)?;
         let relative = canonical_record_path(spec, &header.id)?;
@@ -392,7 +393,7 @@ impl RecordStore {
         target_id: &str,
         role: &str,
     ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_link_type(role)?;
         let mut record = self.load_record_by_id(source_kind, source_id)?;
         let attachment = attachment_relationship(target_kind, target_id, role);
@@ -422,7 +423,7 @@ impl RecordStore {
         target_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_relationship_type(relation_type)?;
         let mut record = self.load_record_by_id(source_kind, source_id)?;
         let relation = relates_relationship(target_kind, target_id, relation_type);
@@ -436,7 +437,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if label.len() > MAX_LABEL_LEN {
             bail!(
                 "Label exceeds maximum length of {} characters",
@@ -453,7 +454,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if parent_id == child_id {
             bail!("An issue cannot be its own parent");
         }
@@ -470,7 +471,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let target = issue_relationship_target(child_id);
         let mut parent = self.load_issue_by_id(parent_id)?;
         let original_len = parent.relationships.children.len();
@@ -508,7 +509,7 @@ impl RecordStore {
         target_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_record_kind(target_kind)?;
         record_id::validate_record_id(target_id)?;
         if is_attachment_role(relation_type) {
@@ -547,7 +548,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let mut record = self.load_issue_by_id(issue_id)?;
         let original_len = record.labels.len();
         record.labels.retain(|existing| existing != label);
@@ -559,7 +560,7 @@ impl RecordStore {
     }
 
     pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if blocked_id == blocker_id {
             bail!("An issue cannot block itself");
         }
@@ -579,7 +580,7 @@ impl RecordStore {
     }
 
     pub fn remove_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         self.load_issue_by_id(blocked_id)?;
         let target = issue_relationship_target(blocked_id);
         let mut blocker = self.load_issue_by_id(blocker_id)?;
@@ -601,7 +602,7 @@ impl RecordStore {
         related_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_issue_relation_type(relation_type)?;
         if issue_id == related_id {
             bail!("Cannot relate an issue to itself");
@@ -632,7 +633,7 @@ impl RecordStore {
         related_id: &str,
         relation_type: &str,
     ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_relation_type(relation_type)?;
         let mut issue = self.load_issue_by_id(issue_id)?;
         let mut related = self.load_issue_by_id(related_id)?;
@@ -663,7 +664,7 @@ impl RecordStore {
     }
 
     fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {
-        let _lock = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
+        let _lock = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let path = self.state_dir.join(relative);
         let parent = path
             .parent()
@@ -755,13 +756,16 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_scalar(&mut output, "id", Some(&record.issue.id))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
-    let mut fields = record.issue.fields.clone();
-    if let Some(strategy) = fields.remove(ISSUE_STRATEGY_FIELD) {
-        let strategy = IssueStrategy::from_value(&strategy)
-            .context("Invalid issue strategy field while rendering record file")?;
-        write_yaml_value(&mut output, ISSUE_STRATEGY_FIELD, &strategy.to_value())?;
+    if let Some(strategy) = &record.issue.strategy {
+        write_yaml_value(&mut output, "strategy", &serde_json::to_value(strategy)?)?;
     }
-    write_yaml_map_if_not_empty(&mut output, "fields", &fields)?;
+    if let Some(branch) = &record.issue.workflow_branch {
+        write_yaml_value(
+            &mut output,
+            "workflow_branch",
+            &serde_json::to_value(branch)?,
+        )?;
+    }
     write_yaml_scalar(
         &mut output,
         "priority",
@@ -783,7 +787,7 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     output.push_str("---\n\n");
     let body = render_issue_sections(&record.sections);
     let path = issue_record_path(&record.issue.id);
-    parse_issue_sections(&body, &path).with_context(|| {
+    parse_issue_sections_for_type(&body, &path, &record.issue.issue_type).with_context(|| {
         format!(
             "Refusing to write issue {} because its rendered body would not parse",
             record.issue.id
@@ -806,7 +810,8 @@ fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueR
             status: issue.header.status.clone(),
             issue_type: issue.issue_type.clone(),
             priority: issue.priority.clone(),
-            fields: issue.fields.clone(),
+            strategy: issue.strategy.clone(),
+            workflow_branch: issue.workflow_branch.clone(),
             parent_id: None,
             created_at: issue.header.created_at,
             updated_at: issue.header.updated_at,
@@ -818,35 +823,20 @@ fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueR
     })
 }
 
-fn render_issue_sections(sections: &IssueSections) -> String {
-    let mut body = format!(
-        "## Description\n\n{}\n\n## Outcome\n\n{}",
-        sections.description.trim(),
-        sections.outcome.trim()
-    );
-    if let Some(evidence) = sections.section(IssueSectionName::Evidence) {
-        body.push_str("\n\n## Evidence\n\n");
-        body.push_str(evidence.trim());
-    }
-    if let Some(notes) = sections
-        .notes
-        .as_deref()
-        .map(str::trim)
-        .filter(|notes| !notes.is_empty())
-    {
-        body.push_str("\n\n## Notes\n\n");
-        body.push_str(notes);
-    }
-    if let Some(close_reason) = sections
-        .close_reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|reason| !reason.is_empty())
-    {
-        body.push_str("\n\n## Close Reason\n\n");
-        body.push_str(close_reason);
-    }
-    normalize_body(&body)
+pub fn render_issue_sections(sections: &IssueSections) -> String {
+    normalize_body(
+        &IssueSections::ALL_NAMES
+            .into_iter()
+            .filter_map(|name| {
+                sections
+                    .section(name)
+                    .map(str::trim)
+                    .filter(|text| !text.is_empty())
+                    .map(|text| format!("## {}\n\n{text}", name.title()))
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+    )
 }
 
 pub fn render_record(record: &Record) -> Result<String> {
@@ -854,11 +844,7 @@ pub fn render_record(record: &Record) -> Result<String> {
     if spec.kind == ISSUE_KIND.kind {
         return render_issue_record(&canonical_issue_record_from_record(record)?);
     }
-    let mut record = record.clone();
-    if spec.kind == "evidence" {
-        record.header_mut().relationships =
-            normalize_legacy_evidence_relationships(record.header().relationships.clone());
-    }
+    let record = record.clone();
     validate_record(&record, Path::new("<record>"), spec)?;
     let mut relationships = record.header().relationships.clone();
     sort_relationships(&mut relationships);
@@ -945,22 +931,18 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
-    let fields = optional_object(&front_matter, "fields", relative)?;
-    let strategy = front_matter
-        .get(ISSUE_STRATEGY_FIELD)
-        .map(IssueStrategy::from_value)
-        .transpose()
-        .map_err(|error| {
-            anyhow!(
-                "workflow_issue_field_invalid: issue {} has an invalid strategy field in {}: {}",
-                id,
-                display_state_path(relative),
-                error
-            )
-        })?;
-    let sections = parse_issue_sections(body, relative)?;
+    if front_matter.contains_key("fields") {
+        bail!("generic issue fields are obsolete in {}; use typed strategy and workflow_branch front matter", display_state_path(relative));
+    }
+    let strategy = optional_yaml_value::<IssueStrategy>(&front_matter, "strategy", relative)?;
+    if let Some(strategy) = &strategy {
+        IssueStrategy::new(&strategy.path)?;
+    }
+    let workflow_branch =
+        optional_yaml_value::<WorkflowBranch>(&front_matter, "workflow_branch", relative)?;
+    let sections = parse_issue_sections_for_type(body, relative, &issue_type)?;
 
-    let mut issue = Issue {
+    let issue = Issue {
         id,
         title: require_scalar(&front_matter, "title", relative)?,
         description: None,
@@ -968,15 +950,13 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         issue_type,
         priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
             .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
-        fields,
+        strategy,
+        workflow_branch,
         parent_id: None,
         created_at: require_datetime(&front_matter, "created_at", relative)?,
         updated_at,
         closed_at: closed_at.or((status == "closed").then_some(updated_at)),
     };
-    if let Some(strategy) = strategy {
-        issue.set_strategy(strategy);
-    }
 
     Ok(CanonicalIssueRecord {
         issue,
@@ -1070,6 +1050,17 @@ fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Resu
     validate_priority(&record.issue.priority)
         .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?;
     validate_relationships(&record.relationships, relative)?;
+    if !record.sections.matches_type(&record.issue.issue_type) {
+        bail!(
+            "body shape does not match issue_type {}",
+            record.issue.issue_type
+        );
+    }
+    for state in record.sections.section_states() {
+        if state.required && state.empty {
+            bail!("required section {} is empty", state.name.title());
+        }
+    }
     for name in IssueSections::ALL_NAMES {
         if let Some(text) = record.sections.section(name) {
             validate_issue_section_text(&record.issue.id, name, text)?;
@@ -1129,7 +1120,7 @@ fn render_evidence_record(
     let Record::Evidence(record) = record else {
         bail!("Expected evidence record");
     };
-    let data = normalized_evidence_data(record.data.clone());
+    let data = record.data.clone();
     let body = render_evidence_body(Some(&record.summary), &data);
 
     let mut output = String::new();
@@ -1141,6 +1132,8 @@ fn render_evidence_record(
     )?;
     write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
     write_yaml_scalar(&mut output, "evidence_type", Some(&data.evidence_type))?;
+    write_yaml_scalar(&mut output, "commit", Some(&data.commit))?;
+    write_yaml_scalar(&mut output, "result", Some(data.result.as_str()))?;
     write_yaml_scalar(
         &mut output,
         "captured_at",
@@ -1167,11 +1160,7 @@ fn render_evidence_record(
     write_yaml_relationships(&mut output, relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(
-        &mut output,
-        "status",
-        Some(normalized_evidence_status(&record.header.status)),
-    )?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
     write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
     write_yaml_scalar(
         &mut output,
@@ -1191,15 +1180,17 @@ fn parse_evidence_record(
     spec: &RecordKindSpec,
     id: String,
 ) -> Result<Record> {
-    let relationships =
-        normalize_legacy_evidence_relationships(parse_relationships(&front_matter, relative)?);
+    let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
-    let status =
-        normalized_evidence_status(&require_scalar(&front_matter, "status", relative)?).to_string();
+    let status = require_scalar(&front_matter, "status", relative)?;
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
 
     let mut data = EvidenceRecordData {
+        commit: require_scalar(&front_matter, "commit", relative)?,
+        result: require_scalar(&front_matter, "result", relative)?
+            .parse::<EvidenceResult>()
+            .map_err(anyhow::Error::msg)?,
         evidence_type: require_scalar(&front_matter, "evidence_type", relative)?,
         captured_at: require_datetime(&front_matter, "captured_at", relative)?,
         command: optional_scalar(&front_matter, "command")?,
@@ -1222,7 +1213,7 @@ fn parse_evidence_record(
     };
     apply_evidence_body_sections(&mut data, body);
 
-    Ok(Record::Evidence(EvidenceRecord {
+    let record = Record::Evidence(EvidenceRecord {
         header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
@@ -1235,7 +1226,9 @@ fn parse_evidence_record(
         },
         data,
         summary: body.to_string(),
-    }))
+    });
+    validate_evidence_record(&record, relative)?;
+    Ok(record)
 }
 
 fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
@@ -1245,63 +1238,48 @@ fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
             display_state_path(relative)
         );
     };
-    let data = normalized_evidence_data(record.data.clone());
+    let data = record.data.clone();
     if data.evidence_type.trim().is_empty() {
         bail!(
             "Evidence record {} must include evidence_type",
             display_state_path(relative)
         );
     }
-    validate_relationships(&record.header.relationships, relative)?;
-    Ok(())
-}
-
-fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> Relationships {
-    let mut normalized_attachments = relationships.attachments.clone();
-    for relation in &relationships.relates {
-        if relation.relation_type == "validates" {
-            normalized_attachments.push(AttachmentRelationship {
-                kind: relation.kind.clone(),
-                id: relation.id.clone(),
-                role: "validates".to_string(),
-            });
+    if !matches!(data.commit.len(), 40 | 64) || !data.commit.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        bail!(
+            "evidence commit must be a full Git object ID in {}",
+            display_state_path(relative)
+        );
+    }
+    if data
+        .success
+        .is_some_and(|success| success != (data.result == EvidenceResult::Pass))
+    {
+        bail!(
+            "evidence result conflicts with captured command success in {}",
+            display_state_path(relative)
+        );
+    }
+    if data.command.is_some() {
+        if let Some(status) = &data.exit_status {
+            let expected = if status == "not-started" {
+                EvidenceResult::Blocked
+            } else if status == "0" {
+                EvidenceResult::Pass
+            } else {
+                EvidenceResult::Fail
+            };
+            if data.result != expected {
+                bail!(
+                    "explicit evidence result conflicts with captured command exit status in {}",
+                    display_state_path(relative)
+                );
+            }
         }
     }
-    relationships.attachments = normalized_attachments;
-    relationships
-        .relates
-        .retain(|relation| relation.relation_type != "validates");
-    sort_relationships(&mut relationships);
-    relationships
-}
-
-fn default_record_labels(kind: &str) -> Vec<String> {
-    let _ = kind;
-    Vec::new()
-}
-
-fn normalized_evidence_data(mut data: EvidenceRecordData) -> EvidenceRecordData {
-    if data.agent_identity.is_none() {
-        data.agent_identity = data.producer.clone();
-    }
-    if matches!(
-        data.proof_scope.as_deref(),
-        Some("scoped to the attached target or summary")
-    ) {
-        data.proof_scope = None;
-    }
-    if matches!(data.independence_level.as_deref(), Some("unspecified")) {
-        data.independence_level = None;
-    }
-    data.follow_up_ids.sort();
-    data
-}
-
-fn normalized_evidence_status(status: &str) -> &str {
-    match status {
-        "pass" | "fail" | "blocked" | "deferred" => "recorded",
-        other => other,
-    }
+    validate_relationships(&record.header.relationships, relative)?;
+    Ok(())
 }
 
 fn add_relationship_to_bucket(
@@ -1425,27 +1403,6 @@ fn require_i64(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> 
             display_state_path(relative)
         )
     })
-}
-
-fn optional_object(
-    values: &BTreeMap<String, Value>,
-    key: &str,
-    relative: &Path,
-) -> Result<BTreeMap<String, Value>> {
-    let Some(value) = values.get(key) else {
-        return Ok(BTreeMap::new());
-    };
-    let Some(object) = value.as_object() else {
-        bail!(
-            "Front matter key '{}' must be a mapping in {}",
-            key,
-            display_state_path(relative)
-        );
-    };
-    Ok(object
-        .iter()
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect())
 }
 
 fn require_datetime(
@@ -1668,6 +1625,14 @@ fn reject_legacy_issue_keys(values: &BTreeMap<String, Value>, relative: &Path) -
 }
 
 pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections> {
+    parse_issue_sections_for_type(body, relative, "task")
+}
+
+pub fn parse_issue_sections_for_type(
+    body: &str,
+    relative: &Path,
+    issue_type: &str,
+) -> Result<IssueSections> {
     let mut sections = BTreeMap::<String, String>::new();
     let mut current_heading: Option<String> = None;
     let mut current_body = String::new();
@@ -1727,43 +1692,56 @@ pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections
             relative,
             issue_id.as_deref(),
         )?;
-    } else {
-        bail!(
-            "{}",
-            issue_section_diagnostic(
-                issue_id.as_deref(),
-                IssueSectionName::Description.title(),
-                relative,
-                "Missing required issue body section 'Description'"
-            )
-        );
     }
-
-    let description = required_issue_section(
-        &sections,
-        IssueSectionName::Description,
-        relative,
-        issue_id.as_deref(),
-    )?;
-    let outcome = required_issue_section(
-        &sections,
-        IssueSectionName::Outcome,
-        relative,
-        issue_id.as_deref(),
-    )?;
-    let evidence = sections
-        .get(IssueSectionName::Evidence.title())
-        .cloned()
-        .unwrap_or_default();
-    let notes = sections.get(IssueSectionName::Notes.title()).cloned();
-    let close_reason = sections.get(IssueSectionName::CloseReason.title()).cloned();
-
+    use IssueSectionName::*;
+    let required = |name| required_issue_section(&sections, name, relative, issue_id.as_deref());
+    let optional = |name: IssueSectionName| sections.get(name.title()).cloned();
+    let (body, allowed) = match issue_type {
+        "epic" => (
+            IssueBody::Epic {
+                outcome: required(Outcome)?,
+                proof: optional(Proof),
+                delivers: optional(Delivers),
+                scope: optional(Scope),
+                unknowns: optional(Unknowns),
+                design: optional(Design),
+            },
+            vec![Outcome, Proof, Delivers, Scope, Unknowns, Design],
+        ),
+        "mission" => (
+            IssueBody::Mission {
+                outcome: required(Outcome)?,
+                success_criteria: optional(SuccessCriteria),
+                epics: optional(Epics),
+            },
+            vec![Outcome, SuccessCriteria, Epics],
+        ),
+        _ => (
+            IssueBody::Issue {
+                goal: required(Goal)?,
+                done_when: required(DoneWhen)?,
+                scope: optional(Scope),
+                context: optional(Context),
+            },
+            vec![Goal, DoneWhen, Scope, Context],
+        ),
+    };
+    for heading in sections.keys() {
+        if !allowed
+            .iter()
+            .chain([Notes, CloseReason].iter())
+            .any(|name| name.title() == heading)
+        {
+            bail!(
+                "section '{heading}' is not valid for {issue_type} in {}",
+                display_state_path(relative)
+            );
+        }
+    }
     Ok(IssueSections {
-        description,
-        outcome,
-        evidence,
-        notes,
-        close_reason,
+        body,
+        notes: optional(Notes),
+        close_reason: optional(CloseReason),
     })
 }
 
@@ -2123,28 +2101,6 @@ fn write_yaml_array_if_not_empty(output: &mut String, key: &str, values: &[Strin
     Ok(())
 }
 
-fn write_yaml_map_if_not_empty(
-    output: &mut String,
-    key: &str,
-    values: &BTreeMap<String, Value>,
-) -> Result<()> {
-    if values.is_empty() {
-        return Ok(());
-    }
-    output.push_str(key);
-    output.push_str(":\n");
-    let rendered = serde_yaml::to_string(values)?;
-    for line in rendered.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        output.push_str("  ");
-        output.push_str(line);
-        output.push('\n');
-    }
-    Ok(())
-}
-
 fn write_evidence_target(output: &mut String, target: &EvidenceTarget) -> Result<()> {
     output.push_str("target:\n");
     output.push_str("  kind: ");
@@ -2175,7 +2131,11 @@ fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String
         return normalized;
     }
 
-    let summary = evidence_summary_from_legacy_body(&normalized).unwrap_or(&data.evidence_type);
+    let summary = if normalized.is_empty() {
+        &data.evidence_type
+    } else {
+        &normalized
+    };
     let mut output = String::new();
     output.push_str("## Summary\n\n");
     output.push_str(summary);
@@ -2216,28 +2176,6 @@ fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String
 fn evidence_body_has_transcript_sections(body: &str) -> bool {
     body.lines()
         .any(|line| matches!(line.trim(), "## Command" | "## Stdout" | "## Stderr"))
-}
-
-fn evidence_summary_from_legacy_body(body: &str) -> Option<&str> {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let mut end = trimmed.len();
-    for marker in [
-        "\n\nCommand:",
-        "\nCommand:",
-        "\nExit status:",
-        "\n\nStdout summary",
-        "\nStdout summary",
-        "\n\nStderr summary",
-        "\nStderr summary",
-    ] {
-        if let Some(index) = trimmed.find(marker) {
-            end = end.min(index);
-        }
-    }
-    Some(trimmed[..end].trim())
 }
 
 fn push_evidence_stream_section(
@@ -2354,7 +2292,7 @@ fn evidence_stream_from_section(content: &str) -> atelier_core::EvidenceStreamSu
         .lines()
         .find_map(|line| line.trim().strip_prefix("Bytes:"))
         .and_then(|value| value.trim().parse::<usize>().ok())
-        .unwrap_or_else(|| summary.len());
+        .unwrap_or(summary.len());
     let truncated = content
         .lines()
         .find_map(|line| line.trim().strip_prefix("Truncated:"))
@@ -2482,7 +2420,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn issue_record(id: &str) -> CanonicalIssueRecord {
-        let body = "## Description\n\nCanonical body\n\n## Outcome\n\nIssue Markdown round-trips without losing fields.\n\n## Evidence\n\n- `cargo test record_store` passes.";
+        let body = "## Goal\n\nCanonical body\n\n## Done when\n\nIssue Markdown round-trips without losing fields.\n\n## Context\n\n- `cargo test record_store` passes.";
         CanonicalIssueRecord {
             issue: Issue {
                 id: id.to_string(),
@@ -2491,7 +2429,8 @@ mod tests {
                 status: "todo".to_string(),
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
-                fields: BTreeMap::new(),
+                strategy: None,
+                workflow_branch: None,
                 parent_id: None,
                 created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
                 updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
@@ -2540,6 +2479,8 @@ mod tests {
 
     fn evidence_record(id: &str) -> EvidenceRecord {
         let data = EvidenceRecordData {
+            commit: "a".repeat(40),
+            result: atelier_core::EvidenceResult::Pass,
             evidence_type: "validation".to_string(),
             captured_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 30, 0).unwrap(),
             command: Some("cargo test record_store".to_string()),
@@ -2596,7 +2537,7 @@ relationships:
   children: []
   relates: []
 schema: "atelier.issue"
-schema_version: 1
+schema_version: 2
 status: "todo"
 title: "Write RecordStore"
 updated_at: "2026-06-10T13:00:00+00:00"
@@ -2624,8 +2565,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(
             canonical_contracts,
             vec![
-                ("issue", "atelier.issue", 1, Some("issues")),
-                ("evidence", "atelier.evidence", 1, Some("evidence")),
+                ("issue", "atelier.issue", 2, Some("issues")),
+                ("evidence", "atelier.evidence", 2, Some("evidence")),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
@@ -2660,7 +2601,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(parsed, record);
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.issue\""));
-        assert!(text.contains("schema_version: 1"));
+        assert!(text.contains("schema_version: 2"));
         assert!(text.contains("priority: \"P1\""));
         assert!(text.contains("relationships:\n"));
         assert!(text.contains("  blocks:\n  - kind: \"issue\"\n    id: \"atelier-bbbb\"\n"));
@@ -2670,8 +2611,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
         ));
         assert!(!text.contains("acceptance:"));
         assert!(!text.contains("evidence_required:"));
-        assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
-        assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
+        assert!(text.contains("## Done when\n\nIssue Markdown round-trips without losing fields."));
+        assert!(text.contains("## Context\n\n- `cargo test record_store` passes."));
         assert!(!text.contains("closed_at:"));
     }
 
@@ -2704,7 +2645,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let dir = tempdir().unwrap();
         let store = RecordStore::new(dir.path().join(".atelier"));
         let mut record = issue_record("atelier-smug");
-        record.sections.close_reason = Some("done\n## Evidence\nsmuggled".to_string());
+        record.sections.close_reason = Some("done\n## Context\nsmuggled".to_string());
 
         let error = store.write_issue_atomic(&record).unwrap_err().to_string();
 
@@ -2748,16 +2689,16 @@ updated_at: "2026-06-10T13:00:00+00:00"
     fn mission_record_round_trips_typed_strategy_reference() {
         let mut record = issue_record("atelier-strg");
         record.issue.issue_type = "mission".to_string();
+        record.sections = IssueSections::for_type("mission", Some("Mission outcome."));
         record.issue.status = "draft".to_string();
         record
             .issue
-            .set_strategy(IssueStrategy::new("docs/strategies/adaptive-mission.md", 2).unwrap());
+            .set_strategy(IssueStrategy::new("docs/strategies/adaptive-mission.md").unwrap());
 
         let text = render_issue_record(&record).unwrap();
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-strg")).unwrap();
 
-        assert!(text
-            .contains("strategy:\n  path: docs/strategies/adaptive-mission.md\n  revision: 2\n"));
+        assert!(text.contains("strategy:\n  path: docs/strategies/adaptive-mission.md\n"));
         assert!(!text.contains("fields:\n"));
         assert_eq!(
             parsed.issue.strategy().unwrap(),
@@ -2792,7 +2733,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         };
         let text = issue::render_issue_record(&record).unwrap();
         assert!(document::split_document(&text).is_some());
-        assert_eq!(issue::IssueSectionName::Evidence.title(), "Evidence");
+        assert_eq!(issue::IssueSectionName::Context.title(), "Context");
         let _store = store::RecordStore::new(tempdir().unwrap().path());
         validation::validate_priority("high").unwrap();
         let _: Option<evidence::EvidenceOutputSummary> = None;
@@ -2906,7 +2847,7 @@ relationships:
     id: "atelier-proof"
     type: "validates"
 schema: "atelier.evidence"
-schema_version: 1
+schema_version: 2
 status: "recorded"
 title: "Legacy evidence proof"
 updated_at: "2026-06-10T13:00:00+00:00"
@@ -2945,21 +2886,21 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_accepts_sectioned_body_without_legacy_arrays() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
         let text = sectioned_issue_text("atelier-abcd", body);
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
 
         assert_eq!(parsed.issue.description, None);
         assert_eq!(
-            parsed.sections.description,
+            parsed.sections.section(IssueSectionName::Goal).unwrap(),
             "Canonical problem statement.".to_string()
         );
         assert_eq!(
-            parsed.sections.outcome,
+            parsed.sections.section(IssueSectionName::DoneWhen).unwrap(),
             "The desired finished world is observable.".to_string()
         );
         assert_eq!(
-            parsed.sections.evidence,
+            parsed.sections.section(IssueSectionName::Context).unwrap(),
             "- `atelier check atelier-abcd` passes.".to_string()
         );
         assert_eq!(
@@ -2970,7 +2911,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_sections_report_shared_presence_state_and_search_text() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let sections = parse_issue_sections(body, &issue_record_path("atelier-abcd")).unwrap();
         let states = sections.section_states();
 
@@ -2982,7 +2923,7 @@ Legacy evidence summary.
             2
         );
         assert!(states.iter().any(|state| {
-            state.name == IssueSectionName::Evidence
+            state.name == IssueSectionName::Context
                 && !state.required
                 && state.present
                 && !state.empty
@@ -3000,7 +2941,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_legacy_acceptance_and_evidence_front_matter() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body).replace(
             "created_at:",
             "acceptance:\n  - \"legacy acceptance\"\nevidence_required:\n  - \"legacy proof\"\ncreated_at:",
@@ -3014,7 +2955,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_label_priority_in_canonical_markdown() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body)
             .replace("priority: \"P1\"", "priority: \"high\"");
 
@@ -3024,46 +2965,44 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_accepts_missing_evidence_section() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
 
         assert_eq!(
-            parsed.sections.outcome,
+            parsed.sections.section(IssueSectionName::DoneWhen).unwrap(),
             "The desired finished world is observable."
         );
-        assert_eq!(parsed.sections.section(IssueSectionName::Evidence), None);
-        assert!(!render_issue_record(&parsed)
-            .unwrap()
-            .contains("## Evidence"));
+        assert_eq!(parsed.sections.section(IssueSectionName::Context), None);
+        assert!(!render_issue_record(&parsed).unwrap().contains("## Context"));
     }
 
     #[test]
     fn issue_parser_contract_rejects_missing_required_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Missing required issue body section 'Outcome'"));
+            .contains("Missing required issue body section 'Done when'"));
     }
 
     #[test]
     fn issue_parser_contract_rejects_duplicate_recognized_headings() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.\n\n## Outcome\n\nA second outcome.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.\n\n## Done when\n\nA second outcome.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Duplicate issue body section 'Outcome'"));
+            .contains("Duplicate issue body section 'Done when'"));
     }
 
     #[test]
     fn issue_parser_contract_rejects_content_before_first_recognized_heading() {
-        let body = "Preamble is not part of the issue contract.\n\n## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "Preamble is not part of the issue contract.\n\n## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3074,7 +3013,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_unknown_top_level_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3085,13 +3024,13 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_empty_present_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
+        let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Empty issue body section 'Outcome'"));
+            .contains("Empty issue body section 'Done when'"));
     }
 
     #[test]
@@ -3350,5 +3289,66 @@ Legacy evidence summary.
         assert!(!kinds.contains(&"session"));
         assert!(canonical_record_kind("session").is_err());
         assert!(validate_canonical_record_kind("session").is_err());
+    }
+    #[test]
+    fn version_two_rejects_old_versions_generic_fields_and_strategy_revisions() {
+        let record = issue_record("atelier-vers");
+        let text = render_issue_record(&record).unwrap();
+        let path = issue_record_path("atelier-vers");
+        let old = parse_issue_record(
+            &text.replace("schema_version: 2", "schema_version: 1"),
+            &path,
+        )
+        .unwrap_err();
+        assert!(old.to_string().contains("schema_version"), "{old}");
+        let fields = parse_issue_record(&text.replace("priority:", "fields: {}\npriority:"), &path)
+            .unwrap_err();
+        assert!(
+            fields
+                .to_string()
+                .contains("generic issue fields are obsolete"),
+            "{fields}"
+        );
+        let strategy = parse_issue_record(
+            &text.replace(
+                "priority:",
+                "strategy: {path: docs/strategy.md, revision: 2}\npriority:",
+            ),
+            &path,
+        )
+        .unwrap_err();
+        assert!(format!("{strategy:#}").contains("revision"), "{strategy:#}");
+        let evidence = render_evidence_record_file(&evidence_record("atelier-evers")).unwrap();
+        let path = Path::new("evidence/atelier-evers.md");
+        assert!(parse_evidence_record_file(
+            &evidence.replace("schema_version: 2", "schema_version: 1"),
+            path
+        )
+        .is_err());
+        assert!(
+            parse_evidence_record_file(&evidence.replace("result: \"pass\"\n", ""), path).is_err()
+        );
+        assert!(
+            parse_evidence_record_file(&evidence.replace(&"a".repeat(40), "abcd"), path).is_err()
+        );
+    }
+
+    #[test]
+    fn task_epic_and_mission_bodies_round_trip_their_own_shapes() {
+        for (kind, body) in [
+            ("task", "## Goal\n\nBounded change.\n\n## Done when\n\nFocused test passes.\n\n## Scope\n\nsrc/lib.rs\n\n## Context\n\nADR 0019."),
+            ("epic", "## Outcome\n\nObservable increment.\n\n## Proof\n\nAuthor tests and independent validation.\n\n## Unknowns\n\nOne design question."),
+            ("mission", "## Outcome\n\nMission outcome.\n\n## Success criteria\n\nS1: scenario passes."),
+        ] {
+            let mut record = issue_record("atelier-body");
+            record.issue.issue_type = kind.to_string();
+            record.sections = parse_issue_sections_for_type(body, Path::new("<body>"), kind).unwrap();
+            let text = render_issue_record(&record).unwrap();
+            let parsed = parse_issue_record(&text, &issue_record_path("atelier-body")).unwrap();
+            assert_eq!(parsed.sections, record.sections);
+            for other_kind in ["task", "epic", "mission"] {
+                if kind != other_kind { assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err()); }
+            }
+        }
     }
 }

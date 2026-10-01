@@ -13,7 +13,7 @@ pub struct RecordKindSpec {
 pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
     kind: "issue",
     schema: "atelier.issue",
-    schema_version: 1,
+    schema_version: 2,
     canonical_dir: Some("issues"),
     extension: "md",
 };
@@ -21,7 +21,7 @@ pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
 pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
     kind: "evidence",
     schema: "atelier.evidence",
-    schema_version: 1,
+    schema_version: 2,
     canonical_dir: Some("evidence"),
     extension: "md",
 }];
@@ -31,7 +31,7 @@ pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
     RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
-        schema_version: 1,
+        schema_version: 2,
         canonical_dir: Some("evidence"),
         extension: "md",
     },

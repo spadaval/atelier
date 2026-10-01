@@ -90,6 +90,17 @@ fn migrate_default_issue_workflow(dir: &Path) {
 }
 
 fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
+    edit_canonical_issue(dir, mission_id, |markdown| {
+        markdown
+            .replace(
+                "Success criteria were not specified.",
+                "The mission scenario demonstrates its acceptance claims.",
+            )
+            .replace(
+                "Goal was not specified.",
+                "Coordinate an observable increment of tracker work.",
+            )
+    });
     let (success, _, stderr) = run_atelier(dir, &["issue", "transition", mission_id, "ready"]);
     assert!(success, "mission ready transition failed: {stderr}");
 }
@@ -100,7 +111,12 @@ fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
 /// or closeout rather than the draft-to-ready validators themselves.
 fn move_epic_directly_to_ready(dir: &Path, epic_id: &str) {
     edit_canonical_issue(dir, epic_id, |markdown| {
-        replace_front_matter_scalar(&markdown, "status", "todo")
+        let markdown = replace_front_matter_scalar(&markdown, "status", "todo");
+        if markdown.contains("## Proof") {
+            markdown
+        } else {
+            format!("{markdown}\n## Proof\n\nFocused tests show the outcome.\n")
+        }
     });
 }
 
@@ -136,13 +152,21 @@ fn init_git_repo(dir: &Path) {
 fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
     let needs_git = matches!(
         args,
-        ["issue", "transition", ..] | ["issue", "close", ..] | ["abandon", ..]
+        ["issue", "transition", ..]
+            | ["issue", "close", ..]
+            | ["abandon", ..]
+            | ["evidence", "record", ..]
+            | ["--quiet", "evidence", "record", ..]
     );
     if needs_git && !dir.join(".git").exists() {
         init_git_repo(dir);
         commit_if_dirty(dir, "test fixture state before workflow command");
     }
-    if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
+    if matches!(
+        args,
+        ["issue", "close", ..] | ["evidence", "record", ..] | ["--quiet", "evidence", "record", ..]
+    ) && dir.join(".git").exists()
+    {
         commit_if_dirty(dir, "test fixture state before transition close");
     }
 }
@@ -408,10 +432,10 @@ fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
         return;
     }
     edit_canonical_issue(dir, issue_id, |markdown| {
-        if description.contains("## Description") {
+        if description.contains("## Goal") {
             replace_markdown_body(&markdown, description)
         } else {
-            replace_issue_section(&markdown, "Description", description)
+            replace_issue_section(&markdown, "Goal", description)
         }
     });
 }
@@ -570,6 +594,8 @@ fn attach_evidence(
         &[
             "evidence",
             "record",
+            "--result",
+            result,
             "--kind",
             "validation",
             "--target",
@@ -583,32 +609,6 @@ fn attach_evidence(
         "{evidence_out}"
     );
     let evidence_id = record_id_by_title(dir, "evidence", summary);
-    let success = result == "pass";
-    edit_canonical_record(dir, "evidence", &evidence_id, |markdown| {
-        let markdown = replace_front_matter_scalar(&markdown, "status", result);
-        if markdown.contains("\nsuccess:") {
-            markdown
-                .lines()
-                .map(|line| {
-                    if line.starts_with("success:") {
-                        format!("success: {}", if success { "true" } else { "false" })
-                    } else {
-                        line.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-                + "\n"
-        } else {
-            markdown.replace(
-                "schema_version: 1\n",
-                &format!(
-                    "schema_version: 1\nsuccess: {}\n",
-                    if success { "true" } else { "false" }
-                ),
-            )
-        }
-    });
     evidence_id
 }
 
@@ -638,19 +638,12 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
 }
 
 fn ensure_issue_completion_sections(dir: &Path, issue_id: &str) {
-    edit_canonical_issue(dir, issue_id, |mut markdown| {
-        markdown = markdown.replace(
-            "Outcome was not specified.",
-            &format!(
-                "The issue outcome is complete and ready for terminal checks.\n\n## Evidence\n\n{}",
-                format!("- Evidence record attached to issue/{issue_id} validates completion.")
-            ),
-        );
+    edit_canonical_issue(dir, issue_id, |markdown| {
         markdown.replace(
-            "Evidence was not specified.",
-            &format!("- Evidence record attached to issue/{issue_id} validates completion."),
+            "Done when was not specified.",
+            "A focused regression test proves the intended behavior.",
         )
-    });
+    })
 }
 
 fn ensure_all_issue_completion_sections(dir: &Path) {
@@ -802,3 +795,5 @@ mod records_evidence;
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]
 mod unicode;
+#[path = "cli_integration/verified_records.rs"]
+mod verified_records;

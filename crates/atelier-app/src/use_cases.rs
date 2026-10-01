@@ -155,6 +155,8 @@ mod tests {
             "recorded",
             "Concrete evidence service proof.",
             EvidenceRecordData {
+                commit: "a".repeat(40),
+                result: atelier_core::EvidenceResult::Pass,
                 evidence_type: "test".to_string(),
                 captured_at: now,
                 command: None,

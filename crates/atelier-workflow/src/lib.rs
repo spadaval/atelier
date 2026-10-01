@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
-use serde_json::Value as JsonValue;
 use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -1361,6 +1360,19 @@ fn validate_transition_statuses(
             workflow_name, transition_name
         ),
     )?;
+    if transition
+        .required_fields
+        .iter()
+        .any(|field| field == "close_reason")
+        && policy.status_category(&transition.to) != Some("done")
+    {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_transition",
+            display_path,
+            format!("workflows.{workflow_name}.transitions.{transition_name}.required_fields"),
+            "close_reason may only be required by a done-category transition",
+        ));
+    }
     for from_status in &transition.from {
         ensure_known_status(
             &policy.statuses,
@@ -1466,52 +1478,30 @@ fn validate_issue_fields_against_policy(
     issue: &Issue,
     policy_path: &Path,
 ) -> Result<()> {
-    for (field_name, value) in &issue.fields {
-        if field_name == ISSUE_STRATEGY_FIELD {
-            validate_strategy_field(value, issue, policy_path)?;
-        } else if field_name == WORKFLOW_BRANCH_FIELD {
-            validate_workflow_branch_field(value, issue, policy_path)?;
-        } else {
-            return Err(WorkflowPolicyError {
-                code: "workflow_issue_field_unknown",
-                path: policy_path.display().to_string(),
-                message: format!(
-                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'strategy' and 'workflow_branch'",
-                    issue.id, field_name
-                ),
-                field: Some(field_name.to_string()),
-                reference: Some(issue.id.clone()),
-                line: None,
-                column: None,
-            }
-            .into());
+    if let Some(strategy) = &issue.strategy {
+        if issue.issue_type != "mission" {
+            return invalid_strategy_field(
+                issue,
+                policy_path,
+                "strategy is only valid on issue_type 'mission'",
+            );
+        }
+        IssueStrategy::new(&strategy.path)?;
+    }
+    if let Some(branch) = &issue.workflow_branch {
+        for (key, value) in [
+            ("work_branch", &branch.work_branch),
+            ("branch_base", &branch.branch_base),
+        ] {
+            validate_branch_value(
+                value,
+                &policy_path.display().to_string(),
+                &format!("workflow_branch.{key}"),
+                "workflow branch",
+            )?;
         }
     }
     Ok(())
-}
-
-fn validate_strategy_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
-    if issue.issue_type != "mission" {
-        return invalid_strategy_field(
-            issue,
-            policy_path,
-            "field 'strategy' is only valid on issue_type 'mission'",
-        );
-    }
-    IssueStrategy::from_value(value)
-        .map(|_| ())
-        .map_err(|error| {
-            WorkflowPolicyError {
-                code: "workflow_issue_field_invalid",
-                path: policy_path.display().to_string(),
-                message: format!("issue {} field 'strategy' is invalid: {}", issue.id, error),
-                field: Some(ISSUE_STRATEGY_FIELD.to_string()),
-                reference: Some(issue.id.clone()),
-                line: None,
-                column: None,
-            }
-            .into()
-        })
 }
 
 fn invalid_strategy_field(issue: &Issue, policy_path: &Path, reason: &str) -> Result<()> {
@@ -1520,59 +1510,6 @@ fn invalid_strategy_field(issue: &Issue, policy_path: &Path, reason: &str) -> Re
         path: policy_path.display().to_string(),
         message: format!("issue {} field 'strategy' is invalid: {}", issue.id, reason),
         field: Some(ISSUE_STRATEGY_FIELD.to_string()),
-        reference: Some(issue.id.clone()),
-        line: None,
-        column: None,
-    }
-    .into())
-}
-
-fn validate_workflow_branch_field(
-    value: &JsonValue,
-    issue: &Issue,
-    policy_path: &Path,
-) -> Result<()> {
-    let Some(object) = value.as_object() else {
-        return invalid_workflow_branch_field(
-            issue,
-            policy_path,
-            "field 'workflow_branch' must be an object",
-        );
-    };
-    let allowed_keys = ["work_branch", "branch_base"];
-    for key in object.keys() {
-        if !allowed_keys.contains(&key.as_str()) {
-            return invalid_workflow_branch_field(
-                issue,
-                policy_path,
-                &format!("field 'workflow_branch.{key}' is not supported"),
-            );
-        }
-    }
-    for key in allowed_keys {
-        let Some(branch) = object.get(key).and_then(JsonValue::as_str) else {
-            return invalid_workflow_branch_field(
-                issue,
-                policy_path,
-                &format!("field 'workflow_branch.{key}' must be a non-empty string"),
-            );
-        };
-        validate_branch_value(
-            branch,
-            &policy_path.display().to_string(),
-            &format!("workflow_branch.{key}"),
-            "workflow branch field",
-        )?;
-    }
-    Ok(())
-}
-
-fn invalid_workflow_branch_field(issue: &Issue, policy_path: &Path, detail: &str) -> Result<()> {
-    Err(WorkflowPolicyError {
-        code: "workflow_branch_field_invalid",
-        path: policy_path.display().to_string(),
-        message: format!("issue {} has invalid workflow_branch: {detail}", issue.id),
-        field: Some(WORKFLOW_BRANCH_FIELD.to_string()),
         reference: Some(issue.id.clone()),
         line: None,
         column: None,
@@ -1777,18 +1714,20 @@ mod tests {
         )
     }
 
-    fn issue_with_fields(fields: std::collections::BTreeMap<String, JsonValue>) -> Issue {
+    fn test_issue() -> Issue {
+        let now = chrono::Utc::now();
         Issue {
             id: "atelier-pr01".to_string(),
-            title: "Pull request".to_string(),
+            title: "Test".to_string(),
             description: None,
+            issue_type: "task".to_string(),
             status: "todo".to_string(),
             priority: "medium".to_string(),
-            issue_type: "task".to_string(),
-            fields,
+            strategy: None,
+            workflow_branch: None,
             parent_id: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: now,
+            updated_at: now,
             closed_at: None,
         }
     }
@@ -1940,13 +1879,8 @@ mod tests {
     #[test]
     fn validates_strategy_field_as_mission_only() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut issue = issue_with_fields(BTreeMap::from([(
-            ISSUE_STRATEGY_FIELD.to_string(),
-            serde_json::json!({
-                "path": "docs/strategies/adaptive-mission.md",
-                "revision": 2
-            }),
-        )]));
+        let mut issue = test_issue();
+        issue.strategy = Some(IssueStrategy::new("docs/strategies/adaptive-mission.md").unwrap());
         issue.issue_type = "mission".to_string();
         issue.status = "draft".to_string();
 
@@ -1965,41 +1899,24 @@ mod tests {
     #[test]
     fn validates_workflow_branch_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let issue = issue_with_fields(BTreeMap::from([(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "work_branch": "task/atelier-pr01",
-                "branch_base": "main",
-            }),
-        )]));
+        let mut issue = test_issue();
+        issue.workflow_branch = Some(atelier_core::WorkflowBranch {
+            work_branch: "task/atelier-pr01".to_string(),
+            branch_base: "main".to_string(),
+        });
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
     }
 
     #[test]
-    fn rejects_integration_sub_fields_in_workflow_branch() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let issue = issue_with_fields(BTreeMap::from([(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "work_branch": "task/atelier-pr01",
-                "branch_base": "main",
-                "integration_target": "main",
-            }),
-        )]));
-
-        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_branch_field_invalid"), "{error}");
-        assert!(error.contains("integration_target"), "{error}");
+    fn typed_workflow_branch_rejects_obsolete_integration_field() {
+        assert!(serde_json::from_value::<atelier_core::WorkflowBranch>(serde_json::json!({"work_branch": "task/test", "branch_base": "main", "integration_target": "main"})).is_err());
     }
 
     #[test]
     fn rejects_unknown_issue_type_in_record() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut issue = issue_with_fields(Default::default());
+        let mut issue = test_issue();
         issue.issue_type = "incident".to_string();
 
         let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
@@ -2059,7 +1976,7 @@ mod tests {
     #[test]
     fn branch_name_for_owner_uses_issue_type_and_id() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut issue = issue_with_fields(Default::default());
+        let mut issue = test_issue();
         issue.id = "atelier-abc1".to_string();
 
         assert_eq!(
@@ -2206,5 +2123,19 @@ mod tests {
         .to_string();
         assert!(error.contains("workflow_config_invalid_issue_type"));
         assert!(error.contains("task"));
+    }
+    #[test]
+    fn close_reason_requirement_rejects_nonterminal_destination() {
+        let policy = valid_policy().replace(
+            "        description: Start work.",
+            "        required_fields: [close_reason]\n        description: Start work.",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("close_reason may only be required by a done-category transition"),
+            "{error}"
+        );
     }
 }

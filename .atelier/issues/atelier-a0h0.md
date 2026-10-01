@@ -13,22 +13,44 @@ relationships:
   attachments: []
   relates: []
 schema: "atelier.issue"
-schema_version: 1
-status: "todo"
+schema_version: 2
+status: "review"
 title: "Clarify or remove generic issue fields storage"
-updated_at: "2026-06-20T15:56:45.847091628+00:00"
+updated_at: "2026-10-01T20:21:21.230270+00:00"
 ---
 
-## Description
+## Goal
 
-Issue records expose a generic `fields` map in code and canonical parsing, but schema version 3 only accepts the built-in `review` field. This is technically a generic custom-field mechanism with a single allowed key, which makes the product contract ambiguous.
+Replace the generic issue fields map with typed strategy and workflow branch
+metadata, and align issue, epic, mission, and evidence records with the verified
+repo-native tracker contract in ADR 0019.
 
-## Outcome
+## Done when
 
-The issue record contract is explicit: either the generic `fields` bag is removed/renamed in favor of first-class typed fields such as `review`, or the product intentionally defines a real user-facing custom field system. The target decision should avoid preserving a misleading half-measure.
+Schema version 2 round-trips typed bodies and rejects the old metadata/version.
+CLI regression tests show explicit evidence results, full commit pins, stale
+acceptance/code/policy evidence including edit/revert history, newer failure
+blocking, and concurrent updates without lost data. Formatting, tracker lint,
+workspace tests, and the dead/unused-code scan pass after the change.
 
-## Evidence
+## Scope
 
-- Command proof: `rg "fields" crates/atelier-*` shows either no generic issue fields surface or a documented custom-field system.
-- Command proof: `target/debug/atelier rebuild` rejects unsupported issue metadata with a clear schema diagnostic.
-- File proof: `docs/architecture/markdown-first-record-store.md` and `docs/product/workflow-configuration.md` agree on the final issue field contract.
+Core record types, Markdown codecs, app evidence freshness, CLI callers and
+locking, public bundle fixtures, and the read-command benchmark generator.
+Review/merge gates and session commands remain separate rebuild slices.
+
+## Context
+
+- Strategy: `docs/strategies/atelier-rebuild.md`, step 6 (S3, S7).
+- Decision: `docs/adr/0019-verified-repo-native-tracker.md`.
+- Shapes: `.agents/skills/agent-factory/references/tracker-records.md`.
+- Proof: `crates/atelier-cli/tests/cli_integration/verified_records.rs` and
+  schema/shape tests in `crates/atelier-records/src/lib.rs`.
+
+## Notes
+
+- 2026-10-01 [handoff] Atomic schema migration implemented on the mission branch.
+  Author proof complete; independent review is pending with the orchestrator.
+  The shared-lock regression reproduced a lost label before the lock fix.
+  Bundle preview's evidence count and read-time commit validation regressions
+  were observed failing and then corrected. Logs: `/tmp/step6-*.log`.

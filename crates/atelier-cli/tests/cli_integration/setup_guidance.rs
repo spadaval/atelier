@@ -1166,11 +1166,14 @@ fn test_evidence_help_hides_predecessor_subcommands() {
 #[test]
 fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "record", "--help"]);
+    let (success, stdout, stderr) = run_atelier_raw(
+        dir.path(),
+        &["evidence", "record", "--result", "pass", "--help"],
+    );
     assert!(success, "evidence record help failed: {stderr}");
     assert!(stdout.contains("issue/<id>"));
     assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind validation \"checked claim X; result pass\""
+        "atelier evidence record --target issue/<id> --kind validation --result pass \"checked claim X\""
     ));
     assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
@@ -1625,11 +1628,11 @@ fn test_root_start_reports_workflow_validator_failure() {
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
     assert!(
-        options_out.contains("no validating evidence link found"),
+        options_out.contains("expected at least 1 fresh passing evidence"),
         "{options_out}"
     );
     assert!(
-        options_out.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        options_out.contains("Hint: Record fresh proof"),
         "{options_out}"
     );
 
@@ -1638,13 +1641,10 @@ fn test_root_start_reports_workflow_validator_failure() {
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
     assert!(
-        stdout.contains("no validating evidence link found"),
+        stdout.contains("expected at least 1 fresh passing evidence"),
         "{stdout}"
     );
-    assert!(
-        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("Hint: Record fresh proof"), "{stdout}");
     assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();

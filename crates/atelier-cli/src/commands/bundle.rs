@@ -10,7 +10,7 @@ use atelier_core::{EvidenceRecordData, Issue, Record};
 use atelier_records::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status,
 };
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
+use atelier_records::{CanonicalIssueRecord, RecordStore, Relationships};
 
 pub fn preview(index: &RecordIndex, input: &str) -> Result<()> {
     let bundle = load_bundle(input)?;
@@ -70,8 +70,9 @@ struct BundleIssue {
     title: String,
     #[serde(default)]
     operation: Option<String>,
+    body: String,
     #[serde(default)]
-    description: Option<String>,
+    strategy: Option<atelier_core::IssueStrategy>,
     #[serde(default = "default_issue_type")]
     issue_type: String,
     #[serde(default = "default_priority")]
@@ -90,10 +91,6 @@ struct BundleIssue {
     advances: Vec<BundleRef>,
     #[serde(default)]
     notes: Vec<BundleNote>,
-    #[serde(default)]
-    outcome: Vec<String>,
-    #[serde(default)]
-    evidence: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +102,7 @@ struct BundleEvidence {
     operation: Option<String>,
     evidence_type: String,
     result: String,
+    commit: String,
     #[serde(default)]
     body: String,
     #[serde(default)]
@@ -276,7 +274,7 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
     if bundle.schema != "atelier.bundle" {
         bail!("Invalid bundle schema '{}'", bundle.schema);
     }
-    if bundle.schema_version != 1 {
+    if bundle.schema_version != 2 {
         bail!(
             "Unsupported bundle schema_version {}",
             bundle.schema_version
@@ -309,6 +307,18 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
             bail!("Issue {} title cannot be empty", issue.client_ref);
         }
         validate_bundle_issue_type(&issue.issue_type)?;
+        atelier_records::parse_issue_sections_for_type(
+            &issue.body,
+            Path::new("<bundle issue body>"),
+            &issue.issue_type,
+        )
+        .with_context(|| format!("Invalid body for {}", issue.client_ref))?;
+        if let Some(strategy) = &issue.strategy {
+            if issue.issue_type != "mission" {
+                bail!("strategy is only valid for mission {}", issue.client_ref);
+            }
+            atelier_core::IssueStrategy::new(&strategy.path)?;
+        }
         validate_priority(&issue.priority)?;
         if let Some(status) = &issue.status {
             validate_bundle_issue_status(&issue.issue_type, status)?;
@@ -320,6 +330,14 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
     }
     for evidence in &bundle.resources.evidence {
         validate_operation(evidence.operation.as_deref(), &evidence.client_ref)?;
+        if !matches!(evidence.commit.len(), 40 | 64)
+            || !evidence.commit.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            bail!(
+                "Evidence {} requires a full Git commit ID",
+                evidence.client_ref
+            );
+        }
         if evidence.title.trim().is_empty() {
             bail!("Evidence {} title cannot be empty", evidence.client_ref);
         }
@@ -339,7 +357,7 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
                 evidence.client_ref
             );
         }
-        if !["pass", "fail", "blocked", "informational"].contains(&evidence.result.as_str()) {
+        if !["pass", "fail", "blocked", "not-applicable"].contains(&evidence.result.as_str()) {
             bail!(
                 "Invalid evidence result '{}' for {}",
                 evidence.result,
@@ -623,14 +641,18 @@ fn apply_bundle_to_state(
     let store = RecordStore::new(state_dir);
 
     for issue in &plan.issues {
-        let description = issue_description(issue);
+        let description = Some(issue.body.clone());
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
         let status = match &issue.status {
             Some(status) => status.clone(),
             None => workflow_initial_issue_status(&issue.issue_type)?,
         };
-        let sections = IssueSections::unchecked_from_body(description.as_deref());
+        let sections = atelier_records::parse_issue_sections_for_type(
+            &issue.body,
+            Path::new("<bundle issue body>"),
+            &issue.issue_type,
+        )?;
         let record = CanonicalIssueRecord {
             issue: Issue {
                 id: id.clone(),
@@ -639,7 +661,8 @@ fn apply_bundle_to_state(
                 status: status.clone(),
                 issue_type: issue.issue_type.clone(),
                 priority: issue.priority.clone(),
-                fields: Default::default(),
+                strategy: issue.strategy.clone(),
+                workflow_branch: None,
                 parent_id: None,
                 created_at: now,
                 updated_at: now,
@@ -668,6 +691,11 @@ fn apply_bundle_to_state(
 
     for evidence in &plan.evidence {
         let data = EvidenceRecordData {
+            commit: evidence.commit.clone(),
+            result: evidence
+                .result
+                .parse::<atelier_core::EvidenceResult>()
+                .map_err(anyhow::Error::msg)?,
             evidence_type: evidence.evidence_type.clone(),
             captured_at: chrono::Utc::now(),
             command: None,
@@ -681,7 +709,7 @@ fn apply_bundle_to_state(
             follow_up_ids: Vec::new(),
             exit_code: None,
             exit_status: Some(evidence.result.clone()),
-            success: Some(evidence.result == "pass"),
+            success: None,
             spawn_error: None,
             output: None,
             target: None,
@@ -1171,39 +1199,11 @@ fn add_relationship(
     Ok(())
 }
 
-fn issue_description(issue: &BundleIssue) -> Option<String> {
-    let description = issue
-        .description
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("Imported bundle issue.");
-    let outcome = if issue.outcome.is_empty() {
-        "Outcome was not specified in the bundle.".to_string()
-    } else {
-        bullet_list(&issue.outcome)
-    };
-    let mut body = format!("## Description\n\n{description}\n\n## Outcome\n\n{outcome}");
-    if !issue.evidence.is_empty() {
-        body.push_str("\n\n## Evidence\n\n");
-        body.push_str(&bullet_list(&issue.evidence));
-    }
-    Some(body)
-}
-
-fn bullet_list(values: &[String]) -> String {
-    values
-        .iter()
-        .map(|value| format!("- {value}"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn preview_bundle_summary(bundle: &BundleFile, plan: &BundleGraphPlan<'_>) -> Value {
     let mut records = BTreeMap::<String, Vec<Value>>::new();
     for (client_ref, kind) in bundle.client_refs() {
         records
-            .entry(format!("{kind}s"))
+            .entry(created_key(&kind).to_string())
             .or_default()
             .push(json!({ "client_ref": client_ref, "kind": kind }));
     }
@@ -1377,21 +1377,18 @@ mod tests {
     }
 
     #[test]
-    fn bundle_issue_omits_evidence_section_when_no_proof_is_planned() {
-        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({
-            "client_ref": "future.epic",
-            "title": "Future outcome",
-            "issue_type": "epic",
-            "description": "A meaningful draft outcome.",
-            "outcome": ["The future result is explicit."]
-        }))
+    fn bundle_issue_uses_typed_markdown_body() {
+        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.epic", "title": "Future outcome", "issue_type": "epic", "body": "## Outcome\n\nA meaningful draft outcome." })).unwrap();
+        let sections = atelier_records::parse_issue_sections_for_type(
+            &issue.body,
+            Path::new("<bundle>"),
+            &issue.issue_type,
+        )
         .unwrap();
-
-        let body = issue_description(&issue).unwrap();
-
-        assert!(body.contains("## Outcome"));
-        assert!(!body.contains("## Evidence"));
-        assert!(!body.contains("Evidence was not specified"));
+        assert!(matches!(
+            sections.body,
+            atelier_core::IssueBody::Epic { proof: None, .. }
+        ));
     }
 
     #[test]

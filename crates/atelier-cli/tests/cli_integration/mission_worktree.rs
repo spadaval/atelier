@@ -67,7 +67,7 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
         format!(
             r#"{{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Mission fixture",
   "resources": {{
     "issues": [
@@ -75,7 +75,7 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
         "client_ref": "mission.fixture",
         "title": {title:?},
         "issue_type": "mission",
-        "description": "Mission fixture body.",
+        "body": "\u0023\u0023 Outcome\n\nMission fixture body.\n\n## Success criteria\n\nThe intended mission result is observable.",
         "labels": ["mission"]
       }}
     ]
@@ -644,13 +644,13 @@ fn test_lint_rejects_missing_required_issue_section() {
     let issue_id = issue_id_by_title(dir.path(), "Missing outcome lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Done when")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for missing Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Outcome")
+            && stdout.contains("section Done when")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -669,14 +669,17 @@ fn test_lint_rejects_empty_required_issue_section() {
     let issue_id = issue_id_by_title(dir.path(), "Empty outcome lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    let invalid = markdown.replace("## Outcome\n\nOutcome was not specified.", "## Outcome\n\n");
+    let invalid = markdown.replace(
+        "## Done when\n\nDone when was not specified.",
+        "## Done when\n\n",
+    );
     std::fs::write(&issue_path, invalid).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for empty Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Outcome")
+            && stdout.contains("section Done when")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -694,13 +697,13 @@ fn test_lint_rejects_missing_outcome_section() {
     let issue_id = issue_id_by_title(dir.path(), "Missing outcome lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Done when")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for missing Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Outcome")
+            && stdout.contains("section Done when")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing Outcome diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -719,27 +722,24 @@ fn test_lint_rejects_empty_description_section() {
     let issue_id = issue_id_by_title(dir.path(), "Empty description lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    let invalid = markdown.replace(
-        "## Description\n\nNo description provided.",
-        "## Description\n\n",
-    );
+    let invalid = markdown.replace("## Goal\n\nGoal was not specified.", "## Goal\n\n");
     std::fs::write(&issue_path, invalid).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for empty Description");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Description")
+            && stdout.contains("section Goal")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing Description diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
 }
 
 #[test]
-fn test_lint_rejects_vague_evidence_even_when_notes_name_a_command() {
+fn test_lint_rejects_missing_acceptance_even_when_notes_name_a_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint flags vague Evidence entries.\n\n## Evidence\n\n- Validation complete.\n\n## Notes\n\n- `cargo test --test cli_integration vague_evidence` passes.";
+    let body = "## Goal\n\nDescription\n\n## Done when\n\nDone when was not specified.\n\n## Context\n\n- Validation complete.\n\n## Notes\n\n- `cargo test --test cli_integration vague_evidence` passes.";
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -760,10 +760,7 @@ fn test_lint_rejects_vague_evidence_even_when_notes_name_a_command() {
     let transcript = format!("{stdout}\n{stderr}");
     for needle in [
         &issue_id,
-        "section Evidence",
-        ".atelier/issues/",
-        "observable proof target",
-        "command, transcript, evidence record, test, review artifact, file change, or manual check",
+        "Issue section Done when must be present and non-empty",
     ] {
         assert!(
             transcript.contains(needle),
@@ -776,7 +773,7 @@ fn test_lint_rejects_vague_evidence_even_when_notes_name_a_command() {
 fn test_lint_accepts_concrete_evidence_without_optional_notes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint accepts concrete Evidence entries without optional Notes.\n\n## Evidence\n\n- `cargo test --test cli_integration concrete_evidence` passes.\n- Manual check confirms the lint diagnostic names the issue, section, and path.";
+    let body = "## Goal\n\nDescription\n\n## Done when\n\nLint accepts concrete Evidence entries without optional Notes.\n\n## Context\n\n- `cargo test --test cli_integration concrete_evidence` passes.\n- Manual check confirms the lint diagnostic names the issue, section, and path.";
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -810,8 +807,8 @@ fn test_lint_rejects_duplicate_recognized_issue_heading() {
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     let invalid = markdown.replace(
-        "## Outcome\n\nOutcome was not specified.",
-        "## Outcome\n\nOutcome was not specified.\n\n## Outcome\n\nSecond outcome should be rejected.",
+        "## Done when\n\nDone when was not specified.",
+        "## Done when\n\nDone when was not specified.\n\n## Done when\n\nSecond outcome should be rejected.",
     );
     std::fs::write(&issue_path, invalid).unwrap();
 
@@ -819,7 +816,7 @@ fn test_lint_rejects_duplicate_recognized_issue_heading() {
     assert!(!success, "lint should fail for duplicate Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Outcome")
+            && stdout.contains("section Done when")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -838,14 +835,14 @@ fn test_root_start_refuses_structurally_invalid_issue() {
     let issue_id = issue_id_by_title(dir.path(), "Invalid work start");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Done when")).unwrap();
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "root start should refuse invalid issue");
     assert!(
         stderr.contains(&format!("issue {issue_id}"))
-            && stderr.contains("section Outcome")
+            && stderr.contains("section Done when")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing refusal diagnostic, stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -1020,7 +1017,7 @@ fn test_queries_fail_naming_the_invalid_record_file() {
     assert!(success, "issue create failed: {stderr}");
     let schema_issue_id = issue_id_by_title(schema_dir.path(), "Schema drift");
     edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
-        markdown.replace("schema_version: 1", "schema_version: 99")
+        markdown.replace("schema_version: 2", "schema_version: 99")
     });
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
@@ -1121,21 +1118,21 @@ relationships:
   attachments: []
   relates: []
 schema: "atelier.issue"
-schema_version: 1
+schema_version: 2
 status: "todo"
 title: "Lint canonical source"
 updated_at: "2026-06-10T12:00:00+00:00"
 ---
 
-## Description
+## Goal
 
 Lint source fixture.
 
-## Outcome
+## Done when
 
 Lint rejects malformed canonical state.
 
-## Evidence
+## Context
 
 - Command transcript from `atelier check` reports the malformed record.
 "#
@@ -1177,7 +1174,7 @@ fn test_status_works_without_runtime_directory() {
     init_atelier(dir.path());
     migrate_default_issue_workflow(dir.path());
 
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nStatus reads current work from record files after ignored runtime deletion.\n\n## Evidence\n\n- `atelier status` prints the current-work issue.";
+    let body = "## Goal\n\nDescription\n\n## Done when\n\nStatus reads current work from record files after ignored runtime deletion.\n\n## Context\n\n- `atelier status` prints the current-work issue.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1209,7 +1206,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nFocused lint missing target body.\n\n## Outcome\n\nFocused lint reports a missing relationship target.\n\n## Evidence\n\n- `atelier check <issue-id>` reports the missing issue relationship target.";
+    let body = "## Goal\n\nFocused lint missing target body.\n\n## Done when\n\nFocused lint reports a missing relationship target.\n\n## Context\n\n- `atelier check <issue-id>` reports the missing issue relationship target.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1250,8 +1247,8 @@ fn test_focused_lint_validates_dependency_cycles() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let first_body = "## Description\n\nFocused lint cycle root body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
-    let second_body = "## Description\n\nFocused lint cycle leaf body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
+    let first_body = "## Goal\n\nFocused lint cycle root body.\n\n## Done when\n\nFocused lint reports dependency cycles.\n\n## Context\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
+    let second_body = "## Goal\n\nFocused lint cycle leaf body.\n\n## Done when\n\nFocused lint reports dependency cycles.\n\n## Context\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1329,7 +1326,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     );
     assert_lint_rejects_issue_edit(
         "Invalid schema version fixture",
-        |markdown, _issue_id| markdown.replace("schema_version: 1", "schema_version: 99"),
+        |markdown, _issue_id| markdown.replace("schema_version: 2", "schema_version: 99"),
         &["Unsupported schema_version 99"],
     );
     assert_lint_rejects_issue_edit(
@@ -1355,6 +1352,8 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
                 &[
                     "evidence",
                     "record",
+                    "--result",
+                    "pass",
                     "--kind",
                     "test",
                     "Duplicate ID evidence",
@@ -1399,7 +1398,7 @@ fn assert_lint_rejects_canonical_mutation(
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let body = format!(
-        "## Description\n\n{title} body.\n\n## Outcome\n\nCanonical lint rejects the targeted malformed record.\n\n## Evidence\n\n- `atelier check` reports the targeted malformed canonical record."
+        "## Goal\n\n{title} body.\n\n## Done when\n\nCanonical lint rejects the targeted malformed record.\n\n## Context\n\n- `atelier check` reports the targeted malformed canonical record."
     );
 
     let (success, issue_out, stderr) = run_atelier(
@@ -1440,7 +1439,7 @@ fn test_bundle_apply_records_links() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Bundle apply smoke",
   "resources": {
     "issues": [
@@ -1450,20 +1449,29 @@ fn test_bundle_apply_records_links() {
         "issue_type": "task",
         "priority": "medium",
         "status": "done",
-        "labels": ["bundle"],
-        "blocks": [{ "client_ref": "issue.blocked" }]
+        "labels": [
+          "bundle"
+        ],
+        "blocks": [
+          {
+            "client_ref": "issue.blocked"
+          }
+        ],
+        "body": "\u0023\u0023 Goal\n\nComplete prerequisite\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.blocked",
         "title": "Blocked bundle work",
         "issue_type": "task",
-        "priority": "medium"
+        "priority": "medium",
+        "body": "\u0023\u0023 Goal\n\nBlocked bundle work\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.epic",
         "title": "Bundle epic",
         "issue_type": "epic",
-        "priority": "high"
+        "priority": "high",
+        "body": "\u0023\u0023 Outcome\n\nBundle epic\n\n## Proof\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.work",
@@ -1471,23 +1479,39 @@ fn test_bundle_apply_records_links() {
         "issue_type": "feature",
         "priority": "high",
         "status": "in_progress",
-        "parent": { "client_ref": "issue.epic" },
-        "depends_on": [{ "client_ref": "issue.blocker" }],
-        "notes": [
-          { "body": "Zulu authored first" },
-          { "body": "Alpha authored second" }
+        "parent": {
+          "client_ref": "issue.epic"
+        },
+        "depends_on": [
+          {
+            "client_ref": "issue.blocker"
+          }
         ],
-        "outcome": ["summary maps client refs"],
-        "evidence": ["export check passes"]
+        "notes": [
+          {
+            "body": "Zulu authored first"
+          },
+          {
+            "body": "Alpha authored second"
+          }
+        ],
+        "body": "\u0023\u0023 Goal\n\nImplement bundle output\n\n## Done when\n\n- summary maps client refs"
       },
       {
         "client_ref": "mission.bundle",
         "title": "Bundle mission",
         "issue_type": "mission",
         "priority": "medium",
-        "labels": ["bundle", "mission"],
-        "advances": [{ "client_ref": "issue.epic" }],
-        "description": "Mission from bundle"
+        "labels": [
+          "bundle",
+          "mission"
+        ],
+        "advances": [
+          {
+            "client_ref": "issue.epic"
+          }
+        ],
+        "body": "\u0023\u0023 Outcome\n\nMission from bundle\n\n## Success criteria\n\nThe mission outcome is observable."
       }
     ],
     "evidence": [
@@ -1497,7 +1521,12 @@ fn test_bundle_apply_records_links() {
         "evidence_type": "test",
         "result": "pass",
         "body": "The apply smoke test passed.",
-        "validates": [{ "client_ref": "mission.bundle" }]
+        "validates": [
+          {
+            "client_ref": "mission.bundle"
+          }
+        ],
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     ]
   }
@@ -1641,19 +1670,29 @@ fn test_bundle_preview_rejects_duplicate_normalized_relationships_without_mutati
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Duplicate normalized relationship",
   "resources": {
     "issues": [
       {
         "client_ref": "issue.blocker",
         "title": "Bundle blocker",
-        "blocks": [{ "client_ref": "issue.blocked" }]
+        "blocks": [
+          {
+            "client_ref": "issue.blocked"
+          }
+        ],
+        "body": "\u0023\u0023 Goal\n\nBundle blocker\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.blocked",
         "title": "Bundle blocked",
-        "depends_on": [{ "client_ref": "issue.blocker" }]
+        "depends_on": [
+          {
+            "client_ref": "issue.blocker"
+          }
+        ],
+        "body": "\u0023\u0023 Goal\n\nBundle blocked\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1689,7 +1728,7 @@ fn test_bundle_rejects_removed_mission_resource_shape() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Removed mission shape",
   "resources": {
     "missions": [
@@ -1729,20 +1768,24 @@ fn test_bundle_rejects_mission_parent_scope() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Invalid mission parent",
   "resources": {
     "issues": [
       {
         "client_ref": "issue.parent",
         "title": "Parent epic",
-        "issue_type": "epic"
+        "issue_type": "epic",
+        "body": "\u0023\u0023 Outcome\n\nParent epic\n\n## Proof\n\nRun the focused regression tests."
       },
       {
         "client_ref": "mission.child",
         "title": "Invalid mission child",
         "issue_type": "mission",
-        "parent": { "client_ref": "issue.parent" }
+        "parent": {
+          "client_ref": "issue.parent"
+        },
+        "body": "\u0023\u0023 Outcome\n\nInvalid mission child\n\n## Success criteria\n\nThe mission outcome is observable."
       }
     ]
   }
@@ -1774,19 +1817,19 @@ fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserve
             format!(
                 r#"{{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Executable mission without receipts",
   "resources": {{
     "issues": [
       {{
         "client_ref": "issue.blocker",
-        "title": "Open bundled blocker",
+        "title": "Open bundled blocker", "body": "\u0023\u0023 Goal\n\nOpen blocker\n\n## Done when\n\nFocused test passes.",
         "issue_type": "task",
         "status": "todo"
       }},
       {{
         "client_ref": "mission.executable",
-        "title": "Unreviewed executable mission",
+        "title": "Unreviewed executable mission", "body": "\u0023\u0023 Outcome\n\nMission result\n\n## Success criteria\n\nChecks pass.",
         "issue_type": "mission",
         "status": {status:?},
         "depends_on": [{{ "client_ref": "issue.blocker" }}]
@@ -1824,7 +1867,7 @@ fn test_bundle_apply_accepts_non_executable_initial_statuses() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Initial statuses",
   "resources": {
     "issues": [
@@ -1832,13 +1875,15 @@ fn test_bundle_apply_accepts_non_executable_initial_statuses() {
         "client_ref": "mission.draft",
         "title": "Draft bundled mission",
         "issue_type": "mission",
-        "status": "draft"
+        "status": "draft",
+        "body": "\u0023\u0023 Outcome\n\nDraft bundled mission\n\n## Success criteria\n\nThe mission outcome is observable."
       },
       {
         "client_ref": "issue.todo",
         "title": "Todo bundled task",
         "issue_type": "task",
-        "status": "todo"
+        "status": "todo",
+        "body": "\u0023\u0023 Goal\n\nTodo bundled task\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1872,13 +1917,13 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
         format!(
             r#"{{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Stale reviewed mission",
   "resources": {{
     "issues": [
       {{
         "client_ref": "issue.completed-blocker",
-        "title": "Completed graph addition",
+        "title": "Completed graph addition", "body": "\u0023\u0023 Goal\n\nCompleted graph addition\n\n## Done when\n\nTests pass.",
         "issue_type": "task",
         "status": "done",
         "blocks": [{{ "id": {mission_id:?} }}]
@@ -1910,7 +1955,7 @@ fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Paused bundle",
   "resources": {
     "issues": [
@@ -1918,7 +1963,8 @@ fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
         "client_ref": "issue.bulk",
         "title": "Bulk installed task",
         "issue_type": "task",
-        "status": "todo"
+        "status": "todo",
+        "body": "\u0023\u0023 Goal\n\nBulk installed task\n\n## Done when\n\nRun the focused regression tests."
       }
     ]
   }
@@ -1986,7 +2032,7 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Cleanup failure bundle",
   "resources": {
     "issues": [
@@ -1994,7 +2040,8 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
         "client_ref": "issue.cleanup",
         "title": "Cleanup committed task",
         "issue_type": "task",
-        "status": "todo"
+        "status": "todo",
+        "body": "\u0023\u0023 Goal\n\nCleanup committed task\n\n## Done when\n\nRun the focused regression tests."
       }
     ],
     "evidence": [
@@ -2003,7 +2050,8 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
         "title": "Cleanup committed evidence",
         "evidence_type": "test",
         "result": "pass",
-        "body": "Both bundle directories committed before cleanup failed."
+        "body": "Both bundle directories committed before cleanup failed.",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     ]
   }
@@ -2115,7 +2163,7 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Stage cleanup failure bundle",
   "resources": {
     "issues": [
@@ -2123,7 +2171,8 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
         "client_ref": "issue.stage-cleanup",
         "title": "Stage cleanup committed task",
         "issue_type": "task",
-        "status": "todo"
+        "status": "todo",
+        "body": "\u0023\u0023 Goal\n\nStage cleanup committed task\n\n## Done when\n\nRun the focused regression tests."
       }
     ],
     "evidence": [
@@ -2132,7 +2181,8 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
         "title": "Stage cleanup committed evidence",
         "evidence_type": "test",
         "result": "pass",
-        "body": "Both live directories committed before stage cleanup failed."
+        "body": "Both live directories committed before stage cleanup failed.",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     ]
   }
@@ -2247,7 +2297,7 @@ fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
         &bundle_path,
         r#"{
   "schema": "atelier.bundle",
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "Mid apply failure",
   "resources": {
     "issues": [
@@ -2256,7 +2306,10 @@ fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
         "title": "Should not persist",
         "issue_type": "task",
         "priority": "high",
-        "parent": { "client_ref": "evidence.invalid-parent" }
+        "parent": {
+          "client_ref": "evidence.invalid-parent"
+        },
+        "body": "\u0023\u0023 Goal\n\nShould not persist\n\n## Done when\n\nRun the focused regression tests."
       }
     ],
     "evidence": [
@@ -2265,7 +2318,8 @@ fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
         "title": "Should not persist evidence",
         "evidence_type": "test",
         "result": "pass",
-        "body": "This staged record must not install."
+        "body": "This staged record must not install.",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     ]
   }
@@ -2358,7 +2412,7 @@ fn test_start_refuses_shared_section_diagnostic() {
         .join(".atelier/issues")
         .join(format!("{issue_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    let malformed = markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
+    let malformed = markdown.replace("\n## Done when\n\nDone when was not specified.\n", "\n");
     std::fs::write(&issue_path, malformed).unwrap();
     commit_all(dir.path(), "malformed issue section");
 
@@ -2366,9 +2420,9 @@ fn test_start_refuses_shared_section_diagnostic() {
     assert!(!lint_success, "lint should report malformed issue sections");
     let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     for needle in [
-        "Missing required issue body section 'Outcome'",
+        "Missing required issue body section 'Done when'",
         &issue_id,
-        "section Outcome",
+        "section Done when",
         ".atelier/issues/",
     ] {
         assert!(
@@ -2385,9 +2439,9 @@ fn test_start_refuses_shared_section_diagnostic() {
     );
     let start_transcript = format!("{startstdout}\n{start_stderr}");
     for needle in [
-        "Missing required issue body section 'Outcome'",
+        "Missing required issue body section 'Done when'",
         &issue_id,
-        "section Outcome",
+        "section Done when",
         ".atelier/issues/",
     ] {
         assert!(
@@ -2512,7 +2566,7 @@ fn test_start_child_checks_out_parent_epic_branch_and_records_it_on_the_epic() {
     );
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
-        epic["fields"]["workflow_branch"],
+        epic["workflow_branch"],
         serde_json::json!({ "work_branch": format!("epic/{epic_id}"), "branch_base": "main" })
     );
     assert_eq!(
@@ -2543,8 +2597,8 @@ fn test_start_standalone_issue_and_epic_own_their_branches() {
         );
         assert_eq!(git_current_branch(dir.path()), branch);
         let record = issue_front_matter(dir.path(), &issue_id);
-        assert_eq!(record["fields"]["workflow_branch"]["work_branch"], branch);
-        assert_eq!(record["fields"]["workflow_branch"]["branch_base"], "main");
+        assert_eq!(record["workflow_branch"]["work_branch"], branch);
+        assert_eq!(record["workflow_branch"]["branch_base"], "main");
         // A draft epic has no start transition until it is made ready.
         assert_eq!(record["status"], status, "{stdout}");
     }
@@ -2745,7 +2799,7 @@ fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
-        epic["fields"]["workflow_branch"],
+        epic["workflow_branch"],
         serde_json::json!({ "work_branch": format!("epic/{epic_id}"), "branch_base": "develop" })
     );
     assert_eq!(

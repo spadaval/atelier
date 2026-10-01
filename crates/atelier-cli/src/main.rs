@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use atelier::commands;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::storage_layout::StorageLayout;
@@ -221,7 +221,7 @@ enum IssueCommands {
         /// Initial Markdown description/body text
         #[arg(long)]
         description: Option<String>,
-        /// Plain mission Markdown centered on Outcome; requires --issue-type mission
+        /// Typed Markdown body: Goal/Done when for issues, Outcome/Proof for epics.
         #[arg(long)]
         body: Option<String>,
         /// Deprecated compatibility: add one mission Constraints section bullet
@@ -384,7 +384,7 @@ enum BundleCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation \"checked claim X; result pass\"
+  atelier evidence record --target issue/<id> --kind validation --result pass \"checked claim X\"
   atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
@@ -392,6 +392,9 @@ another target.")]
     Record {
         #[arg(long = "kind")]
         evidence_kind: String,
+        /// Explicit manual result; command capture derives it from the exit status.
+        #[arg(long)]
+        result: Option<atelier_core::EvidenceResult>,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
@@ -420,10 +423,10 @@ another target.")]
         #[arg(long, default_value = "validates")]
         role: String,
     },
-    /// List evidence records
+    /// List evidence records, optionally filtering their explicit result
     List {
         #[arg(long)]
-        status: Option<String>,
+        result: Option<atelier_core::EvidenceResult>,
     },
 }
 
@@ -500,9 +503,8 @@ fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
     init_tracing(&cli.log_level, &cli.log_format);
     // Hold an association transaction across every repository command's
-    // complete read/validate/write lifetime. Ordinary commands share it;
-    // snapshot-and-swap bundle commands own it exclusively so a writer cannot
-    // commit between their snapshot and installation.
+    // complete read/validate/write lifetime. Reads share it; every writer owns
+    // it exclusively so read-modify-write commands cannot lose concurrent edits.
     let _canonical_transaction_lock = match canonical_transaction_mode(&cli.command) {
         CanonicalTransactionMode::None => None,
         mode => {
@@ -612,6 +614,7 @@ fn run() -> Result<()> {
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record {
                 evidence_kind,
+                result,
                 target,
                 role,
                 summary,
@@ -648,6 +651,9 @@ fn run() -> Result<()> {
                         &state_dir,
                         &evidence_kind,
                         summary,
+                        result.context(
+                            "manual evidence requires --result pass|fail|blocked|not-applicable",
+                        )?,
                         path.as_deref(),
                         uri.as_deref(),
                         producer.as_deref(),
@@ -672,6 +678,9 @@ fn run() -> Result<()> {
                     let evidence = use_cases::load_canonical_evidence(&state_dir, &evidence_id)?;
                     commands::evidence::print_new_record(&evidence, quiet)
                 } else {
+                    if result.is_some() {
+                        bail!("command capture derives its result; omit --result when passing a command");
+                    }
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
                             bail!("use either --summary or a positional summary, not both")
@@ -716,9 +725,9 @@ fn run() -> Result<()> {
                     quiet,
                 )
             }
-            EvidenceCommands::List { status } => {
+            EvidenceCommands::List { result } => {
                 let (_, index) = load_repository()?;
-                commands::evidence::list(&index, status.as_deref(), quiet)
+                commands::evidence::list(&index, result, quiet)
             }
         },
 
@@ -784,6 +793,17 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Evidence {
             action: EvidenceCommands::Record { command, .. },
         } if !command.is_empty() => CanonicalTransactionMode::None,
+        Commands::Issue {
+            action:
+                IssueCommands::Create { .. }
+                | IssueCommands::Update { .. }
+                | IssueCommands::Link { .. }
+                | IssueCommands::Unlink { .. }
+                | IssueCommands::Transition { .. },
+        } => CanonicalTransactionMode::Exclusive,
+        Commands::Evidence {
+            action: EvidenceCommands::Record { .. } | EvidenceCommands::Attach { .. },
+        } => CanonicalTransactionMode::Exclusive,
         _ => CanonicalTransactionMode::Shared,
     }
 }
