@@ -89,9 +89,13 @@ pub fn run(
     // Plan and validate canonical removal before any Git cleanup, so a
     // refused canonical prune never follows branch or worktree removal.
     let mut canonical = plan_canonical_records(&tracker, retention_days, apply)?;
+    // Git cleanup runs before record removal: it treats an owner whose record
+    // file is dirty as protected, and removing records would make them dirty.
     let git = prune_git_artifacts(&tracker, retention_days, apply)?;
     if apply {
-        remove_canonical_records(&tracker.state_dir, &mut canonical)?;
+        if let Err(error) = remove_canonical_records(&tracker.state_dir, &mut canonical) {
+            bail!("{error:#}\n{}.", git_removals_note(&git));
+        }
     }
 
     if quiet {
@@ -615,6 +619,34 @@ fn plan_canonical_records(
         evidence,
         removed: Vec::new(),
     })
+}
+
+/// Names the Git artifacts already removed in this run, which
+/// `git restore` cannot bring back.
+fn git_removals_note(git: &GitPruneSummary) -> String {
+    let mut note = if git.removed.is_empty() {
+        "Git cleanup removed nothing in this run".to_string()
+    } else {
+        format!(
+            "Git cleanup already removed {}; `git restore` does not restore branches or worktrees",
+            git.removed
+                .iter()
+                .map(|(class, label)| format!("{class} {label}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    if !git.failures.is_empty() {
+        note.push_str(&format!(
+            "; Git cleanup failures: {}",
+            git.failures
+                .iter()
+                .map(|(target, error)| format!("{target} ({error})"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    note
 }
 
 /// Removes eligible candidates, stopping at the first failure. The checkout

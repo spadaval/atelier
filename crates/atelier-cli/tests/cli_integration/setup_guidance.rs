@@ -678,6 +678,53 @@ fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
     );
 }
 
+/// Gives `issue_id` a pushed `task/<id>` owner branch whose work is
+/// squash-merged into main. Returns the bare remote (keep it alive) and the
+/// branch name.
+fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir, String) {
+    let remote = tempdir().unwrap();
+    let branch = format!("task/{issue_id}");
+    let git = |args: &[&str]| {
+        let status = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} failed");
+    };
+    git(&["init", "--bare", remote.path().to_str().unwrap()]);
+    git(&["remote", "add", "origin", remote.path().to_str().unwrap()]);
+    git(&["push", "-q", "-u", "origin", "main"]);
+    git(&["switch", "-q", "-c", &branch]);
+    fs::write(dir.join(format!("{issue_id}-work.txt")), "merged work\n").unwrap();
+    commit_all(dir, "owner branch work");
+    git(&["push", "-q", "-u", "origin", &branch]);
+    git(&["switch", "-q", "main"]);
+    git(&["merge", "-q", "--squash", &branch]);
+    git(&[
+        "commit",
+        "-q",
+        "-m",
+        &format!("Squash merge {branch} into main"),
+    ]);
+    git(&["push", "-q"]);
+    (remote, branch)
+}
+
+fn branch_exists(dir: &Path, branch: &str) -> bool {
+    Command::new("git")
+        .current_dir(dir)
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .status()
+        .unwrap()
+        .success()
+}
+
 #[test]
 fn test_prune_apply_stops_at_first_removal_failure() {
     let dir = tempdir().unwrap();
@@ -695,6 +742,7 @@ fn test_prune_apply_stops_at_first_removal_failure() {
         make_issue_terminal_before_retention(dir.path(), id, 45);
     }
     commit_all(dir.path(), "old terminal issues");
+    let (_remote, branch) = merged_pushed_owner_branch(dir.path(), &ids[0]);
 
     let (success, _, stderr) = run_atelier_with_env(
         dir.path(),
@@ -707,9 +755,12 @@ fn test_prune_apply_stops_at_first_removal_failure() {
         stderr.contains(&format!("failed to remove .atelier/issues/{}.md", ids[1]))
             && stderr.contains(&format!("Removed: .atelier/issues/{}.md", ids[0]))
             && stderr.contains(&format!("Not removed: .atelier/issues/{}.md", ids[1]))
-            && stderr.contains("git restore .atelier"),
+            && stderr.contains("git restore .atelier")
+            && stderr.contains(&format!("Git cleanup already removed branch {branch}"))
+            && stderr.contains("`git restore` does not restore branches or worktrees"),
         "{stderr}"
     );
+    assert!(!branch_exists(dir.path(), &branch));
     assert!(!canonical_issue_path(dir.path(), &ids[0]).exists());
     assert!(canonical_issue_path(dir.path(), &ids[1]).exists());
     let restored = Command::new("git")
@@ -768,6 +819,13 @@ fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
     commit_all(dir.path(), "old terminal issue fixture");
     fs::write(dir.path().join("tracked.txt"), "dirty tracked file\n").unwrap();
     commit_all(dir.path(), "tracked file fixture");
+    let (_remote, branch) = merged_pushed_owner_branch(dir.path(), &issue_id);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("eligible branch {branch}")),
+        "the owner branch must be eligible so the refusal is what keeps it: {stdout}"
+    );
     fs::write(
         dir.path().join("tracked.txt"),
         "dirty tracked file changed\n",
@@ -785,6 +843,10 @@ fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
     assert!(
         canonical_issue_path(dir.path(), &issue_id).exists(),
         "dirty apply removed canonical issue"
+    );
+    assert!(
+        branch_exists(dir.path(), &branch),
+        "a refused canonical prune must not delete branches"
     );
 }
 
