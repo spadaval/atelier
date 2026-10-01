@@ -206,3 +206,13 @@ with an explicit removal instruction.
 Prune apply holds an exclusive transaction from load through publication. It
 stages canonical deletions reversibly and restores the complete original
 records if staging fails, including review/finding/disposition clusters.
+
+The review follow-up restricts shell validators using an explicit parser
+context; naming an ordinary workflow `merge` grants no shell execution. Trusted
+completion checks include required fields as well as validators. Merge verifies
+all canonical paths, bytes, and modes against pinned HEAD independently of Git
+ignore rules or index flags before reading records and at the final fence. The
+existing machine-local config, identity, runtime, lock, and temporary exclusions
+remain local inputs; merge policy and records must be committed. A separate base
+checkout must still own the exact base branch when checks finish, including when
+another branch has the same commit.

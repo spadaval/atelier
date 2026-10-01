@@ -4,6 +4,7 @@
 //! that do not write directly to stdout or stderr.
 
 pub mod base_policy;
+pub mod committed_snapshot;
 pub mod evidence_freshness;
 pub mod git_freshness;
 pub mod init;

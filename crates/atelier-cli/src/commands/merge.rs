@@ -1,7 +1,7 @@
 //! Gated fast-forward integration. Creates no commits or tracker records.
 use anyhow::{bail, Context, Result};
 use atelier_app::{
-    base_policy, git_freshness as git, record_index::RecordIndex, review_gate,
+    base_policy, committed_snapshot, git_freshness as git, record_index::RecordIndex, review_gate,
     storage_layout::StorageLayout,
 };
 use std::{
@@ -47,7 +47,12 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     clean(repo)?;
     let head = git::head_commit(repo)?;
     let branch = text(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])?;
-    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    let index = {
+        let _transaction =
+            atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
+        committed_snapshot::require_committed(repo, &head)?;
+        RecordIndex::load_structural(&layout.canonical_dir())?
+    };
     let id = index
         .resolve_issue_ref(issue_ref)?
         .ok_or_else(|| anyhow::anyhow!("issue {issue_ref} not found"))?;
@@ -90,6 +95,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let base_tree = base_checkout(repo, base)?;
     if let Some(path) = &base_tree {
         clean(path)?;
+        committed_snapshot::require_committed(path, &base_head)?;
     }
     let nodes = review_gate::evaluate(&index, repo, &source.policy, owner, &base_head)?;
     if json {
@@ -123,6 +129,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
     clean(repo)?;
+    committed_snapshot::require_committed(repo, &head)?;
     if git::head_commit(repo)? != head
         || text(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])? != branch
         || text(repo, &["rev-parse", &format!("refs/heads/{branch}")])? != head
@@ -130,9 +137,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     {
         bail!("merge_snapshot_changed: Git refs changed while checks ran; retry with fresh proof and review");
     }
+    if base_checkout(repo, base)? != base_tree {
+        bail!("base checkout ownership changed while checks ran");
+    }
     if let Some(path) = &base_tree {
         clean(path)?;
-        if git::head_commit(path)? != base_head {
+        committed_snapshot::require_committed(path, &base_head)?;
+        if git::head_commit(path)? != base_head
+            || text(path, &["symbolic-ref", "--quiet", "HEAD"])? != base_ref
+        {
             bail!("base checkout changed while checks ran");
         }
     }
