@@ -110,6 +110,7 @@ pub(crate) fn validate_directory_path(path: &Path, required: bool) -> Result<()>
     }
 }
 
+#[cfg(feature = "test-hooks")]
 pub(crate) fn test_pause_after_snapshot() -> Result<()> {
     let Some(marker) = std::env::var_os("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT") else {
         return Ok(());

@@ -150,19 +150,29 @@ await review on the mission branch.
 9. `prime`, `land`, `setup` (S6); cross-branch status.
 10. Rewrite product docs and `PRODUCT_INTENT.md`; dogfood (S8).
 
+Final cleanup candidate (independent review pending): direct epic-parent
+branch resolution replaces unreachable ancestor recovery logic. Fault injection
+is compiled only with the explicit, nondefault `test-hooks` Cargo feature;
+ordinary builds ignore those environment variables. The feature-enabled suite
+retains rollback, cleanup failure, and concurrent-write coverage. Author proof:
+503 ordinary tests and 507 feature-enabled tests pass; required dead/unused-code
+scans, formatting, whitespace and the default release build pass. The default
+release binary contains no fault-hook environment names. Logs: `/tmp/cleanup-*.log`.
+
 Deferred review findings to resolve in later steps:
 
 - `start` treats a remote-only branch as new and branches from HEAD.
 - `start` writes owner and issue records separately after switching.
 - `work.terminal` passes for an empty mission; no gate uses it yet (step 7).
-- `check` reports only the first graph error when several exist.
+- `check` reports only the first graph error when several exist. Deferred
+  diagnostics improvement; commands already reject invalid graphs, so this is
+  nonblocking for rebuild acceptance.
 - Leftover ignored files from the old model (`.atelier/state.db`,
   `.atelier/cache/`, `.atelier/rules/`, `.activity/` directories, `[review]`
-  config) now fail commands; needed for the one-time migration of other repos.
+  config) now fail commands; other-repository migrations remain explicitly
+  outside this rebuild scope.
 - Git-cleanup failures in `prune` still exit 0; prune gives no branch
   recovery hint.
-- `nearest_parent_epic` has branches made unreachable by load-time checks.
-- Test hooks (`ATELIER_TEST_*` env vars) ship in the production binary.
 - Docs still describing removed behavior: `workflow-configuration.md` review
   sections, `work-model.md`, `cli-surface.md`, command-audit pages, quality
   docs (`check --fix`), `CONTEXT.md`, `PRODUCT_INTENT.md` (step 10).

@@ -403,3 +403,32 @@ fn objective_readiness_requires_agent_factory_acceptance_content() {
         assert!(ok, "{error}");
     }
 }
+
+#[cfg(not(feature = "test-hooks"))]
+#[test]
+fn ordinary_build_ignores_fault_injection_environment() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let fixture = workspace_root().join("docs/spec/bundle/fixtures/valid-bundle.json");
+    let marker = dir.path().join("disabled-fault-hook.marker");
+    let (ok, _, error) = run_atelier_with_env(
+        dir.path(),
+        &["bundle", "apply", fixture.to_str().unwrap(), "--yes"],
+        &[
+            (
+                "ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT",
+                marker.to_str().unwrap(),
+            ),
+            ("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE", "1"),
+            ("ATELIER_TEST_BUNDLE_BACKUP_CLEANUP_FAILURE", "1"),
+        ],
+    );
+    assert!(
+        ok && !error.contains("injected") && !error.contains("cleanup failed"),
+        "{error}"
+    );
+    assert!(
+        !marker.exists(),
+        "ordinary builds must not run the pause hook"
+    );
+}

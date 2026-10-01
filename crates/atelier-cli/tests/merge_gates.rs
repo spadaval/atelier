@@ -745,6 +745,7 @@ fn policy_without_any_valid_history_cannot_authorize_merge() {
 }
 
 #[test]
+#[cfg(feature = "test-hooks")]
 fn prune_apply_waits_for_read_transactions_and_failure_restores_linked_bytes() {
     use std::time::Duration;
     let fixture = Fixture::new();

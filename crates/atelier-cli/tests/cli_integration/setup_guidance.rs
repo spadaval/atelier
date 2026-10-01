@@ -746,6 +746,7 @@ fn branch_exists(dir: &Path, branch: &str) -> bool {
 }
 
 #[test]
+#[cfg(feature = "test-hooks")]
 fn test_prune_apply_restores_every_record_on_staging_failure() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

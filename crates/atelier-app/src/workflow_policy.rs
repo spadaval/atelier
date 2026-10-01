@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::collections::BTreeSet;
 
 use atelier_core::Issue;
 
@@ -95,13 +94,10 @@ pub fn resolve_work_branch(
             issue.id
         ));
     }
-    let owner = if issue.issue_type == "epic" || issue.parent_id.is_none() {
-        issue
-    } else {
-        nearest_parent_epic(index, &issue)?
-    };
-    let (branch, recorded_base) = match recorded_workflow_branch(&owner)? {
-        Some((branch, base)) => (branch, Some(base)),
+    // Loaded graphs already guarantee that any parent is a direct epic owner.
+    let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
+    let (branch, recorded_base) = match &owner.workflow_branch {
+        Some(branch) => (branch.work_branch.clone(), Some(branch.branch_base.clone())),
         None => (policy.branch_name_for_owner(&owner)?, None),
     };
     Ok(WorkBranch {
@@ -109,75 +105,6 @@ pub fn resolve_work_branch(
         branch,
         recorded_base,
     })
-}
-
-/// Returns the `(work_branch, branch_base)` pair recorded on a branch owner.
-fn recorded_workflow_branch(issue: &Issue) -> Result<Option<(String, String)>> {
-    Ok(issue
-        .workflow_branch
-        .as_ref()
-        .map(|branch| (branch.work_branch.clone(), branch.branch_base.clone())))
-}
-
-fn nearest_parent_epic(index: &RecordIndex, issue: &Issue) -> Result<Issue> {
-    let mut parent_id = issue.parent_id.clone();
-    let mut seen = BTreeSet::new();
-    let mut parent_chain = Vec::new();
-    while let Some(current_id) = parent_id {
-        if !seen.insert(current_id.clone()) {
-            return Err(anyhow!(
-                "workflow_branch_policy_invalid_graph: issue {} has a cyclic parent graph while resolving branch owner",
-                issue.id
-            ));
-        }
-        let parent = index.get_issue(&current_id).ok_or_else(|| {
-            anyhow!(
-                "workflow_branch_policy_invalid_graph: issue {} references missing parent issue {}",
-                issue.id,
-                current_id
-            )
-        })?;
-        parent_chain.push((parent.id.clone(), parent.issue_type.clone()));
-        if parent.issue_type == "epic" {
-            return Ok(parent);
-        }
-        parent_id = parent.parent_id;
-    }
-    Err(missing_parent_epic_branch_owner_error(issue, &parent_chain))
-}
-
-fn missing_parent_epic_branch_owner_error(
-    issue: &Issue,
-    parent_chain: &[(String, String)],
-) -> anyhow::Error {
-    let parent_chain = if parent_chain.is_empty() {
-        "(none)".to_string()
-    } else {
-        parent_chain
-            .iter()
-            .map(|(id, issue_type)| format!("{id} ({issue_type})"))
-            .collect::<Vec<_>>()
-            .join(" -> ")
-    };
-    let mission_link_guidance = parent_chain
-        .split(" -> ")
-        .find(|entry| entry.ends_with(" (mission)"))
-        .map(|entry| {
-            let mission_id = entry.split_once(' ').map(|(id, _)| id).unwrap_or(entry);
-            format!(
-                "\nIf this work should stay directly under the mission, make it standalone and link it to the mission instead:\n  atelier issue update {} --no-parent\n  atelier issue link {} {}",
-                issue.id, mission_id, issue.id
-            )
-        })
-        .unwrap_or_default();
-    anyhow!(
-        "workflow_branch_policy_invalid_graph: issue {} is nested but has no parent epic branch owner\nParent chain: {}\nBranch policy requires nested issues to inherit branch ownership from a parent epic. Standalone issues own their own issue branch.\nFix: move {} under an epic with:\n  atelier issue update {} --parent <epic-id>{}",
-        issue.id,
-        parent_chain,
-        issue.id,
-        issue.id,
-        mission_link_guidance
-    )
 }
 
 pub fn load(repo: &std::path::Path) -> anyhow::Result<WorkflowPolicy> {
@@ -237,6 +164,7 @@ mod tests {
     fn standalone_issue_and_epic_own_their_branches() {
         let mut records = Records::default();
         records.issue("atelier-bug1", "bug", "todo");
+        records.issue("atelier-task", "task", "todo");
         records.issue("atelier-epic", "epic", "todo");
         let index = records.index();
 
@@ -247,6 +175,9 @@ mod tests {
             (bug.owner_id.as_str(), bug.branch.as_str()),
             ("atelier-bug1", "bug/atelier-bug1")
         );
+        let task = resolve_work_branch(&policy(), &index, "atelier-task").unwrap();
+        assert_eq!(task.owner_id, "atelier-task");
+        assert_eq!(task.branch, "task/atelier-task");
         assert_eq!(
             (epic.owner_id.as_str(), epic.branch.as_str()),
             ("atelier-epic", "epic/atelier-epic")
@@ -283,5 +214,46 @@ mod tests {
             .to_string();
 
         assert!(error.contains("missions are coordinated, not worked on a branch"));
+    }
+}
+
+#[cfg(test)]
+mod hierarchy_contract_tests {
+    use super::*;
+    use crate::test_records::{issue_record, link};
+
+    #[test]
+    fn loaded_graph_rejects_non_epic_and_missing_hierarchy_targets() {
+        for kind in ["task", "mission"] {
+            let mut parent = issue_record("atelier-parent", kind, "todo");
+            parent.relationships.children.push(link("atelier-child"));
+            let child = issue_record("atelier-child", "task", "todo");
+            let error = RecordIndex::from_records(vec![parent, child], Vec::new(), Vec::new())
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("only epics can own child work"), "{error}");
+        }
+        let mut parent = issue_record("atelier-parent", "epic", "todo");
+        parent.relationships.children.push(link("atelier-missing"));
+        let error = RecordIndex::from_records(vec![parent], Vec::new(), Vec::new())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("atelier-parent") && error.contains("missing issue atelier-missing"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn assigning_missing_parent_retains_actionable_error() {
+        let child = issue_record("atelier-child", "task", "todo");
+        let index = RecordIndex::from_records(vec![child.clone()], Vec::new(), Vec::new()).unwrap();
+        let error = validate_issue_hierarchy(&index, &child.issue, Some("atelier-missing"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("issue atelier-child references missing parent atelier-missing"),
+            "{error}"
+        );
     }
 }
