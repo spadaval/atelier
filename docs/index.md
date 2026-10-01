@@ -1,8 +1,17 @@
 # Documentation Map
 
-- `.agents/skills/agent-factory/SKILL.md`: repository-owned Agent Factory skill
-  source and subskill references used while Atelier's workflow is still being
-  refined.
+> **Rebuild in progress.** [docs/strategies/atelier-rebuild.md](strategies/atelier-rebuild.md)
+> and [ADR 0019](adr/0019-verified-repo-native-tracker.md) define the target
+> model and override the documents below where they conflict. Many product
+> and architecture documents still describe the superseded design.
+
+- [docs/strategies/atelier-rebuild.md](strategies/atelier-rebuild.md): active
+  rebuild strategy and temporary plan.
+- [docs/adr/0019-verified-repo-native-tracker.md](adr/0019-verified-repo-native-tracker.md):
+  Agent Factory owns process; Atelier owns records, queries, and invariant
+  guards; no transition actions, review provider, or cache.
+- `.agents/skills/agent-factory/SKILL.md`: copy of the Agent Factory skill
+  (synced from the global skill on 2026-09-30).
 - `AGENTS.md`: concise entry point and repository reference map for agents
   working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.

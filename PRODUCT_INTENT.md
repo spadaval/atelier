@@ -1,5 +1,11 @@
 # Atelier Product Intent
 
+> **Superseded in part.** Atelier is being rebuilt; see
+> [docs/strategies/atelier-rebuild.md](docs/strategies/atelier-rebuild.md) and
+> [ADR 0019](docs/adr/0019-verified-repo-native-tracker.md). Where this
+> document describes transition actions, review providers, the SQLite cache,
+> activity files, or `atelier man`, it is out of date.
+
 This document defines Atelier's product direction, principles, domain model,
 and target-state constraints. It is not the complete current behavior manual.
 Current behavior lives in `docs/product/`, architecture contracts live in

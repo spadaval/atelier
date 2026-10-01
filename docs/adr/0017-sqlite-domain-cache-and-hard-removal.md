@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
+
 Accepted.
 
 ## Context

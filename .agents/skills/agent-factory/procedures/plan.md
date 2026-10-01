@@ -1,159 +1,86 @@
 # Plan
 
-Use this subskill to create, split, sequence, clarify, or repair durable work.
-Planning decides what work exists, why it exists, and what finished should look
-like. It is not the implementation procedure for a named code item, and it does
-not prewrite validation transcripts for later agents.
+Use this subskill to shape new work: write or revise a mission strategy, lay
+out epics, and create the first executable issues. Once execution is under
+way, `orchestrate` maintains the plan itself. Come back to `plan` only for
+strategic revisions.
 
-## Stance
+## Layers
 
-- Start from repository instructions, the tracker's current status surfaces, and
-  the relevant product, architecture, ADR, and validation docs.
-- In Atelier repositories, use `atelier man manager` for current command
-  routing and focused `atelier issue show <objective-id>` or focused
-  `show`/`list` commands for drill-down.
-- Write the desired finished state first. Avoid replacing the target state with
-  broad process language, private implementation steps, or boilerplate proof
-  systems unless that exact path is the decision being tracked.
-- High-leverage product, architecture, persistence, security, migration,
-  validation, or public-contract choices need durable artifact-update work.
-  Block dependent implementation on those tasks.
-- When planning work, include scoped cleanup or refactoring when adjacent code
-  makes the intended change harder to understand or trust. Cleanup should be
-  purposeful and bounded, not drive-by churn.
-- Keep graph edits focused. Do not rewrite unrelated tracker areas while
-  clarifying one workstream.
+- **Strategy** is the governing intent: why, outcome, success criteria,
+  shape, scope, and authority. For a substantial mission, write it as a short
+  file (see [Strategic Plans](../references/strategic-plans.md)). For smaller
+  work, the mission issue or PR description can serve.
+- **Epics** are outcome-bearing increments that make the whole mission
+  visible. A good epic is also a natural unit for one branch, one review
+  batch, and, where needed, one validation pass.
+- **Issues** are executable slices, created only as far ahead as evidence
+  supports.
+- **Validation issues**, when the tracker is used, hold an independent
+  `validate` assignment for an epic or mission outcome.
 
-## Record Shape
+Each record has one job; see [Tracker Records](../references/tracker-records.md)
+for what goes in each. Detailed design goes in architecture docs or design
+docs linked from epics, not in the strategy. Do not keep a separate
+implementation-plan document, work briefs, or status tables alongside the
+tracker.
 
-An assignable item must be understandable without private chat history. It
-names target state, scope, non-scope, dependencies, and the subskill when that
-is not obvious. If the tracker has canonical sections or templates, use them
-instead of inventing parallel formatting.
+## Initial Planning
 
-Use the smallest record shape that makes accountability clear:
+1. Read the repository instructions, relevant product and architecture docs,
+   ADRs, and existing tracker state.
+2. State the outcome, target shape, what is out of scope, and how success
+   will be shown.
+3. Settle consequential choices that the first work depends on, using
+   `decide` where there are several credible paths. Do not park such a choice
+   in a future issue. If evidence is missing, plan the work that gathers it.
+4. Sketch the remaining mission as draft epics, each with a preliminary
+   outcome and its known unknowns. Do not invent tasks for distant epics.
+5. Make the first increment executable. Prefer an increment that proves a
+   representative user outcome end to end over one that only builds
+   infrastructure, unless a current constraint requires the infrastructure
+   first.
 
-- Mission: a target state and scope boundary for work large enough to need at
-  least one epic or equivalent root work item. Mission scope is the direct
-  `advances` links plus the descendants of those roots.
-- Epic: an outcome-bearing delivery increment and one coherent branch, review,
-  and validation boundary under a mission. Product-facing and pure-engineering
-  outcomes use the same epic shape.
-- Ordinary issue: one accountable implementation, docs, migration, or artifact
-  update slice with a local Outcome.
-- Validation issue: independent judgment derived from the target Outcome or
-  explicit product contract being validated.
-- Evidence record: a receipt from a check that actually ran. It records the
-  claim checked, action taken, result, and transcript or artifact.
+Use `$generate-html-plan` when an interactive visual plan would materially
+help deliberation. Publish its result into the repository strategy before
+execution.
 
-Do not add `Evidence` or `Validation` prose as default paperwork for every new
-record. Strategy owns mission-level assurance. A draft epic may omit exact
-proof; expansion selects proof together with the refined increment. Workers and
-validators choose and record focused proof while doing ordinary work unless a
-specific contract, risk, or workflow gate requires it earlier.
+## Ready Issues
 
-## Planning Horizon
+An issue is ready when a worker without your context could execute it. Use
+the [issue template](../references/tracker-records.md#issue): the goal and why
+it matters, how you will know it is done, scope, context (including the target
+environment when it affects risk), and dependencies.
 
-Create outcome-bearing epics for the visible mission shape, but create ordinary
-issues only through the nearest evidence boundary. Later epics remain in the
-repository's draft state with a meaningful preliminary outcome, constraints,
-and unknowns; they do not need children or exact proof.
+Avoid placeholders such as "TBD", "handle edge cases", or "similar to #12".
+If you cannot state something concretely, you have found an evidence
+boundary. Make it a spike, a decision, or a blocked issue instead of
+papering over it. Do not plan components whose only justification is
+possible future work.
 
-Expand a draft epic by refining its outcome and preservation claims, creating
-only immediate child work, representing known dependencies, choosing its proof
-route, and using the ordinary transition to ready. Do not add an expansion
-flag, approval, validation profile, or second implementation-plan document.
+Before handing off, reread the ready issues. Check that together they cover
+the increment's outcome, that their interfaces agree with one another, and
+that each has a proof that could fail.
 
-## Mission Creation
+## Strategic Revision
 
-For Atelier repositories, [Mission And Issue-Set Authoring
-Standard](../../../../docs/product/mission-authoring.md) is the single normative
-checklist for mission Outcome coverage, decomposition, ownership, dependencies,
-initial parallelism, validation, and closeout. This procedure routes to that
-standard; it does not restate or override its criteria.
+When evidence shows the outcome, target shape, a boundary, or a governing
+tradeoff must change:
 
-Create a mission only when the objective is larger than a single accountable
-issue and needs at least one epic or equivalent workstream beneath it. Smaller
-objectives should remain ordinary issues.
-
-Before writing the mission, resolve the applicable source of truth:
-
-- Product intent and target behavior from the repository product docs.
-- Domain language from repository context docs.
-- Current lifecycle, closeout, and command details from the tracker command
-  surfaces.
-- Architecture, ADR, and validation docs for decisions that affect contracts,
-  persistence, workflow policy, public commands, or agent process.
-
-If those sources conflict or leave an important product or architecture choice
-open, create artifact-update work and block dependent implementation on it.
-Do not bury unresolved decisions inside implementation tasks.
-
-A mission must make the desired finished state concrete enough for another
-agent to plan, implement, and validate without private context. Validation
-derives its checks from the mission or issue `Outcome`; only predefine a
-scenario, command, file, artifact, or evidence class when it is itself the
-product contract or a known risk that would otherwise be ambiguous.
-
-When the immediate work is clear and dependencies are explicit, use the
-repository's normal transition to mark the mission ready. Planning-file edits
-during execution are ordinary graph maintenance.
-
-## Examples
-
-Concrete mission outcome:
-
-```text
-Outcome
--------
-`atelier issue show <mission-id>` explains mission scope from direct `advances`
-links, reports linked root work and descendants once, and points operators to
-the next lifecycle command without requiring private coordinator notes.
-```
-
-Vague mission anti-example:
-
-```text
-Outcome
--------
-Improve mission architecture and validation confidence across the workflow.
-```
-
-That anti-example does not say what command, record, or operator behavior must
-change.
-
-Concrete ordinary issue outcome:
-
-```text
-Outcome
--------
-`atelier man worker` lists `atelier work ready` as the normal ready-work entry
-point and no longer routes normal worker guidance through deprecated queue flag
-forms.
-```
-
-Vague ordinary issue anti-example:
-
-```text
-Outcome
--------
-Clean up worker guidance and make it more aligned with the new process.
-```
-
-Concrete validation issue outcome:
-
-```text
-Outcome
--------
-An independent validator compares the updated planner, product, quality, and
-help text against the simplified mission model, classifies mismatches as
-`pass`, `fail`, `blocked`, or `deferred`, and records the command transcript or
-diff locations inspected.
-```
+1. Confirm you have authority: a human directed it, or the strategy grants
+   it for this kind of change (see the
+   [Constitution](../constitution.md#strategy-changes-deliberately)). Without
+   authority, write the revision as a proposal and stop.
+2. Explain why replanning within the current strategy is not enough.
+3. Resolve the choice, using `decide` if the options are contested.
+4. Edit the strategy in place and record what changed, why, and on whose
+   authority, as described in
+   [Strategic Plans](../references/strategic-plans.md#changing-it). Supersede
+   any affected ADR.
+5. Reconcile the tracker. Mark each affected item as still valid, needing
+   revision, or obsolete. Preserve completed work and its evidence.
 
 ## Handoff
 
-Report items created or changed, dependency changes, unresolved choices,
-validation or lint run, evidence receipts produced, and follow-up artifact
-tasks. Report the draft outcome map separately from the executable horizon and
-name proof routes selected for newly ready epics.
+Also report the strategy location, decisions recorded, epics and ready issues
+created, and open questions.

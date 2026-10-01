@@ -2,6 +2,8 @@
 
 ## Status
 
+**Amended by [ADR 0019](0019-verified-repo-native-tracker.md):** transition actions, review providers, and the SQLite cache described here are removed.
+
 Accepted.
 
 ## Context

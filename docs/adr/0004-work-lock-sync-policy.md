@@ -2,6 +2,8 @@
 
 ## Status
 
+**Amended by [ADR 0019](0019-verified-repo-native-tracker.md):** transition actions, review providers, and the SQLite cache described here are removed.
+
 Accepted. Amended by
 [ADR 0007](0007-mission-workspaces-and-epic-review-branches.md), which moves
 the default workspace boundary from issue to mission and the default review

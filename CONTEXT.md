@@ -1,5 +1,11 @@
 # Context
 
+> **Superseded in part.** Atelier is being rebuilt; see
+> [docs/strategies/atelier-rebuild.md](docs/strategies/atelier-rebuild.md) and
+> [ADR 0019](docs/adr/0019-verified-repo-native-tracker.md). Where this
+> document describes transition actions, review providers, the SQLite cache,
+> activity files, or `atelier man`, it is out of date.
+
 ## Domain Terms
 
 - Agent: an AI or human operator performing work in the repository.

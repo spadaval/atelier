@@ -1,37 +1,61 @@
 # Review
 
-Use this subskill for independent code, design, security, test, docs, or proof
-review. Review starts from the diff or artifact and asks whether the change is
-well-built and supported by evidence. It is not scenario validation.
+Use this subskill to review a diff, PR, or other change that someone else
+produced. You are the independent check the author cannot provide for
+themselves. Review asks whether the change is correct, well built, and backed
+by real evidence. It does not re-run acceptance scenarios; that is `validate`.
 
 ## Stance
 
-- Be read-only unless explicitly asked to fix issues.
-- In Atelier repositories, use `atelier man reviewer` for current tactical
-  review commands and validation docs for proof expectations.
-- Read changed files plus the relevant tracker item, parent scope, product docs,
-  architecture docs, ADRs, code standards, and validation policy.
-- Lead with findings ordered by severity. Cite concrete files and lines when
-  possible.
-- Focus on behavioral regressions, architecture or ownership drift, missing or
-  misleading tests, security/data-loss/persistence/concurrency risk, stale docs,
-  unsupported proof claims, and prohibited compatibility shims.
-- If no issues are found, say so and name residual risk or unrun checks.
+- You did not write this code. Judge it on its merits, not on the author's
+  intentions. If you were given the author's rationale, weigh it as a claim,
+  not a fact.
+- Read the change, the requirements and constraints it answers to, and enough
+  surrounding code, docs, and ADRs to judge it. For non-trivial code, use
+  [Good Code](../references/good-code.md).
+- Stay read-only unless you were asked to fix things.
+- Report every finding you can support, ordered by impact. Cite files and
+  lines, and give a failure scenario where one exists.
+- Ignore formatting and style preferences unless they break an explicit
+  project standard.
+
+## What to Check
+
+Work through two questions in order. An elegant construction does not excuse
+a contract miss.
+
+1. **Does it do what it was supposed to?** Compare it against the assigned
+   outcome, constraints, interfaces, and non-scope. Look for missed
+   requirements, unrequested additions, regressions, and edge cases. Check
+   that the proof actually exercises the claims: are tests meaningful, could
+   they fail, and were they run after the final change?
+2. **Is it fit to integrate?** Check ownership and boundaries, duplicate
+   sources of truth, error handling, security, data integrity, concurrency,
+   leftover residue, and stale docs.
+
+Report complexity as a defect only when you can name the unnecessary moving
+part and a simpler construction that meets the same current requirements
+without moving the complexity elsewhere.
+
+When you think a finding should block, say what current path it affects and
+what the evidence is, so the accountable agent does not have to reconstruct
+it. For an integrated increment, also look for problems that appear only when
+individually acceptable changes interact.
 
 ## Output
 
-Use this shape:
-
 ```text
+Contract: pass | fail | unable to assess, with one line of explanation
+Fitness:  pass | fail | unable to assess, with one line of explanation
+
 Findings
-- Severity: file:line - issue, impact, recommendation.
+- R1 [high|medium|low] path:line: problem, impact, and suggested fix.
+  Recommendation: FIX NOW | DEFER | NO ACTION, with a reason.
 
-Open Questions
-- ...
-
-Residual Risk
-- ...
+Open questions
+Residual risk and checks not run
 ```
 
-Reviewers may recommend validation, but they do not close scenario validation
-unless separately assigned the `validate` subskill.
+Your recommendations are advice. The accountable agent decides using
+[Finding Disposition](../references/finding-disposition.md). If there are no
+findings, say so, and still name any residual risk.

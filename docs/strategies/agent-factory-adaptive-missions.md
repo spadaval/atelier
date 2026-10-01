@@ -2,7 +2,7 @@
 strategy: agent-factory-adaptive-missions
 mission: atelier-5kej
 revision: 3
-status: active
+status: superseded
 sources:
   - PRODUCT_INTENT.md
   - CONTEXT.md

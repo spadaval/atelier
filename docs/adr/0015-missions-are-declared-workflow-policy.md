@@ -1,6 +1,6 @@
 # ADR 0015: Missions Are Declared Workflow Policy
 
-Status: Accepted
+Status: Accepted. **Amended by [ADR 0019](0019-verified-repo-native-tracker.md):** transition actions, review providers, and the SQLite cache described here are removed.
 Date: 2026-06-21
 
 ## Context

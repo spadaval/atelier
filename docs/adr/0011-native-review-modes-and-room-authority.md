@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
+
 Accepted. Amended by
 [ADR 0013](0013-workflow-transition-actions-and-branching.md), which renames
 workflow transition effects to transition actions.

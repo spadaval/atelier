@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
+
 Accepted. Updated by
 [ADR 0016](0016-canonical-work-branches-and-mission-integration.md) for
 canonical work branch names, branch base terminology, and opt-in mission

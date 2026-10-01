@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
+
 Accepted. Provider-specific review terminology in this ADR is superseded for
 new work by [ADR 0011](0011-native-review-modes-and-room-authority.md), which
 renames the public command surface to `atelier review`, introduces native room

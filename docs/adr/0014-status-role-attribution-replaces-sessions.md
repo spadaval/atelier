@@ -1,6 +1,6 @@
 # ADR 0014: Status Role Attribution Replaces Sessions
 
-Status: Accepted
+Status: Accepted. **Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
 Date: 2026-06-20
 
 ## Context

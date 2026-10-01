@@ -1,45 +1,36 @@
 # Submodel Selection
 
-Use this reference when choosing a model and reasoning effort for delegated
-Agent Factory work. Select the lowest tier that can credibly complete the
-assignment and its required proof.
+Choose the cheapest model and reasoning effort that make the whole workflow
+likely to succeed, counting retries, verification effort, elapsed time, and
+the cost of accepting a mistake, not just the quality of one run.
 
-## Capability Source
+## Tiers
 
-Treat the runtime model catalog as authoritative. Select only models and
-reasoning efforts that the current environment exposes. If the delegation
-surface inherits the primary agent's model or does not expose an explicit
-choice, record `inherited` or `default`; do not invent a selection.
+Map the runtime's available models to three tiers:
 
-The current GPT-5.6 routing tiers are:
+| Tier | Typical use |
+| --- | --- |
+| Cheap | Reconnaissance, drafts, spikes, mechanical edits, test runs, and parallel experiments with a reliable automated check |
+| Balanced | Integration-ready implementation, code review, diagnosis, and synthesis of evidence |
+| Strong | Consequential decisions, hard multi-system reasoning, orchestration of large missions, and work whose mistakes are subtle, hard to detect, or costly to reverse |
 
-| Model | Default effort | Use when |
-| --- | --- | --- |
-| `gpt-5.6-luna` | `low` | Work is bounded, low-ambiguity, and low-risk, with concrete output and proof: focused reconnaissance, mechanical documentation, narrow test execution, or evidence collection. Use `medium` only for a real multi-step dependency inside that bounded task. |
-| `gpt-5.6-terra` | `medium` | Normal implementation, debugging, review, validation, or documentation work with clear local scope. Use `high` for difficult debugging, a non-trivial local refactor, or independent review with meaningful failure impact. |
-| `gpt-5.6-sol` | `high` | Ambiguous or high-risk work involving architecture, public contracts, persistence, security, migration, broad refactors, complex review, or adversarial validation. Use `max` for the hardest long-chain reasoning when the runtime supports it. |
+## Guidance
 
-Reserve `gpt-5.6-sol` with `ultra` for primary orchestration of a genuinely
-complex multi-agent workstream, and only when the runtime exposes that effort.
-It is not a substitute for a bounded, single-role assignment.
+- **Cheap verification justifies cheap attempts.** When tests or other checks
+  will catch mistakes, start cheap and escalate after failures or inconclusive
+  results. Labels such as "security" or "migration" do not by themselves rule
+  out a cheap exploratory run.
+- **Cheap output is not trusted output.** Apply review and proof in
+  proportion to what depends on the result. Cheap exploration followed by
+  balanced or strong integration and review is a common, effective pattern.
+- **Escalate for synthesis, not for labels.** Move up when the difficulty is
+  holding a long chain of reasoning together, not merely because a task is
+  called review or implementation.
+- **Reviewers benefit from diversity.** When a choice exists, reviewing with a
+  different model from the author's reduces shared blind spots. It is useful
+  but not required.
+- **Start fresh.** Give subagents a self-contained prompt, not the parent's
+  conversation, unless essential context cannot be summarized.
 
-## Routing Test
-
-Consider these dimensions together:
-
-1. Ambiguity: Are the outcome and constraints already decided?
-2. Risk: What is the impact of a plausible mistake?
-3. Scope: Is the work local, cross-cutting, or architectural?
-4. Independence: Must the agent challenge an implementation or parent claim?
-5. Proof: How much judgment is needed to establish the result?
-
-Increase the tier or effort only when those dimensions require it. Do not use a
-larger model to compensate for missing acceptance criteria, ownership, or
-repository context; resolve those assignment gaps first.
-
-## Assignment Record
-
-Record the model, reasoning effort, routing rationale, and any runtime fallback
-in the delegated assignment. If the preferred combination is unavailable,
-choose the nearest available tier that still meets the risk and proof needs and
-state the constraint.
+If the runtime cannot set the model or reasoning effort, use the defaults and
+put the effort into a clear assignment.

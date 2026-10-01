@@ -2,6 +2,8 @@
 
 ## Status
 
+**Superseded by [ADR 0019](0019-verified-repo-native-tracker.md).**
+
 Accepted. Supersedes
 [ADR 0012](0012-explicit-workflow-transition-effects.md). Updated by
 [ADR 0016](0016-canonical-work-branches-and-mission-integration.md) for
