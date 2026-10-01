@@ -16,6 +16,10 @@ There is no SQLite database, domain cache, daemon, or persistent query index.
   runtime/                 # ignored local mutation lock
 ```
 
+Issue and evidence Markdown use `schema_version: 2`. Older canonical versions
+are rejected rather than silently converted. Workflow policy has version 3 and
+project configuration version 1; these are distinct contracts.
+
 Issue kinds include missions, epics, and ordinary work. IDs are project-scoped
 random IDs such as `atelier-z1p8`, independent of record type. YAML front matter
 holds typed identity, lifecycle state, timestamps, relationships, strategy path,

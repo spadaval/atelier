@@ -16,10 +16,11 @@ file is not silently consumed, moved, or deleted.
 
 ## Envelope and references
 
-The top-level object has `schema: "atelier.bundle"`, `schema_version: 1`, a
+The top-level object has `schema: "atelier.bundle"`, `schema_version: 2`, a
 non-empty `title`, and `resources`. Optional `description` and `metadata`
 describe the input. Unknown fields and unsupported versions are rejected.
-Version 1 is create-only: resource `operation` is omitted or `create`.
+Version 2 is create-only: resource `operation` is omitted or `create`.
+Version 1 is rejected because its issue body and evidence contract differ.
 
 `resources.issues` and `resources.evidence` are supported. Missions are issues
 with `issue_type: "mission"`; a separate `resources.missions` array is rejected.
@@ -89,7 +90,7 @@ proof. Adding evidence does not silently close work.
 
 Validation checks the envelope, supported resources, unique client references,
 reference resolution, body shape, types, statuses, hierarchy, blockers, and the
-complete staged graph. Errors identify JSON paths rooted at `$` and the nearest
+complete staged graph. Errors name the rejected field, reference, record, or
 `client_ref` where available. No invalid reference or cycle may be installed.
 
 Parent references normalize to epic children. Both `depends_on` and `blocks`
@@ -111,4 +112,19 @@ Fixtures:
 
 - [Valid input](fixtures/valid-bundle.json)
 - [Invalid input](fixtures/invalid-bundle.json)
-- [Preview example](fixtures/dry-run-preview.json)
+- [Preview output](fixtures/dry-run-preview.txt): current human CLI output, not a
+  JSON response contract.
+
+The valid input is self-contained: it creates a mission and epic, direct task
+and validation children, a dependency, and an evidence attachment. Run preview
+in a fresh Git repository initialized with `atelier init`; it needs no existing
+record IDs. Apply additionally requires `--yes`.
+
+The example evidence commit is an illustrative full-length hexadecimal ID.
+Preview and apply validate its syntax; freshness gates cannot count a commit
+that is unavailable in the repository as passing proof. For real proof, use the
+full commit actually checked. New bundle-authored issues must first be applied
+and committed before fresh evidence can validate their committed acceptance.
+
+The invalid fixture deliberately uses the unsupported `resources.milestones`
+field. It demonstrates input rejection rather than a valid planning shape.

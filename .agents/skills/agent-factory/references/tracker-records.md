@@ -124,6 +124,31 @@ mission acceptance or an epic that changes a user-facing outcome.
 evidence comment. The evidence comments hold the detail.>
 ```
 
+For Atelier, `validation` uses the same typed body as an ordinary executable
+issue. Adapt the template above rather than passing Claims/Method/Results
+headings to `--body`:
+
+```md
+## Goal
+Check <referenced mission criteria or acceptance claims> independently.
+
+## Done when
+Each claim has an explicit result and linked evidence receipt; the handoff
+states failures, blocked checks, and proof limits.
+
+## Scope
+<Checks and artifacts the validator may produce. Omit when unnecessary.>
+
+## Context
+<Links to claims, the method and environment, and relevant design.>
+```
+
+Keep claim results in attached evidence receipts, and append their IDs and the
+validation handoff to the issue's Notes with `atelier issue note`. The typed
+body defines the assignment; receipts hold the check, result, full commit, and
+artifacts. Do not add unsupported Claims, Method, or Results sections to an
+Atelier record or rewrite acceptance intent to store results.
+
 ## Comments
 
 **Evidence** (see [Evidence Tracking](tracker-commands/evidence-tracking.md)):
