@@ -931,3 +931,285 @@ fn review_regression_setup_preserves_foreign_wrappers_and_updates_owned_binary()
         .unwrap()
         .contains(env!("CARGO_BIN_EXE_atelier")));
 }
+
+#[test]
+fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
+    for integration_base in [false, true] {
+        let f = Fixture::new();
+        if integration_base {
+            git(f.path(), &["switch", "main"]);
+        }
+        let done = ok(
+            f.path(),
+            &["-q", "issue", "create", "Unrelated completion claim"],
+        );
+        let blocker = ok(f.path(), &["-q", "issue", "create", "Open dependency"]);
+        let mut record = f.store().load_issue_by_id(&done).unwrap();
+        record.issue.status = "done".into();
+        record.issue.closed_at = Some(chrono::Utc::now());
+        f.store().write_issue_atomic(&record).unwrap();
+        let mut blocked = f.store().load_issue_by_id(&blocker).unwrap();
+        blocked
+            .relationships
+            .blocks
+            .push(atelier_records::issue_relationship_target(&done));
+        f.store().write_issue_atomic(&blocked).unwrap();
+        commit(f.path(), "invalid unrelated terminal claim");
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(
+            !pass
+                && output.contains("required_field.close_reason")
+                && output.contains("blockers.transitive_none_open"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelated_code() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        policy.replace(
+            "        - blockers.none_open\n",
+            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+        ),
+    )
+    .unwrap();
+    let historical = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Previously verified work",
+            "--body",
+            "## Goal\n\nOriginal acceptance.\n\n## Done when\n\nOriginal proof.",
+        ],
+    );
+    fs::write(f.path().join("history-code"), "original\n").unwrap();
+    commit(f.path(), "historical acceptance and code");
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{historical}"),
+            "--kind",
+            "test",
+            "--result",
+            "fail",
+            "Original failing proof",
+        ],
+    );
+    commit(f.path(), "historical failing proof");
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &historical,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Original defect",
+        ],
+    );
+    commit(f.path(), "historical finding");
+    fs::write(f.path().join("history-code"), "corrected\n").unwrap();
+    commit(f.path(), "historical resolution");
+    let resolution = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &resolution,
+            "Resolved original defect",
+        ],
+    );
+    commit(f.path(), "historical disposition");
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{historical}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Verified historical proof",
+        ],
+    );
+    commit(f.path(), "historical passing proof");
+    f.terminal(&historical);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &historical,
+            "--identity",
+            "Reviewer",
+            "Historical independent approval",
+        ],
+    );
+    commit(f.path(), "historical approval");
+    fs::write(f.path().join("unrelated-code"), "later work\n").unwrap();
+    commit(f.path(), "later unrelated code");
+    ok(f.path(), &["land"]); // Base retains previously accepted proof and resolution.
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "note",
+            &historical,
+            "Historical note after unrelated code",
+        ],
+    );
+    commit(f.path(), "historical note-only change");
+    ok(f.path(), &["land"]);
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["rebase", "main"]);
+    fs::write(f.path().join("code"), "active unfinished work\n").unwrap();
+    ok(f.path(), &["land"]); // Dirty active work does not re-prove retained claims.
+    git(f.path(), &["restore", "code"]);
+    let mut record = f.store().load_issue_by_id(&historical).unwrap();
+    if let atelier_core::IssueBody::Issue { done_when, .. } = &mut record.sections.body {
+        done_when.push_str("\nChanged acceptance criterion.\n");
+    }
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "changed terminal acceptance");
+    f.refusal("evidence.attached");
+    git(
+        f.path(),
+        &[
+            "restore",
+            "--source=main",
+            &format!(".atelier/issues/{historical}.md"),
+        ],
+    );
+    commit(f.path(), "restore historical acceptance");
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{historical}"),
+            "--kind",
+            "test",
+            "--result",
+            "fail",
+            "New honest failure",
+        ],
+    );
+    ok(
+        f.path(),
+        &[
+            "review",
+            "finding",
+            &historical,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "New unresolved finding",
+        ],
+    );
+    commit(f.path(), "new failure and finding on retained claim");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("evidence.no_newer_failure")
+            && output.contains("findings.disposed"),
+        "{output}"
+    );
+}
+#[test]
+fn integration_base_new_completion_cannot_omit_required_proof() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        policy.replace(
+            "        - blockers.none_open\n",
+            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+        ),
+    )
+    .unwrap();
+    let id = ok(f.path(), &["-q", "issue", "create", "Missing global proof"]);
+    commit(f.path(), "base requires proof");
+    f.terminal(&id);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("evidence.attached"), "{output}");
+    fs::write(f.path().join("later-code"), "unrelated\n").unwrap();
+    commit(f.path(), "unrelated later code");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("evidence.attached"), "{output}");
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{id}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Valid retained proof",
+        ],
+    );
+    commit(f.path(), "valid proof for earlier completion");
+    ok(f.path(), &["land"]);
+    let stale = ok(
+        f.path(),
+        &["-q", "issue", "create", "Never valid old proof"],
+    );
+    commit(f.path(), "new task before old proof");
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{stale}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Proof before later implementation",
+        ],
+    );
+    commit(f.path(), "premature proof");
+    fs::write(f.path().join("later-code"), "implementation after proof\n").unwrap();
+    commit(f.path(), "changed code before completion");
+    f.terminal(&stale);
+    fs::write(f.path().join("later-unrelated-code"), "age invalid claim\n").unwrap();
+    commit(
+        f.path(),
+        "later unrelated commit cannot legitimate stale claim",
+    );
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains(&format!("{stale} evidence.attached")),
+        "{output}"
+    );
+}

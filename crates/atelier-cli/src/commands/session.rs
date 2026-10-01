@@ -225,6 +225,50 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
         }
     }
+    let owned = id
+        .as_ref()
+        .map(|id| review_gate::scope(&index, id))
+        .transpose()?
+        .unwrap_or_default();
+    let claim_base = base_pin
+        .as_ref()
+        .map(|(_, pin)| pin.clone())
+        .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.clone()));
+    let mut current = std::collections::BTreeSet::new();
+    let mut historical = std::collections::BTreeSet::new();
+    for issue in index.issues().filter(|issue| !owned.contains(&issue.id)) {
+        if !source
+            .policy
+            .issue_status_is_terminal(&issue.issue_type, &issue.status)?
+        {
+            continue;
+        }
+        let path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", issue.id));
+        let before = git_freshness::blob(repo, &claim_base, &path)
+            .ok()
+            .and_then(|text| {
+                atelier_records::parse_issue_record(&text, path.strip_prefix(".atelier").ok()?).ok()
+            });
+        if before.as_ref().is_some_and(|before| {
+            index.issue_record(&issue.id).is_some_and(|after| {
+                atelier_app::evidence_freshness::completion_claim_matches(before, after)
+            })
+        }) {
+            historical.insert(issue.id.clone());
+        } else {
+            current.insert(issue.id.clone());
+        }
+    }
+    let mut nodes =
+        review_gate::evaluate_claims(&index, repo, &source.policy, &claim_base, historical, true)?;
+    nodes.extend(review_gate::evaluate_claims(
+        &index,
+        repo,
+        &source.policy,
+        &claim_base,
+        current,
+        false,
+    )?);
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
         let ownership = issue.workflow_branch.as_ref().context("land_work_untraceable: owner has no committed branch metadata; run atelier start and commit the record")?;
@@ -254,15 +298,13 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             .context("owner integration base missing")?
             .1;
         review_gate::append_only(repo, base)?;
-        let nodes = review_gate::evaluate_session(&index, repo, &source.policy, &id, base)?;
-        let failed = nodes
-            .iter()
-            .filter(|node| !node.passed)
-            .map(|node| format!("{} {}: {}", node.target, node.check, node.reason))
-            .collect::<Vec<_>>();
-        if !failed.is_empty() {
-            bail!("land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land {id}.", failed.join("\n"));
-        }
+        nodes.extend(review_gate::evaluate_session(
+            &index,
+            repo,
+            &source.policy,
+            &id,
+            base,
+        )?);
         lines.push(format!("Owner: {id} [{}]. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
         if !initial_paths.is_empty() {
             lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier prime for current findings and proof.", initial_paths.len()));
@@ -272,6 +314,14 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             bail!("land_work_untraceable: branch {branch} has no owner; run atelier start <id> before claiming work on it");
         }
         lines.push("No work owner on the integration base.".into());
+    }
+    let failed = nodes
+        .iter()
+        .filter(|node| !node.passed)
+        .map(|node| format!("{} {}: {}", node.target, node.check, node.reason))
+        .collect::<Vec<_>>();
+    if !failed.is_empty() {
+        bail!("land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.", failed.join("\n"));
     }
     // Arbitrary policy checks run outside the lock, as in merge. Fence their
     // result against cooperative writers and child commands that changed state.

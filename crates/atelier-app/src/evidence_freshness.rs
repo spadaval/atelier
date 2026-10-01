@@ -17,6 +17,9 @@ fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> boo
         && a.issue.strategy == b.issue.strategy
         && a.sections.body == b.sections.body
 }
+pub fn completion_claim_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> bool {
+    acceptance_matches(a, b) && a.issue.status == b.issue.status
+}
 fn at_commit(repo: &Path, commit: &str, issue_id: &str) -> Result<CanonicalIssueRecord> {
     let relative = issue_record_path(issue_id);
     parse_issue_record(
@@ -29,12 +32,23 @@ pub fn evidence_is_fresh(
     issue: &CanonicalIssueRecord,
     record: &EvidenceRecord,
 ) -> Result<bool> {
+    Ok(evidence_valid_through(repo, issue, record, "HEAD")?
+        && !git::working_paths(repo)?
+            .iter()
+            .any(|path| !git::is_record_path(path)))
+}
+fn evidence_valid_through(
+    repo: &Path,
+    issue: &CanonicalIssueRecord,
+    record: &EvidenceRecord,
+    end: &str,
+) -> Result<bool> {
     let original = at_commit(repo, &record.data.commit, &issue.issue.id)?;
     if !acceptance_matches(&original, issue) {
         return Ok(false);
     }
     let target = Path::new(".atelier").join(issue_record_path(&issue.issue.id));
-    for edge in git::commit_edges(repo, &record.data.commit)? {
+    for edge in git::commit_edges_to(repo, &record.data.commit, end)? {
         if edge.paths.iter().any(|path| !git::is_record_path(path)) {
             return Ok(false);
         }
@@ -47,9 +61,7 @@ pub fn evidence_is_fresh(
             return Ok(false);
         }
     }
-    Ok(!git::working_paths(repo)?
-        .iter()
-        .any(|path| !git::is_record_path(path)))
+    Ok(true)
 }
 
 pub fn issue_evidence_gate_status(
@@ -58,6 +70,16 @@ pub fn issue_evidence_gate_status(
     issue_id: &str,
     min_count: usize,
     kind: Option<&str>,
+) -> Result<EvidenceGateStatus> {
+    issue_evidence_gate_status_with_freshness(index, repo, issue_id, min_count, kind, true)
+}
+pub(crate) fn issue_evidence_gate_status_with_freshness(
+    index: &RecordIndex,
+    repo: &Path,
+    issue_id: &str,
+    min_count: usize,
+    kind: Option<&str>,
+    fresh: bool,
 ) -> Result<EvidenceGateStatus> {
     let issue = index
         .issue_record(issue_id)
@@ -90,7 +112,7 @@ pub fn issue_evidence_gate_status(
     for record in &records {
         if record.data.result == EvidenceResult::Pass
             && last_failure.is_none_or(|failed_at| record.data.captured_at > failed_at)
-            && evidence_is_fresh(repo, issue, record).unwrap_or(false)
+            && proof_matches(repo, issue, record, fresh).unwrap_or(false)
         {
             passing += 1;
         }
@@ -99,7 +121,10 @@ pub fn issue_evidence_gate_status(
     Ok(EvidenceGateStatus {
         passed,
         reason: if passed {
-            format!("{passing} fresh passing evidence record(s) linked")
+            format!(
+                "{passing} {} passing evidence record(s) linked",
+                if fresh { "fresh" } else { "valid historical" }
+            )
         } else {
             format!("expected at least {} fresh passing evidence record(s); found {passing}; older evidence, blocked/not-applicable results and passes superseded by a newer failure do not satisfy proof", min_count.max(1))
         },
@@ -108,6 +133,14 @@ pub fn issue_evidence_gate_status(
 
 /// A recorded fail newer than every explicit pass blocks successful completion.
 pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Result<Option<String>> {
+    newest_failure_with_freshness(index, repo, issue_id, true)
+}
+pub(crate) fn newest_failure_with_freshness(
+    index: &RecordIndex,
+    repo: &Path,
+    issue_id: &str,
+    fresh: bool,
+) -> Result<Option<String>> {
     let issue = index
         .issue_record(issue_id)
         .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
@@ -132,7 +165,7 @@ pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Resul
             }
             EvidenceResult::Pass
                 if newest_pass.as_ref().is_none_or(|old| &candidate > old)
-                    && evidence_is_fresh(repo, issue, record).unwrap_or(false) =>
+                    && proof_matches(repo, issue, record, fresh).unwrap_or(false) =>
             {
                 newest_pass = Some(candidate)
             }
@@ -146,4 +179,42 @@ pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Resul
                 .is_none_or(|passed| passed.0 <= failed.0)
         })
         .map(|(_, id)| id))
+}
+
+fn proof_matches(
+    repo: &Path,
+    issue: &CanonicalIssueRecord,
+    record: &EvidenceRecord,
+    fresh: bool,
+) -> Result<bool> {
+    if fresh {
+        return evidence_is_fresh(repo, issue, record);
+    }
+    git::git_output(
+        repo,
+        &["merge-base", "--is-ancestor", &record.data.commit, "HEAD"],
+    )?;
+    let path = format!(".atelier/issues/{}.md", issue.issue.id);
+    let changes = String::from_utf8(git::git_output(repo, &["log", "--format=%H", "--", &path])?)?;
+    let mut claim = None;
+    for commit in changes.lines() {
+        let after = at_commit(repo, commit, &issue.issue.id)?;
+        let parent = at_commit(repo, &format!("{commit}^"), &issue.issue.id);
+        if parent.is_err() || !completion_claim_matches(&after, &parent?) {
+            claim = Some(commit);
+            break;
+        }
+    }
+    let claim = claim.ok_or_else(|| anyhow::anyhow!("terminal claim history is missing"))?;
+    let end = if git::git_output(
+        repo,
+        &["merge-base", "--is-ancestor", claim, &record.data.commit],
+    )
+    .is_ok()
+    {
+        &record.data.commit
+    } else {
+        claim
+    };
+    evidence_valid_through(repo, issue, record, end)
 }

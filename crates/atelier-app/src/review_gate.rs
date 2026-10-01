@@ -212,7 +212,67 @@ fn evaluate_inner(
     base_commit: &str,
     complete: bool,
 ) -> Result<Vec<GateNode>> {
-    let ids = scope(index, owner)?;
+    evaluate_scope(
+        index,
+        repo,
+        policy,
+        owner,
+        base_commit,
+        if complete {
+            EvaluationKind::Merge
+        } else {
+            EvaluationKind::Session
+        },
+        scope(index, owner)?,
+    )
+}
+/// Session-wide completion claims; retained claims keep accepted historical proof.
+pub fn evaluate_claims(
+    index: &RecordIndex,
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    base_commit: &str,
+    ids: BTreeSet<String>,
+    historical: bool,
+) -> Result<Vec<GateNode>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    evaluate_scope(
+        index,
+        repo,
+        policy,
+        "session",
+        base_commit,
+        if historical {
+            EvaluationKind::Historical
+        } else {
+            EvaluationKind::Session
+        },
+        ids,
+    )
+}
+enum EvaluationKind {
+    Merge,
+    Session,
+    Historical,
+}
+fn evaluate_scope(
+    index: &RecordIndex,
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    owner: &str,
+    base_commit: &str,
+    kind: EvaluationKind,
+    ids: BTreeSet<String>,
+) -> Result<Vec<GateNode>> {
+    let complete = matches!(kind, EvaluationKind::Merge);
+    let historical = matches!(kind, EvaluationKind::Historical);
+    let retained = |record: &ReviewRecord| {
+        let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
+        let old = entry(repo, base_commit, &path).ok().flatten();
+        old.is_some() && old == entry(repo, "HEAD", &path).ok().flatten()
+    };
     let claimed = ids
         .iter()
         .filter_map(|id| {
@@ -297,22 +357,18 @@ fn evaluate_inner(
             Vec::new(),
         ));
     }
-    if !complete {
-        for id in &claimed {
-            let blockers =
-                crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();
-            nodes.push(gate(
-                id,
-                "blockers.transitive_none_open",
-                blockers.is_empty(),
-                format!("completion blockers: {}", blockers.join(", ")),
-                Vec::new(),
-            ));
-        }
-    }
     let candidates = index
         .reviews()
-        .filter(|record| record.target == owner || (!complete && claimed.contains(&record.target)))
+        .filter(|record| {
+            record.target == owner
+                || (!complete
+                    && (claimed.contains(&record.target)
+                        || claimed.iter().any(|id| {
+                            index.get_issue(id).is_some_and(|issue| {
+                                issue.parent_id.as_deref() == Some(&record.target)
+                            })
+                        })))
+        })
         .filter(|record| {
             matches!(
                 record.event,
@@ -320,9 +376,11 @@ fn evaluate_inner(
             )
         })
         .filter(|record| {
-            (matches!(record.event, ReviewEvent::TrivialExemption) || independent(record, &authors))
-                && ancestor(repo, base_commit, &record.commit)
-                && approval_is_current(repo, &record.commit, &ids).unwrap_or(false)
+            (historical && retained(record))
+                || ((matches!(record.event, ReviewEvent::TrivialExemption)
+                    || independent(record, &authors))
+                    && ancestor(repo, base_commit, &record.commit)
+                    && approval_is_current(repo, &record.commit, &ids).unwrap_or(false))
         })
         .collect::<Vec<_>>();
     let support = candidates
@@ -376,12 +434,17 @@ fn evaluate_inner(
                 ancestor(repo, resolution, "HEAD")
                     && candidates.iter().any(|approval| {
                         matches!(approval.event, ReviewEvent::Approval)
-                            && (approval.target == owner || approval.target == finding.target)
+                            && (approval.target == owner
+                                || approval.target == finding.target
+                                || index.get_issue(&finding.target).is_some_and(|issue| {
+                                    issue.parent_id.as_deref() == Some(&approval.target)
+                                }))
+                            && (!historical || retained(disposition) || !retained(approval))
                             && ancestor(repo, resolution, &approval.commit)
                     })
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
-                independent(disposition, &authors)
+                (historical && retained(disposition)) || independent(disposition, &authors)
             }
         };
         if !accepted {
@@ -404,72 +467,9 @@ fn evaluate_inner(
         },
         dispositions,
     ));
-    for id in applicable {
-        if index.require_issue(id)?.status == "superseded" {
-            continue;
-        }
-        if let Some(failure) = crate::evidence_freshness::newest_failure(index, repo, id)? {
-            nodes.push(gate(
-                id,
-                "evidence.no_newer_failure",
-                false,
-                format!("newer failing evidence {failure}"),
-                vec![failure],
-            ));
-        }
-    }
-    // Terminal records can also be edited directly; retain the trusted
-    // policy's completion checks when evaluating their committed claims.
-    for id in &ids {
-        let issue = index.require_issue(id)?;
-        if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
-            continue;
-        }
-        for transition in policy
-            .workflow_for_issue_type(&issue.issue_type)?
-            .transitions
-            .values()
-            .filter(|transition| transition.to == issue.status)
-        {
-            for field in &transition.required_fields {
-                let present = match field.as_str() {
-                    "close_reason" => index
-                        .issue_record(id)
-                        .context("terminal issue record missing")?
-                        .sections
-                        .close_reason
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty()),
-                    other => bail!("unsupported required field '{other}'"),
-                };
-                nodes.push(gate(
-                    id,
-                    &format!("required_field.{field}"),
-                    present,
-                    if present {
-                        format!("committed claim includes required field {field}")
-                    } else {
-                        format!("committed claim is missing required field {field}")
-                    },
-                    Vec::new(),
-                ));
-            }
-            let checks = crate::workflow_validation::evaluate_policy_transition(
-                crate::workflow_validation::ValidatorRequest {
-                    index,
-                    repo_root: repo,
-                    policy,
-                    issue_id: id,
-                    validators: &transition.validators,
-                },
-            )?;
-            nodes.extend(
-                checks.into_iter().map(|check| {
-                    gate(id, &check.validator, check.passed, check.reason, Vec::new())
-                }),
-            );
-        }
-    }
+    nodes.extend(completion_claims(
+        index, repo, policy, &claimed, historical,
+    )?);
     let checks = if complete {
         crate::workflow_validation::evaluate_policy_transition(
             crate::workflow_validation::ValidatorRequest {
@@ -507,4 +507,102 @@ fn evaluate_inner(
         }
     }
     Ok(unique.into_values().collect())
+}
+
+/// Validate committed terminal claims without imposing session choreography.
+fn completion_claims(
+    index: &RecordIndex,
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    ids: &BTreeSet<String>,
+    historical: bool,
+) -> Result<Vec<GateNode>> {
+    let mut nodes = Vec::new();
+    for id in ids {
+        let issue = index.require_issue(id)?;
+        if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
+            let blockers =
+                crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();
+            nodes.push(gate(
+                id,
+                "blockers.transitive_none_open",
+                blockers.is_empty(),
+                format!("completion blockers: {}", blockers.join(", ")),
+                Vec::new(),
+            ));
+        }
+    }
+    for id in ids {
+        let issue = index.require_issue(id)?;
+        if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
+            || issue.status == "superseded"
+        {
+            continue;
+        }
+        if let Some(failure) =
+            crate::evidence_freshness::newest_failure_with_freshness(index, repo, id, !historical)?
+        {
+            nodes.push(gate(
+                id,
+                "evidence.no_newer_failure",
+                false,
+                format!("newer failing evidence {failure}"),
+                vec![failure],
+            ));
+        }
+    }
+    // Terminal records can also be edited directly; retain the trusted
+    // policy's completion checks when evaluating their committed claims.
+    for id in ids {
+        let issue = index.require_issue(id)?;
+        if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
+            continue;
+        }
+        for transition in policy
+            .workflow_for_issue_type(&issue.issue_type)?
+            .transitions
+            .values()
+            .filter(|transition| transition.to == issue.status)
+        {
+            for field in &transition.required_fields {
+                let present = match field.as_str() {
+                    "close_reason" => index
+                        .issue_record(id)
+                        .context("terminal issue record missing")?
+                        .sections
+                        .close_reason
+                        .as_deref()
+                        .is_some_and(|value| !value.trim().is_empty()),
+                    other => bail!("unsupported required field '{other}'"),
+                };
+                nodes.push(gate(
+                    id,
+                    &format!("required_field.{field}"),
+                    present,
+                    if present {
+                        format!("committed claim includes required field {field}")
+                    } else {
+                        format!("committed claim is missing required field {field}")
+                    },
+                    Vec::new(),
+                ));
+            }
+            let checks = crate::workflow_validation::evaluate_with_freshness(
+                crate::workflow_validation::ValidatorRequest {
+                    index,
+                    repo_root: repo,
+                    policy,
+                    issue_id: id,
+                    validators: &transition.validators,
+                },
+                !historical,
+            )?;
+            nodes.extend(
+                checks.into_iter().map(|check| {
+                    gate(id, &check.validator, check.passed, check.reason, Vec::new())
+                }),
+            );
+        }
+    }
+    Ok(nodes)
 }

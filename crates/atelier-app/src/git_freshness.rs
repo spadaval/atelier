@@ -51,12 +51,15 @@ pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathB
 /// Merge results are compared to a parent containing the tested pin when possible:
 /// older parents must not reintroduce changes already present at the pin.
 pub fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
+    commit_edges_to(repo, pin, "HEAD")
+}
+pub(crate) fn commit_edges_to(repo: &Path, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
     if !matches!(pin.len(), 40 | 64) || !pin.bytes().all(|b| b.is_ascii_hexdigit()) {
         bail!("pin must be a full Git commit ID");
     }
     git_output(repo, &["cat-file", "-e", &format!("{pin}^{{commit}}")])?;
-    git_output(repo, &["merge-base", "--is-ancestor", pin, "HEAD"])?;
-    let range = format!("{pin}..HEAD");
+    git_output(repo, &["merge-base", "--is-ancestor", pin, end])?;
+    let range = format!("{pin}..{end}");
     let commits = String::from_utf8(git_output(repo, &["rev-list", "--parents", &range])?)?;
     let descendants =
         String::from_utf8(git_output(repo, &["rev-list", "--ancestry-path", &range])?)?;
