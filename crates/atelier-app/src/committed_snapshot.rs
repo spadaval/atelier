@@ -138,6 +138,13 @@ pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
 /// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
 /// are needed only for flagged paths; Unix executable modes are always checked.
 pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
+    flagged_modified_paths_matching(repo, commit, |_| true)
+}
+pub(crate) fn flagged_modified_paths_matching(
+    repo: &Path,
+    commit: &str,
+    include: impl Fn(&Path) -> bool,
+) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "-v", "-z"])?;
     let mut flagged = BTreeSet::new();
     for entry in output
@@ -148,7 +155,10 @@ pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>>
             bail!("invalid Git index flag entry");
         }
         if entry[0].is_ascii_lowercase() || entry[0] == b'S' {
-            flagged.insert(PathBuf::from(std::str::from_utf8(&entry[2..])?));
+            let path = PathBuf::from(std::str::from_utf8(&entry[2..])?);
+            if include(&path) {
+                flagged.insert(path);
+            }
         }
     }
     if flagged.is_empty() && !cfg!(unix) {
@@ -160,7 +170,7 @@ pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>>
     {
         use std::os::unix::fs::PermissionsExt;
         for (path, (mode, _)) in &entries {
-            if !matches!(mode.as_str(), "100644" | "100755") {
+            if !include(path) || !matches!(mode.as_str(), "100644" | "100755") {
                 continue;
             }
             let metadata = match fs::symlink_metadata(repo.join(path)) {

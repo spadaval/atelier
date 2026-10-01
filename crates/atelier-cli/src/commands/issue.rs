@@ -329,30 +329,6 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct EvidenceGateStatus {
-    pub passed: bool,
-}
-
-pub(crate) fn issue_evidence_gate_status(
-    index: &RecordIndex,
-    issue: &Issue,
-    sections: Option<&IssueSections>,
-) -> Result<EvidenceGateStatus> {
-    let _ = sections;
-    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
-    let gate = atelier_app::evidence_freshness::issue_evidence_gate_status(
-        index,
-        layout.repo_root(),
-        &issue.id,
-        1,
-        None,
-    )?;
-    Ok(EvidenceGateStatus {
-        passed: gate.passed,
-    })
-}
-
 fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> {
     let issue = index.require_issue(canonical_id)?;
     let line = match issue.parent_id {

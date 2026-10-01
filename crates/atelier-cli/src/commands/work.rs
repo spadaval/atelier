@@ -543,9 +543,11 @@ fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> FooterPane
 }
 
 fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {
+    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    let mut proofs = atelier_app::evidence_freshness::EvidenceReadContext::new(layout.repo_root());
     let mut count = 0;
     for (issue, _) in rows {
-        if !crate::commands::issue::issue_evidence_gate_status(index, issue, None)?.passed {
+        if !proofs.issue_gate(index, &issue.id, 1, None)?.passed {
             count += 1;
         }
     }
