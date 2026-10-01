@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Meet the expanded rebuild read latency contract"
-updated_at: "2026-10-01T23:04:17.805257696+00:00"
+updated_at: "2026-10-01T23:16:53.319640527+00:00"
 ---
 
 ## Goal
@@ -33,3 +33,7 @@ Command-local Git query reuse and batching, scoped session projections, and prun
 ## Context
 
 Independent acceptance V1 at b7aee82cb18837533ebc8ab2c1ff15041e2f5f66: /tmp/atelier-independent-acceptance.md and expanded benchmark logs. Existing six-read benchmark omitted slow dashboards and guards. Keep all earlier failed evidence.
+
+## Notes
+
+- 2026-10-01 [note] Expanded the checked-in release benchmark from six reads to 44 query/guard/refusal shapes (7756de5b). Fresh one-run functional smoke exercises both generated 1000-issue fixtures and reports the remaining budget failures honestly; this concurrent smoke is not latency acceptance. Prune candidate dcb7b022 reduces Git calls from 1690 to 6 and retains identical output. Its 113 ms author timing used one CPU, while the acceptance environment has 32 CPUs; preserve that result as a distinct runtime observation and remeasure the default environment quietly. Evidence candidate f030b7f4 still has epic max116 ms and successful guards above500 ms. Session/history batching and genuine source cleanup remain underway.
