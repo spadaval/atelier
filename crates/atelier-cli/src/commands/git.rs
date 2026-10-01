@@ -108,6 +108,22 @@ impl Snapshot {
 pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Result<Vec<String>> {
     let current = current_branch(repo)?.unwrap_or_default();
     let policy = workflow_policy::load(repo)?;
+    branch_lines_for(
+        repo,
+        state,
+        live,
+        &current,
+        &policy.branch_policy.base_branch,
+    )
+}
+
+pub(crate) fn branch_lines_for(
+    repo: &Path,
+    state: &Path,
+    live: &RecordIndex,
+    current: &str,
+    base_branch: &str,
+) -> Result<Vec<String>> {
     let heads = text(
         repo,
         &[
@@ -123,7 +139,7 @@ pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Res
             continue;
         };
         let branch = reference.trim_start_matches("refs/heads/");
-        if branch == current || branch == policy.branch_policy.base_branch {
+        if branch == current || branch == base_branch {
             continue;
         }
         let view = (|| -> Result<Vec<String>> {

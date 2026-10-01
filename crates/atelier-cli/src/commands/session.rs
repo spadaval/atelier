@@ -44,10 +44,21 @@ fn prime_text() -> Result<String> {
     let repo = layout.repo_root();
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-    let index = RecordIndex::load(&layout.canonical_dir())?;
+    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let branch = git::current_branch(repo)?.unwrap_or_else(|| "detached HEAD".into());
     let source = base_policy::working(repo)?;
-    let view = atelier_app::work_classification::status_view(&index, Some(&source.policy))?;
+    index.validate_policy(&source.policy, repo)?;
+    let owner = owner(&index, &branch, None)?
+        .map(|id| review_gate::scope(&index, &id).map(|scope| (id, scope)))
+        .transpose()?;
+    let work = atelier_app::work_classification::work_buckets_for(
+        &index,
+        Some(&source.policy),
+        index.issues().filter(|issue| match &owner {
+            Some((_, scope)) => scope.contains(&issue.id),
+            None => source.policy.status_category(&issue.status) == Some("active"),
+        }),
+    )?;
     let head = git_freshness::head_commit(repo)?;
     let dirty = git_freshness::working_paths(repo)?;
     let mut lines = vec![
@@ -60,9 +71,8 @@ fn prime_text() -> Result<String> {
         "Guidance: read AGENTS.md, the repository strategy, and .agents/skills/agent-factory/SKILL.md. Agent Factory owns process; commit records with code. Atelier never creates commits.".into(),
     ];
     lines.extend(source.diagnostics);
-    if let Some(id) = owner(&index, &branch, None)? {
+    if let Some((id, scope)) = owner {
         let record = index.issue_record(&id).context("owner missing")?;
-        let scope = review_gate::scope(&index, &id)?;
         lines.push(format!(
             "Owner: {id} [{}] {}",
             record.issue.status, record.issue.title
@@ -85,14 +95,7 @@ fn prime_text() -> Result<String> {
                 }
             }
         }
-        for row in view
-            .work
-            .active
-            .iter()
-            .chain(&view.work.blocked)
-            .filter(|row| scope.contains(&row.id))
-            .take(8)
-        {
+        for row in work.active.iter().chain(&work.blocked).take(8) {
             lines.push(format!(
                 "Work: {} [{}] {} — blockers: {}",
                 row.id,
@@ -163,14 +166,20 @@ fn prime_text() -> Result<String> {
         lines.push(format!("Next: {inspect}; atelier land {id}; use atelier merge {id} --check for completed-owner merge readiness."));
     } else {
         lines.push("Owner: none on this checkout. Select ready work with atelier work ready, then atelier start <id>.".into());
-        for row in view.work.active.iter().take(8) {
+        for row in work.active.iter().take(8) {
             lines.push(format!("Active: {} [{}] {}", row.id, row.status, row.title));
         }
     }
     lines.extend(
-        git::branch_lines(repo, &layout.canonical_dir(), &index)?
-            .into_iter()
-            .take(8),
+        git::branch_lines_for(
+            repo,
+            &layout.canonical_dir(),
+            &index,
+            &branch,
+            &source.policy.branch_policy.base_branch,
+        )?
+        .into_iter()
+        .take(8),
     );
     lines.push("Before handing off: record findings and honest proof, commit records with the code, then run atelier land. In-progress work may remain open.".into());
     Ok(lines.join("\n"))
