@@ -26,6 +26,10 @@ class is never silently deleted. Reviews are append-only proof; do not delete
 review records by hand to bypass gates. External payload deletion is outside
 prune's scope.
 
+Protected prune removes a terminal target and its eligible review cluster
+together. Git preserves their audit trail. Retained review events stay immutable;
+rewrites, partial review deletions, and edits later reverted fail landing.
+
 Commit canonical record removals yourself. After a partial cleanup, inspect Git
 and rerun the dry run; do not assume every candidate was removed. Recover a
 record from Git history:

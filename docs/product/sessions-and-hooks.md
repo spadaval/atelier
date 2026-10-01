@@ -21,6 +21,11 @@ child claims still need their applicable completion checks. A terminal owner
 requires a clean checkout and the full merge gates. An explicit child ID
 resolves its owner; otherwise ownership is inferred from the current branch.
 
+Landing also checks completed claims elsewhere in the checkout. Unchanged
+integrated claims retain proof and independent acceptance that were valid when
+completion was claimed. Historical acceptance preserves the original work's
+author scope and requires immutable review history.
+
 ## Claude Code hooks
 
 Claude is the supported harness. Setup writes `.claude/settings.json` with
@@ -49,5 +54,6 @@ session acceptance needs a dogfooded session as well as adapter tests.
 `status` shows labeled summaries of committed local work-branch scopes, while
 the current checkout uses live records. It does not fetch remote branches or
 overlay another branch's records onto the current graph. Incompatible or
-unavailable snapshots are reported separately, and duplicate tracker trees need
-not produce repeated summaries. A branch's done claim is not base completion.
+unavailable snapshots are reported separately. Every compatible owner branch
+remains visible, including branches sharing a tracker tree. A branch's done
+claim is not base completion.

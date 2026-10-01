@@ -42,6 +42,9 @@ findings without accepted dispositions block merge. A later disposition
 automatically links to the preceding disposition; commit the new
 file rather than editing or deleting an old event. Merge checks review history
 from the base, including edits subsequently reverted.
+Terminal targets and their eligible review clusters can leave the active tree
+together through [protected prune](retention-and-prune.md); retained events
+remain immutable.
 
 ## Approval freshness
 
