@@ -60,7 +60,11 @@ pub fn transition_issue(
 ) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
     if let Some(reason) = close_reason {
-        ensure_close_reason_fits_record(&issue_id, reason)?;
+        atelier_records::validate_issue_section_text(
+            &issue_id,
+            atelier_records::IssueSectionName::CloseReason,
+            reason,
+        )?;
     }
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -848,20 +852,6 @@ fn ensure_expected_branch_checked_out(
     })
 }
 
-/// The close reason is stored as the record's `## Close Reason` body section,
-/// so it must not open another level-two section.
-fn ensure_close_reason_fits_record(issue_id: &str, reason: &str) -> Result<()> {
-    if reason.lines().any(|line| {
-        line.strip_prefix("##")
-            .is_some_and(|rest| !rest.starts_with('#'))
-    }) {
-        bail!(
-            "close reason for issue {issue_id} must not contain a `##` Markdown heading; it is stored in the record's `## Close Reason` section"
-        );
-    }
-    Ok(())
-}
-
 fn apply_transition_record(
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
     state_dir: &Path,
@@ -872,14 +862,11 @@ fn apply_transition_record(
     let now = Utc::now();
     record.issue.status = transition.to.clone();
     record.issue.updated_at = now;
-    record.issue.closed_at = if policy.status_category(&transition.to) == Some("done") {
-        Some(now)
-    } else {
-        None
-    };
+    let closing = policy.status_category(&transition.to) == Some("done");
+    record.issue.closed_at = closing.then_some(now);
     if let Some(reason) = close_reason
         .map(str::trim)
-        .filter(|reason| !reason.is_empty())
+        .filter(|reason| closing && !reason.is_empty())
     {
         record.sections.close_reason = Some(reason.to_string());
     }
@@ -2454,16 +2441,6 @@ state_root = ".atelier"
     }
 
     #[test]
-    fn close_reason_rejects_level_two_headings() {
-        assert!(ensure_close_reason_fits_record("atelier-x", "Done\n### Detail").is_ok());
-        let error = ensure_close_reason_fits_record("atelier-x", "Done\n## Evidence")
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("atelier-x"), "{error}");
-        assert!(error.contains("`##` Markdown heading"), "{error}");
-    }
-
-    #[test]
     fn transition_record_stores_close_reason_in_issue_record() {
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
@@ -2495,5 +2472,33 @@ state_root = ".atelier"
         );
         let text = std::fs::read_to_string(state_dir.join("issues/atelier-epic1.md")).unwrap();
         assert!(text.contains("## Close Reason\n\nReplaced by a smaller epic."));
+    }
+
+    #[test]
+    fn non_terminal_transition_does_not_store_close_reason() {
+        let dir = tempdir().unwrap();
+        write_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let issue = test_issue("atelier-epic1");
+        insert_canonical_issue(&db, &state_dir, issue.clone());
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let transition = resolve_issue_transition(&policy, &issue, "block").unwrap();
+
+        let mut record = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        apply_transition_record(
+            &policy,
+            &state_dir,
+            &mut record,
+            transition,
+            Some("waiting"),
+        )
+        .unwrap();
+
+        let stored = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        assert_eq!(stored.issue.status, "blocked");
+        assert!(stored.issue.closed_at.is_none());
+        assert_eq!(stored.sections.close_reason, None);
     }
 }

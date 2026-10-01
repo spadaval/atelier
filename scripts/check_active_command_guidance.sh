@@ -278,7 +278,7 @@ restricted_occurrence_has_explicit_context() {
   local heading=$2
 
   case "$source" in
-    docs/product/command-audit/branch.md | docs/product/command-audit/diagnostics.md | docs/product/command-audit/doctor.md | docs/product/command-audit/export.md | docs/product/command-audit/forgejo.md | docs/product/command-audit/import-beads.md | docs/product/command-audit/lint.md | docs/product/command-audit/rebuild.md | docs/product/command-audit/workflow.md)
+    docs/product/command-audit/branch.md | docs/product/command-audit/diagnostics.md | docs/product/command-audit/doctor.md | docs/product/command-audit/export.md | docs/product/command-audit/import-beads.md | docs/product/command-audit/lint.md | docs/product/command-audit/rebuild.md | docs/product/command-audit/workflow.md)
       return 0
       ;;
   esac

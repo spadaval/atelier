@@ -859,7 +859,15 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
         Some(&record.issue.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&render_issue_sections(&record.sections));
+    let body = render_issue_sections(&record.sections);
+    let path = issue_record_path(&record.issue.id);
+    parse_issue_sections(&body, &path).with_context(|| {
+        format!(
+            "Refusing to write issue {} because its rendered body would not parse",
+            record.issue.id
+        )
+    })?;
+    output.push_str(&body);
     output.push('\n');
     Ok(output)
 }
@@ -1140,6 +1148,30 @@ fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Resu
     validate_priority(&record.issue.priority)
         .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?;
     validate_relationships(&record.relationships, relative)?;
+    for name in IssueSections::ALL_NAMES {
+        if let Some(text) = record.sections.section(name) {
+            validate_issue_section_text(&record.issue.id, name, text)?;
+        }
+    }
+    Ok(())
+}
+
+/// Reject issue section text that would open another `##` section once the
+/// record is rendered, so every written issue record parses back unchanged.
+pub fn validate_issue_section_text(
+    issue_id: &str,
+    name: IssueSectionName,
+    text: &str,
+) -> Result<()> {
+    if normalize_body(text)
+        .lines()
+        .any(|line| issue_level_two_heading(line).is_some())
+    {
+        bail!(
+            "issue {issue_id} section '{}' must not contain a `##` Markdown heading line; it would start another record section",
+            name.title()
+        );
+    }
     Ok(())
 }
 
@@ -2776,6 +2808,29 @@ updated_at: "2026-06-10T13:00:00+00:00"
             parsed.sections.section(IssueSectionName::CloseReason),
             Some("Shipped with proof")
         );
+    }
+
+    #[test]
+    fn issue_record_write_rejects_section_text_that_opens_another_section() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        let mut record = issue_record("atelier-smug");
+        record.sections.close_reason = Some("done\n## Evidence\nsmuggled".to_string());
+
+        let error = store.write_issue_atomic(&record).unwrap_err().to_string();
+
+        assert!(error.contains("atelier-smug"), "{error}");
+        assert!(error.contains("'Close Reason'"), "{error}");
+        assert!(!store
+            .state_dir
+            .join(issue_record_path("atelier-smug"))
+            .exists());
+
+        record.sections.close_reason = Some("done\r## Notes".to_string());
+        assert!(store.write_issue_atomic(&record).is_err());
+
+        record.sections.close_reason = Some("done\n### Detail is fine".to_string());
+        store.write_issue_atomic(&record).unwrap();
     }
 
     #[test]

@@ -2137,6 +2137,9 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     if text.trim().is_empty() {
         bail!("Note text for issue {issue_id} must not be empty");
     }
+    // Hold the exclusive transaction across read and write so concurrent
+    // notes cannot overwrite each other's appended bullets.
+    let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(issue_id)?;
     let now = Utc::now();
@@ -2459,6 +2462,75 @@ mod tests {
         let dir = tempdir().unwrap();
         let db = Database::open(&dir.path().join("test.db")).unwrap();
         (db, dir)
+    }
+
+    #[test]
+    fn concurrent_note_appends_keep_every_note() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let now = Utc::now();
+        RecordStore::new(&state_dir)
+            .write_issue_atomic(&CanonicalIssueRecord {
+                issue: Issue {
+                    id: "atelier-note".to_string(),
+                    title: "Concurrent notes".to_string(),
+                    description: None,
+                    status: "todo".to_string(),
+                    issue_type: "task".to_string(),
+                    priority: "medium".to_string(),
+                    fields: BTreeMap::new(),
+                    parent_id: None,
+                    created_at: now,
+                    updated_at: now,
+                    closed_at: None,
+                },
+                labels: Vec::new(),
+                sections: IssueSections::unchecked_from_body(Some(
+                    "## Description\n\nNotes race.\n\n## Outcome\n\nNo note is lost.",
+                )),
+                relationships: Relationships::default(),
+            })
+            .unwrap();
+
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let writers = (0..8)
+            .map(|writer| {
+                let state_dir = state_dir.clone();
+                let barrier = std::sync::Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    for index in 0..25 {
+                        append_note(
+                            &state_dir,
+                            "atelier-note",
+                            "note",
+                            &format!("writer {writer} note {index}"),
+                        )
+                        .unwrap();
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+
+        let notes = RecordStore::new(&state_dir)
+            .load_issue_by_id("atelier-note")
+            .unwrap()
+            .sections
+            .notes
+            .unwrap();
+        let mut kept = notes
+            .lines()
+            .filter_map(|line| line.split_once("[note] ").map(|(_, text)| text.to_string()))
+            .collect::<Vec<_>>();
+        kept.sort();
+        let mut expected = (0..8)
+            .flat_map(|writer| (0..25).map(move |index| format!("writer {writer} note {index}")))
+            .collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(kept, expected);
     }
 
     #[test]

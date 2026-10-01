@@ -503,6 +503,12 @@ fn preserve_notes_and_close_reason(
             sections.close_reason = Some(reason.trim().to_string());
         }
     }
+    for name in IssueSections::ALL_NAMES {
+        if let Some(text) = sections.section(name) {
+            atelier_records::validate_issue_section_text(&record.id, name, text)
+                .with_context(|| format!("Cannot import Beads issue {}", record.id))?;
+        }
+    }
 
     for (field, value) in [
         ("owner", record.owner.as_deref()),
@@ -718,6 +724,29 @@ mod tests {
         assert!(notes.starts_with("- "), "{notes}");
         assert!(notes.contains("[note] "), "{notes}");
         assert!(notes.contains("replacement is sequenced"), "{notes}");
+    }
+
+    #[test]
+    fn test_import_rejects_close_reason_that_would_open_another_section() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let mut issue = beads_issue("smuggler", "task", None);
+        issue["close_reason"] = serde_json::json!("done\n## Evidence\nsmuggled");
+        let import_path = write_jsonl(&dir, &[issue]);
+
+        let error = format!(
+            "{:#}",
+            run_beads_jsonl(&import_path, &state_dir).unwrap_err()
+        );
+
+        assert!(
+            error.contains("Cannot import Beads issue smuggler"),
+            "{error}"
+        );
+        assert!(error.contains("'Close Reason'"), "{error}");
+        assert!(!state_dir
+            .join(issue_record_path(&record_id::legacy_issue_id(1)))
+            .exists());
     }
 
     #[test]

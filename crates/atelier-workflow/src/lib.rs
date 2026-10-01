@@ -79,7 +79,7 @@ workflows:
       request_publish:
         from: [ready, in_progress, validation]
         to: publish_review
-        description: "Open the mission publish review from the mission branch to the configured base branch."
+        description: "Mark the mission ready to publish once its work is terminal and checks pass."
         validators:
           - objective.work_present
           - objective.work_terminal
@@ -167,11 +167,11 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        description: "Move reviewed work into validation after review is complete."
+        description: "Move work into validation."
       close:
         from: [validation]
         to: done
-        description: "Closing requires complete child proof, review merge, and a clean worktree."
+        description: "Closing requires complete child proof and a clean worktree."
         validators:
           - children.proof_complete
           - blockers.none_open
@@ -205,7 +205,7 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        description: "Move reviewed work into validation after review is complete."
+        description: "Move work into validation."
       complete_parented:
         from: [in_progress]
         to: done
@@ -221,7 +221,7 @@ workflows:
       close:
         from: [validation]
         to: done
-        description: "Closing standalone validation requires attached evidence, complete review, and a clean worktree."
+        description: "Closing standalone validation requires attached evidence and a clean worktree."
         validators:
           - evidence.attached: { min_count: 1 }
           - blockers.none_open

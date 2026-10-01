@@ -1025,6 +1025,11 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
             action: BundleCommands::Apply { .. },
         }
         | Commands::ImportBeads { .. } => CanonicalTransactionMode::Exclusive,
+        // Note append is a read-modify-write of one record; it owns an
+        // exclusive transaction so concurrent notes cannot lose updates.
+        Commands::Issue {
+            action: IssueCommands::Note { .. },
+        } => CanonicalTransactionMode::Exclusive,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
         // append. The child may itself be an Atelier writer or migration.

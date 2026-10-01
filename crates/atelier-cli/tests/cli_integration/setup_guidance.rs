@@ -2994,8 +2994,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out
-            .contains("Closing requires complete child proof, review merge, and a clean worktree."),
+        options_out.contains("Closing requires complete child proof and a clean worktree."),
         "{options_out}"
     );
     assert!(options_out.contains(&format!(
