@@ -1,4 +1,4 @@
-//! Verify canonical inputs and flagged tracked files independently of Git status.
+//! Verify canonical inputs, hidden file bytes and tracked executable modes.
 use crate::git_freshness::git_output;
 use anyhow::{bail, Context, Result};
 use atelier_records::is_local_atelier_path;
@@ -135,7 +135,8 @@ pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
     Ok(())
 }
 
-/// Modified tracked files hidden from status by assume-unchanged/skip-worktree.
+/// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
+/// are needed only for flagged paths; Unix executable modes are always checked.
 pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "-v", "-z"])?;
     let mut flagged = BTreeSet::new();
@@ -150,15 +151,38 @@ pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>>
             flagged.insert(PathBuf::from(std::str::from_utf8(&entry[2..])?));
         }
     }
-    if flagged.is_empty() {
+    if flagged.is_empty() && !cfg!(unix) {
         return Ok(Vec::new());
     }
-    modified(repo, flagged, &entries(repo, commit, false)?)
+    let entries = entries(repo, commit, false)?;
+    let mut dirty = modified(repo, flagged, &entries)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for (path, (mode, _)) in &entries {
+            if !matches!(mode.as_str(), "100644" | "100755") {
+                continue;
+            }
+            let metadata = match fs::symlink_metadata(repo.join(path)) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            if metadata.is_file()
+                && (metadata.permissions().mode() & 0o111 != 0) != (mode == "100755")
+            {
+                dirty.push(path.clone());
+            }
+        }
+    }
+    dirty.sort();
+    dirty.dedup();
+    Ok(dirty)
 }
 
 pub fn require_flagged_clean(repo: &Path, commit: &str) -> Result<()> {
     if let Some(path) = flagged_modified_paths(repo, commit)?.first() {
-        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags; restore or commit the change before continuing", path.display());
+        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags or filemode settings; restore or commit the change before continuing", path.display());
     }
     Ok(())
 }
