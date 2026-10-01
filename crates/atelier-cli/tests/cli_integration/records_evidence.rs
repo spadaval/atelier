@@ -270,21 +270,6 @@ fn test_create_invalid_priority() {
     );
 }
 
-// --- create.rs: Unknown template ---
-#[test]
-fn test_create_unknown_template() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Issue", "-t", "unknown"]);
-
-    assert!(!success);
-    assert!(
-        stderr.contains("Unknown") || stderr.contains("template") || stderr.contains("unknown")
-    );
-}
-
 // --- block.rs: Error cases ---
 #[test]
 fn test_block_self() {
@@ -775,9 +760,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
             "--issue-type",
             "mission",
             "--body",
-            "Mission body",
-            "--validation",
-            "Wrong-kind command output is corrective",
+            "## Outcome\n\nMission body\n\n## Success criteria\n\nWrong-kind command output is corrective",
         ],
     );
     assert!(success, "mission create failed: {stderr}");

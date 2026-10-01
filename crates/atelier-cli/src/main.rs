@@ -132,7 +132,7 @@ enum Commands {
         retention_days: Option<u64>,
     },
 
-    /// Validate every tracker record and report all findings
+    /// Validate tracker records and their graph
     Check {
         /// Optional issue ID or imported source ID
         id: Option<String>,
@@ -194,21 +194,9 @@ enum IssueCommands {
         /// Typed Markdown body: Goal/Done when for issues, Outcome/Proof for epics.
         #[arg(long)]
         body: Option<String>,
-        /// Deprecated compatibility: add one mission Constraints section bullet
-        #[arg(long, hide = true)]
-        constraint: Vec<String>,
-        /// Deprecated compatibility: add one mission Risks section bullet
-        #[arg(long, hide = true)]
-        risk: Vec<String>,
-        /// Deprecated compatibility: add one mission Validation section bullet
-        #[arg(long, hide = true)]
-        validation: Vec<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
-        /// Work type/body preset (bug, feature, refactor, research)
-        #[arg(short, long)]
-        template: Option<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
@@ -281,15 +269,6 @@ enum IssueCommands {
         /// Plain mission Markdown centered on Outcome; requires a mission objective record
         #[arg(long)]
         body: Option<String>,
-        /// Deprecated compatibility: add one mission Constraints section bullet
-        #[arg(long, hide = true)]
-        constraint: Vec<String>,
-        /// Deprecated compatibility: add one mission Risks section bullet
-        #[arg(long, hide = true)]
-        risk: Vec<String>,
-        /// Deprecated compatibility: add one mission Validation section bullet
-        #[arg(long, hide = true)]
-        validation: Vec<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,

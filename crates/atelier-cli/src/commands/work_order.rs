@@ -2,152 +2,76 @@ use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
+use atelier_app::work_classification::WorkClassification;
 use atelier_core::IssuePriority;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkRowState {
-    Ready,
-    Blocked,
-    Active,
-    Review,
-    Validation,
-    Done,
-    NotReady,
-}
-
-#[cfg(test)]
-impl WorkRowState {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Ready => "ready",
-            Self::Blocked => "blocked",
-            Self::Active => "active",
-            Self::Review => "review",
-            Self::Validation => "validation",
-            Self::Done => "done",
-            Self::NotReady => "not-ready",
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkOrderRow {
     pub id: String,
-    pub status_category: Option<String>,
+    pub classification: WorkClassification,
     pub priority: String,
     pub updated_at: DateTime<Utc>,
     pub open_blockers: Vec<String>,
 }
 
-impl WorkOrderRow {
-    pub(crate) fn state(&self) -> WorkRowState {
-        row_state(self.status_category.as_deref(), self.open_blockers.len())
-    }
-}
-
-pub(crate) fn row_state(category: Option<&str>, open_blocker_count: usize) -> WorkRowState {
-    match category {
-        Some("done") => WorkRowState::Done,
-        _ if open_blocker_count > 0 => WorkRowState::Blocked,
-        Some("todo") => WorkRowState::Ready,
-        Some("active") => WorkRowState::Active,
-        Some("review") => WorkRowState::Review,
-        Some("validation") => WorkRowState::Validation,
-        Some("blocked") => WorkRowState::Blocked,
-        _ => WorkRowState::NotReady,
-    }
-}
-
 pub(crate) fn ordered_work_indices(rows: &[WorkOrderRow]) -> Vec<usize> {
-    let visible_ids = rows
+    let by_id = rows
         .iter()
-        .map(|row| row.id.as_str())
-        .collect::<BTreeSet<_>>();
+        .enumerate()
+        .map(|(index, row)| (row.id.as_str(), index))
+        .collect::<BTreeMap<_, _>>();
     let mut indegree = vec![0usize; rows.len()];
-    let mut dependents_by_blocker = BTreeMap::<&str, Vec<usize>>::new();
-
-    for (blocked_index, row) in rows.iter().enumerate() {
-        let mut visible_blockers = row
+    let mut dependents = vec![Vec::new(); rows.len()];
+    for (blocked, row) in rows.iter().enumerate() {
+        let blockers = row
             .open_blockers
             .iter()
-            .map(String::as_str)
-            .filter(|blocker_id| visible_ids.contains(blocker_id))
+            .filter_map(|id| by_id.get(id.as_str()).copied())
             .collect::<BTreeSet<_>>();
-        for blocker_id in visible_blockers.iter() {
-            indegree[blocked_index] += 1;
-            dependents_by_blocker
-                .entry(blocker_id)
-                .or_default()
-                .push(blocked_index);
+        indegree[blocked] = blockers.len();
+        for blocker in blockers {
+            dependents[blocker].push(blocked);
         }
-        visible_blockers.clear();
     }
-
     let mut available = (0..rows.len())
         .filter(|index| indegree[*index] == 0)
-        .collect::<Vec<_>>();
-    sort_indices_by_display_order(rows, &mut available);
-
+        .map(|index| (display_key(&rows[index]), index))
+        .collect::<BTreeSet<_>>();
     let mut ordered = Vec::with_capacity(rows.len());
-    let mut emitted = vec![false; rows.len()];
-    while let Some(index) = pop_front(&mut available) {
-        if emitted[index] {
-            continue;
-        }
-        emitted[index] = true;
+    while let Some((_, index)) = available.pop_first() {
         ordered.push(index);
-        if let Some(dependents) = dependents_by_blocker.get(rows[index].id.as_str()) {
-            for dependent in dependents {
-                indegree[*dependent] = indegree[*dependent].saturating_sub(1);
-                if indegree[*dependent] == 0 {
-                    available.push(*dependent);
-                }
+        for dependent in &dependents[index] {
+            indegree[*dependent] -= 1;
+            if indegree[*dependent] == 0 {
+                available.insert((display_key(&rows[*dependent]), *dependent));
             }
-            sort_indices_by_display_order(rows, &mut available);
         }
     }
-
-    if ordered.len() < rows.len() {
-        let mut remaining = (0..rows.len())
-            .filter(|index| !emitted[*index])
-            .collect::<Vec<_>>();
-        sort_indices_by_display_order(rows, &mut remaining);
-        ordered.extend(remaining);
-    }
-
+    // Cyclic rows and their dependents retain the same deterministic fallback.
+    let mut remaining = (0..rows.len())
+        .filter(|index| indegree[*index] > 0)
+        .collect::<Vec<_>>();
+    remaining.sort_by_key(|index| display_key(&rows[*index]));
+    ordered.extend(remaining);
     ordered
-}
-
-fn pop_front<T>(items: &mut Vec<T>) -> Option<T> {
-    if items.is_empty() {
-        None
-    } else {
-        Some(items.remove(0))
-    }
-}
-
-fn sort_indices_by_display_order(rows: &[WorkOrderRow], indices: &mut [usize]) {
-    indices.sort_by_key(|index| display_key(&rows[*index]));
 }
 
 fn display_key(row: &WorkOrderRow) -> (u8, u8, Reverse<DateTime<Utc>>, &str) {
     (
-        state_rank(row.state()),
+        state_rank(row.classification),
         priority_rank(&row.priority),
         Reverse(row.updated_at),
         row.id.as_str(),
     )
 }
 
-fn state_rank(state: WorkRowState) -> u8 {
+fn state_rank(state: WorkClassification) -> u8 {
     match state {
-        WorkRowState::Ready => 0,
-        WorkRowState::Active => 1,
-        WorkRowState::Blocked => 2,
-        WorkRowState::Review => 3,
-        WorkRowState::Validation => 4,
-        WorkRowState::Done => 5,
-        WorkRowState::NotReady => 6,
+        WorkClassification::Ready => 0,
+        WorkClassification::Active => 1,
+        WorkClassification::Blocked => 2,
+        WorkClassification::Done => 3,
+        WorkClassification::Backlog => 4,
     }
 }
 
@@ -165,7 +89,13 @@ mod tests {
     fn row(id: &str, category: &str, priority: &str, blockers: &[&str]) -> WorkOrderRow {
         WorkOrderRow {
             id: id.to_string(),
-            status_category: Some(category.to_string()),
+            classification: match category {
+                "done" => WorkClassification::Done,
+                _ if !blockers.is_empty() => WorkClassification::Blocked,
+                "todo" => WorkClassification::Ready,
+                "active" => WorkClassification::Active,
+                _ => WorkClassification::Backlog,
+            },
             priority: priority.to_string(),
             updated_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
             open_blockers: blockers.iter().map(|id| id.to_string()).collect(),
@@ -216,7 +146,7 @@ mod tests {
         ];
 
         assert_eq!(ordered_ids(&rows), vec!["atelier-a", "atelier-b"]);
-        assert_eq!(rows[0].state().label(), "blocked");
+        assert_eq!(rows[0].classification, WorkClassification::Blocked);
     }
 
     #[test]
@@ -256,21 +186,15 @@ mod tests {
             vec!["atelier-c", "atelier-a", "atelier-b"]
         );
     }
-
     #[test]
-    fn row_state_labels_cover_work_view_vocabulary() {
-        let cases = [
-            ((Some("todo"), 0), "ready"),
-            ((Some("todo"), 1), "blocked"),
-            ((Some("active"), 0), "active"),
-            ((Some("review"), 0), "review"),
-            ((Some("validation"), 0), "validation"),
-            ((Some("done"), 1), "done"),
-            ((Some("unknown"), 0), "not-ready"),
+    fn duplicate_edges_and_cycle_tail_preserve_every_row_once() {
+        let rows = vec![
+            row("tail", "todo", "critical", &["a"]),
+            row("b", "todo", "medium", &["a", "a"]),
+            row("a", "todo", "high", &["b"]),
+            row("root", "todo", "low", &[]),
+            row("child", "todo", "high", &["root", "root"]),
         ];
-
-        for ((category, blockers), expected) in cases {
-            assert_eq!(row_state(category, blockers).label(), expected);
-        }
+        assert_eq!(ordered_ids(&rows), vec!["root", "child", "tail", "a", "b"]);
     }
 }

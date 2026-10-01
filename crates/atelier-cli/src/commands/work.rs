@@ -1,9 +1,10 @@
 use anyhow::{bail, Result};
 use atelier_app::record_index::RecordIndex;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
+use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::mission_overview::mission_overview;
-use atelier_app::work_classification::{WorkBuckets, WorkClassification, WorkRow};
+use atelier_app::work_classification::{ClassifiedWork, WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
 
 use crate::human_output::{
@@ -324,47 +325,61 @@ pub fn mission_dashboard(
     options: MissionDashboardOptions,
     quiet: bool,
 ) -> Result<()> {
-    let filter = options.filter()?;
-    let mission_id = crate::commands::issue::resolve_id(index, mission_ref)?;
-    let mission = index.require_issue(&mission_id)?;
-    if mission.issue_type != "mission" {
+    scoped_dashboard(index, mission_ref, "mission", options.filter()?, quiet)
+}
+
+pub fn epic_dashboard(index: &RecordIndex, epic_ref: &str, quiet: bool) -> Result<()> {
+    scoped_dashboard(index, epic_ref, "epic", DashboardFilter::Summary, quiet)
+}
+
+fn scoped_dashboard(
+    index: &RecordIndex,
+    issue_ref: &str,
+    issue_type: &str,
+    filter: DashboardFilter,
+    quiet: bool,
+) -> Result<()> {
+    let id = crate::commands::issue::resolve_id(index, issue_ref)?;
+    let issue = index.require_issue(&id)?;
+    if issue.issue_type != issue_type {
         bail!(
-            "{} is issue_type '{}'; work mission requires issue_type 'mission'",
-            mission.id,
-            mission.issue_type
+            "{} is issue_type '{}'; work {issue_type} requires issue_type '{issue_type}'",
+            issue.id,
+            issue.issue_type
         );
     }
-    let scoped = mission_scoped_issues(index, &mission.id)?;
-    let filtered = filter_dashboard_issues(index, &scoped, filter)?;
+    let work = ScopedWork::new(index, &issue)?;
+    let proof_gaps = if issue_type == "epic" {
+        Some(proof_gap_count(index, &work.rows)?)
+    } else {
+        None
+    };
     if quiet {
         if filter == DashboardFilter::Summary {
-            let counts = dashboard_counts(index, &scoped)?;
-            println!(
-                "{} active={} ready={} blocked={} done={} backlog={}",
-                mission.id,
-                counts.active,
-                counts.ready,
-                counts.blocked,
-                counts.done,
-                counts.backlog
+            let counts = &work.totals;
+            let mut summary = format!(
+                "{id} active={} ready={} blocked={} done={} backlog={}",
+                counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
             );
+            if let Some(gaps) = proof_gaps {
+                summary.push_str(&format!(" proof_gaps={gaps}"));
+            }
+            println!("{summary}");
         } else {
-            for issue in filtered {
-                println!("{}", issue.id);
+            for (issue, classified) in &work.rows {
+                if filter
+                    .classification()
+                    .is_none_or(|state| state == classified.classification)
+                {
+                    println!("{}", issue.id);
+                }
             }
         }
         return Ok(());
     }
-
-    let counts = dashboard_counts(index, &scoped)?;
-    let panels = if filter == DashboardFilter::Summary {
-        dashboard_panels(index, &scoped)?
-    } else {
-        vec![dashboard_panel_for_filter(index, filter, &filtered)?]
-    };
-    let title = strip_mission_title_prefix(&mission.title);
+    let counts = &work.totals;
     let mut metadata = MetadataPanel::untitled()
-        .row("Status", mission.status.clone())
+        .row("Status", issue.status.clone())
         .row(
             "Work",
             format!(
@@ -372,232 +387,134 @@ pub fn mission_dashboard(
                 counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
             ),
         );
-    if let Some(strategy) = mission.strategy()? {
-        metadata = metadata.row("Strategy", strategy.path);
-    }
-    let mut page = Page::new(format!(
-        "{} [mission] {} - {}",
-        mission.id, mission.status, title
-    ))
-    .panel(metadata);
-    for panel in panels {
+    let title = if let Some(proof_gaps) = proof_gaps {
+        metadata = metadata
+            .row(
+                "Mission",
+                containing_mission(index, &id)?.unwrap_or_else(|| "(none)".to_string()),
+            )
+            .row("Proof gaps", proof_gaps.to_string())
+            .row(
+                "Transition readiness",
+                transition_readiness(index, &id, "start")?,
+            );
+        format!("Work Epic {id} - {}", issue.title)
+    } else {
+        if let Some(strategy) = issue.strategy()? {
+            metadata = metadata.row("Strategy", strategy.path);
+        }
+        format!(
+            "{id} [mission] {} - {}",
+            issue.status,
+            strip_mission_title_prefix(&issue.title)
+        )
+    };
+    let mut page = Page::new(title).panel(metadata);
+    for panel in work.panels(filter) {
         page = page.panel(panel);
     }
-    page.panel(mission_footer(&mission.id, &counts))
+    page.panel(objective_footer(&issue, counts))
         .print(RenderContext::for_stdout());
     Ok(())
 }
 
-pub fn epic_dashboard(index: &RecordIndex, epic_ref: &str, quiet: bool) -> Result<()> {
-    let epic_id = crate::commands::issue::resolve_id(index, epic_ref)?;
-    let epic = index.require_issue(&epic_id)?;
-    if epic.issue_type != "epic" {
-        bail!(
-            "{} is issue_type '{}'; work epic requires issue_type 'epic'",
-            epic.id,
-            epic.issue_type
-        );
-    }
-    let mut scoped = descendant_issues(index, &epic.id)?;
-    scoped.insert(0, epic.clone());
-    if quiet {
-        let counts = dashboard_counts(index, &scoped)?;
-        println!(
-            "{} active={} ready={} blocked={} done={} backlog={} proof_gaps={}",
-            epic.id,
-            counts.active,
-            counts.ready,
-            counts.blocked,
-            counts.done,
-            counts.backlog,
-            proof_gap_count(index, &scoped)?
-        );
-        return Ok(());
-    }
-
-    let counts = dashboard_counts(index, &scoped)?;
-    let proof_gaps = proof_gap_count(index, &scoped)?;
-    let transition = transition_readiness(index, &epic.id, "start")?;
-    let panels = dashboard_panels(index, &scoped)?;
-    let mut page = Page::new(format!("Work Epic {} - {}", epic.id, epic.title)).panel(
-        MetadataPanel::untitled()
-            .row("Status", epic.status.clone())
-            .row(
-                "Mission",
-                containing_mission(index, &epic.id)?.unwrap_or_else(|| "(none)".to_string()),
-            )
-            .row(
-                "Work",
-                format!(
-                    "active {}, ready {}, blocked {}, done {}, backlog {}",
-                    counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
-                ),
-            )
-            .row("Proof gaps", proof_gaps.to_string())
-            .row("Transition readiness", transition),
-    );
-    for panel in panels {
-        page = page.panel(panel);
-    }
-    page.panel(FooterPanel::new(
-        "Next Commands",
-        [
-            FooterAction::new(
-                "Show epic record",
-                format!("atelier issue show {}", epic.id),
-            ),
-            FooterAction::new(
-                "Inspect transitions",
-                format!("atelier issue transition {}", epic.id),
-            ),
-        ],
-    ))
-    .print(RenderContext::for_stdout());
-    Ok(())
-}
-
-#[derive(Default)]
-struct DashboardCounts {
-    active: usize,
-    ready: usize,
-    blocked: usize,
-    done: usize,
-    backlog: usize,
-}
-
-fn dashboard_counts(index: &RecordIndex, issues: &[Issue]) -> Result<DashboardCounts> {
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut counts = DashboardCounts::default();
-    for issue in issues {
-        match issue_category(index, policy.as_ref(), issue)?.as_str() {
-            "active" => counts.active += 1,
-            "blocked" => counts.blocked += 1,
-            "done" => counts.done += 1,
-            "backlog" => counts.backlog += 1,
-            _ => counts.ready += 1,
+impl DashboardFilter {
+    fn classification(self) -> Option<WorkClassification> {
+        match self {
+            Self::Ready => Some(WorkClassification::Ready),
+            Self::Blocked => Some(WorkClassification::Blocked),
+            Self::Active => Some(WorkClassification::Active),
+            Self::Done => Some(WorkClassification::Done),
+            Self::Summary | Self::All => None,
         }
     }
-    Ok(counts)
 }
 
-fn dashboard_panels(index: &RecordIndex, issues: &[Issue]) -> Result<Vec<IssueListPanel>> {
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut buckets = BTreeMap::<String, Vec<IssueListRow>>::new();
-    for issue in issues {
-        let category = issue_category(index, policy.as_ref(), issue)?;
-        let role = match category.as_str() {
-            "active" => DisplayRole::Executable,
-            "blocked" => DisplayRole::Blocked,
-            "done" | "backlog" => DisplayRole::ContextOnly,
-            _ => DisplayRole::Selectable,
+struct ScopedWork {
+    rows: Vec<(Issue, ClassifiedWork)>,
+    totals: ObjectiveBucketTotals,
+}
+
+impl ScopedWork {
+    fn new(index: &RecordIndex, objective: &Issue) -> Result<Self> {
+        let mut issues = atelier_app::objective_graph::issue_descendant_ids(index, &objective.id)?
+            .into_iter()
+            .map(|id| index.require_issue(&id))
+            .collect::<Result<Vec<_>>>()?;
+        if objective.issue_type == "epic" {
+            issues.insert(0, objective.clone());
+        }
+        let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+        let mut rows = Vec::new();
+        let mut totals = ObjectiveBucketTotals::default();
+        for issue in issues {
+            let classified =
+                atelier_app::work_classification::classify_issue(index, policy.as_ref(), &issue)?;
+            match classified.classification {
+                WorkClassification::Active => totals.active += 1,
+                WorkClassification::Ready => totals.ready += 1,
+                WorkClassification::Blocked => totals.blocked += 1,
+                WorkClassification::Done => totals.done += 1,
+                WorkClassification::Backlog => totals.backlog += 1,
+            }
+            rows.push((issue, classified));
+        }
+        Ok(Self { rows, totals })
+    }
+
+    fn panels(&self, filter: DashboardFilter) -> Vec<IssueListPanel> {
+        let groups: &[(Option<WorkClassification>, &str)] = match filter {
+            DashboardFilter::Summary => &[
+                (Some(WorkClassification::Active), "Active Work"),
+                (Some(WorkClassification::Ready), "Ready Work"),
+                (Some(WorkClassification::Blocked), "Blocked Work"),
+                (Some(WorkClassification::Backlog), "Backlog Work"),
+                (Some(WorkClassification::Done), "Done Work"),
+            ],
+            DashboardFilter::Ready => &[(filter.classification(), "Ready Work")],
+            DashboardFilter::Blocked => &[(filter.classification(), "Blocked Work")],
+            DashboardFilter::Active => &[(filter.classification(), "Active Work")],
+            DashboardFilter::Done => &[(filter.classification(), "Done Work")],
+            DashboardFilter::All => &[(None, "Scoped Work")],
         };
-        let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
-            index,
-            policy.as_ref(),
-            &issue.id,
-        )?;
-        buckets
-            .entry(category)
-            .or_default()
-            .push(dashboard_row(issue, role, open_blockers));
-    }
-    let mut panels = Vec::new();
-    for (category, title) in [
-        ("active", "Active Work"),
-        ("todo", "Ready Work"),
-        ("blocked", "Blocked Work"),
-        ("backlog", "Backlog Work"),
-        ("done", "Done Work"),
-    ] {
-        let rows = buckets.remove(category).unwrap_or_default();
-        if rows.is_empty() {
-            continue;
-        }
-        panels.push(IssueListPanel::new(title, rows).limit(8));
-    }
-    Ok(panels)
-}
-
-fn dashboard_panel_for_filter(
-    index: &RecordIndex,
-    filter: DashboardFilter,
-    issues: &[Issue],
-) -> Result<IssueListPanel> {
-    let title = match filter {
-        DashboardFilter::Ready => "Ready Work",
-        DashboardFilter::Blocked => "Blocked Work",
-        DashboardFilter::Active => "Active Work",
-        DashboardFilter::Done => "Done Work",
-        DashboardFilter::All | DashboardFilter::Summary => "Scoped Work",
-    };
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let rows = issues
-        .iter()
-        .map(|issue| {
-            let category = issue_category(index, policy.as_ref(), issue)?;
-            let role = match category.as_str() {
-                "active" => DisplayRole::Executable,
-                "blocked" => DisplayRole::Blocked,
-                "done" | "backlog" => DisplayRole::ContextOnly,
-                _ => DisplayRole::Selectable,
-            };
-            let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
-                index,
-                policy.as_ref(),
-                &issue.id,
-            )?;
-            Ok(dashboard_row(issue, role, open_blockers))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(IssueListPanel::new(title, rows).limit(usize::MAX))
-}
-
-fn dashboard_row(issue: &Issue, role: DisplayRole, open_blockers: Vec<String>) -> IssueListRow {
-    let title = if open_blockers.is_empty() {
-        issue.title.clone()
-    } else {
-        format!("{} | blockers: {}", issue.title, open_blockers.join(", "))
-    };
-    IssueListRow {
-        role,
-        id: issue.id.clone(),
-        status: Some(issue.status.clone()),
-        priority: issue.priority.clone(),
-        title,
-        blockers: open_blockers.len(),
-        depth: 1,
-    }
-}
-
-fn filter_dashboard_issues(
-    index: &RecordIndex,
-    issues: &[Issue],
-    filter: DashboardFilter,
-) -> Result<Vec<Issue>> {
-    if filter == DashboardFilter::Summary || filter == DashboardFilter::All {
-        return Ok(issues.to_vec());
-    }
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    issues
-        .iter()
-        .filter_map(
-            |issue| match issue_category(index, policy.as_ref(), issue) {
-                Ok(category)
-                    if matches!(
-                        (filter, category.as_str()),
-                        (DashboardFilter::Ready, "todo")
-                            | (DashboardFilter::Blocked, "blocked")
-                            | (DashboardFilter::Active, "active")
-                            | (DashboardFilter::Done, "done")
-                    ) =>
-                {
-                    Some(Ok(issue.clone()))
+        groups
+            .iter()
+            .filter_map(|(state, title)| {
+                let rows = self
+                    .rows
+                    .iter()
+                    .filter(|(_, work)| state.is_none_or(|state| state == work.classification))
+                    .map(|(issue, work)| IssueListRow {
+                        role: display_role_for_state(work.classification.label()),
+                        id: issue.id.clone(),
+                        status: Some(issue.status.clone()),
+                        priority: issue.priority.clone(),
+                        title: if work.open_blockers.is_empty() {
+                            issue.title.clone()
+                        } else {
+                            format!(
+                                "{} | blockers: {}",
+                                issue.title,
+                                work.open_blockers.join(", ")
+                            )
+                        },
+                        blockers: work.open_blockers.len(),
+                        depth: 1,
+                    })
+                    .collect::<Vec<_>>();
+                if rows.is_empty() && filter == DashboardFilter::Summary {
+                    return None;
                 }
-                Ok(_) => None,
-                Err(error) => Some(Err(error)),
-            },
-        )
-        .collect()
+                Some(IssueListPanel::new(*title, rows).limit(
+                    if filter == DashboardFilter::Summary {
+                        8
+                    } else {
+                        usize::MAX
+                    },
+                ))
+            })
+            .collect()
+    }
 }
 
 fn strip_mission_title_prefix(title: &str) -> &str {
@@ -607,10 +524,11 @@ fn strip_mission_title_prefix(title: &str) -> &str {
         .unwrap_or(title)
 }
 
-fn mission_footer(mission_id: &str, counts: &DashboardCounts) -> FooterPanel {
+fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> FooterPanel {
+    let mission_id = &issue.id;
     let mut actions = vec![
         FooterAction::new(
-            "Show mission record",
+            format!("Show {} record", issue.issue_type),
             format!("atelier issue show {mission_id}"),
         ),
         FooterAction::new(
@@ -618,13 +536,13 @@ fn mission_footer(mission_id: &str, counts: &DashboardCounts) -> FooterPanel {
             format!("atelier issue transition {mission_id}"),
         ),
     ];
-    if counts.ready > 0 {
+    if issue.issue_type == "mission" && counts.ready > 0 {
         actions.push(FooterAction::new(
             "List mission ready work",
             format!("atelier work mission {mission_id} --ready"),
         ));
     }
-    if counts.blocked > 0 {
+    if issue.issue_type == "mission" && counts.blocked > 0 {
         actions.push(FooterAction::new(
             "List mission blockers",
             format!("atelier work mission {mission_id} --blocked"),
@@ -633,38 +551,9 @@ fn mission_footer(mission_id: &str, counts: &DashboardCounts) -> FooterPanel {
     FooterPanel::new("Next Commands", actions)
 }
 
-fn issue_category(
-    index: &RecordIndex,
-    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-    issue: &Issue,
-) -> Result<String> {
-    let classified = atelier_app::work_classification::classify_issue(index, policy, issue)?;
-    Ok(match classified.classification {
-        WorkClassification::Ready => "todo",
-        other => other.label(),
-    }
-    .to_string())
-}
-
-fn mission_scoped_issues(index: &RecordIndex, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut scoped = atelier_app::objective_graph::mission_issue_ids(index, mission_id)?
-        .into_iter()
-        .filter_map(|id| index.get_issue(&id))
-        .collect::<Vec<_>>();
-    scoped.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(scoped)
-}
-
-fn descendant_issues(index: &RecordIndex, root_id: &str) -> Result<Vec<Issue>> {
-    atelier_app::objective_graph::issue_descendant_ids(index, root_id)?
-        .into_iter()
-        .map(|id| index.require_issue(&id))
-        .collect()
-}
-
-fn proof_gap_count(index: &RecordIndex, issues: &[Issue]) -> Result<usize> {
+fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {
     let mut count = 0;
-    for issue in issues {
+    for (issue, _) in rows {
         if !crate::commands::issue::issue_evidence_gate_status(index, issue, None)?.passed {
             count += 1;
         }

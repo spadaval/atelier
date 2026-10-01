@@ -33,10 +33,7 @@ pub struct InitView {
     pub created_paths: Vec<PathBuf>,
 }
 
-pub fn initialize(
-    request: crate::Request<InitRequest>,
-) -> Result<crate::Outcome<crate::ViewModel<InitView>>> {
-    let input = request.input;
+pub fn initialize(input: InitRequest) -> Result<InitView> {
     let layout = StorageLayout::new(&input.path);
     let atelier_dir = layout.atelier_dir();
     let mut created_paths = Vec::new();
@@ -70,11 +67,7 @@ pub fn initialize(
 
     ensure_root_gitignore(&input.path, input.force)?;
 
-    Ok(crate::Outcome {
-        value: crate::ViewModel {
-            data: InitView { created_paths },
-        },
-    })
+    Ok(InitView { created_paths })
 }
 
 pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {

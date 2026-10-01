@@ -77,7 +77,8 @@ fn test_issue_create_help_is_markdown_first() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
     assert!(success, "issue create help failed: {stderr}");
     assert!(stdout.contains("--description <DESCRIPTION>"), "{stdout}");
-    assert!(stdout.contains("--template"), "{stdout}");
+    assert!(stdout.contains("--body <BODY>"), "{stdout}");
+    assert!(stdout.contains("--issue-type <ISSUE_TYPE>"), "{stdout}");
 }
 
 #[test]
@@ -667,6 +668,18 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
     assert!(success, "issue show failed: {stderr}");
+    let subissues = stdout.split("Subissues\n").nth(1).expect("Subissues panel");
+    let subissues = subissues.split("Impact\n").next().unwrap();
+    for title in [
+        "Contract child",
+        "Implementation child",
+        "External blocked child",
+    ] {
+        assert!(
+            subissues.contains(title),
+            "missing child in Subissues: {subissues}"
+        );
+    }
     let contract_pos = stdout.find("Contract child").unwrap_or(usize::MAX);
     let implementation_pos = stdout.find("Implementation child").unwrap_or(usize::MAX);
     assert!(
@@ -1564,9 +1577,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
             "--issue-type",
             "mission",
             "--body",
-            "Canonical mission body",
-            "--constraint",
-            "Canonical constraint",
+            "## Outcome\n\nCanonical mission body\n\n## Success criteria\n\nCanonical constraint",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
@@ -2716,6 +2727,57 @@ fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
 }
 
 #[test]
+fn test_removed_mission_generation_flags_are_unknown_on_create_and_update() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let body = "## Outcome\n\nTyped mission body.\n\n## Success criteria\n\nObserved result.";
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Typed mission",
+            "--issue-type",
+            "mission",
+            "--body",
+            body,
+        ],
+    );
+    assert!(success, "typed mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Typed mission");
+    let path = canonical_issue_path(dir.path(), &mission_id);
+    let original = std::fs::read(&path).unwrap();
+    for flag in ["--constraint", "--risk", "--validation"] {
+        for args in [
+            vec![
+                "issue",
+                "create",
+                "Obsolete generated mission",
+                "--issue-type",
+                "mission",
+                flag,
+                "obsolete",
+            ],
+            vec!["issue", "update", &mission_id, flag, "obsolete"],
+        ] {
+            let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+            assert!(!success, "{args:?} unexpectedly succeeded: {stdout}");
+            assert!(
+                stderr.contains(&format!("unexpected argument '{flag}'")),
+                "{stderr}"
+            );
+        }
+    }
+    assert_eq!(std::fs::read(path).unwrap(), original);
+    assert_eq!(
+        std::fs::read_dir(dir.path().join(".atelier/issues"))
+            .unwrap()
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2989,3 +3051,106 @@ fn set_issue_status(dir: &std::path::Path, issue_id: &str, status: &str) {
 }
 
 // ==================== Session Tests ====================
+
+#[test]
+fn test_retired_template_rejected_and_explicit_creation_preserved() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    for option in ["--template", "-t"] {
+        let (success, _, stderr) =
+            run_atelier_raw(dir.path(), &["issue", "create", "Obsolete", option, "bug"]);
+        assert!(!success);
+        assert!(stderr.contains("unexpected argument"), "{stderr}");
+        assert_eq!(
+            std::fs::read_dir(dir.path().join(".atelier/issues"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+    let body = "## Goal\n\nRepair the observable defect.\n\n## Done when\n\nThe regression passes.";
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Explicit bug",
+            "--issue-type",
+            "bug",
+            "--body",
+            body,
+            "--priority",
+            "high",
+            "--label",
+            "regression",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let id = issue_id_by_title(dir.path(), "Explicit bug");
+    let record = read_canonical_record(dir.path(), "issues", &id);
+    for text in [
+        "issue_type: \"bug\"",
+        "priority: \"P1\"",
+        "regression",
+        "Repair the observable defect.",
+        "The regression passes.",
+    ] {
+        assert!(record.contains(text), "missing {text}: {record}");
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["check", &id]);
+    assert!(success, "{stderr}");
+}
+
+#[test]
+fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Count mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    let mission = issue_id_by_title(dir.path(), "Count mission");
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Count epic", "--issue-type", "epic"],
+    );
+    let epic = issue_id_by_title(dir.path(), "Count epic");
+    run_atelier(
+        dir.path(),
+        &["issue", "link", &epic, &mission, "--role", "advances"],
+    );
+    let mut ids = Vec::new();
+    for n in 0..24 {
+        let title = format!("Count child {n:02}");
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "create", &title, "--parent", &epic]);
+        assert!(success, "{stderr}");
+        ids.push(issue_id_by_title(dir.path(), &title));
+    }
+    ids.sort();
+    for (kind, id) in [("mission", &mission), ("epic", &epic)] {
+        let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", kind, id]);
+        assert!(success, "{stderr}");
+        assert!(quiet.contains("ready=24"), "{quiet}");
+        assert!(quiet.contains("backlog=1"), "{quiet}");
+        let (success, human, stderr) = run_atelier(dir.path(), &["work", kind, id]);
+        assert!(success, "{stderr}");
+        assert!(human.contains("ready 24"), "{human}");
+        assert!(human.contains("16 more"), "{human}");
+    }
+    let (success, quiet, stderr) = run_atelier(
+        dir.path(),
+        &["--quiet", "work", "mission", &mission, "--ready"],
+    );
+    assert!(success, "{stderr}");
+    assert_eq!(
+        quiet.lines().collect::<Vec<_>>(),
+        ids.iter().map(String::as_str).collect::<Vec<_>>()
+    );
+}

@@ -1,7 +1,5 @@
 use anyhow::Result;
-use atelier_app::record_index::RecordIndex;
 
-use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::Issue;
 
@@ -40,20 +38,4 @@ pub(crate) fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> b
 
 pub(crate) fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
     !issue_is_done(policy, issue)
-}
-
-pub(crate) fn open_blocker_ids_with_policy(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issue_id: &str,
-) -> Result<Vec<String>> {
-    let mut blockers = index
-        .get_blockers(issue_id)
-        .into_iter()
-        .filter_map(|id| index.require_issue(&id).ok())
-        .filter(|issue| issue_blocks_work(workflow_policy, issue))
-        .map(|issue| format_issue_id(&issue.id))
-        .collect::<Vec<_>>();
-    blockers.sort();
-    Ok(blockers)
 }

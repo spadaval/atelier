@@ -12,7 +12,7 @@ pub(crate) struct RenderContext {
 }
 
 impl RenderContext {
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn plain() -> Self {
         Self {
             style_policy: StylePolicy::plain(),
@@ -27,7 +27,7 @@ impl RenderContext {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn from_parts(choice: ColorChoice, is_terminal: bool, no_color: bool) -> Self {
         Self {
             style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
@@ -35,7 +35,7 @@ impl RenderContext {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn from_parts_with_width(
         choice: ColorChoice,
         is_terminal: bool,
@@ -634,7 +634,7 @@ pub(crate) struct StylePolicy {
 }
 
 impl StylePolicy {
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn plain() -> Self {
         Self { color: false }
     }
@@ -734,44 +734,11 @@ impl DecisionState {
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum BlockerState {
-    Clear,
-    Direct,
-    ThroughParent,
-}
-
-#[allow(dead_code)]
-impl BlockerState {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            BlockerState::Clear => "not blocked",
-            BlockerState::Direct => "blocked",
-            BlockerState::ThroughParent => "blocked through parent",
-        }
-    }
-
-    pub(crate) fn role(self) -> DisplayRole {
-        match self {
-            BlockerState::Clear => DisplayRole::Selectable,
-            BlockerState::Direct => DisplayRole::Blocked,
-            BlockerState::ThroughParent => DisplayRole::BlockedThroughParent,
-        }
-    }
-
-    pub(crate) fn render(self, policy: StylePolicy) -> String {
-        policy.paint(self.role().style(), self.label())
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRole {
     Executable,
     Selectable,
     Blocked,
-    BlockedThroughParent,
     ContextOnly,
-    Omitted,
 }
 
 impl DisplayRole {
@@ -780,9 +747,7 @@ impl DisplayRole {
             DisplayRole::Executable => "active",
             DisplayRole::Selectable => "ready",
             DisplayRole::Blocked => "blocked",
-            DisplayRole::BlockedThroughParent => "blocked through parent",
             DisplayRole::ContextOnly => "shown for context",
-            DisplayRole::Omitted => "omitted",
         }
     }
 
@@ -790,45 +755,13 @@ impl DisplayRole {
         match self {
             DisplayRole::Executable => TextStyle::Active,
             DisplayRole::Selectable => TextStyle::Success,
-            DisplayRole::Blocked | DisplayRole::BlockedThroughParent => TextStyle::Danger,
-            DisplayRole::ContextOnly | DisplayRole::Omitted => TextStyle::Secondary,
+            DisplayRole::Blocked => TextStyle::Danger,
+            DisplayRole::ContextOnly => TextStyle::Secondary,
         }
     }
 
     pub(crate) fn render(self, policy: StylePolicy) -> String {
         policy.paint(self.style(), self.label())
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RecoveryCallout {
-    title: String,
-    steps: Vec<String>,
-}
-
-#[allow(dead_code)]
-impl RecoveryCallout {
-    pub(crate) fn new(
-        title: impl Into<String>,
-        steps: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Self {
-        Self {
-            title: title.into(),
-            steps: steps.into_iter().map(Into::into).collect(),
-        }
-    }
-
-    pub(crate) fn render(&self) -> String {
-        let mut lines = vec![section_heading(&self.title)];
-        if self.steps.is_empty() {
-            lines.push("(none)".to_string());
-        } else {
-            for (index, step) in self.steps.iter().enumerate() {
-                lines.push(format!("  {}. {step}", index + 1));
-            }
-        }
-        lines.join("\n")
     }
 }
 
@@ -964,25 +897,17 @@ mod tests {
     }
 
     #[test]
-    fn decision_and_blocker_labels_are_colorless_by_default() {
+    fn decision_labels_are_colorless_by_default() {
         let policy = StylePolicy::plain();
         assert_eq!(DecisionState::Allowed.render(policy), "allowed");
         assert_eq!(DecisionState::Fail.render(policy), "fail");
-        assert_eq!(BlockerState::Clear.render(policy), "not blocked");
-        assert_eq!(
-            BlockerState::ThroughParent.render(policy),
-            "blocked through parent"
-        );
     }
 
     #[test]
     fn colorless_display_roles_keep_text_meaning() {
         let policy = StylePolicy::plain();
         assert_eq!(DisplayRole::Selectable.render(policy), "ready");
-        assert_eq!(
-            DisplayRole::BlockedThroughParent.render(policy),
-            "blocked through parent"
-        );
+        assert_eq!(DisplayRole::Blocked.render(policy), "blocked");
         assert_eq!(DisplayRole::ContextOnly.render(policy), "shown for context");
     }
 
@@ -1008,22 +933,6 @@ mod tests {
         assert_eq!(
             footer,
             "Next Commands\n-------------\n  Inspect: atelier issue show atelier-1234\n  Validate: atelier check atelier-1234"
-        );
-    }
-
-    #[test]
-    fn recovery_callout_renders_ordered_public_steps() {
-        let callout = RecoveryCallout::new(
-            "Recovery",
-            [
-                "run `atelier check`",
-                "fix the named record file",
-                "rerun the blocked command",
-            ],
-        );
-        assert_eq!(
-            callout.render(),
-            "Recovery\n--------\n  1. run `atelier check`\n  2. fix the named record file\n  3. rerun the blocked command"
         );
     }
 

@@ -24,13 +24,11 @@ pub struct LintFinding {
 /// Reports every invalid record file, record-graph integrity errors, and
 /// per-issue findings. Unlike other commands, lint never stops at the first
 /// invalid record file.
-pub fn lint(
-    request: crate::Request<LintRequest<'_>>,
-) -> Result<crate::Outcome<crate::ViewModel<LintView>>> {
+pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     let LintRequest {
         state_dir,
         issue_ref,
-    } = request.input;
+    } = request;
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
             "Cannot determine repository root for {}",
@@ -105,11 +103,7 @@ pub fn lint(
         scoped_id.is_some(),
     ));
 
-    Ok(crate::Outcome {
-        value: crate::ViewModel {
-            data: LintView { findings },
-        },
-    })
+    Ok(LintView { findings })
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and

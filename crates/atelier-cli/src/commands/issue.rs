@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
     format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
-    load_issue_workflow_policy, open_blocker_ids_with_policy,
+    load_issue_workflow_policy,
 };
 use crate::commands::work_order::WorkOrderRow;
 use crate::human_output::{
@@ -27,30 +27,6 @@ use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relation
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
 const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
-
-#[derive(Debug, Clone)]
-pub struct DependencySummary {
-    pub id: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct IssueObject {
-    pub id: String,
-    pub title: String,
-    pub description: Option<String>,
-    pub sections: Option<IssueSections>,
-    pub relationships: Relationships,
-    pub status: String,
-    pub issue_type: String,
-    pub priority: String,
-    pub labels: Vec<String>,
-    pub parent: Option<String>,
-    pub assignee: Option<String>,
-    pub owner: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    pub closed_at: Option<String>,
-}
 
 pub fn resolve_id(index: &RecordIndex, issue_ref: &str) -> Result<String> {
     if let Some(id) = index.resolve_issue_ref(issue_ref)? {
@@ -77,68 +53,10 @@ fn show_command_for_kind(kind: &str, id: &str) -> String {
     }
 }
 
-fn issue_id_for_agent(index: &RecordIndex, issue: &Issue) -> Result<String> {
-    let _ = index;
-    Ok(format_issue_id(&issue.id))
-}
-
 fn label_value(labels: &[String], prefix: &str) -> Option<String> {
     labels
         .iter()
         .find_map(|label| label.strip_prefix(prefix).map(str::to_string))
-}
-
-fn dependency_summary(index: &RecordIndex, id: &str) -> Result<DependencySummary> {
-    let issue = index
-        .get_issue(id)
-        .ok_or_else(|| anyhow!("Dependency issue {} was not found", format_issue_id(id)))?;
-    Ok(DependencySummary {
-        id: issue_id_for_agent(index, &issue)?,
-    })
-}
-
-fn issue_object_from_record(
-    index: &RecordIndex,
-    record: &CanonicalIssueRecord,
-) -> Result<IssueObject> {
-    issue_object_from_parts(
-        index,
-        record.issue.clone(),
-        record.labels.clone(),
-        Some(record.sections.clone()),
-        record.relationships.clone(),
-    )
-}
-
-fn issue_object_from_parts(
-    index: &RecordIndex,
-    issue: Issue,
-    labels: Vec<String>,
-    sections: Option<IssueSections>,
-    relationships: Relationships,
-) -> Result<IssueObject> {
-    let parent = match &issue.parent_id {
-        Some(parent_id) => Some(dependency_summary(index, parent_id)?.id),
-        None => None,
-    };
-
-    Ok(IssueObject {
-        id: issue_id_for_agent(index, &issue)?,
-        title: issue.title,
-        description: issue.description,
-        sections,
-        relationships,
-        status: issue.status,
-        issue_type: issue.issue_type,
-        priority: issue.priority,
-        parent,
-        assignee: label_value(&labels, "assignee:"),
-        owner: label_value(&labels, "owner:"),
-        labels,
-        created_at: issue.created_at.to_rfc3339(),
-        updated_at: issue.updated_at.to_rfc3339(),
-        closed_at: issue.closed_at.map(|dt| dt.to_rfc3339()),
-    })
 }
 
 fn canonical_issue_path_from_state(state_dir: &Path, issue_id: &str) -> PathBuf {
@@ -155,79 +73,66 @@ pub fn show(index: &RecordIndex, issue_ref: &str) -> Result<()> {
     let record = index
         .issue_record(&id)
         .ok_or_else(|| anyhow!("Issue {id} not found"))?;
-    let object = issue_object_from_record(index, record)?;
-    render_issue_show_human(index, &id, &object)
+    render_issue_show_human(index, record)
 }
 
-fn render_issue_show_human(
-    index: &RecordIndex,
-    canonical_id: &str,
-    object: &IssueObject,
-) -> Result<()> {
+fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -> Result<()> {
+    let issue = &record.issue;
+    let canonical_id = &issue.id;
     let workflow_policy = load_issue_workflow_policy()?;
     let objective_summary = atelier_app::issue_read::objective_read_summary(
         index,
         canonical_id,
         workflow_policy.as_ref(),
     )?;
-    let status_category = issue_status_category(workflow_policy.as_ref(), &object.status);
+    let status_category = issue_status_category(workflow_policy.as_ref(), &issue.status);
     let identity = format!(
         "{} [{}] {} - {}",
-        object.id,
-        object.issue_type,
-        format_status_with_category(status_category.as_deref(), &object.status),
-        object.title
+        issue.id,
+        issue.issue_type,
+        format_status_with_category(status_category.as_deref(), &issue.status),
+        issue.title
     );
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
-    println!("Status:   {}", object.status);
+    println!("Status:   {}", issue.status);
     println!(
         "Category: {}",
         status_category.unwrap_or_else(|| "(unknown)".to_string())
     );
-    println!("Type:     {}", object.issue_type);
-    println!("Priority: {}", object.priority);
-    println!(
-        "Created:  {}",
-        format_human_datetime_str(&object.created_at)
-    );
-    println!(
-        "Updated:  {}",
-        format_human_datetime_str(&object.updated_at)
-    );
-    if let Some(closed_at) = &object.closed_at {
-        println!("Closed:   {}", format_human_datetime_str(closed_at));
+    println!("Type:     {}", issue.issue_type);
+    println!("Priority: {}", issue.priority);
+    println!("Created:  {}", format_human_datetime(issue.created_at));
+    println!("Updated:  {}", format_human_datetime(issue.updated_at));
+    if let Some(closed_at) = &issue.closed_at {
+        println!("Closed:   {}", format_human_datetime(*closed_at));
     }
-    if let Some(owner) = &object.owner {
+    if let Some(owner) = label_value(&record.labels, "owner:") {
         println!("Owner:    {owner}");
     }
-    if let Some(assignee) = &object.assignee {
+    if let Some(assignee) = label_value(&record.labels, "assignee:") {
         println!("Assignee: {assignee}");
     }
-    if !object.labels.is_empty() {
-        println!("Labels:   {}", object.labels.join(", "));
+    if !record.labels.is_empty() {
+        println!("Labels:   {}", record.labels.join(", "));
     }
     if let Some(path) = canonical_issue_path(canonical_id)? {
         println!("File:     {}", path.display());
     }
     render_parent_context(index, canonical_id)?;
-    render_transition_readiness(index, canonical_id, object)?;
+    render_transition_readiness(index, canonical_id)?;
 
-    if let Some(sections) = &object.sections {
-        for name in IssueSections::ALL_NAMES {
-            print_text_section(name.title(), sections.section(name));
-        }
-    } else {
-        print_text_section("Description", object.description.as_deref());
+    for name in IssueSections::ALL_NAMES {
+        print_text_section(name.title(), record.sections.section(name));
     }
 
     render_dependency_section(index, "Blocked by", index.get_blockers(canonical_id), true)?;
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
-    render_issue_link_section(index, canonical_id, &object.relationships)?;
+    render_issue_link_section(index, canonical_id, &record.relationships)?;
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
-    render_command_footer(canonical_id, object)?;
+    render_command_footer(canonical_id)?;
     Ok(())
 }
 
@@ -280,22 +185,26 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
             ),
     );
 
-    render_objective_issue_rows(
-        "Active Work",
-        &summary.scope.active,
-        summary.scope.totals.active,
-    );
-    render_objective_issue_rows(
-        "Ready Work",
-        &summary.scope.ready,
-        summary.scope.totals.ready,
-    );
-    render_objective_issue_rows(
-        "Blocked Work",
-        &summary.scope.blocked,
-        summary.scope.totals.blocked,
-    );
-    render_objective_issue_rows("Done Work", &summary.scope.done, summary.scope.totals.done);
+    for (title, rows, total) in [
+        (
+            "Active Work",
+            &summary.scope.active,
+            summary.scope.totals.active,
+        ),
+        (
+            "Ready Work",
+            &summary.scope.ready,
+            summary.scope.totals.ready,
+        ),
+        (
+            "Blocked Work",
+            &summary.scope.blocked,
+            summary.scope.totals.blocked,
+        ),
+        ("Done Work", &summary.scope.done, summary.scope.totals.done),
+    ] {
+        render_objective_issue_rows(title, rows, total);
+    }
 
     if !summary.recent_activity.recently_updated.is_empty() {
         print_panel(LinesPanel::new(
@@ -382,11 +291,7 @@ pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -
     Ok(())
 }
 
-fn render_transition_readiness(
-    index: &RecordIndex,
-    canonical_id: &str,
-    object: &IssueObject,
-) -> Result<()> {
+fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Result<()> {
     let mut lines = Vec::new();
     match crate::commands::workflow::issue_transition_options(index, canonical_id) {
         Ok(options) => {
@@ -420,7 +325,9 @@ fn render_transition_readiness(
             lines.push(format!("  options: blocked - {error}"));
         }
     }
-    lines.push(format!("  options: atelier issue transition {}", object.id));
+    lines.push(format!(
+        "  options: atelier issue transition {canonical_id}"
+    ));
     print_panel(LinesPanel::new("Transition Readiness", lines));
     Ok(())
 }
@@ -502,7 +409,7 @@ fn dependency_rows_for_text(
             };
             Ok(format!(
                 "{} [{}] {} - {}{}",
-                issue_id_for_agent(index, &issue)?,
+                issue.id,
                 issue_status_label(workflow_policy.as_ref(), &issue.status),
                 issue.priority,
                 issue.title,
@@ -513,14 +420,13 @@ fn dependency_rows_for_text(
 }
 
 fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()> {
-    let mut subissues = index.get_subissues(canonical_id);
+    let subissues = index.get_subissues(canonical_id);
     let workflow_policy = load_issue_workflow_policy()?;
     if subissues.is_empty() {
         print_panel(LinesPanel::new("Subissues", Vec::<String>::new()));
         return Ok(());
     }
 
-    subissues = order_issues_by_work(index, workflow_policy.as_ref(), subissues)?;
     let classified_subissues = subissues
         .into_iter()
         .map(|subissue| {
@@ -532,6 +438,17 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             Ok((subissue, classified))
         })
         .collect::<Result<Vec<_>>>()?;
+    let order_rows = classified_subissues
+        .iter()
+        .map(|(issue, classified)| WorkOrderRow {
+            id: issue.id.clone(),
+            classification: classified.classification,
+            priority: issue.priority.clone(),
+            updated_at: issue.updated_at,
+            open_blockers: classified.open_blockers.clone(),
+        })
+        .collect::<Vec<_>>();
+    let order = crate::commands::work_order::ordered_work_indices(&order_rows);
     let summary = subissue_summary(
         classified_subissues.len(),
         classified_subissues.iter().map(|(subissue, classified)| {
@@ -541,10 +458,11 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             )
         }),
     );
-    let rows = classified_subissues
-        .iter()
-        .map(|(subissue, classified)| {
-            Ok(IssueListRow {
+    let rows = order
+        .into_iter()
+        .map(|index| {
+            let (subissue, classified) = &classified_subissues[index];
+            IssueListRow {
                 role: display_role_for_bucket(classified.classification.label()),
                 id: format_issue_id(&subissue.id),
                 status: Some(classified.classification.label().to_string()),
@@ -552,15 +470,15 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
                 title: subissue.title.clone(),
                 blockers: classified.open_blockers.len(),
                 depth: 1,
-            })
+            }
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect();
     let mut lines = vec![summary];
     lines.extend(
         IssueListPanel::new("Subissues", rows)
             .render(RenderContext::for_stdout())
             .into_iter()
-            .skip(2),
+            .skip(1),
     );
     print_panel(LinesPanel::new("Subissues", lines));
     Ok(())
@@ -571,7 +489,6 @@ fn display_role_for_bucket(label: &str) -> DisplayRole {
         "active" => DisplayRole::Executable,
         "ready" => DisplayRole::Selectable,
         "blocked" => DisplayRole::Blocked,
-        "blocked through parent" => DisplayRole::BlockedThroughParent,
         _ => DisplayRole::ContextOnly,
     }
 }
@@ -599,7 +516,7 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
             .map(|issue| {
                 Ok(format!(
                     "  {} [{}] {} - {}",
-                    issue_id_for_agent(index, issue)?,
+                    issue.id,
                     issue_status_label(workflow_policy.as_ref(), &issue.status),
                     issue.priority,
                     issue.title
@@ -612,36 +529,6 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
     }
     print_panel(LinesPanel::new("Impact", lines));
     Ok(())
-}
-
-fn order_issues_by_work(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issues: Vec<Issue>,
-) -> Result<Vec<Issue>> {
-    let rows = issues
-        .iter()
-        .map(|issue| work_order_row_for_issue(index, workflow_policy, issue))
-        .collect::<Result<Vec<_>>>()?;
-    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
-    Ok(crate::commands::work_order::ordered_work_indices(&rows)
-        .into_iter()
-        .filter_map(|index| keyed[index].take())
-        .collect())
-}
-
-fn work_order_row_for_issue(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issue: &Issue,
-) -> Result<WorkOrderRow> {
-    Ok(WorkOrderRow {
-        id: format_issue_id(&issue.id),
-        status_category: issue_status_category(workflow_policy, &issue.status),
-        priority: issue.priority.clone(),
-        updated_at: issue.updated_at,
-        open_blockers: open_blocker_ids_with_policy(index, workflow_policy, &issue.id)?,
-    })
 }
 
 fn subissue_summary<'a>(
@@ -670,7 +557,7 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()> {
+fn render_command_footer(canonical_id: &str) -> Result<()> {
     let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
         actions.push(FooterAction::new(
@@ -681,19 +568,19 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
     actions.extend([
         FooterAction::new(
             "Validate this issue",
-            format!("atelier check {}", object.id),
+            format!("atelier check {}", canonical_id),
         ),
         FooterAction::new(
             "Add a note",
-            format!("atelier issue note {} \"...\"", object.id),
+            format!("atelier issue note {} \"...\"", canonical_id),
         ),
         FooterAction::new(
             "Show transition options",
-            format!("atelier issue transition {}", object.id),
+            format!("atelier issue transition {}", canonical_id),
         ),
         FooterAction::new(
             "Execute a transition",
-            format!("atelier issue transition {} <transition>", object.id),
+            format!("atelier issue transition {} <transition>", canonical_id),
         ),
     ]);
     print_panel(FooterPanel::new("Next Commands", actions));
@@ -816,12 +703,6 @@ fn plural_suffix(count: usize) -> &'static str {
     }
 }
 
-fn format_human_datetime_str(timestamp: &str) -> String {
-    DateTime::parse_from_rfc3339(timestamp)
-        .map(|dt| format_human_datetime(dt.with_timezone(&Utc)))
-        .unwrap_or_else(|_| timestamp.to_string())
-}
-
 fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
     timestamp
         .with_timezone(&Local)
@@ -837,9 +718,6 @@ pub struct LifecycleCreateInput<'a> {
     pub issue_type: &'a str,
     pub labels: &'a [String],
     pub parent: Option<&'a str>,
-    pub constraints: Vec<String>,
-    pub risks: Vec<String>,
-    pub validation: Vec<String>,
     pub quiet: bool,
 }
 
@@ -854,13 +732,6 @@ pub fn create_lifecycle(
             MAX_ISSUE_TITLE_LEN
         );
     }
-    if input.issue_type != "mission"
-        && (!input.constraints.is_empty()
-            || !input.risks.is_empty()
-            || !input.validation.is_empty())
-    {
-        bail!("mission section flags are not supported for issue records");
-    }
     validate_priority(input.priority)?;
     validate_configured_issue_type(state_dir, input.issue_type)?;
     let parent_id = input
@@ -872,7 +743,7 @@ pub fn create_lifecycle(
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
-    let description = lifecycle_issue_description(&input);
+    let description = input.description.or(input.body).map(str::to_string);
     if description
         .as_ref()
         .is_some_and(|description| description.len() > MAX_ISSUE_DESCRIPTION_LEN)
@@ -912,77 +783,40 @@ pub fn create_lifecycle(
         store.add_issue_child(parent_id, &id)?;
     }
 
-    let file_path = canonical_issue_path_from_state(state_dir, &id);
     if input.quiet {
         println!("{}", record.issue.id);
-    } else if parent_id.is_some() {
-        println!(
-            "Created subissue {} under {}",
-            record.issue.id,
-            format_issue_id(parent_id.as_deref().unwrap_or_default())
-        );
-        println!("File: {}", file_path.display());
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", record.issue.id);
-        println!(
-            "  Inspect this issue: atelier issue show {}",
-            record.issue.id
-        );
-        println!(
-            "  Inspect tracked work transitions: atelier issue transition {}",
-            record.issue.id
-        );
+        return Ok(());
+    }
+    if let Some(parent_id) = &parent_id {
+        println!("Created subissue {} under {}", record.issue.id, parent_id);
     } else {
-        if record.issue.issue_type == "mission" {
-            println!(
-                "Created mission objective {} - {}",
-                record.issue.id, record.issue.title
-            );
+        let kind = if record.issue.issue_type == "mission" {
+            "mission objective"
         } else {
-            println!("Created issue {} - {}", record.issue.id, record.issue.title);
-        }
+            "issue"
+        };
+        println!(
+            "Created {kind} {} - {}",
+            record.issue.id, record.issue.title
+        );
         println!("Type:     {}", record.issue.issue_type);
         println!("Priority: {}", record.issue.priority);
-        println!("File:     {}", file_path.display());
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  Edit issue Markdown: {}", file_path.display());
-        println!("  Validate this issue: atelier check {}", record.issue.id);
-        println!(
-            "  Inspect this issue: atelier issue show {}",
-            record.issue.id
-        );
-        println!(
-            "  Inspect tracked work transitions: atelier issue transition {}",
-            record.issue.id
-        );
     }
+    let file_path = canonical_issue_path_from_state(state_dir, &id);
+    println!("File: {}", file_path.display());
+    print_panel(FooterPanel::new(
+        "Next Commands",
+        [
+            FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
+            FooterAction::new("Validate this issue", format!("atelier check {id}")),
+            FooterAction::new("Inspect this issue", format!("atelier issue show {id}")),
+            FooterAction::new(
+                "Inspect tracked work transitions",
+                format!("atelier issue transition {id}"),
+            ),
+        ],
+    ));
     Ok(())
-}
-
-fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<String> {
-    if input.issue_type != "mission" {
-        return input.description.or(input.body).map(str::to_string);
-    }
-    let mut lines = Vec::new();
-    if let Some(description) = input.description.or(input.body) {
-        let description = description.trim();
-        if !description.is_empty() {
-            lines.push(description.to_string());
-        }
-    }
-    append_named_list(&mut lines, "Constraints", &input.constraints);
-    append_named_list(&mut lines, "Risks", &input.risks);
-    append_named_list(&mut lines, "Validation", &input.validation);
-    if lines.is_empty() {
-        None
-    } else {
-        Some(lines.join("\n\n"))
-    }
 }
 
 fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {
@@ -991,10 +825,6 @@ fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSec
         .or(input.description)
         .filter(|body| has_level_two_heading(body))
     {
-        if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty()
-        {
-            bail!("sectioned mission content cannot be combined with mission section flags; put the content in --body");
-        }
         return atelier_records::parse_issue_sections_for_type(
             body,
             Path::new("<issue create --body>"),
@@ -1002,10 +832,9 @@ fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSec
         )
         .context("Invalid sectioned --body");
     }
-    let description = lifecycle_issue_description(input);
     Ok(IssueSections::for_type(
         input.issue_type,
-        description.as_deref(),
+        input.description.or(input.body),
     ))
 }
 
@@ -1017,20 +846,6 @@ fn has_level_two_heading(body: &str) -> bool {
         !rest.starts_with('#')
             && (rest.is_empty() || rest.chars().next().is_some_and(char::is_whitespace))
     })
-}
-
-fn append_named_list(lines: &mut Vec<String>, title: &str, values: &[String]) {
-    if values.is_empty() {
-        return;
-    }
-    lines.push(format!(
-        "{title}:\n{}",
-        values
-            .iter()
-            .map(|value| format!("- {}", value.trim()))
-            .collect::<Vec<_>>()
-            .join("\n")
-    ));
 }
 
 fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {
@@ -1229,13 +1044,10 @@ fn push_unique(values: &mut Vec<String>, value: String) {
 }
 
 pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
-    let outcome = atelier_app::lint::lint(atelier_app::Request {
-        input: atelier_app::lint::LintRequest {
-            state_dir,
-            issue_ref,
-        },
+    let view = atelier_app::lint::lint(atelier_app::lint::LintRequest {
+        state_dir,
+        issue_ref,
     })?;
-    let view = outcome.value.data;
     if view.findings.is_empty() {
         println!("Lint passed.");
     } else {

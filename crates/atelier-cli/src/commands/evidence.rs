@@ -590,12 +590,12 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
         records.len()
     );
     for record in records.iter().take(EVIDENCE_LIST_LIMIT) {
-        let data = evidence_record_data(record);
+        let data = &record.data;
         let kind = data.evidence_type.as_str();
         let command = evidence_list_command(data.command.as_deref());
         let title = evidence_list_title(&record.header.title, data.command.as_deref());
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = format_targets(index, &record.header.id, &data)?;
+        let targets = format_targets(index, &record.header.id, data)?;
         let target = if targets.is_empty() {
             "(none)".to_string()
         } else {
@@ -665,21 +665,21 @@ fn bounded_list_text(value: &str) -> String {
 }
 
 pub fn print_record(index: &RecordIndex, record: &EvidenceRecord, quiet: bool) -> Result<()> {
-    let data = evidence_record_data(record);
-    let targets = format_targets(index, &record.header.id, &data)?;
+    let data = &record.data;
+    let targets = format_targets(index, &record.header.id, data)?;
     print_record_with_targets(record, data, targets, quiet)
 }
 
 /// Prints evidence created in this command, which is absent from the index.
 pub fn print_new_record(record: &EvidenceRecord, quiet: bool) -> Result<()> {
-    let data = evidence_record_data(record);
-    let targets = format_data_target(&data).into_iter().collect();
+    let data = &record.data;
+    let targets = format_data_target(data).into_iter().collect();
     print_record_with_targets(record, data, targets, quiet)
 }
 
 fn print_record_with_targets(
     record: &EvidenceRecord,
-    data: EvidenceRecordData,
+    data: &EvidenceRecordData,
     targets: Vec<String>,
     quiet: bool,
 ) -> Result<()> {
@@ -696,61 +696,60 @@ fn print_record_with_targets(
         );
         return Ok(());
     }
-    println!(
+    let identity = format!(
         "{} [evidence] {} - {}",
         record.header.id, record.header.status, record.header.title
     );
-    println!(
-        "{}",
-        "=".repeat(
-            record.header.id.len() + record.header.status.len() + record.header.title.len() + 15
-        )
-    );
-    println!("Status:      {}", record.header.status);
-    println!("Result:      {}", data.result.as_str());
-    println!("Commit:      {}", data.commit);
-    println!("Kind:        {}", data.evidence_type);
-    println!("Captured:    {}", data.captured_at.to_rfc3339());
-    if let Some(command) = data.command.as_deref() {
-        println!("Command:     {command}");
+    println!("{identity}\n{}", "=".repeat(identity.len()));
+    let captured = data.captured_at.to_rfc3339();
+    for (label, value) in [
+        ("Status:", record.header.status.as_str()),
+        ("Result:", data.result.as_str()),
+        ("Commit:", data.commit.as_str()),
+        ("Kind:", data.evidence_type.as_str()),
+        ("Captured:", captured.as_str()),
+    ] {
+        println!("{label:<12} {value}");
     }
-    if let Some(exit_status) = data.exit_status.as_deref() {
-        println!("Exit Status: {exit_status}");
+    let target = (!targets.is_empty()).then(|| targets.join(", "));
+    for (label, value) in [
+        ("Command:", data.command.as_deref()),
+        ("Exit Status:", data.exit_status.as_deref()),
+        ("Target:", target.as_deref()),
+    ] {
+        if let Some(value) = value {
+            println!("{label:<12} {value}");
+        }
     }
-    if !targets.is_empty() {
-        println!("Target:      {}", targets.join(", "));
+    let created = record.header.created_at.to_rfc3339();
+    let updated = record.header.updated_at.to_rfc3339();
+    for (label, value) in [
+        (
+            "Producer:",
+            data.producer
+                .as_deref()
+                .or(data.agent_identity.as_deref())
+                .unwrap_or("(none)"),
+        ),
+        ("Path:", data.path.as_deref().unwrap_or("(none)")),
+        ("URI:", data.uri.as_deref().unwrap_or("(none)")),
+        ("Created:", created.as_str()),
+        ("Updated:", updated.as_str()),
+    ] {
+        println!("{label:<12} {value}");
     }
-    println!(
-        "Producer:    {}",
-        data.producer
-            .as_deref()
-            .or(data.agent_identity.as_deref())
-            .unwrap_or("(none)")
-    );
-    println!("Path:        {}", data.path.as_deref().unwrap_or("(none)"));
-    println!("URI:         {}", data.uri.as_deref().unwrap_or("(none)"));
-    println!("Created:     {}", record.header.created_at.to_rfc3339());
-    println!("Updated:     {}", record.header.updated_at.to_rfc3339());
     print_heading("Summary");
     if record.summary.is_empty() {
         println!("(none)");
     } else {
         println!("{}", record.summary);
     }
-    print_output_summary(&data)?;
+    print_output_summary(data)?;
     Ok(())
 }
 
 fn print_heading(title: &str) {
     human_output::print_section_heading(title);
-}
-
-fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {
-    let mut data = record.data.clone();
-    if data.agent_identity.is_none() {
-        data.agent_identity = data.producer.clone();
-    }
-    data
 }
 
 fn command_result_metadata(

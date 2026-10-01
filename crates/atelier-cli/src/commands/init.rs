@@ -2,13 +2,11 @@ use anyhow::Result;
 use std::path::Path;
 
 pub fn run(path: &Path, force: bool) -> Result<()> {
-    let outcome = atelier_app::init::initialize(atelier_app::Request {
-        input: atelier_app::init::InitRequest {
-            path: path.to_path_buf(),
-            force,
-        },
+    let view = atelier_app::init::initialize(atelier_app::init::InitRequest {
+        path: path.to_path_buf(),
+        force,
     })?;
-    for created_path in &outcome.value.data.created_paths {
+    for created_path in &view.created_paths {
         println!("Created {}", created_path.display());
     }
 
