@@ -49,15 +49,6 @@ impl IssuePriority {
         }
     }
 
-    pub fn score_weight(self) -> i32 {
-        match self {
-            Self::P0 => 4,
-            Self::P1 => 3,
-            Self::P2 => 2,
-            Self::P3 => 1,
-        }
-    }
-
     pub fn from_canonical_token(value: &str) -> Result<Self, ParseIssuePriorityError> {
         match value {
             "P0" => Ok(Self::P0),
@@ -409,10 +400,6 @@ impl IssueSections {
         IssueSectionName::CloseReason,
     ];
 
-    pub fn unchecked_from_body(body: Option<&str>) -> Self {
-        Self::for_type("task", body)
-    }
-
     pub fn for_type(issue_type: &str, text: Option<&str>) -> Self {
         let goal = text
             .map(str::trim)
@@ -574,13 +561,6 @@ impl IssueSections {
             })
             .collect()
     }
-    pub fn searchable_text(&self) -> String {
-        Self::ALL_NAMES
-            .into_iter()
-            .filter_map(|name| self.section(name))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 }
 impl IssueSectionName {
     pub fn title(self) -> &'static str {
@@ -715,17 +695,16 @@ mod tests {
     #[test]
     fn issue_priority_maps_tokens_labels_and_ranks() {
         let cases = [
-            (IssuePriority::P0, "P0", "critical", 0, 4),
-            (IssuePriority::P1, "P1", "high", 1, 3),
-            (IssuePriority::P2, "P2", "medium", 2, 2),
-            (IssuePriority::P3, "P3", "low", 3, 1),
+            (IssuePriority::P0, "P0", "critical", 0),
+            (IssuePriority::P1, "P1", "high", 1),
+            (IssuePriority::P2, "P2", "medium", 2),
+            (IssuePriority::P3, "P3", "low", 3),
         ];
 
-        for (priority, token, label, rank, weight) in cases {
+        for (priority, token, label, rank) in cases {
             assert_eq!(priority.canonical_token(), token);
             assert_eq!(priority.label(), label);
             assert_eq!(priority.sort_rank(), rank);
-            assert_eq!(priority.score_weight(), weight);
             assert_eq!(
                 IssuePriority::from_canonical_token(token).unwrap(),
                 priority

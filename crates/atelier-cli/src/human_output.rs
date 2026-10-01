@@ -410,6 +410,25 @@ pub(crate) struct IssueListPanel {
 }
 
 impl IssueListPanel {
+    pub(crate) fn from_work_rows(
+        title: impl Into<String>,
+        rows: &[atelier_app::work_classification::WorkRow],
+    ) -> Self {
+        Self::new(
+            title,
+            rows.iter()
+                .map(|row| IssueListRow {
+                    role: DisplayRole::for_work(row.state_label()),
+                    id: row.id.clone(),
+                    status: Some(row.status.clone()),
+                    priority: row.priority.clone(),
+                    title: row.title.clone(),
+                    blockers: row.open_blockers.len(),
+                    depth: 1,
+                })
+                .collect(),
+        )
+    }
     pub(crate) fn new(title: impl Into<String>, rows: Vec<IssueListRow>) -> Self {
         let total_count = rows.len();
         Self {

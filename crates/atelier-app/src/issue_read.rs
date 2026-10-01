@@ -1,10 +1,10 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
+use crate::objective_graph::issue_blocks_work;
 use crate::record_index::RecordIndex;
-use crate::work_classification::{classify_issue, WorkClassification};
+use crate::work_classification::{work_buckets_for, WorkBuckets, WorkRow};
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, RecordLink};
 
@@ -17,28 +17,11 @@ pub struct ObjectiveBucketTotals {
     pub backlog: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ObjectiveIssueSummary {
-    pub id: String,
-    pub title: String,
-    pub status: String,
-    pub issue_type: String,
-    pub priority: String,
-    pub parent_id: Option<String>,
-    pub bucket: WorkClassification,
-    pub open_blockers: Vec<String>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ObjectiveScopeSummary {
     pub issue_ids: BTreeSet<String>,
     pub totals: ObjectiveBucketTotals,
-    pub active: Vec<ObjectiveIssueSummary>,
-    pub backlog: Vec<ObjectiveIssueSummary>,
-    pub ready: Vec<ObjectiveIssueSummary>,
-    pub blocked: Vec<ObjectiveIssueSummary>,
-    pub done: Vec<ObjectiveIssueSummary>,
+    pub work: WorkBuckets,
 }
 
 impl ObjectiveScopeSummary {
@@ -65,8 +48,6 @@ impl ObjectiveScopeSummary {
 pub struct ObjectiveRelationshipSummary {
     pub advances_roots: Vec<String>,
     pub open_blockers: Vec<String>,
-    pub direct_blockers: Vec<String>,
-    pub validating_evidence: usize,
     pub other_links: usize,
 }
 
@@ -76,19 +57,12 @@ pub struct ObjectiveEvidenceGateSummary {
     pub scoped_issues_without_evidence: usize,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ObjectiveRecentActivityFacts {
-    pub recently_updated: Vec<ObjectiveIssueSummary>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectiveReadSummary {
-    pub objective_id: String,
-    pub objective_type: String,
     pub scope: ObjectiveScopeSummary,
     pub relationships: ObjectiveRelationshipSummary,
     pub evidence: ObjectiveEvidenceGateSummary,
-    pub recent_activity: ObjectiveRecentActivityFacts,
+    pub recently_updated: Vec<WorkRow>,
 }
 
 pub fn objective_read_summary(
@@ -108,15 +82,34 @@ pub fn objective_read_summary(
     let relationships = relationship_summary(index, &objective, &scope_ids, workflow_policy)?;
     let scope = scope_summary(index, &scope_ids, workflow_policy)?;
     let evidence = evidence_gate_summary(index, objective_id, &scope_ids)?;
-    let recent_activity = recent_activity_facts(&scope);
+    let mut recently_updated = scope
+        .work
+        .active
+        .iter()
+        .chain(&scope.work.backlog)
+        .chain(&scope.work.ready)
+        .chain(&scope.work.blocked)
+        .chain(&scope.work.done)
+        .cloned()
+        .collect::<Vec<_>>();
+    recently_updated.sort_by_key(|row| {
+        (
+            Reverse(
+                index
+                    .issue_record(&row.id)
+                    .expect("indexed work row")
+                    .issue
+                    .updated_at,
+            ),
+            row.id.clone(),
+        )
+    });
 
     Ok(Some(ObjectiveReadSummary {
-        objective_id: objective.id,
-        objective_type: objective.issue_type,
         scope,
         relationships,
         evidence,
-        recent_activity,
+        recently_updated,
     }))
 }
 
@@ -125,59 +118,45 @@ fn scope_summary(
     scope_ids: &BTreeSet<String>,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<ObjectiveScopeSummary> {
-    let mut summary = ObjectiveScopeSummary {
-        issue_ids: scope_ids.clone(),
-        ..ObjectiveScopeSummary::default()
-    };
-    let mut done = Vec::new();
-
-    for issue_id in scope_ids {
-        let Some(issue) = index.get_issue(issue_id) else {
-            continue;
-        };
-        let classified = classify_issue(index, workflow_policy, &issue)?;
-        let bucket = classified.classification;
-        let issue_summary = ObjectiveIssueSummary {
-            id: issue.id,
-            title: issue.title,
-            status: issue.status,
-            issue_type: issue.issue_type,
-            priority: issue.priority,
-            parent_id: issue.parent_id,
-            bucket,
-            open_blockers: classified.open_blockers,
-            updated_at: issue.updated_at,
-        };
-        match bucket {
-            WorkClassification::Active => {
-                summary.totals.active += 1;
-                summary.active.push(issue_summary);
-            }
-            WorkClassification::Ready => {
-                summary.totals.ready += 1;
-                summary.ready.push(issue_summary);
-            }
-            WorkClassification::Blocked => {
-                summary.totals.blocked += 1;
-                summary.blocked.push(issue_summary);
-            }
-            WorkClassification::Done => {
-                summary.totals.done += 1;
-                done.push(issue_summary);
-            }
-            WorkClassification::Backlog => {
-                summary.totals.backlog += 1;
-                summary.backlog.push(issue_summary);
-            }
-        }
+    let mut work = work_buckets_for(
+        index,
+        workflow_policy,
+        index.issues().filter(|issue| scope_ids.contains(&issue.id)),
+    )?;
+    for rows in [
+        &mut work.active,
+        &mut work.ready,
+        &mut work.blocked,
+        &mut work.backlog,
+        &mut work.done,
+    ] {
+        rows.sort_by_key(|row| {
+            (
+                IssuePriority::from_label(&row.priority)
+                    .map(|priority| priority.sort_rank())
+                    .unwrap_or(4),
+                Reverse(
+                    index
+                        .issue_record(&row.id)
+                        .expect("indexed work row")
+                        .issue
+                        .updated_at,
+                ),
+                row.id.clone(),
+            )
+        });
     }
-
-    summary.active = order_issue_summaries(summary.active);
-    summary.backlog = order_issue_summaries(summary.backlog);
-    summary.ready = order_issue_summaries(summary.ready);
-    summary.blocked = order_issue_summaries(summary.blocked);
-    summary.done = order_issue_summaries(done);
-    Ok(summary)
+    Ok(ObjectiveScopeSummary {
+        issue_ids: scope_ids.clone(),
+        totals: ObjectiveBucketTotals {
+            active: work.active.len(),
+            ready: work.ready.len(),
+            blocked: work.blocked.len(),
+            done: work.done.len(),
+            backlog: work.backlog.len(),
+        },
+        work,
+    })
 }
 
 fn relationship_summary(
@@ -187,7 +166,7 @@ fn relationship_summary(
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<ObjectiveRelationshipSummary> {
     let mut summary = ObjectiveRelationshipSummary::default();
-    let mut direct_blockers = BTreeSet::new();
+    let mut blocker_ids = BTreeSet::new();
 
     for relation in index.get_typed_relations(&objective.id) {
         let linked_id = if relation.issue_id_1 == objective.id {
@@ -206,22 +185,20 @@ fn relationship_summary(
         match link.relation_type.as_str() {
             "blocked_by" => {
                 if let Some(issue_id) = linked_issue_side(&link, &objective.id) {
-                    direct_blockers.insert(issue_id.to_string());
+                    blocker_ids.insert(issue_id.to_string());
                 }
             }
-            "validates" if link_touches_evidence(&link) => summary.validating_evidence += 1,
+            "validates" if link_touches_evidence(&link) => {}
             _ => summary.other_links += 1,
         }
     }
 
-    let mut blocker_ids = direct_blockers.clone();
     for issue_id in scope_ids {
         for blocker_id in index.get_blockers(issue_id) {
             blocker_ids.insert(blocker_id);
         }
     }
 
-    summary.direct_blockers = direct_blockers.into_iter().collect();
     summary.open_blockers = blocker_ids
         .into_iter()
         .filter_map(|id| index.get_issue(&id))
@@ -266,62 +243,6 @@ fn validating_evidence_count(index: &RecordIndex, issue_id: &str) -> Result<usiz
         .count())
 }
 
-fn recent_activity_facts(scope: &ObjectiveScopeSummary) -> ObjectiveRecentActivityFacts {
-    let mut recently_updated = scope
-        .active
-        .iter()
-        .chain(scope.backlog.iter())
-        .chain(scope.ready.iter())
-        .chain(scope.blocked.iter())
-        .chain(scope.done.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    recently_updated.sort_by_key(|issue| (Reverse(issue.updated_at), issue.id.clone()));
-    ObjectiveRecentActivityFacts { recently_updated }
-}
-
-fn order_issue_summaries(mut issues: Vec<ObjectiveIssueSummary>) -> Vec<ObjectiveIssueSummary> {
-    issues.sort_by_key(|issue| {
-        (
-            bucket_rank(issue.bucket),
-            priority_rank(&issue.priority),
-            Reverse(issue.updated_at),
-            issue.id.clone(),
-        )
-    });
-    issues
-}
-
-fn bucket_rank(bucket: WorkClassification) -> u8 {
-    match bucket {
-        WorkClassification::Ready => 0,
-        WorkClassification::Active => 1,
-        WorkClassification::Blocked => 2,
-        WorkClassification::Done => 3,
-        WorkClassification::Backlog => 4,
-    }
-}
-
-fn priority_rank(priority: &str) -> u8 {
-    IssuePriority::from_label(priority)
-        .map(|priority| priority.sort_rank())
-        .unwrap_or(4)
-}
-
-fn issue_status_category(policy: Option<&WorkflowPolicy>, status: &str) -> Option<String> {
-    policy
-        .and_then(|policy| policy.status_category(status))
-        .map(str::to_string)
-}
-
-fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    issue_status_category(policy, &issue.status).as_deref() == Some("done")
-}
-
-fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    !issue_is_done(policy, issue)
-}
-
 fn linked_issue_side<'a>(link: &'a RecordLink, objective_id: &str) -> Option<&'a str> {
     if link.source_kind == "issue" && link.source_id == objective_id && link.target_kind == "issue"
     {
@@ -348,6 +269,7 @@ mod tests {
         BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
         WorkflowPolicy,
     };
+    use chrono::Utc;
     use std::collections::BTreeMap;
 
     fn test_policy() -> WorkflowPolicy {
@@ -507,12 +429,47 @@ mod tests {
             .unwrap();
 
         assert_eq!(summary.scope.totals.ready, 7);
-        assert_eq!(summary.scope.ready.len(), 7);
+        assert_eq!(summary.scope.work.ready.len(), 7);
         assert_eq!(summary.scope.totals.active, 1);
+        assert_eq!(summary.recently_updated[0].id, "atelier-active");
+        assert_eq!(summary.recently_updated.len(), 8);
+    }
+    #[test]
+    fn objective_rows_keep_priority_update_and_identity_order() {
+        let mut records = Records::default();
+        records.issue("atelier-obj", "epic", "todo");
+        let now = Utc::now();
+        for (id, priority, age) in [
+            ("atelier-low", "low", 0),
+            ("atelier-old", "high", 10),
+            ("atelier-newb", "high", 0),
+            ("atelier-newa", "high", 0),
+        ] {
+            let record = records.issue(id, "task", "todo");
+            record.issue.priority = priority.into();
+            record.issue.updated_at = now - chrono::Duration::days(age);
+            records.parent(id, "atelier-obj");
+        }
+        let summary = objective_read_summary(&records.index(), "atelier-obj", Some(&test_policy()))
+            .unwrap()
+            .unwrap();
         assert_eq!(
-            summary.recent_activity.recently_updated[0].id,
-            "atelier-active"
+            summary
+                .scope
+                .work
+                .ready
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            ["atelier-newa", "atelier-newb", "atelier-old", "atelier-low"]
         );
-        assert_eq!(summary.recent_activity.recently_updated.len(), 8);
+        assert_eq!(
+            summary
+                .recently_updated
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            ["atelier-low", "atelier-newa", "atelier-newb", "atelier-old"]
+        );
     }
 }

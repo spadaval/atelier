@@ -292,22 +292,7 @@ fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
 }
 
 fn work_bucket_panel(title: &str, rows: &[WorkRow]) -> IssueListPanel {
-    IssueListPanel::new(
-        title,
-        rows.iter()
-            .map(|row| IssueListRow {
-                role: DisplayRole::for_work(row.state_label()),
-                id: row.id.clone(),
-                status: Some(row.status.clone()),
-                priority: row.priority.clone(),
-                title: row.title.clone(),
-                blockers: row.open_blockers.len(),
-                depth: 1,
-            })
-            .collect(),
-    )
-    .total_count(rows.len())
-    .limit(20)
+    IssueListPanel::from_work_rows(title, rows)
 }
 
 pub fn mission_dashboard(

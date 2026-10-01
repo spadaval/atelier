@@ -14,7 +14,7 @@ use crate::human_output::{
 };
 use crate::utils::format_issue_id;
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
-use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
+use atelier_app::issue_read::ObjectiveReadSummary;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
@@ -185,29 +185,38 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     for (title, rows, total) in [
         (
             "Active Work",
-            &summary.scope.active,
+            &summary.scope.work.active,
             summary.scope.totals.active,
         ),
         (
             "Ready Work",
-            &summary.scope.ready,
+            &summary.scope.work.ready,
             summary.scope.totals.ready,
         ),
         (
             "Blocked Work",
-            &summary.scope.blocked,
+            &summary.scope.work.blocked,
             summary.scope.totals.blocked,
         ),
-        ("Done Work", &summary.scope.done, summary.scope.totals.done),
+        (
+            "Done Work",
+            &summary.scope.work.done,
+            summary.scope.totals.done,
+        ),
     ] {
-        render_objective_issue_rows(title, rows, total);
+        if total > 0 {
+            print_panel(
+                IssueListPanel::from_work_rows(title, rows)
+                    .total_count(total)
+                    .limit(OBJECTIVE_ROLLUP_LIMIT),
+            );
+        }
     }
 
-    if !summary.recent_activity.recently_updated.is_empty() {
+    if !summary.recently_updated.is_empty() {
         print_panel(LinesPanel::new(
             "Recent Activity Facts",
             summary
-                .recent_activity
                 .recently_updated
                 .iter()
                 .take(OBJECTIVE_ROLLUP_LIMIT)
@@ -215,36 +224,13 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                     format!(
                         "  updated {} [{}] {} - {}",
                         format_issue_id(&issue.id),
-                        issue.bucket.label(),
+                        issue.classification.label(),
                         issue.priority,
                         issue.title
                     )
                 }),
         ));
     }
-}
-
-fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], total_count: usize) {
-    if total_count == 0 {
-        return;
-    }
-    let rows = issues
-        .iter()
-        .map(|issue| IssueListRow {
-            role: DisplayRole::for_work(issue.bucket.label()),
-            id: format_issue_id(&issue.id),
-            status: Some(issue.status.clone()),
-            priority: issue.priority.clone(),
-            title: issue.title.clone(),
-            blockers: issue.open_blockers.len(),
-            depth: 1,
-        })
-        .collect::<Vec<_>>();
-    print_panel(
-        IssueListPanel::new(title, rows)
-            .total_count(total_count)
-            .limit(OBJECTIVE_ROLLUP_LIMIT),
-    );
 }
 
 fn render_issue_link_section(
