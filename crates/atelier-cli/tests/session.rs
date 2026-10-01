@@ -1373,3 +1373,248 @@ fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
         assert!(!pass && output.contains("review_append_only"), "{output}");
     }
 }
+
+#[test]
+fn terminal_review_cluster_prune_remains_a_valid_handoff() {
+    for (days_ago, retired) in [(2000, true), (1, true), (0, false)] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let id = ok(
+            f.path(),
+            &["-q", "issue", "create", "Retired reviewed work"],
+        );
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Reviewed concern",
+            ],
+        );
+        let disposition = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "disposition",
+                &finding,
+                "--identity",
+                "Reviewer",
+                "--decision",
+                "no_action",
+                "Independent accepted disposition",
+            ],
+        );
+        let mut record = f.store().load_issue_by_id(&id).unwrap();
+        let date = chrono::Utc::now() - chrono::Duration::days(days_ago);
+        record.issue.status = "done".into();
+        record.issue.created_at = date;
+        record.issue.updated_at = date;
+        record.issue.closed_at = Some(date);
+        record.sections.close_reason = Some("Verified terminal claim".into());
+        f.store().write_issue_atomic(&record).unwrap();
+        if retired {
+            let created = format!("created_at: {}", date.to_rfc3339());
+            for review in [&finding, &disposition] {
+                let path = f.path().join(format!(".atelier/reviews/{review}.md"));
+                let text = fs::read_to_string(&path).unwrap();
+                let old = text
+                    .lines()
+                    .map(|line| {
+                        if line.starts_with("created_at:") {
+                            created.as_str()
+                        } else {
+                            line
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                fs::write(path, format!("{old}\n")).unwrap();
+            }
+        }
+        commit(f.path(), "original terminal review cluster");
+        ok(f.path(), &["land"]);
+        ok(f.path(), &["prune", "--apply", "--retention-days", "0"]);
+        let issue_path = f.path().join(format!(".atelier/issues/{id}.md"));
+        if !retired {
+            assert!(issue_path.exists()); // Day-based cutoff still protects today's work.
+            ok(f.path(), &["land"]);
+        } else {
+            assert!(!issue_path.exists());
+            for review in [&finding, &disposition] {
+                assert!(!f
+                    .path()
+                    .join(format!(".atelier/reviews/{review}.md"))
+                    .exists());
+            }
+            commit(f.path(), "public prune retired complete terminal cluster");
+            ok(f.path(), &["land"]);
+            fs::write(f.path().join("later-code"), "later work\n").unwrap();
+            commit(f.path(), "later unrelated work");
+            ok(f.path(), &["land"]);
+        }
+    }
+}
+
+#[test]
+fn retirement_cannot_hide_prior_rewrites_or_active_target_events() {
+    for mutation in ["rewrite", "edit_revert", "active", "partial"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let id = ok(
+            f.path(),
+            &["-q", "issue", "create", "Protected review history"],
+        );
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Concern",
+            ],
+        );
+        let disposition = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "disposition",
+                &finding,
+                "--identity",
+                "Reviewer",
+                "--decision",
+                "no_action",
+                "Independent acceptance",
+            ],
+        );
+        if mutation == "active" {
+            commit(f.path(), "active target and reviews");
+        } else {
+            f.terminal(&id);
+        }
+        let path = f.path().join(format!(".atelier/reviews/{disposition}.md"));
+        let original = fs::read_to_string(&path).unwrap();
+        if matches!(mutation, "rewrite" | "edit_revert") {
+            fs::write(&path, original.replace("Reviewer", "Author")).unwrap();
+            commit(f.path(), "invalid event rewrite");
+            if mutation == "edit_revert" {
+                fs::write(&path, original).unwrap();
+                commit(f.path(), "restore bytes without erasing rewrite history");
+            }
+        }
+        fs::remove_file(f.path().join(format!(".atelier/issues/{id}.md"))).unwrap();
+        fs::remove_file(path).unwrap();
+        if mutation != "partial" {
+            fs::remove_file(f.path().join(format!(".atelier/reviews/{finding}.md"))).unwrap();
+        }
+        commit(
+            f.path(),
+            "retire records after invalid history or with invalid cluster",
+        );
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(!pass, "{mutation}: {output}");
+        if mutation != "partial" {
+            assert!(output.contains("review_append_only"), "{output}");
+        }
+    }
+}
+
+#[test]
+fn valid_independent_review_survives_merge_after_reviewer_authored_prior_base_work() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    ok(dir.path(), &["init"]);
+    let id = ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Planned before unrelated base work",
+        ],
+    );
+    commit(dir.path(), "Author planned owner");
+    git(dir.path(), &["config", "user.name", "Reviewer"]);
+    git(
+        dir.path(),
+        &["config", "user.email", "reviewer@example.test"],
+    );
+    fs::write(
+        dir.path().join("base-code"),
+        "Reviewer authored unrelated base work\n",
+    )
+    .unwrap();
+    commit(dir.path(), "Reviewer prior base work");
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    ok(dir.path(), &["start", &id]);
+    fs::write(dir.path().join("owner-code"), "Author implementation\n").unwrap();
+    commit(dir.path(), "Author owner implementation");
+    let finding = ok(
+        dir.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Potential concern",
+        ],
+    );
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Independent accepted disposition",
+        ],
+    );
+    commit(dir.path(), "Reviewer events");
+    let f = Fixture {
+        branch: git(dir.path(), &["branch", "--show-current"]),
+        dir,
+        id,
+    };
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent approval",
+        ],
+    );
+    commit(f.path(), "Reviewer approval");
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["merge", &f.id]);
+    assert_eq!(git(f.path(), &["symbolic-ref", "HEAD"]), "refs/heads/main");
+    ok(f.path(), &["land"]);
+    fs::write(f.path().join("subsequent-code"), "unrelated future work\n").unwrap();
+    commit(f.path(), "later unrelated base code");
+    ok(f.path(), &["land"]);
+}

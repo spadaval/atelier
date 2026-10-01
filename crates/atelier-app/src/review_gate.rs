@@ -145,9 +145,12 @@ pub fn append_only(repo: &Path, base_commit: &str) -> Result<()> {
             .iter()
             .filter(|path| path.starts_with(".atelier/reviews"))
         {
-            if entry(repo, &edge.parent, path)?.is_some()
-                || entry(repo, &edge.commit, path)?.is_none_or(|(mode, _)| mode != "100644")
-            {
+            let before = entry(repo, &edge.parent, path)?;
+            let after = entry(repo, &edge.commit, path)?;
+            if before.is_some() && after.is_none() && retired_review_cluster(repo, &edge, path)? {
+                continue;
+            }
+            if before.is_some() || after.is_none_or(|(mode, _)| mode != "100644") {
                 bail!("review_append_only: {} was rewritten, deleted or changed mode in {}; append a successor event", path.display(), edge.commit);
             }
         }
@@ -733,8 +736,41 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
         .lines()
         .next()
         .context("review predates its issue scope")?;
-    let mut authors = author_identities_to(repo, start, &ids, event)?;
-    add_author(repo, start, &mut authors)?;
+    let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
+    let owner_path = std::path::PathBuf::from(format!(".atelier/issues/{owner}.md"));
+    let updates = String::from_utf8(git::git_output(
+        repo,
+        &[
+            "log",
+            "--reverse",
+            "--format=%H",
+            event,
+            "--",
+            owner_path.to_str().context("owner path is not UTF-8")?,
+        ],
+    )?)?;
+    let branch_start = updates.lines().find(|commit| {
+        crate::evidence_freshness::at_commit(repo, commit, owner)
+            .is_ok_and(|record| record.issue.workflow_branch.is_some())
+    });
+    let authors = if let Some(origin) = branch_start {
+        let parent = git::git_output(
+            repo,
+            &["rev-parse", "--verify", &format!("{origin}^{{commit}}^1")],
+        );
+        match parent {
+            Ok(bytes) => author_identities_to(repo, String::from_utf8(bytes)?.trim(), &ids, event)?,
+            Err(_) => {
+                let mut authors = author_identities_to(repo, origin, &ids, event)?;
+                add_author(repo, origin, &mut authors)?;
+                authors
+            }
+        }
+    } else {
+        let mut authors = author_identities_to(repo, start, &ids, event)?;
+        add_author(repo, start, &mut authors)?;
+        authors
+    };
     Ok(independent(record, &authors))
 }
 
@@ -748,4 +784,48 @@ fn original_approval_valid(
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
     let end = crate::evidence_freshness::claim_endpoint(repo, target, &approval.commit)?;
     approval_is_current_to(repo, &approval.commit, &ids, &end)
+}
+
+fn retired_review_cluster(repo: &Path, edge: &git::CommitEdge, path: &Path) -> Result<bool> {
+    let record = atelier_records::review::parse_review_record(
+        &git::blob(repo, &edge.parent, path)?,
+        path.strip_prefix(".atelier")?,
+    )?;
+    let issue_path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", record.target));
+    if entry(repo, &edge.commit, &issue_path)?.is_some() {
+        return Ok(false);
+    }
+    let issue = crate::evidence_freshness::at_commit(repo, &edge.parent, &record.target)?;
+    let policy = crate::base_policy::from_ref(repo, &edge.parent)?.policy;
+    if !policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)? {
+        return Ok(false);
+    }
+    let paths = String::from_utf8(git::git_output(
+        repo,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            &edge.parent,
+            "--",
+            ".atelier/reviews/",
+        ],
+    )?)?;
+    for name in paths.lines() {
+        let other_path = Path::new(name);
+        if other_path
+            .extension()
+            .is_none_or(|extension| extension != "md")
+        {
+            continue;
+        }
+        let other = atelier_records::review::parse_review_record(
+            &git::blob(repo, &edge.parent, other_path)?,
+            other_path.strip_prefix(".atelier")?,
+        )?;
+        if other.target == record.target && entry(repo, &edge.commit, other_path)?.is_some() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
