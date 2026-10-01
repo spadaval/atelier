@@ -2,7 +2,7 @@ schema: atelier.workflow
 schema_version: 3
 branch_policy:
   base_branch: master
-  merge_strategy: squash
+  merge_strategy: fast_forward_only
 issue_types:
   bug:
     label: Bug

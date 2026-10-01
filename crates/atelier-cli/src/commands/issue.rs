@@ -1189,6 +1189,7 @@ mod tests {
                 blocker_record,
             ],
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
 
@@ -1217,6 +1218,7 @@ mod tests {
                 fixture_record(child_a, "First child", "todo", "high"),
                 fixture_record("atelier-child-b", "Second child", "done", "low"),
             ],
+            Vec::new(),
             Vec::new(),
         )
         .unwrap();

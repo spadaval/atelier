@@ -58,12 +58,17 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         Some(snapshot) => (&snapshot.index, snapshot.root()),
         None => (index, repo_root.as_path()),
     };
-    let view_policy = atelier_app::workflow_policy::load(view_root)?;
     let Some(issue) = view_index.get_issue(&issue_id) else {
         bail!(
             "start_branch_missing_record: branch '{branch}' does not contain issue {issue_id}; commit the record on the branch that owns this work, then rerun `atelier start {issue_id}`."
         );
     };
+    let source = atelier_app::workflow_policy::action_policy(&repo_root, view_index, &issue_id)?;
+    for diagnostic in source.diagnostics {
+        eprintln!("{diagnostic}");
+    }
+    let view_policy = source.policy;
+    view_index.validate_policy(&view_policy, view_root)?;
     let work_branch =
         atelier_app::workflow_policy::resolve_work_branch(&view_policy, view_index, &issue_id)?;
     if work_branch.branch != branch {
@@ -225,9 +230,10 @@ impl BranchSnapshot {
                 String::from_utf8_lossy(&tar.stderr).trim()
             );
         }
-        let index = RecordIndex::load(&dir.path().join(state_relative)).with_context(|| {
-            format!("start_branch_snapshot: tracker records on branch '{branch}' are invalid")
-        })?;
+        let index =
+            RecordIndex::load_structural(&dir.path().join(state_relative)).with_context(|| {
+                format!("start_branch_snapshot: tracker records on branch '{branch}' are invalid")
+            })?;
         Ok(Self { dir, index })
     }
 

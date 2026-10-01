@@ -6,8 +6,8 @@ use atelier_core::Issue;
 use crate::record_index::RecordIndex;
 
 pub use atelier_workflow::{
-    configured_initial_status, load, validate_issue_against_policy, BranchLifecycleConfig,
-    MergeStrategy, StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
+    configured_initial_status, validate_issue_against_policy, BranchLifecycleConfig, MergeStrategy,
+    StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
     WorkflowDefinition, WorkflowPolicy, STARTER_POLICY_YAML, WORKFLOW_BRANCH_FIELD,
     WORKFLOW_POLICY_PATH,
 };
@@ -180,6 +180,26 @@ fn missing_parent_epic_branch_owner_error(
     )
 }
 
+pub fn load(repo: &std::path::Path) -> anyhow::Result<WorkflowPolicy> {
+    Ok(crate::base_policy::working(repo)?.policy)
+}
+
+/// Guards for started work use the committed integration base's policy.
+/// Unstarted planning records retain ordinary working-policy semantics.
+pub fn action_policy(
+    repo: &std::path::Path,
+    index: &RecordIndex,
+    issue_id: &str,
+) -> anyhow::Result<crate::base_policy::PolicySource> {
+    let issue = index.require_issue(issue_id)?;
+    let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
+    if let Some(branch) = &owner.workflow_branch {
+        crate::base_policy::from_ref(repo, &format!("refs/heads/{}", branch.branch_base))
+    } else {
+        crate::base_policy::working(repo)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,6 +208,7 @@ mod tests {
 
     fn policy() -> WorkflowPolicy {
         WorkflowPolicy {
+            merge_checks: Vec::new(),
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),

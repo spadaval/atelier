@@ -18,16 +18,28 @@ pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
     extension: "md",
 };
 
-pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
-    kind: "evidence",
-    schema: "atelier.evidence",
-    schema_version: 2,
-    canonical_dir: Some("evidence"),
+pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
+    REVIEW_KIND,
+    RecordKindSpec {
+        kind: "evidence",
+        schema: "atelier.evidence",
+        schema_version: 2,
+        canonical_dir: Some("evidence"),
+        extension: "md",
+    },
+];
+
+pub const REVIEW_KIND: RecordKindSpec = RecordKindSpec {
+    kind: "review",
+    schema: "atelier.review",
+    schema_version: 1,
+    canonical_dir: Some("reviews"),
     extension: "md",
-}];
+};
 
 pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
     ISSUE_KIND,
+    REVIEW_KIND,
     RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
