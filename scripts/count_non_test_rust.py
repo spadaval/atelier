@@ -48,7 +48,7 @@ def item_end(code, start):
     """Find a body's closing brace or a declaration's outer semicolon."""
     kind = re.search(r'\b(fn|const|static|type|use|mod|struct|enum|impl|trait|union)\b', code[start:])
     value_item = kind is not None and kind.group() in ('const', 'static', 'type', 'use')
-    if kind is not None and re.match(r'const\s+(?:unsafe\s+)?fn\b', code[start + kind.start():]):
+    if kind is not None and re.match(r'const\s+(?:unsafe\s+)?(?:extern\s+)?fn\b', code[start + kind.start():]):
         value_item = False
     stack = []
     value_expression = False
@@ -105,6 +105,7 @@ def self_check():
         ('const block', '#[cfg(test)]\nconst ITEM: usize = {\n    3\n};\n', 0),
         ('array shift', '#[cfg(test)]\nfn helper() -> [u8; 1 << 2] {\n    [0; 4]\n}\n', 0),
         ('array comparison', '#[cfg(test)]\nfn helper() -> [u8; (1 < 2) as usize] {\n    [0; 1]\n}\n', 0),
+        ('const extern function', '#[cfg(test)]\nconst unsafe extern "C" fn helper() -> u8 {\n    1\n}\nconst PRODUCTION: u8 = 2;\n', 1),
         ('production after helper', '#[cfg(test)]\nfn helper() -> [u8; 3] {\n    [1, 2, 3]\n}\n// Production comment\n\npub fn production() -> u8 {\n    4\n}\n', 5),
     ]
     for name, source, expected in cases:
