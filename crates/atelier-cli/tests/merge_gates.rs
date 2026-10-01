@@ -1249,3 +1249,206 @@ fn ignored_canonical_changes_in_base_checkout_refuse_before_and_after_checks() {
         assert!(git(base.path(), &["status", "--porcelain"]).is_empty());
     }
 }
+
+#[test]
+fn shadow_tags_do_not_change_source_or_base_branch_identity() {
+    for separate_base in [false, true] {
+        let fixture = Fixture::new();
+        fixture.approval("Reviewer");
+        let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+        git(fixture.path(), &["tag", &fixture.branch, "HEAD"]);
+        git(fixture.path(), &["tag", "main", "refs/heads/main"]);
+        let base = tempdir().unwrap();
+        if separate_base {
+            git(
+                fixture.path(),
+                &["worktree", "add", base.path().to_str().unwrap(), "main"],
+            );
+        }
+        ok(fixture.path(), &["merge", &fixture.id]);
+        let target = if separate_base {
+            base.path()
+        } else {
+            fixture.path()
+        };
+        assert_eq!(git(target, &["symbolic-ref", "HEAD"]), "refs/heads/main");
+        assert_eq!(git(target, &["rev-parse", "refs/heads/main"]), head);
+        assert_eq!(
+            git(
+                target,
+                &["rev-parse", &format!("refs/tags/{}", fixture.branch)]
+            ),
+            head
+        );
+        let output = Command::new("git")
+            .current_dir(target)
+            .args([
+                "show-ref",
+                "--verify",
+                &format!("refs/heads/{}", fixture.branch),
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(git(target, &["status", "--porcelain"]).is_empty());
+    }
+}
+
+#[test]
+fn hidden_flagged_code_is_rejected_before_merge_and_after_shell_checks_in_both_checkouts() {
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        for base_target in [false, true] {
+            for during_check in [false, true] {
+                let fixture = Fixture::new();
+                let base = tempdir().unwrap();
+                git(fixture.path(), &["switch", "main"]);
+                fs::write(fixture.path().join("base.rs"), "base code\n").unwrap();
+                if during_check {
+                    let path = fixture.path().join(".atelier/workflow.yaml");
+                    let policy = fs::read_to_string(&path).unwrap();
+                    let command = if base_target {
+                        format!(
+                            "git -C {} update-index {flag} base.rs; printf hidden > {}/base.rs",
+                            base.path().display(),
+                            base.path().display()
+                        )
+                    } else {
+                        format!("git update-index {flag} src.rs; printf hidden > src.rs")
+                    };
+                    fs::write(&path, format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: '{command}' }}\n")).unwrap();
+                }
+                commit(
+                    fixture.path(),
+                    "base code and optional hidden mutation check",
+                );
+                git(fixture.path(), &["switch", &fixture.branch]);
+                git(fixture.path(), &["rebase", "main"]);
+                fixture.approval("Reviewer");
+                if base_target {
+                    git(
+                        fixture.path(),
+                        &["worktree", "add", base.path().to_str().unwrap(), "main"],
+                    );
+                }
+                let target = if base_target {
+                    base.path()
+                } else {
+                    fixture.path()
+                };
+                let code_path = if base_target { "base.rs" } else { "src.rs" };
+                if !during_check {
+                    git(target, &["update-index", flag, code_path]);
+                    fs::write(target.join(code_path), "hidden").unwrap();
+                    assert!(git(target, &["status", "--porcelain"]).is_empty());
+                }
+                let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+                fixture.refusal("tracked_snapshot_uncommitted");
+                assert_eq!(
+                    git(
+                        fixture.path(),
+                        &["rev-parse", &format!("refs/heads/{}", fixture.branch)]
+                    ),
+                    head
+                );
+                assert!(git(target, &["status", "--porcelain"]).is_empty());
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn flagged_code_executable_mode_changes_are_rejected_despite_core_filemode_false() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    git(fixture.path(), &["config", "core.filemode", "false"]);
+    git(
+        fixture.path(),
+        &["update-index", "--assume-unchanged", "src.rs"],
+    );
+    fs::set_permissions(
+        fixture.path().join("src.rs"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+    fixture.refusal("tracked_snapshot_uncommitted");
+}
+
+#[test]
+fn evidence_capture_rejects_hidden_flagged_code_before_and_during_command_without_append() {
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        for during_command in [false, true] {
+            let fixture = Fixture::new();
+            if !during_command {
+                git(fixture.path(), &["update-index", flag, "src.rs"]);
+                fs::write(fixture.path().join("src.rs"), "hidden").unwrap();
+            }
+            let script = if during_command {
+                format!("git update-index {flag} src.rs; printf hidden > src.rs")
+            } else {
+                "touch capture-child-ran".into()
+            };
+            let (passed, output) = cli(
+                fixture.path(),
+                &[
+                    "evidence",
+                    "record",
+                    "--kind",
+                    "test",
+                    "--target",
+                    &format!("issue/{}", fixture.id),
+                    "--",
+                    "sh",
+                    "-c",
+                    &script,
+                ],
+            );
+            let expected = if during_command {
+                "command changed code or policy"
+            } else {
+                "requires committed code and policy"
+            };
+            assert!(!passed && output.contains(expected), "{output}");
+            assert!(!fixture.path().join("capture-child-ran").exists());
+            let evidence = fixture.path().join(".atelier/evidence");
+            assert!(!evidence.exists() || fs::read_dir(evidence).unwrap().next().is_none());
+            assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        }
+    }
+}
+
+#[test]
+fn unchanged_flagged_files_allow_merge_and_canonical_hashing_bypasses_filters() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    git(
+        fixture.path(),
+        &["update-index", "--assume-unchanged", "src.rs"],
+    );
+    // An ignored attributes file is machine-local; raw hashing must never run
+    // its clean filter when verifying committed Markdown bytes.
+    let marker = fixture.path().join("filter-ran");
+    git(
+        fixture.path(),
+        &[
+            "config",
+            "filter.snapshot.clean",
+            &format!("touch {}; cat", marker.display()),
+        ],
+    );
+    fs::write(
+        fixture.path().join(".git/info/attributes"),
+        ".atelier/**/*.md filter=snapshot\n",
+    )
+    .unwrap();
+    atelier_app::committed_snapshot::require_committed(
+        fixture.path(),
+        &git(fixture.path(), &["rev-parse", "HEAD"]),
+    )
+    .unwrap();
+    assert!(!marker.exists());
+    fs::remove_file(fixture.path().join(".git/info/attributes")).unwrap();
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+}

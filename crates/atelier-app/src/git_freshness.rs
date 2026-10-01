@@ -94,6 +94,11 @@ pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
         repo,
         &["ls-files", "--others", "--exclude-standard", "-z"],
     )?)?);
+    changed.extend(crate::committed_snapshot::flagged_modified_paths(
+        repo, "HEAD",
+    )?);
+    changed.sort();
+    changed.dedup();
     Ok(changed)
 }
 /// Record-only paths; policy and project config are intentionally excluded.

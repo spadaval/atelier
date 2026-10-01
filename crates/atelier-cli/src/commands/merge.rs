@@ -46,11 +46,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let repo = layout.repo_root();
     clean(repo)?;
     let head = git::head_commit(repo)?;
-    let branch = text(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])?;
+    let source_ref = text(repo, &["symbolic-ref", "--quiet", "HEAD"])?;
+    let branch = source_ref
+        .strip_prefix("refs/heads/")
+        .context("merge requires a local work branch")?;
     let index = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         committed_snapshot::require_committed(repo, &head)?;
+        committed_snapshot::require_flagged_clean(repo, &head)?;
         RecordIndex::load_structural(&layout.canonical_dir())?
     };
     let id = index
@@ -96,6 +100,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     if let Some(path) = &base_tree {
         clean(path)?;
         committed_snapshot::require_committed(path, &base_head)?;
+        committed_snapshot::require_flagged_clean(path, &base_head)?;
     }
     let nodes = review_gate::evaluate(&index, repo, &source.policy, owner, &base_head)?;
     if json {
@@ -130,8 +135,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     // Shell checks cannot authorize a different tree or leave dirty records.
     clean(repo)?;
     committed_snapshot::require_committed(repo, &head)?;
+    committed_snapshot::require_flagged_clean(repo, &head)?;
     if git::head_commit(repo)? != head
-        || text(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])? != branch
+        || text(repo, &["symbolic-ref", "--quiet", "HEAD"])? != source_ref
         || text(repo, &["rev-parse", &format!("refs/heads/{branch}")])? != head
         || text(repo, &["rev-parse", &base_ref])? != base_head
     {
@@ -143,6 +149,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     if let Some(path) = &base_tree {
         clean(path)?;
         committed_snapshot::require_committed(path, &base_head)?;
+        committed_snapshot::require_flagged_clean(path, &base_head)?;
         if git::head_commit(path)? != base_head
             || text(path, &["symbolic-ref", "--quiet", "HEAD"])? != base_ref
         {
