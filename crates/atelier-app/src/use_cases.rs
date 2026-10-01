@@ -52,14 +52,6 @@ pub const CACHE_COMMAND_ROUTES: &[CacheCommandRoute] = &[
         command_family: "bundle preview",
         cache_use: CacheUse::Decision,
     },
-    CacheCommandRoute {
-        command_family: "workflow check",
-        cache_use: CacheUse::Decision,
-    },
-    CacheCommandRoute {
-        command_family: "branch decision",
-        cache_use: CacheUse::Decision,
-    },
 ];
 
 fn cache(cache_use: CacheUse) -> Result<CacheAccess> {
@@ -272,12 +264,6 @@ mod tests {
         assert!(CACHE_COMMAND_ROUTES
             .iter()
             .any(|route| route.command_family == "work/mission/epic"));
-        assert!(CACHE_COMMAND_ROUTES
-            .iter()
-            .any(|route| route.command_family == "workflow check"));
-        assert!(CACHE_COMMAND_ROUTES
-            .iter()
-            .any(|route| route.command_family == "branch decision"));
     }
 
     #[test]

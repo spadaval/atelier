@@ -234,13 +234,24 @@ fn active_transition_ancestor_blocker(
     )
 }
 
-pub(crate) fn apply_transition_record(
+fn apply_transition_record(
     policy: &WorkflowPolicy,
     state_dir: &Path,
     record: &mut CanonicalIssueRecord,
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<()> {
+    apply_transition(policy, record, transition, close_reason);
+    app_use_cases::write_canonical_issue(state_dir, record)
+}
+
+/// Applies a transition to an in-memory record without writing it.
+pub(crate) fn apply_transition(
+    policy: &WorkflowPolicy,
+    record: &mut CanonicalIssueRecord,
+    transition: &TransitionDefinition,
+    close_reason: Option<&str>,
+) {
     let now = Utc::now();
     record.issue.status = transition.to.clone();
     record.issue.updated_at = now;
@@ -252,7 +263,6 @@ pub(crate) fn apply_transition_record(
     {
         record.sections.close_reason = Some(reason.to_string());
     }
-    app_use_cases::write_canonical_issue(state_dir, record)
 }
 
 pub fn print_issue_transition_options(

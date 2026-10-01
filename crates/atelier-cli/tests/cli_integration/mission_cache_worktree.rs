@@ -3369,3 +3369,137 @@ fn test_start_refuses_existing_owner_branch_without_the_issue_record() {
     assert_eq!(git_current_branch(dir.path()), "main");
     assert!(git_status_short(dir.path()).is_empty());
 }
+
+fn git_ok(dir: &std::path::Path, args: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
+    let dir = start_fixture();
+    let epic_id = create_issue(dir.path(), &["Shared owner", "--issue-type", "epic"]);
+    let first_id = create_issue(dir.path(), &["First child", "--parent", &epic_id]);
+    let second_id = create_issue(dir.path(), &["Second child", "--parent", &epic_id]);
+    commit_all(dir.path(), "start fixture");
+    git_ok(dir.path(), &["switch", "-c", "develop"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    assert!(success, "first start failed: {stderr}");
+    commit_all(dir.path(), "first child started");
+    git_ok(dir.path(), &["switch", "main"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &second_id]);
+
+    assert!(success, "second start failed: {stderr}");
+    assert!(
+        stdout.contains(&format!("git switch epic/{epic_id}")),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("Recorded workflow_branch"), "{stdout}");
+    assert!(stdout.contains("Base:     develop"), "{stdout}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    let epic = issue_front_matter(dir.path(), &epic_id);
+    assert_eq!(
+        epic["fields"]["workflow_branch"],
+        serde_json::json!({ "work_branch": format!("epic/{epic_id}"), "branch_base": "develop" })
+    );
+    assert_eq!(
+        issue_front_matter(dir.path(), &first_id)["status"],
+        "in_progress"
+    );
+    assert_eq!(
+        issue_front_matter(dir.path(), &second_id)["status"],
+        "in_progress"
+    );
+    assert_eq!(
+        git_status_short(dir.path()).trim(),
+        format!("M .atelier/issues/{second_id}.md")
+    );
+}
+
+#[test]
+fn test_start_checks_blockers_on_the_target_branch_before_switching() {
+    let dir = start_fixture();
+    let epic_id = create_issue(dir.path(), &["Owner epic", "--issue-type", "epic"]);
+    let first_id = create_issue(dir.path(), &["Started child", "--parent", &epic_id]);
+    let gated_id = create_issue(dir.path(), &["Gated child", "--parent", &epic_id]);
+    let blocker_id = create_issue(dir.path(), &["Branch blocker", "--issue-type", "task"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &gated_id,
+            &blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "blocker link failed: {stderr}");
+    commit_all(dir.path(), "start fixture");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    assert!(success, "first start failed: {stderr}");
+    commit_all(dir.path(), "first child started");
+    git_ok(dir.path(), &["switch", "main"]);
+    set_dependency_fixture_status(dir.path(), &blocker_id, "done");
+    commit_all(dir.path(), "blocker done on main only");
+    let gated_on_branch = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "show",
+            &format!("epic/{epic_id}:.atelier/issues/{gated_id}.md"),
+        ])
+        .output()
+        .unwrap()
+        .stdout;
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &gated_id]);
+
+    assert!(
+        !success,
+        "start should check the branch's blocker:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("fail  blockers.transitive_none_open"),
+        "{stdout}"
+    );
+    assert!(stdout.contains(&blocker_id), "{stdout}");
+    assert!(stderr.contains("Transition 'start' is blocked"), "{stderr}");
+    assert!(!stdout.contains("git switch"), "{stdout}");
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert!(git_status_short(dir.path()).is_empty());
+    let gated_after = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "show",
+            &format!("epic/{epic_id}:.atelier/issues/{gated_id}.md"),
+        ])
+        .output()
+        .unwrap()
+        .stdout;
+    assert_eq!(gated_after, gated_on_branch);
+}
+
+#[test]
+fn test_start_refuses_done_issues_without_changes() {
+    let dir = start_fixture();
+    let issue_id = create_issue(dir.path(), &["Finished", "--issue-type", "task"]);
+    set_dependency_fixture_status(dir.path(), &issue_id, "done");
+    commit_all(dir.path(), "done fixture");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+
+    assert!(!success, "done start should fail:\n{stdout}");
+    assert!(stderr.contains("start_issue_done"), "{stderr}");
+    assert!(!stdout.contains("git switch"), "{stdout}");
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert!(git_status_short(dir.path()).is_empty());
+}

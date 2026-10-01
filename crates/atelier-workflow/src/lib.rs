@@ -197,16 +197,6 @@ pub enum MergeStrategy {
     FastForwardOnly,
 }
 
-impl MergeStrategy {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Squash => "squash",
-            Self::MergeCommit => "merge_commit",
-            Self::FastForwardOnly => "fast_forward_only",
-        }
-    }
-}
-
 /// Issue field recording the branch an owner (epic or standalone issue) is
 /// worked on and the branch it was started from. Written by `atelier start`.
 pub const WORKFLOW_BRANCH_FIELD: &str = "workflow_branch";

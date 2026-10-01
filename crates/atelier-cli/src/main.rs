@@ -987,6 +987,9 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Issue {
             action: IssueCommands::Note { .. },
         } => CanonicalTransactionMode::Exclusive,
+        // Start reads records, switches branches, and rewrites the owner and
+        // issue records; no other writer may interleave.
+        Commands::Start { .. } => CanonicalTransactionMode::Exclusive,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
         // append. The child may itself be an Atelier writer or migration.
