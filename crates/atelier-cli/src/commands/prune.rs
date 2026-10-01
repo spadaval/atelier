@@ -89,10 +89,11 @@ pub fn run(
 ) -> Result<()> {
     // Plan and validate canonical removal before any Git cleanup, so a
     // refused canonical prune never follows branch or worktree removal.
-    let mut canonical = plan_canonical_records(&tracker, retention_days, apply)?;
+    let head_paths = canonical_paths_at_head(&tracker.repo_root)?;
+    let mut canonical = plan_canonical_records(&tracker, retention_days, apply, &head_paths)?;
     // Git cleanup runs before record removal: it treats an owner whose record
     // file is dirty as protected, and removing records would make them dirty.
-    let git = prune_git_artifacts(&tracker, retention_days, apply)?;
+    let git = prune_git_artifacts(&tracker, retention_days, apply, &head_paths)?;
     if apply {
         if let Err(error) = remove_canonical_records(&tracker.state_dir, &mut canonical) {
             bail!("{error:#}\n{}.", git_removals_note(&git));
@@ -127,6 +128,7 @@ fn prune_git_artifacts(
     tracker: &TrackerContext,
     retention_days_override: Option<u64>,
     apply: bool,
+    head_paths: &BTreeSet<PathBuf>,
 ) -> Result<GitPruneSummary> {
     let git_repository = Command::new("git")
         .current_dir(&tracker.repo_root)
@@ -152,13 +154,14 @@ fn prune_git_artifacts(
     };
     let base = policy.branch_policy.base_branch.clone();
     let (_, cutoff) = canonical_retention_cutoff(tracker, retention_days_override);
-    let mut owner_candidates = issue_candidates(tracker, cutoff)?;
-    apply_git_history_protection(&tracker.repo_root, &mut owner_candidates)?;
+    let mut owner_candidates = issue_candidates(tracker, cutoff);
+    apply_git_history_protection(head_paths, &mut owner_candidates);
+    let dirty_paths = dirty_canonical_paths(&tracker.repo_root)?;
     for candidate in owner_candidates
         .iter_mut()
         .filter(|candidate| candidate.eligible())
     {
-        if canonical_path_is_dirty(&tracker.repo_root, &candidate.path)? {
+        if dirty_paths.contains(&PathBuf::from(display_git_path(&candidate.path))) {
             candidate.protection = Some("owner record has uncommitted changes".to_string());
         }
     }
@@ -614,15 +617,15 @@ fn plan_canonical_records(
     tracker: &TrackerContext,
     retention_days_override: Option<u64>,
     apply: bool,
+    head_paths: &BTreeSet<PathBuf>,
 ) -> Result<CanonicalPruneSummary> {
     let (retention_days, cutoff) = canonical_retention_cutoff(tracker, retention_days_override);
-    let mut issues = issue_candidates(tracker, cutoff)?;
-    let evidence = evidence_candidates(tracker, cutoff, &issues)?;
-    apply_git_history_protection(&tracker.repo_root, &mut issues)?;
-    let mut evidence = evidence;
-    apply_git_history_protection(&tracker.repo_root, &mut evidence)?;
-    let mut reviews = review_candidates(tracker, cutoff)?;
-    apply_git_history_protection(&tracker.repo_root, &mut reviews)?;
+    let mut issues = issue_candidates(tracker, cutoff);
+    let mut evidence = evidence_candidates(tracker, cutoff, &issues);
+    apply_git_history_protection(head_paths, &mut issues);
+    apply_git_history_protection(head_paths, &mut evidence);
+    let mut reviews = review_candidates(tracker, cutoff);
+    apply_git_history_protection(head_paths, &mut reviews);
     protect_referenced_candidates(&tracker.index, &mut issues, &mut evidence, &mut reviews);
 
     let has_eligible = issues.iter().any(CanonicalCandidate::eligible)
@@ -879,10 +882,7 @@ fn canonical_retention_cutoff(
     (retention_days, cutoff)
 }
 
-fn issue_candidates(
-    tracker: &TrackerContext,
-    cutoff: NaiveDate,
-) -> Result<Vec<CanonicalCandidate>> {
+fn issue_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<CanonicalCandidate> {
     let policy = atelier_app::workflow_policy::load(&tracker.repo_root).ok();
     let all_issues = tracker.index.issues().cloned().collect::<Vec<_>>();
     let all_issue_ids = all_issues
@@ -937,7 +937,7 @@ fn issue_candidates(
         });
     }
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(candidates)
+    candidates
 }
 
 fn active_descendants_by_ancestor(
@@ -970,11 +970,8 @@ fn active_descendants_by_ancestor(
     descendants
 }
 
-fn review_candidates(
-    tracker: &TrackerContext,
-    cutoff: NaiveDate,
-) -> Result<Vec<CanonicalCandidate>> {
-    Ok(tracker
+fn review_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<CanonicalCandidate> {
+    tracker
         .index
         .reviews()
         .filter(|record| record.header.created_at.date_naive() < cutoff)
@@ -987,14 +984,14 @@ fn review_candidates(
             latest_at: record.header.created_at,
             protection: None,
         })
-        .collect())
+        .collect()
 }
 
 fn evidence_candidates(
     tracker: &TrackerContext,
     cutoff: NaiveDate,
     issue_candidates: &[CanonicalCandidate],
-) -> Result<Vec<CanonicalCandidate>> {
+) -> Vec<CanonicalCandidate> {
     let links = tracker.index.record_links();
     let issue_candidates = issue_candidates
         .iter()
@@ -1043,7 +1040,7 @@ fn evidence_candidates(
         });
     }
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(candidates)
+    candidates
 }
 
 fn retained_record_ids(index: &RecordIndex, cutoff: NaiveDate) -> BTreeSet<(String, String)> {
@@ -1102,46 +1099,70 @@ fn crossing_link_reason(
 }
 
 fn apply_git_history_protection(
-    repo_root: &Path,
+    head_paths: &BTreeSet<PathBuf>,
     candidates: &mut [CanonicalCandidate],
-) -> Result<()> {
+) {
     for candidate in candidates
         .iter_mut()
         .filter(|candidate| candidate.eligible())
     {
-        if !path_exists_in_head(repo_root, &candidate.path)? {
+        if !head_paths.contains(&PathBuf::from(display_git_path(&candidate.path))) {
             candidate.protection = Some("not present in Git history at HEAD".to_string());
         }
     }
-    Ok(())
 }
 
-fn path_exists_in_head(repo_root: &Path, path: &Path) -> Result<bool> {
-    let spec = format!("HEAD:{}", display_git_path(path));
+/// One invocation's planning facts; apply's checkout check remains fresh.
+fn canonical_paths_at_head(repo_root: &Path) -> Result<BTreeSet<PathBuf>> {
     let output = Command::new("git")
         .current_dir(repo_root)
-        .args(["cat-file", "-e", &spec])
+        .args(["ls-tree", "-rz", "--name-only", "HEAD", "--", ".atelier"])
         .output()
-        .context("failed to inspect Git history for prune candidate")?;
-    Ok(output.status.success())
+        .context("failed to inspect Git history for prune candidates")?;
+    // An unborn HEAD (or absent repository) has no recoverable candidates.
+    Ok(if output.status.success() {
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| PathBuf::from(String::from_utf8_lossy(path).as_ref()))
+            .collect()
+    } else {
+        BTreeSet::new()
+    })
 }
 
-fn canonical_path_is_dirty(repo_root: &Path, path: &Path) -> Result<bool> {
+fn dirty_canonical_paths(repo_root: &Path) -> Result<BTreeSet<PathBuf>> {
     let output = Command::new("git")
         .current_dir(repo_root)
         .args([
             "status",
             "--porcelain",
+            "-z",
             "--untracked-files=all",
             "--",
-            &display_git_path(path),
+            ".atelier",
         ])
         .output()
-        .context("failed to inspect branch owner record state for prune candidate")?;
+        .context("failed to inspect branch owner record state for prune candidates")?;
     if !output.status.success() {
-        bail!("git status failed while inspecting branch owner record");
+        bail!("git status failed while inspecting branch owner records");
     }
-    Ok(!output.stdout.is_empty())
+    let mut paths = BTreeSet::new();
+    let mut entries = output.stdout.split(|byte| *byte == 0);
+    while let Some(entry) = entries.next().filter(|entry| entry.len() >= 3) {
+        paths.insert(PathBuf::from(String::from_utf8_lossy(&entry[3..]).as_ref()));
+        // Porcelain -z includes both destination and source for a rename/copy.
+        if entry[..2]
+            .iter()
+            .any(|status| matches!(status, b'R' | b'C'))
+        {
+            if let Some(source) = entries.next() {
+                paths.insert(PathBuf::from(String::from_utf8_lossy(source).as_ref()));
+            }
+        }
+    }
+    Ok(paths)
 }
 
 fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
@@ -1346,6 +1367,34 @@ mod tests {
             args.join(" "),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn canonical_status_preserves_rename_paths_and_untracked_files() {
+        let repo = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+        let original = ".atelier/issues/old.md";
+        let renamed = ".atelier/issues/new \"name\"\n.md";
+        let untracked = ".atelier/issues/untracked.md";
+        fs::write(repo.path().join(original), "unchanged record bytes").unwrap();
+        git(repo.path(), &["add", ".atelier"]);
+        git(repo.path(), &["commit", "-m", "record"]);
+        git(repo.path(), &["mv", original, renamed]);
+        fs::write(repo.path().join(untracked), "untracked record").unwrap();
+        let dirty = dirty_canonical_paths(repo.path()).unwrap();
+        for path in [original, renamed, untracked] {
+            assert!(
+                dirty.contains(Path::new(path)),
+                "missing dirty path {path:?}"
+            );
+        }
+        let history = canonical_paths_at_head(repo.path()).unwrap();
+        assert!(history.contains(Path::new(original)));
+        assert!(!history.contains(Path::new(renamed)));
+        assert!(!history.contains(Path::new(untracked)));
     }
 
     #[test]
