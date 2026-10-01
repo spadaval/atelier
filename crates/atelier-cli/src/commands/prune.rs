@@ -688,6 +688,7 @@ fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummar
     let mut moved: Vec<(&CanonicalCandidate, PathBuf)> = Vec::new();
     for (position, candidate) in eligible.iter().enumerate() {
         let target = staged.path().join(position.to_string());
+        #[cfg(feature = "test-hooks")]
         let result = if std::env::var("ATELIER_TEST_PRUNE_REMOVE_FAILURE").as_deref()
             == Ok(candidate.id.as_str())
         {
@@ -695,6 +696,9 @@ fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummar
         } else {
             fs::rename(state_dir.join(&candidate.path), &target).map_err(Into::into)
         };
+        #[cfg(not(feature = "test-hooks"))]
+        let result: Result<()> =
+            fs::rename(state_dir.join(&candidate.path), &target).map_err(Into::into);
         if let Err(error) = result {
             let mut recovery = Vec::new();
             for (original, staged_path) in moved.iter().rev() {

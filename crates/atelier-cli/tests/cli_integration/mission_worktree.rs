@@ -32,6 +32,7 @@ pub(super) fn canonical_tree_snapshot(
     snapshot
 }
 
+#[cfg(feature = "test-hooks")]
 fn wait_for_test_marker(path: &std::path::Path) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while !path.exists() {
@@ -44,6 +45,7 @@ fn wait_for_test_marker(path: &std::path::Path) {
     }
 }
 
+#[cfg(feature = "test-hooks")]
 fn assert_bulk_process_holds_exclusive_lock(state_dir: &std::path::Path) {
     use fs2::FileExt;
     use std::fs::OpenOptions;
@@ -1952,6 +1954,7 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
 }
 
 #[test]
+#[cfg(feature = "test-hooks")]
 fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2028,6 +2031,7 @@ fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
 }
 
 #[test]
+#[cfg(feature = "test-hooks")]
 fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -2159,6 +2163,7 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
 }
 
 #[test]
+#[cfg(feature = "test-hooks")]
 fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());

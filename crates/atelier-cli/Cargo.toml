@@ -24,6 +24,10 @@ path = "src/lib.rs"
 name = "atelier"
 path = "src/main.rs"
 
+[features]
+# Explicit opt-in for integration-test fault injection; never enabled by default.
+test-hooks = []
+
 [dependencies]
 atelier-app = { path = "../atelier-app" }
 atelier-core = { path = "../atelier-core" }

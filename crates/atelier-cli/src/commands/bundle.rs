@@ -519,6 +519,7 @@ fn apply_bundle_file(
         copy_state_tree(state_dir, &stage)?;
         fs::create_dir_all(stage.join("issues"))?;
         fs::create_dir_all(stage.join("evidence"))?;
+        #[cfg(feature = "test-hooks")]
         crate::commands::bulk_canonical::test_pause_after_snapshot()?;
         let summary = apply_bundle_to_state(&stage, bundle, plan)?;
         RecordIndex::load(&stage).map_err(|error| {
@@ -543,6 +544,7 @@ fn apply_bundle_file(
 }
 
 fn cleanup_bundle_stage(stage: &Path) -> Result<()> {
+    #[cfg(feature = "test-hooks")]
     if std::env::var_os("ATELIER_TEST_BUNDLE_STAGE_CLEANUP_FAILURE").is_some() {
         bail!("injected bundle stage cleanup failure");
     }
@@ -924,6 +926,7 @@ fn install_bundle_stage_with(
 }
 
 fn cleanup_bundle_backup(backup: &Path) -> Result<()> {
+    #[cfg(feature = "test-hooks")]
     if std::env::var_os("ATELIER_TEST_BUNDLE_BACKUP_CLEANUP_FAILURE").is_some() {
         bail!("injected bundle backup cleanup failure");
     }
