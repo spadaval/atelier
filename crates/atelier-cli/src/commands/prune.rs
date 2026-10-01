@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::MergeStrategy;
-use atelier_core::{Issue, RecordLink};
+use atelier_core::{Issue, RecordLink, Relationships};
 use chrono::{DateTime, Days, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -593,6 +593,7 @@ fn prune_canonical_records(
     apply_git_history_protection(&tracker.repo_root, &mut issues)?;
     let mut evidence = evidence;
     apply_git_history_protection(&tracker.repo_root, &mut evidence)?;
+    protect_referenced_candidates(&tracker.index, &mut issues, &mut evidence);
 
     let mut removed = Vec::new();
     let mut failures = Vec::new();
@@ -601,6 +602,7 @@ fn prune_canonical_records(
             || evidence.iter().any(CanonicalCandidate::eligible);
         if has_eligible {
             ensure_clean_for_canonical_prune(&tracker.repo_root)?;
+            ensure_survivors_load(tracker, &issues, &evidence)?;
         }
         for candidate in evidence
             .iter()
@@ -619,6 +621,128 @@ fn prune_canonical_records(
         removed,
         failures,
     })
+}
+
+/// Every relationship a record declares, as `(target kind, target id, role)`.
+fn declared_references(relationships: &Relationships) -> Vec<(&str, &str, &str)> {
+    let mut references = Vec::new();
+    for (role, targets) in [
+        ("blocks", &relationships.blocks),
+        ("children", &relationships.children),
+    ] {
+        references.extend(
+            targets
+                .iter()
+                .map(|target| (target.kind.as_str(), target.id.as_str(), role)),
+        );
+    }
+    references.extend(relationships.attachments.iter().map(|attachment| {
+        (
+            attachment.kind.as_str(),
+            attachment.id.as_str(),
+            attachment.role.as_str(),
+        )
+    }));
+    references.extend(relationships.relates.iter().map(|relation| {
+        (
+            relation.kind.as_str(),
+            relation.id.as_str(),
+            relation.relation_type.as_str(),
+        )
+    }));
+    references
+}
+
+/// Protects every eligible candidate that a kept record references, or that
+/// references a kept record, through any relationship. Protecting one
+/// candidate keeps it, so this repeats until nothing changes.
+fn protect_referenced_candidates(
+    index: &RecordIndex,
+    issues: &mut [CanonicalCandidate],
+    evidence: &mut [CanonicalCandidate],
+) {
+    let mut edges = Vec::new();
+    for record in index.issue_records() {
+        for (kind, id, role) in declared_references(&record.relationships) {
+            edges.push((("issue", record.issue.id.as_str()), (kind, id), role));
+        }
+    }
+    for record in index.evidence_records() {
+        for (kind, id, role) in declared_references(&record.header.relationships) {
+            edges.push((("evidence", record.header.id.as_str()), (kind, id), role));
+        }
+    }
+    loop {
+        let eligible = issues
+            .iter()
+            .map(|candidate| ("issue", candidate))
+            .chain(evidence.iter().map(|candidate| ("evidence", candidate)))
+            .filter(|(_, candidate)| candidate.eligible())
+            .map(|(kind, candidate)| (kind, candidate.id.clone()))
+            .collect::<BTreeSet<_>>();
+        let is_eligible = |(kind, id): (&str, &str)| eligible.contains(&(kind, id.to_string()));
+        let mut reasons = BTreeMap::new();
+        for (source, target, role) in &edges {
+            match (is_eligible(*source), is_eligible(*target)) {
+                (true, false) => {
+                    reasons
+                        .entry((source.0, source.1.to_string()))
+                        .or_insert_with(|| {
+                            format!("references retained {} {} ({role})", target.0, target.1)
+                        });
+                }
+                (false, true) => {
+                    reasons
+                        .entry((target.0, target.1.to_string()))
+                        .or_insert_with(|| {
+                            format!("referenced by retained {} {} ({role})", source.0, source.1)
+                        });
+                }
+                _ => {}
+            }
+        }
+        if reasons.is_empty() {
+            return;
+        }
+        for (kind, candidates) in [("issue", &mut *issues), ("evidence", &mut *evidence)] {
+            for candidate in candidates.iter_mut() {
+                if let Some(reason) = reasons.remove(&(kind, candidate.id.clone())) {
+                    candidate.protection = Some(reason);
+                }
+            }
+        }
+    }
+}
+
+/// Refuses an apply whose surviving records would not load.
+fn ensure_survivors_load(
+    tracker: &TrackerContext,
+    issues: &[CanonicalCandidate],
+    evidence: &[CanonicalCandidate],
+) -> Result<()> {
+    let removed = |candidates: &[CanonicalCandidate], id: &str| {
+        candidates
+            .iter()
+            .any(|candidate| candidate.eligible() && candidate.id == id)
+    };
+    let surviving_issues = tracker
+        .index
+        .issue_records()
+        .filter(|record| !removed(issues, &record.issue.id))
+        .cloned()
+        .collect();
+    let surviving_evidence = tracker
+        .index
+        .evidence_records()
+        .into_iter()
+        .filter(|record| !removed(evidence, &record.header.id))
+        .cloned()
+        .collect();
+    RecordIndex::from_project_records(&tracker.state_dir, surviving_issues, surviving_evidence)
+        .map(|_| ())
+        .context(
+            "prune refused: the records left after pruning would not load; no files were removed",
+        )
 }
 
 fn canonical_retention_cutoff(

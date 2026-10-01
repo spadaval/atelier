@@ -9,10 +9,12 @@ release build and no cache. Build first with `cargo build --release`.
 The fixture has missions advancing epics, epics with children, blocker
 chains, mixed statuses, labels, and evidence attached to done work. Records
 are written as Markdown directly, then `atelier check` must pass before any
-timing starts. Exits non-zero if any command's median exceeds the budget.
+timing starts. Exits non-zero if any command's median or max exceeds the
+budget.
 """
 
 import argparse
+import os
 import random
 import shutil
 import statistics
@@ -228,7 +230,8 @@ def main():
             ["issue", "list"],
             ["check"],
         ]
-        print(f"Binary: {binary}; {options.runs} runs after one warm-up\n")
+        print(f"Binary: {binary}; {options.runs} runs after one warm-up")
+        print(f"CPU cores available: {len(os.sched_getaffinity(0))} of {os.cpu_count()}\n")
         print(f"| Command | median ms | max ms |")
         print(f"| --- | ---: | ---: |")
         over = []
@@ -239,10 +242,10 @@ def main():
             label = " ".join("<epic>" if a == epic else "<mission>" if a == mission else a
                              for a in args)
             print(f"| `atelier {label}` | {median:.1f} | {max(samples):.1f} |")
-            if median > BUDGET_MS:
+            if median > BUDGET_MS or max(samples) > BUDGET_MS:
                 over.append(label)
         if over:
-            sys.exit(f"\nOver the {BUDGET_MS:.0f} ms budget: {', '.join(over)}")
+            sys.exit(f"\nMedian or max over the {BUDGET_MS:.0f} ms budget: {', '.join(over)}")
     finally:
         if options.keep:
             print(f"\nKept fixture at {repo}")

@@ -139,10 +139,13 @@ fn collect_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()
         if is_local_atelier_path(relative) {
             continue;
         }
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
+        // Everything except a real directory is read as a record file, so a
+        // symlink is followed when it points at a file and is reported as an
+        // invalid record file otherwise (dangling, or a linked directory,
+        // which is not traversed to avoid link cycles). Nothing is skipped.
+        if entry.file_type()?.is_dir() {
             collect_files(root, &path, files)?;
-        } else if file_type.is_file() {
+        } else {
             files.push(relative.to_path_buf());
         }
     }
@@ -895,8 +898,101 @@ pub fn built_in_issue_link_types() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_records::{issue_record, link};
+    use crate::test_records::{issue_record, link, Records};
     use tempfile::tempdir;
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_record_files_are_read_or_reported() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        fs::create_dir_all(state_dir.join("issues")).unwrap();
+        let target = dir.path().join("elsewhere.md");
+        fs::write(
+            &target,
+            atelier_records::render_issue_record(&issue_record("atelier-link", "task", "todo"))
+                .unwrap(),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(&target, state_dir.join("issues/atelier-link.md")).unwrap();
+        std::os::unix::fs::symlink(
+            dir.path().join("missing.md"),
+            state_dir.join("issues/atelier-gone.md"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(dir.path(), state_dir.join("issues/loop")).unwrap();
+
+        let files = read_record_files(&state_dir).unwrap();
+
+        assert_eq!(files.issues.len(), 1);
+        assert_eq!(files.issues[0].issue.id, "atelier-link");
+        let errors = files
+            .errors
+            .iter()
+            .map(|error| error.path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(errors, ["issues/atelier-gone.md", "issues/loop"]);
+    }
+
+    fn impact_ids(index: &RecordIndex, source: &str) -> Vec<String> {
+        let mut ids = index
+            .downstream_impact(source)
+            .into_iter()
+            .map(|issue| issue.id)
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn downstream_impact_follows_children_transitively() {
+        let mut records = Records::default();
+        records.issue("atelier-root", "epic", "todo");
+        records.issue("atelier-why1", "task", "todo");
+        records.issue("atelier-why2", "task", "todo");
+        records.parent("atelier-why1", "atelier-root");
+        records.parent("atelier-why2", "atelier-root");
+
+        assert_eq!(
+            impact_ids(&records.index(), "atelier-root"),
+            ["atelier-why1", "atelier-why2"]
+        );
+    }
+
+    #[test]
+    fn downstream_impact_follows_impact_relations_transitively() {
+        let mut records = Records::default();
+        for id in [
+            "atelier-a",
+            "atelier-b",
+            "atelier-c",
+            "atelier-d",
+            "atelier-e",
+        ] {
+            records.issue(id, "task", "todo");
+        }
+        records.relate("atelier-a", "atelier-b", "derived");
+        records.relate("atelier-b", "atelier-c", "caused-by");
+        records.relate("atelier-c", "atelier-d", "falsifies");
+        records.relate("atelier-e", "atelier-a", "related");
+
+        assert_eq!(
+            impact_ids(&records.index(), "atelier-a"),
+            ["atelier-b", "atelier-c", "atelier-d"]
+        );
+    }
+
+    #[test]
+    fn downstream_impact_follows_assumptions_one_hop() {
+        let mut records = Records::default();
+        for id in ["atelier-a1", "atelier-a2", "atelier-a3"] {
+            records.issue(id, "task", "todo");
+        }
+        records.relate("atelier-a1", "atelier-a2", "assumption");
+        records.relate("atelier-a2", "atelier-a3", "assumption");
+
+        assert_eq!(impact_ids(&records.index(), "atelier-a1"), ["atelier-a2"]);
+    }
 
     #[test]
     fn load_names_the_invalid_record_file() {

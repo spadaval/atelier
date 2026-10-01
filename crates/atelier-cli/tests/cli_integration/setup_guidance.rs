@@ -679,6 +679,41 @@ fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
 }
 
 #[test]
+fn test_prune_keeps_done_child_listed_by_open_epic() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Open epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Open epic");
+    move_epic_directly_to_ready(dir.path(), &epic_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Old done child", "--parent", &epic_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Old done child");
+    make_issue_terminal_before_retention(dir.path(), &child_id, 45);
+    commit_all(dir.path(), "open epic with old done child");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(
+        stdout.contains(&format!(
+            "referenced by retained issue {epic_id} (children)"
+        )),
+        "{stdout}"
+    );
+    assert!(canonical_issue_path(dir.path(), &child_id).exists());
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "records must still load after prune: {stderr}");
+}
+
+#[test]
 fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

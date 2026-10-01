@@ -1,6 +1,6 @@
 //! App-layer use-case entrypoints for command families that still render in CLI.
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use std::path::{Path, PathBuf};
 
 use crate::record_index::RecordIndex;
@@ -17,7 +17,9 @@ pub struct EvidenceTargetArg {
 /// record in it.
 pub fn load_repository() -> Result<(PathBuf, RecordIndex)> {
     let state_dir = crate::storage_layout::StorageLayout::discover()?.canonical_dir();
-    let index = RecordIndex::load(&state_dir)?;
+    let index = RecordIndex::load(&state_dir).map_err(|error| {
+        anyhow!("{error:#}\nNext: run `atelier check`, fix every named record file, and rerun.")
+    })?;
     Ok((state_dir, index))
 }
 
