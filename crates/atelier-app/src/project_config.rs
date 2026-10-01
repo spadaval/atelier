@@ -79,7 +79,7 @@ pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
     parse_project_config(&text, &config_path)
 }
 
-fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
+pub fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
     let raw = parse_raw_project_config(text, config_path)?;
     validate_schema_fields(&raw, config_path)?;
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;

@@ -29,6 +29,15 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     }
 
     print_status_view(&view);
+    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    let lines =
+        crate::commands::git::branch_lines(layout.repo_root(), &layout.canonical_dir(), index)
+            .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
+    if !lines.is_empty() {
+        Page::new("Other local work branches")
+            .panel(LinesPanel::new("", lines))
+            .print(RenderContext::for_stdout());
+    }
     Ok(())
 }
 

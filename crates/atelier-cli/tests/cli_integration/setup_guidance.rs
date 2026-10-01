@@ -946,12 +946,14 @@ fn test_top_level_help_only_shows_core_commands() {
         assert!(stdout.contains(command), "missing core command {command}");
     }
     assert!(!stdout.contains("Search issues, relationships, and activity"));
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("prime ")),
-        "root help should not expose removed prime command:\n{stdout}"
-    );
+    for command in ["prime", "land", "setup"] {
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{command} "))),
+            "missing session command {command}: {stdout}"
+        );
+    }
     assert!(
         !stdout
             .lines()

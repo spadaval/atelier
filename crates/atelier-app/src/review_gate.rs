@@ -188,7 +188,42 @@ pub fn evaluate(
     owner: &str,
     base_commit: &str,
 ) -> Result<Vec<GateNode>> {
+    evaluate_inner(index, repo, policy, owner, base_commit, true)
+}
+
+/// Active handoffs check committed completion claims, not merge readiness.
+pub fn evaluate_session(
+    index: &RecordIndex,
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    owner: &str,
+    base_commit: &str,
+) -> Result<Vec<GateNode>> {
+    let issue = index.require_issue(owner)?;
+    let complete = policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?;
+    evaluate_inner(index, repo, policy, owner, base_commit, complete)
+}
+
+fn evaluate_inner(
+    index: &RecordIndex,
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    owner: &str,
+    base_commit: &str,
+    complete: bool,
+) -> Result<Vec<GateNode>> {
     let ids = scope(index, owner)?;
+    let claimed = ids
+        .iter()
+        .filter_map(|id| {
+            let issue = index.get_issue(id)?;
+            policy
+                .issue_status_is_terminal(&issue.issue_type, &issue.status)
+                .unwrap_or(false)
+                .then(|| id.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    let applicable = if complete { &ids } else { &claimed };
     let authors = author_identities(repo, base_commit, &ids)?;
     for record in index
         .reviews()
@@ -228,38 +263,56 @@ pub fn evaluate(
         })
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
-    let mut nodes = vec![gate(
-        owner,
-        "work.terminal",
-        terminal.is_empty(),
-        if terminal.is_empty() {
-            "owner and all scoped work are terminal".into()
-        } else {
-            format!("open scoped work: {}", terminal.join(", "))
-        },
-        Vec::new(),
-    )];
-    let mut open = BTreeSet::new();
-    for id in &ids {
-        open.extend(crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids());
+    let mut nodes = Vec::new();
+    if complete {
+        nodes.push(gate(
+            owner,
+            "work.terminal",
+            terminal.is_empty(),
+            if terminal.is_empty() {
+                "owner and all scoped work are terminal".into()
+            } else {
+                format!("open scoped work: {}", terminal.join(", "))
+            },
+            Vec::new(),
+        ));
+        let mut open = BTreeSet::new();
+        for id in &ids {
+            open.extend(
+                crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids(),
+            );
+        }
+        nodes.push(gate(
+            owner,
+            "blockers.none_open",
+            open.is_empty(),
+            if open.is_empty() {
+                "no open transitive blockers".into()
+            } else {
+                format!(
+                    "open blockers: {}",
+                    open.into_iter().collect::<Vec<_>>().join(", ")
+                )
+            },
+            Vec::new(),
+        ));
     }
-    nodes.push(gate(
-        owner,
-        "blockers.none_open",
-        open.is_empty(),
-        if open.is_empty() {
-            "no open transitive blockers".into()
-        } else {
-            format!(
-                "open blockers: {}",
-                open.into_iter().collect::<Vec<_>>().join(", ")
-            )
-        },
-        Vec::new(),
-    ));
+    if !complete {
+        for id in &claimed {
+            let blockers =
+                crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();
+            nodes.push(gate(
+                id,
+                "blockers.transitive_none_open",
+                blockers.is_empty(),
+                format!("completion blockers: {}", blockers.join(", ")),
+                Vec::new(),
+            ));
+        }
+    }
     let candidates = index
         .reviews()
-        .filter(|record| record.target == owner)
+        .filter(|record| record.target == owner || (!complete && claimed.contains(&record.target)))
         .filter(|record| {
             matches!(
                 record.event,
@@ -276,29 +329,31 @@ pub fn evaluate(
         .iter()
         .map(|record| record.header.id.clone())
         .collect::<Vec<_>>();
-    nodes.push(gate(
-        owner,
-        "review.current",
-        !candidates.is_empty(),
-        if candidates.is_empty() {
-            format!(
-                "no current independent approval or explicit trivial exemption; authors: {}",
-                authors.iter().cloned().collect::<Vec<_>>().join(", ")
-            )
-        } else if candidates
-            .iter()
-            .any(|record| matches!(record.event, ReviewEvent::TrivialExemption))
-        {
-            "EXPLICIT TRIVIAL EXEMPTION recorded with explanation".into()
-        } else {
-            "current independent approval recorded".into()
-        },
-        support,
-    ));
+    if complete {
+        nodes.push(gate(
+            owner,
+            "review.current",
+            !candidates.is_empty(),
+            if candidates.is_empty() {
+                format!(
+                    "no current independent approval or explicit trivial exemption; authors: {}",
+                    authors.iter().cloned().collect::<Vec<_>>().join(", ")
+                )
+            } else if candidates
+                .iter()
+                .any(|record| matches!(record.event, ReviewEvent::TrivialExemption))
+            {
+                "EXPLICIT TRIVIAL EXEMPTION recorded with explanation".into()
+            } else {
+                "current independent approval recorded".into()
+            },
+            support,
+        ));
+    }
     let mut unresolved = Vec::new();
     let mut dispositions = Vec::new();
     for finding in index.reviews().filter(|record| {
-        ids.contains(&record.target) && matches!(record.event, ReviewEvent::Finding { .. })
+        applicable.contains(&record.target) && matches!(record.event, ReviewEvent::Finding { .. })
     }) {
         let ReviewEvent::Finding { .. } = &finding.event else {
             unreachable!()
@@ -321,6 +376,7 @@ pub fn evaluate(
                 ancestor(repo, resolution, "HEAD")
                     && candidates.iter().any(|approval| {
                         matches!(approval.event, ReviewEvent::Approval)
+                            && (approval.target == owner || approval.target == finding.target)
                             && ancestor(repo, resolution, &approval.commit)
                     })
             }),
@@ -348,7 +404,7 @@ pub fn evaluate(
         },
         dispositions,
     ));
-    for id in &ids {
+    for id in applicable {
         if index.require_issue(id)?.status == "superseded" {
             continue;
         }
@@ -414,15 +470,19 @@ pub fn evaluate(
             );
         }
     }
-    let checks = crate::workflow_validation::evaluate_policy_transition(
-        crate::workflow_validation::ValidatorRequest {
-            index,
-            repo_root: repo,
-            policy,
-            issue_id: owner,
-            validators: &policy.merge_checks,
-        },
-    )?;
+    let checks = if complete {
+        crate::workflow_validation::evaluate_policy_transition(
+            crate::workflow_validation::ValidatorRequest {
+                index,
+                repo_root: repo,
+                policy,
+                issue_id: owner,
+                validators: &policy.merge_checks,
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     nodes.extend(checks.into_iter().map(|check| {
         gate(
             owner,

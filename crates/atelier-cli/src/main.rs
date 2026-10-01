@@ -14,8 +14,11 @@ mod issue_cli;
 #[command(help_template = "{about-section}\nUsage: {usage}\n\n{after-help}\nOptions:\n{options}")]
 #[command(after_help = "Setup:
   init          Initialize Atelier in the current repository
+  setup         Install supported harness hooks (claude)
 
 Orientation:
+  prime         Load fresh session context
+  land          Check committed records and completion invariants
   status        Show checkout, mission, work, and tracker signposts
   work          Show operational views, including the plural Mission Overview
 
@@ -135,6 +138,29 @@ enum Commands {
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
+
+    /// Load fresh checkout and work context without writing session state
+    Prime {
+        /// Consume Claude Code SessionStart JSON and emit hook context
+        #[arg(long, value_parser = ["claude"])]
+        hook: Option<String>,
+    },
+    /// Verify committed records and applicable completion invariants
+    Land {
+        /// Issue or branch owner (otherwise inferred from the checkout)
+        id: Option<String>,
+        /// Consume Claude Code Stop JSON and emit its decision
+        #[arg(long, value_parser = ["claude"])]
+        hook: Option<String>,
+    },
+    /// Install supported harness session hooks
+    Setup {
+        #[arg(value_parser = ["claude"])]
+        harness: String,
+        /// Explicit executable for local dogfooding; otherwise use atelier on PATH
+        #[arg(long)]
+        binary: Option<std::path::PathBuf>,
+    },
 
     /// Operational multi-issue work views
     Work {
@@ -594,6 +620,12 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force)
         }
 
+        Commands::Prime { hook } => commands::session::run(false, None, hook.is_some(), quiet),
+        Commands::Land { id, hook } => {
+            commands::session::run(true, id.as_deref(), hook.is_some(), quiet)
+        }
+        Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
+
         Commands::Status => {
             let (_, index) = load_repository()?;
             commands::status::run(&index, quiet)
@@ -910,7 +942,10 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         } => CanonicalTransactionMode::Exclusive,
         // Shell checks may run Atelier read commands; revalidate snapshots
         // rather than hold a lock across arbitrary child execution.
-        Commands::Merge { .. } => CanonicalTransactionMode::None,
+        Commands::Merge { .. }
+        | Commands::Prime { .. }
+        | Commands::Land { .. }
+        | Commands::Setup { .. } => CanonicalTransactionMode::None,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
         // append. The child may itself be an Atelier writer or migration.
