@@ -296,7 +296,7 @@ fn work_bucket_panel(title: &str, rows: &[WorkRow]) -> IssueListPanel {
         title,
         rows.iter()
             .map(|row| IssueListRow {
-                role: display_role_for_state(row.state_label()),
+                role: DisplayRole::for_work(row.state_label()),
                 id: row.id.clone(),
                 status: Some(row.status.clone()),
                 priority: row.priority.clone(),
@@ -308,15 +308,6 @@ fn work_bucket_panel(title: &str, rows: &[WorkRow]) -> IssueListPanel {
     )
     .total_count(rows.len())
     .limit(20)
-}
-
-fn display_role_for_state(state: &str) -> DisplayRole {
-    match state {
-        "active" => DisplayRole::Executable,
-        "ready" => DisplayRole::Selectable,
-        "blocked" => DisplayRole::Blocked,
-        _ => DisplayRole::ContextOnly,
-    }
 }
 
 pub fn mission_dashboard(
@@ -485,7 +476,7 @@ impl ScopedWork {
                     .iter()
                     .filter(|(_, work)| state.is_none_or(|state| state == work.classification))
                     .map(|(issue, work)| IssueListRow {
-                        role: display_role_for_state(work.classification.label()),
+                        role: DisplayRole::for_work(work.classification.label()),
                         id: issue.id.clone(),
                         status: Some(issue.status.clone()),
                         priority: issue.priority.clone(),
@@ -609,12 +600,12 @@ fn transition_readiness(
 }
 
 fn containing_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
-    for mission in index.list_issues(Some("all"), None, None)? {
+    for mission in index.issues() {
         if mission.issue_type == "mission"
             && atelier_app::objective_graph::mission_issue_ids(index, &mission.id)?
                 .contains(issue_id)
         {
-            return Ok(Some(mission.id));
+            return Ok(Some(mission.id.clone()));
         }
     }
     Ok(None)

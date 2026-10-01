@@ -165,7 +165,7 @@ fn prune_git_artifacts(
         .into_iter()
         .map(|candidate| (candidate.id.clone(), candidate))
         .collect::<BTreeMap<_, _>>();
-    let all_issues = tracker.index.list_issues(Some("all"), None, None)?;
+    let all_issues = tracker.index.issues().cloned().collect::<Vec<_>>();
     let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
     for issue in &all_issues {
         if let Ok(resolution) =
@@ -826,7 +826,7 @@ fn issue_candidates(
     cutoff: NaiveDate,
 ) -> Result<Vec<CanonicalCandidate>> {
     let policy = atelier_app::workflow_policy::load(&tracker.repo_root).ok();
-    let all_issues = tracker.index.list_issues(Some("all"), None, None)?;
+    let all_issues = tracker.index.issues().cloned().collect::<Vec<_>>();
     let all_issue_ids = all_issues
         .iter()
         .map(|issue| issue.id.clone())
@@ -925,9 +925,8 @@ fn evidence_candidates(
         .collect::<BTreeSet<_>>();
     let retained_issues = tracker
         .index
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .map(|issue| issue.id)
+        .issues()
+        .map(|issue| issue.id.clone())
         .filter(|id| !issue_candidates.contains(id))
         .collect::<BTreeSet<_>>();
     let all_evidence = tracker.index.evidence_records();

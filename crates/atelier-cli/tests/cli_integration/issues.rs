@@ -3154,3 +3154,104 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         ids.iter().map(String::as_str).collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn test_inventory_combines_custom_status_category_and_real_metadata_before_limiting() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let policy = dir.path().join(".atelier/workflow.yaml");
+    std::fs::write(
+        &policy,
+        std::fs::read_to_string(&policy)
+            .unwrap()
+            .replace("in_progress", "working"),
+    )
+    .unwrap();
+    let mut matching = Vec::new();
+    for (n, kind, label, priority, status) in [
+        (0, "bug", "cli", "high", "working"),
+        (1, "bug", "cli", "high", "working"),
+        (2, "bug", "docs", "high", "working"),
+        (3, "task", "cli", "high", "working"),
+        (4, "bug", "cli", "low", "todo"),
+    ] {
+        let title = format!("Unicode Δ inventory {n}");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                &title,
+                "--issue-type",
+                kind,
+                "--label",
+                label,
+                "--priority",
+                priority,
+            ],
+        );
+        assert!(success, "{stderr}");
+        let id = issue_id_by_title(dir.path(), &title);
+        set_issue_status(dir.path(), &id, status);
+        if n < 2 {
+            matching.push(id);
+        }
+    }
+    matching.sort();
+    let filters = [
+        "--status",
+        "working",
+        "--category",
+        "active",
+        "--issue-type",
+        "bug",
+        "--label",
+        "cli",
+        "--priority",
+        "high",
+    ];
+    let mut args = vec!["--quiet", "issue", "list"];
+    args.extend(filters);
+    let (success, output, stderr) = run_atelier(dir.path(), &args);
+    assert!(success, "{stderr}");
+    assert_eq!(
+        output.lines().collect::<Vec<_>>(),
+        matching.iter().map(String::as_str).collect::<Vec<_>>()
+    );
+    args.extend(["--limit", "1"]);
+    let (success, output, stderr) = run_atelier(dir.path(), &args);
+    assert!(success, "{stderr}");
+    assert_eq!(output.trim(), matching[0]);
+    args.remove(0);
+    let (success, output, stderr) = run_atelier(dir.path(), &args);
+    assert!(success, "{stderr}");
+    assert!(output.contains("Showing 1 of 2 issues"), "{output}");
+    assert!(output.contains("Unicode Δ inventory"), "{output}");
+    assert!(output.contains("raise --limit"), "{output}");
+}
+
+#[test]
+fn test_status_footer_uses_complete_work_buckets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    run_atelier(dir.path(), &["issue", "create", "Status guidance"]);
+    let id = issue_id_by_title(dir.path(), "Status guidance");
+    for (status, expected) in [
+        ("todo", "Choose ready work (1 ready issue(s) available)"),
+        (
+            "blocked",
+            "Inspect blocked work (no ready work is available)",
+        ),
+        ("done", "No specific next action is available"),
+        ("in_progress", "No specific next action is available"),
+    ] {
+        set_issue_status(dir.path(), &id, status);
+        let (success, output, stderr) = run_atelier(dir.path(), &["status"]);
+        assert!(success, "{stderr}");
+        assert!(output.contains(expected), "{output}");
+        if status == "in_progress" {
+            assert!(output.contains("Current work:  1 issue(s)"), "{output}");
+            assert!(output.contains("Status guidance"), "{output}");
+        }
+    }
+}
