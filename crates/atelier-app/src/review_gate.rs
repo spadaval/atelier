@@ -121,7 +121,15 @@ fn allowed_edge(repo: &Path, edge: &git::CommitEdge, ids: &BTreeSet<String>) -> 
 }
 
 pub fn approval_is_current(repo: &Path, pin: &str, ids: &BTreeSet<String>) -> Result<bool> {
-    for edge in git::commit_edges(repo, pin)? {
+    approval_is_current_to(repo, pin, ids, "HEAD")
+}
+fn approval_is_current_to(
+    repo: &Path,
+    pin: &str,
+    ids: &BTreeSet<String>,
+    end: &str,
+) -> Result<bool> {
+    for edge in git::commit_edges_to(repo, pin, end)? {
         if !allowed_edge(repo, &edge, ids)? {
             return Ok(false);
         }
@@ -448,6 +456,9 @@ fn evaluate_scope(
                                     issue.parent_id.as_deref() == Some(&approval.target)
                                 }))
                             && (!historical || retained(disposition) || !retained(approval))
+                            && (!historical
+                                || original_approval_valid(index, repo, approval, &finding.target)
+                                    .unwrap_or(false))
                             && ancestor(repo, resolution, &approval.commit)
                     })
             }),
@@ -675,4 +686,16 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
     let mut authors = author_identities_to(repo, start, &ids, event)?;
     add_author(repo, start, &mut authors)?;
     Ok(independent(record, &authors))
+}
+
+fn original_approval_valid(
+    index: &RecordIndex,
+    repo: &Path,
+    approval: &ReviewRecord,
+    target: &str,
+) -> Result<bool> {
+    let issue = index.require_issue(target)?;
+    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
+    let end = crate::evidence_freshness::claim_endpoint(repo, target, &approval.commit)?;
+    approval_is_current_to(repo, &approval.commit, &ids, &end)
 }

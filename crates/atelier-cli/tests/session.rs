@@ -1215,8 +1215,12 @@ fn integration_base_new_completion_cannot_omit_required_proof() {
 }
 
 #[test]
-fn retained_self_dispositions_and_self_approvals_never_age_into_acceptance() {
-    for fix_now in [false, true] {
+fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
+    for (fix_now, approver, stale) in [
+        (false, "Author", false),
+        (true, "Author", false),
+        (true, "Reviewer", true),
+    ] {
         let f = Fixture::new();
         git(f.path(), &["switch", "main"]);
         let id = ok(
@@ -1271,8 +1275,8 @@ fn retained_self_dispositions_and_self_approvals_never_age_into_acceptance() {
                     "approve",
                     &id,
                     "--identity",
-                    "Author",
-                    "Self approval is insufficient",
+                    approver,
+                    "Resolution approval",
                 ],
             );
         } else {
@@ -1289,6 +1293,15 @@ fn retained_self_dispositions_and_self_approvals_never_age_into_acceptance() {
                     "Author cannot accept own dismissal",
                 ],
             );
+        }
+        if stale {
+            commit(f.path(), "independent approval before later implementation");
+            fs::write(
+                f.path().join("original-work"),
+                "code changed after approval\n",
+            )
+            .unwrap();
+            commit(f.path(), "implementation invalidates earlier approval");
         }
         f.terminal(&id);
         let (pass, output) = cli(f.path(), &["land"]);

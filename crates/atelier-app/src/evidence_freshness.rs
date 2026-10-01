@@ -194,27 +194,26 @@ fn proof_matches(
         repo,
         &["merge-base", "--is-ancestor", &record.data.commit, "HEAD"],
     )?;
-    let path = format!(".atelier/issues/{}.md", issue.issue.id);
+    let end = claim_endpoint(repo, &issue.issue.id, &record.data.commit)?;
+    evidence_valid_through(repo, issue, record, &end)
+}
+pub(crate) fn claim_endpoint(repo: &Path, issue_id: &str, pin: &str) -> Result<String> {
+    let path = format!(".atelier/issues/{issue_id}.md");
     let changes = String::from_utf8(git::git_output(repo, &["log", "--format=%H", "--", &path])?)?;
     let mut claim = None;
     for commit in changes.lines() {
-        let after = at_commit(repo, commit, &issue.issue.id)?;
-        let parent = at_commit(repo, &format!("{commit}^"), &issue.issue.id);
+        let after = at_commit(repo, commit, issue_id)?;
+        let parent = at_commit(repo, &format!("{commit}^"), issue_id);
         if parent.is_err() || !completion_claim_matches(&after, &parent?) {
             claim = Some(commit);
             break;
         }
     }
     let claim = claim.ok_or_else(|| anyhow::anyhow!("terminal claim history is missing"))?;
-    let end = if git::git_output(
-        repo,
-        &["merge-base", "--is-ancestor", claim, &record.data.commit],
-    )
-    .is_ok()
-    {
-        &record.data.commit
+    let end = if git::git_output(repo, &["merge-base", "--is-ancestor", claim, pin]).is_ok() {
+        pin
     } else {
         claim
     };
-    evidence_valid_through(repo, issue, record, end)
+    Ok(end.to_owned())
 }
