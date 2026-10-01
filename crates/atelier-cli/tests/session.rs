@@ -800,3 +800,56 @@ fn start_cannot_switch_away_from_hidden_modified_code() {
         "hidden unfinished change\n"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn hidden_executable_modes_allow_active_handoff_but_fence_completion() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    git(f.path(), &["config", "core.filemode", "false"]);
+    fs::set_permissions(f.path().join("code"), fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+    assert!(ok(f.path(), &["land"]).contains("1 uncommitted path"));
+    f.terminal(&f.id);
+    f.refusal("land_completion_dirty");
+
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'chmod +x code' }}\n"),
+    )
+    .unwrap();
+    commit(f.path(), "trusted executable-mode check");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["rebase", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    git(f.path(), &["config", "core.filemode", "false"]);
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("land_state_changed"), "{output}");
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+    assert_ne!(
+        fs::metadata(f.path().join("code"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o111,
+        0
+    );
+}
