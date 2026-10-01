@@ -687,6 +687,98 @@ fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
     );
 }
 
+#[test]
+fn test_prune_history_is_committed_and_refreshed_between_commands() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Uncommitted terminal"]);
+    assert!(success, "{stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    for staged in [false, true] {
+        if staged {
+            assert!(Command::new("git")
+                .current_dir(dir.path())
+                .args(["add", ".atelier"])
+                .status()
+                .unwrap()
+                .success());
+        }
+        let (success, stdout, stderr) =
+            run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+        assert!(success, "{stderr}");
+        assert!(
+            stdout.contains("not present in Git history at HEAD"),
+            "{stdout}"
+        );
+        assert!(canonical_issue_path(dir.path(), &issue_id).exists());
+    }
+    commit_all(dir.path(), "make terminal record recoverable");
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(stdout.contains("removed issue"), "{stdout}");
+    assert!(!canonical_issue_path(dir.path(), &issue_id).exists());
+}
+
+#[test]
+fn test_prune_protects_owner_record_with_staged_or_unstaged_changes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Dirty terminal owner"]);
+    assert!(success, "{stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "old owner record");
+    let (_remote, branch) = merged_pushed_owner_branch(dir.path(), &issue_id);
+    let record = canonical_issue_path(dir.path(), &issue_id);
+    fs::write(
+        &record,
+        format!(
+            "{}\nUncommitted notes.\n",
+            fs::read_to_string(&record).unwrap()
+        ),
+    )
+    .unwrap();
+    for staged in [false, true] {
+        if staged {
+            assert!(Command::new("git")
+                .current_dir(dir.path())
+                .args(["add", ".atelier"])
+                .status()
+                .unwrap()
+                .success());
+        }
+        let (success, stdout, stderr) =
+            run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+        assert!(success, "{stderr}");
+        assert!(
+            stdout.contains(&format!("protected branch {branch}")),
+            "{stdout}"
+        );
+        assert!(
+            stdout.contains("owner record has uncommitted changes"),
+            "{stdout}"
+        );
+    }
+    assert!(Command::new("git")
+        .current_dir(dir.path())
+        .args(["restore", "--staged", "--worktree", ".atelier"])
+        .status()
+        .unwrap()
+        .success());
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains(&format!("eligible branch {branch}")),
+        "{stdout}"
+    );
+}
+
 /// Gives `issue_id` a pushed `task/<id>` owner branch whose work is
 /// squash-merged into main. Returns the bare remote (keep it alive) and the
 /// branch name.
