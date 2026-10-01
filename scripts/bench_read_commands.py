@@ -231,7 +231,12 @@ def main():
             ["check"],
         ]
         print(f"Binary: {binary}; {options.runs} runs after one warm-up")
-        print(f"CPU cores available: {len(os.sched_getaffinity(0))} of {os.cpu_count()}\n")
+        available = (
+            len(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else os.cpu_count()
+        )
+        print(f"CPU cores available: {available} of {os.cpu_count()}\n")
         print(f"| Command | median ms | max ms |")
         print(f"| --- | ---: | ---: |")
         over = []

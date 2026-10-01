@@ -72,12 +72,18 @@ not be taught as ordinary workflow:
 
 - [branch](branch.md): hidden/manual owner-branch recovery; routine branch
   guidance comes from status, work dashboards, issue detail, and transitions.
-- [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
-  visible `check` and explicit `check --fix`.
-- [maintenance](maintenance.md): removed arbitrary-record deletion surface.
-- [rebuild](rebuild.md): hidden domain-cache diagnostic; operator repair starts
-  from `check --fix`.
 - [workflow](workflow.md): hidden raw workflow-policy diagnostics.
+
+## Removed Command Notes
+
+These commands were removed and are rejected as unrecognized; the notes are
+historical:
+
+- [doctor](doctor.md): former cache and runtime repair entry, removed with the
+  SQLite cache ([ADR 0019](../../adr/0019-verified-repo-native-tracker.md)).
+- [maintenance](maintenance.md): removed arbitrary-record deletion surface.
+- [rebuild](rebuild.md): former domain-cache rebuild diagnostic, removed with
+  the SQLite cache.
 
 ## Cross-Cutting Audit Artifacts
 

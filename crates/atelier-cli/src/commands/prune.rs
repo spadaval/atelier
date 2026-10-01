@@ -22,7 +22,6 @@ struct CanonicalPruneSummary {
     issues: Vec<CanonicalCandidate>,
     evidence: Vec<CanonicalCandidate>,
     removed: Vec<CanonicalRemoval>,
-    failures: Vec<(PathBuf, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -87,8 +86,13 @@ pub fn run(
     retention_days: Option<u64>,
     quiet: bool,
 ) -> Result<()> {
+    // Plan and validate canonical removal before any Git cleanup, so a
+    // refused canonical prune never follows branch or worktree removal.
+    let mut canonical = plan_canonical_records(&tracker, retention_days, apply)?;
     let git = prune_git_artifacts(&tracker, retention_days, apply)?;
-    let canonical = prune_canonical_records(&tracker, retention_days, apply)?;
+    if apply {
+        remove_canonical_records(&tracker.state_dir, &mut canonical)?;
+    }
 
     if quiet {
         print_quiet_summary(&git, &canonical, apply);
@@ -102,7 +106,7 @@ pub fn run(
 
     print_git(&git, apply);
     println!();
-    print_canonical(&canonical, apply);
+    print_canonical(&canonical);
     println!();
     print_deferred_classes();
 
@@ -582,7 +586,9 @@ fn git_run(repo_root: &Path, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn prune_canonical_records(
+/// Finds canonical candidates and, for `--apply`, checks that removing the
+/// eligible ones is safe: a clean checkout and surviving records that load.
+fn plan_canonical_records(
     tracker: &TrackerContext,
     retention_days_override: Option<u64>,
     apply: bool,
@@ -595,22 +601,11 @@ fn prune_canonical_records(
     apply_git_history_protection(&tracker.repo_root, &mut evidence)?;
     protect_referenced_candidates(&tracker.index, &mut issues, &mut evidence);
 
-    let mut removed = Vec::new();
-    let mut failures = Vec::new();
-    if apply {
-        let has_eligible = issues.iter().any(CanonicalCandidate::eligible)
-            || evidence.iter().any(CanonicalCandidate::eligible);
-        if has_eligible {
-            ensure_clean_for_canonical_prune(&tracker.repo_root)?;
-            ensure_survivors_load(tracker, &issues, &evidence)?;
-        }
-        for candidate in evidence
-            .iter()
-            .chain(issues.iter())
-            .filter(|c| c.eligible())
-        {
-            remove_candidate(&tracker.state_dir, candidate, &mut removed, &mut failures);
-        }
+    let has_eligible = issues.iter().any(CanonicalCandidate::eligible)
+        || evidence.iter().any(CanonicalCandidate::eligible);
+    if apply && has_eligible {
+        ensure_clean_for_canonical_prune(&tracker.repo_root)?;
+        ensure_survivors_load(tracker, &issues, &evidence)?;
     }
 
     Ok(CanonicalPruneSummary {
@@ -618,9 +613,46 @@ fn prune_canonical_records(
         cutoff,
         issues,
         evidence,
-        removed,
-        failures,
+        removed: Vec::new(),
     })
+}
+
+/// Removes eligible candidates, stopping at the first failure. The checkout
+/// was clean before removal, so `git restore .atelier` undoes a partial run.
+fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummary) -> Result<()> {
+    let eligible = summary
+        .evidence
+        .iter()
+        .chain(summary.issues.iter())
+        .filter(|candidate| candidate.eligible())
+        .cloned()
+        .collect::<Vec<_>>();
+    let names = |candidates: &[CanonicalCandidate]| {
+        if candidates.is_empty() {
+            "(none)".to_string()
+        } else {
+            candidates
+                .iter()
+                .map(|candidate| display_state_path(&candidate.path))
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    };
+    for (position, candidate) in eligible.iter().enumerate() {
+        if let Err(error) = remove_candidate_file(state_dir, candidate) {
+            bail!(
+                "prune --apply stopped: failed to remove {}: {error:#}\nRemoved: {}\nNot removed: {}\nNext: run `git restore .atelier` to restore every record file, then rerun `atelier prune`.",
+                display_state_path(&candidate.path),
+                names(&eligible[..position]),
+                names(&eligible[position..]),
+            );
+        }
+        summary.removed.push(CanonicalRemoval {
+            kind: candidate.kind,
+            id: candidate.id.clone(),
+        });
+    }
+    Ok(())
 }
 
 /// Every relationship a record declares, as `(target kind, target id, role)`.
@@ -741,7 +773,7 @@ fn ensure_survivors_load(
     RecordIndex::from_project_records(&tracker.state_dir, surviving_issues, surviving_evidence)
         .map(|_| ())
         .context(
-            "prune refused: the records left after pruning would not load; no files were removed",
+            "prune refused: the records left after pruning would not load; nothing was removed",
         )
 }
 
@@ -1034,20 +1066,11 @@ fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn remove_candidate(
-    state_dir: &Path,
-    candidate: &CanonicalCandidate,
-    removed: &mut Vec<CanonicalRemoval>,
-    failures: &mut Vec<(PathBuf, String)>,
-) {
-    let absolute = state_dir.join(&candidate.path);
-    match fs::remove_file(&absolute) {
-        Ok(()) => removed.push(CanonicalRemoval {
-            kind: candidate.kind,
-            id: candidate.id.clone(),
-        }),
-        Err(error) => failures.push((candidate.path.clone(), error.to_string())),
+fn remove_candidate_file(state_dir: &Path, candidate: &CanonicalCandidate) -> Result<()> {
+    if std::env::var("ATELIER_TEST_PRUNE_REMOVE_FAILURE").as_deref() == Ok(candidate.id.as_str()) {
+        bail!("injected prune removal failure");
     }
+    fs::remove_file(state_dir.join(&candidate.path)).map_err(Into::into)
 }
 
 fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary, apply: bool) {
@@ -1074,7 +1097,7 @@ fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary,
             .filter(|candidate| !candidate.eligible())
             .count();
     let removed = git.removed.len() + canonical.removed.len();
-    let failures = git.failures.len() + canonical.failures.len();
+    let failures = git.failures.len();
     println!(
         "mode={} eligible={eligible} protected={protected} removed={removed} failures={failures}",
         if apply { "apply" } else { "dry-run" }
@@ -1121,7 +1144,7 @@ fn print_git(summary: &GitPruneSummary, apply: bool) {
     }
 }
 
-fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
+fn print_canonical(summary: &CanonicalPruneSummary) {
     println!("Canonical Records");
     println!("-----------------");
     println!("Retention: {} day(s)", summary.retention_days);
@@ -1133,35 +1156,18 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
     } else {
         println!("Candidates: {total_candidates}");
         for candidate in summary.issues.iter().chain(summary.evidence.iter()) {
-            print_canonical_candidate(candidate, apply, summary);
-        }
-    }
-
-    if !summary.failures.is_empty() {
-        println!("Failures:");
-        for (path, error) in &summary.failures {
-            println!("  {} - {}", path.display(), error);
+            print_canonical_candidate(candidate, summary);
         }
     }
 }
 
-fn print_canonical_candidate(
-    candidate: &CanonicalCandidate,
-    apply: bool,
-    summary: &CanonicalPruneSummary,
-) {
+fn print_canonical_candidate(candidate: &CanonicalCandidate, summary: &CanonicalPruneSummary) {
     let removed = summary
         .removed
         .iter()
         .any(|removed| removed.kind == candidate.kind && removed.id == candidate.id);
-    let failed = summary
-        .failures
-        .iter()
-        .any(|(path, _)| path == &candidate.path);
     let status = if removed {
         "removed"
-    } else if failed {
-        "failed"
     } else if let Some(reason) = &candidate.protection {
         println!(
             "  protected {} {} ({}, latest {}, path {}) - {}",
@@ -1173,8 +1179,6 @@ fn print_canonical_candidate(
             reason
         );
         return;
-    } else if apply {
-        "eligible"
     } else {
         "eligible"
     };

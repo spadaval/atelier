@@ -945,17 +945,19 @@ mod tests {
     }
 
     #[test]
-    fn downstream_impact_follows_children_transitively() {
+    fn downstream_impact_follows_children_then_relations_transitively() {
         let mut records = Records::default();
         records.issue("atelier-root", "epic", "todo");
         records.issue("atelier-why1", "task", "todo");
         records.issue("atelier-why2", "task", "todo");
+        records.issue("atelier-derived", "task", "todo");
         records.parent("atelier-why1", "atelier-root");
         records.parent("atelier-why2", "atelier-root");
+        records.relate("atelier-why1", "atelier-derived", "derived");
 
         assert_eq!(
             impact_ids(&records.index(), "atelier-root"),
-            ["atelier-why1", "atelier-why2"]
+            ["atelier-derived", "atelier-why1", "atelier-why2"]
         );
     }
 

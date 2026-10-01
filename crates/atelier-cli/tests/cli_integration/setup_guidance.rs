@@ -679,6 +679,49 @@ fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
 }
 
 #[test]
+fn test_prune_apply_stops_at_first_removal_failure() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    for title in ["Old terminal one", "Old terminal two"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue create failed: {stderr}");
+    }
+    let mut ids = ["Old terminal one", "Old terminal two"]
+        .map(|title| issue_id_by_title(dir.path(), title))
+        .to_vec();
+    ids.sort();
+    for id in &ids {
+        make_issue_terminal_before_retention(dir.path(), id, 45);
+    }
+    commit_all(dir.path(), "old terminal issues");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["prune", "--apply", "--retention-days", "30"],
+        &[("ATELIER_TEST_PRUNE_REMOVE_FAILURE", ids[1].as_str())],
+    );
+
+    assert!(!success, "a removal failure must fail prune");
+    assert!(
+        stderr.contains(&format!("failed to remove .atelier/issues/{}.md", ids[1]))
+            && stderr.contains(&format!("Removed: .atelier/issues/{}.md", ids[0]))
+            && stderr.contains(&format!("Not removed: .atelier/issues/{}.md", ids[1]))
+            && stderr.contains("git restore .atelier"),
+        "{stderr}"
+    );
+    assert!(!canonical_issue_path(dir.path(), &ids[0]).exists());
+    assert!(canonical_issue_path(dir.path(), &ids[1]).exists());
+    let restored = Command::new("git")
+        .current_dir(dir.path())
+        .args(["restore", ".atelier"])
+        .status()
+        .unwrap();
+    assert!(restored.success());
+    assert!(canonical_issue_path(dir.path(), &ids[0]).exists());
+}
+
+#[test]
 fn test_prune_keeps_done_child_listed_by_open_epic() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
