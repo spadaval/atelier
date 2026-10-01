@@ -273,48 +273,6 @@ fn git_rev_parse(dir: &Path, rev: &str) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-fn init_atelier_with_telemetry_disabled(dir: &Path) {
-    let (success, _, stderr) =
-        run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);
-    assert!(success, "Failed to init: {}", stderr);
-    migrate_default_issue_workflow(dir);
-}
-
-fn diagnostics_events(root: &Path) -> Vec<serde_json::Value> {
-    let commands_dir = root.join("commands");
-    if !commands_dir.exists() {
-        return Vec::new();
-    }
-    let mut paths = std::fs::read_dir(&commands_dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect::<Vec<_>>();
-    paths.sort();
-    let mut events = Vec::new();
-    for path in paths {
-        let content = fs::read_to_string(path).unwrap();
-        for line in content.lines().filter(|line| !line.trim().is_empty()) {
-            events.push(serde_json::from_str(line).unwrap());
-        }
-    }
-    events
-}
-
-fn write_diagnostics_event(root: &Path, date: &str, event: serde_json::Value) {
-    let commands_dir = root.join("commands");
-    fs::create_dir_all(&commands_dir).unwrap();
-    let path = commands_dir.join(format!("{date}.ndjson"));
-    let mut line = serde_json::to_string(&event).unwrap();
-    line.push('\n');
-    fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .unwrap()
-        .write_all(line.as_bytes())
-        .unwrap();
-}
-
 fn registry() -> &'static Mutex<HashMap<PathBuf, Vec<String>>> {
     TEST_ISSUE_IDS.get_or_init(|| Mutex::new(HashMap::new()))
 }

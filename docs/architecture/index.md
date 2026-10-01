@@ -37,9 +37,6 @@ preservation expectations, and deferred migration areas.
 See [Markdown-First Record Store](markdown-first-record-store.md) for the
 record-file, domain-object, and lazy SQLite-cache boundaries that govern durable
 Markdown writes and local-only diagnostics/cache data.
-See [Local Command Diagnostics](local-command-diagnostics.md) for the global
-local diagnostics store, command telemetry fields, redaction defaults, opt-out
-controls, retention behavior, and Mission Control export boundary.
 See [Retention And Prune Policy](../product/retention-and-prune.md) for
 user-visible cleanup classes, protection rules, Git-history recovery, and
 explicit apply semantics.

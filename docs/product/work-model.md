@@ -496,9 +496,6 @@ transitions:
 The validator does not define the checkpoint's meaning. It only enforces whether
 the issue transition is allowed.
 
-See [Deferred Checkpoint Semantics](milestone-records.md) for the v1 rule that
-checkpoint data stays in accountable record prose and evidence.
-
 ## Current Representation
 
 First-class mission, issue, evidence, workflow, and activity records make

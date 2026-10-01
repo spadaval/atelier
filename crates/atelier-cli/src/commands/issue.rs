@@ -1,6 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
-use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -79,17 +78,6 @@ impl QueueRow {
     fn state_label(&self) -> &'static str {
         self.work_order_row().state().label()
     }
-}
-
-struct DependencyListRow {
-    blocked_id: String,
-    blocked_title: String,
-    blocked_status: String,
-    blocked_priority: String,
-    blocker_id: String,
-    blocker_title: String,
-    blocker_status: String,
-    blocker_priority: String,
 }
 
 #[derive(Debug, Clone)]
@@ -969,19 +957,6 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn status_rank(status: &str) -> u8 {
-    match status {
-        "todo" => 0,
-        "in_progress" => 1,
-        "blocked" => 2,
-        "review" => 3,
-        "validation" => 4,
-        "done" => 5,
-        "archived" => 6,
-        _ => 7,
-    }
-}
-
 fn priority_rank(priority: &str) -> u8 {
     IssuePriority::from_label(priority)
         .map(|priority| priority.sort_rank())
@@ -1201,16 +1176,6 @@ pub(crate) fn list_with_title(
 
 pub(crate) fn list_blocked_with_title(db: &Database, title: &str, quiet: bool) -> Result<()> {
     list_blocked_filtered_with_title(db, title, None, None, None, quiet)
-}
-
-pub fn list_blocked_inventory(
-    db: &Database,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    quiet: bool,
-) -> Result<()> {
-    list_blocked_filtered_with_title(db, "Issue List", issue_type, label, priority, quiet)
 }
 
 fn list_blocked_filtered_with_title(
@@ -2111,160 +2076,9 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     Ok(())
 }
 
-pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<String> {
-    let db = Database::open(db_path)?;
-    let id = resolve_id(&db, issue_ref)?;
-    db.require_issue(&id)?;
-    let descendants = descendant_issue_ids(&db, &id)?;
-    drop(db);
-
-    let store = RecordStore::new(state_dir);
-    store.remove_issue_children_from_external_parents(&descendants)?;
-    for issue_id in &descendants {
-        store.delete_issue_atomic(issue_id)?;
-    }
-    Ok(id)
-}
-
-fn descendant_issue_ids(db: &Database, root: &str) -> Result<Vec<String>> {
-    let mut ids = vec![root.to_string()];
-    let mut index = 0;
-    while index < ids.len() {
-        let current = ids[index].clone();
-        for child in db.get_subissues(&current)? {
-            ids.push(child.id);
-        }
-        index += 1;
-    }
-    Ok(ids)
-}
-
 fn push_unique(values: &mut Vec<String>, value: String) {
     if !values.contains(&value) {
         values.push(value);
-    }
-}
-
-pub fn dep_add_canonical(
-    db: &Database,
-    store: &RecordStore,
-    blocked_ref: &str,
-    blocker_ref: &str,
-) -> Result<()> {
-    let blocked_id = resolve_id(db, blocked_ref)?;
-    let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = store.add_issue_block(&blocked_id, &blocker_id)?;
-    dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
-}
-
-pub fn dep_remove_canonical(
-    db: &Database,
-    store: &RecordStore,
-    blocked_ref: &str,
-    blocker_ref: &str,
-) -> Result<()> {
-    let blocked_id = resolve_id(db, blocked_ref)?;
-    let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = store.remove_issue_block(&blocked_id, &blocker_id)?;
-    dep_result(
-        db,
-        "dep.remove",
-        "remove",
-        &blocked_id,
-        &blocker_id,
-        changed,
-    )
-}
-
-fn dep_result(
-    db: &Database,
-    command: &str,
-    action: &str,
-    blocked_id: &str,
-    blocker_id: &str,
-    changed: bool,
-) -> Result<()> {
-    let blocked = db.require_issue(blocked_id)?;
-    let blocker = db.require_issue(blocker_id)?;
-    let data = json!({
-        "source": issue_id_for_agent(db, &blocker)?,
-        "target": issue_id_for_agent(db, &blocked)?,
-        "blocked": issue_id_for_agent(db, &blocked)?,
-        "blocker": issue_id_for_agent(db, &blocker)?,
-        "type": "blocks",
-        "action": action,
-        "state": dependency_state(action, changed),
-        "changed": changed
-    });
-    let _ = command;
-    let blocked = data["blocked"].as_str().unwrap_or_default();
-    let blocker = data["blocker"].as_str().unwrap_or_default();
-    let state = data["state"].as_str().unwrap_or_default();
-    match action {
-        "remove" => println!("{blocked} is no longer blocked by {blocker} ({state})"),
-        _ => println!("{blocked} is blocked by {blocker} ({state})"),
-    }
-    Ok(())
-}
-
-fn dependency_state(action: &str, changed: bool) -> &'static str {
-    match (action, changed) {
-        ("add", true) => "added",
-        ("add", false) => "already-present",
-        ("remove", true) => "removed",
-        ("remove", false) => "already-absent",
-        _ => "unchanged",
-    }
-}
-
-pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
-    let mut rows = Vec::new();
-    let issues = if let Some(issue_ref) = issue_ref {
-        let id = resolve_id(db, issue_ref)?;
-        vec![db.require_issue(&id)?]
-    } else {
-        db.list_issues(Some("all"), None, None)?
-    };
-    for issue in issues {
-        for blocker_id in db.get_blockers(&issue.id)? {
-            let blocker = db.require_issue(&blocker_id)?;
-            rows.push(DependencyListRow {
-                blocked_id: issue_id_for_agent(db, &issue)?,
-                blocked_title: issue.title.clone(),
-                blocked_status: issue.status.clone(),
-                blocked_priority: issue.priority.clone(),
-                blocker_id: issue_id_for_agent(db, &blocker)?,
-                blocker_title: blocker.title.clone(),
-                blocker_status: blocker.status.clone(),
-                blocker_priority: blocker.priority.clone(),
-            });
-        }
-    }
-    if rows.is_empty() {
-        println!("No dependencies found.");
-        Ok(())
-    } else {
-        println!("Dependencies");
-        println!("============");
-        println!("{} total", rows.len());
-        rows.sort_by(|a, b| {
-            status_rank(&a.blocked_status)
-                .cmp(&status_rank(&b.blocked_status))
-                .then(priority_rank(&a.blocked_priority).cmp(&priority_rank(&b.blocked_priority)))
-                .then(a.blocked_id.cmp(&b.blocked_id))
-                .then(a.blocker_id.cmp(&b.blocker_id))
-        });
-        for row in rows {
-            println!(
-                "  {} [{}] {} - {}",
-                row.blocked_id, row.blocked_status, row.blocked_priority, row.blocked_title
-            );
-            println!(
-                "    blocked by {} [{}] {} - {}",
-                row.blocker_id, row.blocker_status, row.blocker_priority, row.blocker_title
-            );
-        }
-        Ok(())
     }
 }
 
@@ -2304,7 +2118,6 @@ pub fn doctor(
             db_path: db_path.to_path_buf(),
             cache_db_existed,
             fix,
-            diagnostics_enabled: crate::telemetry::diagnostics_enabled(),
         },
     })?;
     render_doctor(outcome.value.data);
@@ -2361,36 +2174,9 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
             "missing"
         }
     );
-    println!("  diagnostics: {}", view.diagnostics);
     println!("Legacy health:");
     for (key, value) in view.health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });
-    }
-}
-
-pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
-    if !check {
-        bail!(
-            "SQLite-to-record export has been removed; use `atelier export --check` only for targeted freshness diagnostics"
-        );
-    }
-    let outcome = atelier_app::export::canonical_export(atelier_app::Request {
-        input: atelier_app::export::CanonicalExportRequest {
-            db,
-            state_dir: state_dir.to_path_buf(),
-            check,
-        },
-    })?;
-    let view = outcome.value.data;
-    if view.stale_entries.is_empty() {
-        println!("Record files and domain cache are current");
-        println!("State: {}", view.state_dir.display());
-        Ok(())
-    } else {
-        bail!(
-            "Record-file/domain-cache state is stale:\n{}",
-            view.stale_entries.join("\n")
-        )
     }
 }
 

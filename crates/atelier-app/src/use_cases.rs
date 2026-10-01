@@ -109,10 +109,6 @@ pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) ->
     RecordStore::new(state_dir).write_issue_atomic(record)
 }
 
-pub fn write_canonical_evidence(state_dir: &Path, record: &EvidenceRecord) -> Result<()> {
-    RecordStore::new(state_dir).write_evidence_atomic(record)
-}
-
 pub fn create_evidence_record(
     state_dir: &Path,
     summary: &str,
@@ -132,23 +128,6 @@ pub fn add_record_relationship(
     relation: &str,
 ) -> Result<bool> {
     RecordStore::new(state_dir).add_relates_relationship(
-        source_kind,
-        source_id,
-        target_kind,
-        target_id,
-        relation,
-    )
-}
-
-pub fn remove_record_relationship(
-    state_dir: &Path,
-    source_kind: &str,
-    source_id: &str,
-    target_kind: &str,
-    target_id: &str,
-    relation: &str,
-) -> Result<bool> {
-    RecordStore::new(state_dir).remove_relates_relationship(
         source_kind,
         source_id,
         target_kind,
@@ -185,28 +164,6 @@ pub fn resolve_issue_ref(storage: &CacheAccess, issue_ref: &str) -> Result<Strin
     }
 
     bail!("Issue {issue_ref} was not found")
-}
-
-pub fn resolve_record_ref(storage: &CacheAccess, kind: &str, id: &str) -> Result<String> {
-    let db = storage.db();
-    if kind == "issue" {
-        resolve_issue_ref(storage, id)
-    } else if db.get_record(kind, id)?.is_some() {
-        Ok(id.to_string())
-    } else if let Some(actual_kind) = db.record_kind_for_id(id)? {
-        bail!("{}", wrong_kind_message(kind, &actual_kind, id));
-    } else {
-        Ok(id.to_string())
-    }
-}
-
-pub fn resolve_optional_record_ref(
-    storage: &CacheAccess,
-    kind: &str,
-    id: Option<String>,
-) -> Result<Option<String>> {
-    id.map(|id| resolve_record_ref(storage, kind, &id))
-        .transpose()
 }
 
 pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {

@@ -41,13 +41,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "fuzz_import"
-path = "fuzz_targets/fuzz_import.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "fuzz_dependency_graph"
 path = "fuzz_targets/fuzz_dependency_graph.rs"
 test = false

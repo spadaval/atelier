@@ -11,7 +11,6 @@ pub struct DoctorRequest<'a> {
     pub db_path: PathBuf,
     pub cache_db_existed: bool,
     pub fix: bool,
-    pub diagnostics_enabled: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,7 +25,6 @@ pub struct DoctorView {
     pub cache_fresh: bool,
     pub cache_dir_status: &'static str,
     pub runtime_db_available: bool,
-    pub diagnostics: &'static str,
     pub health: BTreeMap<&'static str, bool>,
 }
 
@@ -68,11 +66,6 @@ pub fn doctor(
     };
     let state_dir_ok = input.state_dir.is_dir();
     let ignore_rules_current = runtime_gitignore_entries_present(&input.repo_root);
-    let diagnostics = if input.diagnostics_enabled {
-        "enabled"
-    } else {
-        "disabled"
-    };
     let mut health = BTreeMap::new();
     health.insert("config", config_path.exists());
     health.insert("database", runtime_db_available);
@@ -93,7 +86,6 @@ pub fn doctor(
                 cache_fresh,
                 cache_dir_status: optional_dir_status(&cache_dir),
                 runtime_db_available,
-                diagnostics,
                 health,
             },
         },

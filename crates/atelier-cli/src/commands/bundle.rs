@@ -744,10 +744,7 @@ fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
     {
         let entry = entry?;
         let name = entry.file_name();
-        if matches!(
-            name.to_str(),
-            Some("runtime" | "cache" | "locks" | "diagnostics")
-        ) {
+        if matches!(name.to_str(), Some("runtime" | "cache" | "locks")) {
             continue;
         }
         let source_path = entry.path();

@@ -11,7 +11,7 @@ and cleanup. Do not use repair or maintenance commands as a normal work path.
   state; it does not own canonical record edits.
 - Use `atelier prune` to inspect cleanup candidates and `atelier prune --apply`
   only when cleanup is intended.
-- Start recovery from `atelier man admin` and focused command help.
+- Start recovery from `atelier check` and focused command help.
 
 ## GitHub Issues
 

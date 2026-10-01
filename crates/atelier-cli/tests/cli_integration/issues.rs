@@ -24,7 +24,7 @@ fn test_create_issue() {
     assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
     assert!(!issue_text.contains("## Evidence"));
 
-    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "placeholder scaffold should be under-specified");
     assert!(stderr.contains("Lint failed"));
     assert!(lint_out.contains("Issue section Description must be present and non-empty"));
@@ -104,7 +104,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
         );
     std::fs::write(&path, text).unwrap();
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(success, "lint after markdown edit failed: {stderr}");
     let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed: {stderr}");
@@ -247,7 +247,7 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(!success, "lint should reject corrupted parent type");
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
@@ -1743,105 +1743,6 @@ fn test_close_issue() {
     assert!(show_out.contains("Status:   done"), "{show_out}");
 }
 
-#[test]
-fn test_import_beads_jsonl_fixture_round_trip() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let fixture_path = dir.path().join("issues.manual.jsonl");
-    std::fs::write(
-        &fixture_path,
-        include_str!("../fixtures/beads/issues.manual.jsonl"),
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["import-beads", fixture_path.to_str().unwrap()],
-    );
-    assert!(success, "import-beads failed: {stderr}");
-    assert!(stdout.contains("source records: 3"));
-    assert!(stdout.contains("imported issues: 3"));
-    assert!(stdout.contains("parent-child relationships: 2"));
-    assert!(stdout.contains("blocking relationships: 1"));
-    assert!(dir
-        .path()
-        .join(".atelier")
-        .join("issues")
-        .join("atelier-0001.md")
-        .exists());
-
-    let (_, list_out, _) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(list_out.contains("Mission: Replace Beads"));
-    assert!(list_out.contains("Dogfood Atelier"));
-
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "atelier-0003"]);
-    assert!(show_out.contains("Parent: atelier-0001"));
-    assert!(show_out.contains("Blocked by"));
-    assert!(show_out.contains("atelier-0002"));
-    assert!(show_out.contains("(open blocker)"));
-    assert!(show_out.contains("Outcome"));
-    assert!(show_out.contains("AGENTS.md declares Atelier as the tracker"));
-    assert!(show_out.contains("Evidence"));
-    assert!(show_out.contains("atelier import-beads <path>"));
-    assert!(!show_out.contains("Acceptance Criteria"));
-
-    let (updated, _, update_err) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "update",
-            "atelier-0002",
-            "--title",
-            "Imported Beads issue updated",
-        ],
-    );
-    assert!(updated, "update failed: {update_err}");
-    close_issue_with_evidence(dir.path(), "atelier-0002", None);
-
-    let (_, closed_show, _) = run_atelier(dir.path(), &["issue", "show", "atelier-0002"]);
-    assert!(closed_show.contains("Imported Beads issue updated"));
-    assert!(closed_show.contains("Status:   done"));
-
-    let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(
-        fresh,
-        "export --check validates record Markdown/cache state, not SQLite-only drift: {fresh_err}"
-    );
-}
-
-#[test]
-fn test_import_beads_late_invalid_record_is_failure_atomic_and_retryable() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let import_path = dir.path().join("late-invalid.jsonl");
-    let invalid = concat!(
-        r#"{"_type":"issue","id":"first","title":"First","status":"open","priority":2,"issue_type":"task","notes":"first note"}"#,
-        "\n",
-        r#"{"_type":"issue","id":"second","title":"Second","status":"open","priority":2,"issue_type":"invalid type"}"#,
-        "\n"
-    );
-    std::fs::write(&import_path, invalid).unwrap();
-
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
-    assert!(!success, "late-invalid import unexpectedly succeeded");
-    assert!(stderr.contains("Invalid issue_type"), "{stderr}");
-    for id in ["atelier-0001", "atelier-0002"] {
-        assert!(!dir.path().join(format!(".atelier/issues/{id}.md")).exists());
-    }
-
-    std::fs::write(&import_path, invalid.replace("invalid type", "task")).unwrap();
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["import-beads", import_path.to_str().unwrap()]);
-    assert!(success, "clean retry failed: {stderr}");
-    assert!(stdout.contains("imported issues: 2"), "{stdout}");
-    assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
-    assert!(dir.path().join(".atelier/issues/atelier-0002.md").exists());
-    let first = read_canonical_record(dir.path(), "issues", "atelier-0001");
-    assert!(first.contains("## Notes\n\n- "), "{first}");
-    assert!(first.contains("[note] first note"), "{first}");
-}
-
 // ==================== Issue Delete Tests ====================
 
 // ==================== Labels Tests ====================
@@ -2054,7 +1955,7 @@ fn test_issue_show_recovers_notes_and_close_reason_after_rebuild() {
 }
 
 #[test]
-fn test_issue_create_is_durable_without_manual_export() {
+fn test_issue_create_is_durable_from_record_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2072,10 +1973,6 @@ fn test_issue_create_is_durable_without_manual_export() {
     );
     assert!(success, "create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Create-only durable");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "create should leave the disposable cache stale");
-    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2126,19 +2023,12 @@ fn test_issue_mutations_leave_stale_cache_for_one_lazy_repair() {
         assert!(success, "{args:?} failed: {stderr}");
     }
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "mutations should leave the cache stale");
-    assert!(stderr.contains("cache:"), "{stderr}");
-
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Mutation source updated"));
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("keep-me"));
     assert!(stdout.contains(&target_id));
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "cache should be fresh after lazy query: {stderr}");
 
     let source_text = read_canonical_record(dir.path(), "issues", &source_id);
     assert!(!source_text.contains("- \"remove-me\""));
@@ -2368,7 +2258,7 @@ fn test_unblock_issue() {
 }
 
 #[test]
-fn test_issue_blocker_mutations_are_durable_without_manual_export() {
+fn test_issue_blocker_mutations_are_durable_from_record_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2391,9 +2281,6 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
         ],
     );
     assert!(success, "issue link failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "issue link should leave the cache stale");
-    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2414,9 +2301,6 @@ fn test_issue_blocker_mutations_are_durable_without_manual_export() {
         ],
     );
     assert!(success, "issue unlink failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "issue unlink should leave the cache stale");
-    assert!(stderr.contains("cache:"), "{stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -3072,13 +2956,6 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(active_epic.contains("Blocked Work"), "{active_epic}");
     assert!(active_epic.contains(&blocked_id), "{active_epic}");
     assert!(!active_epic.contains("Ready Work"), "{active_epic}");
-
-    for role in ["worker", "manager"] {
-        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
-        assert!(success, "man {role} failed: {stderr}");
-        assert!(guide.contains(&active_epic_id), "{guide}");
-        assert!(!guide.contains(&retired_active_id), "{guide}");
-    }
 
     for issue_id in [&open_id, &retired_blocked_id] {
         let (success, options, stderr) =

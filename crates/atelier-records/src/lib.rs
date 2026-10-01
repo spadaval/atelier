@@ -54,16 +54,6 @@ impl RecordKind {
     }
 }
 
-/// Deterministic front matter/body rendering used by record-store extraction.
-pub fn render_document(front_matter: &serde_yaml::Value, body: &str) -> Result<String> {
-    let mut rendered = String::from("---\n");
-    rendered.push_str(&serde_yaml::to_string(front_matter)?);
-    rendered.push_str("---\n\n");
-    rendered.push_str(body.trim_end());
-    rendered.push('\n');
-    Ok(rendered)
-}
-
 /// Split a canonical Markdown document into YAML front matter and body text.
 pub fn split_document(input: &str) -> Option<(&str, &str)> {
     let rest = input.strip_prefix("---\n")?;
@@ -443,35 +433,6 @@ impl RecordStore {
         Ok(true)
     }
 
-    pub fn remove_relates_relationship(
-        &self,
-        source_kind: &str,
-        source_id: &str,
-        target_kind: &str,
-        target_id: &str,
-        relation_type: &str,
-    ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
-        validate_relationship_type(relation_type)?;
-        let mut record = self.load_record_by_id(source_kind, source_id)?;
-        let original_len = record.header().relationships.relates.len();
-        record
-            .header_mut()
-            .relationships
-            .relates
-            .retain(|existing| {
-                existing.kind != target_kind
-                    || existing.id != target_id
-                    || existing.relation_type != relation_type
-            });
-        if record.header().relationships.relates.len() == original_len {
-            return Ok(false);
-        }
-        record.header_mut().updated_at = Utc::now();
-        self.write_record_atomic(&record)?;
-        Ok(true)
-    }
-
     pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         if label.len() > MAX_LABEL_LEN {
@@ -535,31 +496,6 @@ impl RecordStore {
                     .any(|child| child.kind == ISSUE_KIND.kind && child.id == child_id)
             })
             .map(|record| record.issue.id))
-    }
-
-    pub fn remove_issue_children_from_external_parents(
-        &self,
-        child_ids: &[String],
-    ) -> Result<Vec<String>> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
-        let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
-        let mut changed_parents = Vec::new();
-        for mut parent in self.load_issues()? {
-            if child_ids.contains(&parent.issue.id) {
-                continue;
-            }
-            let original_len = parent.relationships.children.len();
-            parent
-                .relationships
-                .children
-                .retain(|child| !(child.kind == ISSUE_KIND.kind && child_ids.contains(&child.id)));
-            if parent.relationships.children.len() != original_len {
-                parent.issue.updated_at = Utc::now();
-                changed_parents.push(parent.issue.id.clone());
-                self.write_issue_atomic(&parent)?;
-            }
-        }
-        Ok(changed_parents)
     }
 
     pub fn add_record_relationship(
@@ -724,12 +660,6 @@ impl RecordStore {
         Ok(true)
     }
 
-    pub fn delete_issue_atomic(&self, id: &str) -> Result<()> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
-        record_id::validate_record_id(id)?;
-        self.delete_atomic(&issue_record_path(id))
-    }
-
     fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {
         let _lock = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
         let path = self.state_dir.join(relative);
@@ -757,16 +687,6 @@ impl RecordStore {
             .with_context(|| format!("Missing record file {}", display_state_path(relative)))?;
         String::from_utf8(bytes)
             .with_context(|| format!("Record file {} is not UTF-8", display_state_path(relative)))
-    }
-
-    fn delete_atomic(&self, relative: &Path) -> Result<()> {
-        let _lock = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
-        let path = self.state_dir.join(relative);
-        if path.exists() {
-            fs::remove_file(&path)
-                .with_context(|| format!("Failed to remove {}", path.display()))?;
-        }
-        Ok(())
     }
 
     fn would_create_block_cycle(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
@@ -1450,8 +1370,6 @@ fn is_local_atelier_path(relative_path: &Path) -> bool {
     first == ".cache"
         || first == "runtime"
         || first == "cache"
-        || first == "rules"
-        || first == "rules.local"
         || relative_path == Path::new("config.toml")
         || relative_path == Path::new("state.db")
         || relative_path == Path::new("agent.json")
@@ -2747,15 +2665,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn plan_and_milestone_record_kinds_are_deferred() {
-        for kind in ["plan", "milestone"] {
-            assert!(validate_record_kind(kind).is_err());
-            assert!(validate_canonical_record_kind(kind).is_err());
-            assert!(canonical_record_kind(kind).is_err());
-        }
-    }
-
-    #[test]
     fn workflow_validator_kind_is_registered_but_not_canonical_yet() {
         validate_record_kind("workflow_validator").unwrap();
         assert!(validate_canonical_record_kind("workflow_validator").is_err());
@@ -3056,7 +2965,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_accepts_sectioned_body_without_legacy_arrays() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
         let text = sectioned_issue_text("atelier-abcd", body);
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
 
@@ -3071,7 +2980,7 @@ Legacy evidence summary.
         );
         assert_eq!(
             parsed.sections.evidence,
-            "- `atelier lint atelier-abcd` passes.".to_string()
+            "- `atelier check atelier-abcd` passes.".to_string()
         );
         assert_eq!(
             parsed.sections.notes.as_deref(),
@@ -3081,7 +2990,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_sections_report_shared_presence_state_and_search_text() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let sections = parse_issue_sections(body, &issue_record_path("atelier-abcd")).unwrap();
         let states = sections.section_states();
 
@@ -3111,7 +3020,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_legacy_acceptance_and_evidence_front_matter() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body).replace(
             "created_at:",
             "acceptance:\n  - \"legacy acceptance\"\nevidence_required:\n  - \"legacy proof\"\ncreated_at:",
@@ -3125,7 +3034,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_label_priority_in_canonical_markdown() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body)
             .replace("priority: \"P1\"", "priority: \"high\"");
 
@@ -3152,7 +3061,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_missing_required_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3163,7 +3072,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_duplicate_recognized_headings() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Outcome\n\nA second outcome.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.\n\n## Outcome\n\nA second outcome.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3174,7 +3083,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_content_before_first_recognized_heading() {
-        let body = "Preamble is not part of the issue contract.\n\n## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "Preamble is not part of the issue contract.\n\n## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3185,7 +3094,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_unknown_top_level_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
@@ -3196,7 +3105,7 @@ Legacy evidence summary.
 
     #[test]
     fn issue_parser_contract_rejects_empty_present_sections() {
-        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\n\n## Evidence\n\n- `atelier check atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();

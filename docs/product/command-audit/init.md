@@ -17,11 +17,9 @@ this repository?"
 - Documentation: Mostly correct. It should stay in setup/admin guidance and
   should not be presented as ordinary workflow after a repository is initialized.
 - Design: Correct if it writes only tracker scaffolding, workflow config, local
-  runtime storage, and ignore rules. `--import-beads` is acceptable as explicit
-  migration input, but the command must not silently import predecessor state.
-- Output hierarchy: Created/reused paths first, migration detection second,
-  verification commands last. It should point to `atelier check`,
-  `atelier man admin`, and `atelier status` before issue creation.
+  runtime storage, and ignore rules.
+- Output hierarchy: Created/reused paths first, verification commands last. It
+  should point to `atelier check` before issue creation.
 
 ## Role Use
 
@@ -29,4 +27,3 @@ this repository?"
 | --- | --- | --- | --- |
 | `atelier init` | Admin | Create first-class Atelier state. | Good. |
 | `atelier init --force` | Admin | Reconcile existing setup. | Good, but should clearly say what was reused or repaired. |
-| `atelier init --import-beads` | Admin | Explicit predecessor import during setup. | Good as a migration option, not as default setup behavior. |

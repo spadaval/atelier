@@ -36,8 +36,8 @@ yet, output must keep reporting it as deferred rather than silently ignoring it.
 Canonical record pruning requires a clean tracked checkout and a healthy tracker
 state. If canonical Markdown is invalid, the projection is stale in a way the
 command cannot refresh, or tracked files are dirty, apply mode must stop before
-removing canonical records. Local diagnostics cleanup may still run when it can
-do so without reading or mutating tracked records.
+removing canonical records. Ignored local artifact cleanup may still run when it
+can do so without reading or mutating tracked records.
 
 Quiet output may collapse paths and record titles to counts and stable tokens,
 but normal output must give enough IDs or paths to inspect the candidate set.
@@ -49,7 +49,6 @@ but is never removed by `--apply`.
 
 | Class | Default policy | Observable prune behavior and apply safety |
 | --- | --- | --- |
-| Local diagnostics logs | Retain command diagnostics for 30 UTC days unless the operator supplies a command override. | Reports the UTC cutoff and each expired ignored log; `--apply` deletes only those logs. Failure leaves the log in place and reports its path. |
 | Ignored runtime and domain-cache artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable caches are disposable. | Reports ignored candidates separately from canonical state. `--apply` deletes only unlocked, rebuildable local files and then names `check --fix` recovery when cache state changed. It never treats an ignored file as canonical input. |
 | Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Reports each candidate with an ID/path and protection reason. `--apply` removes only eligible terminal records and their eligible sidecars from a clean tracked checkout, then refreshes the domain cache. Recovery uses Git history for the removed path or ID. |
 | Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | May remove eligible metadata only with its sole terminal dependents; never deletes an external payload. |
@@ -67,8 +66,8 @@ canonical_retention_days = 7
 ```
 
 The `atelier prune --retention-days <days>` flag is an explicit command override
-for the current run. Diagnostics keep their separate 30-day default when the
-flag is omitted.
+for the current run. Ignored local artifacts keep their separate 30-day default
+when the flag is omitted.
 
 ## Protection Rules
 
@@ -91,9 +90,9 @@ the configured base/review target, have a dirty worktree, or are associated with
 active workflow state.
 
 Runtime/cache cleanup is additionally protected when a command lock, active
-rebuild, or current runtime ownership makes deletion unsafe. Diagnostics are
-local-only and may be cleaned independently; a failure to inspect canonical or
-Git state must not turn a local cleanup into a canonical or Git mutation.
+rebuild, or current runtime ownership makes deletion unsafe. A failure to
+inspect canonical or Git state must not turn a local cleanup into a canonical or
+Git mutation.
 
 ## Apply And Recovery Sequence
 
@@ -111,9 +110,7 @@ candidate set, then use the recovery surface named for the affected class:
 - runtime/cache or projection state: run `atelier check --fix` and rerun the
   original command;
 - Git branches/worktrees: inspect Git state before recreating a checkout or
-  restoring a branch;
-- diagnostics: the reported path is local-only; recovery is not a canonical
-  record restore.
+  restoring a branch.
 
 ## Git-History Recovery
 

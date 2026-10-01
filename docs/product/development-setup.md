@@ -30,7 +30,6 @@ From the repository root:
 ```bash
 cargo fmt -- --check
 cargo nextest run
-atelier man admin
 atelier check
 ```
 
@@ -46,12 +45,6 @@ Common repository work should succeed without setting any environment variables.
 Optional environment variables are limited to local behavior overrides:
 
 - `ATELIER_LOG` and `ATELIER_LOG_FORMAT` adjust CLI diagnostic logging.
-- `ATELIER_TELEMETRY`, `ATELIER_DIAGNOSTICS`, `ATELIER_DIAGNOSTICS_DIR`,
-  `ATELIER_DIAGNOSTICS_VERBOSE`, `ATELIER_DIAGNOSTICS_RETENTION_DAYS`,
-  `ATELIER_HOME`, and `XDG_STATE_HOME` adjust local diagnostics storage and
-  retention.
-- `ATELIER_AGENT` and `ATELIER_AGENT_ID` can label local activity/diagnostic
-  records.
 
 These variables are optional local overrides, not required setup inputs.
 
@@ -73,11 +66,6 @@ If runtime or cache state is missing or stale, prefer normal Atelier health and
 repair surfaces such as `atelier check` and commands named by `atelier status`.
 Do not edit ignored runtime/cache files as a substitute for updating tracked
 Markdown records, `.atelier/config.toml`, or `.atelier/workflow.yaml`.
-
-Diagnostics storage and retention details are defined in
-[Local Command Diagnostics](../architecture/local-command-diagnostics.md).
-Use `atelier prune` to inspect expired diagnostics logs and
-`atelier prune --apply` to remove them explicitly.
 
 `cargo udeps` is not part of required setup. It remains an advisory
 nightly-toolchain cross-check for deeper dependency review when a reviewer asks

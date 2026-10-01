@@ -11,12 +11,7 @@
 /.atelier/hook-config.local.json
 /.atelier/state.db
 /.atelier/.cache/
-/.atelier/rules/
-/.atelier/rules.local/
 /.atelier/runtime/
 /.atelier/cache/
-/.atelier-worktrees/
 /.atelier-bundle-stage-*/
 /.atelier-state/cache/
-.dolt/
-.beads-credential-key

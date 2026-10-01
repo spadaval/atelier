@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
-const DERIVED_TOP_LEVEL_DIRS: &[&str] = &["runtime", "cache", "locks", "diagnostics"];
+const DERIVED_TOP_LEVEL_DIRS: &[&str] = &["runtime", "cache", "locks"];
 
 pub(crate) fn canonical_tree_fingerprint(state_dir: &Path) -> Result<String> {
     let metadata = fs::symlink_metadata(state_dir)

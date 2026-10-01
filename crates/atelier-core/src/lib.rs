@@ -1,6 +1,6 @@
 //! Core Atelier domain vocabulary.
 //!
-//! This crate is intentionally free of filesystem, SQLite, Clap, and telemetry
+//! This crate is intentionally free of filesystem, SQLite, and Clap
 //! dependencies. Concrete domain types move here as the migration advances.
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -81,16 +81,6 @@ impl IssuePriority {
 
     pub fn from_cli_input(value: &str) -> Result<Self, ParseIssuePriorityError> {
         Self::from_label(value)
-    }
-
-    pub fn from_beads_numeric(value: i64) -> Option<Self> {
-        match value {
-            0 => Some(Self::P0),
-            1 => Some(Self::P1),
-            2 => Some(Self::P2),
-            3 | 4 => Some(Self::P3),
-            _ => None,
-        }
     }
 }
 
@@ -220,12 +210,6 @@ impl Issue {
     pub fn set_strategy(&mut self, strategy: IssueStrategy) {
         self.fields
             .insert(ISSUE_STRATEGY_FIELD.to_string(), strategy.to_value());
-    }
-
-    pub fn clear_strategy(&mut self) -> Option<IssueStrategy> {
-        self.fields
-            .remove(ISSUE_STRATEGY_FIELD)
-            .and_then(|value| IssueStrategy::from_value(&value).ok())
     }
 }
 
@@ -618,16 +602,6 @@ pub struct RecordLink {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct WorkAssociation {
-    pub issue_id: String,
-    pub status: String,
-    pub branch: Option<String>,
-    pub worktree_path: Option<String>,
-    pub started_at: DateTime<Utc>,
-    pub finished_at: Option<DateTime<Utc>>,
-}
-
 /// Stable identifier for a canonical Atelier record.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct RecordId(String);
@@ -750,31 +724,6 @@ mod tests {
             assert_eq!(IssuePriority::from_label(label).unwrap(), priority);
             assert_eq!(IssuePriority::from_cli_input(label).unwrap(), priority);
         }
-    }
-
-    #[test]
-    fn issue_priority_maps_beads_numeric_values() {
-        assert_eq!(
-            IssuePriority::from_beads_numeric(0),
-            Some(IssuePriority::P0)
-        );
-        assert_eq!(
-            IssuePriority::from_beads_numeric(1),
-            Some(IssuePriority::P1)
-        );
-        assert_eq!(
-            IssuePriority::from_beads_numeric(2),
-            Some(IssuePriority::P2)
-        );
-        assert_eq!(
-            IssuePriority::from_beads_numeric(3),
-            Some(IssuePriority::P3)
-        );
-        assert_eq!(
-            IssuePriority::from_beads_numeric(4),
-            Some(IssuePriority::P3)
-        );
-        assert_eq!(IssuePriority::from_beads_numeric(5), None);
     }
 
     #[test]

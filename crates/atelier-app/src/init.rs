@@ -6,8 +6,6 @@ use atelier_sqlite::Database;
 
 use crate::storage_layout::StorageLayout;
 
-pub const STANDARD_BEADS_IMPORT_PATH: &str = ".beads/issues.manual.jsonl";
-
 pub const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier"
@@ -24,7 +22,6 @@ pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/.cache/",
     "/.atelier/runtime/",
     "/.atelier/cache/",
-    "/.atelier-worktrees/",
     "/.atelier-bundle-stage-*/",
 ];
 
@@ -32,24 +29,11 @@ pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
 pub struct InitRequest {
     pub path: PathBuf,
     pub force: bool,
-    pub import_beads: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitView {
     pub created_paths: Vec<PathBuf>,
-    pub beads_import: Option<BeadsImportView>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum BeadsImportView {
-    Requested {
-        input_path: PathBuf,
-        state_dir: PathBuf,
-    },
-    Available {
-        input_path: PathBuf,
-    },
 }
 
 pub fn initialize(
@@ -98,32 +82,9 @@ pub fn initialize(
 
     ensure_root_gitignore(&input.path, input.force)?;
 
-    let beads_import_path = input.path.join(STANDARD_BEADS_IMPORT_PATH);
-    let beads_import = if input.import_beads {
-        if !beads_import_path.exists() {
-            anyhow::bail!(
-                "Beads migration input not found at {}",
-                beads_import_path.display()
-            );
-        }
-        Some(BeadsImportView::Requested {
-            input_path: beads_import_path,
-            state_dir: atelier_dir,
-        })
-    } else if beads_import_path.exists() {
-        Some(BeadsImportView::Available {
-            input_path: beads_import_path,
-        })
-    } else {
-        None
-    };
-
     Ok(crate::Outcome {
         value: crate::ViewModel {
-            data: InitView {
-                created_paths,
-                beads_import,
-            },
+            data: InitView { created_paths },
         },
     })
 }

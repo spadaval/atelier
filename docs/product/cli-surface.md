@@ -34,7 +34,6 @@ output, not this static list, decides the next process step for a concrete issue
 or mission:
 
 - `atelier init`
-- `atelier man [worker|reviewer|validator|manager|admin|work-model]`
 - `atelier status`
 - `atelier work ...`
 - `atelier issue ...`
@@ -63,43 +62,23 @@ may be cited as ordinary workflow proof.
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
 | Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `bundle preview`, `check` | Removed/deprecated surfaces, admin repair commands, and hidden diagnostics. |
-| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply` | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
-| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
-| Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
+| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply` | Removed objective-status and mission-status surfaces and hidden workflow diagnostics. |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics or tests may name them. | hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
 
 Tracked Markdown under `.atelier/` is authoritative. The local SQLite domain
 cache and other runtime, lock, diagnostic, and cache files are repairable
 checkout state. Cache-backed commands check record-file freshness and repair
 changed sources lazily through `CacheManager`. `atelier check --fix` is the
 admin repair surface for ignored runtime/cache state and must not edit tracked
-record files. If
-an `export`-style deterministic renderer is retained, it
-is hidden/admin migration or test infrastructure, not a normal health, handoff,
-validation, or completion command.
+record files.
 
 `atelier init` is core tracker setup only. It creates `.atelier/` records,
 `.atelier/config.toml`, `.atelier/workflow.yaml`, local runtime storage, and
-root ignore rules. It does not install editor or assistant hooks. When
-`--import-beads` is supplied, it imports the standard repo-local Beads backup
-from `.beads/issues.manual.jsonl`; otherwise it may mention that migration
-input was detected but must not silently convert it. Its default next steps
+root ignore rules. It does not install editor or assistant hooks. Its default
+next steps
 must not route a fresh checkout directly to issue creation before
 `atelier check` confirms the committed tracker and workflow configuration are
 valid.
-
-`atelier man [<page>]` is the guide surface. Role pages filter the existing
-product command surface for the operator's job without creating role-prefixed
-command namespaces. Valid roles are `worker`, `reviewer`,
-`validator`, `manager`, and `admin`. `manager` is the broad CLI role class for work
-coordination; Agent Factory may still use `orchestrator` for a specific agent
-type inside that class, but `orchestrator` is not a `man` role alias. With no
-page, `atelier man` lists valid roles and product topics. The static
-`work-model` topic explains Atelier's mission, epic, and issue split, graph
-shape, sizing, proof ownership, and inspection commands without requiring an
-initialized repository. Worker, reviewer, validator, and
-manager guides require valid tracker/runtime state and fail fast with recovery guidance when
-state is unavailable. The admin guide degrades gracefully before initialization
-or when local state is broken.
 
 `atelier status` is the root checkout signpost. It summarizes the current-work
 set, active objective context when visible from committed records, ready work
@@ -110,10 +89,8 @@ dashboards for objective completion status.
 `atelier --help` should expose the normal operator path first: orient, inspect
 objectives and issues, inspect workflow options, manage blockers, record proof,
 inspect history, and validate committed records. Low-level state diagnostics
-such as doctor/export/rebuild, predecessor imports, raw workflow diagnostics,
-and command telemetry are not normal root-help entries; admin guidance,
-targeted error messages, and migration docs may name them when they are
-relevant. Arbitrary destructive record deletion is not an Atelier command;
+such as doctor/rebuild and raw workflow diagnostics are not normal root-help
+entries; targeted error messages may name them when they are relevant. Arbitrary destructive record deletion is not an Atelier command;
 supported cleanup is owned by `prune`, and canonical recovery uses Git history.
 
 ## Visible Help Contract
@@ -126,8 +103,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
-| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `check`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
-| `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
+| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup and verification commands before issue creation. | Created path(s) and a success token. | `check`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `status` | Root orientation for the current checkout. | Current-work set, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
 | `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends a dated bullet to the record's `## Notes` section. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record. |
@@ -146,21 +122,16 @@ in the command audit:
 
 - `rebuild`: hidden debug diagnostic or admin repair primitive only if
   `check --fix` delegates to it; not normal workflow.
-- `diagnostics slow`: hidden local telemetry; not an automation contract.
 - `prune`: visible admin maintenance; dry-run by default and applies only
   explicitly supported cleanup classes from
   [Retention And Prune Policy](retention-and-prune.md).
-- `import-beads`: temporary migration surface; normal setup uses
-  `init --import-beads`.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
 - `worktree`: removed visible workspace-management surface pending redesign.
 
-Hidden advanced diagnostics probes may remain callable for local performance
-analysis, but they are not visible root-help surfaces and must not appear as
-normal mission, issue, blocker, evidence, or completion next actions. Slow-command
-diagnostics remain hidden local performance analysis rather than a normal
-operator workflow step.
+Hidden advanced diagnostics probes are not visible root-help surfaces and must
+not appear as normal mission, issue, blocker, evidence, or completion next
+actions.
 
 ## Operator Jobs
 
@@ -190,17 +161,13 @@ time pressure:
 - Check committed state: prove tracked records and workflow config are usable
   for handoff. Owned by `atelier check`; local runtime repair is admin-only and
   should appear only when a command reports degraded local state. Low-level
-  state diagnostics such as export/rebuild are not normal handoff commands.
+  state diagnostics such as rebuild are not normal handoff commands.
 
 Normal workflow commands speak in product terms: issue, mission, evidence,
 blocker, proof, completion, and committed-state validity. Advanced
-diagnostics may expose workflow policy names, cache repair,
-command telemetry, JSON summaries, or raw validator detail, but normal
-operators should only run them when an admin repair path, targeted error,
-assignment, or completion contract names them. JSON emitted by diagnostics
-commands is an Atelier-maintenance interface for local telemetry and
-performance analysis, not an automation contract for selecting work,
-proving validation, deciding blockers, or closing missions. Supported cleanup
+diagnostics may expose workflow policy names, cache repair, or raw validator
+detail, but normal operators should only run them when an admin repair path,
+targeted error, assignment, or completion contract names them. Supported cleanup
 is constrained to `prune`; canonical record repair is reviewed and recoverable
 through Git history rather than arbitrary CLI deletion.
 Common read and orientation commands correct record-kind mistakes directly:
@@ -438,17 +405,12 @@ without an eager cache rebuild. Degraded states are reported as record or
 workflow repair problems rather than cache-maintenance chores.
 
 Low-level debug and repair surfaces may expose cache mechanics when diagnosing
-Atelier itself. Doctor/export/rebuild diagnostics and similar repair checks
+Atelier itself. Doctor/rebuild diagnostics and similar repair checks
 must not appear as ordinary next actions from core workflow surfaces or root
 help, and their output should make clear that they are diagnostic tools rather
 than required user workflow. `atelier check --fix` is the admin explicit
 repair path for ignored local runtime/cache state and must not edit tracked
-`.atelier/` record files. Hidden slow-command telemetry summarizes
-local command performance for investigations; it is an advanced diagnostic, not
-a normal mission or issue workflow step. Its JSON is stable for diagnostic
-tooling and local analysis, but normal recipes must not parse it to decide
-ready work, validation status, blockers, evidence coverage, or completion
-status.
+`.atelier/` record files.
 
 Installed-binary drift is distinct from malformed records. Normal tracker work
 uses the installed `atelier` command. When a command reports that canonical
@@ -461,7 +423,7 @@ the repair path remains `atelier check`, editing the named record, and rerunning
 Stale cache and invalid record-file diagnostics should present one
 ordered recovery path, preserve the original blocked command, and keep the
 specific record path or parser detail visible so operators do not cycle through
-export, rebuild, lint, and read commands blindly.
+rebuild, check, and read commands blindly.
 
 ## Removed Behavior
 
@@ -476,15 +438,13 @@ surface is `delete` unless it is in the core list above.
 | Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
 | Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
-| Export check diagnostic | Low-level diagnostic | Cache state should be transparent; normal health and completion routes use `check`, objective detail, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
-| Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `check --fix` owns admin explicit local repair. |
 | Rebuild diagnostic | Low-level diagnostic | Domain-cache rebuild is repair, not a product workflow. | Hidden/advanced diagnostic only; `check --fix` owns admin explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, `work queue`, issue detail, record-specific notes, `evidence`, and `status`. |
 | Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and work dashboards as next-step sources. |
 | `mission` root namespace | Remove | Mission objectives are issue records, so a parallel root namespace duplicates lifecycle, linking, and status concepts. | `issue create --issue-type mission`, `issue show <objective-id>`, `work mission <objective-id>`, `issue link <objective-id> <issue-id> --role advances`, and `issue transition <objective-id> close --reason "..."`. |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle, blockers, links, detail, and objective status. |
 | Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `issue link/unlink`; issue blockers and links use issue commands; evidence uses evidence commands; issue detail inspects impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
-| Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `init --import-beads` and temporarily hidden/manual `import-beads` for migration. |
+| Backup `import`, `import-beads`, and `export` | Remove | Predecessor and backup formats are not the target durable contract. | Tracked `.atelier/` records and Git history. |
 | `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | Issue detail/status, record-specific note commands, and lifecycle commands. |
 
 Removed command surfaces:
@@ -499,10 +459,7 @@ Removed command surfaces:
 - Flat timer aliases such as `stop`, and the `timer` group.
 - Legacy groups `archive`, `milestone`, `daemon`, `cpitd`, `usage`,
   `agent`, `locks`, and `sync`.
-- Backup `import` and `export --format json|markdown`; use
-  `init --import-beads` for the standard repo-local predecessor import.
-  Standalone `import-beads` remains a hidden transitional command for explicit
-  backup paths until migration cleanup removes it.
+- Backup `import`, `import-beads`, `init --import-beads`, and `export`.
 - The retired graph impact and graph tree forms; use `issue show <id>` for
   downstream impact and `issue show <objective-id>` for objective work
   hierarchy.
@@ -515,9 +472,8 @@ of teaching a legacy workflow path.
 
 ## Low-Level Debug And Repair
 
-The implementation may retain low-level export/rebuild commands, raw workflow
-diagnostics, import helpers, and command diagnostics for development,
-diagnostics, migration, and test evidence. They are not part of the normal
+The implementation may retain the low-level rebuild command and raw workflow
+diagnostics for development, diagnostics, and test evidence. They are not part of the normal
 product workflow or root help. Public orientation commands such as
 `atelier status`, `atelier check`, and record-specific repair guidance should
 absorb routine cache recovery, naming admin repair only when local state is
@@ -574,10 +530,10 @@ atelier issue note atelier-isd5 "CLI surface examples checked against root help.
 If an operator retries removed names such as workflow check/init, finish,
 archive, timer, current-work, issue new, top-level dep, generic link,
 import-beads, export, rebuild, or integrations during normal work, the supported
-path is to stop and choose the record-specific command above. Low-level export,
-rebuild, predecessor import, and workflow diagnostics may still exist for
-development, migration, or targeted diagnostics, but they are not the normal
-operator route for mission progress, proof, blockers, or completion.
+path is to stop and choose the record-specific command above. Low-level rebuild
+and workflow diagnostics may still exist for development or targeted
+diagnostics, but they are not the normal operator route for mission progress,
+proof, blockers, or completion.
 
 ## Record-File And Cache Recovery
 
@@ -599,7 +555,7 @@ Use this recovery order:
 | Workspace isolation is needed for a risky or conflicting slice | Plain Git checkout/worktree commands outside Atelier | Keep the durable issue state in canonical `.atelier/` records and use `atelier status`/`issue show <objective-id>` inside the checkout. |
 | Installed binary does not understand committed record shape | `cargo build` then `target/debug/atelier <command>` for local CLI changes | Update or rebuild the binary before diagnosing canonical records. |
 
-Export and rebuild diagnostics are advanced implementation tools. Normal
+Rebuild diagnostics are advanced implementation tools. Normal
 handoff and completion should cite `atelier check`, `atelier status`, `atelier
 issue show <objective-id>`, and the specific command that was retried after repair.
 
@@ -611,6 +567,5 @@ reason in tracker state; it does not mutate `CHANGELOG.md`.
 
 Canonical state is Markdown under tracked `.atelier/` records and checked with
 check and health gates. Local indexes are repaired transparently by normal
-commands or explicitly by `check --fix`. `atelier export` and `atelier
-rebuild` remain low-level diagnostics only; backup JSON/Markdown formats are no
-longer command surfaces.
+commands or explicitly by `check --fix`. `atelier rebuild` remains a low-level
+diagnostic only.

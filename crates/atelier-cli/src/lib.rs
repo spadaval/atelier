@@ -5,7 +5,4 @@
 pub mod commands;
 pub(crate) mod human_output;
 pub mod identity;
-pub mod models;
-pub mod record_id;
-pub mod telemetry;
 pub mod utils;

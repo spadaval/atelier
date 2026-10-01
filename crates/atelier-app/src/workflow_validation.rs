@@ -209,7 +209,7 @@ fn lint_none_blocking(db: &Database) -> Result<(bool, String)> {
     } else {
         Ok((
             false,
-            format!("atelier lint failed with {} finding(s)", findings.len()),
+            format!("atelier check failed with {} finding(s)", findings.len()),
         ))
     }
 }

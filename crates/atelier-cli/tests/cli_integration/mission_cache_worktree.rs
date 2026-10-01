@@ -17,10 +17,7 @@ fn canonical_tree_snapshot(
             let path = entry.path();
             let relative = path.strip_prefix(root).unwrap();
             if relative.components().count() == 1
-                && matches!(
-                    relative.to_str(),
-                    Some("runtime" | "cache" | "locks" | "diagnostics")
-                )
+                && matches!(relative.to_str(), Some("runtime" | "cache" | "locks"))
             {
                 continue;
             }
@@ -656,7 +653,7 @@ fn test_lint_rejects_missing_required_issue_section() {
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for missing Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
@@ -682,7 +679,7 @@ fn test_lint_rejects_empty_required_issue_section() {
     let invalid = markdown.replace("## Outcome\n\nOutcome was not specified.", "## Outcome\n\n");
     std::fs::write(&issue_path, invalid).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for empty Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
@@ -706,7 +703,7 @@ fn test_lint_rejects_missing_outcome_section() {
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for missing Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
@@ -735,7 +732,7 @@ fn test_lint_rejects_empty_description_section() {
     );
     std::fs::write(&issue_path, invalid).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for empty Description");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
@@ -765,7 +762,7 @@ fn test_lint_rejects_vague_evidence_even_when_notes_name_a_command() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Vague evidence lint");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "lint should fail for vague Evidence");
     let transcript = format!("{stdout}\n{stderr}");
     for needle in [
@@ -802,7 +799,7 @@ fn test_lint_accepts_concrete_evidence_without_optional_notes() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Concrete evidence lint");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(success, "lint should accept concrete Evidence: {stderr}");
     assert!(stdout.contains("Lint passed."));
 }
@@ -825,7 +822,7 @@ fn test_lint_rejects_duplicate_recognized_issue_heading() {
     );
     std::fs::write(&issue_path, invalid).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(!success, "lint should fail for duplicate Outcome");
     assert!(
         stdout.contains(&format!("issue {issue_id}"))
@@ -1237,25 +1234,6 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
         });
     }
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(
-        !success,
-        "export check should report a stale cache diagnostic"
-    );
-    assert!(
-        stderr.contains("12 indexed sources changed")
-            && stderr.contains("Cache diagnostic is stale")
-            && stderr.contains("showing first 5")
-            && stderr.contains("recovery: 1. run `atelier check`")
-            && stderr.contains("3. run `atelier check --fix`")
-            && stderr.contains("4. rerun the blocked command"),
-        "stale diagnostics should be bounded and actionable: {stderr}"
-    );
-    assert!(
-        stderr.lines().count() < 12,
-        "stale diagnostics should not dump every changed source: {stderr}"
-    );
-
     let (success, list_out, stderr) =
         run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(
@@ -1270,9 +1248,6 @@ fn test_cache_bounds_many_changed_sources_and_rebuilds() {
                 .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing automatic rebuild diagnostic: {stderr}"
     );
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "fresh export check failed: {stderr}");
-    assert!(stdout.contains("Record files and domain cache are current"));
 }
 
 #[test]
@@ -1367,7 +1342,7 @@ The unindexed issue is discoverable after rebuild.
 fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let first_body = "## Description\n\nCache root body.\n\n## Outcome\n\nCache root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
+    let first_body = "## Description\n\nCache root body.\n\n## Outcome\n\nCache root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier check` output prints `Lint passed.` after automatic rebuild.";
     let second_body = "## Description\n\nCache leaf body.\n\n## Outcome\n\nCache leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
@@ -1434,7 +1409,7 @@ fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
         "missing automatic rebuild diagnostic: {stderr}"
     );
 
-    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         success,
         "lint should run after automatic rebuild:\nstdout:\n{lint_out}\nstderr:\n{stderr}"
@@ -1447,7 +1422,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.`, `atelier doctor` exits 0, and `atelier doctor --fix` exits 0 while rebuild temp files exist.";
+    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier check` output prints `Lint passed.`, `atelier doctor` exits 0, and `atelier doctor --fix` exits 0 while rebuild temp files exist.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1478,7 +1453,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
         "query diagnostics must not report rebuild tmp path: {stderr}"
     );
 
-    let commands: &[&[&str]] = &[&["lint"], &["doctor"], &["doctor", "--fix"]];
+    let commands: &[&[&str]] = &[&["check"], &["doctor"], &["doctor", "--fix"]];
     for args in commands {
         let (success, stdout, stderr) = run_atelier(dir.path(), args);
         assert!(
@@ -1533,7 +1508,7 @@ Lint rejects malformed canonical state.
 
 ## Evidence
 
-- Command transcript from `atelier lint` reports the malformed record.
+- Command transcript from `atelier check` reports the malformed record.
 "#
         .to_string(),
     );
@@ -1577,7 +1552,7 @@ Lint rejects malformed canonical state.
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         !success,
         "lint must reject malformed canonical Markdown, stdout: {stdout}"
@@ -1633,7 +1608,7 @@ Base record is indexed.
 
 ## Evidence
 
-- Command transcript from `atelier lint` passes.
+- Command transcript from `atelier check` passes.
 "#,
     )
     .unwrap();
@@ -1671,7 +1646,7 @@ Evidence will be added.
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", "atelier-new1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", "atelier-new1"]);
     assert!(!success, "lint must reject the unindexed invalid issue");
     assert!(
         stdout.contains("atelier-new1") && stdout.contains("section Evidence"),
@@ -1687,7 +1662,7 @@ Evidence will be added.
 fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint rebuilds a missing state database from canonical Markdown.\n\n## Evidence\n\n- `atelier lint` prints `Lint passed.` after rebuilding state.db.";
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint rebuilds a missing state database from canonical Markdown.\n\n## Evidence\n\n- `atelier check` prints `Lint passed.` after rebuilding state.db.";
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -1703,7 +1678,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     assert!(issue_out.contains("Created issue atelier-"));
     remove_cache_state(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         success,
         "lint should validate without rebuilding state.db: {stderr}"
@@ -1759,7 +1734,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nFocused lint missing target body.\n\n## Outcome\n\nFocused lint reports a missing relationship target.\n\n## Evidence\n\n- `atelier lint <issue-id>` reports the missing issue relationship target.";
+    let body = "## Description\n\nFocused lint missing target body.\n\n## Outcome\n\nFocused lint reports a missing relationship target.\n\n## Evidence\n\n- `atelier check <issue-id>` reports the missing issue relationship target.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1781,7 +1756,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
         )
     });
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(
         !success,
         "focused lint should reject missing relationship target, stdout: {stdout}"
@@ -1800,8 +1775,8 @@ fn test_focused_lint_validates_dependency_cycles() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let first_body = "## Description\n\nFocused lint cycle root body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier lint <issue-id>` reports relationships.blocks contains a cycle.";
-    let second_body = "## Description\n\nFocused lint cycle leaf body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier lint <issue-id>` reports relationships.blocks contains a cycle.";
+    let first_body = "## Description\n\nFocused lint cycle root body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
+    let second_body = "## Description\n\nFocused lint cycle leaf body.\n\n## Outcome\n\nFocused lint reports dependency cycles.\n\n## Evidence\n\n- `atelier check <issue-id>` reports relationships.blocks contains a cycle.";
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1838,7 +1813,7 @@ fn test_focused_lint_validates_dependency_cycles() {
         });
     }
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &first_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &first_id]);
     assert!(
         !success,
         "focused lint should reject dependency cycle, stdout: {stdout}"
@@ -1949,7 +1924,7 @@ fn assert_lint_rejects_canonical_mutation(
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let body = format!(
-        "## Description\n\n{title} body.\n\n## Outcome\n\nCanonical lint rejects the targeted malformed record.\n\n## Evidence\n\n- `atelier lint` reports the targeted malformed canonical record."
+        "## Description\n\n{title} body.\n\n## Outcome\n\nCanonical lint rejects the targeted malformed record.\n\n## Evidence\n\n- `atelier check` reports the targeted malformed canonical record."
     );
 
     let (success, issue_out, stderr) = run_atelier(
@@ -1962,7 +1937,7 @@ fn assert_lint_rejects_canonical_mutation(
 
     mutate(dir.path(), &issue_id);
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         !success,
         "lint should reject {title}, stdout: {stdout}, stderr: {stderr}"
@@ -1982,7 +1957,7 @@ fn assert_lint_rejects_canonical_mutation(
 }
 
 #[test]
-fn test_bundle_apply_records_links_export_and_rebuild() {
+fn test_bundle_apply_records_links_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let bundle_path = dir.path().join("bundle.json");
@@ -2134,9 +2109,6 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     let blocker_id = issue_id_by_title(dir.path(), "Complete prerequisite");
     let blocked_id = issue_id_by_title(dir.path(), "Blocked bundle work");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!success, "bundle apply should leave cache detectably stale");
-
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "lazy query after bundle apply failed: {stderr}");
     assert!(
@@ -2145,9 +2117,6 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
                 .contains("Local cache was stale; repaired changed record sources incrementally"),
         "missing one-time lazy rebuild diagnostic: {stderr}"
     );
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check after lazy rebuild failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -2560,68 +2529,6 @@ fn test_bundle_apply_exclusive_snapshot_swap_preserves_later_writer() {
 }
 
 #[test]
-fn test_import_beads_exclusive_snapshot_swap_preserves_later_writer() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let import_path = dir.path().join("paused-import.jsonl");
-    std::fs::write(
-        &import_path,
-        r#"{"_type":"issue","id":"bulk-source","title":"Bulk imported task","status":"open","priority":2,"issue_type":"task"}
-"#,
-    )
-    .unwrap();
-    let marker = dir.path().join("import-snapshot.marker");
-    let release = marker.with_extension("release");
-    let bulk = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
-        .current_dir(dir.path())
-        .args(["import-beads", import_path.to_str().unwrap()])
-        .env("ATELIER_TEST_BULK_PAUSE_AFTER_SNAPSHOT", &marker)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    wait_for_test_marker(&marker);
-    assert_bulk_process_holds_exclusive_lock(&dir.path().join(".atelier"));
-
-    let mut writer = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
-        .current_dir(dir.path())
-        .args(["issue", "create", "Writer after import snapshot"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    assert!(
-        writer.try_wait().unwrap().is_none(),
-        "ordinary writer completed while import snapshot/swap lock was held"
-    );
-
-    std::fs::write(&release, "release").unwrap();
-    let bulk_output = bulk.wait_with_output().unwrap();
-    assert!(
-        bulk_output.status.success(),
-        "import failed: {}",
-        String::from_utf8_lossy(&bulk_output.stderr)
-    );
-    let writer_output = writer.wait_with_output().unwrap();
-    assert!(
-        writer_output.status.success(),
-        "writer failed: {}",
-        String::from_utf8_lossy(&writer_output.stderr)
-    );
-    assert!(canonical_directory_contains(
-        dir.path(),
-        "issues",
-        "Bulk imported task"
-    ));
-    assert!(canonical_directory_contains(
-        dir.path(),
-        "issues",
-        "Writer after import snapshot"
-    ));
-}
-
-#[test]
 fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -3021,7 +2928,7 @@ fn test_start_refuses_shared_section_diagnostic() {
     std::fs::write(&issue_path, malformed).unwrap();
     commit_all(dir.path(), "malformed issue section");
 
-    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["check"]);
     assert!(!lint_success, "lint should report malformed issue sections");
     let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     for needle in [
@@ -3100,33 +3007,6 @@ fn test_issue_type_is_canonical_not_label_derived() {
     .unwrap();
     assert!(issue_record.contains("issue_type: \"validation\"\n"));
     assert!(issue_record.contains("labels:\n- \"epic\"\n"));
-}
-
-#[test]
-fn test_import_beads_reports_mapping_without_tracker_provenance() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/beads/issues.manual.jsonl");
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["import-beads", fixture.to_str().unwrap()]);
-    assert!(success, "import-beads failed: {stderr}");
-    assert!(stdout.contains("imported issues: 3"));
-    assert!(stdout.contains("blocking relationships: 1"));
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "atelier-0003"]);
-    assert!(success, "mapped show failed: {stderr}");
-    assert!(stdout.contains("atelier-0003"));
-    assert!(stdout.contains("[task]"));
-    assert!(stdout.contains("Parent: atelier-0001"));
-    assert!(stdout.contains("atelier-0002"));
-    assert!(!stdout.contains("beads:"));
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "atelier-0003"]);
-    assert!(success, "mapped issue show failed: {stderr}");
-    assert!(stdout.contains("atelier-0003"));
-    assert!(stdout.contains("atelier-0002"));
 }
 
 fn count_markdown_records(dir: &std::path::Path, directory: &str) -> usize {

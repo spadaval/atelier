@@ -23,9 +23,8 @@ The product surface uses four command categories:
   proof, terminal readiness, and ordinary health.
 - Admin maintenance: visible setup, explicit repair, supported pruning, and
   manual owner-branch recovery.
-- Hidden debug diagnostics: raw policy, telemetry, domain-cache, or
-  deterministic-renderer probes that are callable only for targeted diagnostics,
-  tests, or migration work.
+- Hidden debug diagnostics: raw policy or domain-cache probes that are callable
+  only for targeted diagnostics or tests.
 - Temporary migration: transitional inherited-state or deterministic-rendering
   helpers that must not become compatibility promises or normal workflow gates.
 
@@ -62,7 +61,6 @@ explain and low-value to operate, fold it, hide it, or remove it.
 - [evidence](evidence.md)
 - [init](init.md)
 - [issue](issue.md)
-- [man](man.md)
 - [prune](prune.md)
 - [status](status.md)
 - [work](work.md)
@@ -72,17 +70,10 @@ explain and low-value to operate, fold it, hide it, or remove it.
 These files document callable commands that are hidden from root help and must
 not be taught as ordinary workflow:
 
-- [diagnostics](diagnostics.md): hidden local command telemetry.
-- [export](export.md): hidden deterministic-renderer diagnostic or migration
-  helper; normal operator health uses `check`.
 - [branch](branch.md): hidden/manual owner-branch recovery; routine branch
   guidance comes from status, work dashboards, issue detail, and transitions.
 - [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
   visible `check` and explicit `check --fix`.
-- [import-beads](import-beads.md): hidden explicit predecessor import escape
-  hatch; normal setup uses `init --import-beads`.
-- [lint](lint.md): hidden compatibility health probe; normal validation uses
-  visible `check`.
 - [maintenance](maintenance.md): removed arbitrary-record deletion surface.
 - [rebuild](rebuild.md): hidden domain-cache diagnostic; operator repair starts
   from `check --fix`.
@@ -93,9 +84,7 @@ not be taught as ordinary workflow:
 - [actual agent complaints](agent-complaints.md)
 - [category review](category-review.md)
 - [command complexity budget](complexity-budget.md)
-- [export check reference classification](export-check-reference-classification.md)
 - [human output refresh](human-output-refresh.md)
-- [role guides](role-guides.md)
 
 ## Retired Or Deferred Notes
 
@@ -124,14 +113,12 @@ documentation:
 
 The command surface should stay product-oriented rather than role-prefixed.
 `issue create` and `issue transition` belong together because they both mutate
-or inspect issue workflow state. Role-specific guidance belongs in a guide
-layer: `atelier man worker`, `atelier man reviewer`, `atelier man validator`,
-`atelier man manager`, and `atelier man admin`.
+or inspect issue workflow state. Process and role guidance belongs to Agent
+Factory, not to an Atelier guide command (ADR 0019).
 
 The main product risk is not that all roles share commands. The risk is that
 general help presents too many commands without answering which role should
-care. Role-specific guide pages should present a smaller command path, while
-root help continues to expose the product nouns. Current-work orientation should
+care. Root help exposes the product nouns. Current-work orientation should
 come from canonical in-progress issue records rendered by `status`, type-aware
 `issue show <objective-id>`, and issue workflow surfaces, not from separate
 runtime active-pointer helpers.

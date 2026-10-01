@@ -18,14 +18,7 @@ pub struct MissionReadinessDiagnosis {
     pub next_command: String,
 }
 
-impl MissionReadinessDiagnosis {
-    pub fn normal_lines(&self) -> [String; 2] {
-        [
-            format!("Readiness: {}", self.summary),
-            format!("Next: {}", self.next_command),
-        ]
-    }
-}
+impl MissionReadinessDiagnosis {}
 
 pub fn dependency_diagnosis(
     db: &Database,

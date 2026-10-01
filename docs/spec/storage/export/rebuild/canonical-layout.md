@@ -608,9 +608,7 @@ migration or targeted maintenance, and normal durable writes target
 The hidden/admin projection rebuild primitive recreates
 `.atelier/runtime/state.db` from tracked `.atelier/` canonical records and may
 create ignored runtime/cache directories in a fresh checkout. Normal operators
-use `atelier check --fix` for explicit ignored-state repair. Backup export
-formats are no longer command surfaces; standard predecessor imports use
-`atelier init --import-beads`.
+use `atelier check --fix` for explicit ignored-state repair.
 
 Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
 write to a unique temporary database before atomically replacing `state.db`.

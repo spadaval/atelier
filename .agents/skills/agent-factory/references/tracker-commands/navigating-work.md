@@ -13,8 +13,7 @@ instructions select the tracker.
   `atelier issue show <id>` for focused context.
 - Use `atelier history` with mission, epic, or issue filters when current state
   needs its durable activity trail.
-- `atelier man <role>` and `atelier help <command>` provide current routing and
-  syntax.
+- `atelier help <command>` provides current syntax.
 
 ## GitHub Issues
 

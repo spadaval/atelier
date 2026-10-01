@@ -211,20 +211,6 @@ pub struct IssueTypeDefinition {
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FieldDefinition {
-    pub field_type: FieldType,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldType {
-    String,
-    Bool,
-    Integer,
-    Enum { values: Vec<String> },
-    Object { required: Vec<String> },
-}
-
 #[derive(Debug, Clone)]
 pub struct ValidatorDefinition {
     pub builtin: String,

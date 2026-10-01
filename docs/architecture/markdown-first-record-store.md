@@ -415,7 +415,7 @@ history and recent-activity views read the sidecars directly.
 | Typed links, labels, and blockers | Record-file facts | Cache rebuild and repair derive domain-specific label, blocker, and relation rows from concrete domain records. |
 | Workflow validate | Cache-backed query | Built-in validators use domain services and cache read models but do not persist validator-result records. |
 | Issue transitions and branch recovery | Record files plus activity sidecars | `atelier issue transition <id>` exposes readiness and executes configured lifecycle actions. Canonical issue status remains the durable current-work source of truth; manual owner-branch commands are recovery-only after failed transition actions. |
-| Diagnostics, telemetry, import, hidden renderer/cache probes, and check | Local runtime, migration, or repair | Telemetry is local. Imports must emit valid record files. Hidden probes diagnose migration or cache behavior; `atelier check` and `atelier check --fix` own normal operator health and ignored-state repair. |
+| Hidden cache probes and check | Local runtime or repair | Hidden probes diagnose cache behavior; `atelier check` and `atelier check --fix` own normal operator health and ignored-state repair. |
 
 Current caller map for activity sidecars:
 
@@ -424,7 +424,6 @@ Current caller map for activity sidecars:
 | `atelier-records/src/activity.rs` | Record-file owner | Owns sidecar paths, schema, parsing, rendering, timestamp ID allocation, listing, and create-new writes. |
 | CLI `issue note`, work lifecycle, transition, evidence attachment, and bundle note adapters | App/CLI orchestration over `atelier-records::activity` | Command code converts user actions into typed activity events; follow-on app extraction should move orchestration upward without changing the storage owner. |
 | `atelier history`, issue show recent activity, Agent Factory status helpers, `rebuild`, and `check` | Read-only consumers over `atelier-records::activity` | These surfaces may combine cache rows with sidecar events, but sidecar files remain the durable history payload. |
-| `import-beads` preservation notes and close reasons | App/import workflow over `atelier-records::activity` | Imported predecessor comments are migration input and should be written as activity sidecars, preserving source timestamps when available. |
 
 ## Cache Invalidation After Record Writes
 

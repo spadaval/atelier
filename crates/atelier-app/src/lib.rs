@@ -4,7 +4,6 @@
 //! that do not write directly to stdout or stderr.
 
 pub mod cache_manager;
-pub mod export;
 pub mod health;
 pub mod init;
 pub mod issue_inventory;

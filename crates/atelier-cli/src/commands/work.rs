@@ -229,15 +229,6 @@ fn apply_ready_execution_gates(
     Ok(())
 }
 
-pub(crate) fn executable_ready_count(db: &Database) -> Result<usize> {
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut buckets = atelier_app::read_pipeline::work_buckets(db, policy.as_ref())?;
-    if let Some(policy) = policy.as_ref() {
-        apply_ready_execution_gates(db, policy, &mut buckets)?;
-    }
-    Ok(buckets.ready.len())
-}
-
 pub fn missions(db: &Database, include_done: bool, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let overview = mission_overview(db, policy.as_ref(), MissionOverviewRequest { include_done })?;

@@ -99,8 +99,6 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
     first == ".cache"
         || first == "runtime"
         || first == "cache"
-        || first == "rules"
-        || first == "rules.local"
         || relative_path == Path::new(CONFIG_FILE)
         || relative_path == Path::new(RUNTIME_DB_FILE)
         || relative_path == Path::new("agent.json")

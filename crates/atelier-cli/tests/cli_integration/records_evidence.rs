@@ -359,7 +359,6 @@ fn test_show_with_related_issues() {
     assert!(stdout.contains("Related") || stdout.contains("#2") || stdout.contains("Main issue"));
 }
 
-// --- milestone.rs: Edge cases ---
 // ==================== Security & Stress Tests ====================
 
 /// Test with very long title — within limit should succeed, over limit should fail
@@ -663,7 +662,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "--label",
             "agent-factory",
             "--description",
-            "## Description\n\nWork item.\n\n## Outcome\n\nFactory task remains valid for human command-result checks.\n\n## Evidence\n\n- `atelier lint` passes for the command-result fixture.",
+            "## Description\n\nWork item.\n\n## Outcome\n\nFactory task remains valid for human command-result checks.\n\n## Evidence\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
     assert!(success, "create failed: {stderr}");
@@ -716,7 +715,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "create",
             "Blocker",
             "--description",
-            "## Description\n\nBlocking fixture issue.\n\n## Outcome\n\nBlocker issue participates in dependency command-result checks.\n\n## Evidence\n\n- `atelier lint` passes for the command-result fixture.",
+            "## Description\n\nBlocking fixture issue.\n\n## Outcome\n\nBlocker issue participates in dependency command-result checks.\n\n## Evidence\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
     assert!(success, "blocker create failed: {stderr}");
@@ -757,8 +756,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 
     for args in [
         vec!["work", "queue", "--status", "all"],
-        vec!["lint"],
-        vec!["export", "--check"],
+        vec!["check"],
         vec!["doctor"],
         vec!["rebuild"],
     ] {
@@ -1000,8 +998,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stdout"));
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
-    let (fresh, _, _) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!fresh, "evidence create+attach should leave cache stale");
     let (success, shown, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
     assert!(success, "lazy evidence query failed: {stderr}");
@@ -1010,11 +1006,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         stderr.contains("Local cache was stale; rebuilt SQLite cache")
             || stderr.contains("Local cache was stale; repaired changed record sources"),
         "missing lazy evidence repair diagnostic: {stderr}"
-    );
-    let (fresh, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(
-        fresh,
-        "cache should be fresh after evidence query: {stderr}"
     );
     let issue_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
@@ -1523,9 +1514,7 @@ fn test_evidence_capture_postflight_accepts_same_target_material_mutation() {
         target_id
     );
 
-    let fixture =
-        workspace_root().join("crates/atelier-cli/tests/fixtures/beads/issues.manual.jsonl");
-    let import_capture = run_atelier_with_deadlock_timeout(
+    let exclusive_capture = run_atelier_with_deadlock_timeout(
         dir.path(),
         &[
             "evidence",
@@ -1533,24 +1522,26 @@ fn test_evidence_capture_postflight_accepts_same_target_material_mutation() {
             "--kind",
             "test",
             "--summary",
-            "Proof after same-repository import swap",
+            "Proof after same-repository exclusive writer",
             "--target",
             &format!("issue/{target_id}"),
             "--",
             env!("CARGO_BIN_EXE_atelier"),
-            "import-beads",
-            fixture.to_str().unwrap(),
+            "issue",
+            "note",
+            &target_id,
+            "Note written under an exclusive transaction",
         ],
     );
     assert!(
-        import_capture.status.success(),
-        "same-repository import capture failed: {}",
-        String::from_utf8_lossy(&import_capture.stderr)
+        exclusive_capture.status.success(),
+        "same-repository exclusive capture failed: {}",
+        String::from_utf8_lossy(&exclusive_capture.stderr)
     );
     assert!(record_id_by_title(
         dir.path(),
         "evidence",
-        "Proof after same-repository import swap"
+        "Proof after same-repository exclusive writer"
     )
     .starts_with("atelier-"));
     let (healthy, _, stderr) = run_atelier(dir.path(), &["check"]);

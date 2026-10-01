@@ -23,9 +23,6 @@ that direction into contracts that can be implemented and validated.
   decomposition, dependency, and incremental-planning guidance.
 - [Validation](validation.md): product language for outcomes, proof, evidence,
   validation, terminal checks, and proof visibility in normal operator surfaces.
-- [Milestone Records](milestone-records.md): deferred checkpoint semantics and
-  the v1 rule that validation data stays on issues, epics, missions, and
-  evidence.
 - [Workflow Configuration Contract](workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   transition actions, strict errors, and starter workflow examples.

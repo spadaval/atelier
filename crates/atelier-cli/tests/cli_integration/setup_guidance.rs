@@ -13,7 +13,6 @@ fn test_init_creates_atelier_directory() {
     assert!(stdout.contains(".atelier/workflow.yaml"));
     assert!(stdout.contains("atelier check"));
     assert!(stdout.contains("atelier issue create \"Task\""));
-    assert!(stdout.contains("atelier man admin"));
     let lint_pos = stdout.find("atelier check").unwrap();
     let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
     assert!(
@@ -24,8 +23,6 @@ fn test_init_creates_atelier_directory() {
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
     assert!(dir.path().join(".atelier").join("workflow.yaml").exists());
-    assert!(!dir.path().join(".atelier").join("rules").exists());
-    assert!(!dir.path().join(".atelier").join("rules.local").exists());
     assert!(!dir
         .path()
         .join(".atelier")
@@ -52,44 +49,7 @@ fn test_init_twice_is_idempotent() {
     assert!(success);
     assert!(stdout.contains("Atelier initialized successfully"));
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
-    assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".claude").exists());
-}
-
-#[test]
-fn test_init_help_documents_import_beads_flag() {
-    let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["init", "--help"]);
-    assert!(success, "init help failed: {stderr}");
-
-    assert!(stdout.contains("--import-beads"));
-    assert!(stdout.contains(".beads/issues.manual.jsonl"));
-}
-
-#[test]
-fn test_init_import_beads_requires_explicit_flag() {
-    let dir = tempdir().unwrap();
-    let beads_dir = dir.path().join(".beads");
-    std::fs::create_dir_all(&beads_dir).unwrap();
-    std::fs::write(
-        beads_dir.join("issues.manual.jsonl"),
-        include_str!("../fixtures/beads/issues.manual.jsonl"),
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["init"]);
-    assert!(success, "init without import flag failed: {stderr}");
-    assert!(stdout.contains("Detected Beads migration input"));
-    assert!(stdout.contains("atelier init --import-beads"));
-    assert!(!dir.path().join(".atelier/issues/atelier-0001.md").exists());
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["init", "--import-beads"]);
-    assert!(success, "init import-beads failed: {stderr}");
-    assert!(stdout.contains("Imported Beads backup from"));
-    assert!(stdout.contains(".beads/issues.manual.jsonl"));
-    assert!(stdout.contains("source records: 3"));
-    assert!(stdout.contains("imported issues: 3"));
-    assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
 }
 
 #[test]
@@ -99,7 +59,6 @@ fn test_integrations_command_is_removed() {
 
     assert!(!dir.path().join(".claude").exists());
     assert!(!dir.path().join(".mcp.json").exists());
-    assert!(!dir.path().join(".atelier").join("rules").exists());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["integrations", "claude", "install"]);
     assert!(
@@ -118,7 +77,6 @@ fn test_integrations_command_is_removed() {
     assert!(!dir.path().join(".claude").exists());
     assert!(!dir.path().join(".mcp.json").exists());
     assert!(!dir.path().join(".atelier/hook-config.json").exists());
-    assert!(!dir.path().join(".atelier/rules").exists());
 }
 
 #[test]
@@ -140,7 +98,6 @@ fn test_doctor_human_separates_cache_and_runtime_state_health() {
     assert!(stdout.contains("source_metadata: ok"));
     assert!(stdout.contains("Cache database:"));
     assert!(stdout.contains("database: ok"));
-    assert!(stdout.contains("diagnostics:"));
 }
 
 #[test]
@@ -229,7 +186,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
 
     corrupt_issue_title_yaml(dir.path(), &issue_id, "Doctor runtime boundary");
 
-    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         !lint_success,
         "lint must reject malformed canonical Markdown, stdout: {lintstdout}"
@@ -253,405 +210,14 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
 }
 
 #[test]
-fn test_command_telemetry_records_success_event() {
-    let dir = tempdir().unwrap();
-    init_atelier_with_telemetry_disabled(dir.path());
-    let diagnostics_dir = dir.path().join("diagnostics");
-
-    let (success, _, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["doctor"],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "doctor failed: {stderr}");
-
-    let events = diagnostics_events(&diagnostics_dir);
-    assert_eq!(events.len(), 1);
-    let event = &events[0];
-    assert_eq!(event["schema"], "atelier.command_event");
-    assert_eq!(event["schema_version"], 1);
-    assert_eq!(event["command"], "doctor");
-    assert_eq!(event["result"], "success");
-    assert_eq!(event["exit_code"], 0);
-    assert_eq!(event["argv_capture"], "none");
-    assert_eq!(event["argv_redacted"].as_array().unwrap().len(), 0);
-    assert!(event["duration_ms"].as_u64().is_some());
-    assert!(event["workspace_id"].as_str().unwrap().len() >= 16);
-    assert!(event["workspace_root"].is_null());
-    assert_eq!(event["state_path"], ".atelier");
-}
-
-#[test]
-fn test_command_telemetry_records_failure_event() {
-    let dir = tempdir().unwrap();
-    init_atelier_with_telemetry_disabled(dir.path());
-    let diagnostics_dir = dir.path().join("diagnostics");
-
-    let (success, _, _) = run_atelier_with_env(
-        dir.path(),
-        &["issue", "show", "missing"],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(!success);
-
-    let events = diagnostics_events(&diagnostics_dir);
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0]["command"], "issue show");
-    assert_eq!(events[0]["result"], "failure");
-    assert_eq!(events[0]["exit_code"], 1);
-}
-
-#[test]
-fn test_command_telemetry_respects_opt_out_controls() {
-    let dir = tempdir().unwrap();
-    init_atelier_with_telemetry_disabled(dir.path());
-    let diagnostics_dir = dir.path().join("diagnostics");
-
-    let (success, _, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["doctor"],
-        &[
-            ("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap()),
-            ("ATELIER_TELEMETRY", "off"),
-        ],
-    );
-    assert!(success, "doctor failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["doctor"],
-        &[
-            ("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap()),
-            ("ATELIER_DIAGNOSTICS", "disabled"),
-        ],
-    );
-    assert!(success, "doctor failed: {stderr}");
-
-    assert!(diagnostics_events(&diagnostics_dir).is_empty());
-}
-
-#[test]
-fn test_command_telemetry_omits_sensitive_arguments_by_default() {
-    let dir = tempdir().unwrap();
-    init_atelier_with_telemetry_disabled(dir.path());
-    let diagnostics_dir = dir.path().join("diagnostics");
-    let secret_title = "secret-token-should-not-appear";
-
-    let (success, _, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["issue", "create", secret_title],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "issue create failed: {stderr}");
-
-    let events = diagnostics_events(&diagnostics_dir);
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0]["command"], "issue create");
-    let raw_event = serde_json::to_string(&events[0]).unwrap();
-    assert!(
-        !raw_event.contains(secret_title),
-        "telemetry event leaked raw issue title: {raw_event}"
-    );
-    assert_eq!(events[0]["argv_redacted"].as_array().unwrap().len(), 0);
-}
-
-#[test]
-fn test_command_telemetry_ignores_relative_diagnostics_dir() {
-    let dir = tempdir().unwrap();
-    init_atelier_with_telemetry_disabled(dir.path());
-
-    let (success, _, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["doctor"],
-        &[("ATELIER_DIAGNOSTICS_DIR", "relative-diagnostics")],
-    );
-    assert!(success, "doctor failed: {stderr}");
-    assert!(!dir.path().join("relative-diagnostics").exists());
-}
-
-#[test]
-fn test_diagnostics_slow_handles_missing_telemetry_store() {
-    let dir = tempdir().unwrap();
-    let diagnostics_dir = dir.path().join("diagnostics");
-
-    let (success, stdout, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["diagnostics", "slow"],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "diagnostics slow failed: {stderr}");
-
-    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(parsed["schema"], "atelier.slow_commands");
-    assert_eq!(parsed["schema_version"], 1);
-    assert_eq!(parsed["window_days"], 7);
-    assert_eq!(parsed["threshold_ms"], 1000);
-    assert_eq!(parsed["rows"].as_array().unwrap().len(), 0);
-}
-
-#[test]
-fn test_diagnostics_slow_summarizes_fixture_events() {
-    let dir = tempdir().unwrap();
-    let diagnostics_dir = dir.path().join("diagnostics");
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let old = chrono::Utc::now()
-        .date_naive()
-        .checked_sub_days(chrono::Days::new(20))
-        .unwrap()
-        .format("%Y-%m-%d")
-        .to_string();
-
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &today,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "one",
-            "command": "issue show",
-            "started_at": format!("{today}T01:00:00.000Z"),
-            "finished_at": format!("{today}T01:00:01.200Z"),
-            "duration_ms": 1200,
-            "result": "success",
-            "workspace_id": "workspace-a"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &today,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "two",
-            "command": "issue show",
-            "started_at": format!("{today}T02:00:00.000Z"),
-            "finished_at": format!("{today}T02:00:02.400Z"),
-            "duration_ms": 2400,
-            "result": "failure",
-            "workspace_id": "workspace-a"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &today,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "fast",
-            "command": "issue show",
-            "started_at": format!("{today}T03:00:00.000Z"),
-            "finished_at": format!("{today}T03:00:00.100Z"),
-            "duration_ms": 100,
-            "result": "success",
-            "workspace_id": "workspace-a"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &today,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "three",
-            "command": "doctor",
-            "started_at": format!("{today}T04:00:00.000Z"),
-            "finished_at": format!("{today}T04:00:02.000Z"),
-            "duration_ms": 2000,
-            "result": "success",
-            "workspace_id": "workspace-b"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &old,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "old",
-            "command": "doctor",
-            "started_at": format!("{old}T04:00:00.000Z"),
-            "finished_at": format!("{old}T04:00:05.000Z"),
-            "duration_ms": 5000,
-            "result": "success",
-            "workspace_id": "workspace-z"
-        }),
-    );
-
-    let (success, stdout, stderr) = run_atelier_with_env(
-        dir.path(),
-        &[
-            "diagnostics",
-            "slow",
-            "--days",
-            "7",
-            "--threshold-ms",
-            "1000",
-        ],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "diagnostics slow failed: {stderr}");
-
-    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let rows = parsed["rows"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
-
-    assert_eq!(rows[0]["workspace_id"], "workspace-a");
-    assert_eq!(rows[0]["command"], "issue show");
-    assert_eq!(rows[0]["bucket"], today);
-    assert_eq!(rows[0]["count"], 2);
-    assert_eq!(rows[0]["failure_count"], 1);
-    assert_eq!(rows[0]["min_duration_ms"], 1200);
-    assert_eq!(rows[0]["max_duration_ms"], 2400);
-    assert_eq!(rows[0]["mean_duration_ms"], 1800.0);
-    assert_eq!(rows[0]["p50_duration_ms"], 1200);
-    assert_eq!(rows[0]["p95_duration_ms"], 2400);
-
-    assert_eq!(rows[1]["workspace_id"], "workspace-b");
-    assert_eq!(rows[1]["command"], "doctor");
-    assert_eq!(rows[1]["count"], 1);
-    assert_eq!(rows[1]["max_duration_ms"], 2000);
-}
-
-#[test]
-fn test_prune_dry_run_reports_diagnostics_without_removing_logs() {
-    let dir = tempdir().unwrap();
-    let diagnostics_dir = dir.path().join("diagnostics");
-    let old = chrono::Utc::now()
-        .date_naive()
-        .checked_sub_days(chrono::Days::new(45))
-        .unwrap()
-        .format("%Y-%m-%d")
-        .to_string();
-    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &old,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "old",
-            "command": "status",
-            "started_at": format!("{old}T01:00:00.000Z"),
-            "finished_at": format!("{old}T01:00:01.000Z"),
-            "duration_ms": 1000,
-            "result": "success"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &recent,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "recent",
-            "command": "status",
-            "started_at": format!("{recent}T01:00:00.000Z"),
-            "finished_at": format!("{recent}T01:00:01.000Z"),
-            "duration_ms": 1000,
-            "result": "success"
-        }),
-    );
-
-    let old_path = diagnostics_dir
-        .join("commands")
-        .join(format!("{old}.ndjson"));
-    let recent_path = diagnostics_dir
-        .join("commands")
-        .join(format!("{recent}.ndjson"));
-
-    let (success, stdout, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["prune", "--retention-days", "30"],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "prune dry-run failed: {stderr}");
-    assert!(stdout.contains("Mode: dry-run"), "{stdout}");
-    assert!(stdout.contains("Diagnostics Logs"), "{stdout}");
-    assert!(stdout.contains("eligible diagnostics-log"), "{stdout}");
-    assert!(stdout.contains(&old), "{stdout}");
-    assert!(stdout.contains("Deferred Cleanup Classes"), "{stdout}");
-    assert!(stdout.contains("Next: atelier prune --apply"), "{stdout}");
-    assert!(old_path.exists(), "dry-run removed old diagnostics log");
-    assert!(
-        recent_path.exists(),
-        "dry-run removed recent diagnostics log"
-    );
-}
-
-#[test]
 fn test_prune_help_describes_both_retention_classes() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["prune", "--help"]);
     assert!(success, "prune help failed: {stderr}");
     assert!(
-        stdout.contains("Override diagnostics and canonical record retention for this prune pass"),
+        stdout.contains("Override canonical record retention for this prune pass"),
         "{stdout}"
     );
-}
-
-#[test]
-fn test_prune_apply_removes_only_expired_diagnostics_logs() {
-    let dir = tempdir().unwrap();
-    let diagnostics_dir = dir.path().join("diagnostics");
-    let old = chrono::Utc::now()
-        .date_naive()
-        .checked_sub_days(chrono::Days::new(45))
-        .unwrap()
-        .format("%Y-%m-%d")
-        .to_string();
-    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &old,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "old",
-            "command": "status",
-            "started_at": format!("{old}T01:00:00.000Z"),
-            "finished_at": format!("{old}T01:00:01.000Z"),
-            "duration_ms": 1000,
-            "result": "success"
-        }),
-    );
-    write_diagnostics_event(
-        &diagnostics_dir,
-        &recent,
-        serde_json::json!({
-            "schema": "atelier.command_event",
-            "schema_version": 1,
-            "event_id": "recent",
-            "command": "status",
-            "started_at": format!("{recent}T01:00:00.000Z"),
-            "finished_at": format!("{recent}T01:00:01.000Z"),
-            "duration_ms": 1000,
-            "result": "success"
-        }),
-    );
-
-    let old_path = diagnostics_dir
-        .join("commands")
-        .join(format!("{old}.ndjson"));
-    let recent_path = diagnostics_dir
-        .join("commands")
-        .join(format!("{recent}.ndjson"));
-
-    let (success, stdout, stderr) = run_atelier_with_env(
-        dir.path(),
-        &["prune", "--apply", "--retention-days", "30"],
-        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
-    );
-    assert!(success, "prune apply failed: {stderr}");
-    assert!(stdout.contains("Mode: apply"), "{stdout}");
-    assert!(stdout.contains("removed diagnostics-log"), "{stdout}");
-    assert!(stdout.contains(&old), "{stdout}");
-    assert!(
-        !old_path.exists(),
-        "apply left expired diagnostics log in place"
-    );
-    assert!(recent_path.exists(), "apply removed recent diagnostics log");
 }
 
 #[test]
@@ -1454,33 +1020,6 @@ fn test_prune_protects_old_evidence_attached_to_retained_issue() {
 }
 
 #[test]
-fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
-    let dir = tempdir().unwrap();
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
-    assert!(success, "root help failed: {stderr}");
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("diagnostics ")),
-        "root help should not expose diagnostics:\n{stdout}"
-    );
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["diagnostics", "--help"]);
-    assert!(success, "diagnostics help failed: {stderr}");
-    assert!(stdout.contains(
-        "Advanced local command diagnostics; JSON is local-only telemetry, not workflow state"
-    ));
-    assert!(stdout.contains("slow"));
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["diagnostics", "slow", "--help"]);
-    assert!(success, "diagnostics slow help failed: {stderr}");
-    assert!(stdout.contains(
-        "Summarize slow command telemetry as stable local-only JSON for performance analysis"
-    ));
-}
-
-#[test]
 fn test_top_level_help_only_shows_core_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
@@ -1510,7 +1049,7 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "work", "issue", "start", "bundle", "evidence", "check",
+        "init", "status", "work", "issue", "start", "bundle", "evidence", "check",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -1520,12 +1059,6 @@ fn test_top_level_help_only_shows_core_commands() {
             .lines()
             .any(|line| line.trim_start().starts_with("prime ")),
         "root help should not expose removed prime command:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("import-beads ")),
-        "root help should not expose import-beads:\n{stdout}"
     );
     assert!(
         !stdout
@@ -1554,22 +1087,10 @@ fn test_top_level_help_only_shows_core_commands() {
     assert!(
         !stdout
             .lines()
-            .any(|line| line.trim_start().starts_with("export ")),
-        "root help should not present export as a normal operator command:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
             .any(|line| line.trim_start().starts_with("rebuild ")),
         "root help should not present rebuild as a normal operator command:\n{stdout}"
     );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("diagnostics ")),
-        "root help should not present diagnostics as a normal operator command:\n{stdout}"
-    );
-    for hidden in ["branch", "maintenance", "lint", "doctor"] {
+    for hidden in ["branch", "maintenance", "doctor"] {
         assert!(
             !stdout.lines().any(|line| {
                 let command = line.trim_start();
@@ -1580,13 +1101,6 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for common in [
-        "atelier man",
-        "atelier man worker",
-        "atelier man planner",
-        "atelier man reviewer",
-        "atelier man validator",
-        "atelier man manager",
-        "atelier man admin",
         "atelier work ready",
         "atelier work blocked",
         "atelier work missions",
@@ -1617,10 +1131,6 @@ fn test_top_level_help_only_shows_core_commands() {
         !common_commands.contains("atelier doctor"),
         "common commands should not teach doctor as routine work:\n{stdout}"
     );
-    assert!(
-        !common_commands.contains("atelier lint"),
-        "common commands should not teach lint as routine work:\n{stdout}"
-    );
     assert!(!stdout.contains("workflow validate"));
 
     assert!(
@@ -1634,7 +1144,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "integrations",
         "repair",
         "timer",
-        "milestone",
         "daemon",
         "cpitd",
         "usage",
@@ -1656,7 +1165,7 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
-fn test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped_views() {
+fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
     let dir = tempdir().unwrap();
 
     let (success, work_help, stderr) = run_atelier_raw(dir.path(), &["work", "--help"]);
@@ -1688,50 +1197,19 @@ fn test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped
             && dashboards.contains("mission  Live mission orchestration dashboard"),
         "{dashboards}"
     );
-
-    let (success, manager, stderr) = run_atelier(dir.path(), &["man", "manager"]);
-    assert!(success, "manager guide failed: {stderr}");
-    let overview = manager
-        .find("atelier work missions")
-        .expect("manager guide should name plural Mission Overview");
-    let scoped = manager
-        .find("atelier work mission <mission-id>")
-        .expect("manager guide should name scoped mission drill-down");
-    assert!(overview < scoped, "{manager}");
 }
 
 #[test]
-fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
+fn test_hidden_rebuild_help_routes_local_repair_to_check() {
     let dir = tempdir().unwrap();
 
-    for (args, expected) in [
-        (vec!["export", "--help"], "normal health uses check"),
-        (
-            vec!["rebuild", "--help"],
-            "explicit local repair uses check --fix",
-        ),
-    ] {
-        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
-        assert!(success, "{args:?} help failed: {stderr}");
-        assert!(
-            stdout.contains(expected),
-            "{args:?} help was stale:\n{stdout}"
-        );
-        assert!(!stdout.contains("normal health uses lint"), "{stdout}");
-        assert!(!stdout.contains("repair uses doctor"), "{stdout}");
-    }
-}
-
-#[test]
-fn test_import_beads_help_names_record_files_and_lazy_cache_repair() {
-    let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["import-beads", "--help"]);
-    assert!(success, "import-beads help failed: {stderr}");
-    assert!(stdout.contains("Import Beads JSONL backup into durable record files"));
-    assert!(stdout.contains("cache repair remains lazy"));
-    assert!(stdout.contains("Record-file directory to write after import"));
-    assert!(!stdout.contains("local runtime"));
-    assert!(!stdout.contains("Canonical state directory"));
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["rebuild", "--help"]);
+    assert!(success, "rebuild help failed: {stderr}");
+    assert!(
+        stdout.contains("explicit local repair uses check --fix"),
+        "rebuild help was stale:\n{stdout}"
+    );
+    assert!(!stdout.contains("repair uses doctor"), "{stdout}");
 }
 
 #[test]
@@ -1932,30 +1410,6 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
 }
 
 #[test]
-fn test_diagnostics_json_docs_define_local_operator_boundary() {
-    let manifest = workspace_root();
-    let diagnostics =
-        std::fs::read_to_string(manifest.join("docs/architecture/local-command-diagnostics.md"))
-            .unwrap();
-    let cli_surface =
-        std::fs::read_to_string(manifest.join("docs/product/cli-surface.md")).unwrap();
-    let validation =
-        std::fs::read_to_string(manifest.join("docs/architecture/quality/validation.md")).unwrap();
-
-    assert!(diagnostics.contains("Diagnostics JSON is for inspecting Atelier itself."));
-    assert!(diagnostics.contains("stable for local diagnostic tooling"));
-    assert!(diagnostics.contains("must not appear in ordinary Agent Factory or"));
-    assert!(diagnostics.contains("operator recipes for mission selection"));
-    assert!(cli_surface.contains("stable for diagnostic"));
-    assert!(cli_surface.contains("not an automation contract for selecting work"));
-    assert!(
-        validation.contains("Diagnostics JSON from commands such as `atelier diagnostics slow`")
-    );
-    assert!(validation.contains("not proof of"));
-    assert!(validation.contains("ready work, blockers, validation results"));
-}
-
-#[test]
 fn test_product_intent_representative_commands_match_signpost_surfaces() {
     let product_intent =
         std::fs::read_to_string(workspace_root().join("PRODUCT_INTENT.md")).unwrap();
@@ -1975,132 +1429,6 @@ fn test_product_intent_representative_commands_match_signpost_surfaces() {
     assert!(product_intent.contains("atelier issue transition atelier-z1p8"));
     assert!(product_intent
         .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
-}
-
-#[test]
-fn test_man_lists_roles_and_topics() {
-    let dir = tempdir().unwrap();
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man"]);
-    assert!(success, "man failed: {stderr}");
-    assert!(stdout.contains("Atelier Man"));
-    assert!(stdout.contains("worker"));
-    assert!(stdout.contains("planner"));
-    assert!(stdout.contains("reviewer"));
-    assert!(stdout.contains("manager"));
-    assert!(stdout.contains("admin"));
-    assert!(stdout.contains("atelier man worker"));
-    assert!(stdout.contains("atelier man planner"));
-    assert!(stdout.contains("Topics"));
-    assert!(stdout.contains("work-model"));
-    assert!(stdout.contains("atelier man work-model"));
-}
-
-#[test]
-fn test_man_planning_guidance_keeps_mission_flow_direct() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, planner, stderr) = run_atelier(dir.path(), &["man", "planner"]);
-    assert!(success, "man planner failed: {stderr}");
-    assert!(planner.contains("atelier issue transition <epic-id> ready"));
-    assert!(!planner.contains("plan-review"));
-
-    let (success, reviewer, stderr) = run_atelier(dir.path(), &["man", "reviewer"]);
-    assert!(success, "man reviewer failed: {stderr}");
-    assert!(!reviewer.contains("plan-review"));
-}
-
-#[test]
-fn test_man_work_model_explains_scope_and_runs_without_tracker_state() {
-    let dir = tempdir().unwrap();
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "work-model"]);
-    assert!(success, "man work-model failed: {stderr}");
-    assert!(stdout.contains("Atelier Man: Work Model"));
-    assert!(stdout.contains("Mission"));
-    assert!(stdout.contains("Epic"));
-    assert!(stdout.contains("Issue"));
-    assert!(stdout.contains("mission --advances--> epic --children--> issue"));
-    assert!(stdout.contains("A mission is not the hierarchy parent of its work"));
-    assert!(stdout.contains("Dependencies and `blocked_by` links"));
-    assert!(stdout.contains("Draft epics are planning context, not ready work"));
-    assert!(stdout.contains("Epic expansion selects focused proof"));
-    assert!(stdout.contains("atelier issue link <mission-id> <work-id> --role advances"));
-    assert!(stdout.contains("atelier work mission <mission-id>"));
-}
-
-#[test]
-fn test_man_worker_guides_empty_checkout_without_repeating_status() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
-    assert!(success, "man worker failed: {stderr}");
-    assert!(stdout.contains("Atelier Man: Worker"));
-    assert!(stdout.contains("Current State"));
-    assert!(stdout.contains("Current work:   none"));
-    assert!(stdout.contains("Current work:   none"));
-    assert!(stdout.contains("Most Relevant Commands"));
-    assert!(stdout.contains("Normal Loop"));
-    assert!(stdout.contains("Not Usually For This Role"));
-    assert!(stdout.contains("atelier work ready"));
-    assert!(stdout.contains("atelier issue transition <id>"));
-    assert!(!stdout.contains("Atelier Status"));
-    assert!(!stdout.contains("Generic"));
-    assert!(!stdout.contains("etc."));
-}
-
-#[test]
-fn test_man_worker_names_current_work() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Man work"]);
-    assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Man work");
-    let issue_id = issue_id.as_str();
-    migrate_default_issue_workflow(dir.path());
-    commit_all(dir.path(), "man work setup");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", issue_id, "start"]);
-    assert!(success, "start failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
-    assert!(success, "man worker failed: {stderr}");
-    assert!(stdout.contains("Current work:   1 issue(s)"));
-    assert!(stdout.contains(&format!("{issue_id}")));
-    assert!(stdout.contains("atelier status - Review the checkout's current-work set."));
-    assert!(stdout.contains("atelier evidence record --target issue/<id>"));
-}
-
-#[test]
-fn test_man_rejects_unknown_pages_and_admin_degrades_before_init() {
-    let dir = tempdir().unwrap();
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "bogus"]);
-    assert!(!success, "unknown page should fail");
-    assert!(stdout.is_empty());
-    assert!(stderr.contains("unknown man page 'bogus'"));
-    assert!(stderr.contains("Valid roles: worker, planner, reviewer, validator, manager, admin"));
-    assert!(stderr.contains("Valid topics: work-model"));
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);
-    assert!(!success, "worker guide should require tracker state");
-    assert!(stdout.is_empty());
-    assert!(stderr.contains("Not an Atelier repository"));
-    assert!(stderr.contains("atelier man admin"));
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "admin"]);
-    assert!(success, "admin guide should degrade before init: {stderr}");
-    assert!(stdout.contains("Atelier Man: Admin"));
-    assert!(stdout.contains("Tracker"));
-    assert!(stdout.contains("Not an Atelier repository"));
-    assert!(stdout.contains("atelier init"));
-    assert!(stdout.contains("docs/product/workflow-configuration.md"));
-    assert!(stdout.contains("atelier issue transition <id>"));
-    assert!(stdout.contains("atelier prune"));
-    assert!(!stdout.contains("atelier prune --dry-run"));
 }
 
 #[test]

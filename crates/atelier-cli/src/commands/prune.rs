@@ -12,8 +12,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
-use crate::telemetry::{self, DiagnosticsPruneSummary};
-
 pub struct TrackerContext {
     pub db: Database,
     pub repo_root: PathBuf,
@@ -111,7 +109,6 @@ pub fn run(
     retention_days: Option<u64>,
     quiet: bool,
 ) -> Result<()> {
-    let diagnostics = telemetry::prune_diagnostics_logs(retention_days, apply)?;
     // Local artifacts are explicitly independent of canonical health.  Do this
     // before opening or validating canonical state so a broken cache never
     // prevents removal of an abandoned temporary file.
@@ -120,7 +117,7 @@ pub fn run(
     let canonical = prune_canonical_records(tracker, retention_days, apply)?;
 
     if quiet {
-        print_quiet_summary(&diagnostics, &local, &git, &canonical, apply);
+        print_quiet_summary(&local, &git, &canonical, apply);
         return Ok(());
     }
 
@@ -129,8 +126,6 @@ pub fn run(
     println!("Mode: {}", if apply { "apply" } else { "dry-run" });
     println!();
 
-    print_diagnostics(&diagnostics, apply);
-    println!();
     print_local(&local, apply);
     println!();
     print_git(&git, apply);
@@ -1247,18 +1242,16 @@ fn remove_candidate(
 }
 
 fn print_quiet_summary(
-    diagnostics: &DiagnosticsPruneSummary,
     local: &LocalPruneSummary,
     git: &GitPruneSummary,
     canonical: &CanonicalPruneSummary,
     apply: bool,
 ) {
-    let eligible = diagnostics.candidates.len()
-        + local
-            .candidates
-            .iter()
-            .filter(|candidate| candidate.protection.is_none())
-            .count()
+    let eligible = local
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.protection.is_none())
+        .count()
         + git
             .candidates
             .iter()
@@ -1286,58 +1279,12 @@ fn print_quiet_summary(
             .chain(canonical.evidence.iter())
             .filter(|candidate| !candidate.eligible())
             .count();
-    let removed = diagnostics.removed.len()
-        + local.removed.len()
-        + git.removed.len()
-        + canonical.removed.len();
-    let failures = diagnostics.failures.len()
-        + local.failures.len()
-        + git.failures.len()
-        + canonical.failures.len();
+    let removed = local.removed.len() + git.removed.len() + canonical.removed.len();
+    let failures = local.failures.len() + git.failures.len() + canonical.failures.len();
     println!(
         "mode={} eligible={eligible} protected={protected} removed={removed} failures={failures}",
         if apply { "apply" } else { "dry-run" }
     );
-}
-
-fn print_diagnostics(summary: &DiagnosticsPruneSummary, apply: bool) {
-    println!("Diagnostics Logs");
-    println!("----------------");
-    println!("Retention: {} day(s)", summary.retention_days);
-    println!("Cutoff:    before {}", summary.cutoff);
-    match &summary.commands_dir {
-        Some(path) => println!("Path:      {}", path.display()),
-        None => println!("Path:      disabled or unavailable"),
-    }
-
-    if summary.candidates.is_empty() {
-        println!("Candidates: none");
-        return;
-    }
-
-    println!("Candidates: {}", summary.candidates.len());
-    for candidate in &summary.candidates {
-        let status = if apply && summary.removed.contains(&candidate.path) {
-            "removed"
-        } else if apply {
-            "failed"
-        } else {
-            "eligible"
-        };
-        println!(
-            "  {status} diagnostics-log {} (date {}, {} bytes)",
-            candidate.path.display(),
-            candidate.date,
-            candidate.size_bytes
-        );
-    }
-
-    if !summary.failures.is_empty() {
-        println!("Failures:");
-        for (path, error) in &summary.failures {
-            println!("  {} - {}", path.display(), error);
-        }
-    }
 }
 
 fn print_local(summary: &LocalPruneSummary, apply: bool) {

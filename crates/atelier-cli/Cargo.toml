@@ -11,7 +11,6 @@ repository.workspace = true
 version.workspace = true
 include = [
     "src/**/*",
-    "../../resources/**/*",
     "!**/__pycache__/**",
     "build.rs",
     "../../LICENSE",

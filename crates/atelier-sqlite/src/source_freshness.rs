@@ -327,8 +327,6 @@ fn is_local_atelier_path(relative_path: &Path) -> bool {
     first == ".cache"
         || first == "runtime"
         || first == "cache"
-        || first == "rules"
-        || first == "rules.local"
         || relative_path == Path::new("config.toml")
         || relative_path == Path::new("state.db")
         || relative_path == Path::new("agent.json")

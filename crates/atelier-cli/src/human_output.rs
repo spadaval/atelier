@@ -134,18 +134,6 @@ impl MetadataPanel {
         self.rows.push((label.into(), value.into()));
         self
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn optional_row(
-        mut self,
-        label: impl Into<String>,
-        value: Option<impl Into<String>>,
-    ) -> Self {
-        if let Some(value) = value {
-            self.rows.push((label.into(), value.into()));
-        }
-        self
-    }
 }
 
 impl Panel for MetadataPanel {

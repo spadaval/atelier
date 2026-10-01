@@ -1,12 +1,10 @@
 use anyhow::{bail, Result};
-use atelier::{commands, telemetry};
+use atelier::commands;
 use atelier_app::cache_manager::{CacheManager, CacheUse};
 use atelier_app::use_cases;
 use atelier_sqlite::Database;
-use chrono::Utc;
 use clap::{Parser, Subcommand};
 use std::env;
-use std::time::Instant;
 
 mod issue_cli;
 
@@ -18,7 +16,6 @@ mod issue_cli;
   init          Initialize Atelier in the current repository
 
 Orientation:
-  man           Show role guides and Atelier product topics
   status        Show checkout, mission, work, and tracker signposts
   work          Show operational views, including the plural Mission Overview
 
@@ -37,14 +34,6 @@ Maintenance:
   prune         Prune accumulated artifacts safely
 
 Common commands:
-  atelier man
-  atelier man worker
-  atelier man planner
-  atelier man reviewer
-  atelier man validator
-  atelier man manager
-  atelier man admin
-  atelier man work-model
   atelier status
   atelier work ready
   atelier work blocked
@@ -99,15 +88,6 @@ enum Commands {
         /// Reconcile core tracker state even if already initialized
         #[arg(short, long)]
         force: bool,
-        /// Import the repo-local Beads migration file at .beads/issues.manual.jsonl
-        #[arg(long)]
-        import_beads: bool,
-    },
-
-    /// Show role guides and Atelier product topics
-    Man {
-        /// Guide to print: a role, or work-model
-        page: Option<String>,
     },
 
     /// Show checkout, mission, work, and tracker signposts
@@ -131,33 +111,12 @@ enum Commands {
         id: String,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses check
-    #[command(hide = true)]
-    Export {
-        /// Record-file directory for export diagnostics
-        #[arg(short, long)]
-        output: Option<String>,
-        /// Check deterministic renderer/cache freshness without writing tracked records
-        #[arg(long)]
-        check: bool,
-    },
-
     /// Advanced domain-cache diagnostic; explicit local repair uses check --fix
     #[command(hide = true)]
     Rebuild {
         /// Record-file directory to rebuild from
         #[arg(short, long)]
         input: Option<String>,
-    },
-
-    /// Import Beads JSONL backup into durable record files; cache repair remains lazy
-    #[command(hide = true)]
-    ImportBeads {
-        /// Beads JSONL backup path from an external source
-        input: String,
-        /// Record-file directory to write after import
-        #[arg(short, long)]
-        output: Option<String>,
     },
 
     /// One-shot graph bundle files
@@ -172,19 +131,12 @@ enum Commands {
         action: EvidenceCommands,
     },
 
-    /// Advanced local command diagnostics; JSON is local-only telemetry, not workflow state
-    #[command(hide = true)]
-    Diagnostics {
-        #[command(subcommand)]
-        action: DiagnosticsCommands,
-    },
-
     /// Prune accumulated artifacts safely
     Prune {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
         apply: bool,
-        /// Override diagnostics and canonical record retention for this prune pass
+        /// Override canonical record retention for this prune pass
         #[arg(long)]
         retention_days: Option<u64>,
     },
@@ -196,13 +148,6 @@ enum Commands {
         /// Repair ignored local runtime/cache state; never edits tracked record files
         #[arg(long)]
         fix: bool,
-    },
-
-    /// Validate tracker records
-    #[command(hide = true)]
-    Lint {
-        /// Optional issue ID or imported source ID
-        id: Option<String>,
     },
 
     /// Check tracker runtime and domain-cache health
@@ -502,19 +447,6 @@ another target.")]
     },
 }
 
-#[derive(Subcommand)]
-enum DiagnosticsCommands {
-    /// Summarize slow command telemetry as stable local-only JSON for performance analysis
-    Slow {
-        /// Time window in UTC days, where 0 means today only
-        #[arg(long, default_value_t = 7)]
-        days: u64,
-        /// Minimum duration in milliseconds
-        #[arg(long, default_value_t = 1000)]
-        threshold_ms: u64,
-    },
-}
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -612,20 +544,12 @@ fn run() -> Result<()> {
         }
     };
     let quiet = cli.quiet;
-    let command_name = command_identity(&cli.command);
-    let started_at = Utc::now();
-    let started = Instant::now();
 
-    let result = match cli.command {
-        Commands::Init {
-            force,
-            import_beads,
-        } => {
+    match cli.command {
+        Commands::Init { force } => {
             let cwd = env::current_dir()?;
-            commands::init::run(&cwd, force, import_beads)
+            commands::init::run(&cwd, force)
         }
-
-        Commands::Man { page } => commands::man::run(page),
 
         Commands::Status => {
             let storage = use_cases::status_cache()?;
@@ -700,15 +624,6 @@ fn run() -> Result<()> {
             commands::start::run(storage.db(), &storage.state_dir(), &id)
         }
 
-        Commands::Export { output, check } => {
-            let storage = CacheManager::discover()?.open_cache_for_health()?;
-            let state_dir = output
-                .as_deref()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| storage.state_dir());
-            commands::issue::export_canonical(storage.db(), &state_dir, check)
-        }
-
         Commands::Rebuild { input } => {
             let storage = CacheManager::discover()?;
             let state_dir = input
@@ -717,15 +632,6 @@ fn run() -> Result<()> {
                 .unwrap_or_else(|| storage.state_dir());
             let db_path = storage.db_path();
             commands::issue::rebuild(&state_dir, &db_path)
-        }
-
-        Commands::ImportBeads { input, output } => {
-            let storage = CacheManager::discover()?;
-            let state_dir = output
-                .as_deref()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| storage.state_dir());
-            commands::import::run_beads_jsonl(std::path::Path::new(&input), &state_dir)
         }
 
         Commands::Bundle { action } => match action {
@@ -865,19 +771,11 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Diagnostics { action } => match action {
-            DiagnosticsCommands::Slow { days, threshold_ms } => {
-                let summary = telemetry::slow_command_summary(days, threshold_ms)?;
-                println!("{}", serde_json::to_string_pretty(&summary)?);
-                Ok(())
-            }
-        },
-
         Commands::Prune {
             apply,
             retention_days,
         } => {
-            // Prune can clean local diagnostics without a repository. Once a
+            // Prune reports unavailable classes outside a repository. Once a
             // tracker is discovered, retain its association lock across cache
             // acquisition, canonical candidate reads, and any removals.
             let manager = CacheManager::discover();
@@ -934,11 +832,6 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Lint { id } => {
-            let cache = use_cases::lint_cache()?;
-            commands::issue::lint(cache.db(), id.as_deref())
-        }
-
         Commands::Doctor { fix } => {
             let storage = CacheManager::discover()?.open_cache_for_health()?;
             commands::issue::doctor(
@@ -950,17 +843,7 @@ fn run() -> Result<()> {
                 fix,
             )
         }
-    };
-
-    let success = result.is_ok();
-    telemetry::record_command_event(
-        command_name,
-        started_at,
-        started.elapsed(),
-        if success { Some(0) } else { Some(1) },
-        success,
-    );
-    result
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -980,8 +863,7 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Init { .. } => CanonicalTransactionMode::None,
         Commands::Bundle {
             action: BundleCommands::Apply { .. },
-        }
-        | Commands::ImportBeads { .. } => CanonicalTransactionMode::Exclusive,
+        } => CanonicalTransactionMode::Exclusive,
         // Note append is a read-modify-write of one record; it owns an
         // exclusive transaction so concurrent notes cannot lose updates.
         Commands::Issue {
@@ -996,9 +878,7 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Evidence {
             action: EvidenceCommands::Record { command, .. },
         } if !command.is_empty() => CanonicalTransactionMode::None,
-        Commands::Man { .. } | Commands::Diagnostics { .. } | Commands::Prune { .. } => {
-            CanonicalTransactionMode::None
-        }
+        Commands::Prune { .. } => CanonicalTransactionMode::None,
         _ => CanonicalTransactionMode::Shared,
     }
 }
@@ -1018,74 +898,6 @@ fn parse_cli_or_exit() -> Cli {
             }
             std::process::exit(exit_code);
         }
-    }
-}
-
-fn command_identity(command: &Commands) -> &'static str {
-    match command {
-        Commands::Init { .. } => "init",
-        Commands::Man { .. } => "man",
-        Commands::Status => "status",
-        Commands::Work { action } => match action {
-            None => "work",
-            Some(WorkCommands::Queue { .. }) => "work queue",
-            Some(WorkCommands::Mission { .. }) => "work mission",
-            Some(WorkCommands::Epic { .. }) => "work epic",
-            Some(WorkCommands::Ready) => "work ready",
-            Some(WorkCommands::Blocked) => "work blocked",
-            Some(WorkCommands::Active) => "work active",
-            Some(WorkCommands::All) => "work all",
-            Some(WorkCommands::Missions { .. }) => "work missions",
-        },
-        Commands::Start { .. } => "start",
-        Commands::Issue { action } => match action {
-            IssueCommands::Create { .. } => "issue create",
-            IssueCommands::List { .. } => "issue list",
-            IssueCommands::Show { .. } => "issue show",
-            IssueCommands::Transition { .. } => "issue transition",
-            IssueCommands::Update { .. } => "issue update",
-            IssueCommands::Note { .. } => "issue note",
-            IssueCommands::Link { .. } => "issue link",
-            IssueCommands::Unlink { .. } => "issue unlink",
-        },
-        Commands::Export { check, .. } => {
-            if *check {
-                "export --check"
-            } else {
-                "export"
-            }
-        }
-        Commands::Rebuild { .. } => "rebuild",
-        Commands::ImportBeads { .. } => "import-beads",
-        Commands::Bundle { action } => match action {
-            BundleCommands::Preview { .. } => "bundle preview",
-            BundleCommands::Apply { .. } => "bundle apply",
-        },
-        Commands::Evidence { action } => match action {
-            EvidenceCommands::Record { .. } => "evidence record",
-            EvidenceCommands::Show { .. } => "evidence show",
-            EvidenceCommands::Attach { .. } => "evidence attach",
-            EvidenceCommands::List { .. } => "evidence list",
-        },
-        Commands::Diagnostics { action } => match action {
-            DiagnosticsCommands::Slow { .. } => "diagnostics slow",
-        },
-        Commands::Prune { apply, .. } => {
-            if *apply {
-                "prune --apply"
-            } else {
-                "prune"
-            }
-        }
-        Commands::Check { fix, .. } => {
-            if *fix {
-                "check --fix"
-            } else {
-                "check"
-            }
-        }
-        Commands::Lint { .. } => "lint",
-        Commands::Doctor { .. } => "doctor",
     }
 }
 
@@ -1128,19 +940,14 @@ mod cache_acquisition_tests {
             .find("let _canonical_transaction_lock")
             .expect("canonical association lock");
         let dispatch = production
-            .find("let result = match cli.command")
+            .find("    match cli.command {")
             .expect("central command dispatch");
 
         assert!(lock < dispatch, "association lock must precede dispatch");
-        for bulk_surface in [
-            "commands::bundle::apply",
-            "commands::import::run_beads_jsonl",
-        ] {
-            assert!(
-                production[dispatch..].contains(bulk_surface),
-                "missing bulk canonical mutation surface {bulk_surface}"
-            );
-        }
+        assert!(
+            production[dispatch..].contains("commands::bundle::apply"),
+            "missing bulk canonical mutation surface commands::bundle::apply"
+        );
         let prune_lock = production
             .find("let _prune_canonical_lock")
             .expect("optional-repository prune association lock");
@@ -1152,16 +959,12 @@ mod cache_acquisition_tests {
 
     #[test]
     fn bulk_snapshot_swap_commands_take_exclusive_canonical_transactions() {
-        for args in [
-            vec!["atelier", "bundle", "apply", "bundle.json", "--yes"],
-            vec!["atelier", "import-beads", "issues.jsonl"],
-        ] {
-            let cli = Cli::try_parse_from(args).expect("bulk canonical command");
-            assert_eq!(
-                canonical_transaction_mode(&cli.command),
-                CanonicalTransactionMode::Exclusive
-            );
-        }
+        let apply = Cli::try_parse_from(["atelier", "bundle", "apply", "bundle.json", "--yes"])
+            .expect("bundle apply");
+        assert_eq!(
+            canonical_transaction_mode(&apply.command),
+            CanonicalTransactionMode::Exclusive
+        );
 
         let preview = Cli::try_parse_from(["atelier", "bundle", "preview", "bundle.json"])
             .expect("bundle preview");
@@ -1176,7 +979,6 @@ mod cache_acquisition_tests {
         let sources = [
             ("main", include_str!("main.rs")),
             ("issue dispatch", include_str!("issue_cli.rs")),
-            ("role guide", include_str!("commands/man.rs")),
         ];
         let raw_database_open = ["Database", "::open"].concat();
         let raw_app_open = ["open_", "database("].concat();

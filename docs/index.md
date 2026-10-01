@@ -76,9 +76,6 @@
 - [docs/product/validation.md](product/validation.md): product language for
   outcomes, proof, evidence, validation, closeout, and proof visibility in
   normal operator surfaces.
-- [docs/product/milestone-records.md](product/milestone-records.md): deferred
-  checkpoint semantics and the v1 rule that validation data stays on issues,
-  epics, missions, and evidence.
 - [docs/product/workflow-configuration.md](product/workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   review field and review room records, strict errors, and starter workflow
@@ -89,9 +86,6 @@
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
   record-file, concrete domain service, and lazy SQLite domain-cache boundaries
   for durable writes and cache-backed reads.
-- [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
-  local command telemetry storage, redaction defaults, opt-out controls,
-  retention behavior, event fields, and Mission Control export boundary.
 - [docs/product/mission-control-tui.md](product/mission-control-tui.md):
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.
