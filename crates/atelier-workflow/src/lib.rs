@@ -8,8 +8,6 @@ use std::path::Path;
 
 use atelier_core::{Issue, IssueStrategy, ISSUE_STRATEGY_FIELD};
 
-pub use atelier_core::RecordId;
-
 pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 3
 branch_policy:
