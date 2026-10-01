@@ -1,5 +1,10 @@
 # Codex Mission Log Insights, 2026-06-14
 
+> Historical audit. This describes the system at the time of the audit.
+> Current behavior is defined by [ADR 0019](../../adr/0019-verified-repo-native-tracker.md)
+> and the [product guide](../../product/index.md); superseded command and cache
+> guidance below is not an operating procedure.
+
 This report summarizes patterns mined from recent long-running Codex mission
 threads for Atelier. The goal is not a blow-by-blow history. It is a short list
 of repeated mistakes, stumbling blocks, and improvement opportunities for:

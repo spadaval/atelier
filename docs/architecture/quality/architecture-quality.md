@@ -1,51 +1,27 @@
 # Architecture Quality Vocabulary
 
-## Abstraction
+**Abstraction:** protect real invariants: valid records, graph integrity,
+dependency closure, traceable active work, freshness, review, and safe cleanup.
+Each abstraction should serve a current need.
 
-Prefer abstractions that protect real domain invariants: durable record files,
-domain-cache source freshness, workflow validator evaluation, typed links,
-workflow transitions, evidence attachment, and cache rebuild. Avoid wrappers
-whose only purpose is hiding current Chainlink names before the target behavior
-is implemented.
+**Coupling:** connect CLI, application queries, workflow checks, and record
+persistence through typed values. Do not parse human command output as state.
+Git owns integration facts; Markdown owns durable tracker facts.
 
-## Coupling
+**Cohesion:** keep parsing/rendering in the records crate, graph queries in the
+application layer, and CLI arguments and external-command adapters at the
+edge. A read-only invariant check should not branch, commit, or merge.
 
-CLI parsing, `RecordStore` persistence, domain-cache rebuild, and workflow
-validation should be coupled through explicit data structures rather than
-command-output parsing. SQLite runtime state must stay decoupled from the
-mergeable repository record store.
+**Determinism:** make rendering, iteration order, identifiers, timestamps, and
+bundle preview ordering explicit where they affect reproducibility or diffs.
 
-## Cohesion
+**Operability:** errors identify the record, gate, policy, or path that failed
+and give a concrete recovery step. Commands expose focused current context.
 
-Keep command handlers focused on user intent and argument handling. Keep
-record-file parsing/rendering in `RecordStore` modules. Keep cache and
-runtime schema transaction logic in database modules. Keep validation proof and
-freshness checks in the boundary that owns them.
+**Proof:** claim-specific evidence names its method, explicit result, full
+commit, artifacts, and limits. Fresh independent review establishes approval;
+a broad green test suite or a receipt's existence does not replace it.
 
-## Determinism
-
-Canonical Markdown records must be deterministic across machines and runs. File
-order, IDs, timestamps, JSON key ordering, and distinct derived outputs need
-explicit rules when they affect diffs or rebuild.
-
-## Operability
-
-Agent-facing commands should provide focused human output when they are used for
-coordination, validation, or Mission Control. Errors should identify the failed
-record, validator, transition, or record file. Durable record files, not
-command-result JSON or SQLite cache rows, are the machine-readable state boundary.
-
-## Proof
-
-Strong proof is claim-specific, reproducible, attached to the accountable work,
-classified with a result, scoped to the changed behavior or policy, and
-independent when risk requires another validator. Weak proof is broad,
-summary-only, unattached, unverifiable, stale, or unmapped to the claim. Broad
-checks are useful supporting context, but they do not replace proof that shows
-the claimed behavior, file content, command result, rejection, or workflow gate.
-
-## Preservation
-
-When replacing inherited Chainlink behavior, preserve useful CLI, SQLite,
-session, locking, and test coverage until a bead or ADR explicitly permits
-breakage or migration.
+**Preservation:** preserve current documented behavior through focused tests.
+Remove retired subsystems and compatibility shims when the governing migration
+or ADR permits it. Historical behavior does not define the current contract.

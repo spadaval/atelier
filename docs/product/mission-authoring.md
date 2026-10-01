@@ -1,94 +1,29 @@
-# Mission And Work Authoring
+# Mission Authoring
 
-Atelier is a pleasant interface over repository planning files. It helps agents
-find work, see relationships, and preserve useful proof. It is not an approval
-system for plans.
+[Agent Factory](../../.agents/skills/agent-factory/SKILL.md) owns planning.
+Its [tracker-record templates](../../.agents/skills/agent-factory/references/tracker-records.md)
+are the authoring reference. Atelier validates the resulting records and graph.
 
-## Keep The Model Small
+A mission is a front door to a strategy, not a second strategy or a status table.
+Link the strategy by path, state the outcome, and identify success criteria.
+When no separate strategy exists, the mission body carries that intent.
 
-- A mission states the desired outcome, boundaries, and major workstreams.
-- An epic states a coherent outcome that owns one integration and review
-  boundary. Product-facing and pure-engineering outcomes use the same epic
-  shape.
-- An issue owns one accountable slice of work.
-- Evidence records what was actually checked.
+An epic describes an observable Outcome. Draft epics can retain Unknowns;
+before ready, add the Proof route and immediate child work with real dependency
+links. Add Delivers when it helps connect the increment to mission criteria.
+Keep Design as a link to the owning document.
 
-Use `advances` to connect a mission to root work, hierarchy to group issue work
-under epics, and blockers only for real execution prerequisites.
+An executable issue has Goal and Done when. Done when names a check or scenario
+that could fail if the slice were missing or wrong. Scope and Context give the
+worker enough boundaries and interfaces to act without the author's context.
+A validation item references the claims it checks and records its method and
+results; validation work still follows the executable issue shape.
 
-## Plan Only What Is Useful
+Keep status in front matter and progress in dated Notes. Put follow-up findings
+in new issues. Use native blockers for sequencing, parent fields for direct epic
+children, and `advances` links for mission scope. Do not put mission membership
+in parent fields.
 
-Describe the whole mission as outcomes, but create detailed issues only as far
-as current evidence supports. A later epic may remain in `draft` when its
-outcome is meaningful but its implementation and proof route are not yet clear.
-If even the outcome or integration boundary is speculative, do not create the
-epic yet.
-
-Expanding a draft epic refines its outcome and preservation claims, creates the
-immediate child work, represents known dependencies, and selects the proof
-route together. Transition it to `ready` only after that current horizon is
-understandable. There is no separate expansion record or approval.
-
-Changing the graph during execution is normal. Add, split, reorder, block,
-defer, or supersede work when evidence changes the implementation route.
-Preserve completed work and evidence; do not rewrite history to make the new
-route appear inevitable.
-
-## Ready Means Understandable
-
-A draft mission is ready when:
-
-- its Outcome describes an observable finished state;
-- immediate work is understandable without private chat history;
-- known blockers are represented;
-- major unresolved product or architecture decisions are called out; and
-- the next useful increment can begin safely.
-
-Use:
-
-```text
-atelier issue transition <mission-id> ready
-atelier issue transition <mission-id> start
-```
-
-No separate mission-plan approval, reviewer identity, exact graph digest, or
-provenance ceremony is required.
-
-A draft epic is ready when:
-
-- its Outcome describes one result that can be reviewed and validated as a
-  coherent branch;
-- preservation claims are explicit when no external behavior should change;
-- immediate child work is understandable without private context;
-- dependencies and blockers are represented; and
-- the Manager has selected an appropriate proof route, including independent
-  validation when the claim or risk requires it.
-
-Use:
-
-```text
-atelier issue transition <epic-id> ready
-atelier issue transition <epic-id> start
-```
-
-Draft epics remain valid planning records but are not ready work.
-
-## Proof
-
-Strategy states mission-level assurance. During epic expansion, the Manager
-chooses the proof route appropriate to the now-understood increment. Workers
-still choose focused commands while doing ordinary work unless an exact check
-is part of the contract. Independent validation is useful for risky behavior
-and parent completion claims, but it is ordinary accountable work rather than
-permission to edit or execute a plan.
-
-## Anti-Red-Tape Test
-
-Before adding planning policy, ask:
-
-- Does this help an agent understand the outcome or next action?
-- Does it expose a real blocker or dependency?
-- Does it preserve information another agent will need?
-- Does it prevent a failure we have actually observed?
-
-If not, leave it out.
+Use `atelier issue create` for a single item. For a prepared multi-record graph,
+inspect `atelier bundle preview <file>` before applying it. Read the
+[bundle contract](../spec/bundle/schema.md) for its supported input fields.

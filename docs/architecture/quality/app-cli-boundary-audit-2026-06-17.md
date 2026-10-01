@@ -1,5 +1,10 @@
 # App/CLI Boundary Audit, 2026-06-17
 
+> Historical audit. This describes the system at the time of the audit.
+> Current behavior is defined by [ADR 0019](../../adr/0019-verified-repo-native-tracker.md)
+> and the [product guide](../../product/index.md); superseded command and cache
+> guidance below is not an operating procedure.
+
 Closed app-layer tracker work overstated the live boundary. The target
 architecture in `docs/architecture/source-layout.md` says `atelier-app` owns
 use-case orchestration and `atelier-cli` owns Clap parsing, telemetry, exit

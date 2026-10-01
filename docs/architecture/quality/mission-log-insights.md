@@ -1,5 +1,10 @@
 # Mission Log Insights
 
+> Historical audit. This describes the system at the time of the audit.
+> Current behavior is defined by [ADR 0019](../../adr/0019-verified-repo-native-tracker.md)
+> and the [product guide](../../product/index.md); superseded command and cache
+> guidance below is not an operating procedure.
+
 This note summarizes patterns found by mining recent Codex mission transcripts
 from `/root/.codex` after the long Atelier implementation runs on June 11-13,
 2026. The review focused on repeated mistakes, friction, and confusion that

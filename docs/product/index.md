@@ -1,60 +1,28 @@
-# Product
+# Product Guide
 
-This map owns Atelier's user-visible behavior: workflow concepts, command
-surface, human output, policy semantics, and Mission Control experience.
-Implementation ownership, persistence boundaries, and local runtime mechanics
-live in [Architecture](../architecture/index.md).
+Atelier keeps records and proof in Git and checks invariants. Agent Factory owns
+how agents plan, execute, review, and validate work. See
+[Product Intent](../../PRODUCT_INTENT.md) and
+[ADR 0019](../adr/0019-verified-repo-native-tracker.md).
 
-Product direction starts in [PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), and
-domain language lives in [CONTEXT.md](../../CONTEXT.md). Product docs refine
-that direction into contracts that can be implemented and validated.
+- [Work model](work-model.md): records, graph relationships, ownership, and
+  completion.
+- [Mission authoring](mission-authoring.md): concise missions, epics, and slices.
+- [CLI surface](cli-surface.md): command map and ordinary work sequence.
+- [Evidence and validation](validation.md): honest results, commit identity,
+  freshness, and proof limits.
+- [Reviews and merge](reviews-and-merge.md): approvals, findings, exemptions,
+  and fast-forward integration.
+- [Workflow configuration](workflow-configuration.md): reviewed repository
+  policy and read-only transition checks.
+- [Sessions and hooks](sessions-and-hooks.md): prime, land, setup, and branch
+  orientation.
+- [Human CLI output](human-cli-output.md), [inventory and mission views](issue-inventory-and-mission-overview.md),
+  and [work ordering](work-view-ordering.md): reading operational views.
+- [Retention and prune](retention-and-prune.md): explicit cleanup and Git recovery.
+- [Development setup](development-setup.md) and
+  [repository contribution](repository-contribution.md): working on Atelier.
 
-## Doctrine
-
-- [Zen Of Atelier](zen.md): product principles for long-running
-  semi-autonomous mission work, coordination, evidence, validation, and
-  terminal checks.
-
-## Workflow Model
-
-- [Work Model](work-model.md): mission, deferred checkpoint semantics, epic,
-  issue, workflow validator, and evidence relationships.
-- [Mission And Work Authoring](mission-authoring.md): lightweight outcome,
-  decomposition, dependency, and incremental-planning guidance.
-- [Validation](validation.md): product language for outcomes, proof, evidence,
-  validation, terminal checks, and proof visibility in normal operator surfaces.
-- [Workflow Configuration Contract](workflow-configuration.md):
-  fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
-  transition actions, strict errors, and starter workflow examples.
-- [Work View Ordering](work-view-ordering.md): blocker-aware ordering and row
-  state vocabulary for issue-like work queues.
-- [Retention And Prune Policy](retention-and-prune.md): cleanup classes,
-  protection rules, Git-history recovery, and explicit apply semantics.
-
-## Interfaces
-
-- [Development Setup](development-setup.md): required tools, fresh-checkout
-  commands, local env/secrets policy, and devcontainer rationale.
-- [Repository Contribution Policy](repository-contribution.md): contribution
-  entry point, GitHub template classification, dependency update automation,
-  and tracker-first ownership policy.
-- [CLI Surface Tiers](cli-surface.md): public CLI core command surface, removed
-  compatibility commands, and inherited utility disposition.
-- [Command Audit](command-audit/index.md): role ownership, naming, documentation,
-  output hierarchy, and role-specific guide proposal for each root command
-  surface.
-- [Human CLI Output](human-cli-output.md): human-readable CLI output grammar,
-  formatter boundaries, color/width policy, and test expectations.
-- [Issue Inventory And Mission Overview](issue-inventory-and-mission-overview.md):
-  flat issue inventory, cross-mission membership and rollups, exceptional work,
-  ordering, budgets, quiet output, and colorless behavior.
-- [Mission Control TUI](mission-control-tui.md): Mission Control TUI projection
-  dependencies, degradation rules, navigation model, mutation boundary, and
-  fixture expectations.
-
-## Boundary
-
-Product docs may name implementation-backed concepts such as local runtime
-state when the behavior is user-visible, but they should not define storage
-ownership, module boundaries, or parsing algorithms. Those belong in
-architecture docs.
+Command help is the exact argument reference. Use the repository's debug binary
+while validating the rebuild; the installed binary can still represent the old
+model until installation is deliberately updated.

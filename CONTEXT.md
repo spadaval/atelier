@@ -1,296 +1,44 @@
-# Context
+# Atelier Domain Language
 
-> **Superseded in part.** Atelier is being rebuilt; see
-> [docs/strategies/atelier-rebuild.md](docs/strategies/atelier-rebuild.md) and
-> [ADR 0019](docs/adr/0019-verified-repo-native-tracker.md). Where this
-> document describes transition actions, review providers, the SQLite cache,
-> activity files, or `atelier man`, it is out of date.
+Use these terms for the verified repo-native tracker defined by
+[ADR 0019](docs/adr/0019-verified-repo-native-tracker.md).
 
-## Domain Terms
+| Term | Meaning |
+| --- | --- |
+| Record | Tracked Markdown with typed YAML front matter and a human-readable body under `.atelier/`. |
+| Mission | An issue of type `mission` that links strategy and success criteria; its execution scope uses `advances` links. |
+| Strategy | Ordinary Markdown owning intent, success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
+| Epic | An outcome-bearing issue, normally the branch owner for its direct child issues. |
+| Draft epic | Planning context whose immediate work and proof route are not yet executable. |
+| Issue | One accountable slice; ordinary work has `Goal` and `Done when` sections. |
+| Validation item | Work dedicated to independently checking referenced acceptance claims. |
+| Blocker | A native dependency that prevents another item becoming executable or done. |
+| Branch owner | An epic for its children, or a standalone non-mission issue; recorded branch metadata identifies its work branch and base. |
+| Status | Repository-defined lifecycle state; its category supports work queries. Agent Factory decides the process. |
+| Transition | A permitted status change plus read-only checks; it writes records and has no Git or provider actions. |
+| Gate | An invariant check applied at a consequential boundary, including merge. |
+| Evidence | An immutable proof receipt with an explicit result and full Git commit, attached to the claims it supports. |
+| Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
+| Review | An append-only in-repo account of examination, approval, findings, and dispositions. |
+| Approval | A review decision pinned to a commit, from an identity independent of the change's authors. |
+| Finding | A recorded problem that needs an explicit `FIX NOW`, `DEFER`, or `NO ACTION` disposition. |
+| Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |
+| Freshness | Whether later commits changed material relevant to the proof or approval. |
+| Done claim | A terminal status committed on the work branch, before integration. |
+| Integration | A gated fast-forward of the base branch; it creates no commit and writes no tracker state. |
+| Prime | Session orientation from records, Git state, proof, and repository guidance. |
+| Land | A session handoff check of committed records and tracker invariants. |
+| Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |
 
-- Agent: an AI or human operator performing work in the repository.
-- Agent-factory: the coordinated operating model used to plan, assign,
-  validate, review, and hand off agent work.
-- Atelier: the product and live repository tracker: a local-first, agent-native work tracker for
-  complex software missions.
-- Beads: the predecessor tracker replaced by Atelier. Beads data was imported
-  once and the repository archive was purged; Atelier no longer imports it.
-- Record files: deterministic tracked Markdown files under `.atelier/`; they
-  are the durable project state and can rebuild the local SQLite domain cache.
-- RecordStore: the target component that owns record-file reads, writes,
-  validation, deterministic rendering, and ID allocation for concrete domain
-  types.
-- SQLite domain cache: the target rebuildable cache derived from record files
-  for global queries, graph traversal, search, validation, and Mission Control
-  inputs. It holds selected query facts, never a generic object mirror or facts
-  that cannot be recreated from record files.
-- Local diagnostics and cache: local-only ignored files such as command
-  diagnostics, locks, and UI caches. These are not SQLite tracker state and
-  must not define durable project records or current work.
-- Local command diagnostics: user-local command telemetry used for performance
-  and failure analysis. It is local diagnostic data, not a canonical work
-  record, SQLite tracker state, or exported run/session record.
-- Chainlink: the inherited Rust CLI codebase this repository starts from.
-- Virtual workspace root: the target repository root `Cargo.toml` shape after
-  the crate migration. It owns workspace membership and shared package metadata,
-  not a root `atelier` library or binary package.
-- Atelier crate layers: the target internal Rust crates under `crates/`:
-  `atelier-core` for pure domain types, `atelier-workflow` for workflow policy,
-  `atelier-records` for record-file storage, `atelier-sqlite` for the
-  rebuildable SQLite domain cache, `atelier-app` for
-  use-case orchestration, and `atelier-cli` for the public `atelier` binary.
-- Evidence: a durable proof record for validation, such as test output, logs,
-  screenshots, reports, or benchmark results.
-- Evidence validates relationship: the proof relationship from an evidence
-  record to the issue, mission, epic, or other record whose claim it supports.
-  `validates` is reserved for evidence links; issue-to-issue mission scope uses
-  `advances`.
-- Strong proof: claim-specific evidence that is reproducible from durable
-  repository state or recorded transcripts, attached to the accountable work,
-  classified with a result, scoped to the claim being made, and independently
-  validated when the claim's risk requires a different reviewer.
-- Weak proof: evidence that is too broad, summary-only, unattached,
-  unverifiable, stale, or not mapped to the specific claim it is supposed to
-  prove. Broad green test suites and mission summaries can support strong proof,
-  but they are weak when they are the only proof for a concrete outcome.
-- Workflow: repository-owned policy that defines issue workflow statuses,
-  transitions, terminal states, validators, descriptions, and applicability.
-- Issue type registry: the repository-owned `issue_types` map in workflow
-  policy. It defines valid issue type names and user-facing labels before
-  workflows claim coverage.
-- Workflow applicability: the issue type coverage owned by each workflow through
-  `workflows.*.applies_to`. Every registered issue type must be covered exactly
-  once by the committed workflow policy.
-- Workflow status: the canonical issue `status` value defined by workflow
-  policy. It is durable repository state, not a derived summary or a local
-  runtime marker.
-- Status category: derived orientation metadata that groups workflow statuses
-  into stable operator-facing buckets such as todo, active, blocked, or done.
-  Categories help commands summarize work but do not replace workflow status in
-  durable state or transition checks. `review` and `validation` are issue types
-  or workflow statuses when configured, not required global categories.
-- Transition: a named workflow rule that moves a record from one workflow
-  status to another after required fields, evidence, and validators succeed.
-- Transition action: configured work run by an explicit issue transition after
-  required fields and validators succeed. Actions may write canonical tracker
-  records, local branch commits, review artifact links, provider requests, or
-  provider-owned merge/sync operations, but they are scoped to the transition
-  that declares them and are not hidden automation hooks.
-- Validator: a machine-readable workflow transition check that controls whether
-  a transition can proceed and returns an actionable failure reason.
-- Transition description: static workflow text rendered near an action, status,
-  or failure to explain the next operator move. Descriptions inform;
-  validators decide.
-- Base branch: the named integration branch from `branch_policy.base_branch`.
-  It is the repository default target for owner-branch integration unless an
-  explicit mission or epic branch base is recorded by workflow actions.
-- Work branch: the Git branch that owns mutation and review for a branch-owning
-  record. Its canonical name is `<issue_type>/<issue_id>`, such as
-  `epic/atelier-li5h` or `mission/atelier-sszj`; the issue type is the
-  registry key and the issue ID is the canonical record ID.
-- Branch base: the recorded branch/ref and commit from which a work branch was
-  prepared. Review targets, sync, and integration checks use the recorded
-  branch base instead of recomputing a target from the current parent graph.
-- Mission integration branch: the mission work branch named
-  `mission/<issue_id>`. Mission workflows prepare it explicitly with branch
-  actions, and mission scope is still defined by direct `advances` links.
-- Mission publish review: the mission workflow state where mission-scoped work
-  is complete enough to open a review artifact from `mission/<issue_id>` to the
-  configured base branch. This is the explicit handoff to base-branch
-  publication; normal mission execution and scoped work closeout happen on
-  mission-derived branches before this state.
-- Review artifact action: the v1 transition action that opens or links the
-  configured review artifact for the branch-owning issue or epic and writes the
-  canonical `review` field. It follows the active review mode and must not
-  merge, approve, comment on, or close review or issue workflow by itself.
-- Mission: a high-level objective declared through repository workflow policy.
-  A mission may span multiple epics, issues, evidence records, agents, and
-  deferred run metadata, but it does not own a hidden command lifecycle,
-  active-focus pointer, or universal evidence rule outside the workflow model.
-  A mission may still be the shared background workspace boundary when
-  repository workflow and operator assignment choose that coordination shape.
-- Strategy: durable mission-scoped Markdown that owns the finished outcome,
-  target system, governing tradeoffs, boundaries, adaptation authority, and
-  mission-level assurance. Strategy is not a first-class tracker record or a
-  backlog of implementation work.
-- Epic: an outcome-bearing delivery increment and the normal branch and review
-  boundary beneath a mission. Its outcome may be product-facing, system,
-  architecture, operational, quantitative, destructive, or explicitly
-  behavior-preserving. One epic normally owns one reviewable branch or
-  PR-equivalent changeset.
-- Draft epic: a structurally valid provisional outcome whose implementation and
-  proof route are not yet ready. A draft epic may omit children and exact
-  Evidence content and must not appear as executable ready work.
-- Epic expansion: the ordinary graph work that refines an epic's outcome and
-  preservation claims, creates its immediate evidence-backed child work,
-  represents dependencies, selects a proof route, and transitions the epic from
-  `draft` to `ready`. It is not a separate record or stored flag.
-- Issue: a durable accountability unit and implementation slice. It does not
-  have to map one-to-one to an agent run, worktree, branch, or independent
-  review.
-- Blocking relationship: an issue-owned relationship where one issue prevents
-  another issue from being ready.
-- Milestone/checkpoint semantics: a deferred v1 concept for validated
-  intermediate target states. Checkpoint intent may be described in mission,
-  epic, issue, or evidence bodies, but there is no active first-class
-  `.atelier/milestones/` record table or milestone command surface.
-- Mission Control: the target query or UI surface that summarizes active
-  missions, checkpoint progress, blockers, agents, workflow validator failures,
-  and evidence.
-- Status role: optional workflow policy on an active issue status that names
-  the role currently responsible for that work state. Status roles are declared
-  in `.atelier/workflow.yaml` and are surfaced by `atelier status`, role guides,
-  and review attribution.
-- Review mode: the repository-wide review backend selected in
-  `.atelier/config.toml`. Exactly one mode is active for a project:
-  `room` for native Atelier review rooms or `provider` for a hosted
-  PR-equivalent provider such as Forgejo.
-- Review artifact: the configured review object linked from issue state
-  through the canonical `review` field. In room mode this is a native
-  `.atelier/reviews/<id>.yaml` room. In provider mode this is the normalized
-  provider-local review number plus provider kind. Review artifacts are code
-  review workspaces, not Atelier workflow transitions, and they do not replace
-  evidence records.
-- Review room: a native Atelier review artifact stored as tracked YAML under
-  `.atelier/reviews/<id>.yaml`. Its current state is derived from room metadata
-  plus ordered events such as comments, findings, approvals, change requests,
-  resolutions, stale-approval invalidations, and merge.
-- Room event: an append-only review-room timeline entry. Events are the durable
-  source for comments, decisions, approvals, finding resolution, stale approval
-  invalidation, and merge state.
-- Finding: a review-room decision event that names a blocking or non-blocking
-  problem. Blocking findings must be resolved before room merge can succeed.
-- Approval: a review-room decision event that can satisfy merge readiness until
-  it becomes stale. New commits or change-request events invalidate previous
-  approvals rather than mutating them in place.
-- Merge authority: the `atelier review merge` boundary. In room mode it checks
-  room approvals, stale approvals, blocking findings, and expected branch state
-  and records a room merge event. In provider mode it delegates merge or merge
-  confirmation to the configured provider. In both modes it does not transition
-  Atelier issue workflow.
-- Provider terminal actions: provider-backed workflow actions such as
-  `tracker.commit`, `git.push`, `review.merge`, and `git.sync` that make
-  the provider review artifact and remote base branch the integration
-  authority. They are not aliases for local `git.integrate`.
-- Plan: execution intent that matters beyond ephemeral context. In v1, plans are
-  ordinary Markdown artifacts or prose referenced from accountable work or
-  evidence; they are not first-class `.atelier/plans/` records.
-- Run: execution metadata for a slice of work, not the primary unit of product
-  planning.
-- Graph: the cross-record relationship shape among missions, issues, blockers,
-  evidence, and other first-class records.
-- Current work: the set of canonical issue records in one checkout's tracked
-  `.atelier/` tree whose workflow status is `in_progress`, interpreted with the
-  mission worktree and epic branch context visible in that checkout. Different
-  Git worktrees may legitimately have different current-work sets until their
-  Markdown records reconcile through Git.
-- Abandon: a legacy active-pointer cleanup concept that should not remain the
-  normal way to leave current work once status-derived current work replaces
-  runtime work associations.
-- SQLite domain-cache state: selected query facts and source-freshness metadata
-  in ignored `.atelier/runtime/state.db`. It is opened and repaired lazily by
-  commands that need cache-backed access.
-- Check: the visible operator health surface that validates durable tracker
-  records and workflow configuration. `atelier check --fix` is the explicit
-  repair path for ignored local runtime and domain-cache state; it does not edit
-  record files. Doctor remains a hidden advanced diagnostic behind that normal
-  surface.
+The graph stores hierarchy in `children`, dependencies in `blocks`, evidence in
+`attachments`, and semantic links in `relates`. Missions are not hierarchy
+parents. Epics have direct ordinary issue children; standalone issues remain
+valid. Mission membership uses `advances`, not parent fields.
 
-## Ambiguities
+Different branches may contain different records and statuses. Cross-branch
+summaries name their branch and never overlay them onto the current checkout.
+Merge-time facts come from Git, not a second stored integration state.
 
-- The product name is Atelier. Use Chainlink for provenance and inherited
-  behavior that is still intentionally documented as source history; use Atelier
-  for the current package, binary, runtime directory, resources, and target-state
-  product design.
-- Export/import in the inherited code is backup-oriented historical behavior,
-  not part of the target persistence path. The target architecture rebuilds its
-  disposable domain cache from record files.
-- Cache rebuild is a low-level diagnostic and recovery mechanic, not normal
-  operator workflow. Ordinary cache-backed commands detect and repair stale
-  sources lazily; the explicit `atelier check --fix` path handles broader local
-  damage.
-- Beads migration is explicit during setup. `atelier init` may detect the
-  standard repo-local Beads migration input, but import requires an explicit
-  setup option rather than a silent automatic conversion.
-- Local repair may change ignored domain-cache state but must not edit tracked
-  `.atelier/` record files.
-- Graph commands should inspect cross-record relationships, including missions
-  and issues. If a view is issue-only, its help should say so explicitly.
-- The project-state target is Markdown-first in a single `.atelier/` tree:
-  successful durable mutations write record files through `RecordStore` and
-  invalidate affected cache facts. `CacheManager` repairs those facts lazily
-  before a cache-backed query; SQLite is never the durable source of truth.
-- Blocking relationships represent issue readiness, not a separate dependency
-  domain. Canonical state groups record relationships under `relationships`:
-  use `blocks` for issue-owned blockers, `children` for hierarchy and mission
-  work, `attachments` for evidence, and `relates` for peer semantic
-  relationships.
-- Missions, issues, evidence, workflow policy, review artifacts, and activity
-  sidecars are the v1 first-class durable concepts.
-  Milestone/checkpoint
-  records, first-class plan records, sessions, attempts, and runs remain
-  deferred until a later contract reintroduces them directly.
-- Validators belong to workflow policy. Checkpoint or plan prose may describe
-  desired proof, but validators enforce issue transitions.
-- Durable claim/assignment and current work are easy to confuse. Current work
-  is derived from active-category issue status in the checkout's tracked
-  Markdown records, not from runtime work associations, sessions, attempts, or
-  a parallel hidden claim system.
-- Status roles and local command diagnostics serve different purposes. Status
-  roles are committed workflow policy for active work ownership. Local command
-  diagnostics are ignored runtime telemetry for command health and are not
-  exported work records.
-- Review artifacts and validators are distinct. `atelier review` commands
-  operate on native rooms or provider-backed review artifacts and record their
-  issue or epic linkage, while workflow validators such as
-  `review.linked_pr_merged` only read review state to decide whether an Atelier
-  transition is allowed.
-- Review artifact actions and review commands are distinct. A workflow
-  transition may declare an action that opens or links the branch owner's review
-  artifact after validators pass, but approval, comments, request-changes,
-  finding resolution, merge, and workflow status changes remain owned by
-  explicit review and issue commands.
-- Review command role attribution is status-derived by default. Mutating review
-  commands use explicit `--role` when supplied; otherwise they infer the role
-  from the linked owner issue's current `status.role` and fail if that status
-  has no configured role.
-- Review links and evidence attachments are distinct. The `review` field stores
-  the active review artifact for a branch-owning issue or epic; evidence
-  attachments prove claims with command transcripts, review summaries, or
-  validation records. Legacy `pull_request` fields are migration input, not the
-  durable target shape.
-- Workspace, branch, and review boundaries are distinct. Missions own shared
-  worktrees/background checkouts when declared as the coordination objective,
-  epics own reviewable branches, and ordinary issues own local implementation
-  proof. Per-issue worktrees or branches are exceptional isolation tools, not
-  the default assignment model.
-- Mission lifecycle and publish policy is workflow-owned. The CLI may provide
-  objective graph summaries and migration helpers, but the valid statuses,
-  transitions, validators, and evidence requirements for mission-shaped work
-  come from `.atelier/workflow.yaml`.
-- This repository's pre-execution mission lifecycle is
-  `draft -> ready -> in_progress`. Readiness requires understandable planning
-  files and clear declared blockers, not a separate approval subsystem.
-- This repository's epic planning lifecycle begins
-  `draft -> ready -> in_progress`. Draft permits incomplete implementation and
-  proof planning; ready means expansion has made the next increment executable.
-  Todo-category status alone does not establish ready-work eligibility.
-- Branch policy is workflow-owned rather than a separate routine setup step.
-  Operators inspect `atelier issue transition <id>` and execute the configured
-  transition that enters active work; its `git.prepare_branch` action prepares
-  the owner branch from the work graph. Child issues use the nearest parent epic
-  branch, standalone issues use an issue branch, and epics use an epic branch.
-  Terminal transitions commit tracker state through explicit workflow actions.
-  Child issues normally stop at the owner branch. Provider-owned review
-  transitions use provider terminal actions, while any transition that
-  explicitly owns a local branch boundary may use `git.integrate`, even when
-  other workflows use provider review. Squash merge is the default local integration strategy,
-  with repository policy able to select merge alternatives but not configurable
-  branch-name templates. Owner branches use canonical
-  `<issue_type>/<issue_id>` names, and optional mission integration branches are
-  created only by configured workflow actions. A failed close-time commit or
-  merge must not leave the item closed in the integration branch.
-- The layered Cargo workspace is the target architecture, not a parallel
-  scaffold. The repository root is a virtual workspace; remaining monolithic
-  modules under `crates/atelier-cli/src/` are migration input for lower crates,
-  and old root-package compatibility paths must not return.
+Historical terms such as review room, provider terminal action, activity file,
+SQLite domain cache, and Mission Control describe retired designs. They are
+not aliases for current concepts.

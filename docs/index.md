@@ -1,114 +1,24 @@
 # Documentation Map
 
-> **Rebuild in progress.** [docs/strategies/atelier-rebuild.md](strategies/atelier-rebuild.md)
-> and [ADR 0019](adr/0019-verified-repo-native-tracker.md) define the target
-> model and override the documents below where they conflict. Many product
-> and architecture documents still describe the superseded design.
+Start with [Product Intent](../PRODUCT_INTENT.md) and
+[Domain Language](../CONTEXT.md). [ADR 0019](adr/0019-verified-repo-native-tracker.md)
+defines the verified repo-native tracker and supersedes older decisions about
+process ownership, review providers, transition actions, and the cache.
 
-- [docs/strategies/atelier-rebuild.md](strategies/atelier-rebuild.md): active
-  rebuild strategy and temporary plan.
-- [docs/adr/0019-verified-repo-native-tracker.md](adr/0019-verified-repo-native-tracker.md):
-  Agent Factory owns process; Atelier owns records, queries, and invariant
-  guards; no transition actions, review provider, or cache.
-- `.agents/skills/agent-factory/SKILL.md`: copy of the Agent Factory skill
-  (synced from the global skill on 2026-09-30).
-- `AGENTS.md`: concise entry point and repository reference map for agents
-  working in this repository.
-- [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
-- [PRODUCT_INTENT.md](../PRODUCT_INTENT.md): product direction, principles, and
-  target-state constraints for Atelier.
-- [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  historical export/rebuild migration layout; current persistence guidance is
-  in the architecture documents below.
-- [docs/spec/bundle/schema.md](spec/bundle/schema.md):
-  versioned JSON contract, validation diagnostics, preview output shape, and
-  fixtures for authored bundle graph deltas.
-- [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
-  minimum human command, storage, and workflow contract required before Atelier
-  replaces Beads for this repository and Agent Factory.
-- `docs/adr/`: durable architecture and process choices.
-- [docs/adr/0001-project-scoped-random-record-ids.md](adr/0001-project-scoped-random-record-ids.md):
-  accepted choice that canonical record IDs are project-scoped random IDs
-  such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
-- [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
-  historical choice of Markdown record authority, superseded for persistence
-  and query-cache behavior by ADR 0017.
-- [docs/adr/0017-sqlite-domain-cache-and-hard-removal.md](adr/0017-sqlite-domain-cache-and-hard-removal.md):
-  accepted current contract that record files are durable state, SQLite is a
-  disposable lazy domain cache, and obsolete dual-write/projection paths have
-  no compatibility window.
-- [docs/adr/0018-strategy-draft-epics-and-adaptive-expansion.md](adr/0018-strategy-draft-epics-and-adaptive-expansion.md):
-  accepted adaptive-planning contract for governing strategy, outcome-bearing
-  epics, draft-to-ready expansion, just-in-time proof, and direct replanning.
-- [docs/adr/0011-native-review-modes-and-room-authority.md](adr/0011-native-review-modes-and-room-authority.md):
-  accepted choice that projects configure exactly one review mode, native
-  rooms live under `.atelier/reviews/`, the public command surface is
-  `atelier review`, and review merge does not transition issue workflow.
-- [docs/adr/0013-workflow-transition-actions-and-branching.md](adr/0013-workflow-transition-actions-and-branching.md):
-  accepted choice that transition actions replace effects, branch mutation is
-  declared transition work, and v1 rejects generic capabilities, separate
-  branch lifecycles, mission-only branching, and arbitrary hooks.
-- [docs/adr/0016-canonical-work-branches-and-mission-integration.md](adr/0016-canonical-work-branches-and-mission-integration.md):
-  accepted choice that work branch names use `<issue_type>/<issue_id>`,
-  mission integration branches are opt-in through workflow policy, branch base
-  is recorded context, and domain-cache freshness is an internal command
-  concern rather than workflow policy.
-- [docs/product/index.md](product/index.md): product behavior, workflow model,
-  public command surface, and human interface contracts.
-- [docs/product/development-setup.md](product/development-setup.md): required
-  tools, Rust toolchain, `cargo-nextest`, local environment/secrets policy, and
-  devcontainer decision.
-- [docs/product/repository-contribution.md](product/repository-contribution.md):
-  repository contribution entry points, GitHub collaboration-file
-  classification, and tracker-first ownership policy.
-- [docs/product/zen.md](product/zen.md): product principles for
-  semi-autonomous mission work, evidence, validation, and closeout.
-- [docs/architecture/index.md](architecture/index.md): implementation
-  architecture and ownership map.
-- [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
-  provenance, inherited module boundaries, preservation expectations, and
-  deferred migration areas.
-- [docs/product/work-model.md](product/work-model.md): mission, deferred
-  checkpoint semantics, epic, issue, workflow validator, and evidence
-  relationships.
-- [docs/product/mission-authoring.md](product/mission-authoring.md):
-  normative mission and issue-set authoring and review checklist.
-- [docs/product/validation.md](product/validation.md): product language for
-  outcomes, proof, evidence, validation, closeout, and proof visibility in
-  normal operator surfaces.
-- [docs/product/workflow-configuration.md](product/workflow-configuration.md):
-  fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
-  review field and review room records, strict errors, and starter workflow
-  examples.
-- [docs/product/retention-and-prune.md](product/retention-and-prune.md):
-  cleanup classes, protection rules, Git-history recovery, and explicit apply
-  semantics.
-- [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
-  record-file, concrete domain service, and lazy SQLite domain-cache boundaries
-  for durable writes and cache-backed reads.
-- [docs/product/mission-control-tui.md](product/mission-control-tui.md):
-  Mission Control TUI projection dependencies, degradation rules, navigation
-  model, mutation boundary, and fixture expectations.
-- [docs/product/cli-surface.md](product/cli-surface.md): public CLI
-  core command surface, removed compatibility commands, and inherited utility
-  disposition.
-- [docs/product/command-audit/index.md](product/command-audit/index.md):
-  role ownership, naming, documentation, output hierarchy, and role-specific
-  guide proposal for each root command surface.
-- [docs/product/human-cli-output.md](product/human-cli-output.md):
-  human-readable CLI output grammar, formatter boundaries, color/width policy,
-  and test expectations.
-- [docs/product/issue-inventory-and-mission-overview.md](product/issue-inventory-and-mission-overview.md):
-  flat issue inventory and cross-mission Mission Overview membership, limits,
-  exceptional-work, quiet-output, and color contracts.
-- `docs/architecture/quality/index.md`: quality documentation index.
-- `docs/architecture/quality/architecture-quality.md`: vocabulary for
-  architecture review.
-- `docs/architecture/quality/standards.md`: code and documentation standards.
-- `docs/architecture/quality/validation.md`: validation router and result
-  states.
-- [docs/architecture/quality/mission-log-insights.md](architecture/quality/mission-log-insights.md):
-  findings from mining recent long-running Codex mission transcripts for docs,
-  Agent Factory, and CLI improvement opportunities.
-- `docs/references/`: notes on external projects and prior art that inform
-  Atelier design.
+- [Product guide](product/index.md): work records, commands, evidence, review,
+  workflow policy, sessions, and cleanup.
+- [Architecture guide](architecture/index.md): durable storage, crate
+  boundaries, invariant checks, and engineering standards.
+- [Bundle input contract](spec/bundle/schema.md): one-shot authored graph input.
+- [Agent Factory](../.agents/skills/agent-factory/SKILL.md): planning,
+  implementation, review, validation, and handoff process.
+- [Rebuild strategy](strategies/atelier-rebuild.md): migration mission and plan.
+- [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
+  decision's status and ADR 0019's supersession list before applying older rules.
+- [Development setup](product/development-setup.md): local tools and verification.
+- [Repository contribution](product/repository-contribution.md): ownership and
+  integration policy.
+
+Dated [quality audits](architecture/quality/index.md), provenance notes, and
+`docs/references/` preserve observations about earlier designs. They do not
+replace the current guides.

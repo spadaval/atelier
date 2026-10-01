@@ -2,50 +2,39 @@
 
 ## Rust
 
-- Run `cargo fmt` before handing off code changes.
-- Use `cargo nextest run` as the default Rust test runner. Use `cargo test`
-  only for libtest-specific behavior, `--no-run`, reproducing standard
-  test-harness output, or when `nextest` is unavailable, and state the reason
-  in the handoff or evidence.
-- Use [rust-quality-hazard-scans.md](./rust-quality-hazard-scans.md) for the
-  classified debt-marker, dead/unused-code, large-function, and unused-
-  dependency review commands.
-- Prefer `anyhow::Context` on fallible IO, database, and external-command
-  boundaries.
-- Keep command output stable when tests or agents depend on it.
-- Follow the human-output grammar in
-  [Human CLI Output](../../product/human-cli-output.md) for non-JSON detail, queue, and
-  hierarchy views.
-- Add or update CLI integration tests for user-visible command behavior.
-- Add focused database tests for schema, migration, transaction, and invariant
-  changes.
-- Preserve documented authored-input and distinct derived JSON compatibility unless a
-  migration bead or ADR explicitly changes that contract. Do not treat retired
-  command-result JSON as the default automation boundary.
+- Format with `cargo fmt` and check with `cargo fmt -- --check`.
+- Use `cargo nextest run` as the default Rust test runner. Use `cargo test` for
+  libtest-specific behavior, `--no-run`, reproduction, or unavailable nextest;
+  state the reason in the handoff.
+- Run checks appropriate to the changed claim; add focused CLI integration
+  coverage for user-visible commands and invariant rejection paths.
+- Use [Rust hazard scans](rust-quality-hazard-scans.md) for debt markers,
+  dead code, large functions, and unused dependencies when applicable.
+- Use `anyhow::Context` on fallible IO and external-command boundaries.
+- Keep documented authored input and deterministic rendering stable unless a
+  reviewed migration deliberately changes their contract.
+- Follow the [human output contract](../../product/human-cli-output.md) for
+  normal command views and actionable errors.
 
-## Data And State
+## State and boundaries
 
-- Treat record files as durable repository state and SQLite as a disposable
-  domain cache.
-- Do not merge SQLite databases through Git.
-- Any domain-cache rebuild change must define how changed record-file sources
-  are detected and repaired.
-- Use typed links for semantic relationships; reserve dependencies for real
-  sequencing.
+- Treat Markdown records as durable repository state. Parse them directly.
+- Validate graph and policy before mutating records; coordinate canonical
+  writers with the mutation lock.
+- Use typed links for semantic relationships and blockers for sequencing.
+- Keep read-only checks separate from explicit Git mutation commands.
+- Never create commits in Atelier. Commit records with related implementation.
+- Derive integration from Git; do not persist a competing merge state.
+- Keep evidence honest and commit-bound, reviews append-only, and merge gates
+  governed by the base branch's reviewed policy.
 
-## Documentation
+## Documentation and process
 
-- Update `PRODUCT_INTENT.md` when product intent changes.
-- Update `CONTEXT.md` when terminology or model choices change.
-- Add ADRs for costly, surprising, or repeatedly relevant architecture choices.
-- Keep current target-state docs separate from historical rationale.
+Update Product Intent for direction, Context for terminology, and the owning
+product or architecture page for behavior. Add ADRs for consequential choices.
+Keep dated historical material distinct from current guidance.
 
-## Agent Workflow
-
-- Track work in Atelier.
-- Use explicit noninteractive `atelier issue` commands.
-- Record follow-up work as Atelier issues.
-- Commit tracked `.atelier/` record changes with related tracker updates; treat
-  `.atelier/runtime/state.db` as rebuildable local runtime state.
-- Include validation evidence in handoff notes when checks are skipped, fail, or
-  only partially cover the change.
+Use [Agent Factory](../../../.agents/skills/agent-factory/SKILL.md) for planning,
+review, validation, and handoff. Non-trivial executable changes require
+independent review before local merge. Pushing any remote requires the human,
+as recorded in [AGENTS.md](../../../AGENTS.md).

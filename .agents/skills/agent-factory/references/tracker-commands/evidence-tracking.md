@@ -26,11 +26,16 @@ Use these terms verbatim so evidence stays searchable across trackers:
 ## Atelier
 
 - Use `atelier evidence record` for manual proof or captured command output.
+  Manual receipts require an explicit `--result`; command capture derives pass
+  or fail from exit status and pins current HEAD.
+- Every receipt identifies a full Git commit and one result: `pass`, `fail`,
+  `blocked`, or `not-applicable`. Presence alone is not passing proof.
 - Use `atelier evidence show` and `list` to inspect receipts. Use `attach` only
-  when reusing an existing receipt on another item.
-- Attach evidence to the mission, epic, or issue it actually supports, and
-  record the producer, role, kind, summary, and path or URI where relevant.
-- Check `atelier help evidence` for current fields.
+  when reusing valid proof for another item.
+- Attach proof to the work it supports; name the producer, kind, summary,
+  artifacts, and limits. Add a new receipt to correct earlier proof.
+- Freshness matters: an older pass cannot cover a later relevant change, and
+  a newer failure blocks completion. Check `atelier help evidence` for fields.
 
 ## GitHub Issues
 

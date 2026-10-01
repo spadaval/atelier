@@ -6,13 +6,14 @@ instructions select the tracker.
 
 ## Atelier
 
-- Start with `atelier status` for checkout and tracker signposts.
+- Start a fresh session with `atelier prime`; use `atelier status` for checkout
+  context and separately labeled local-branch summaries.
 - Use `atelier work ready`, `blocked`, `active`, `all`, or `missions` for
   operational views.
 - Use `atelier work mission <mission-id>`, `atelier work epic <epic-id>`, and
   `atelier issue show <id>` for focused context.
-- Use `atelier history` with mission, epic, or issue filters when current state
-  needs its durable activity trail.
+- Records are branch-local. Inspect Git history for past state; there is no
+  activity-file or `atelier history` command.
 - `atelier help <command>` provides current syntax.
 
 ## GitHub Issues

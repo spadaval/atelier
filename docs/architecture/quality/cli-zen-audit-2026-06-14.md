@@ -1,5 +1,10 @@
 # Historical CLI Zen Audit, 2026-06-14 (Non-Normative)
 
+> Historical audit. This describes the system at the time of the audit.
+> Current behavior is defined by [ADR 0019](../../adr/0019-verified-repo-native-tracker.md)
+> and the [product guide](../../product/index.md); superseded command and cache
+> guidance below is not an operating procedure.
+
 This document preserves a June 14 command-surface snapshot and the findings it
 generated. Command examples such as `atelier mission create --help` describe
 the surface observed during that audit; they are historical evidence, not

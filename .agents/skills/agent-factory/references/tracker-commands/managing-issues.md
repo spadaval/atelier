@@ -12,7 +12,11 @@ what they contain.
   consequential mutations.
 - Omit the transition name to inspect currently valid transitions and blockers:
   `atelier issue transition <id>`.
-- Use parent fields for hierarchy and typed links for other relationships.
+- Author typed Markdown with `--body`: ordinary slices use Goal and Done when,
+  epics use Outcome and Proof, and missions use Outcome plus Success criteria
+  or a typed strategy path. Inspect help for current field flags.
+- Use epic parent fields for direct child hierarchy, `advances` for mission
+  scope, and `blocked_by` for dependencies. Missions are not parents.
 - Atelier epics begin in `draft`. Refine the outcome and any existing
   behavior that must be preserved, add immediate children and dependencies,
   select the proof route, then inspect and execute the configured `ready`

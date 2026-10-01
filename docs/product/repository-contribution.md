@@ -1,30 +1,22 @@
-# Repository Contribution Policy
+# Repository Contribution
 
-Atelier's committed tracker records are the repository's coordination source of
-truth. GitHub collaboration files may support review and dependency hygiene,
-but they must not introduce a competing issue workflow or imply human/team
-ownership that is not recorded elsewhere.
+Committed Atelier records are this repository's coordination source of truth.
+[AGENTS.md](../../AGENTS.md) routes durable guidance; use
+[Agent Factory](../../.agents/skills/agent-factory/SKILL.md) for process and
+[development setup](development-setup.md) for tools.
 
-## Classification
+Commit `.atelier/` changes with the implementation they describe. Keep work on
+reviewable branches. Non-trivial executable changes require independent review
+before local integration into `master`. Agents may integrate reviewed work
+locally under repository policy; pushing any remote requires the human.
 
-| Surface | Decision | Rationale |
-| --- | --- | --- |
-| `CONTRIBUTING.md` | Add | A root contribution entry point reduces setup and workflow mistakes by routing contributors to `AGENTS.md` and Atelier issue evidence. |
-| Pull request template | Add | Pull requests are a useful review boundary when they require linked Atelier work, evidence, and validation commands. |
-| GitHub issue templates | Not applicable | Atelier issues are canonical. GitHub issue templates would create a parallel intake path and weaken tracker-first coordination. |
-| `CODEOWNERS` | Defer | The repository does not have durable human or team owner identifiers to encode. A placeholder owner file would create false review expectations. |
-| Dependency update automation | Add | Cargo dependency update pull requests reduce drift without changing the work queue. The pull request template still requires Atelier ownership before merge. |
+Atelier's merge command checks the reviewed base policy and fast-forwards
+committed work. It never commits or pushes. GitHub collaboration surfaces may
+support discussion and dependency updates, but do not create a second tracker
+or substitute for in-repo approval and evidence.
 
-## Added Surfaces
-
-- [CONTRIBUTING.md](../../CONTRIBUTING.md) is the contributor entry point.
-- [Pull request template](../../.github/PULL_REQUEST_TEMPLATE.md) requires a
-  linked Atelier issue or mission, evidence, and validation commands.
-- [Dependabot configuration](../../.github/dependabot.yml) checks Cargo
-  dependencies weekly.
-
-## Deferred Surfaces
-
-Do not add `CODEOWNERS` until the repository has a real owner identifier to
-name. Do not add GitHub issue templates unless the product decision changes and
-GitHub intake is intentionally reconciled back into committed Atelier records.
+[CONTRIBUTING.md](../../CONTRIBUTING.md) is the contribution entry point. The
+[pull request template](../../.github/PULL_REQUEST_TEMPLATE.md) asks for linked
+work and validation; [Dependabot](../../.github/dependabot.yml) proposes Cargo
+updates. Do not add issue templates or placeholder CODEOWNERS that invent
+ownership absent from durable repository guidance.

@@ -42,6 +42,13 @@ Post progress as comments. At meaningful points, post a dated status comment
 listing the success criteria shown so far, current epics, blockers, and open
 questions.
 
+For Atelier, the mission record uses typed front matter `strategy: {path: ...}`
+and an `## Outcome` body section. Without a strategy link, include
+`## Success criteria` in the body. `## Epics` is optional; native `advances`
+links carry execution scope. Plain CLI body text is normalized to Outcome, but
+sectioned `--body` input must use the typed headings. The strategy owns intent;
+this storage shape does not require copying it into the mission.
+
 ## Epic
 
 An epic is an outcome-bearing increment, and usually one branch, one review

@@ -1,80 +1,36 @@
 # Development Setup
 
-This repository should be usable from committed files alone. Normal development
-does not require a local `.env` file, secret material, Docker services, or a
-committed devcontainer.
-
-## Required Tools
-
-- Git
-- Rust `1.95.0` from [rust-toolchain.toml](../../rust-toolchain.toml)
-- Rust components: `rustfmt`, `clippy`
-- `cargo-nextest` for the default Rust test workflow
-- `cargo-machete` for the repo-supported unused dependency scan when
-  dependency manifests change
-
-Install cargo subcommands once with:
+Normal development needs Git and the toolchain pinned in
+[rust-toolchain.toml](../../rust-toolchain.toml), including rustfmt and clippy.
+Install the default test runner and dependency checker when needed:
 
 ```bash
 cargo install cargo-nextest --locked
 cargo install cargo-machete --locked
 ```
 
-## Fresh Checkout
-
 From the repository root:
 
 ```bash
+cargo build -p atelier-cli
 cargo fmt -- --check
 cargo nextest run
-atelier check
+target/debug/atelier check
+git diff --check
 ```
 
-Use the installed `atelier` command for normal tracker work. Use
-`target/debug/atelier` only when validating local CLI changes before they are
-installed.
+Use `target/debug/atelier` to validate repository CLI changes. The installed
+`atelier` can still contain the old model during the rebuild; update it only
+when the new model is stable. No external service, provider credential, `.env`,
+or devcontainer is required.
 
-## Environment And Secrets
+Optional `ATELIER_LOG` and `ATELIER_LOG_FORMAT` configure diagnostics. Producer
+identity is self-declared; commands with attribution accept an explicit identity
+where documented by help. Do not commit credentials or local runtime files.
 
-No local `.env` or `.env.example` file is required for normal development.
-Common repository work should succeed without setting any environment variables.
+The ignored `.atelier/runtime/` contains the mutation lock. Commands read
+tracked records directly. There is no database or cache to initialize or repair.
+`cargo udeps` is an optional nightly cross-check, not a required setup input.
 
-Optional environment variables are limited to local behavior overrides:
-
-- `ATELIER_LOG` and `ATELIER_LOG_FORMAT` adjust CLI diagnostic logging.
-
-These variables are optional local overrides, not required setup inputs.
-
-`~/.config/atelier.toml` is required only for commands that mutate the
-configured provider review artifact. Store the Forgejo admin token there as
-`review.providers.forgejo.admin_token`. The token value is local secret
-material and must not be committed.
-
-## Local Runtime State
-
-Atelier keeps only the canonical mutation lock under the ignored
-`.atelier/runtime/` directory. There is no cache: every command parses the
-tracked record files directly. Do not edit ignored runtime files as a
-substitute for updating tracked Markdown records, `.atelier/config.toml`, or
-`.atelier/workflow.yaml`.
-
-`cargo udeps` is not part of required setup. It remains an advisory
-nightly-toolchain cross-check for deeper dependency review when a reviewer asks
-for it.
-
-## Devcontainer Decision
-
-No `.devcontainer/` is committed today. That is an explicit defer decision, not
-an omission.
-
-Rationale:
-
-- the repository is a single Rust CLI with a pinned toolchain and no required
-  service stack;
-- the committed setup path already fits in a few host commands;
-- a devcontainer would add a second environment contract to maintain before the
-  repo has cross-platform or service-topology pressure that justifies it.
-
-Revisit a committed devcontainer when Atelier requires nontrivial external
-services, more native tool dependencies, or repeated onboarding failures that
-the host-toolchain path does not resolve.
+See [standards](../architecture/quality/standards.md) for change-specific proof
+and review requirements.

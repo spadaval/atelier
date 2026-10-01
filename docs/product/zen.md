@@ -1,88 +1,21 @@
-# Zen Of Atelier
+# Atelier Principles
 
-Atelier facilitates long-running mostly-autonomous multi-agent workflows to
-reliably complete ambitious work.
+Keep work and proof visible in the same repository as the implementation.
+Store each fact in its owning place: strategy for intent, tracker for state and
+sequencing, design docs for architecture, and Git for integration history.
 
-## Principles
+Use concise records with observable outcomes and checks. A receipt must state
+its result and checked commit. Independent approval comes from another identity
+and must remain fresh. Findings need explicit dispositions.
 
-The repository is the source of truth.
-Work, policy, and history must be reviewable from committed state.
-No hidden state, no magic.
+Guard invariants at the point of action. Leave planning depth and coordination
+to Agent Factory. Keep transitions simple record writes, and make Git side
+effects explicit through start and merge. Agents commit; Atelier never does.
 
-Proof must stand on its own.
-Someone who did not do the work should be able to inspect the record,
-check the claim, and continue.
+Make errors and branch context legible. Prefer direct parsing and a small CLI
+to hidden runtime machinery. Retire obsolete commands and docs instead of
+keeping competing contracts alive.
 
-Value and outcomes first.
-Missions exist for a reason.
-Issues are accountable steps toward that reason.
-
-Intent is durable; plans are adaptive.
-State outcomes, boundaries, and decision authority explicitly.
-Treat implementation plans as hypotheses that change with evidence.
-Concretize work only as far as current understanding supports.
-
-Model the domain, don't flatten it.
-Strategies, missions, epics, issues, and evidence are different shapes because
-they answer different questions.
-
-Domain truth is not UI.
-Domain services say what is true, allowed, blocked, or required.
-Renderers decide wording, layout, emphasis, and command spelling.
-Do not smuggle UI annotations into domain code, and do not reimplement domain
-rules in renderers.
-
-One truth can have many views.
-Status, work queues, issue detail, transitions, history, and checks may show
-different slices of the same facts.
-They must not maintain parallel interpretations of those facts.
-
-Coordination must be visible.
-Blockers, ownership, and agreements live in records and policy, not in
-someone's head or chat history.
-
-Agents make mistakes. The system must detect errors and guide recovery.
-Workflow catches what agents forget.
-Status surfaces make uncertainty visible and explain how to move forward.
-
-Show the right layer first.
-Default output should name the state, the cause, and the next useful step.
-Do not dump implementation machinery by default.
-Do not hide it behind vague failure messages.
-
-Commands answer operator questions.
-Do not print data just because it exists.
-Do not invent generic next actions.
-Every visible line should help the operator understand state, choose work, or
-recover from a problem.
-
-Workflow enforces the minimum. Agents handle the rest.
-Add checks only where agents skip evidence or close too early.
-Give agents freedom for everything else.
-
-Every feature must justify its cost.
-Less is more. Curation is a virtue.
-
-Choose the simplest thing that works.
-Always prefer the least magical solution that solves the real problem.
-Do not add abstraction, hidden inference, clever formatting, or policy machinery
-when a direct representation of the truth is enough.
-
-Complexity has product cost and architecture cost.
-Product complexity is what an operator has to understand: which command to use,
-which facts matter, how much output to scan, and how many commands must be
-stitched together before they can act. Good hierarchy, bounded defaults,
-semantic color, and role-shaped output reduce product complexity.
-Architecture complexity is what the system has to carry: code paths,
-queries, caches, domain abstractions, renderers, tests, and migration work.
-Good caching, smaller read models, simpler ownership, and deleting unused paths
-reduce architecture complexity.
-Do not optimize one kind by blindly increasing the other.
-
-Resilience over perfection.
-Keep useful paths open.
-Make uncertainty visible.
-Treat blocked or failed outcomes as information, not dirt to sweep away.
-
-Delete the old path once the new one is clear.
-Do not preserve obsolete commands, aliases, or fallback behavior.
+The governing sources are [Product Intent](../../PRODUCT_INTENT.md),
+[ADR 0019](../adr/0019-verified-repo-native-tracker.md), and
+[Agent Factory](../../.agents/skills/agent-factory/SKILL.md).

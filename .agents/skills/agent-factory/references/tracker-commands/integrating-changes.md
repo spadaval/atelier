@@ -5,13 +5,18 @@ reviews, and integration state. Repository workflow policy remains authoritative
 
 ## Atelier
 
-- Use `atelier status` to discover the active checkout, mission, and integration
-  signposts.
-- Use `atelier review open`, `link`, `status`, `show`, `comments`, `comment`,
-  `approve`, `request-changes`, and `merge` for configured review artifacts.
-- Use focused issue notes or evidence records for durable handoff and proof;
-  inspect `atelier history` when integration state needs reconciliation.
-- Atelier review commands do not replace issue workflow transitions.
+- Use `atelier start <id>` to prepare the branch owner and start work.
+- Commit records with the implementation; Atelier never creates commits.
+- Record approvals, findings, dispositions, and explicit trivial exemptions
+  through `atelier review`. Reviews are append-only in-repo Markdown.
+- Commit the done claim on the work branch. `atelier merge <id>` checks the
+  base branch's policy, fresh evidence, independent approval or exemption,
+  finding dispositions, and blockers, then fast-forwards without tracker writes.
+- Code, policy, acceptance, and other material changes stale approval. Allowed
+  additions of evidence/review records and in-scope status-only edits can follow
+  approval; inspect exact freshness rules in repository docs.
+- Use `atelier land` before handoff. Use `atelier prune` for safe cleanup and
+  ordinary Git for integration history. Pushing follows repository authority.
 
 ## GitHub Issues
 
