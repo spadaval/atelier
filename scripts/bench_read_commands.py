@@ -16,6 +16,7 @@ budget.
 import argparse
 import os
 import random
+import re
 import shutil
 import statistics
 import subprocess
@@ -192,15 +193,53 @@ def generate(repo, total_issues):
     return len(issues), missions[0], epic_with_children
 
 
-def run(binary, repo, args, check=True):
+def run(binary, repo, args, expected=0):
     started = time.perf_counter()
     result = subprocess.run(
         [str(binary), *args], cwd=repo, capture_output=True, text=True
     )
     elapsed = (time.perf_counter() - started) * 1000
-    if check and result.returncode != 0:
-        sys.exit(f"atelier {' '.join(args)} failed:\n{result.stdout}\n{result.stderr}")
+    if result.returncode != expected:
+        sys.exit(f"atelier {' '.join(args)} exited {result.returncode}, expected {expected}:\n"
+                 f"{result.stdout}\n{result.stderr}")
     return elapsed
+
+
+def guard_fixture(binary, repo):
+    """Give the same sized repository one honestly approved, completed owner."""
+    def command(args):
+        result = subprocess.run(args, cwd=repo, capture_output=True, text=True)
+        if result.returncode:
+            sys.exit(f"Fixture command {args} failed:\n{result.stdout}\n{result.stderr}")
+        return result.stdout.strip()
+
+    def commit(message):
+        command(["git", "add", "-A"])
+        command(["git", "commit", "-qm", message])
+
+    for path in (repo / ".atelier/issues").glob("*.md"):
+        record = path.read_text()
+        record = re.sub(r"^closed_at:.*\n", "", record, flags=re.M)
+        record = re.sub(r'^status: ".*"$', 'status: "todo"', record, flags=re.M)
+        record = re.sub(r"  blocks:\n(?:  -.*\n(?:    .*\n)*)*", "  blocks: []\n", record)
+        path.write_text(record)
+    policy = repo / ".atelier/workflow.yaml"
+    policy.write_text(policy.read_text().replace("base_branch: main", "base_branch: master"))
+    commit("Normalize guard fixture backlog")
+    owner = "atelier-s000"
+    command([str(binary), "start", owner])
+    (repo / "code.rs").write_text("verified fixture code\n")
+    commit("Implement fixture owner")
+    command([str(binary), "evidence", "record", "--kind", "validation", "--target",
+             "issue/" + owner, "--result", "pass", "Observed fixture result"])
+    command([str(binary), "issue", "transition", owner, "close", "--reason",
+             "Verified fixture owner"])
+    commit("Record passing evidence and done claim")
+    review = command([str(binary), "-q", "review", "approve", owner, "--identity",
+                      "Independent Benchmark Reviewer", "Observed fixture changes"])
+    commit("Independent fixture approval")
+    run(binary, repo, ["check"])
+    return owner, review
 
 
 def main():
@@ -210,13 +249,18 @@ def main():
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--keep", action="store_true", help="keep the fixture repo")
     options = parser.parse_args()
+    if options.runs < 1 or options.issues < 220 or (options.issues - 160) % 60:
+        parser.error("runs must be positive; issues must be 160 + a positive multiple of 60")
     binary = Path(options.binary).resolve()
     if not binary.exists():
         sys.exit(f"{binary} not found; run `cargo build --release` first")
 
     repo = Path(tempfile.mkdtemp(prefix="atelier-bench-"))
+    guard_repo = None
     try:
         subprocess.run(["git", "init", "-q", "-b", "master"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Benchmark Author"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "benchmark@example.test"], cwd=repo, check=True)
         run(binary, repo, ["init"])
         count, mission, epic = generate(repo, options.issues)
         for args in (["add", "-A"], ["-c", "user.email=b@b", "-c", "user.name=b",
@@ -225,15 +269,53 @@ def main():
         evidence = len(list((repo / ".atelier/evidence").glob("*.md")))
         print(f"Fixture: {count} issues, {evidence} evidence records in {repo}")
         run(binary, repo, ["check"])
+        todo = next(path.stem for path in sorted((repo / ".atelier/issues").glob("*.md"))
+                    if 'status: "todo"' in path.read_text())
 
         commands = [
+            ["work"],
             ["work", "ready"],
+            ["work", "blocked"],
+            ["work", "active"],
+            ["work", "all"],
+            ["work", "missions"],
+            ["work", "missions", "--all"],
+            ["work", "epic", epic],
             ["status"],
             ["issue", "show", epic],
+            ["issue", "show", mission],
+            ["issue", "show", "atelier-t000"],
             ["work", "mission", mission],
+            *[["work", "mission", mission, "--" + bucket]
+              for bucket in ("ready", "blocked", "active", "done", "all")],
             ["issue", "list"],
+            ["issue", "list", "--limit", str(count)],
+            ["issue", "list", "--status", "done"],
+            ["issue", "list", "--label", "cli", "--issue-type", "task"],
+            ["issue", "transition", todo],
+            ["issue", "transition", todo, "--verbose"],
+            ["evidence", "list"],
+            ["evidence", "list", "--result", "pass"],
+            ["evidence", "show", "atelier-v000"],
+            ["review", "list"],
+            ["review", "list", "--json"],
             ["check"],
+            ["check", epic],
+            ["prime"],
+            ["prune"],
+            ["prune", "--quiet"],
+            ["bundle", "preview", str(ROOT / "docs/spec/bundle/fixtures/valid-bundle.json")],
         ]
+        guard_repo = Path(tempfile.mkdtemp(prefix="atelier-bench-guards-"))
+        shutil.copytree(repo, guard_repo, dirs_exist_ok=True)
+        owner, review = guard_fixture(binary, guard_repo)
+        guard_commands = [
+            ["prime"], ["land"], ["land", owner],
+            ["merge", owner, "--check"], ["merge", owner, "--check", "--json"],
+            ["review", "list", owner], ["review", "list", owner, "--json"],
+            ["review", "show", review],
+        ]
+        print(f"Guard fixture: {count} issues, {evidence + 1} evidence, one approval in {guard_repo}")
         print(f"Binary: {binary}; {options.runs} runs after one warm-up")
         available = (
             len(os.sched_getaffinity(0))
@@ -244,22 +326,30 @@ def main():
         print(f"| Command | median ms | max ms |")
         print(f"| --- | ---: | ---: |")
         over = []
-        for args in commands:
-            run(binary, repo, args)
-            samples = [run(binary, repo, args) for _ in range(options.runs)]
+        for fixture, group, args, expected in (
+            [(repo, "query", args, 0) for args in commands]
+            + [(guard_repo, "guard", args, 0) for args in guard_commands]
+            + [(repo, "refusal", ["land"], 1)]
+        ):
+            run(binary, fixture, args, expected)
+            samples = [run(binary, fixture, args, expected) for _ in range(options.runs)]
             median = statistics.median(samples)
             label = " ".join("<epic>" if a == epic else "<mission>" if a == mission else a
                              for a in args)
-            print(f"| `atelier {label}` | {median:.1f} | {max(samples):.1f} |")
-            if median > BUDGET_MS or max(samples) > BUDGET_MS:
-                over.append(label)
+            print(f"| {group}: `atelier {label}` | {median:.1f} | {max(samples):.1f} |")
+            if max(samples) >= BUDGET_MS:
+                over.append(f"{group}: {label}")
         if over:
             sys.exit(f"\nMedian or max over the {BUDGET_MS:.0f} ms budget: {', '.join(over)}")
     finally:
         if options.keep:
             print(f"\nKept fixture at {repo}")
+            if guard_repo:
+                print(f"Kept guard fixture at {guard_repo}")
         else:
             shutil.rmtree(repo)
+            if guard_repo:
+                shutil.rmtree(guard_repo)
 
 
 if __name__ == "__main__":
