@@ -375,6 +375,29 @@ pub fn evaluate(
             .values()
             .filter(|transition| transition.to == issue.status)
         {
+            for field in &transition.required_fields {
+                let present = match field.as_str() {
+                    "close_reason" => index
+                        .issue_record(id)
+                        .context("terminal issue record missing")?
+                        .sections
+                        .close_reason
+                        .as_deref()
+                        .is_some_and(|value| !value.trim().is_empty()),
+                    other => bail!("unsupported required field '{other}'"),
+                };
+                nodes.push(gate(
+                    id,
+                    &format!("required_field.{field}"),
+                    present,
+                    if present {
+                        format!("committed claim includes required field {field}")
+                    } else {
+                        format!("committed claim is missing required field {field}")
+                    },
+                    Vec::new(),
+                ));
+            }
             let checks = crate::workflow_validation::evaluate_policy_transition(
                 crate::workflow_validation::ValidatorRequest {
                     index,

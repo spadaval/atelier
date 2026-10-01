@@ -517,6 +517,7 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
     let merge_checks = match root.get("merge_checks") {
         None => Vec::new(),
         Some(value) => parse_transition_validators(
+            ValidatorContext::MergeChecks,
             "merge",
             "merge",
             value
@@ -1122,6 +1123,7 @@ fn parse_transition_definition(
         display_path,
     )?;
     let validators = parse_transition_validators(
+        ValidatorContext::Transition,
         workflow_name,
         transition_name,
         &raw.validators,
@@ -1136,7 +1138,14 @@ fn parse_transition_definition(
     })
 }
 
+#[derive(Clone, Copy)]
+enum ValidatorContext {
+    Transition,
+    MergeChecks,
+}
+
 fn parse_transition_validators(
+    context: ValidatorContext,
     workflow_name: &str,
     transition_name: &str,
     values: &[Value],
@@ -1150,6 +1159,7 @@ fn parse_transition_validators(
                     return Err(anyhow!("shell.check requires command parameters"));
                 }
                 validate_builtin_validator_name(
+                    context,
                     workflow_name,
                     transition_name,
                     name,
@@ -1174,6 +1184,7 @@ fn parse_transition_validators(
                     ));
                 };
                 validate_builtin_validator_name(
+                    context,
                     workflow_name,
                     transition_name,
                     name,
@@ -1214,12 +1225,13 @@ fn parse_transition_validators(
 }
 
 fn validate_builtin_validator_name(
+    context: ValidatorContext,
     workflow_name: &str,
     transition_name: &str,
     name: &str,
     display_path: &str,
 ) -> Result<()> {
-    if name == "shell.check" && workflow_name != "merge" {
+    if name == "shell.check" && !matches!(context, ValidatorContext::MergeChecks) {
         return Err(anyhow!("shell.check is available only in merge_checks"));
     }
     if BUILTIN_VALIDATORS.contains(&name) {

@@ -1011,3 +1011,241 @@ fn introduced_side_code_edit_then_revert_stales_approval_after_merge() {
     );
     fixture.refusal("review.current");
 }
+
+#[test]
+fn workflow_named_merge_cannot_admit_transition_shell_checks() {
+    let fixture = Fixture::new();
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let mut policy: serde_yaml::Value =
+        serde_yaml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let workflows = policy["workflows"].as_mapping_mut().unwrap();
+    let mut work = workflows.remove(serde_yaml::Value::from("work")).unwrap();
+    work["transitions"]["start"]["validators"] =
+        serde_yaml::from_str("[ { shell.check: { command: 'touch transition-shell-ran' } } ]")
+            .unwrap();
+    workflows.insert(serde_yaml::Value::from("merge"), work);
+    let candidate = serde_yaml::to_string(&policy).unwrap();
+    let error = atelier_workflow::parse_policy_text(&candidate, "fixture").unwrap_err();
+    assert!(
+        error.to_string().contains("available only in merge_checks"),
+        "{error}"
+    );
+    fs::write(&path, candidate).unwrap();
+    let (passed, output) = cli(fixture.path(), &["check"]);
+    assert!(
+        !passed && output.contains("available only in merge_checks"),
+        "{output}"
+    );
+    assert!(!fixture.path().join("transition-shell-ran").exists());
+
+    policy["workflows"]["merge"]["transitions"]["start"]["validators"] =
+        serde_yaml::Value::Sequence(Vec::new());
+    policy["merge_checks"] =
+        serde_yaml::from_str("[ { shell.check: { command: 'test -f src.rs' } } ]").unwrap();
+    let accepted =
+        atelier_workflow::parse_policy_text(&serde_yaml::to_string(&policy).unwrap(), "fixture")
+            .unwrap();
+    assert_eq!(accepted.merge_checks[0].builtin, "shell.check");
+}
+
+#[test]
+fn same_commit_base_checkout_branch_switch_during_check_refuses_integration() {
+    let fixture = Fixture::new();
+    let base = tempdir().unwrap();
+    git(fixture.path(), &["switch", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        format!(
+        "{policy}\nmerge_checks:\n  - shell.check: {{ command: 'git -C {} switch alternate' }}\n",
+        base.path().display(),
+    ),
+    )
+    .unwrap();
+    commit(fixture.path(), "base checkout switch check");
+    git(fixture.path(), &["branch", "alternate", "main"]);
+    git(fixture.path(), &["switch", &fixture.branch]);
+    git(fixture.path(), &["rebase", "main"]);
+    fixture.approval("Reviewer");
+    git(
+        fixture.path(),
+        &["worktree", "add", base.path().to_str().unwrap(), "main"],
+    );
+    let base_head = git(fixture.path(), &["rev-parse", "main"]);
+    let work_head = git(fixture.path(), &["rev-parse", "HEAD"]);
+    fixture.refusal("base checkout ownership changed");
+    assert_eq!(git(fixture.path(), &["rev-parse", "alternate"]), base_head);
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", &fixture.branch]),
+        work_head
+    );
+    assert_eq!(git(base.path(), &["branch", "--show-current"]), "alternate");
+    assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn ignored_uncommitted_approval_issue_and_evidence_are_not_merge_inputs() {
+    for kind in ["reviews", "issues", "evidence"] {
+        let fixture = Fixture::new();
+        if kind != "reviews" {
+            fixture.approval("Reviewer");
+        }
+        fs::write(
+            fixture.path().join(".git/info/exclude"),
+            format!(".atelier/{kind}/\n"),
+        )
+        .unwrap();
+        match kind {
+            "reviews" => {
+                ok(
+                    fixture.path(),
+                    &[
+                        "review",
+                        "approve",
+                        &fixture.id,
+                        "--identity",
+                        "Reviewer",
+                        "Ignored approval",
+                    ],
+                );
+            }
+            "issues" => {
+                ok(fixture.path(), &["issue", "create", "Ignored issue"]);
+            }
+            "evidence" => {
+                ok(
+                    fixture.path(),
+                    &[
+                        "evidence",
+                        "record",
+                        "--target",
+                        &format!("issue/{}", fixture.id),
+                        "--kind",
+                        "test",
+                        "--result",
+                        "pass",
+                        "Ignored proof",
+                    ],
+                );
+            }
+            _ => unreachable!(),
+        }
+        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        fixture.refusal("canonical_snapshot_uncommitted");
+    }
+}
+
+#[test]
+fn ignored_canonical_file_created_by_shell_is_rejected_at_final_fence() {
+    let fixture = Fixture::new();
+    git(fixture.path(), &["switch", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!(
+        "{policy}\nmerge_checks:\n  - shell.check: {{ command: 'mkdir -p .atelier/reviews; printf hidden > .atelier/reviews/hidden.md' }}\n"
+    )).unwrap();
+    commit(fixture.path(), "ignored record shell check");
+    git(fixture.path(), &["switch", &fixture.branch]);
+    git(fixture.path(), &["rebase", "main"]);
+    fixture.approval("Reviewer");
+    fs::write(
+        fixture.path().join(".git/info/exclude"),
+        ".atelier/reviews/\n",
+    )
+    .unwrap();
+    fixture.refusal("canonical_snapshot_uncommitted");
+    assert!(fixture.path().join(".atelier/reviews/hidden.md").exists());
+    assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn git_index_flags_cannot_hide_uncommitted_completion_claim_bytes_or_modes() {
+    for mode_change in [false, true] {
+        let fixture = Fixture::new();
+        fixture.approval("Reviewer");
+        let record = fixture.issue();
+        let relative = atelier_records::issue_record_path(&record.issue.id);
+        let path = fixture.path().join(".atelier").join(&relative);
+        if mode_change {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                git(fixture.path(), &["config", "core.filemode", "false"]);
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+            }
+        } else {
+            git(
+                fixture.path(),
+                &[
+                    "update-index",
+                    "--assume-unchanged",
+                    &format!(".atelier/{}", relative.display()),
+                ],
+            );
+            let mut record = record;
+            record.sections.close_reason = None;
+            fixture.write_issue(&record);
+        }
+        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        fixture.refusal("canonical_snapshot_uncommitted");
+    }
+}
+
+#[test]
+fn direct_terminal_claim_requires_trusted_completion_fields() {
+    for status in ["done", "superseded"] {
+        let fixture = Fixture::new();
+        let mut record = fixture.issue();
+        record.issue.status = status.into();
+        record.sections.close_reason = None;
+        fixture.write_issue(&record);
+        commit(
+            fixture.path(),
+            "direct terminal claim missing required reason",
+        );
+        fixture.approval("Reviewer");
+        fixture.refusal("required_field.close_reason");
+        record.sections.close_reason = Some("Completed claim with required reason".into());
+        fixture.write_issue(&record);
+        commit(fixture.path(), "record required completion reason");
+        ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    }
+}
+
+#[test]
+fn ignored_canonical_changes_in_base_checkout_refuse_before_and_after_checks() {
+    for during_check in [false, true] {
+        let fixture = Fixture::new();
+        let base = tempdir().unwrap();
+        if during_check {
+            git(fixture.path(), &["switch", "main"]);
+            let path = fixture.path().join(".atelier/workflow.yaml");
+            let policy = fs::read_to_string(&path).unwrap();
+            fs::write(&path, format!(
+                "{policy}\nmerge_checks:\n  - shell.check: {{ command: 'mkdir -p {}/.atelier/reviews; printf hidden > {}/.atelier/reviews/hidden.md' }}\n",
+                base.path().display(), base.path().display(),
+            )).unwrap();
+            commit(fixture.path(), "base canonical mutation check");
+            git(fixture.path(), &["switch", &fixture.branch]);
+            git(fixture.path(), &["rebase", "main"]);
+        }
+        fixture.approval("Reviewer");
+        fs::write(
+            fixture.path().join(".git/info/exclude"),
+            ".atelier/reviews/\n",
+        )
+        .unwrap();
+        git(
+            fixture.path(),
+            &["worktree", "add", base.path().to_str().unwrap(), "main"],
+        );
+        if !during_check {
+            fs::create_dir_all(base.path().join(".atelier/reviews")).unwrap();
+            fs::write(base.path().join(".atelier/reviews/hidden.md"), "hidden").unwrap();
+        }
+        fixture.refusal("canonical_snapshot_uncommitted");
+        assert_eq!(git(base.path(), &["branch", "--show-current"]), "main");
+        assert!(git(base.path(), &["status", "--porcelain"]).is_empty());
+    }
+}
