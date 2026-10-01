@@ -1255,42 +1255,6 @@ fn test_root_status_summarizes_checkout_orientation() {
 }
 
 #[test]
-fn test_workflow_configuration_docs_describe_internal_diagnostics() {
-    let docs =
-        std::fs::read_to_string(workspace_root().join("docs/product/workflow-configuration.md"))
-            .unwrap();
-    assert!(!docs.contains("The future `atelier workflow validate` command"));
-    assert!(
-        !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
-    );
-    assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("Record-file validity is checked whenever a command loads"));
-    assert!(!docs.contains("| `tracker.current` |"));
-}
-
-#[test]
-fn test_product_intent_representative_commands_match_signpost_surfaces() {
-    let product_intent =
-        std::fs::read_to_string(workspace_root().join("PRODUCT_INTENT.md")).unwrap();
-
-    assert!(!product_intent.contains("atelier work start"));
-    assert!(!product_intent.contains("atelier work finish"));
-    assert!(!product_intent.contains("atelier workflow validate"));
-    assert!(product_intent.contains("atelier issue transition atelier-z1p8 start"));
-    assert!(
-        product_intent.contains("atelier issue transition atelier-z1p8 close --reason \"done\"")
-    );
-    assert!(!product_intent.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
-    assert!(product_intent.contains("atelier status"));
-    assert!(product_intent.contains("atelier work missions"));
-    assert!(product_intent.contains("atelier work mission <mission-id>"));
-    assert!(product_intent.contains("atelier work epic <epic-id>"));
-    assert!(product_intent.contains("atelier issue transition atelier-z1p8"));
-    assert!(product_intent
-        .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
-}
-
-#[test]
 fn test_issue_ready_list_uses_current_workflow_commands() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

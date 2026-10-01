@@ -70,6 +70,6 @@ records and policy; it does not repair a hidden cache. Prune is dry-run by defau
 and removes only eligible artifacts in apply mode. Commit canonical deletions.
 
 Removed surfaces include provider review, review rooms, transition actions,
-`history`, `doctor`, `man`, `rules`, telemetry, import/export, hidden branch
+`work queue`, `history`, `doctor`, `man`, `rules`, telemetry, import/export, hidden branch
 helpers, cache rebuild, and a TUI. Use ordinary Git for history and recovery.
 There is no compatibility command layer.
