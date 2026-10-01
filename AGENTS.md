@@ -20,6 +20,12 @@ the superseded design until the rebuild's docs step rewrites them.
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
 
+## Merge Policy
+
+- Agents may merge independently reviewed work into `master` locally without
+  asking. Unreviewed non-trivial changes never reach `master`.
+- Pushing to any remote requires the human.
+
 ## Product Sources
 
 - Product intent: `PRODUCT_INTENT.md`
