@@ -185,6 +185,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         check_records(repo, &head)?;
         (head, RecordIndex::load_structural(&layout.canonical_dir())?)
     };
+    review_gate::append_only_history(repo)?;
     let branch = git::current_branch(repo)?.unwrap_or_default();
     let initial_paths = git_freshness::working_paths(repo)?;
     atelier_workflow::load(repo)
@@ -297,7 +298,6 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             .as_ref()
             .context("owner integration base missing")?
             .1;
-        review_gate::append_only(repo, base)?;
         nodes.extend(review_gate::evaluate_session(
             &index,
             repo,
