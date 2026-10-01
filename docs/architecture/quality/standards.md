@@ -6,6 +6,10 @@
 - Use `cargo nextest run` as the default Rust test runner. Use `cargo test` for
   libtest-specific behavior, `--no-run`, reproduction, or unavailable nextest;
   state the reason in the handoff.
+- Default tests exclude injected failure hooks. Use
+  `cargo nextest run --features test-hooks` for rollback, cleanup-failure, and
+  concurrency checks. Normal release builds omit fault-injection environment
+  hooks.
 - Run checks appropriate to the changed claim; add focused CLI integration
   coverage for user-visible commands and invariant rejection paths.
 - Use [Rust hazard scans](rust-quality-hazard-scans.md) for debt markers,

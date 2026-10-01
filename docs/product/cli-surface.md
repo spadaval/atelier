@@ -24,6 +24,7 @@ installed binary only after the new model is stable.
 ## Orientation and ordinary work
 
 ```text
+atelier prime
 atelier status
 atelier work ready
 atelier work blocked
@@ -51,7 +52,18 @@ Transitions write records after read-only checks. `start` prepares Git context.
 Commit code and related tracker records yourself. Record focused proof and
 independent review before `merge`; see [evidence](validation.md) and
 [reviews and merge](reviews-and-merge.md). Done claims belong in committed work
-branch records. Atelier never commits, pushes, squashes, or creates merge commits.
+branch records. Run `atelier land` before a session handoff and
+`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never commits, pushes, squashes, or creates merge commits.
+
+## Review and session commands
+
+`review record`, `approve`, `finding`, and `trivial` require an owner, explicit
+`--identity`, and summary. `review disposition` appends a finding decision.
+Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
+
+`prime` restores context; `land [id]` checks committed records and applicable
+claims. `setup claude [--binary <path>]` installs the supported hooks. See
+[sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
 
 ## Bulk input and maintenance
 

@@ -1,7 +1,7 @@
 ---
-status: active
+status: accepted
 mission: atelier-kgcr
-last_changed: "2026-10-01: native tail tracker created"
+last_changed: "2026-10-01: execution state moved to native records"
 ---
 
 # Why
@@ -98,100 +98,26 @@ daemon needs the human.
 
 # Risks and Unknowns
 
-- Atelier tracks its own work while being rebuilt. Until S8, track the mission
-  in this file and in commit history; fall back to it if the tracker breaks.
-- Removing the cache touches every read path. Do it after the deletions shrink
-  the code.
-- Approval staleness needs a precise rule for which post-approval commits are
-  tracker-only. Settle it with tests before `atelier merge` relies on it.
-- Branch-per-epic means the base branch lags in-flight work; cross-branch
-  status reads are needed for orientation.
+- Atelier tracks its own rebuild. If the tracker is unavailable, recover its
+  committed records and decisions from Git; do not maintain a parallel status
+  table in this strategy.
+- Approval and evidence freshness must distinguish material edits from allowed
+  record bookkeeping, including changes later reverted.
+- The base branch lags in-flight work. Labeled local-branch summaries provide
+  orientation without treating branch-local done claims as integrated work.
+- Other repositories using the retired model need an explicit migration when
+  next used; that work is outside this mission.
 
-# Plan
+# Execution State
 
-Execution state now lives in mission `atelier-kgcr`, epic `atelier-1ioo`, and
-their child records in `.atelier/`. Work happens on `mission/atelier-rebuild`.
-The migration notes below preserve earlier proof and handoffs; the native
-records own current status. Each non-trivial increment is independently
-reviewed before it reaches `master`.
+Strategy status `accepted` records acceptance of this direction, not mission
+completion. The [native mission](../../.atelier/issues/atelier-kgcr.md) and its
+[tail epic](../../.atelier/issues/atelier-1ioo.md) own current work, dependencies,
+proof, review, and completion state. The epic's child records cover session
+workflow, documentation, and independent mission acceptance. This strategy owns
+intent, criteria, scope, and authority; it contains no temporary progress log.
 
-1. [done] Simplify this repository's `workflow.yaml`; archive terminal
-   records and activity files.
-2. [done] Delete Forgejo, review rooms, PR and review commands.
-3. [done] Delete transition actions and most validators; add `start`.
-4. [done] Replace the SQLite cache with direct parsing (S4 met: medians
-   28–42 ms, max under 52 ms, release build, 32 cores).
-5. [done] Delete leftovers: import, export, telemetry, `doctor`, `rules`,
-   `man`, hidden `branch` commands, `history`.
-6. [implemented; author proof complete; independent review pending] Reshape
-   records and evidence (S3, S7), absorbing `atelier-a0h0`. Issue, evidence,
-   and bundle schema version 2 replaces the generic fields map and old body
-   shape atomically. Tasks use Goal / Done when / Scope / Context; epics use
-   Outcome / Proof; missions use Outcome and Success criteria or a strategy
-   path without a revision. Draft epics may omit Proof until readiness.
-   Evidence has a full Git commit and an explicit pass, fail, blocked, or
-   not-applicable result; command capture derives its result and manual proof
-   requires `--result`. Freshness checks every post-pin commit edge and current
-   acceptance/code/policy changes, including committed edits later reverted.
-   New failures block completion even without a configured presence gate;
-   stale passes cannot clear failures. Status, notes, and record attachments
-   do not invalidate proof. Author regression proof includes 24 concurrent
-   label updates (the shared-lock version loses labels), stale code/policy/
-   acceptance, explicit non-pass results, and clean capture failures. The
-   migrated 1,000-issue/200-evidence release fixture has medians of
-   29.1–37.7 ms and a maximum of 46.2 ms across 10 runs. All 481 workspace
-   tests, formatting, whitespace, tracker lint, and dead/unused-code checks pass.
-   All writes now own an exclusive read/validate/write transaction. Policy
-   rejects close reasons on non-terminal transitions; evidence capture load
-   failures include `atelier check` recovery guidance. Public bundle examples
-   preview/apply/check successfully; the negative example rejects its intended
-   unsupported resource. Full logs are in `/tmp/step6-*.log` for review.
-   Independent review reported R1/R2; the orchestrator accepted both for repair.
-   Fixes now detect staged edits
-   even when the worktree matches HEAD, and preserve fresh proof through
-   record-only merges from before its pin. Introduced side-branch edits/reverts
-   and merge-result code changes still invalidate proof. Regression proof is in
-   `/tmp/step6-reviewfix-*.log`: all 484 tests, formatting, whitespace and the
-   dead/unused-code scan pass. The fixes await independent re-review.
-   R3 (exclusive prune apply) and R4 (atomic prune) remain outstanding and are
-   assigned to the gates slice. Step 6 source remains review-pending.
-7. In-repo review records, gates as graph nodes, `atelier merge` (S1, S2).
-8. Policy from the base branch; shell checks.
-9. `prime`, `land`, `setup` (S6); cross-branch status.
-10. Rewrite product docs and `PRODUCT_INTENT.md`; dogfood (S8).
-
-Bounded UI simplification candidate (author proof complete; independent review
-pending): removed the legacy `work queue` without an alias and deleted the
-unreachable per-objective status renderer/model. Metadata filtering stays in
-`issue list`; operational selection stays in `work ready/blocked/active/all`
-and scoped dashboards. Objective views use the shared app graph traversal and
-classification, retain every scoped row, and apply limits only when rendering.
-This removes duplicate hierarchy/readiness machinery without changing record,
-policy, evidence, or merge guards. Migrated tests retain readiness, blockers,
-Unicode, quiet output, and custom-status coverage; obsolete queue presentation
-tests are removed. A regression first failed on the old five-row app truncation,
-then passed with complete scope and active work included in recent activity.
-All 480 workspace tests, formatting, whitespace, and required dead/unused-code
-checks pass. The 1,000-issue/200-evidence release benchmark passes 10 runs:
-medians 31.1–43.0 ms and maximum 54.1 ms. Non-test physical Rust is 18,753 lines,
-down exactly 1,500 from the step-6 candidate at `8a4b850d` (20,253); this count
-retains blanks/comments, includes build scripts, and excludes integration-test
-files, the cfg-gated test helper, and complete `cfg(test)` item spans. Reproduce
-a committed tree with `scripts/count_non_test_rust.py <commit>`.
-
-Deferred review findings to resolve in later steps:
-
-- `start` treats a remote-only branch as new and branches from HEAD.
-- `start` writes owner and issue records separately after switching.
-- `work.terminal` passes for an empty mission; no gate uses it yet (step 7).
-- `check` reports only the first graph error when several exist.
-- Leftover ignored files from the old model (`.atelier/state.db`,
-  `.atelier/cache/`, `.atelier/rules/`, `.activity/` directories, `[review]`
-  config) now fail commands; needed for the one-time migration of other repos.
-- Git-cleanup failures in `prune` still exit 0; prune gives no branch
-  recovery hint.
-- `nearest_parent_epic` has branches made unreachable by load-time checks.
-- Test hooks (`ATELIER_TEST_*` env vars) ship in the production binary.
-- Docs still describing removed behavior: `workflow-configuration.md` review
-  sections, `work-model.md`, `cli-surface.md`, command-audit pages, quality
-  docs (`check --fix`), `CONTEXT.md`, `PRODUCT_INTENT.md` (step 10).
+Earlier migration steps and their proof remain in Git history. Acceptance is
+recorded by [the validation item](../../.atelier/issues/atelier-xz11.md) and its
+evidence, after the checks actually run. No status in this strategy establishes
+that the mission's criteria have passed.

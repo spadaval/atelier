@@ -8,7 +8,12 @@ and cleanup. Do not use repair or maintenance commands as a normal work path.
 - Use `atelier init` only when installing Atelier in the repository.
 - Use `atelier check` for tracked-state and workflow health; repair canonical
   records through reviewed edits, then rerun the check. There is no cache repair.
-- Use `atelier setup claude` for the supported lifecycle hooks.
+- Use `atelier setup claude` for the supported SessionStart/Stop hooks. Its
+  default executable is `atelier`; use `--binary <path>` for a local rebuilt
+  binary. Setup preserves unrelated settings; commit shared hook configuration
+  deliberately and restart Claude Code.
+- `atelier check` stops at the first structural load error. Repair the named
+  error and rerun; there is no structural-error aggregation promise.
 - Use `atelier prune` to inspect cleanup candidates and `atelier prune --apply`
   only when cleanup is intended. Commit canonical deletions yourself.
 - Recover terminal records from Git history; start diagnosis with command help.

@@ -16,10 +16,10 @@ Use these terms for the verified repo-native tracker defined by
 | Branch owner | An epic for its children, or a standalone non-mission issue; recorded branch metadata identifies its work branch and base. |
 | Status | Repository-defined lifecycle state; its category supports work queries. Agent Factory decides the process. |
 | Transition | A permitted status change plus read-only checks; it writes records and has no Git or provider actions. |
-| Gate | An invariant check applied at a consequential boundary, including merge. |
+| Gate | A derived `workflow_validator` query node for an invariant check; it is not a persisted record. |
 | Evidence | An immutable proof receipt with an explicit result and full Git commit, attached to the claims it supports. |
 | Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
-| Review | An append-only in-repo account of examination, approval, findings, and dispositions. |
+| Review | An immutable in-repo event for examination, approval, a finding, a disposition, or a trivial exemption; additions get new files. |
 | Approval | A review decision pinned to a commit, from an identity independent of the change's authors. |
 | Finding | A recorded problem that needs an explicit `FIX NOW`, `DEFER`, or `NO ACTION` disposition. |
 | Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |

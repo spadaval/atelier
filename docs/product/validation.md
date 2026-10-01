@@ -28,7 +28,7 @@ Command capture refuses a caller-supplied result. Commit the state you intend
 to check before recording proof, so the receipt describes that committed state.
 
 Use `atelier evidence show <evidence-id>` and `atelier evidence list` to inspect
-receipts. Use `attach` only when the existing proof also supports another item.
+receipts; `list --result fail` filters for a particular explicit result. Use `attach` only when the existing proof also supports another item.
 Correct a claim by adding a new receipt, not by rewriting a receipt that later
 work may rely on.
 

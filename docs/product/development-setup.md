@@ -19,6 +19,11 @@ target/debug/atelier check
 git diff --check
 ```
 
+The default test run excludes injected failure hooks. Run
+`cargo nextest run --features test-hooks` when checking rollback, cleanup
+failure, and concurrency paths. Normal release builds contain no fault-injection
+environment hooks.
+
 Use `target/debug/atelier` to validate repository CLI changes. The installed
 `atelier` can still contain the old model during the rebuild; update it only
 when the new model is stable. No external service, provider credential, `.env`,

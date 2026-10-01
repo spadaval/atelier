@@ -18,7 +18,9 @@ There is no SQLite database, domain cache, daemon, or persistent query index.
 
 Issue and evidence Markdown use `schema_version: 2`. Older canonical versions
 are rejected rather than silently converted. Workflow policy has version 3 and
-project configuration version 1; these are distinct contracts.
+project configuration version 1; these are distinct contracts. Review events
+use `atelier.review` version 1. Derived `workflow_validator` gate nodes have
+version 1 and no record files.
 
 Issue kinds include missions, epics, and ordinary work. IDs are project-scoped
 random IDs such as `atelier-z1p8`, independent of record type. YAML front matter
@@ -48,7 +50,10 @@ are owned by the typed record parsers and
 ## Reads and writes
 
 `atelier-records` parses, renders, validates, and persists canonical records.
-`atelier-app` builds direct indexes and graph queries. Read commands do not
+`atelier-app` builds direct indexes and graph queries. `atelier check` refuses
+an invalid structural graph at the first load error; repair that error and
+rerun to uncover the next one. It does not promise aggregate structural errors.
+Read commands do not
 repair files or consult a hidden secondary truth.
 
 Mutating commands validate before writing. The canonical mutation lock
