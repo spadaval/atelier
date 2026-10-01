@@ -225,3 +225,10 @@ working-path check detects those same hidden changes before and after the child
 command. Canonical and flagged-file verification compares raw Git blob hashes
 in batches without running content filters; ordinary runtime exclusions remain
 local, and unchanged index flags do not prevent integration.
+
+The final hidden-mode correction inspects tracked Unix executable modes even
+when the index has ordinary `H` entries and `core.filemode=false` masks a chmod
+from Git status. Merge checks both checkouts before and after shell execution;
+evidence capture sees the same mode changes before and after its command.
+Only flagged file contents need additional hashes; the mode scan reads metadata
+for tracked regular files without running filters or hashing every code file.

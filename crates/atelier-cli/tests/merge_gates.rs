@@ -1452,3 +1452,127 @@ fn unchanged_flagged_files_allow_merge_and_canonical_hashing_bypasses_filters() 
     fs::remove_file(fixture.path().join(".git/info/attributes")).unwrap();
     ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
+
+#[cfg(unix)]
+#[test]
+fn normal_index_hidden_modes_refuse_merge_before_and_after_checks_in_both_checkouts() {
+    use std::os::unix::fs::PermissionsExt;
+    for base_target in [false, true] {
+        for during_check in [false, true] {
+            let fixture = Fixture::new();
+            let base = tempdir().unwrap();
+            git(fixture.path(), &["switch", "main"]);
+            fs::write(fixture.path().join("base.rs"), "base code\n").unwrap();
+            if during_check {
+                let path = fixture.path().join(".atelier/workflow.yaml");
+                let policy = fs::read_to_string(&path).unwrap();
+                let command = if base_target {
+                    format!("chmod +x {}/base.rs", base.path().display())
+                } else {
+                    "chmod +x src.rs".into()
+                };
+                fs::write(
+                    &path,
+                    format!(
+                        "{policy}\nmerge_checks:\n  - shell.check: {{ command: '{command}' }}\n"
+                    ),
+                )
+                .unwrap();
+            }
+            commit(fixture.path(), "base code and optional hidden mode check");
+            git(fixture.path(), &["switch", &fixture.branch]);
+            git(fixture.path(), &["rebase", "main"]);
+            fixture.approval("Reviewer");
+            git(fixture.path(), &["config", "core.filemode", "false"]);
+            if base_target {
+                git(
+                    fixture.path(),
+                    &["worktree", "add", base.path().to_str().unwrap(), "main"],
+                );
+            }
+            let target = if base_target {
+                base.path()
+            } else {
+                fixture.path()
+            };
+            let file = if base_target { "base.rs" } else { "src.rs" };
+            assert_eq!(
+                git(target, &["ls-files", "-v", "--", file]),
+                format!("H {file}")
+            );
+            if !during_check {
+                fs::set_permissions(target.join(file), fs::Permissions::from_mode(0o755)).unwrap();
+                assert!(git(target, &["status", "--porcelain"]).is_empty());
+            }
+            let work_head = git(fixture.path(), &["rev-parse", "HEAD"]);
+            fixture.refusal("tracked_snapshot_uncommitted");
+            assert_eq!(
+                git(
+                    fixture.path(),
+                    &["rev-parse", &format!("refs/heads/{}", fixture.branch)]
+                ),
+                work_head
+            );
+            assert!(git(target, &["status", "--porcelain"]).is_empty());
+            assert_eq!(
+                git(target, &["ls-files", "-v", "--", file]),
+                format!("H {file}")
+            );
+            fs::set_permissions(target.join(file), fs::Permissions::from_mode(0o644)).unwrap();
+            if !during_check {
+                ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn evidence_capture_rejects_normal_index_hidden_modes_before_and_during_command() {
+    use std::os::unix::fs::PermissionsExt;
+    for during_command in [false, true] {
+        let fixture = Fixture::new();
+        git(fixture.path(), &["config", "core.filemode", "false"]);
+        if !during_command {
+            fs::set_permissions(
+                fixture.path().join("src.rs"),
+                fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+        }
+        let command = if during_command {
+            "chmod +x src.rs"
+        } else {
+            "touch capture-child-ran"
+        };
+        let (passed, output) = cli(
+            fixture.path(),
+            &[
+                "evidence",
+                "record",
+                "--kind",
+                "test",
+                "--target",
+                &format!("issue/{}", fixture.id),
+                "--",
+                "sh",
+                "-c",
+                command,
+            ],
+        );
+        let expected = if during_command {
+            "command changed code or policy"
+        } else {
+            "requires committed code and policy"
+        };
+        assert!(!passed && output.contains(expected), "{output}");
+        assert!(!fixture.path().join("capture-child-ran").exists());
+        let evidence = fixture.path().join(".atelier/evidence");
+        assert!(!evidence.exists() || fs::read_dir(evidence).unwrap().next().is_none());
+        assert_eq!(
+            git(fixture.path(), &["ls-files", "-v", "--", "src.rs"]),
+            "H src.rs"
+        );
+        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+    }
+}
