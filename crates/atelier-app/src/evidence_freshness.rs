@@ -20,7 +20,7 @@ fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> boo
 pub fn completion_claim_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> bool {
     acceptance_matches(a, b) && a.issue.status == b.issue.status
 }
-fn at_commit(repo: &Path, commit: &str, issue_id: &str) -> Result<CanonicalIssueRecord> {
+pub(crate) fn at_commit(repo: &Path, commit: &str, issue_id: &str) -> Result<CanonicalIssueRecord> {
     let relative = issue_record_path(issue_id);
     parse_issue_record(
         &git::blob(repo, commit, &Path::new(".atelier").join(&relative))?,
