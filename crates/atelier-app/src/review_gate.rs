@@ -152,21 +152,19 @@ pub fn author_identities(
     base_commit: &str,
     ids: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>> {
+    author_identities_to(repo, base_commit, ids, "HEAD")
+}
+fn author_identities_to(
+    repo: &Path,
+    base_commit: &str,
+    ids: &BTreeSet<String>,
+    end: &str,
+) -> Result<BTreeSet<String>> {
     let mut authors = BTreeSet::new();
     let mut inspected = BTreeSet::new();
-    for edge in git::commit_edges(repo, base_commit)? {
+    for edge in git::commit_edges_to(repo, base_commit, end)? {
         if !allowed_edge(repo, &edge, ids)? && inspected.insert(edge.commit.clone()) {
-            let names = String::from_utf8(git::git_output(
-                repo,
-                &["show", "-s", "--format=%an%n%ae", &edge.commit],
-            )?)?;
-            for identity in names.lines() {
-                authors.insert(normalize(identity));
-            }
-            let parts = names.lines().collect::<Vec<_>>();
-            if parts.len() == 2 {
-                authors.insert(normalize(&format!("{} <{}>", parts[0], parts[1])));
-            }
+            add_author(repo, &edge.commit, &mut authors)?;
         }
     }
     Ok(authors)
@@ -247,7 +245,7 @@ pub fn evaluate_claims(
         if historical {
             EvaluationKind::Historical
         } else {
-            EvaluationKind::Session
+            EvaluationKind::CurrentClaims
         },
         ids,
     )
@@ -255,6 +253,7 @@ pub fn evaluate_claims(
 enum EvaluationKind {
     Merge,
     Session,
+    CurrentClaims,
     Historical,
 }
 fn evaluate_scope(
@@ -268,6 +267,10 @@ fn evaluate_scope(
 ) -> Result<Vec<GateNode>> {
     let complete = matches!(kind, EvaluationKind::Merge);
     let historical = matches!(kind, EvaluationKind::Historical);
+    let global = matches!(
+        kind,
+        EvaluationKind::CurrentClaims | EvaluationKind::Historical
+    );
     let retained = |record: &ReviewRecord| {
         let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
         let old = entry(repo, base_commit, &path).ok().flatten();
@@ -376,11 +379,16 @@ fn evaluate_scope(
             )
         })
         .filter(|record| {
-            (historical && retained(record))
-                || ((matches!(record.event, ReviewEvent::TrivialExemption)
-                    || independent(record, &authors))
-                    && ancestor(repo, base_commit, &record.commit)
-                    && approval_is_current(repo, &record.commit, &ids).unwrap_or(false))
+            let accepted_identity = matches!(record.event, ReviewEvent::TrivialExemption)
+                || if global {
+                    original_independent(index, repo, record).unwrap_or(false)
+                } else {
+                    independent(record, &authors)
+                };
+            accepted_identity
+                && ((historical && retained(record))
+                    || ((global || ancestor(repo, base_commit, &record.commit))
+                        && approval_is_current(repo, &record.commit, &ids).unwrap_or(false)))
         })
         .collect::<Vec<_>>();
     let support = candidates
@@ -444,7 +452,11 @@ fn evaluate_scope(
                     })
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
-                (historical && retained(disposition)) || independent(disposition, &authors)
+                if global {
+                    original_independent(index, repo, disposition)?
+                } else {
+                    independent(disposition, &authors)
+                }
             }
         };
         if !accepted {
@@ -605,4 +617,62 @@ fn completion_claims(
         }
     }
     Ok(nodes)
+}
+
+fn add_author(repo: &Path, commit: &str, authors: &mut BTreeSet<String>) -> Result<()> {
+    let names = String::from_utf8(git::git_output(
+        repo,
+        &["show", "-s", "--format=%an%n%ae", commit],
+    )?)?;
+    for identity in names.lines() {
+        authors.insert(normalize(identity));
+    }
+    let parts = names.lines().collect::<Vec<_>>();
+    if parts.len() == 2 {
+        authors.insert(normalize(&format!("{} <{}>", parts[0], parts[1])));
+    }
+    Ok(())
+}
+fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord) -> Result<bool> {
+    let issue = index.require_issue(&record.target)?;
+    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
+    let event_path = format!(".atelier/reviews/{}.md", record.header.id);
+    let introduced = String::from_utf8(git::git_output(
+        repo,
+        &[
+            "log",
+            "--reverse",
+            "--diff-filter=A",
+            "--format=%H",
+            "--",
+            &event_path,
+        ],
+    )?)?;
+    let event = introduced
+        .lines()
+        .next()
+        .context("review event history missing")?;
+    let paths = ids
+        .iter()
+        .map(|id| format!(".atelier/issues/{id}.md"))
+        .collect::<Vec<_>>();
+    let args = [
+        "log",
+        "--reverse",
+        "--diff-filter=A",
+        "--format=%H",
+        event,
+        "--",
+    ]
+    .into_iter()
+    .chain(paths.iter().map(String::as_str))
+    .collect::<Vec<_>>();
+    let history = String::from_utf8(git::git_output(repo, &args)?)?;
+    let start = history
+        .lines()
+        .next()
+        .context("review predates its issue scope")?;
+    let mut authors = author_identities_to(repo, start, &ids, event)?;
+    add_author(repo, start, &mut authors)?;
+    Ok(independent(record, &authors))
 }

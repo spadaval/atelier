@@ -1213,3 +1213,89 @@ fn integration_base_new_completion_cannot_omit_required_proof() {
         "{output}"
     );
 }
+
+#[test]
+fn retained_self_dispositions_and_self_approvals_never_age_into_acceptance() {
+    for fix_now in [false, true] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let id = ok(
+            f.path(),
+            &["-q", "issue", "create", "Original author's completion"],
+        );
+        if fix_now {
+            commit(f.path(), "original author plan");
+        }
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Original work defect",
+            ],
+        );
+        if fix_now {
+            commit(f.path(), "original finding");
+            fs::write(
+                f.path().join("original-work"),
+                "original author resolution\n",
+            )
+            .unwrap();
+            commit(f.path(), "author resolves finding");
+            let resolution = git(f.path(), &["rev-parse", "HEAD"]);
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "disposition",
+                    &finding,
+                    "--identity",
+                    "Reviewer",
+                    "--decision",
+                    "fix_now",
+                    "--resolution-commit",
+                    &resolution,
+                    "Requires independent approval",
+                ],
+            );
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "approve",
+                    &id,
+                    "--identity",
+                    "Author",
+                    "Self approval is insufficient",
+                ],
+            );
+        } else {
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "disposition",
+                    &finding,
+                    "--identity",
+                    "Author",
+                    "--decision",
+                    "no_action",
+                    "Author cannot accept own dismissal",
+                ],
+            );
+        }
+        f.terminal(&id);
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(!pass && output.contains("findings.disposed"), "{output}");
+        fs::write(f.path().join("unrelated-work"), "later unrelated work\n").unwrap();
+        commit(f.path(), "aging cannot create independent acceptance");
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(!pass && output.contains("findings.disposed"), "{output}");
+    }
+}
