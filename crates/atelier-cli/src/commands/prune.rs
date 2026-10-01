@@ -153,10 +153,39 @@ fn prune_git_artifacts(
         }
     };
     let base = policy.branch_policy.base_branch.clone();
+    let current = git_stdout_trimmed(&tracker.repo_root, &["branch", "--show-current"])?;
+    let worktrees = git_worktrees(&tracker.repo_root)?;
+    let branches = git_stdout_trimmed(
+        &tracker.repo_root,
+        &["for-each-ref", "--format=%(refname)", "refs/heads"],
+    )?;
+    // Owner checks only serve artifacts that are not already protected by
+    // their checkout/base identity. Canonical records are planned separately.
+    let needs_owners = branches
+        .lines()
+        .filter_map(|branch| branch.strip_prefix("refs/heads/"))
+        .any(|branch| branch != current && branch != base)
+        || worktrees.iter().any(|worktree| {
+            !worktree.prunable
+                && !worktree.locked
+                && worktree.path != tracker.repo_root
+                && worktree
+                    .branch
+                    .as_ref()
+                    .is_some_and(|branch| branch != &base)
+        });
     let (_, cutoff) = canonical_retention_cutoff(tracker, retention_days_override);
-    let mut owner_candidates = issue_candidates(tracker, cutoff);
+    let mut owner_candidates = if needs_owners {
+        issue_candidates(tracker, cutoff)
+    } else {
+        Vec::new()
+    };
     apply_git_history_protection(head_paths, &mut owner_candidates);
-    let dirty_paths = dirty_canonical_paths(&tracker.repo_root)?;
+    let dirty_paths = if owner_candidates.iter().any(CanonicalCandidate::eligible) {
+        dirty_canonical_paths(&tracker.repo_root)?
+    } else {
+        BTreeSet::new()
+    };
     for candidate in owner_candidates
         .iter_mut()
         .filter(|candidate| candidate.eligible())
@@ -169,7 +198,11 @@ fn prune_git_artifacts(
         .into_iter()
         .map(|candidate| (candidate.id.clone(), candidate))
         .collect::<BTreeMap<_, _>>();
-    let all_issues = tracker.index.issues().cloned().collect::<Vec<_>>();
+    let all_issues = tracker
+        .index
+        .issues()
+        .filter(|_| needs_owners)
+        .collect::<Vec<_>>();
     let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
     for issue in &all_issues {
         if let Ok(resolution) =
@@ -227,8 +260,6 @@ fn prune_git_artifacts(
             owner.active_descendants.insert(issue.id.clone());
         }
     }
-    let current = git_stdout_trimmed(&tracker.repo_root, &["branch", "--show-current"])?;
-    let worktrees = git_worktrees(&tracker.repo_root)?;
     let mut worktree_branch_blockers = BTreeMap::new();
     for worktree in &worktrees {
         if worktree.prunable || worktree.branch.is_none() {
@@ -249,10 +280,6 @@ fn prune_git_artifacts(
         }
     }
     let mut summary = GitPruneSummary::default();
-    let branches = git_stdout_trimmed(
-        &tracker.repo_root,
-        &["for-each-ref", "--format=%(refname)", "refs/heads"],
-    )?;
     for branch in branches
         .lines()
         .filter_map(|branch| branch.strip_prefix("refs/heads/"))
