@@ -90,8 +90,16 @@ pub fn work_buckets(
     index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<WorkBuckets> {
+    work_buckets_for(index, workflow_policy, index.issues())
+}
+
+pub fn work_buckets_for<'a>(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issues: impl IntoIterator<Item = &'a Issue>,
+) -> Result<WorkBuckets> {
     let mut buckets = WorkBuckets::default();
-    for issue in index.issues() {
+    for issue in issues {
         let row = work_row(index, workflow_policy, issue.clone())?;
         match row.state_label() {
             "active" => buckets.active.push(row),
