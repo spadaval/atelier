@@ -9,23 +9,24 @@
 //! commit with the work they describe.
 
 use anyhow::{bail, Context, Result};
+use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::commands::workflow;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD;
 use atelier_records::CanonicalIssueRecord;
-use atelier_sqlite::Database;
 
 const START_TRANSITION: &str = "start";
 
-pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
-    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
+pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()> {
+    let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let repo_root = workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let branch = atelier_app::workflow_policy::resolve_work_branch(&policy, db, &issue_id)?.branch;
+    let branch =
+        atelier_app::workflow_policy::resolve_work_branch(&policy, index, &issue_id)?.branch;
 
     let current = current_branch(&repo_root)?;
     let switch_needed = current.as_deref() != Some(branch.as_str());
@@ -53,18 +54,18 @@ pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
     } else {
         None
     };
-    let (view_db, view_root, view_state) = match &snapshot {
-        Some(snapshot) => (&snapshot.db, snapshot.root(), snapshot.state_dir.clone()),
-        None => (db, repo_root.as_path(), state_dir.to_path_buf()),
+    let (view_index, view_root) = match &snapshot {
+        Some(snapshot) => (&snapshot.index, snapshot.root()),
+        None => (index, repo_root.as_path()),
     };
     let view_policy = atelier_app::workflow_policy::load(view_root)?;
-    let Some(issue) = view_db.get_issue(&issue_id)? else {
+    let Some(issue) = view_index.get_issue(&issue_id) else {
         bail!(
             "start_branch_missing_record: branch '{branch}' does not contain issue {issue_id}; commit the record on the branch that owns this work, then rerun `atelier start {issue_id}`."
         );
     };
     let work_branch =
-        atelier_app::workflow_policy::resolve_work_branch(&view_policy, view_db, &issue_id)?;
+        atelier_app::workflow_policy::resolve_work_branch(&view_policy, view_index, &issue_id)?;
     if work_branch.branch != branch {
         bail!(
             "start_branch_mismatch: on branch '{branch}', {issue_id} is owned by branch '{}'; repair the owner's {WORKFLOW_BRANCH_FIELD} field, then rerun `atelier start {issue_id}`.",
@@ -89,7 +90,7 @@ pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
         .filter(|transition| transition.from.contains(&issue.status));
     if let Some(transition) = transition {
         workflow::ensure_transition_allowed(
-            view_db,
+            view_index,
             &view_policy,
             view_root,
             &issue,
@@ -110,7 +111,10 @@ pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
                 (Some(current), false) => current.clone(),
                 _ => view_policy.branch_policy.base_branch.clone(),
             });
-    let mut owner = app_use_cases::load_canonical_issue(&view_state, &work_branch.owner_id)?;
+    let mut owner = view_index
+        .issue_record(&work_branch.owner_id)
+        .cloned()
+        .with_context(|| format!("Issue {} not found", work_branch.owner_id))?;
     let record_branch = work_branch.recorded_base.is_none();
     if record_branch {
         owner.issue.fields.insert(
@@ -124,7 +128,10 @@ pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
         let mut record = if owner.issue.id == issue_id {
             owner.clone()
         } else {
-            app_use_cases::load_canonical_issue(&view_state, &issue_id)?
+            view_index
+                .issue_record(&issue_id)
+                .cloned()
+                .with_context(|| format!("Issue {issue_id} not found"))?
         };
         workflow::apply_transition(&view_policy, &mut record, transition, None);
         if record.issue.id != owner.issue.id && record_branch {
@@ -176,12 +183,12 @@ pub fn run(db: &Database, state_dir: &Path, issue_ref: &str) -> Result<()> {
     Ok(())
 }
 
-/// A read-only copy of another branch's tracker records with its own cache,
-/// so `start` can check the records it is about to change before switching.
+/// A read-only copy of another branch's tracker records, loaded into an
+/// index so `start` can check the records it is about to change before
+/// switching.
 struct BranchSnapshot {
     dir: tempfile::TempDir,
-    state_dir: PathBuf,
-    db: Database,
+    index: RecordIndex,
 }
 
 impl BranchSnapshot {
@@ -218,17 +225,10 @@ impl BranchSnapshot {
                 String::from_utf8_lossy(&tar.stderr).trim()
             );
         }
-        let snapshot_state = dir.path().join(state_relative);
-        let db_path = dir.path().join("snapshot.db");
-        atelier_app::rebuild::run(&snapshot_state, &db_path).with_context(|| {
+        let index = RecordIndex::load(&dir.path().join(state_relative)).with_context(|| {
             format!("start_branch_snapshot: tracker records on branch '{branch}' are invalid")
         })?;
-        let db = app_use_cases::open_database(&db_path)?;
-        Ok(Self {
-            dir,
-            state_dir: snapshot_state,
-            db,
-        })
+        Ok(Self { dir, index })
     }
 
     fn root(&self) -> &Path {

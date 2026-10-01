@@ -1,5 +1,9 @@
 # SQLite Domain Cache Schema
 
+> Superseded by [ADR 0019](../adr/0019-verified-repo-native-tracker.md):
+> the SQLite cache was removed. Commands parse record files into an in-memory
+> index (`atelier-app::record_index`). Kept as a historical record.
+
 Atelier uses one ignored local SQLite database at `.atelier/runtime/state.db`.
 It is a disposable domain cache: record files under `.atelier/` are the
 durable project state, and rebuilding or deleting the database must never lose

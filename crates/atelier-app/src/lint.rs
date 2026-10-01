@@ -1,13 +1,14 @@
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
-use atelier_core::Issue;
-use atelier_records::{issue_record_path, issue_section_diagnostic, IssueSectionName, RecordStore};
-use atelier_sqlite::{Database, IssueCacheQuery, IssueCacheRow};
+use atelier_records::{
+    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
+};
+
+use crate::record_index::{read_record_files, RecordIndex};
 
 pub struct LintRequest<'a> {
-    pub db: &'a Database,
+    pub state_dir: &'a Path,
     pub issue_ref: Option<&'a str>,
 }
 
@@ -72,188 +73,171 @@ const VAGUE_EVIDENCE_MARKERS: &[&str] = &[
     "later",
 ];
 
+/// Reports every invalid record file, record-graph integrity errors, and
+/// per-issue findings. Unlike other commands, lint never stops at the first
+/// invalid record file.
 pub fn lint(
     request: crate::Request<LintRequest<'_>>,
 ) -> Result<crate::Outcome<crate::ViewModel<LintView>>> {
-    let input = request.input;
-    let mut issues: Vec<Issue> = if let Some(issue_ref) = input.issue_ref {
-        let id = resolve_issue_id(input.db, issue_ref)?;
-        input
-            .db
-            .issue_cache_row(&id)?
-            .map(issue_from_cache)
-            .into_iter()
-            .collect()
-    } else {
-        input
-            .db
-            .query_issue_cache(&IssueCacheQuery::default())?
-            .into_iter()
-            .map(issue_from_cache)
-            .collect()
-    };
-    let canonical_state_dir = crate::storage_layout::find_canonical_dir_from_cwd()?;
-    let workflow_policy = canonical_state_dir
-        .as_ref()
-        .and_then(|state_dir| state_dir.parent())
-        .and_then(|repo_root| {
-            crate::workflow_policy::load(repo_root).ok().map(|policy| {
-                (
-                    policy,
-                    repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH),
-                )
-            })
-        });
-    let (canonical_issues, canonical_findings) = if let Some(state_dir) = &canonical_state_dir {
-        let store = RecordStore::new(&state_dir);
-        let mut records = BTreeMap::new();
-        let mut findings = Vec::new();
-        let paths = if let Some(issue_ref) = input.issue_ref {
-            let id = resolve_issue_id(input.db, issue_ref)?;
-            vec![issue_record_path(&id)]
-        } else {
-            match store.discover_issue_paths() {
-                Ok(paths) => paths,
-                Err(error) => {
-                    findings.push(LintFinding {
-                        id: "(canonical)".to_string(),
-                        message: format!("Tracker record files are invalid: {error:#}"),
-                    });
-                    Vec::new()
-                }
-            }
-        };
-        for relative in paths {
-            match store.load_issue(&relative) {
-                Ok(record) => {
-                    records.insert(record.issue.id.clone(), record);
-                }
-                Err(error) => {
-                    findings.push(LintFinding {
-                        id: relative
-                            .file_stem()
-                            .and_then(|stem| stem.to_str())
-                            .unwrap_or("(unknown)")
-                            .to_string(),
-                        message: format!("Tracker record files are invalid: {error:#}"),
-                    });
-                }
-            }
-        }
-        if findings.is_empty() {
-            if let Err(error) = crate::rebuild::validate_canonical_state(state_dir) {
-                findings.push(LintFinding {
-                    id: "(canonical)".to_string(),
-                    message: format!("Tracker record files are invalid: {error:#}"),
-                });
-            }
-        }
-        (records, findings)
-    } else {
-        (BTreeMap::new(), Vec::new())
-    };
+    let LintRequest {
+        state_dir,
+        issue_ref,
+    } = request.input;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "Cannot determine repository root for {}",
+            state_dir.display()
+        )
+    })?;
+    let files = read_record_files(state_dir)?;
+    let scoped_id = issue_ref
+        .map(|issue_ref| resolve_issue_id(&files, issue_ref))
+        .transpose()?;
 
-    for record in canonical_issues.values() {
-        if !issues.iter().any(|issue| issue.id == record.issue.id) {
-            issues.push(record.issue.clone());
+    let mut findings = Vec::new();
+    let mut other_file_errors = Vec::new();
+    for file_error in &files.errors {
+        let stem = file_error
+            .path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("(unknown)")
+            .to_string();
+        let finding = LintFinding {
+            message: format!("Tracker record files are invalid: {:#}", file_error.error),
+            id: stem,
+        };
+        match &scoped_id {
+            Some(id) if file_error.path != issue_record_path(id) => other_file_errors.push(finding),
+            _ => findings.push(finding),
         }
     }
-
-    let mut findings = canonical_findings;
-    for issue in issues {
-        let issue = canonical_issues
-            .get(&issue.id)
-            .map(|record| record.issue.clone())
-            .unwrap_or(issue);
-        if issue.title.trim().is_empty() {
+    let scoped_record_missing = scoped_id.as_ref().is_some_and(|id| {
+        !files.issues.iter().any(|record| &record.issue.id == id)
+            && !files
+                .errors
+                .iter()
+                .any(|error| error.path == issue_record_path(id))
+    });
+    if let (Some(id), true) = (&scoped_id, scoped_record_missing) {
+        findings.push(LintFinding {
+            id: id.clone(),
+            message: format!(
+                "Tracker record files are invalid: Missing record file .atelier/{}",
+                issue_record_path(id).display()
+            ),
+        });
+    }
+    if findings.is_empty() {
+        let integrity_error = match other_file_errors.into_iter().next() {
+            Some(first) => Some(first.message),
+            None => RecordIndex::from_project_records(
+                state_dir,
+                files.issues.clone(),
+                files.evidence.clone(),
+            )
+            .err()
+            .map(|error| format!("Tracker record files are invalid: {error:#}")),
+        };
+        if let Some(message) = integrity_error {
             findings.push(LintFinding {
-                id: issue_id_for_agent(&issue),
-                message: "Issue title must not be empty".to_string(),
+                id: "(canonical)".to_string(),
+                message,
             });
         }
-        if let Some((policy, policy_path)) = &workflow_policy {
-            if let Err(error) =
-                crate::workflow_policy::validate_issue_against_policy(policy, &issue, policy_path)
-            {
-                findings.push(LintFinding {
-                    id: issue_id_for_agent(&issue),
-                    message: error.to_string(),
-                });
-            }
-        }
-        for blocker_id in input.db.issue_cache_blockers(&issue.id)? {
-            if input.db.issue_cache_row(&blocker_id)?.is_none() {
-                findings.push(LintFinding {
-                    id: issue_id_for_agent(&issue),
-                    message: format!("Dependency references missing issue {blocker_id}"),
-                });
-            }
-        }
-        if let Some(record) = canonical_issues.get(&issue.id) {
-            for state in record.sections.section_states() {
-                if state.required && (!state.present || state.empty) {
-                    findings.push(LintFinding {
-                        id: issue_id_for_agent(&issue),
-                        message: format!(
-                            "Issue section {} must be present and non-empty",
-                            state.name.title()
-                        ),
-                    });
-                }
-            }
-            if input.issue_ref.is_some() {
-                for (name, value) in [
-                    (
-                        IssueSectionName::Description,
-                        record.sections.description.as_str(),
-                    ),
-                    (IssueSectionName::Outcome, record.sections.outcome.as_str()),
-                ] {
-                    if issue_section_placeholder(name, value) {
-                        findings.push(LintFinding {
-                            id: issue_id_for_agent(&issue),
-                            message: format!(
-                                "Issue section {} must be present and non-empty",
-                                name.title()
-                            ),
-                        });
-                    }
-                }
-            }
-            if input.issue_ref.is_some() {
-                if let Some(evidence) = record.sections.section(IssueSectionName::Evidence) {
-                    if issue_section_placeholder(IssueSectionName::Evidence, evidence) {
-                        continue;
-                    }
-                    for (index, entry) in evidence_entries(evidence).iter().enumerate() {
-                        if !evidence_entry_names_observable_target(entry) {
-                            let relative = issue_record_path(&issue.id);
-                            let message = issue_section_diagnostic(
-                                Some(&issue.id),
-                                IssueSectionName::Evidence.title(),
-                                &relative,
-                                &format!(
-                                    "Issue section Evidence entry {} must name an observable proof target ({})",
-                                    index + 1,
-                                    EVIDENCE_PROOF_TARGET_HINT
-                                ),
-                            );
-                            findings.push(LintFinding {
-                                id: issue_id_for_agent(&issue),
-                                message,
-                            });
-                        }
-                    }
-                }
-            }
-        }
     }
+
+    let scoped_records = files
+        .issues
+        .iter()
+        .filter(|record| scoped_id.as_ref().is_none_or(|id| &record.issue.id == id));
+    findings.extend(issue_findings(
+        scoped_records,
+        repo_root,
+        scoped_id.is_some(),
+    ));
 
     Ok(crate::Outcome {
         value: crate::ViewModel {
             data: LintView { findings },
         },
     })
+}
+
+/// Per-issue findings: empty titles, workflow-policy violations, and
+/// required sections. `scoped` adds the stricter single-issue checks
+/// (placeholder sections and unobservable evidence entries).
+pub fn issue_findings<'a>(
+    records: impl IntoIterator<Item = &'a CanonicalIssueRecord>,
+    repo_root: &Path,
+    scoped: bool,
+) -> Vec<LintFinding> {
+    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    let workflow_policy = crate::workflow_policy::load(repo_root).ok();
+    let mut findings = Vec::new();
+    for record in records {
+        let issue = &record.issue;
+        let finding = |message: String| LintFinding {
+            id: issue.id.clone(),
+            message,
+        };
+        if issue.title.trim().is_empty() {
+            findings.push(finding("Issue title must not be empty".to_string()));
+        }
+        if let Some(policy) = &workflow_policy {
+            if let Err(error) =
+                crate::workflow_policy::validate_issue_against_policy(policy, issue, &policy_path)
+            {
+                findings.push(finding(error.to_string()));
+            }
+        }
+        for state in record.sections.section_states() {
+            if state.required && (!state.present || state.empty) {
+                findings.push(finding(format!(
+                    "Issue section {} must be present and non-empty",
+                    state.name.title()
+                )));
+            }
+        }
+        if !scoped {
+            continue;
+        }
+        for (name, value) in [
+            (
+                IssueSectionName::Description,
+                record.sections.description.as_str(),
+            ),
+            (IssueSectionName::Outcome, record.sections.outcome.as_str()),
+        ] {
+            if issue_section_placeholder(name, value) {
+                findings.push(finding(format!(
+                    "Issue section {} must be present and non-empty",
+                    name.title()
+                )));
+            }
+        }
+        let Some(evidence) = record.sections.section(IssueSectionName::Evidence) else {
+            continue;
+        };
+        if issue_section_placeholder(IssueSectionName::Evidence, evidence) {
+            continue;
+        }
+        for (position, entry) in evidence_entries(evidence).iter().enumerate() {
+            if !evidence_entry_names_observable_target(entry) {
+                findings.push(finding(issue_section_diagnostic(
+                    Some(&issue.id),
+                    IssueSectionName::Evidence.title(),
+                    &issue_record_path(&issue.id),
+                    &format!(
+                        "Issue section Evidence entry {} must name an observable proof target ({})",
+                        position + 1,
+                        EVIDENCE_PROOF_TARGET_HINT
+                    ),
+                )));
+            }
+        }
+    }
+    findings
 }
 
 fn issue_section_placeholder(name: IssueSectionName, value: &str) -> bool {
@@ -265,25 +249,61 @@ fn issue_section_placeholder(name: IssueSectionName, value: &str) -> bool {
     )
 }
 
-pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
-    if let Some(id) = db.resolve_issue_cache_ref(issue_ref)? {
-        return Ok(id);
+/// Resolves an issue reference against the record files, including files
+/// that failed to parse, so a broken issue can still be checked by id.
+fn resolve_issue_id(files: &crate::record_index::RecordFiles, issue_ref: &str) -> Result<String> {
+    let issue_ref = issue_ref.trim();
+    let mut ids = files
+        .issues
+        .iter()
+        .map(|record| record.issue.id.clone())
+        .chain(files.errors.iter().filter_map(|error| {
+            error
+                .path
+                .strip_prefix("issues")
+                .ok()
+                .and_then(|path| path.file_stem())
+                .and_then(|stem| stem.to_str())
+                .map(str::to_string)
+        }))
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    if ids.iter().any(|id| id == issue_ref) {
+        return Ok(issue_ref.to_string());
     }
-
-    let actual_kind = if db.evidence_cache_row(issue_ref)?.is_some() {
-        Some("evidence")
-    } else {
-        None
-    };
-    if let Some(actual_kind) = actual_kind {
+    if !issue_ref.is_empty()
+        && issue_ref
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+    {
+        let suffix = format!("-{issue_ref}");
+        let matches = ids
+            .iter()
+            .filter(|id| id.ends_with(&suffix))
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [id] => return Ok((*id).clone()),
+            [] => {}
+            _ => bail!(
+                "Issue key {issue_ref} is ambiguous: {}",
+                matches
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+    if files
+        .evidence
+        .iter()
+        .any(|record| record.header.id == issue_ref)
+    {
         bail!(
-            "{} is a {} record, not an issue record. Use `{}`.",
-            issue_ref,
-            actual_kind,
-            show_command_for_kind(actual_kind, issue_ref)
+            "{issue_ref} is a evidence record, not an issue record. Use `atelier evidence show {issue_ref}`."
         );
     }
-
     if issue_ref.contains('-')
         && issue_ref.chars().all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
@@ -291,36 +311,7 @@ pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
     {
         return Ok(issue_ref.to_string());
     }
-
     Err(anyhow!("Issue {issue_ref} was not found"))
-}
-
-fn issue_from_cache(row: IssueCacheRow) -> Issue {
-    Issue {
-        id: row.id,
-        title: row.title,
-        description: None,
-        status: row.status,
-        issue_type: row.issue_type,
-        priority: row.priority,
-        fields: BTreeMap::new(),
-        parent_id: row.parent_id,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        closed_at: row.closed_at,
-    }
-}
-
-fn show_command_for_kind(kind: &str, id: &str) -> String {
-    match kind {
-        "mission" => format!("atelier issue show {id}"),
-        "evidence" => format!("atelier evidence show {id}"),
-        _ => format!("atelier {kind} show {id}"),
-    }
-}
-
-fn issue_id_for_agent(issue: &Issue) -> String {
-    issue.id.clone()
 }
 
 fn evidence_entries(evidence: &str) -> Vec<String> {
@@ -390,9 +381,4 @@ fn evidence_entry_names_observable_target(entry: &str) -> bool {
     CONCRETE_EVIDENCE_MARKERS
         .iter()
         .any(|marker| lower.contains(marker))
-}
-
-#[allow(dead_code)]
-fn canonical_issue_path_from_state(state_dir: &Path, issue_id: &str) -> PathBuf {
-    state_dir.join("issues").join(format!("{issue_id}.md"))
 }

@@ -38,8 +38,7 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // Concurrent writers can leave the domain cache stale; ordinary reads
-    // should validate record files, repair automatically, and continue.
+    // Reads after concurrent writers parse the resulting record files.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
 }
@@ -144,53 +143,7 @@ fn test_concurrent_mixed_operations() {
         "At least one concurrent read should succeed"
     );
 
-    // Concurrent writers can leave the domain cache stale; ordinary reads
-    // should validate record files, repair automatically, and continue.
+    // Reads after concurrent writers parse the resulting record files.
     let result = h.run_ok(&["work", "queue", "--all"]);
     assert!(result.success);
-}
-
-#[test]
-fn test_concurrent_rebuilds_and_reads_are_serialized() {
-    let h = SmokeHarness::new();
-    h.run_ok(&["issue", "create", "Serialized rebuild source"]);
-    let issue_id = h.issue_id(1);
-    h.run_ok(&["work", "queue", "--all"]);
-    h.edit_canonical_issue(&issue_id, |markdown| {
-        markdown.replace("Serialized rebuild source", "Serialized rebuild changed")
-    });
-
-    let bin = h.atelier_bin.clone();
-    let dir = h.temp_dir.path().to_path_buf();
-    let mut handles = Vec::new();
-    for index in 0..16 {
-        let bin = bin.clone();
-        let dir = dir.clone();
-        let args: Vec<&'static str> = if index % 2 == 0 {
-            vec!["rebuild"]
-        } else {
-            vec!["work", "queue", "--all"]
-        };
-        handles.push(thread::spawn(move || {
-            Command::new(&bin)
-                .current_dir(&dir)
-                .args(args)
-                .output()
-                .expect("failed to execute atelier")
-        }));
-    }
-
-    for handle in handles {
-        let output = handle.join().expect("thread panicked");
-        assert!(
-            output.status.success(),
-            "concurrent rebuild/read failed\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    let result = h.run_ok(&["work", "queue", "--all"]);
-    assert!(result.stdout.contains("Serialized rebuild changed"));
-    h.run_ok(&["work", "queue", "--all"]);
 }

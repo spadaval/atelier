@@ -2,15 +2,15 @@
 //!
 //! The acquisition adapter supplies directed mission membership and canonical
 //! issue facts. This module deliberately does not infer `advances` direction,
-//! query SQLite, or render terminal output.
+//! read record files, or render terminal output.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use atelier_core::IssuePriority;
-use atelier_sqlite::Database;
 
-use crate::read_pipeline::WorkClassification;
+use crate::record_index::RecordIndex;
+use crate::work_classification::WorkClassification;
 use crate::workflow_policy::WorkflowPolicy;
 
 pub const MISSION_OVERVIEW_MISSION_LIMIT: usize = 20;
@@ -111,28 +111,26 @@ pub struct OutsideVisibleMissions {
     pub linked_only_to_hidden_done_missions: usize,
 }
 
-/// Acquires the complete, persistence-backed fact set consumed by the Mission
-/// Overview projection.
+/// Acquires the complete fact set consumed by the Mission Overview projection.
 ///
-/// The disposable decision cache is selected by the caller. This adapter only
-/// translates its canonical issue rows, directed links, parent edges, and
-/// blocker state into the persistence-neutral projection input.
+/// This adapter only translates the record index's issues, directed links,
+/// parent edges, and blocker state into the persistence-neutral projection
+/// input.
 pub fn acquire_mission_overview_input(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<MissionOverviewInput> {
-    let cached_issues = db.list_issues(Some("all"), None, None)?;
-    let mut issues = Vec::with_capacity(cached_issues.len());
+    let mut issues = Vec::new();
     let mut children = Vec::new();
 
-    for issue in &cached_issues {
+    for issue in index.issues() {
         if let Some(parent_id) = &issue.parent_id {
             children.push(IssueParentChild {
                 parent_id: parent_id.clone(),
                 child_id: issue.id.clone(),
             });
         }
-        let classified = crate::read_pipeline::classify_issue(db, workflow_policy, issue)?;
+        let classified = crate::work_classification::classify_issue(index, workflow_policy, issue)?;
         issues.push(MissionOverviewIssue {
             id: issue.id.clone(),
             title: issue.title.clone(),
@@ -145,17 +143,17 @@ pub fn acquire_mission_overview_input(
         });
     }
 
-    let advances = db
-        .list_all_record_links()?
-        .into_iter()
+    let advances = index
+        .record_links()
+        .iter()
         .filter(|link| {
             link.source_kind == "issue"
                 && link.target_kind == "issue"
                 && link.relation_type == "advances"
         })
         .map(|link| MissionAdvancesRoot {
-            mission_id: link.source_id,
-            root_id: link.target_id,
+            mission_id: link.source_id.clone(),
+            root_id: link.target_id.clone(),
         })
         .collect();
 
@@ -166,15 +164,15 @@ pub fn acquire_mission_overview_input(
     })
 }
 
-/// Acquires and projects one Mission Overview from a caller-owned decision
-/// cache. Keeping this boundary in the application crate lets the CLI remain a
-/// renderer rather than interpreting cache rows or relationship direction.
+/// Acquires and projects one Mission Overview from a record index. Keeping
+/// this boundary in the application crate lets the CLI remain a renderer
+/// rather than interpreting relationship direction.
 pub fn mission_overview(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     request: MissionOverviewRequest,
 ) -> Result<MissionOverview> {
-    let input = acquire_mission_overview_input(db, workflow_policy)?;
+    let input = acquire_mission_overview_input(index, workflow_policy)?;
     Ok(project_mission_overview(request, &input))
 }
 
@@ -505,10 +503,7 @@ fn priority_rank(priority: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Utc};
-    use tempfile::tempdir;
-
-    use atelier_sqlite::{IssueCacheRow, IssueRelationCacheRow, RecordSourceCacheRow};
+    use crate::test_records::Records;
 
     use crate::workflow_policy::{
         BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
@@ -801,52 +796,33 @@ mod tests {
     }
 
     #[test]
-    fn acquires_directed_cache_facts_and_projects_the_command_model() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
-        for (id, issue_type, status, parent_id) in [
-            ("mission-active", "mission", "in_progress", None),
-            ("mission-done", "mission", "done", None),
-            ("epic-a", "epic", "todo", None),
-            ("task-a", "task", "todo", Some("epic-a")),
-            ("direct-a", "task", "todo", None),
-            ("hidden-a", "task", "todo", None),
-            ("open-blocker", "task", "todo", None),
-            ("done-blocker", "task", "done", None),
+    fn acquires_directed_record_facts_and_projects_the_command_model() {
+        let mut records = Records::default();
+        for (id, issue_type, status) in [
+            ("mission-active", "mission", "in_progress"),
+            ("mission-done", "mission", "done"),
+            ("epic-a", "epic", "todo"),
+            ("task-a", "task", "todo"),
+            ("direct-a", "task", "todo"),
+            ("hidden-a", "task", "todo"),
+            ("open-blocker", "task", "todo"),
+            ("done-blocker", "task", "done"),
         ] {
-            index_cached_issue(&db, id, issue_type, status, parent_id, &[]);
+            records.issue(id, issue_type, status);
         }
-        index_cached_issue(
-            &db,
-            "mission-active",
-            "mission",
-            "in_progress",
-            None,
-            &[("epic-a", "advances"), ("direct-a", "advances")],
-        );
-        index_cached_issue(
-            &db,
-            "mission-done",
-            "mission",
-            "done",
-            None,
-            &[("hidden-a", "advances")],
-        );
+        records.parent("task-a", "epic-a");
+        records.relate("mission-active", "epic-a", "advances");
+        records.relate("mission-active", "direct-a", "advances");
+        records.relate("mission-done", "hidden-a", "advances");
         // This is an incoming link to the mission and must never be inverted
         // into mission membership by the acquisition adapter.
-        index_cached_issue(
-            &db,
-            "direct-a",
-            "task",
-            "todo",
-            None,
-            &[("mission-active", "advances")],
-        );
-        db.add_dependency("epic-a", "open-blocker").unwrap();
-        db.add_dependency("epic-a", "done-blocker").unwrap();
+        records.relate("direct-a", "mission-active", "advances");
+        records.block("epic-a", "open-blocker");
+        records.block("epic-a", "done-blocker");
+        let index = records.index();
 
         let policy = test_workflow_policy();
-        let input = acquire_mission_overview_input(&db, Some(&policy)).unwrap();
+        let input = acquire_mission_overview_input(&index, Some(&policy)).unwrap();
 
         assert!(input.children.contains(&IssueParentChild {
             parent_id: "epic-a".to_string(),
@@ -869,7 +845,7 @@ mod tests {
         assert_eq!(epic.open_blocker_count, 1);
 
         let overview =
-            mission_overview(&db, Some(&policy), MissionOverviewRequest::default()).unwrap();
+            mission_overview(&index, Some(&policy), MissionOverviewRequest::default()).unwrap();
         assert_eq!(
             overview
                 .missions
@@ -889,7 +865,7 @@ mod tests {
         );
 
         let all = mission_overview(
-            &db,
+            &index,
             Some(&policy),
             MissionOverviewRequest { include_done: true },
         )
@@ -901,54 +877,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["mission-active", "mission-done"]
         );
-    }
-
-    fn index_cached_issue(
-        db: &Database,
-        id: &str,
-        issue_type: &str,
-        status: &str,
-        parent_id: Option<&str>,
-        relations: &[(&str, &str)],
-    ) {
-        let now = Utc.with_ymd_and_hms(2026, 7, 7, 12, 0, 0).unwrap();
-        let row = IssueCacheRow {
-            id: id.to_string(),
-            title: format!("Title for {id}"),
-            status: status.to_string(),
-            issue_type: issue_type.to_string(),
-            priority: "high".to_string(),
-            fields: BTreeMap::new(),
-            parent_id: parent_id.map(str::to_string),
-            created_at: now,
-            updated_at: now,
-            closed_at: (status == "done").then_some(now),
-        };
-        let relations = relations
-            .iter()
-            .map(|(target_id, relation_type)| IssueRelationCacheRow {
-                source_issue_id: id.to_string(),
-                target_issue_id: (*target_id).to_string(),
-                relation_type: (*relation_type).to_string(),
-                created_at: now,
-            })
-            .collect::<Vec<_>>();
-        db.index_issue(
-            &row,
-            &[],
-            &[],
-            &relations,
-            &RecordSourceCacheRow {
-                path: format!("issues/{id}.md"),
-                record_kind: "issue".to_string(),
-                record_id: id.to_string(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: now,
-            },
-        )
-        .unwrap();
     }
 
     fn test_workflow_policy() -> WorkflowPolicy {

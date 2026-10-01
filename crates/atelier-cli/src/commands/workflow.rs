@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Result};
+use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -8,7 +9,6 @@ use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{TransitionDefinition, WorkflowPolicy};
 use atelier_core::Issue;
 use atelier_records::CanonicalIssueRecord;
-use atelier_sqlite::Database;
 
 pub use atelier_app::workflow_validation::ValidatorResult;
 
@@ -27,13 +27,13 @@ pub struct IssueTransitionOption {
 /// Applies a workflow transition: checks required fields and read-only
 /// validators, then writes the issue record. Never touches Git.
 pub fn transition_issue(
-    db: &Database,
+    index: &RecordIndex,
     state_dir: &Path,
     issue_ref: &str,
     transition_name: &str,
     close_reason: Option<&str>,
 ) -> Result<()> {
-    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     if let Some(reason) = close_reason {
         atelier_records::validate_issue_section_text(
             &issue_id,
@@ -43,12 +43,12 @@ pub fn transition_issue(
     }
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let before = db.require_issue(&issue_id)?;
+    let before = index.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
     ensure_transition_allowed(
-        db,
+        index,
         &policy,
         &repo_root,
         &before,
@@ -80,7 +80,7 @@ pub(crate) fn print_applied_transition(
 /// Fails with the full transition report when required fields, ancestry, or
 /// validators block the transition.
 pub(crate) fn ensure_transition_allowed(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     repo_root: &Path,
     issue: &Issue,
@@ -89,7 +89,7 @@ pub(crate) fn ensure_transition_allowed(
     close_reason: Option<&str>,
 ) -> Result<()> {
     let (blockers, validator_results) =
-        transition_blockers(db, policy, repo_root, issue, transition, close_reason)?;
+        transition_blockers(index, policy, repo_root, issue, transition, close_reason)?;
     if blockers.is_empty() {
         return Ok(());
     }
@@ -157,7 +157,7 @@ fn ensure_transition_available(
 }
 
 fn transition_blockers(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     repo_root: &Path,
     issue: &Issue,
@@ -165,11 +165,11 @@ fn transition_blockers(
     close_reason: Option<&str>,
 ) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
     let mut blockers = required_field_failures(transition, close_reason)?;
-    if let Some(blocker) = active_transition_ancestor_blocker(db, policy, issue, transition)? {
+    if let Some(blocker) = active_transition_ancestor_blocker(index, policy, issue, transition)? {
         blockers.push(blocker);
     }
     let validator_results =
-        evaluate_policy_transition(db, policy, repo_root, &issue.id, transition)?;
+        evaluate_policy_transition(index, policy, repo_root, &issue.id, transition)?;
     blockers.extend(
         validator_results
             .iter()
@@ -180,18 +180,18 @@ fn transition_blockers(
 }
 
 pub fn issue_transition_options(
-    db: &Database,
+    index: &RecordIndex,
     issue_ref: &str,
 ) -> Result<Vec<IssueTransitionOption>> {
-    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let issue = db.require_issue(&issue_id)?;
+    let issue = index.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
     let mut options = Vec::new();
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let (blockers, validator_results) =
-            transition_blockers(db, &policy, &repo_root, &issue, transition, None)?;
+            transition_blockers(index, &policy, &repo_root, &issue, transition, None)?;
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -214,7 +214,7 @@ pub fn issue_transition_options(
 }
 
 fn active_transition_ancestor_blocker(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     issue: &Issue,
     transition: &TransitionDefinition,
@@ -225,7 +225,7 @@ fn active_transition_ancestor_blocker(
         return Ok(None);
     }
     Ok(
-        atelier_app::read_pipeline::terminal_ancestor(db, Some(policy), issue)?.map(|ancestor_id| {
+        atelier_app::work_classification::terminal_ancestor(index, Some(policy), issue)?.map(|ancestor_id| {
             format!(
                 "terminal ancestor {ancestor_id} retires nonterminal descendant {}; cannot enter active-category status '{}'; inspect `atelier issue show {ancestor_id}`",
                 issue.id, transition.to
@@ -484,7 +484,7 @@ fn transition_command(
 }
 
 fn evaluate_policy_transition(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     repo_root: &Path,
     issue_id: &str,
@@ -492,7 +492,7 @@ fn evaluate_policy_transition(
 ) -> Result<Vec<ValidatorResult>> {
     atelier_app::workflow_validation::evaluate_policy_transition(
         atelier_app::workflow_validation::ValidatorRequest {
-            db,
+            index,
             repo_root,
             policy,
             issue_id,
@@ -524,7 +524,6 @@ pub(crate) fn repo_root() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::test_support::DomainCacheFixture;
     use crate::human_output::ColorChoice;
     use atelier_records::{IssueSections, RecordStore, Relationships};
     use std::collections::BTreeMap;
@@ -611,7 +610,7 @@ mod tests {
     }
 
     fn write_config_and_workflow(dir: &TempDir) {
-        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".atelier")).unwrap();
         std::fs::write(
             dir.path().join(".atelier/config.toml"),
             r#"schema = "atelier.project_config"
@@ -630,8 +629,7 @@ state_root = ".atelier"
         .unwrap();
     }
 
-    fn insert_canonical_issue(db: &Database, state_dir: &Path, issue: Issue) {
-        db.cache_fixture_insert(&issue).unwrap();
+    fn insert_canonical_issue(state_dir: &Path, issue: Issue) {
         let record = CanonicalIssueRecord {
             issue,
             labels: Vec::new(),
@@ -650,10 +648,9 @@ state_root = ".atelier"
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
         let mut issue = test_issue("atelier-epic1");
         issue.status = "draft".to_string();
-        insert_canonical_issue(&db, &state_dir, issue.clone());
+        insert_canonical_issue(&state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "supersede").unwrap();
 
@@ -681,9 +678,8 @@ state_root = ".atelier"
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
         let issue = test_issue("atelier-epic1");
-        insert_canonical_issue(&db, &state_dir, issue.clone());
+        insert_canonical_issue(&state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "block").unwrap();
 

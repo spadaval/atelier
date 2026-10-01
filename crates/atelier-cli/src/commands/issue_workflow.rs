@@ -1,9 +1,9 @@
 use anyhow::Result;
+use atelier_app::record_index::RecordIndex;
 
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::Issue;
-use atelier_sqlite::Database;
 
 pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
     let repo_root = atelier_app::storage_layout::find_repo_root()?;
@@ -43,14 +43,14 @@ pub(crate) fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) 
 }
 
 pub(crate) fn open_blocker_ids_with_policy(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue_id: &str,
 ) -> Result<Vec<String>> {
-    let mut blockers = db
-        .get_blockers(issue_id)?
+    let mut blockers = index
+        .get_blockers(issue_id)
         .into_iter()
-        .filter_map(|id| db.require_issue(&id).ok())
+        .filter_map(|id| index.require_issue(&id).ok())
         .filter(|issue| issue_blocks_work(workflow_policy, issue))
         .map(|issue| format_issue_id(&issue.id))
         .collect::<Vec<_>>();

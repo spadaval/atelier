@@ -1,23 +1,22 @@
 use anyhow::Result;
+use atelier_app::record_index::RecordIndex;
 
-use std::path::Path;
 use std::process::Command;
 
 use crate::commands;
 use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
 };
-use atelier_app::read_pipeline::{StatusNextAction, StatusView};
+use atelier_app::work_classification::{StatusNextAction, StatusView};
 use atelier_core::Issue;
-use atelier_sqlite::Database;
 
-pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
+pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let view = atelier_app::read_pipeline::status_view(db, state_dir, workflow_policy.as_ref())?;
+    let view = atelier_app::work_classification::status_view(index, workflow_policy.as_ref())?;
 
     if quiet {
         println!(
-            "work={} current_missions={} ready={} tracker={}",
+            "work={} current_missions={} ready={}",
             if view.work.active.is_empty() {
                 "none".to_string()
             } else {
@@ -25,29 +24,25 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             },
             view.current_missions.len(),
             view.work.ready.len(),
-            view.tracker_state
         );
         return Ok(());
     }
 
-    print_status_view(db, &view)
+    print_status_view(&view);
+    Ok(())
 }
 
-fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
+fn print_status_view(view: &StatusView) {
     let current_work = if view.work.active.is_empty() {
         "none".to_string()
     } else {
         format!("{} issue(s)", view.work.active.len())
     };
-    let mut summary_lines = vec![
-        format!("Tracker:       {}", view.tracker_state),
+    let summary_lines = vec![
         format!("Ready work:    {}", view.work.ready.len()),
         format!("Current work:  {current_work}"),
         format!("Current missions: {}", view.current_missions.len()),
     ];
-    if view.stale_records > 0 {
-        summary_lines.push(format!("Local state issues: {}", view.stale_records));
-    }
 
     let active_rows = view
         .work
@@ -82,11 +77,11 @@ fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
                     ),
                 );
             }
-            panel.row("Tracker", view.tracker_state.clone())
+            panel
         }
-        Err(error) => MetadataPanel::new("Local State")
-            .row("Checkout", format!("unavailable - {error}"))
-            .row("Tracker", view.tracker_state.clone()),
+        Err(error) => {
+            MetadataPanel::new("Local State").row("Checkout", format!("unavailable - {error}"))
+        }
     };
 
     let next_actions = match view.next_action {
@@ -105,14 +100,6 @@ fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
                     .to_string(),
             ]
         }
-        StatusNextAction::InspectHealth { stale_records } => {
-            vec![
-                format!(
-                    "  Repair local Atelier state ({stale_records} stale record(s)): atelier check --fix"
-                ),
-                "  Check committed tracker records after repair: atelier check".to_string(),
-            ]
-        }
         StatusNextAction::NoSpecificAction => {
             vec!["  No specific next action is available from checkout state.".to_string()]
         }
@@ -124,22 +111,22 @@ fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
         .panel(local_state)
         .panel(LinesPanel::new("Next Actions", next_actions))
         .print(RenderContext::for_stdout());
-    Ok(())
 }
 
 pub(crate) fn current_work_issues(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        if atelier_app::read_pipeline::classify_issue(db, workflow_policy, &issue)?.classification
-            == atelier_app::read_pipeline::WorkClassification::Active
+    for issue in index.list_issues(Some("all"), None, None)? {
+        if atelier_app::work_classification::classify_issue(index, workflow_policy, &issue)?
+            .classification
+            == atelier_app::work_classification::WorkClassification::Active
         {
             issues.push(issue);
         }
     }
-    commands::objective_status::order_issues_by_work(db, workflow_policy, issues)
+    commands::objective_status::order_issues_by_work(index, workflow_policy, issues)
 }
 
 struct GitState {

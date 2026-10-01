@@ -28,14 +28,11 @@ path = "src/main.rs"
 atelier-app = { path = "../atelier-app" }
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
-atelier-sqlite = { path = "../atelier-sqlite" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
 dotenvy.workspace = true
-fs2.workspace = true
-rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
@@ -46,4 +43,5 @@ tempfile = "3"
 
 [dev-dependencies]
 arbitrary = "1"
+fs2.workspace = true
 proptest = "1"

@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use atelier::commands;
-use atelier_app::cache_manager::{CacheManager, CacheUse};
-use atelier_app::use_cases;
-use atelier_sqlite::Database;
+use atelier_app::record_index::RecordIndex;
+use atelier_app::storage_layout::StorageLayout;
+use atelier_app::use_cases::{self, load_repository};
 use clap::{Parser, Subcommand};
 use std::env;
 
@@ -30,7 +30,7 @@ Records:
   evidence      Capture validation evidence
 
 Maintenance:
-  check         Validate tracker health; use --fix for local repair
+  check         Validate every tracker record
   prune         Prune accumulated artifacts safely
 
 Common commands:
@@ -53,7 +53,6 @@ Common commands:
   atelier issue transition <issue-id> close --reason \"...\"
   atelier check
   atelier check <issue-id>
-  atelier check --fix
   atelier prune
   atelier prune --apply
   atelier help <command>
@@ -111,14 +110,6 @@ enum Commands {
         id: String,
     },
 
-    /// Advanced domain-cache diagnostic; explicit local repair uses check --fix
-    #[command(hide = true)]
-    Rebuild {
-        /// Record-file directory to rebuild from
-        #[arg(short, long)]
-        input: Option<String>,
-    },
-
     /// One-shot graph bundle files
     Bundle {
         #[command(subcommand)]
@@ -141,21 +132,10 @@ enum Commands {
         retention_days: Option<u64>,
     },
 
-    /// Validate tracker health; repair ignored local runtime state with --fix
+    /// Validate every tracker record and report all findings
     Check {
         /// Optional issue ID or imported source ID
         id: Option<String>,
-        /// Repair ignored local runtime/cache state; never edits tracked record files
-        #[arg(long)]
-        fix: bool,
-    },
-
-    /// Check tracker runtime and domain-cache health
-    #[command(hide = true)]
-    Doctor {
-        /// Repair ignored local runtime/cache state; never edits tracked record files
-        #[arg(long)]
-        fix: bool,
     },
 }
 
@@ -451,12 +431,12 @@ another target.")]
 // Helpers
 // ============================================================================
 
-fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
-    match commands::issue::resolve_id(db, issue_ref) {
+fn resolve_issue_arg(index: &RecordIndex, issue_ref: &str) -> Result<String> {
+    match commands::issue::resolve_id(index, issue_ref) {
         Ok(id) => Ok(id),
-        Err(error) => match db.record_kind_for_id(issue_ref)? {
+        Err(error) => match index.record_kind_for_id(issue_ref) {
             Some(actual_kind) if actual_kind != "issue" => {
-                bail!("{}", wrong_kind_message("issue", &actual_kind, issue_ref));
+                bail!("{}", wrong_kind_message("issue", actual_kind, issue_ref));
             }
             _ => Err(error),
         },
@@ -521,17 +501,12 @@ fn run() -> Result<()> {
     init_tracing(&cli.log_level, &cli.log_format);
     // Hold an association transaction across every repository command's
     // complete read/validate/write lifetime. Ordinary commands share it;
-    // snapshot-and-swap bundle/import commands own it exclusively so a writer
-    // cannot commit between their snapshot and installation. This also
-    // prevents a mutation prepared against pre-cutover bytes from waiting
-    // behind the exclusive migration and then committing stale state after
-    // activation. Repository-associated prune acquires the same lock after its
-    // optional tracker discovery below.
+    // snapshot-and-swap bundle commands own it exclusively so a writer cannot
+    // commit between their snapshot and installation.
     let _canonical_transaction_lock = match canonical_transaction_mode(&cli.command) {
         CanonicalTransactionMode::None => None,
         mode => {
-            let manager = CacheManager::discover()?;
-            let state_dir = manager.state_dir();
+            let state_dir = StorageLayout::discover()?.canonical_dir();
             Some(match mode {
                 CanonicalTransactionMode::Shared => {
                     atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?
@@ -552,12 +527,12 @@ fn run() -> Result<()> {
         }
 
         Commands::Status => {
-            let storage = use_cases::status_cache()?;
-            commands::status::run(storage.db(), &storage.state_dir(), quiet)
+            let (_, index) = load_repository()?;
+            commands::status::run(&index, quiet)
         }
 
         Commands::Work { action } => {
-            let storage = use_cases::work_query_cache()?;
+            let (_, index) = load_repository()?;
             match action {
                 None => commands::work::dashboards(quiet),
                 Some(WorkCommands::Queue {
@@ -571,7 +546,7 @@ fn run() -> Result<()> {
                     backlog,
                     all,
                 }) => commands::work::queue(
-                    storage.db(),
+                    &index,
                     commands::work::QueueOptions {
                         status: &status,
                         category: category.as_deref(),
@@ -593,7 +568,7 @@ fn run() -> Result<()> {
                     done,
                     all,
                 }) => commands::work::mission_dashboard(
-                    storage.db(),
+                    &index,
                     &id,
                     commands::work::MissionDashboardOptions {
                         ready,
@@ -605,14 +580,14 @@ fn run() -> Result<()> {
                     quiet,
                 ),
                 Some(WorkCommands::Epic { id }) => {
-                    commands::work::epic_dashboard(storage.db(), &id, quiet)
+                    commands::work::epic_dashboard(&index, &id, quiet)
                 }
-                Some(WorkCommands::Ready) => commands::work::list(storage.db(), "ready", quiet),
-                Some(WorkCommands::Blocked) => commands::work::list(storage.db(), "blocked", quiet),
-                Some(WorkCommands::Active) => commands::work::list(storage.db(), "active", quiet),
-                Some(WorkCommands::All) => commands::work::list(storage.db(), "all", quiet),
+                Some(WorkCommands::Ready) => commands::work::list(&index, "ready", quiet),
+                Some(WorkCommands::Blocked) => commands::work::list(&index, "blocked", quiet),
+                Some(WorkCommands::Active) => commands::work::list(&index, "active", quiet),
+                Some(WorkCommands::All) => commands::work::list(&index, "all", quiet),
                 Some(WorkCommands::Missions { all }) => {
-                    commands::work::missions(storage.db(), all, quiet)
+                    commands::work::missions(&index, all, quiet)
                 }
             }
         }
@@ -620,36 +595,19 @@ fn run() -> Result<()> {
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
         Commands::Start { id } => {
-            let storage = use_cases::mutation_cache()?;
-            commands::start::run(storage.db(), &storage.state_dir(), &id)
+            let (state_dir, index) = load_repository()?;
+            commands::start::run(&index, &state_dir, &id)
         }
 
-        Commands::Rebuild { input } => {
-            let storage = CacheManager::discover()?;
-            let state_dir = input
-                .as_deref()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| storage.state_dir());
-            let db_path = storage.db_path();
-            commands::issue::rebuild(&state_dir, &db_path)
+        Commands::Bundle { action } => {
+            let (state_dir, index) = load_repository()?;
+            match action {
+                BundleCommands::Preview { input } => commands::bundle::preview(&index, &input),
+                BundleCommands::Apply { input, yes } => {
+                    commands::bundle::apply(&index, &state_dir, &input, yes)
+                }
+            }
         }
-
-        Commands::Bundle { action } => match action {
-            BundleCommands::Preview { input } => {
-                let storage = use_cases::bundle_query_cache()?;
-                commands::bundle::preview(storage.db(), &input)
-            }
-            BundleCommands::Apply { input, yes } => {
-                let storage = use_cases::mutation_cache()?;
-                commands::bundle::apply(
-                    storage.db(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &input,
-                    yes,
-                )
-            }
-        },
 
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record {
@@ -668,16 +626,12 @@ fn run() -> Result<()> {
                     None => None,
                 };
                 if command.is_empty() {
-                    let storage = use_cases::mutation_cache()?;
+                    let (state_dir, index) = load_repository()?;
                     let resolved_target = parsed_target
                         .as_ref()
                         .map(|target| {
-                            use_cases::resolve_evidence_target_ref(
-                                &storage,
-                                &target.kind,
-                                &target.id,
-                            )
-                            .map(|id| (target.kind.clone(), id))
+                            use_cases::resolve_evidence_target_ref(&index, &target.kind, &target.id)
+                                .map(|id| (target.kind.clone(), id))
                         })
                         .transpose()?;
                     let summary = match (summary.as_deref(), summary_text.as_deref()) {
@@ -690,8 +644,8 @@ fn run() -> Result<()> {
                         }
                     };
                     let evidence_id = commands::evidence::add_returning_id(
-                        &storage.state_dir(),
-                        &storage.db_path(),
+                        &index,
+                        &state_dir,
                         &evidence_kind,
                         summary,
                         path.as_deref(),
@@ -707,17 +661,16 @@ fn run() -> Result<()> {
                     )?;
                     if let Some((kind, id)) = resolved_target {
                         commands::evidence::attach_silently(
-                            &storage.state_dir(),
-                            &storage.db_path(),
+                            &index,
+                            &state_dir,
                             &evidence_id,
                             &kind,
                             &id,
                             &role,
                         )?;
                     }
-                    let evidence =
-                        use_cases::load_canonical_evidence(&storage.state_dir(), &evidence_id)?;
-                    commands::evidence::print_record_without_cache(&evidence, quiet)
+                    let evidence = use_cases::load_canonical_evidence(&state_dir, &evidence_id)?;
+                    commands::evidence::print_new_record(&evidence, quiet)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -741,9 +694,8 @@ fn run() -> Result<()> {
                 }
             }
             EvidenceCommands::Show { id } => {
-                let storage = use_cases::evidence_query_cache()?;
-                let db = storage.db();
-                commands::evidence::show(&db, &id, quiet)
+                let (_, index) = load_repository()?;
+                commands::evidence::show(&index, &id, quiet)
             }
             EvidenceCommands::Attach {
                 id,
@@ -751,12 +703,12 @@ fn run() -> Result<()> {
                 target_id,
                 role,
             } => {
-                let storage = use_cases::mutation_cache()?;
+                let (state_dir, index) = load_repository()?;
                 let target_id =
-                    use_cases::resolve_evidence_target_ref(&storage, &target_kind, &target_id)?;
+                    use_cases::resolve_evidence_target_ref(&index, &target_kind, &target_id)?;
                 commands::evidence::attach(
-                    &storage.state_dir(),
-                    &storage.db_path(),
+                    &index,
+                    &state_dir,
                     &id,
                     &target_kind,
                     &target_id,
@@ -765,9 +717,8 @@ fn run() -> Result<()> {
                 )
             }
             EvidenceCommands::List { status } => {
-                let storage = use_cases::evidence_query_cache()?;
-                let db = storage.db();
-                commands::evidence::list(&db, status.as_deref(), quiet)
+                let (_, index) = load_repository()?;
+                commands::evidence::list(&index, status.as_deref(), quiet)
             }
         },
 
@@ -775,73 +726,28 @@ fn run() -> Result<()> {
             apply,
             retention_days,
         } => {
-            // Prune reports unavailable classes outside a repository. Once a
-            // tracker is discovered, retain its association lock across cache
-            // acquisition, canonical candidate reads, and any removals.
-            let manager = CacheManager::discover();
-            let _prune_canonical_lock = manager
-                .as_ref()
-                .ok()
-                .map(|manager| {
-                    atelier_records::mutation_lock::CanonicalMutationLock::shared(
-                        &manager.state_dir(),
-                    )
-                })
-                .transpose()?;
-            let tracker = match manager.and_then(|manager| manager.get_cache(CacheUse::Decision)) {
-                Ok(storage) => {
-                    let repo_root = storage.repo_root().to_path_buf();
-                    let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
-                    let state_dir = storage.state_dir();
-                    let db_path = storage.db_path();
-                    Some(commands::prune::TrackerContext {
-                        db: storage.into_db(),
-                        repo_root,
-                        state_dir,
-                        db_path,
-                        canonical_retention_days: config.prune.canonical_retention_days,
-                    })
-                }
-                Err(error) => {
-                    if atelier_app::cache_manager::find_atelier_dir().is_ok() {
-                        return Err(error);
-                    }
-                    None
-                }
-            };
-            commands::prune::run(tracker, apply, retention_days, quiet)
-        }
-
-        Commands::Check { id, fix } => {
-            if fix {
-                if id.is_some() {
-                    bail!("atelier check --fix cannot be scoped to one issue");
-                }
-                let storage = CacheManager::discover()?.get_cache(CacheUse::Decision)?;
-                commands::issue::doctor(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    storage.cache_existed(),
-                    true,
-                )
-            } else {
-                let cache = use_cases::lint_cache()?;
-                commands::issue::lint(cache.db(), id.as_deref())
-            }
-        }
-
-        Commands::Doctor { fix } => {
-            let storage = CacheManager::discover()?.open_cache_for_health()?;
-            commands::issue::doctor(
-                storage.db(),
-                storage.repo_root(),
-                &storage.state_dir(),
-                &storage.db_path(),
-                storage.cache_existed(),
-                fix,
+            let (state_dir, index) = load_repository()?;
+            let repo_root = state_dir
+                .parent()
+                .expect("state directory has a repository root")
+                .to_path_buf();
+            let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
+            commands::prune::run(
+                commands::prune::TrackerContext {
+                    index,
+                    repo_root,
+                    state_dir,
+                    canonical_retention_days: config.prune.canonical_retention_days,
+                },
+                apply,
+                retention_days,
+                quiet,
             )
+        }
+
+        Commands::Check { id } => {
+            let state_dir = StorageLayout::discover()?.canonical_dir();
+            commands::issue::lint(&state_dir, id.as_deref())
         }
     }
 }
@@ -878,7 +784,6 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Evidence {
             action: EvidenceCommands::Record { command, .. },
         } if !command.is_empty() => CanonicalTransactionMode::None,
-        Commands::Prune { .. } => CanonicalTransactionMode::None,
         _ => CanonicalTransactionMode::Shared,
     }
 }
@@ -902,7 +807,7 @@ fn parse_cli_or_exit() -> Cli {
 }
 
 #[cfg(test)]
-mod cache_acquisition_tests {
+mod transaction_tests {
     use super::{
         canonical_transaction_mode, command_uses_canonical_transaction, CanonicalTransactionMode,
         Cli,
@@ -933,7 +838,7 @@ mod cache_acquisition_tests {
     fn canonical_transaction_lock_precedes_repository_dispatch() {
         let main = include_str!("main.rs");
         let production = main
-            .split("mod cache_acquisition_tests")
+            .split("mod transaction_tests")
             .next()
             .expect("production dispatch source");
         let lock = production
@@ -948,13 +853,11 @@ mod cache_acquisition_tests {
             production[dispatch..].contains("commands::bundle::apply"),
             "missing bulk canonical mutation surface commands::bundle::apply"
         );
-        let prune_lock = production
-            .find("let _prune_canonical_lock")
-            .expect("optional-repository prune association lock");
-        let prune_run = production
-            .find("commands::prune::run")
-            .expect("prune dispatch");
-        assert!(prune_lock < prune_run, "prune lock must precede prune work");
+        let prune = Cli::try_parse_from(["atelier", "prune", "--apply"]).expect("prune");
+        assert_eq!(
+            canonical_transaction_mode(&prune.command),
+            CanonicalTransactionMode::Shared
+        );
     }
 
     #[test]
@@ -972,65 +875,5 @@ mod cache_acquisition_tests {
             canonical_transaction_mode(&preview.command),
             CanonicalTransactionMode::Shared
         );
-    }
-
-    #[test]
-    fn central_dispatch_has_no_raw_database_open_bypass() {
-        let sources = [
-            ("main", include_str!("main.rs")),
-            ("issue dispatch", include_str!("issue_cli.rs")),
-        ];
-        let raw_database_open = ["Database", "::open"].concat();
-        let raw_app_open = ["open_", "database("].concat();
-
-        for (name, source) in sources {
-            assert!(
-                !source.contains(&raw_database_open) && !source.contains(&raw_app_open),
-                "{name} must acquire cache-dependent reads through CacheManager"
-            );
-        }
-    }
-
-    #[test]
-    fn cache_dependent_query_families_use_named_app_accessors() {
-        let main = include_str!("main.rs");
-        let main = main
-            .split("mod cache_acquisition_tests")
-            .next()
-            .expect("production dispatch source");
-        for accessor in [
-            "status_cache()",
-            "work_query_cache()",
-            "evidence_query_cache()",
-            "bundle_query_cache()",
-            "lint_cache()",
-        ] {
-            assert!(main.contains(accessor), "missing cache accessor {accessor}");
-        }
-
-        let issue_dispatch = include_str!("issue_cli.rs");
-        assert!(issue_dispatch.contains("issue_detail_cache()"));
-        assert!(issue_dispatch.contains("issue_query_cache()"));
-    }
-
-    #[test]
-    fn mutation_paths_have_no_eager_cache_refresh_helper() {
-        let sources = [
-            include_str!("issue_cli.rs"),
-            include_str!("commands/issue.rs"),
-            include_str!("commands/evidence.rs"),
-            include_str!("commands/workflow.rs"),
-            include_str!("commands/relate.rs"),
-            include_str!("commands/bundle.rs"),
-        ];
-        let eager_helper = ["refresh_after_", "canonical_write"].concat();
-
-        for source in sources {
-            assert!(
-                !source.contains(&eager_helper),
-                "mutation path retained eager cache refresh"
-            );
-        }
-        assert!(include_str!("issue_cli.rs").contains("mutation_cache()"));
     }
 }

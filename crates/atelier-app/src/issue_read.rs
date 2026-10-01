@@ -3,10 +3,10 @@ use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 
-use crate::read_pipeline::{classify_issue, WorkClassification};
+use crate::record_index::RecordIndex;
+use crate::work_classification::{classify_issue, WorkClassification};
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, RecordLink};
-use atelier_sqlite::Database;
 
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
 
@@ -113,23 +113,23 @@ pub struct ObjectiveReadSummary {
 }
 
 pub fn objective_read_summary(
-    db: &Database,
+    index: &RecordIndex,
     objective_id: &str,
     workflow_policy: Option<&WorkflowPolicy>,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<Option<ObjectiveReadSummary>> {
-    let Some(objective) = db.get_issue(objective_id)? else {
+    let Some(objective) = index.get_issue(objective_id) else {
         return Ok(None);
     };
     let is_objective = matches!(objective.issue_type.as_str(), "epic" | "mission");
-    let scope_ids = issue_descendant_ids(db, &objective)?;
+    let scope_ids = issue_descendant_ids(index, &objective)?;
     if !is_objective && scope_ids.is_empty() {
         return Ok(None);
     }
 
-    let relationships = relationship_summary(db, &objective, &scope_ids, workflow_policy)?;
-    let scope = scope_summary(db, &scope_ids, workflow_policy, active_issue_ids)?;
-    let evidence = evidence_gate_summary(db, objective_id, &scope_ids)?;
+    let relationships = relationship_summary(index, &objective, &scope_ids, workflow_policy)?;
+    let scope = scope_summary(index, &scope_ids, workflow_policy, active_issue_ids)?;
+    let evidence = evidence_gate_summary(index, objective_id, &scope_ids)?;
     let recent_activity = recent_activity_facts(&scope);
 
     Ok(Some(ObjectiveReadSummary {
@@ -143,7 +143,7 @@ pub fn objective_read_summary(
 }
 
 fn scope_summary(
-    db: &Database,
+    index: &RecordIndex,
     scope_ids: &BTreeSet<String>,
     workflow_policy: Option<&WorkflowPolicy>,
     active_issue_ids: &BTreeSet<&str>,
@@ -155,10 +155,10 @@ fn scope_summary(
     let mut done = Vec::new();
 
     for issue_id in scope_ids {
-        let Some(issue) = db.get_issue(issue_id)? else {
+        let Some(issue) = index.get_issue(issue_id) else {
             continue;
         };
-        let classified = classify_issue(db, workflow_policy, &issue)?;
+        let classified = classify_issue(index, workflow_policy, &issue)?;
         let bucket = issue_bucket(&issue, &classified, active_issue_ids);
         let issue_summary = ObjectiveIssueSummary {
             id: issue.id,
@@ -200,7 +200,7 @@ fn scope_summary(
 
 fn issue_bucket(
     issue: &Issue,
-    classified: &crate::read_pipeline::ClassifiedWork,
+    classified: &crate::work_classification::ClassifiedWork,
     active_issue_ids: &BTreeSet<&str>,
 ) -> ObjectiveIssueBucket {
     if active_issue_ids.contains(issue.id.as_str())
@@ -219,7 +219,7 @@ fn issue_bucket(
 }
 
 fn relationship_summary(
-    db: &Database,
+    index: &RecordIndex,
     objective: &Issue,
     scope_ids: &BTreeSet<String>,
     workflow_policy: Option<&WorkflowPolicy>,
@@ -227,7 +227,7 @@ fn relationship_summary(
     let mut summary = ObjectiveRelationshipSummary::default();
     let mut direct_blockers = BTreeSet::new();
 
-    for relation in db.get_typed_relations(&objective.id)? {
+    for relation in index.get_typed_relations(&objective.id) {
         let linked_id = if relation.issue_id_1 == objective.id {
             relation.issue_id_2
         } else {
@@ -240,7 +240,7 @@ fn relationship_summary(
         }
     }
 
-    for link in db.list_record_links("issue", &objective.id)? {
+    for link in index.list_record_links("issue", &objective.id)? {
         match link.relation_type.as_str() {
             "blocked_by" => {
                 if let Some(issue_id) = linked_issue_side(&link, &objective.id) {
@@ -254,7 +254,7 @@ fn relationship_summary(
 
     let mut blocker_ids = direct_blockers.clone();
     for issue_id in scope_ids {
-        for blocker_id in db.get_blockers(issue_id)? {
+        for blocker_id in index.get_blockers(issue_id) {
             blocker_ids.insert(blocker_id);
         }
     }
@@ -262,7 +262,7 @@ fn relationship_summary(
     summary.direct_blockers = direct_blockers.into_iter().collect();
     summary.open_blockers = blocker_ids
         .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter_map(|id| index.get_issue(&id))
         .filter(|issue| issue_blocks_work(workflow_policy, issue))
         .map(|issue| issue.id)
         .collect();
@@ -273,7 +273,7 @@ fn relationship_summary(
 }
 
 fn evidence_gate_summary(
-    db: &Database,
+    index: &RecordIndex,
     objective_id: &str,
     scope_ids: &BTreeSet<String>,
 ) -> Result<ObjectiveEvidenceGateSummary> {
@@ -283,7 +283,7 @@ fn evidence_gate_summary(
     issue_ids.push(objective_id);
 
     for issue_id in issue_ids {
-        let count = validating_evidence_count(db, issue_id)?;
+        let count = validating_evidence_count(index, issue_id)?;
         linked_validating_evidence += count;
         if issue_id != objective_id && count == 0 {
             scoped_issues_without_evidence += 1;
@@ -296,8 +296,8 @@ fn evidence_gate_summary(
     })
 }
 
-fn validating_evidence_count(db: &Database, issue_id: &str) -> Result<usize> {
-    Ok(db
+fn validating_evidence_count(index: &RecordIndex, issue_id: &str) -> Result<usize> {
+    Ok(index
         .list_record_links("issue", issue_id)?
         .into_iter()
         .filter(|link| link.relation_type == "validates" && link_touches_evidence(link))
@@ -317,15 +317,15 @@ fn recent_activity_facts(scope: &ObjectiveScopeSummary) -> ObjectiveRecentActivi
     ObjectiveRecentActivityFacts { recently_updated }
 }
 
-pub fn issue_descendant_ids(db: &Database, objective: &Issue) -> Result<BTreeSet<String>> {
+pub fn issue_descendant_ids(index: &RecordIndex, objective: &Issue) -> Result<BTreeSet<String>> {
     let mut issue_ids = BTreeSet::new();
-    for child in db.get_subissues(&objective.id)? {
-        collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
+    for child in index.get_subissues(&objective.id) {
+        collect_issue_and_descendants(index, &child.id, &mut issue_ids)?;
     }
     if objective.issue_type != "mission" {
         return Ok(issue_ids);
     }
-    for relation in db.get_typed_relations(&objective.id)? {
+    for relation in index.get_typed_relations(&objective.id) {
         if relation.relation_type != "advances" {
             continue;
         }
@@ -334,21 +334,21 @@ pub fn issue_descendant_ids(db: &Database, objective: &Issue) -> Result<BTreeSet
         } else {
             relation.issue_id_1
         };
-        collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
+        collect_issue_and_descendants(index, &linked_id, &mut issue_ids)?;
     }
     Ok(issue_ids)
 }
 
 fn collect_issue_and_descendants(
-    db: &Database,
+    index: &RecordIndex,
     issue_id: &str,
     issue_ids: &mut BTreeSet<String>,
 ) -> Result<()> {
     if !issue_ids.insert(issue_id.to_string()) {
         return Ok(());
     }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
+    for child in index.get_subissues(issue_id) {
+        collect_issue_and_descendants(index, &child.id, issue_ids)?;
     }
     Ok(())
 }
@@ -416,18 +416,12 @@ fn link_touches_evidence(link: &RecordLink) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_records::{evidence_record, Records};
     use crate::workflow_policy::{
         BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
         WorkflowPolicy,
     };
-    use atelier_core::Issue;
-    use atelier_sqlite::{
-        EvidenceCacheRow, EvidenceTargetCacheRow, IssueCacheRow, RecordSourceCacheRow,
-    };
-    use chrono::{TimeZone, Utc};
-    use serde_json::Value;
     use std::collections::BTreeMap;
-    use tempfile::tempdir;
 
     fn test_policy() -> WorkflowPolicy {
         let mut statuses = BTreeMap::new();
@@ -491,106 +485,30 @@ mod tests {
         }
     }
 
-    fn setup_db() -> (Database, tempfile::TempDir) {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
-        (db, dir)
-    }
-
-    fn insert_issue(
-        db: &Database,
-        id: &str,
-        title: &str,
-        issue_type: &str,
-        status: &str,
-        parent_id: Option<&str>,
-    ) {
-        let issue = Issue {
-            id: id.to_string(),
-            title: title.to_string(),
-            description: None,
-            status: status.to_string(),
-            issue_type: issue_type.to_string(),
-            priority: "medium".to_string(),
-            fields: BTreeMap::<String, Value>::new(),
-            parent_id: parent_id.map(str::to_string),
-            created_at: Utc.with_ymd_and_hms(2026, 6, 24, 12, 0, 0).unwrap(),
-            updated_at: Utc.with_ymd_and_hms(2026, 6, 24, 12, 0, 0).unwrap(),
-            closed_at: None,
-        };
-        let row = IssueCacheRow {
-            id: issue.id.clone(),
-            title: issue.title,
-            status: issue.status,
-            issue_type: issue.issue_type,
-            priority: issue.priority,
-            fields: issue.fields,
-            parent_id: issue.parent_id,
-            created_at: issue.created_at,
-            updated_at: issue.updated_at,
-            closed_at: issue.closed_at,
-        };
-        db.index_issue(
-            &row,
-            &[],
-            &[],
-            &[],
-            &RecordSourceCacheRow {
-                path: format!("issues/{}.md", row.id),
-                record_kind: "issue".to_string(),
-                record_id: row.id.clone(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: Utc::now(),
-            },
-        )
-        .unwrap();
-    }
-
     #[test]
     fn objective_scope_buckets_ready_blocked_and_done_children() {
-        let (db, _dir) = setup_db();
+        let mut records = Records::default();
         let policy = test_policy();
-        insert_issue(&db, "atelier-obj", "Objective", "epic", "todo", None);
-        insert_issue(
-            &db,
-            "atelier-ready",
-            "Ready",
-            "task",
-            "todo",
-            Some("atelier-obj"),
-        );
-        insert_issue(
-            &db,
-            "atelier-blocked",
-            "Blocked",
-            "task",
-            "todo",
-            Some("atelier-obj"),
-        );
-        insert_issue(
-            &db,
-            "atelier-blocker",
-            "Blocker",
-            "task",
-            "todo",
-            Some("atelier-obj"),
-        );
-        insert_issue(
-            &db,
-            "atelier-done",
-            "Done",
-            "task",
-            "done",
-            Some("atelier-obj"),
-        );
-        db.add_dependency("atelier-blocked", "atelier-blocker")
-            .unwrap();
+        records.issue("atelier-obj", "epic", "todo");
+        for (id, status) in [
+            ("atelier-ready", "todo"),
+            ("atelier-blocked", "todo"),
+            ("atelier-blocker", "todo"),
+            ("atelier-done", "done"),
+        ] {
+            records.issue(id, "task", status);
+            records.parent(id, "atelier-obj");
+        }
+        records.block("atelier-blocked", "atelier-blocker");
 
-        let summary = objective_read_summary(&db, "atelier-obj", Some(&policy), &BTreeSet::new())
-            .unwrap()
-            .unwrap();
+        let summary = objective_read_summary(
+            &records.index(),
+            "atelier-obj",
+            Some(&policy),
+            &BTreeSet::new(),
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(summary.scope.total(), 4);
         assert_eq!(summary.scope.totals.ready, 2);
@@ -607,25 +525,22 @@ mod tests {
 
     #[test]
     fn mission_scope_follows_advances_linked_roots_and_descendants() {
-        let (db, _dir) = setup_db();
+        let mut records = Records::default();
         let policy = test_policy();
-        insert_issue(&db, "atelier-mission", "Mission", "mission", "todo", None);
-        insert_issue(&db, "atelier-root", "Linked root", "epic", "todo", None);
-        insert_issue(
-            &db,
-            "atelier-child",
-            "Linked child",
-            "task",
-            "todo",
-            Some("atelier-root"),
-        );
-        db.add_typed_relation("atelier-mission", "atelier-root", "advances")
-            .unwrap();
+        records.issue("atelier-mission", "mission", "todo");
+        records.issue("atelier-root", "epic", "todo");
+        records.issue("atelier-child", "task", "todo");
+        records.parent("atelier-child", "atelier-root");
+        records.relate("atelier-mission", "atelier-root", "advances");
 
-        let summary =
-            objective_read_summary(&db, "atelier-mission", Some(&policy), &BTreeSet::new())
-                .unwrap()
-                .unwrap();
+        let summary = objective_read_summary(
+            &records.index(),
+            "atelier-mission",
+            Some(&policy),
+            &BTreeSet::new(),
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(
             summary.scope.issue_ids,
@@ -637,53 +552,25 @@ mod tests {
 
     #[test]
     fn evidence_gate_counts_validating_evidence_without_renderer() {
-        let (db, _dir) = setup_db();
+        let mut records = Records::default();
         let policy = test_policy();
-        insert_issue(&db, "atelier-obj", "Objective", "epic", "todo", None);
-        insert_issue(
-            &db,
+        records.issue("atelier-obj", "epic", "todo");
+        records.issue("atelier-ready", "task", "todo");
+        records.parent("atelier-ready", "atelier-obj");
+        records.evidence(evidence_record(
+            "atelier-proof",
             "atelier-ready",
-            "Ready",
-            "task",
-            "todo",
-            Some("atelier-obj"),
-        );
-        let evidence_id = "atelier-proof".to_string();
-        let now = Utc::now();
-        db.index_evidence(
-            &EvidenceCacheRow {
-                id: evidence_id.clone(),
-                title: "Validation proof".to_string(),
-                status: "pass".to_string(),
-                evidence_type: "validation".to_string(),
-                captured_at: now,
-                proof_scope: None,
-                agent_identity: None,
-                independence_level: None,
-                created_at: now,
-                updated_at: now,
-            },
-            &[EvidenceTargetCacheRow {
-                evidence_id: evidence_id.clone(),
-                target_kind: "issue".to_string(),
-                target_id: "atelier-ready".to_string(),
-                role: "validates".to_string(),
-            }],
-            &RecordSourceCacheRow {
-                path: "evidence/atelier-proof.md".to_string(),
-                record_kind: "evidence".to_string(),
-                record_id: evidence_id.clone(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: now,
-            },
-        )
-        .unwrap();
+            "validates",
+        ));
 
-        let summary = objective_read_summary(&db, "atelier-obj", Some(&policy), &BTreeSet::new())
-            .unwrap()
-            .unwrap();
+        let summary = objective_read_summary(
+            &records.index(),
+            "atelier-obj",
+            Some(&policy),
+            &BTreeSet::new(),
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(summary.evidence.linked_validating_evidence, 1);
         assert_eq!(summary.evidence.scoped_issues_without_evidence, 0);

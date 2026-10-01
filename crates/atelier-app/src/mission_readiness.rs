@@ -1,7 +1,7 @@
 use anyhow::Result;
-use atelier_sqlite::Database;
 
 use crate::objective_graph::dependency_closure;
+use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -19,11 +19,11 @@ pub struct MissionReadinessDiagnosis {
 }
 
 pub fn dependency_diagnosis(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     mission_id: &str,
 ) -> Result<Option<MissionReadinessDiagnosis>> {
-    let closure = dependency_closure(db, policy, mission_id)?;
+    let closure = dependency_closure(index, policy, mission_id)?;
     let Some(path) = closure
         .open_paths
         .iter()

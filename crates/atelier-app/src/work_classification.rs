@@ -1,10 +1,12 @@
+//! Executable-work classification (active, ready, blocked, backlog, done)
+//! shared by status, work queues, and objective rollups.
+
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use atelier_core::Issue;
-use atelier_sqlite::Database;
 
+use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,37 +78,23 @@ pub struct MissionSummary {
 pub enum StatusNextAction {
     InspectReadyWork { count: usize },
     InspectBlockedWork,
-    InspectHealth { stale_records: usize },
     NoSpecificAction,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StatusView {
-    pub tracker_state: String,
-    pub stale_records: usize,
     pub work: WorkBuckets,
     pub current_missions: Vec<MissionSummary>,
     pub next_action: StatusNextAction,
 }
 
 pub fn status_view(
-    db: &Database,
-    state_dir: &Path,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<StatusView> {
-    let work = work_buckets(db, workflow_policy)?;
-    let current_missions = current_missions(db, workflow_policy)?;
-    let _ = state_dir;
-    // CacheManager establishes freshness before constructing this read model.
-    let stale_records = 0;
-    let tracker_state = if stale_records == 0 {
-        "current".to_string()
-    } else {
-        "stale".to_string()
-    };
-    let next_action = if stale_records > 0 {
-        StatusNextAction::InspectHealth { stale_records }
-    } else if !work.ready.is_empty() {
+    let work = work_buckets(index, workflow_policy)?;
+    let current_missions = current_missions(index, workflow_policy);
+    let next_action = if !work.ready.is_empty() {
         StatusNextAction::InspectReadyWork {
             count: work.ready.len(),
         }
@@ -117,8 +105,6 @@ pub fn status_view(
     };
 
     Ok(StatusView {
-        tracker_state,
-        stale_records,
         work,
         current_missions,
         next_action,
@@ -126,12 +112,12 @@ pub fn status_view(
 }
 
 pub fn work_buckets(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<WorkBuckets> {
     let mut buckets = WorkBuckets::default();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let row = work_row(db, workflow_policy, issue)?;
+    for issue in index.issues() {
+        let row = work_row(index, workflow_policy, issue.clone())?;
         match row.state_label() {
             "active" => buckets.active.push(row),
             "ready" => buckets.ready.push(row),
@@ -149,11 +135,11 @@ pub fn work_buckets(
 }
 
 fn work_row(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue: Issue,
 ) -> Result<WorkRow> {
-    let classified = classify_issue(db, workflow_policy, &issue)?;
+    let classified = classify_issue(index, workflow_policy, &issue)?;
     Ok(WorkRow {
         id: issue.id.clone(),
         title: issue.title,
@@ -174,14 +160,14 @@ fn work_row(
 /// context-only backlog; and only todo-category records are refined by
 /// blocker and direct-start eligibility.
 pub fn classify_issue(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue: &Issue,
 ) -> Result<ClassifiedWork> {
     let status_category = workflow_policy
         .and_then(|policy| policy.status_category(&issue.status))
         .map(str::to_string);
-    let open_blockers = open_blockers(db, workflow_policy, &issue.id)?;
+    let open_blockers = open_blockers(index, workflow_policy, &issue.id)?;
 
     if status_category.as_deref() == Some("done") {
         return Ok(ClassifiedWork {
@@ -193,7 +179,7 @@ pub fn classify_issue(
         });
     }
 
-    let terminal_ancestor = terminal_ancestor(db, workflow_policy, issue)?;
+    let terminal_ancestor = terminal_ancestor(index, workflow_policy, issue)?;
     if terminal_ancestor.is_some() {
         return Ok(ClassifiedWork {
             classification: WorkClassification::Backlog,
@@ -241,7 +227,7 @@ pub fn classify_issue(
 /// Completed descendants remain independently terminal and inspectable; callers
 /// use this fact only to retire nonterminal descendants from execution.
 pub fn terminal_ancestor(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue: &Issue,
 ) -> Result<Option<String>> {
@@ -254,7 +240,7 @@ pub fn terminal_ancestor(
                 issue.id
             );
         }
-        let parent = db.require_issue(&id)?;
+        let parent = index.require_issue(&id)?;
         if workflow_policy.and_then(|policy| policy.status_category(&parent.status)) == Some("done")
         {
             return Ok(Some(parent.id));
@@ -265,49 +251,37 @@ pub fn terminal_ancestor(
 }
 
 fn open_blockers(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue_id: &str,
 ) -> Result<Vec<String>> {
     if let Some(policy) = workflow_policy {
         return Ok(
-            crate::objective_graph::dependency_closure(db, policy, issue_id)?.blocking_ids(),
+            crate::objective_graph::dependency_closure(index, policy, issue_id)?.blocking_ids(),
         );
     }
-    let mut blockers = db
-        .get_blockers(issue_id)?
-        .into_iter()
-        .filter_map(|id| db.require_issue(&id).ok())
-        .filter(|issue| issue_blocks_work(workflow_policy, issue))
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    blockers.sort();
-    Ok(blockers)
-}
-
-fn issue_blocks_work(workflow_policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
+    // Without a policy no status is terminal, so every blocker is open.
+    Ok(index.get_blockers(issue_id))
 }
 
 fn current_missions(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Vec<MissionSummary>> {
-    let mut missions = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
+) -> Vec<MissionSummary> {
+    let mut missions = index
+        .issues()
         .filter(|issue| issue.issue_type == "mission")
         .filter(|issue| {
             workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
         })
         .map(|issue| MissionSummary {
-            id: issue.id,
-            title: issue.title,
-            status: issue.status,
+            id: issue.id.clone(),
+            title: issue.title.clone(),
+            status: issue.status.clone(),
         })
         .collect::<Vec<_>>();
     missions.sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(missions)
+    missions
 }
 
 fn sort_work_rows(rows: &mut [WorkRow]) {
@@ -332,73 +306,20 @@ fn priority_rank(priority: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atelier_core::Issue;
-    use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
-    use chrono::Utc;
+    use crate::test_records::Records;
     use std::collections::BTreeMap;
-    use tempfile::tempdir;
 
-    fn issue(id: &str, title: &str, status: &str, priority: &str) -> Issue {
-        let now = Utc::now();
-        Issue {
-            id: id.to_string(),
-            title: title.to_string(),
-            description: None,
-            status: status.to_string(),
-            priority: priority.to_string(),
-            issue_type: "task".to_string(),
-            fields: BTreeMap::new(),
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-            parent_id: None,
-        }
-    }
-
-    fn index_issue(db: &Database, issue: Issue) {
-        let row = IssueCacheRow {
-            id: issue.id.clone(),
-            title: issue.title,
-            status: issue.status,
-            issue_type: issue.issue_type,
-            priority: issue.priority,
-            fields: issue.fields,
-            parent_id: issue.parent_id,
-            created_at: issue.created_at,
-            updated_at: issue.updated_at,
-            closed_at: issue.closed_at,
-        };
-        db.index_issue(
-            &row,
-            &[],
-            &[],
-            &[],
-            &RecordSourceCacheRow {
-                path: format!("issues/{}.md", row.id),
-                record_kind: "issue".to_string(),
-                record_id: row.id.clone(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: Utc::now(),
-            },
-        )
-        .unwrap();
-    }
-
-    fn db_with_rows() -> Database {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
-        index_issue(&db, issue("atelier-ready", "Ready", "ready", "high"));
-        index_issue(
-            &db,
-            issue("atelier-active", "Active", "in_progress", "medium"),
-        );
-        index_issue(&db, issue("atelier-done", "Done", "done", "low"));
-        index_issue(&db, issue("atelier-blocked", "Blocked", "todo", "medium"));
-        db.add_dependency("atelier-blocked", "atelier-ready")
-            .unwrap();
-        db
+    fn records_with_rows() -> Records {
+        let mut records = Records::default();
+        records
+            .issue("atelier-ready", "task", "ready")
+            .issue
+            .priority = "high".to_string();
+        records.issue("atelier-active", "task", "in_progress");
+        records.issue("atelier-done", "task", "done").issue.priority = "low".to_string();
+        records.issue("atelier-blocked", "task", "todo");
+        records.block("atelier-blocked", "atelier-ready");
+        records
     }
 
     fn test_policy() -> WorkflowPolicy {
@@ -477,10 +398,10 @@ mod tests {
 
     #[test]
     fn work_buckets_classify_rows_without_cli_renderers() {
-        let db = db_with_rows();
+        let index = records_with_rows().index();
         let policy = test_policy();
 
-        let buckets = work_buckets(&db, Some(&policy)).unwrap();
+        let buckets = work_buckets(&index, Some(&policy)).unwrap();
 
         assert_eq!(buckets.ready[0].id, "atelier-ready");
         assert_eq!(buckets.active[0].id, "atelier-active");
@@ -490,34 +411,23 @@ mod tests {
 
     #[test]
     fn status_view_selects_ready_work_before_generic_guidance() {
-        let db = db_with_rows();
-        let dir = tempdir().unwrap();
+        let index = records_with_rows().index();
         let policy = test_policy();
 
-        let view = status_view(&db, dir.path(), Some(&policy)).unwrap();
+        let view = status_view(&index, Some(&policy)).unwrap();
 
         assert_eq!(
             view.next_action,
             StatusNextAction::InspectReadyWork { count: 1 }
         );
-        assert_eq!(view.tracker_state, "current");
     }
 
     #[test]
     fn explicit_blocked_status_wins_over_direct_start_eligibility() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
-        index_issue(
-            &db,
-            issue(
-                "atelier-explicit-blocked",
-                "Explicit blocked",
-                "blocked",
-                "high",
-            ),
-        );
+        let mut records = Records::default();
+        records.issue("atelier-explicit-blocked", "task", "blocked");
 
-        let buckets = work_buckets(&db, Some(&test_policy())).unwrap();
+        let buckets = work_buckets(&records.index(), Some(&test_policy())).unwrap();
 
         assert!(buckets.ready.is_empty());
         assert_eq!(buckets.blocked[0].id, "atelier-explicit-blocked");
@@ -525,19 +435,14 @@ mod tests {
 
     #[test]
     fn terminal_ancestor_retires_open_descendant_but_preserves_done_descendant() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
-        let mut epic = issue("atelier-epic", "Superseded epic", "superseded", "high");
-        epic.issue_type = "epic".to_string();
-        index_issue(&db, epic);
-        let mut open = issue("atelier-open", "Open speculation", "todo", "medium");
-        open.parent_id = Some("atelier-epic".to_string());
-        index_issue(&db, open);
-        let mut done = issue("atelier-history", "Completed history", "done", "medium");
-        done.parent_id = Some("atelier-epic".to_string());
-        index_issue(&db, done);
+        let mut records = Records::default();
+        records.issue("atelier-epic", "epic", "superseded");
+        records.issue("atelier-open", "task", "todo");
+        records.issue("atelier-history", "task", "done");
+        records.parent("atelier-open", "atelier-epic");
+        records.parent("atelier-history", "atelier-epic");
 
-        let buckets = work_buckets(&db, Some(&test_policy())).unwrap();
+        let buckets = work_buckets(&records.index(), Some(&test_policy())).unwrap();
 
         assert!(buckets.ready.is_empty());
         assert_eq!(buckets.backlog[0].id, "atelier-open");

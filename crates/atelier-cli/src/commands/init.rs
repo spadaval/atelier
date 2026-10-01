@@ -23,8 +23,6 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::test_support::DomainCacheFixture;
-    use atelier_sqlite::Database;
     use std::fs;
     use tempfile::tempdir;
 
@@ -41,17 +39,14 @@ mod tests {
         assert!(!dir.path().join(".atelier/missions").exists());
         assert!(dir.path().join(".atelier/evidence").exists());
         assert!(dir.path().join(".atelier/workflow.yaml").exists());
-        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".atelier/hook-config.json").exists());
         assert!(!dir.path().join(".claude").exists());
         assert!(!dir.path().join(".mcp.json").exists());
         assert!(!dir.path().join(".atelier/.gitignore").exists());
 
         let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        assert!(!gitignore.contains("/.atelier/state.db"));
-        assert!(!gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
         assert!(gitignore.contains("/.atelier/runtime/"));
-        assert!(gitignore.contains("/.atelier/cache/"));
+        assert!(!gitignore.contains("cache"));
         assert!(gitignore.contains("/.atelier-bundle-stage-*/"));
         assert!(!gitignore.contains("/.atelier/hook-config.json"));
         assert!(!gitignore.lines().any(|line| line.trim() == "/.atelier/"));
@@ -115,7 +110,6 @@ project_slug = "custom"
         run(dir.path(), true).unwrap();
 
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".claude").exists());
         assert!(!dir.path().join(".mcp.json").exists());
     }
@@ -131,7 +125,6 @@ project_slug = "custom"
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".claude").exists());
     }
 
@@ -147,36 +140,6 @@ project_slug = "custom"
 
         assert!(dir.path().join(".atelier").exists());
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/runtime/state.db").exists());
-    }
-
-    #[test]
-    fn test_run_database_usable() {
-        let dir = tempdir().unwrap();
-        run(dir.path(), false).unwrap();
-
-        // Open the created database and verify it works
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        let db = Database::open(&db_path).unwrap();
-
-        // Should be able to create an issue
-        let id = db
-            .cache_fixture_issue("Test issue", None, "medium")
-            .unwrap();
-        assert!(!id.is_empty());
-    }
-
-    #[test]
-    fn test_run_recreates_missing_database() {
-        let dir = tempdir().unwrap();
-        run(dir.path(), false).unwrap();
-
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        fs::remove_file(&db_path).unwrap();
-
-        run(dir.path(), false).unwrap();
-
-        assert!(db_path.exists());
     }
 
     #[test]
@@ -189,8 +152,7 @@ project_slug = "custom"
             assert!(result.is_ok());
         }
 
-        // All files should still exist
-        assert!(dir.path().join(".atelier/runtime/state.db").exists());
+        assert!(dir.path().join(".atelier/config.toml").exists());
         assert!(!dir.path().join(".claude/settings.json").exists());
     }
 }

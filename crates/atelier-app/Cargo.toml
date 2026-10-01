@@ -13,18 +13,14 @@ path = "src/lib.rs"
 [dependencies]
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
-atelier-sqlite = { path = "../atelier-sqlite" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 chrono.workspace = true
-fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 sha2.workspace = true
 toml.workspace = true
-tracing.workspace = true
 
 [dev-dependencies]
-rusqlite.workspace = true
 tempfile = "3"

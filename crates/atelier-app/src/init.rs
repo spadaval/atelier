@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use atelier_sqlite::Database;
 
 use crate::storage_layout::StorageLayout;
 
@@ -19,9 +18,7 @@ canonical_retention_days = 7
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/agent.json",
-    "/.atelier/.cache/",
     "/.atelier/runtime/",
-    "/.atelier/cache/",
     "/.atelier-bundle-stage-*/",
 ];
 
@@ -59,15 +56,6 @@ pub fn initialize(
         fs::write(&project_config_path, PROJECT_CONFIG_TOML)
             .context("Failed to write .atelier/config.toml")?;
         created_paths.push(project_config_path);
-    }
-
-    fs::create_dir_all(layout.target_runtime_dir())
-        .context("Failed to create .atelier/runtime directory")?;
-    let db_path = layout.runtime_db_path();
-    let db_existed = db_path.exists();
-    let _db = Database::open(&db_path)?;
-    if !db_existed {
-        created_paths.push(db_path);
     }
 
     let workflow_path = input
@@ -111,7 +99,7 @@ pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
         if !existing.is_empty() {
             existing.push('\n');
         }
-        existing.push_str("# Atelier local runtime/cache\n");
+        existing.push_str("# Atelier local runtime state\n");
         for entry in missing {
             existing.push_str(entry);
             existing.push('\n');

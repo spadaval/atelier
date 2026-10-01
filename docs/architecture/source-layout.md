@@ -15,11 +15,10 @@ behind the lower target crate boundary.
 
 | Crate | Responsibility | May depend on |
 | --- | --- | --- |
-| `atelier-core` | Shared domain types, record IDs, typed relationships, workflow status/category vocabulary, and pure formatting helpers that do not touch the filesystem, SQLite, Clap, or Git. | External pure utility crates only. |
+| `atelier-core` | Shared domain types, record IDs, typed relationships, workflow status/category vocabulary, and pure formatting helpers that do not touch the filesystem, Clap, or Git. | External pure utility crates only. |
 | `atelier-workflow` | Repository-owned workflow policy loading, transition validation, readiness checks, and guidance text evaluation. | `atelier-core`. |
 | `atelier-records` | Canonical `.atelier/` Markdown record discovery, parsing, deterministic rendering, ID allocation, relationship rendering, activity sidecar schema/IO, and atomic tracked-file mutation. | `atelier-core`, `atelier-workflow` when validation needs workflow policy. |
-| `atelier-sqlite` | Rebuildable SQLite domain-cache schema, source-freshness metadata, domain indexers, and graph/search/list/status queries. It may cache enough metadata to filter and order results, but it must not own durable activity sidecar reads or writes. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
-| `atelier-app` | Use-case orchestration for mission, issue, issue-note/activity, evidence, workflow, status, doctor, export, lint, worktree, branch, and rebuild operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`, `atelier-sqlite`. |
+| `atelier-app` | The in-memory record index (`record_index`: loads and validates every record per command and answers graph, list, and status queries) and use-case orchestration for issue, evidence, workflow, status, and lint operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
 | `atelier-cli` | The `atelier` binary, Clap parser, command dispatch telemetry, terminal rendering, process exit mapping, and CLI-only transcript formatting. | `atelier-app`, plus lower crates only for types explicitly re-exported by `atelier-app` contracts. |
 
 ## Layering Rules
@@ -28,7 +27,7 @@ behind the lower target crate boundary.
   Lower crates must not call into `atelier-cli` or depend on Clap rendering.
 - Rust crate APIs are internal to this repository. They may be replaced during
   the migration when doing so makes the crate boundary clearer.
-- Tests and fuzz targets should move toward the lowest crate that owns the
+- Tests should move toward the lowest crate that owns the
   invariant being tested. CLI integration tests should stay in `atelier-cli`
   only when terminal behavior, Clap rejection, or exit-code mapping is the
   behavior under test.
@@ -120,10 +119,10 @@ When it validates or defaults a status during record creation or bundle apply,
 it should ask `atelier-workflow` for the configured initial status and status
 catalog instead of using a local lifecycle constant.
 
-`atelier-sqlite` owns rebuildable cache fields used for filtering and
-ordering. It may store status strings and indexed relationships, but category
-classification and transition readiness remain workflow/app questions. SQLite
-queries should not decide whether a transition is allowed.
+`atelier-app::record_index` owns the in-memory graph used for filtering and
+ordering. It indexes status strings and relationships, but category
+classification and transition readiness remain workflow questions; index
+queries do not decide whether a transition is allowed.
 
 Follow-on workflow extraction issues should be accepted only when command output
 and tests show that:
@@ -163,8 +162,7 @@ classified as not an adapter because it is target-state code.
 | `crates/atelier-cli/src/models.rs`, `crates/atelier-cli/src/record_id.rs`, pure shared helpers | `atelier-core` |
 | `crates/atelier-cli/src/workflow_policy.rs`, `crates/atelier-cli/src/commands/issue_workflow.rs`, `crates/atelier-cli/src/commands/workflow.rs` policy internals | `atelier-workflow` |
 | `crates/atelier-cli/src/record_store.rs`, `crates/atelier-cli/src/record_store/` | `atelier-records` |
-| `crates/atelier-sqlite/src/cache.rs`, remaining legacy-named cache modules, and cache/rebuild storage internals | `atelier-sqlite` |
-| `crates/atelier-cli/src/commands/*.rs` use-case logic, doctor/lint/export/status orchestration | `atelier-app` |
+| `crates/atelier-cli/src/commands/*.rs` use-case logic, lint/status orchestration | `atelier-app` |
 | `crates/atelier-cli/src/main.rs`, Clap definitions, terminal output, command-surface tracing | `atelier-cli` |
 
 ## Orientation Order

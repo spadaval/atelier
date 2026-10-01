@@ -20,9 +20,6 @@ cargo install cargo-nextest --locked
 cargo install cargo-machete --locked
 ```
 
-`rusqlite` is built with the `bundled` feature, so normal development does not
-need a separately installed system SQLite package.
-
 ## Fresh Checkout
 
 From the repository root:
@@ -53,19 +50,13 @@ configured provider review artifact. Store the Forgejo admin token there as
 `review.providers.forgejo.admin_token`. The token value is local secret
 material and must not be committed.
 
-## Local Runtime And Cache
+## Local Runtime State
 
-Atelier uses implementation-owned defaults for local runtime and cache paths:
-`.atelier/runtime/` and `.atelier/cache/`. Tracked `.atelier/config.toml` does
-not name runtime database, cache, or compatibility-state paths. The contents of
-`.atelier/runtime/` and `.atelier/cache/` are ignored local files. They may contain
-the SQLite domain cache, locks, diagnostics, identity hints, or UI caches, but they
-must not be treated as durable project policy or committed work records.
-
-If runtime or cache state is missing or stale, prefer normal Atelier health and
-repair surfaces such as `atelier check` and commands named by `atelier status`.
-Do not edit ignored runtime/cache files as a substitute for updating tracked
-Markdown records, `.atelier/config.toml`, or `.atelier/workflow.yaml`.
+Atelier keeps only the canonical mutation lock under the ignored
+`.atelier/runtime/` directory. There is no cache: every command parses the
+tracked record files directly. Do not edit ignored runtime files as a
+substitute for updating tracked Markdown records, `.atelier/config.toml`, or
+`.atelier/workflow.yaml`.
 
 `cargo udeps` is not part of required setup. It remains an advisory
 nightly-toolchain cross-check for deeper dependency review when a reviewer asks

@@ -1,19 +1,22 @@
 use anyhow::Result;
+use atelier_app::record_index::RecordIndex;
 use std::collections::BTreeSet;
 
 use crate::commands;
-use atelier_sqlite::Database;
 
-pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
-    let issue = db.require_issue(issue_id)?;
+pub fn run(index: &RecordIndex, issue_id: &str, quiet: bool) -> Result<()> {
+    let issue = index.require_issue(issue_id)?;
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let active_issues = commands::status::current_work_issues(db, workflow_policy.as_ref())?;
+    let active_issues = commands::status::current_work_issues(index, workflow_policy.as_ref())?;
     let active_issue_ids = active_issues
         .iter()
         .map(|issue| issue.id.as_str())
         .collect::<BTreeSet<_>>();
-    let snapshot =
-        commands::objective_status::snapshot_for_issue_objective(db, &issue.id, &active_issue_ids)?;
+    let snapshot = commands::objective_status::snapshot_for_issue_objective(
+        index,
+        &issue.id,
+        &active_issue_ids,
+    )?;
     let open_work = open_work_ids(&snapshot);
 
     if quiet {
@@ -52,8 +55,8 @@ pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
         );
     }
 
-    print_ready_work(db, &snapshot)?;
-    print_blocked_work(db, &snapshot)?;
+    print_ready_work(index, &snapshot)?;
+    print_blocked_work(index, &snapshot)?;
     print_blockers(&snapshot);
     print_terminal(&snapshot, &open_work);
     print_next_commands(&issue.id, &snapshot, &open_work);
@@ -61,7 +64,7 @@ pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
 }
 
 fn print_ready_work(
-    db: &Database,
+    index: &RecordIndex,
     snapshot: &commands::objective_status::ObjectiveStatusSnapshot,
 ) -> Result<()> {
     println!();
@@ -77,7 +80,7 @@ fn print_ready_work(
             issue.id,
             issue.title,
             commands::objective_status::parent_context(issue),
-            commands::objective_status::proof_context(db, &issue.id)?
+            commands::objective_status::proof_context(index, &issue.id)?
         );
     }
     if snapshot.ready_issues.len() > 5 {
@@ -90,7 +93,7 @@ fn print_ready_work(
 }
 
 fn print_blocked_work(
-    db: &Database,
+    index: &RecordIndex,
     snapshot: &commands::objective_status::ObjectiveStatusSnapshot,
 ) -> Result<()> {
     println!();
@@ -101,7 +104,8 @@ fn print_blocked_work(
         return Ok(());
     }
     for issue in snapshot.blocked_issues.iter().take(5) {
-        let blockers = commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?;
+        let blockers =
+            commands::objective_status::open_issue_blockers_with_default(index, &issue.id)?;
         println!(
             "  blocked {} - {} | {} blocker{}",
             issue.id,

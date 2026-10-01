@@ -1,22 +1,17 @@
 use anyhow::{bail, Context, Result};
-use atelier_app::project_config::DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS;
+use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::MergeStrategy;
 use atelier_core::{Issue, RecordLink};
-use atelier_sqlite::{Database, RecordSummary};
 use chrono::{DateTime, Days, NaiveDate, Utc};
-use fs2::FileExt;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime};
 
 pub struct TrackerContext {
-    pub db: Database,
+    pub index: RecordIndex,
     pub repo_root: PathBuf,
     pub state_dir: PathBuf,
-    pub db_path: PathBuf,
     pub canonical_retention_days: u64,
 }
 
@@ -28,8 +23,6 @@ struct CanonicalPruneSummary {
     evidence: Vec<CanonicalCandidate>,
     removed: Vec<CanonicalRemoval>,
     failures: Vec<(PathBuf, String)>,
-    unavailable: Option<String>,
-    rebuilt_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -47,21 +40,6 @@ struct CanonicalCandidate {
 struct CanonicalRemoval {
     kind: &'static str,
     id: String,
-}
-
-#[derive(Debug, Clone)]
-struct LocalCandidate {
-    class: &'static str,
-    path: PathBuf,
-    protection: Option<String>,
-}
-
-#[derive(Debug, Clone, Default)]
-struct LocalPruneSummary {
-    candidates: Vec<LocalCandidate>,
-    removed: Vec<PathBuf>,
-    failures: Vec<(PathBuf, String)>,
-    unavailable: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,20 +82,16 @@ impl CanonicalCandidate {
 }
 
 pub fn run(
-    tracker: Option<TrackerContext>,
+    tracker: TrackerContext,
     apply: bool,
     retention_days: Option<u64>,
     quiet: bool,
 ) -> Result<()> {
-    // Local artifacts are explicitly independent of canonical health.  Do this
-    // before opening or validating canonical state so a broken cache never
-    // prevents removal of an abandoned temporary file.
-    let local = prune_local_artifacts(tracker.as_ref(), retention_days, apply)?;
-    let git = prune_git_artifacts(tracker.as_ref(), retention_days, apply)?;
-    let canonical = prune_canonical_records(tracker, retention_days, apply)?;
+    let git = prune_git_artifacts(&tracker, retention_days, apply)?;
+    let canonical = prune_canonical_records(&tracker, retention_days, apply)?;
 
     if quiet {
-        print_quiet_summary(&local, &git, &canonical, apply);
+        print_quiet_summary(&git, &canonical, apply);
         return Ok(());
     }
 
@@ -126,8 +100,6 @@ pub fn run(
     println!("Mode: {}", if apply { "apply" } else { "dry-run" });
     println!();
 
-    print_local(&local, apply);
-    println!();
     print_git(&git, apply);
     println!();
     print_canonical(&canonical, apply);
@@ -143,16 +115,10 @@ pub fn run(
 }
 
 fn prune_git_artifacts(
-    tracker: Option<&TrackerContext>,
+    tracker: &TrackerContext,
     retention_days_override: Option<u64>,
     apply: bool,
 ) -> Result<GitPruneSummary> {
-    let Some(tracker) = tracker else {
-        return Ok(GitPruneSummary {
-            unavailable: Some("tracker unavailable in this directory".to_string()),
-            ..Default::default()
-        });
-    };
     let git_repository = Command::new("git")
         .current_dir(&tracker.repo_root)
         .args(["rev-parse", "--is-inside-work-tree"])
@@ -176,7 +142,7 @@ fn prune_git_artifacts(
         }
     };
     let base = policy.branch_policy.base_branch.clone();
-    let (_, cutoff) = canonical_retention_cutoff(Some(tracker), retention_days_override);
+    let (_, cutoff) = canonical_retention_cutoff(tracker, retention_days_override);
     let mut owner_candidates = issue_candidates(tracker, cutoff)?;
     apply_git_history_protection(&tracker.repo_root, &mut owner_candidates)?;
     for candidate in owner_candidates
@@ -191,11 +157,11 @@ fn prune_git_artifacts(
         .into_iter()
         .map(|candidate| (candidate.id.clone(), candidate))
         .collect::<BTreeMap<_, _>>();
-    let all_issues = tracker.db.list_issues(Some("all"), None, None)?;
+    let all_issues = tracker.index.list_issues(Some("all"), None, None)?;
     let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
     for issue in &all_issues {
         if let Ok(resolution) =
-            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.db, &issue.id)
+            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.index, &issue.id)
         {
             if resolution.owner_id == issue.id {
                 let protection =
@@ -231,7 +197,7 @@ fn prune_git_artifacts(
             continue;
         }
         let Ok(resolution) =
-            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.db, &issue.id)
+            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.index, &issue.id)
         else {
             continue;
         };
@@ -616,267 +582,14 @@ fn git_run(repo_root: &Path, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn prune_local_artifacts(
-    tracker: Option<&TrackerContext>,
-    retention_days: Option<u64>,
-    apply: bool,
-) -> Result<LocalPruneSummary> {
-    let Some(tracker) = tracker else {
-        return Ok(LocalPruneSummary {
-            unavailable: Some("tracker unavailable in this directory".to_string()),
-            ..Default::default()
-        });
-    };
-    let cutoff = SystemTime::now()
-        .checked_sub(Duration::from_secs(
-            retention_days.unwrap_or(30).saturating_mul(86_400),
-        ))
-        .unwrap_or(SystemTime::UNIX_EPOCH);
-    let mut summary = LocalPruneSummary::default();
-    for root in [
-        tracker.state_dir.join("runtime"),
-        tracker.state_dir.join("cache"),
-        tracker.state_dir.join(".cache"),
-    ] {
-        collect_local_candidates(
-            &tracker.repo_root,
-            &tracker.state_dir,
-            &root,
-            cutoff,
-            &mut summary.candidates,
-        )?;
-    }
-    summary.candidates.sort_by(|a, b| a.path.cmp(&b.path));
-    if apply {
-        for candidate in summary.candidates.iter().filter(|c| c.protection.is_none()) {
-            let absolute = tracker.state_dir.join(&candidate.path);
-            match remove_exclusively_owned_local_artifact(&absolute) {
-                Ok(()) => summary.removed.push(candidate.path.clone()),
-                Err(error) => summary
-                    .failures
-                    .push((candidate.path.clone(), error.to_string())),
-            }
-        }
-    }
-    Ok(summary)
-}
-
-fn collect_local_candidates(
-    repo_root: &Path,
-    state_dir: &Path,
-    root: &Path,
-    cutoff: SystemTime,
-    candidates: &mut Vec<LocalCandidate>,
-) -> Result<()> {
-    if !root.exists() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(root)
-        .with_context(|| format!("failed to inspect local prune directory {}", root.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if entry.file_type()?.is_dir() {
-            collect_local_candidates(repo_root, state_dir, &path, cutoff, candidates)?;
-            continue;
-        }
-        let relative = match path.strip_prefix(state_dir) {
-            Ok(path) => path.to_path_buf(),
-            Err(_) => continue,
-        };
-        if !is_ignored_local_path(repo_root, &path)? {
-            continue;
-        }
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        let is_lock = name.ends_with(".lock");
-        let is_temp = name.ends_with(".tmp")
-            || name.contains(".rebuild-tmp")
-            || name.ends_with("-journal")
-            || name.ends_with("-wal")
-            || name.ends_with("-shm")
-            || name.ends_with(".journal");
-        let is_cache = relative
-            .components()
-            .next()
-            .map(|part| part.as_os_str() == "cache" || part.as_os_str() == ".cache")
-            .unwrap_or(false);
-        if !is_temp && !is_cache && !is_lock {
-            continue;
-        }
-        let stale = entry
-            .metadata()?
-            .modified()
-            .map(|modified| modified < cutoff)
-            .unwrap_or(true);
-        if !is_temp && !is_lock && !stale {
-            continue;
-        }
-        let class = if is_cache {
-            "stale-cache"
-        } else if is_temp {
-            "orphaned-temp"
-        } else {
-            "runtime-lock"
-        };
-        let protection = if is_lock {
-            Some("locked by a running or interrupted command; inspect before removal".to_string())
-        } else if is_runtime_projection_artifact(&relative) {
-            if let Some(reason) = projection_artifact_protection(state_dir, &path)? {
-                Some(reason)
-            } else if !stale {
-                Some("within local artifact retention window".to_string())
-            } else {
-                local_artifact_lock_protection(&path)?
-            }
-        } else if !stale {
-            Some("within local artifact retention window".to_string())
-        } else {
-            local_artifact_lock_protection(&path)?
-        };
-        candidates.push(LocalCandidate {
-            class,
-            path: relative,
-            protection,
-        });
-    }
-    Ok(())
-}
-
-fn local_artifact_lock_protection(path: &Path) -> Result<Option<String>> {
-    let file = match OpenOptions::new().read(true).write(true).open(path) {
-        Ok(file) => file,
-        Err(error) => {
-            return Ok(Some(format!(
-                "exclusive ownership cannot be proven: {error}"
-            )))
-        }
-    };
-    match file.try_lock_exclusive() {
-        Ok(()) => {
-            file.unlock()?;
-            Ok(None)
-        }
-        Err(error) => Ok(Some(format!(
-            "artifact is open or locked; exclusive ownership cannot be proven: {error}"
-        ))),
-    }
-}
-
-fn remove_exclusively_owned_local_artifact(path: &Path) -> Result<()> {
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)
-        .with_context(|| {
-            format!(
-                "refusing to unlink local artifact without an ownership handle {}",
-                path.display()
-            )
-        })?;
-    file.try_lock_exclusive().with_context(|| {
-        format!(
-            "refusing to unlink open or locked local artifact {}",
-            path.display()
-        )
-    })?;
-    fs::remove_file(path).with_context(|| format!("failed to unlink {}", path.display()))?;
-    file.unlock()?;
-    Ok(())
-}
-
-fn is_runtime_projection_artifact(relative: &Path) -> bool {
-    relative
-        .components()
-        .next()
-        .map(|part| part.as_os_str() == "runtime")
-        .unwrap_or(false)
-}
-
-fn projection_artifact_protection(state_dir: &Path, artifact: &Path) -> Result<Option<String>> {
-    let name = artifact
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    // SQLite sidecars are tied to an open projection database. They cannot be
-    // distinguished safely from live state without coordinating with SQLite.
-    if name.ends_with("-wal")
-        || name.ends_with("-shm")
-        || name.ends_with("-journal")
-        || name.ends_with(".journal")
-    {
-        return Ok(Some(
-            "runtime projection sidecar may belong to an open database".to_string(),
-        ));
-    }
-    if !name.contains(".rebuild-tmp") {
-        return Ok(None);
-    }
-    let lock = state_dir.join("runtime/.state.db.rebuild.lock");
-    let file = match OpenOptions::new().read(true).write(true).open(&lock) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error).with_context(|| {
-                format!(
-                    "failed to inspect projection rebuild lock {}",
-                    lock.display()
-                )
-            })
-        }
-    };
-    match file.try_lock_exclusive() {
-        Ok(()) => {
-            let _ = file.unlock();
-            Ok(Some(
-                "projection rebuild artifact is protected outside a coordinated rebuild; run `atelier check --fix`"
-                    .to_string(),
-            ))
-        }
-        Err(_) => Ok(Some(
-            "projection rebuild lock is active; rebuild artifact may be live".to_string(),
-        )),
-    }
-}
-
-fn is_ignored_local_path(repo_root: &Path, path: &Path) -> Result<bool> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
-        .args([
-            "check-ignore",
-            "--quiet",
-            "--",
-            path.to_string_lossy().as_ref(),
-        ])
-        .output()
-        .context("failed to inspect Git ignore state for local prune candidate")?;
-    Ok(output.status.success())
-}
-
 fn prune_canonical_records(
-    tracker: Option<TrackerContext>,
+    tracker: &TrackerContext,
     retention_days_override: Option<u64>,
     apply: bool,
 ) -> Result<CanonicalPruneSummary> {
-    let (retention_days, cutoff) =
-        canonical_retention_cutoff(tracker.as_ref(), retention_days_override);
-    let Some(tracker) = tracker else {
-        return Ok(CanonicalPruneSummary {
-            retention_days,
-            cutoff,
-            issues: Vec::new(),
-            evidence: Vec::new(),
-            removed: Vec::new(),
-            failures: Vec::new(),
-            unavailable: Some("tracker unavailable in this directory".to_string()),
-            rebuilt_cache: false,
-        });
-    };
-
-    let mut issues = issue_candidates(&tracker, cutoff)?;
-    let evidence = evidence_candidates(&tracker, cutoff, &issues)?;
+    let (retention_days, cutoff) = canonical_retention_cutoff(tracker, retention_days_override);
+    let mut issues = issue_candidates(tracker, cutoff)?;
+    let evidence = evidence_candidates(tracker, cutoff, &issues)?;
     apply_git_history_protection(&tracker.repo_root, &mut issues)?;
     let mut evidence = evidence;
     apply_git_history_protection(&tracker.repo_root, &mut evidence)?;
@@ -896,21 +609,6 @@ fn prune_canonical_records(
         {
             remove_candidate(&tracker.state_dir, candidate, &mut removed, &mut failures);
         }
-        if !removed.is_empty() {
-            drop(tracker.db);
-            atelier_app::rebuild::run(&tracker.state_dir, &tracker.db_path)
-                .context("failed to rebuild the local domain cache after pruning record files")?;
-            return Ok(CanonicalPruneSummary {
-                retention_days,
-                cutoff,
-                issues,
-                evidence,
-                removed,
-                failures,
-                unavailable: None,
-                rebuilt_cache: true,
-            });
-        }
     }
 
     Ok(CanonicalPruneSummary {
@@ -920,18 +618,14 @@ fn prune_canonical_records(
         evidence,
         removed,
         failures,
-        unavailable: None,
-        rebuilt_cache: false,
     })
 }
 
 fn canonical_retention_cutoff(
-    tracker: Option<&TrackerContext>,
+    tracker: &TrackerContext,
     retention_days_override: Option<u64>,
 ) -> (u64, NaiveDate) {
-    let retention_days = retention_days_override
-        .or_else(|| tracker.map(|tracker| tracker.canonical_retention_days))
-        .unwrap_or(DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS);
+    let retention_days = retention_days_override.unwrap_or(tracker.canonical_retention_days);
     let cutoff = Utc::now()
         .date_naive()
         .checked_sub_days(Days::new(retention_days))
@@ -944,13 +638,13 @@ fn issue_candidates(
     cutoff: NaiveDate,
 ) -> Result<Vec<CanonicalCandidate>> {
     let policy = atelier_app::workflow_policy::load(&tracker.repo_root).ok();
-    let all_issues = tracker.db.list_issues(Some("all"), None, None)?;
+    let all_issues = tracker.index.list_issues(Some("all"), None, None)?;
     let all_issue_ids = all_issues
         .iter()
         .map(|issue| issue.id.clone())
         .collect::<BTreeSet<_>>();
-    let links = tracker.db.list_all_record_links()?;
-    let retained_records = retained_record_ids(&tracker.db, cutoff)?;
+    let links = tracker.index.record_links();
+    let retained_records = retained_record_ids(&tracker.index, cutoff);
     let active_descendants = active_descendants_by_ancestor(policy.as_ref(), &all_issues);
 
     let mut old_terminal = BTreeSet::new();
@@ -979,7 +673,7 @@ fn issue_candidates(
             .map(|descendant| format!("terminal record has active descendant {descendant}"))
             .or_else(|| {
                 crossing_link_reason(
-                    &links,
+                    links,
                     "issue",
                     &issue.id,
                     &retained_issues,
@@ -1035,51 +729,51 @@ fn evidence_candidates(
     cutoff: NaiveDate,
     issue_candidates: &[CanonicalCandidate],
 ) -> Result<Vec<CanonicalCandidate>> {
-    let links = tracker.db.list_all_record_links()?;
+    let links = tracker.index.record_links();
     let issue_candidates = issue_candidates
         .iter()
         .filter(|candidate| candidate.eligible())
         .map(|candidate| candidate.id.clone())
         .collect::<BTreeSet<_>>();
     let retained_issues = tracker
-        .db
+        .index
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .map(|issue| issue.id)
         .filter(|id| !issue_candidates.contains(id))
         .collect::<BTreeSet<_>>();
-    let all_evidence = tracker.db.list_records("evidence", None)?;
+    let all_evidence = tracker.index.evidence_records();
     let old_evidence = all_evidence
         .iter()
-        .filter(|record| record.updated_at.date_naive() < cutoff)
-        .map(|record| record.id.clone())
+        .filter(|record| record.header.updated_at.date_naive() < cutoff)
+        .map(|record| record.header.id.clone())
         .collect::<BTreeSet<_>>();
     let retained_records = all_evidence
         .iter()
-        .filter(|record| !old_evidence.contains(&record.id))
-        .map(|record| ("evidence".to_string(), record.id.clone()))
+        .filter(|record| !old_evidence.contains(&record.header.id))
+        .map(|record| ("evidence".to_string(), record.header.id.clone()))
         .collect::<BTreeSet<_>>();
 
     let mut candidates = Vec::new();
     for record in all_evidence {
-        if !old_evidence.contains(&record.id) {
+        let header = &record.header;
+        if !old_evidence.contains(&header.id) {
             continue;
         }
-        let path = record_path(&record, "evidence");
         let protection = crossing_link_reason(
-            &links,
+            links,
             "evidence",
-            &record.id,
+            &header.id,
             &retained_issues,
             &retained_records,
         );
         candidates.push(CanonicalCandidate {
             kind: "evidence-record",
-            id: record.id.clone(),
-            title: record.title,
-            status: record.status,
-            path,
-            latest_at: record.updated_at,
+            id: header.id.clone(),
+            title: header.title.clone(),
+            status: header.status.clone(),
+            path: PathBuf::from("evidence").join(format!("{}.md", header.id)),
+            latest_at: header.updated_at,
             protection,
         });
     }
@@ -1087,22 +781,13 @@ fn evidence_candidates(
     Ok(candidates)
 }
 
-fn retained_record_ids(db: &Database, cutoff: NaiveDate) -> Result<BTreeSet<(String, String)>> {
-    let mut retained = BTreeSet::new();
-    for record in db.list_records("evidence", None)? {
-        if record.updated_at.date_naive() >= cutoff {
-            retained.insert((record.kind, record.id));
-        }
-    }
-    Ok(retained)
-}
-
-fn record_path(record: &RecordSummary, directory: &str) -> PathBuf {
-    if record.source_path.trim().is_empty() {
-        PathBuf::from(directory).join(format!("{}.md", record.id))
-    } else {
-        PathBuf::from(&record.source_path)
-    }
+fn retained_record_ids(index: &RecordIndex, cutoff: NaiveDate) -> BTreeSet<(String, String)> {
+    index
+        .evidence_records()
+        .into_iter()
+        .filter(|record| record.header.updated_at.date_naive() >= cutoff)
+        .map(|record| (record.header.kind.clone(), record.header.id.clone()))
+        .collect()
 }
 
 fn crossing_link_reason(
@@ -1241,104 +926,35 @@ fn remove_candidate(
     }
 }
 
-fn print_quiet_summary(
-    local: &LocalPruneSummary,
-    git: &GitPruneSummary,
-    canonical: &CanonicalPruneSummary,
-    apply: bool,
-) {
-    let eligible = local
+fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary, apply: bool) {
+    let eligible = git
         .candidates
         .iter()
         .filter(|candidate| candidate.protection.is_none())
         .count()
-        + git
-            .candidates
-            .iter()
-            .filter(|candidate| candidate.protection.is_none())
-            .count()
         + canonical
             .issues
             .iter()
             .chain(canonical.evidence.iter())
             .filter(|candidate| candidate.eligible())
             .count();
-    let protected = local
+    let protected = git
         .candidates
         .iter()
         .filter(|candidate| candidate.protection.is_some())
         .count()
-        + git
-            .candidates
-            .iter()
-            .filter(|candidate| candidate.protection.is_some())
-            .count()
         + canonical
             .issues
             .iter()
             .chain(canonical.evidence.iter())
             .filter(|candidate| !candidate.eligible())
             .count();
-    let removed = local.removed.len() + git.removed.len() + canonical.removed.len();
-    let failures = local.failures.len() + git.failures.len() + canonical.failures.len();
+    let removed = git.removed.len() + canonical.removed.len();
+    let failures = git.failures.len() + canonical.failures.len();
     println!(
         "mode={} eligible={eligible} protected={protected} removed={removed} failures={failures}",
         if apply { "apply" } else { "dry-run" }
     );
-}
-
-fn print_local(summary: &LocalPruneSummary, apply: bool) {
-    println!("Ignored Runtime, Cache, And Projection Artifacts");
-    println!("-----------------------------------------------");
-    if let Some(reason) = &summary.unavailable {
-        println!("Status:    unavailable - {reason}");
-        return;
-    }
-    if summary.candidates.is_empty() {
-        println!("Candidates: none");
-    } else {
-        println!("Candidates: {}", summary.candidates.len());
-        for candidate in &summary.candidates {
-            let removed = summary.removed.contains(&candidate.path);
-            if let Some(reason) = &candidate.protection {
-                println!(
-                    "  protected {} {} - {}",
-                    candidate.class,
-                    display_state_path(&candidate.path),
-                    reason
-                );
-            } else if removed {
-                println!(
-                    "  removed {} {}",
-                    candidate.class,
-                    display_state_path(&candidate.path)
-                );
-            } else if apply {
-                println!(
-                    "  failed {} {}",
-                    candidate.class,
-                    display_state_path(&candidate.path)
-                );
-            } else {
-                println!(
-                    "  eligible {} {}",
-                    candidate.class,
-                    display_state_path(&candidate.path)
-                );
-            }
-        }
-    }
-    if !summary.removed.is_empty() {
-        println!(
-            "Domain cache: local state changed; run `atelier check --fix` if cache health is stale"
-        );
-    }
-    if !summary.failures.is_empty() {
-        println!("Failures:");
-        for (path, error) in &summary.failures {
-            println!("  {} - {}", display_state_path(path), error);
-        }
-    }
 }
 
 fn print_git(summary: &GitPruneSummary, apply: bool) {
@@ -1386,10 +1002,6 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
     println!("-----------------");
     println!("Retention: {} day(s)", summary.retention_days);
     println!("Cutoff:    before {}", summary.cutoff);
-    if let Some(reason) = &summary.unavailable {
-        println!("Status:    unavailable - {reason}");
-        return;
-    }
 
     let total_candidates = summary.issues.len() + summary.evidence.len();
     if total_candidates == 0 {
@@ -1399,10 +1011,6 @@ fn print_canonical(summary: &CanonicalPruneSummary, apply: bool) {
         for candidate in summary.issues.iter().chain(summary.evidence.iter()) {
             print_canonical_candidate(candidate, apply, summary);
         }
-    }
-
-    if summary.rebuilt_cache {
-        println!("Domain cache: rebuilt after pruning record files");
     }
 
     if !summary.failures.is_empty() {

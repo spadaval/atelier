@@ -1,6 +1,5 @@
 #![allow(unused_variables)]
 
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -461,22 +460,9 @@ fn replace_issue_section(markdown: &str, heading: &str, replacement: &str) -> St
 fn write_ignored_canonical_artifacts(dir: &Path, issue_id: &str) {
     let runtime_dir = dir.join(".atelier/runtime");
     std::fs::create_dir_all(&runtime_dir).unwrap();
-    std::fs::write(
-        runtime_dir.join(".state.db.123.456.rebuild-tmp"),
-        "partial sqlite rebuild",
-    )
-    .unwrap();
-    std::fs::write(
-        runtime_dir.join(".state.db.123.456.rebuild-tmp-journal"),
-        "partial sqlite rebuild journal",
-    )
-    .unwrap();
-    let cache_dir = dir.join(".atelier/cache");
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::write(cache_dir.join("cache.lock"), "cache lock").unwrap();
+    std::fs::write(runtime_dir.join(".canonical-mutation.lock"), "").unwrap();
     let issue_dir = dir.join(".atelier/issues");
     std::fs::write(issue_dir.join(format!("{issue_id}.md.lock")), "lock").unwrap();
-    std::fs::write(issue_dir.join(format!("{issue_id}.md-journal")), "journal").unwrap();
     std::fs::write(
         issue_dir.join(format!(".{issue_id}.md.123.456.tmp")),
         "partial canonical write",
@@ -488,10 +474,6 @@ fn corrupt_issue_title_yaml(dir: &Path, issue_id: &str, title: &str) {
     edit_canonical_issue(dir, issue_id, |markdown| {
         markdown.replace(&format!("title: {title:?}"), &format!("title: [{title}"))
     });
-}
-
-fn remove_cache_state(dir: &Path) {
-    std::fs::remove_file(dir.join(".atelier/runtime/state.db")).unwrap();
 }
 
 fn canonical_evidence_front_matter(dir: &Path, evidence_id: &str) -> serde_json::Value {
@@ -627,12 +609,6 @@ fn attach_evidence(
             )
         }
     });
-    let rebuild = run_atelier_raw(dir, &["rebuild"]);
-    assert!(
-        rebuild.0,
-        "test fixture cache rebuild failed after evidence result edit: {}",
-        rebuild.2
-    );
     evidence_id
 }
 
@@ -818,8 +794,8 @@ fn is_record_id(value: &str) -> bool {
 
 #[path = "cli_integration/issues.rs"]
 mod issues;
-#[path = "cli_integration/mission_cache_worktree.rs"]
-mod mission_cache_worktree;
+#[path = "cli_integration/mission_worktree.rs"]
+mod mission_worktree;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
 #[path = "cli_integration/setup_guidance.rs"]

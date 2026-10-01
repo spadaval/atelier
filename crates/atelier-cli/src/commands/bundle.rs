@@ -5,33 +5,28 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use atelier_app::record_index::RecordIndex;
 use atelier_core::{EvidenceRecordData, Issue, Record};
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
-use atelier_sqlite::{
-    validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
+use atelier_records::{
+    validate_issue_type, validate_priority, validate_record_kind, validate_status,
 };
+use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
-pub fn preview(db: &Database, input: &str) -> Result<()> {
+pub fn preview(index: &RecordIndex, input: &str) -> Result<()> {
     let bundle = load_bundle(input)?;
-    validate_bundle(db, &bundle)?;
-    let plan = BundleGraphPlan::from_bundle(db, &bundle)?;
+    validate_bundle(index, &bundle)?;
+    let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
     print_bundle_summary(preview_bundle_summary(&bundle, &plan))
 }
 
-pub fn apply(
-    db: &Database,
-    state_dir: &Path,
-    _db_path: &Path,
-    input: &str,
-    yes: bool,
-) -> Result<()> {
+pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> Result<()> {
     if !yes {
         bail!("bundle apply requires --yes");
     }
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
     let bundle = load_bundle(input)?;
-    validate_bundle(db, &bundle)?;
-    let plan = BundleGraphPlan::from_bundle(db, &bundle)?;
+    validate_bundle(index, &bundle)?;
+    let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
 
     let summary = apply_bundle_file(state_dir, &bundle, &plan)?;
     print_bundle_summary(summary)
@@ -182,7 +177,7 @@ struct BundleGraphPlan<'a> {
 }
 
 impl<'a> BundleGraphPlan<'a> {
-    fn from_bundle(db: &Database, bundle: &'a BundleFile) -> Result<Self> {
+    fn from_bundle(index: &RecordIndex, bundle: &'a BundleFile) -> Result<Self> {
         let mut issues = bundle.resources.issues.iter().collect::<Vec<_>>();
         issues.sort_by(|left, right| left.client_ref.cmp(&right.client_ref));
         let mut evidence = bundle.resources.evidence.iter().collect::<Vec<_>>();
@@ -202,7 +197,7 @@ impl<'a> BundleGraphPlan<'a> {
                 insert_planned_relationship(
                     &mut relationships,
                     PlannedRelationship {
-                        source: planned_bundle_ref(db, bundle, parent)?,
+                        source: planned_bundle_ref(index, bundle, parent)?,
                         target: issue_ref.clone(),
                         role: "parent".to_string(),
                     },
@@ -212,7 +207,7 @@ impl<'a> BundleGraphPlan<'a> {
                 insert_planned_relationship(
                     &mut relationships,
                     PlannedRelationship {
-                        source: planned_bundle_ref(db, bundle, blocker)?,
+                        source: planned_bundle_ref(index, bundle, blocker)?,
                         target: issue_ref.clone(),
                         role: "blocks".to_string(),
                     },
@@ -223,7 +218,7 @@ impl<'a> BundleGraphPlan<'a> {
                     &mut relationships,
                     PlannedRelationship {
                         source: issue_ref.clone(),
-                        target: planned_bundle_ref(db, bundle, blocked)?,
+                        target: planned_bundle_ref(index, bundle, blocked)?,
                         role: "blocks".to_string(),
                     },
                 )?;
@@ -233,7 +228,7 @@ impl<'a> BundleGraphPlan<'a> {
                     &mut relationships,
                     PlannedRelationship {
                         source: issue_ref.clone(),
-                        target: planned_bundle_ref(db, bundle, target)?,
+                        target: planned_bundle_ref(index, bundle, target)?,
                         role: "advances".to_string(),
                     },
                 )?;
@@ -246,7 +241,7 @@ impl<'a> BundleGraphPlan<'a> {
                     &mut relationships,
                     PlannedRelationship {
                         source: source.clone(),
-                        target: planned_bundle_ref(db, bundle, target)?,
+                        target: planned_bundle_ref(index, bundle, target)?,
                         role: "validates".to_string(),
                     },
                 )?;
@@ -277,7 +272,7 @@ fn insert_planned_relationship(
     Ok(())
 }
 
-fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
+fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
     if bundle.schema != "atelier.bundle" {
         bail!("Invalid bundle schema '{}'", bundle.schema);
     }
@@ -318,10 +313,10 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         if let Some(status) = &issue.status {
             validate_bundle_issue_status(&issue.issue_type, status)?;
         }
-        validate_refs_exist(db, bundle, issue.parent.iter(), &issue.client_ref)?;
-        validate_refs_exist(db, bundle, issue.depends_on.iter(), &issue.client_ref)?;
-        validate_refs_exist(db, bundle, issue.blocks.iter(), &issue.client_ref)?;
-        validate_refs_exist(db, bundle, issue.advances.iter(), &issue.client_ref)?;
+        validate_refs_exist(index, bundle, issue.parent.iter(), &issue.client_ref)?;
+        validate_refs_exist(index, bundle, issue.depends_on.iter(), &issue.client_ref)?;
+        validate_refs_exist(index, bundle, issue.blocks.iter(), &issue.client_ref)?;
+        validate_refs_exist(index, bundle, issue.advances.iter(), &issue.client_ref)?;
     }
     for evidence in &bundle.resources.evidence {
         validate_operation(evidence.operation.as_deref(), &evidence.client_ref)?;
@@ -351,13 +346,18 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
                 evidence.client_ref
             );
         }
-        validate_refs_exist(db, bundle, evidence.validates.iter(), &evidence.client_ref)?;
+        validate_refs_exist(
+            index,
+            bundle,
+            evidence.validates.iter(),
+            &evidence.client_ref,
+        )?;
     }
-    validate_bundle_hierarchy(db, bundle)?;
+    validate_bundle_hierarchy(index, bundle)?;
     Ok(())
 }
 
-fn validate_bundle_hierarchy(db: &Database, bundle: &BundleFile) -> Result<()> {
+fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
     for issue in &bundle.resources.issues {
         if issue.issue_type == "mission" {
             if issue.parent.is_some() {
@@ -376,12 +376,13 @@ fn validate_bundle_hierarchy(db: &Database, bundle: &BundleFile) -> Result<()> {
             }
         }
         if let Some(parent) = &issue.parent {
-            let parent_type = bundle_issue_type_for_ref(db, bundle, parent)?.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Issue parent for {} must resolve to an issue",
-                    issue.client_ref
-                )
-            })?;
+            let parent_type =
+                bundle_issue_type_for_ref(index, bundle, parent)?.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Issue parent for {} must resolve to an issue",
+                        issue.client_ref
+                    )
+                })?;
             if parent_type != "epic" {
                 bail!(
                     "Issue {} cannot be child of {} parent; only epics can own child work",
@@ -402,7 +403,7 @@ fn validate_bundle_hierarchy(db: &Database, bundle: &BundleFile) -> Result<()> {
 }
 
 fn bundle_issue_type_for_ref(
-    db: &Database,
+    index: &RecordIndex,
     bundle: &BundleFile,
     reference: &BundleRef,
 ) -> Result<Option<String>> {
@@ -418,7 +419,7 @@ fn bundle_issue_type_for_ref(
         return Ok(None);
     }
     if let Some(id) = &reference.id {
-        return Ok(db.get_issue(id)?.map(|issue| issue.issue_type));
+        return Ok(index.get_issue(id).map(|issue| issue.issue_type));
     }
     Ok(None)
 }
@@ -502,7 +503,7 @@ fn apply_bundle_file(
         fs::create_dir_all(stage.join("evidence"))?;
         crate::commands::bulk_canonical::test_pause_after_snapshot()?;
         let summary = apply_bundle_to_state(&stage, bundle, plan)?;
-        atelier_app::rebuild::validate_canonical_state(&stage).map_err(|error| {
+        RecordIndex::load(&stage).map_err(|error| {
             anyhow::anyhow!(
                 "Bundle apply rejected the staged canonical state: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
             )
@@ -744,7 +745,7 @@ fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
     {
         let entry = entry?;
         let name = entry.file_name();
-        if matches!(name.to_str(), Some("runtime" | "cache" | "locks")) {
+        if name == "runtime" {
             continue;
         }
         let source_path = entry.path();
@@ -992,19 +993,19 @@ fn validate_client_ref(client_ref: &str) -> Result<()> {
 }
 
 fn validate_refs_exist<'a>(
-    db: &Database,
+    index: &RecordIndex,
     bundle: &BundleFile,
     refs: impl Iterator<Item = &'a BundleRef>,
     owner: &str,
 ) -> Result<()> {
     for reference in refs {
-        validate_ref_exists(db, bundle, reference, owner)?;
+        validate_ref_exists(index, bundle, reference, owner)?;
     }
     Ok(())
 }
 
 fn validate_ref_exists(
-    db: &Database,
+    index: &RecordIndex,
     bundle: &BundleFile,
     reference: &BundleRef,
     owner: &str,
@@ -1020,7 +1021,7 @@ fn validate_ref_exists(
             }
         }
         (None, Some(id)) => {
-            resolve_existing_ref(db, id)
+            resolve_existing_ref(index, id)
                 .with_context(|| format!("Reference id '{}' for {} does not resolve", id, owner))?;
         }
         _ => bail!(
@@ -1031,20 +1032,18 @@ fn validate_ref_exists(
     Ok(())
 }
 
-fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
-    if let Some(issue_id) = db.resolve_issue_ref(id)? {
+fn resolve_existing_ref(index: &RecordIndex, id: &str) -> Result<ResolvedRef> {
+    if let Some(issue_id) = index.resolve_issue_ref(id)? {
         return Ok(ResolvedRef {
             kind: "issue".to_string(),
             id: issue_id,
         });
     }
-    for kind in ["evidence", "workflow_validator"] {
-        if db.get_record(kind, id)?.is_some() {
-            return Ok(ResolvedRef {
-                kind: kind.to_string(),
-                id: id.to_string(),
-            });
-        }
+    if index.evidence(id).is_some() {
+        return Ok(ResolvedRef {
+            kind: "evidence".to_string(),
+            id: id.to_string(),
+        });
     }
     bail!("Record id '{}' not found", id)
 }
@@ -1060,14 +1059,14 @@ fn planned_client_ref(bundle: &BundleFile, client_ref: &str) -> Result<PlannedRe
 }
 
 fn planned_bundle_ref(
-    db: &Database,
+    index: &RecordIndex,
     bundle: &BundleFile,
     reference: &BundleRef,
 ) -> Result<PlannedRef> {
     match (&reference.client_ref, &reference.id) {
         (Some(client_ref), None) => planned_client_ref(bundle, client_ref),
         (None, Some(id)) => {
-            let resolved = resolve_existing_ref(db, id)?;
+            let resolved = resolve_existing_ref(index, id)?;
             Ok(PlannedRef {
                 kind: resolved.kind,
                 reference: PlannedReference::Id(resolved.id),

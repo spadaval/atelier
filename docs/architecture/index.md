@@ -1,7 +1,7 @@
 # Architecture
 
 This map covers implementation architecture for Atelier's target layered Cargo
-workspace: crate ownership, persistence boundaries, local domain-cache state, and
+workspace: crate ownership, persistence boundaries, local runtime state, and
 inherited Chainlink structure being migrated out of the root package. Product
 behavior lives in [Product](../product/index.md), product direction lives in
 [PRODUCT_INTENT.md](../../PRODUCT_INTENT.md), domain language lives in
@@ -13,30 +13,25 @@ behavior lives in [Product](../product/index.md), product direction lives in
 Atelier is migrating to a virtual-root Cargo workspace:
 
 - [Source Layout](source-layout.md): the target crate map for
-  `atelier-core`, `atelier-workflow`, `atelier-records`, `atelier-sqlite`,
-  `atelier-app`, and `atelier-cli`, plus the migration map from the current
-  root package.
-- [SQLite Domain Cache Schema](sqlite-runtime-schema.md): selected
-  domain-shaped cache read models, shared rebuild/repair indexing, and the
-  exclusion of generic record mirrors and non-project-state tables.
+  `atelier-core`, `atelier-workflow`, `atelier-records`, `atelier-app`, and
+  `atelier-cli`, plus the migration map from the current root package.
 - `crates/atelier-cli`: owns the `atelier` binary, Clap parser, terminal
   rendering, dispatch telemetry, and exit-code mapping.
-- `crates/atelier-app`: owns use-case orchestration through request, outcome,
-  and view-model APIs that the CLI renders.
-- `crates/atelier-sqlite`: owns rebuildable SQLite domain-cache schema/query
-  code.
+- `crates/atelier-app`: owns the in-memory record index that every command
+  loads from the record files, and use-case orchestration through request,
+  outcome, and view-model APIs that the CLI renders.
 - `crates/atelier-records`, `crates/atelier-workflow`, and
   `crates/atelier-core`: own record-file storage, workflow policy, and
   pure domain types.
-- `crates/atelier-cli/tests` and `fuzz/`: migrate toward the crate that owns
+- `crates/atelier-cli/tests`: migrate toward the crate that owns
   the invariant under test while preserving CLI integration coverage for
   terminal behavior.
 
 See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.
 See [Markdown-First Record Store](markdown-first-record-store.md) for the
-record-file, domain-object, and lazy SQLite-cache boundaries that govern durable
-Markdown writes and local-only diagnostics/cache data.
+record-file and domain-object boundaries that govern durable Markdown writes
+(its SQLite-cache sections are superseded by ADR 0019).
 See [Retention And Prune Policy](../product/retention-and-prune.md) for
 user-visible cleanup classes, protection rules, Git-history recovery, and
 explicit apply semantics.
@@ -56,7 +51,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0013: Workflow Transition Actions And Branching](../adr/0013-workflow-transition-actions-and-branching.md)
 - [ADR 0014: Status Role Attribution Replaces Sessions](../adr/0014-status-role-attribution-replaces-sessions.md)
 - [ADR 0015: Missions Are Declared Workflow Policy](../adr/0015-missions-are-declared-workflow-policy.md)
-- [ADR 0017: SQLite Domain Cache And Hard Removal](../adr/0017-sqlite-domain-cache-and-hard-removal.md)
+- [ADR 0019: Verified Repo-Native Tracker](../adr/0019-verified-repo-native-tracker.md)
 - [ADR 0018: Strategy, Draft Epics, And Adaptive Expansion](../adr/0018-strategy-draft-epics-and-adaptive-expansion.md)
 
 ## Target Architecture
@@ -66,21 +61,18 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 
 - `.atelier/` is the single project state root. It contains deterministic,
   mergeable Markdown records and tracked project config.
-- `.atelier/runtime/` and `.atelier/cache/` are ignored local locations for
-  locks, diagnostics, and UI caches. The SQLite domain cache stores only
-  selected query facts and is rebuilt from durable record files.
+- `.atelier/runtime/` is the ignored local location for the canonical mutation
+  lock. There is no cache: every command parses the record files it needs
+  into an in-memory index.
 - Command diagnostics are local-only telemetry outside record-file directories
   and do not create exported run/session records until a later contract
   explicitly opts in.
-- Mutating commands write durable record files through `RecordStore` and
-  invalidate affected cache facts; `CacheManager` repairs them lazily before a
-  cache-backed query.
+- Mutating commands write durable record files through `RecordStore`; the next
+  command reads them directly.
 - The root package is being deleted in favor of a virtual workspace root; all
   executable ownership moves to `crates/atelier-cli`.
-- `check` detects stale, invalid, or missing tracker state through
-  operator-facing health checks.
-- `check --fix` repairs ignored local cache state from committed record files
-  when it is safe to do so.
+- `check` reports every invalid record file and record-graph error; other
+  commands fail on the first invalid record file, naming it.
 - First-class concepts include missions, issues, evidence, typed links,
   workflows, workflow validators, status roles, review artifacts, and deferred run metadata; their
   user-visible behavior is defined in [Product](../product/index.md).
@@ -94,16 +86,14 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 
 - CLI parsing should stay thin and delegate behavior to command and domain
   modules.
-- Database code owns cache schema, transaction boundaries, and persistence
-  invariants for domain-cache tables.
 - RecordStore code must own deterministic record-file serialization and
   record-local validation.
-- SQLite cache code must own rebuild, reindex, query freshness, and stale-cache
-  detection.
+- The record index owns record-graph integrity checks (resolvable references,
+  hierarchy shape, acyclic graphs) applied on every load.
 - Workflow validator evaluation should be implemented in `atelier-workflow` and
   produce machine-readable results suitable for app orchestration, product
   workflow surfaces, and Mission Control.
-- Mission Control TUI code should consume only documented cache fields and keep
+- Mission Control TUI code should consume only documented projection fields and keep
   CLI commands plus durable record files as the primary agent interface.
 - Human CLI rendering should keep record-file/domain loading separate from
   display text.
@@ -114,7 +104,4 @@ principles, using the vocabulary in [CONTEXT.md](../../CONTEXT.md):
 
 - Some inherited Chainlink concepts and module boundaries can still obscure
   Atelier target-state work.
-- Backup-style export/import can be mistaken for record-file/cache rebuild.
-- SQLite state must not become the only durable source once tracked record files
-  exist.
 - Process features must stay risk-scaled and configurable to avoid red tape.

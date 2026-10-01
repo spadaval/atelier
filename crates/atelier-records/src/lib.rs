@@ -27,6 +27,8 @@ mod record_id;
 mod record_kinds;
 mod relationships;
 
+pub use record_id::validate_record_id;
+
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
     validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
@@ -1358,39 +1360,17 @@ fn collect_record_paths(
     Ok(())
 }
 
-fn is_local_atelier_path(relative_path: &Path) -> bool {
-    if is_local_artifact_path(relative_path) {
-        return true;
-    }
-
-    let Some(first) = relative_path.components().next() else {
-        return false;
-    };
-    let first = first.as_os_str();
-    first == ".cache"
-        || first == "runtime"
-        || first == "cache"
+/// Whether a path under the state directory is machine-local (runtime state,
+/// identity, local config, temporary or lock files) rather than a record.
+pub fn is_local_atelier_path(relative_path: &Path) -> bool {
+    let local_file = relative_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".tmp") || name.ends_with(".lock"));
+    local_file
+        || relative_path.starts_with("runtime")
         || relative_path == Path::new("config.toml")
-        || relative_path == Path::new("state.db")
         || relative_path == Path::new("agent.json")
-}
-
-fn is_local_artifact_path(relative_path: &Path) -> bool {
-    let Some(file_name) = relative_path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-
-    file_name.starts_with(".state.db.")
-        && (file_name.ends_with(".rebuild-tmp")
-            || file_name.ends_with(".rebuild-tmp-shm")
-            || file_name.ends_with(".rebuild-tmp-wal")
-            || file_name.ends_with(".rebuild-tmp-journal"))
-        || file_name.ends_with(".tmp")
-        || file_name.ends_with(".lock")
-        || file_name.ends_with(".journal")
-        || file_name.ends_with("-journal")
-        || file_name.ends_with("-wal")
-        || file_name.ends_with("-shm")
 }
 
 fn split_front_matter<'a>(

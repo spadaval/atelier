@@ -331,50 +331,6 @@ fn test_unicode_mixed_scripts() {
 // Corruption Recovery
 // ============================================================================
 
-#[cfg(unix)]
-#[test]
-fn test_corrupt_db_permissions() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let h = SmokeHarness::new();
-    let perms = std::fs::Permissions::from_mode(0o444);
-    std::fs::set_permissions(h.db_path(), perms).unwrap();
-
-    if std::fs::OpenOptions::new()
-        .write(true)
-        .open(h.db_path())
-        .is_ok()
-    {
-        let perms = std::fs::Permissions::from_mode(0o644);
-        std::fs::set_permissions(h.db_path(), perms).unwrap();
-        return;
-    }
-
-    let result = h.run(&["issue", "create", "Should fail"]);
-    assert!(
-        !result.success,
-        "Expected failure when DB is read-only, but command succeeded.\nstdout: {}\nstderr: {}",
-        result.stdout, result.stderr
-    );
-
-    let perms = std::fs::Permissions::from_mode(0o644);
-    std::fs::set_permissions(h.db_path(), perms).unwrap();
-}
-
-#[test]
-fn test_corrupt_missing_db() {
-    let h = SmokeHarness::new();
-    std::fs::remove_file(h.db_path()).unwrap();
-
-    let result = h.run(&["work", "queue"]);
-    // Whether it succeeds (recreates DB) or fails (reports missing DB),
-    // it should not panic.
-    if result.success {
-        let list = h.run_ok(&["work", "queue", "--all"]);
-        assert!(list.success);
-    }
-}
-
 // ============================================================================
 // Concurrency (inline — small test)
 // ============================================================================

@@ -1,8 +1,8 @@
 use anyhow::{bail, Context, Result};
 use atelier_core::{Issue, RecordLink};
-use atelier_sqlite::Database;
 use std::collections::{BTreeSet, HashSet};
 
+use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -17,19 +17,18 @@ pub struct DependencyReadinessBatch {
     pub nodes_evaluated: usize,
 }
 
-/// Evaluate dependency readiness for many objectives from one cache snapshot.
+/// Evaluate dependency readiness for many objectives from one record index.
 /// Shared dependency tails are memoized, so each graph node is evaluated at
 /// most once for a request.
 pub fn dependency_readiness_batch(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     issue_ids: impl IntoIterator<Item = String>,
 ) -> Result<DependencyReadinessBatch> {
     use std::collections::{BTreeMap, BTreeSet};
 
-    let issues = db.list_issues(Some("all"), None, None)?;
-    let terminal = issues
-        .iter()
+    let terminal = index
+        .issues()
         .map(|issue| {
             Ok((
                 issue.id.clone(),
@@ -37,16 +36,10 @@ pub fn dependency_readiness_batch(
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
-    let mut blockers = BTreeMap::<String, Vec<String>>::new();
-    for (blocked, blocker) in db.list_issue_dependencies()? {
-        if !terminal.contains_key(&blocked) {
-            bail!("dependency closure references missing issue {blocked}");
-        }
-        if !terminal.contains_key(&blocker) {
-            bail!("dependency path references missing issue {blocker}");
-        }
-        blockers.entry(blocked).or_default().push(blocker);
-    }
+    let blockers = terminal
+        .keys()
+        .map(|id| (id.clone(), index.get_blockers(id)))
+        .collect::<BTreeMap<_, _>>();
 
     fn visit(
         id: &str,
@@ -143,50 +136,19 @@ impl DependencyClosure {
 }
 
 pub fn dependency_closure(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     issue_id: &str,
 ) -> Result<DependencyClosure> {
-    db.require_issue(issue_id)?;
+    index.require_issue(issue_id)?;
     evaluate_dependency_closure(
         issue_id,
-        |id| db.get_blockers(id),
+        |id| Ok(index.get_blockers(id)),
         |id| {
-            let issue = db
-                .require_issue(id)
+            let issue = index
+                .issue_record(id)
                 .with_context(|| format!("dependency path references missing issue {id}"))?;
-            policy.issue_status_is_terminal(&issue.issue_type, &issue.status)
-        },
-    )
-}
-
-pub fn dependency_closure_from_canonical(
-    policy: &WorkflowPolicy,
-    issues: &[Issue],
-    dependency_edges: &[(String, String)],
-    issue_id: &str,
-) -> Result<DependencyClosure> {
-    let by_id = issues
-        .iter()
-        .map(|issue| (issue.id.as_str(), issue))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    if !by_id.contains_key(issue_id) {
-        bail!("dependency closure references missing issue {issue_id}");
-    }
-    evaluate_dependency_closure(
-        issue_id,
-        |blocked_id| {
-            Ok(dependency_edges
-                .iter()
-                .filter(|(blocked, _)| blocked == blocked_id)
-                .map(|(_, blocker)| blocker.clone())
-                .collect())
-        },
-        |id| {
-            let issue = by_id
-                .get(id)
-                .ok_or_else(|| anyhow::anyhow!("dependency path references missing issue {id}"))?;
-            policy.issue_status_is_terminal(&issue.issue_type, &issue.status)
+            policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)
         },
     )
 }
@@ -254,15 +216,15 @@ fn format_dependency_paths(paths: &[Vec<String>]) -> String {
         .join(", ")
 }
 
-pub fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    mission_objective_kind(db, mission_id)?;
-    issue_descendant_ids(db, mission_id)
+pub fn mission_issue_ids(index: &RecordIndex, mission_id: &str) -> Result<BTreeSet<String>> {
+    mission_objective_kind(index, mission_id)?;
+    issue_descendant_ids(index, mission_id)
 }
 
-pub fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<&'static str> {
-    if db
-        .get_issue(mission_id)?
-        .is_some_and(|issue| issue.issue_type == "mission")
+pub fn mission_objective_kind(index: &RecordIndex, mission_id: &str) -> Result<&'static str> {
+    if index
+        .issue_record(mission_id)
+        .is_some_and(|record| record.issue.issue_type == "mission")
     {
         Ok("issue")
     } else {
@@ -270,18 +232,18 @@ pub fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<&'stati
     }
 }
 
-pub fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTreeSet<String>> {
+pub fn issue_descendant_ids(index: &RecordIndex, issue_id: &str) -> Result<BTreeSet<String>> {
     let mut issue_ids = BTreeSet::new();
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
+    for child_id in index.child_ids(issue_id) {
+        collect_issue_and_descendants(index, child_id, &mut issue_ids)?;
     }
-    let follows_advances = db
-        .get_issue(issue_id)?
-        .is_some_and(|issue| issue.issue_type == "mission");
+    let follows_advances = index
+        .issue_record(issue_id)
+        .is_some_and(|record| record.issue.issue_type == "mission");
     if !follows_advances {
         return Ok(issue_ids);
     }
-    for relation in db.get_typed_relations(issue_id)? {
+    for relation in index.get_typed_relations(issue_id) {
         if relation.relation_type != "advances" {
             continue;
         }
@@ -290,14 +252,14 @@ pub fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTreeSet<St
         } else {
             relation.issue_id_1
         };
-        collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
+        collect_issue_and_descendants(index, &linked_id, &mut issue_ids)?;
     }
     Ok(issue_ids)
 }
 
-pub fn direct_blocker_ids(db: &Database, kind: &str, id: &str) -> Result<Vec<String>> {
+pub fn direct_blocker_ids(index: &RecordIndex, kind: &str, id: &str) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
-    for link in db.list_record_links(kind, id)? {
+    for link in index.list_record_links(kind, id)? {
         if link.relation_type != "blocked_by" {
             continue;
         }
@@ -312,13 +274,13 @@ pub fn direct_blocker_ids(db: &Database, kind: &str, id: &str) -> Result<Vec<Str
 }
 
 pub fn open_issue_blockers(
-    db: &Database,
+    index: &RecordIndex,
     issue_id: &str,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
-    for blocker_id in db.get_blockers(issue_id)? {
-        if issue_blocks_work(workflow_policy, &db.require_issue(&blocker_id)?) {
+    for blocker_id in index.get_blockers(issue_id) {
+        if issue_blocks_work(workflow_policy, &index.require_issue(&blocker_id)?) {
             blockers.push(blocker_id);
         }
     }
@@ -327,22 +289,22 @@ pub fn open_issue_blockers(
 }
 
 pub fn open_objective_blockers(
-    db: &Database,
+    index: &RecordIndex,
     objective_kind: &str,
     objective_id: &str,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<Vec<String>> {
-    let mut blocker_ids = direct_blocker_ids(db, objective_kind, objective_id)?
+    let mut blocker_ids = direct_blocker_ids(index, objective_kind, objective_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    for issue_id in mission_issue_ids(db, objective_id)? {
-        for blocker_id in db.get_blockers(&issue_id)? {
+    for issue_id in mission_issue_ids(index, objective_id)? {
+        for blocker_id in index.get_blockers(&issue_id) {
             blocker_ids.insert(blocker_id);
         }
     }
     let mut open = blocker_ids
         .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter_map(|id| index.get_issue(&id))
         .filter(|issue| issue_blocks_work(workflow_policy, issue))
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
@@ -355,15 +317,15 @@ pub fn issue_blocks_work(workflow_policy: Option<&WorkflowPolicy>, issue: &Issue
 }
 
 fn collect_issue_and_descendants(
-    db: &Database,
+    index: &RecordIndex,
     issue_id: &str,
     issue_ids: &mut BTreeSet<String>,
 ) -> Result<()> {
     if !issue_ids.insert(issue_id.to_string()) {
         return Ok(());
     }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
+    for child_id in index.child_ids(issue_id) {
+        collect_issue_and_descendants(index, child_id, issue_ids)?;
     }
     Ok(())
 }
@@ -381,13 +343,11 @@ fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_records::Records;
     use crate::workflow_policy::{
         BranchLifecycleConfig, StatusDefinition, WorkflowDefinition, WorkflowPolicy,
     };
-    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
-    use chrono::Utc;
     use std::collections::{BTreeMap, BTreeSet};
-    use tempfile::tempdir;
 
     fn batch_policy() -> WorkflowPolicy {
         let statuses = BTreeMap::from([
@@ -420,37 +380,6 @@ mod tests {
                 },
             )]),
         }
-    }
-
-    fn index_batch_issue(db: &Database, id: &str, status: &str) {
-        let now = Utc::now();
-        db.index_issue(
-            &IssueCacheRow {
-                id: id.to_string(),
-                title: id.to_string(),
-                status: status.to_string(),
-                issue_type: "task".to_string(),
-                priority: "medium".to_string(),
-                fields: BTreeMap::new(),
-                parent_id: None,
-                created_at: now,
-                updated_at: now,
-                closed_at: None,
-            },
-            &[],
-            &[],
-            &[],
-            &RecordSourceCacheRow {
-                path: format!("issues/{id}.md"),
-                record_kind: "issue".to_string(),
-                record_id: id.to_string(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: now,
-            },
-        )
-        .unwrap();
     }
 
     #[test]
@@ -531,22 +460,22 @@ mod tests {
 
     #[test]
     fn batch_dependency_readiness_memoizes_shared_graph_for_large_candidate_set() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        let mut records = Records::default();
         let policy = batch_policy();
-        index_batch_issue(&db, "atelier-shared", "done");
+        records.issue("atelier-shared", "task", "done");
         let candidates = (0..600)
             .map(|index| format!("atelier-c{index:04}"))
             .collect::<Vec<_>>();
         for id in &candidates {
-            index_batch_issue(&db, id, "todo");
-            db.add_dependency(id, "atelier-shared").unwrap();
+            records.issue(id, "task", "todo");
+            records.block(id, "atelier-shared");
         }
         for index in 0..400 {
-            index_batch_issue(&db, &format!("atelier-u{index:04}"), "todo");
+            records.issue(&format!("atelier-u{index:04}"), "task", "todo");
         }
 
-        let batch = dependency_readiness_batch(&db, &policy, candidates.clone()).unwrap();
+        let batch =
+            dependency_readiness_batch(&records.index(), &policy, candidates.clone()).unwrap();
 
         assert_eq!(batch.ready_by_issue.len(), 600);
         assert!(batch.ready_by_issue.values().all(|ready| *ready));

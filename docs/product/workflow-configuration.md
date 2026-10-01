@@ -20,10 +20,10 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, branch naming, required transition fields, provider secret values, local runtime paths or contents, domain-cache data, diagnostics, locks, or other caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, and static descriptions. | Side effects of any kind, provider host/owner/repo/token settings, local path overrides, domain-cache content, or hidden defaults. |
-| `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, domain-cache data, diagnostics, locks, or other caches. |
-| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, the rebuilt SQLite domain cache, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for provider credentials. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, branch naming, required transition fields, provider secret values, local runtime paths or contents, diagnostics, or locks. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, and static descriptions. | Side effects of any kind, provider host/owner/repo/token settings, local path overrides, or hidden defaults. |
+| `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, diagnostics, or locks. |
+| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` (the canonical mutation lock), local diagnostics, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime state must be disposable, and environment variables must not be required for provider credentials. |
 
 Custom issue links belong to `.atelier/config.toml` because they are project
 vocabulary, not workflow behavior:
@@ -367,9 +367,8 @@ flat validator names, and invalid params are hard config errors.
 Validators must be read-only. They may inspect canonical records, worktree
 state, evidence, and blockers, but they must not write records, create commits,
 or change branches. There are no transition actions.
-Domain-cache freshness is an internal command-storage health concern repaired
-by normal commands or explicit diagnostics; it is not a user-configurable
-workflow validator.
+Record-file validity is checked whenever a command loads the records; it is
+not a user-configurable workflow validator.
 
 The built-in validators are:
 
@@ -424,10 +423,9 @@ events:
     body: "Fix the failing path"
 ```
 
-The current room status is derived from metadata plus ordered events. The
-SQLite domain cache may index open findings, approvals, stale approvals,
-and merge state, but record files must not store a second mutable summary that can
-drift from the event timeline.
+The current room status is derived from metadata plus ordered events. Record
+files must not store a second mutable summary that can drift from the event
+timeline.
 
 Provider-mode `review open --existing` inputs may accept a review number or a
 full provider URL, but canonical issue records store only the normalized

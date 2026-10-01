@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
-use atelier_app::cache_manager::state_and_db_paths;
-use atelier_app::use_cases;
+use atelier_app::use_cases::load_repository;
 use atelier_core::IssuePriority;
 
 use crate::commands;
@@ -95,9 +94,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             issue_type,
             parent,
         } => {
-            let cache = use_cases::mutation_cache()?;
-            drop(cache);
-            let (state_dir, db_path) = state_and_db_paths()?;
+            let (state_dir, index) = load_repository()?;
             let (final_priority, final_description, final_body, labels, issue_type) =
                 issue_create_parts(
                     &priority,
@@ -108,8 +105,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     issue_type.as_deref(),
                 )?;
             commands::issue::create_lifecycle(
+                &index,
                 &state_dir,
-                &db_path,
                 commands::issue::LifecycleCreateInput {
                     title: &title,
                     description: final_description.as_deref(),
@@ -127,8 +124,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Show { id } => {
-            let cache = use_cases::issue_detail_cache()?;
-            commands::issue::show(cache.db(), &id)
+            let (_, index) = load_repository()?;
+            commands::issue::show(&index, &id)
         }
 
         super::IssueCommands::List {
@@ -139,9 +136,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             priority,
             limit,
         } => {
-            let cache = use_cases::issue_query_cache()?;
+            let (_, index) = load_repository()?;
             commands::issue::list_inventory(
-                cache.db(),
+                &index,
                 &status,
                 category.as_deref(),
                 issue_type.as_deref(),
@@ -158,18 +155,17 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             close_reason,
             verbose,
         } => {
+            let (state_dir, index) = load_repository()?;
             if let Some(transition) = transition {
-                let cache = use_cases::mutation_cache()?;
                 commands::workflow::transition_issue(
-                    cache.db(),
-                    &cache.state_dir(),
+                    &index,
+                    &state_dir,
                     &id,
                     &transition,
                     close_reason.as_deref(),
                 )
             } else {
-                let cache = use_cases::issue_query_cache()?;
-                commands::issue::transition_options(cache.db(), &id, verbose)
+                commands::issue::transition_options(&index, &id, verbose)
             }
         }
 
@@ -188,9 +184,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             parent,
             no_parent,
         } => {
-            let cache = use_cases::mutation_cache()?;
-            drop(cache);
-            let (state_dir, db_path) = state_and_db_paths()?;
             if status.is_some() {
                 bail!(
                     "issue status changes use `atelier issue transition <issue-id> <transition>`"
@@ -203,9 +196,10 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             {
                 bail!("mission section flags are not supported for issue records");
             }
+            let (state_dir, index) = load_repository()?;
             commands::issue::update_lifecycle(
+                &index,
                 &state_dir,
-                &db_path,
                 commands::issue::UpdateInput {
                     issue_ref: &id,
                     title: title.as_deref(),
@@ -223,25 +217,19 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         }
 
         super::IssueCommands::Note { id, text, kind } => {
-            let cache = use_cases::mutation_cache()?;
-            let id = super::resolve_issue_arg(cache.db(), &id)?;
-            drop(cache);
-            let (state_dir, _) = state_and_db_paths()?;
+            let (state_dir, index) = load_repository()?;
+            let id = super::resolve_issue_arg(&index, &id)?;
             commands::issue::append_note(&state_dir, &id, &kind, &text)
         }
 
         super::IssueCommands::Link { id, target, role } => {
-            let cache = use_cases::mutation_cache()?;
-            drop(cache);
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::relate::link_issue(&state_dir, &db_path, &id, &target, &role)
+            let (state_dir, index) = load_repository()?;
+            commands::relate::link_issue(&index, &state_dir, &id, &target, &role)
         }
 
         super::IssueCommands::Unlink { id, target, role } => {
-            let cache = use_cases::mutation_cache()?;
-            drop(cache);
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::relate::unlink_issue(&state_dir, &db_path, &id, &target, &role)
+            let (state_dir, index) = load_repository()?;
+            commands::relate::unlink_issue(&index, &state_dir, &id, &target, &role)
         }
     }
 }

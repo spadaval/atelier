@@ -3,8 +3,6 @@
 //! Command orchestration moves here as request, outcome, and view-model APIs
 //! that do not write directly to stdout or stderr.
 
-pub mod cache_manager;
-pub mod health;
 pub mod init;
 pub mod issue_inventory;
 pub mod issue_read;
@@ -13,12 +11,15 @@ pub mod mission_overview;
 pub mod mission_readiness;
 pub mod objective_graph;
 pub mod project_config;
-pub mod read_pipeline;
-pub mod rebuild;
+pub mod record_index;
 pub mod storage_layout;
 pub mod use_cases;
+pub mod work_classification;
 pub mod workflow_policy;
 pub mod workflow_validation;
+
+#[cfg(test)]
+pub(crate) mod test_records;
 
 /// Minimal outcome wrapper for early app-layer extraction.
 #[derive(Clone, Debug, Eq, PartialEq)]

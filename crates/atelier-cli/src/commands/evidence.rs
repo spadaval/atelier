@@ -5,13 +5,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::human_output;
-use atelier_app::cache_manager::{CacheManager, CacheUse};
+use atelier_app::record_index::RecordIndex;
+use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
     EvidenceTarget, RecordLink,
 };
-use atelier_sqlite::{validate_record_kind, Database};
+use atelier_records::validate_record_kind;
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
@@ -89,8 +90,8 @@ impl<'a> EvidenceMetadata<'a> {
 }
 
 pub fn add_returning_id(
+    index: &RecordIndex,
     state_dir: &Path,
-    _db_path: &Path,
     evidence_kind: &str,
     summary: &str,
     path: Option<&str>,
@@ -99,7 +100,7 @@ pub fn add_returning_id(
     target: Option<TargetMetadata<'_>>,
 ) -> Result<String> {
     if let Some(target) = target.as_ref() {
-        validate_evidence_relation_role(target.role)?;
+        validate_record_ref(index, target.kind, target.id, target.role)?;
     }
     let metadata = EvidenceMetadata::from_producer(producer);
     let data = EvidenceRecordData {
@@ -167,28 +168,28 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
 
     // Never hold the canonical association lock while waiting for an arbitrary
     // child: the child may be a normal Atelier writer or the exclusive
-    // migration. Once it exits, acquire one transaction and rebuild/revalidate
+    // migration. Once it exits, acquire one transaction and reload/revalidate
     // current repository and target state before allocating or appending proof.
-    let manager = CacheManager::discover().context(
+    let layout = StorageLayout::discover().context(
         "evidence capture postflight could not rediscover the original repository; no evidence was written",
     )?;
-    let state_dir = manager.state_dir();
+    let state_dir = layout.canonical_dir();
     // No child remains to wait on. Hold the exclusive association transaction
     // across final identity validation and every canonical append so no normal
     // writer can replace the target between the check and attachment.
     let _transaction =
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?;
-    let association = capture_association(&manager)?;
+    let association = capture_association(&layout)?;
     if association != binding.association {
         bail!(
             "evidence_capture_association_changed: the command completed, but the repository or .atelier association changed before proof could be recorded; no evidence was written. Return to {} and inspect the child command's effects before retrying evidence capture.",
             binding.association.repo_root.display()
         );
     }
-    let storage = manager.get_cache(CacheUse::Decision)?;
+    let index = RecordIndex::load(&state_dir)?;
     let resolved_target_id = match (options.target_kind, options.target_id) {
         (Some(kind), Some(id)) => Some(
-            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+            app_use_cases::resolve_evidence_target_ref(&index, kind, id).context(
                 "evidence capture postflight target validation failed after the command completed; no evidence was written",
             )?,
         ),
@@ -196,7 +197,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
     let (target, target_identity) = capture_target_and_identity(
-        storage.db(),
+        &index,
         options.target_kind,
         resolved_target_id.as_deref(),
         options.role,
@@ -258,28 +259,28 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         app_use_cases::create_evidence_record(&state_dir, &summary, "recorded", &body, data)?;
     if let Some(target) = target {
         attach_silently(
+            &index,
             &state_dir,
-            &storage.db_path(),
             &created.header.id,
             &target.display_kind,
             &target.id,
             &target.role,
         )?;
     }
-    print_record_without_cache(&created, options.quiet)
+    print_new_record(&created, options.quiet)
 }
 
 fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
-    let manager = CacheManager::discover().context(
+    let layout = StorageLayout::discover().context(
         "evidence capture preflight could not discover an Atelier repository; the command was not executed",
     )?;
-    let state_dir = manager.state_dir();
+    let state_dir = layout.canonical_dir();
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?;
-    let association = capture_association(&manager)?;
-    let storage = manager.get_cache(CacheUse::Decision)?;
+    let association = capture_association(&layout)?;
+    let index = RecordIndex::load(&state_dir)?;
     let resolved_target_id = match (options.target_kind, options.target_id) {
         (Some(kind), Some(id)) => Some(
-            app_use_cases::resolve_evidence_target_ref(&storage, kind, id).context(
+            app_use_cases::resolve_evidence_target_ref(&index, kind, id).context(
                 "evidence capture preflight target validation failed; the command was not executed",
             )?,
         ),
@@ -287,7 +288,7 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
     let (_, target_identity) = capture_target_and_identity(
-        storage.db(),
+        &index,
         options.target_kind,
         resolved_target_id.as_deref(),
         options.role,
@@ -300,19 +301,19 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
 }
 
 fn capture_target_and_identity<'a>(
-    db: &Database,
+    index: &RecordIndex,
     target_kind: Option<&'a str>,
     target_id: Option<&'a str>,
     role: &'a str,
 ) -> Result<(Option<TargetRef<'a>>, Option<CaptureTargetIdentity>)> {
     let target = match (target_kind, target_id) {
-        (Some(kind), Some(id)) => Some(validate_record_ref(db, kind, id, role)?),
+        (Some(kind), Some(id)) => Some(validate_record_ref(index, kind, id, role)?),
         (None, None) => None,
         _ => bail!("--target-kind and --target-id must be supplied together"),
     };
     let identity = match target.as_ref() {
         Some(target) if target.canonical_kind == "issue" => {
-            let issue = db.require_issue(target.id)?;
+            let issue = index.require_issue(target.id)?;
             let spec = atelier_records::canonical_record_kind("issue")?;
             Some(CaptureTargetIdentity {
                 canonical_kind: "issue".to_string(),
@@ -324,15 +325,15 @@ fn capture_target_and_identity<'a>(
             })
         }
         Some(target) => {
-            let record = db.require_record(target.canonical_kind, target.id)?;
+            let header = &index.require_evidence(target.id)?.header;
             let spec = atelier_records::canonical_record_kind(target.canonical_kind)?;
             Some(CaptureTargetIdentity {
-                canonical_kind: record.kind.clone(),
-                id: record.id,
-                created_at: record.created_at,
+                canonical_kind: header.kind.clone(),
+                id: header.id.clone(),
+                created_at: header.created_at,
                 schema: spec.schema.to_string(),
                 schema_version: spec.schema_version,
-                record_type: record.kind,
+                record_type: header.kind.clone(),
             })
         }
         None => None,
@@ -340,17 +341,17 @@ fn capture_target_and_identity<'a>(
     Ok((target, identity))
 }
 
-fn capture_association(manager: &CacheManager) -> Result<CaptureAssociation> {
-    let repo_root = fs::canonicalize(manager.repo_root()).with_context(|| {
+fn capture_association(layout: &StorageLayout) -> Result<CaptureAssociation> {
+    let repo_root = fs::canonicalize(layout.repo_root()).with_context(|| {
         format!(
             "failed to resolve evidence repository root {}",
-            manager.repo_root().display()
+            layout.repo_root().display()
         )
     })?;
-    let state_dir = fs::canonicalize(manager.state_dir()).with_context(|| {
+    let state_dir = fs::canonicalize(layout.canonical_dir()).with_context(|| {
         format!(
             "failed to resolve evidence canonical state {}",
-            manager.state_dir().display()
+            layout.canonical_dir().display()
         )
     })?;
     let project_slug = atelier_app::project_config::ProjectConfig::load(&repo_root)?.project_slug;
@@ -409,15 +410,14 @@ fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
     Ok(Some(fs::canonicalize(git_dir)?))
 }
 
-pub fn show(db: &Database, id: &str, quiet: bool) -> Result<()> {
-    db.require_record(KIND, id)?;
-    let record = canonical_evidence_record(id)?;
-    print_record(db, &record, quiet)
+pub fn show(index: &RecordIndex, id: &str, quiet: bool) -> Result<()> {
+    let record = index.require_evidence(id)?;
+    print_record(index, record, quiet)
 }
 
 pub fn attach(
+    index: &RecordIndex,
     state_dir: &Path,
-    db_path: &Path,
     id: &str,
     target_kind: &str,
     target_id: &str,
@@ -425,8 +425,8 @@ pub fn attach(
     quiet: bool,
 ) -> Result<()> {
     attach_impl(
+        index,
         state_dir,
-        db_path,
         id,
         target_kind,
         target_id,
@@ -435,20 +435,22 @@ pub fn attach(
     )
 }
 
+/// Attaches evidence created in this command (and therefore absent from
+/// `index`) without printing.
 pub fn attach_silently(
+    index: &RecordIndex,
     state_dir: &Path,
-    db_path: &Path,
     id: &str,
     target_kind: &str,
     target_id: &str,
     role: &str,
 ) -> Result<()> {
-    attach_impl(state_dir, db_path, id, target_kind, target_id, role, None)
+    attach_impl(index, state_dir, id, target_kind, target_id, role, None)
 }
 
 fn attach_impl(
+    index: &RecordIndex,
     state_dir: &Path,
-    db_path: &Path,
     id: &str,
     target_kind: &str,
     target_id: &str,
@@ -456,10 +458,8 @@ fn attach_impl(
     quiet: Option<bool>,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
-    canonical_evidence_record(id)?;
-    let db = app_use_cases::open_database(db_path)?;
-    let target = validate_record_ref(&db, target_kind, target_id, role)?;
-    drop(db);
+    app_use_cases::load_canonical_evidence(state_dir, id)?;
+    let target = validate_record_ref(index, target_kind, target_id, role)?;
     let inserted = app_use_cases::add_attachment_relationship(
         state_dir,
         KIND,
@@ -488,14 +488,14 @@ fn attach_impl(
 }
 
 fn validate_record_ref<'a>(
-    db: &Database,
+    index: &RecordIndex,
     kind: &'a str,
     id: &'a str,
     role: &'a str,
 ) -> Result<TargetRef<'a>> {
     validate_evidence_relation_role(role)?;
     if kind == "epic" {
-        let issue = db.require_issue(id)?;
+        let issue = index.require_issue(id)?;
         if issue.issue_type != "epic" {
             bail!("{id} is not an epic issue");
         }
@@ -509,9 +509,9 @@ fn validate_record_ref<'a>(
 
     validate_record_kind(kind)?;
     if kind == "issue" {
-        db.require_issue(id)?;
+        index.require_issue(id)?;
     } else {
-        db.require_record(kind, id)?;
+        index.require_evidence(id)?;
     }
     Ok(TargetRef {
         display_kind: kind,
@@ -531,11 +531,15 @@ pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
     )
 }
 
-pub fn list(db: &Database, status: Option<&str>, quiet: bool) -> Result<()> {
-    let records = db.list_records(KIND, status)?;
+pub fn list(index: &RecordIndex, status: Option<&str>, quiet: bool) -> Result<()> {
+    let records = index
+        .evidence_records()
+        .into_iter()
+        .filter(|record| status.is_none_or(|status| record.header.status == status))
+        .collect::<Vec<_>>();
     if quiet {
         for record in records {
-            println!("{}", record.id);
+            println!("{}", record.header.id);
         }
         return Ok(());
     }
@@ -552,13 +556,12 @@ pub fn list(db: &Database, status: Option<&str>, quiet: bool) -> Result<()> {
         records.len()
     );
     for record in records.iter().take(EVIDENCE_LIST_LIMIT) {
-        let record = canonical_evidence_record(&record.id)?;
-        let data = evidence_record_data(&record);
+        let data = evidence_record_data(record);
         let kind = data.evidence_type.as_str();
         let command = evidence_list_command(data.command.as_deref());
         let title = evidence_list_title(&record.header.title, data.command.as_deref());
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = format_targets(db, &record.header.id, &data)?;
+        let targets = format_targets(index, &record.header.id, &data)?;
         let target = if targets.is_empty() {
             "(none)".to_string()
         } else {
@@ -621,13 +624,14 @@ fn bounded_list_text(value: &str) -> String {
     output
 }
 
-pub fn print_record(db: &Database, record: &EvidenceRecord, quiet: bool) -> Result<()> {
+pub fn print_record(index: &RecordIndex, record: &EvidenceRecord, quiet: bool) -> Result<()> {
     let data = evidence_record_data(record);
-    let targets = format_targets(db, &record.header.id, &data)?;
+    let targets = format_targets(index, &record.header.id, &data)?;
     print_record_with_targets(record, data, targets, quiet)
 }
 
-pub fn print_record_without_cache(record: &EvidenceRecord, quiet: bool) -> Result<()> {
+/// Prints evidence created in this command, which is absent from the index.
+pub fn print_new_record(record: &EvidenceRecord, quiet: bool) -> Result<()> {
     let data = evidence_record_data(record);
     let targets = format_data_target(&data).into_iter().collect();
     print_record_with_targets(record, data, targets, quiet)
@@ -854,7 +858,7 @@ fn yes_no(value: bool) -> &'static str {
 }
 
 fn format_targets(
-    db: &Database,
+    index: &RecordIndex,
     evidence_id: &str,
     data: &EvidenceRecordData,
 ) -> Result<Vec<String>> {
@@ -862,9 +866,9 @@ fn format_targets(
     if let Some(target) = format_data_target(data) {
         targets.insert(target);
     }
-    for link in db.list_record_links(KIND, evidence_id)? {
+    for link in index.list_record_links(KIND, evidence_id)? {
         if let Some((kind, id, role)) = evidence_link_target(&link, evidence_id) {
-            let kind = display_target_kind(db, kind, id)?;
+            let kind = display_target_kind(index, kind, id)?;
             targets.insert(format!("{kind}/{id} ({role})"));
         }
     }
@@ -894,9 +898,9 @@ fn evidence_link_target<'a>(
     }
 }
 
-fn display_target_kind(db: &Database, kind: &str, id: &str) -> Result<String> {
+fn display_target_kind(index: &RecordIndex, kind: &str, id: &str) -> Result<String> {
     if kind == "issue" {
-        let issue = db.require_issue(id)?;
+        let issue = index.require_issue(id)?;
         if issue.issue_type == "epic" {
             return Ok("epic".to_string());
         }
@@ -921,15 +925,4 @@ fn quote_command_arg(arg: &str) -> String {
     } else {
         format!("'{}'", arg.replace('\'', "'\"'\"'"))
     }
-}
-
-fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Cannot locate Atelier record-file directory");
-    };
-    app_use_cases::load_canonical_evidence(&state_dir, id)
-}
-
-fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }

@@ -6,13 +6,11 @@ must continue to use CLI commands plus committed `.atelier/` record files as
 the authoritative interface; the TUI exists to help humans and
 orchestrators inspect state, copy IDs, and choose the next CLI action.
 
-The TUI must not read `.atelier/runtime/state.db` directly and must not invent a state
-model separate from the Mission Control projection. Its input is either
-`.atelier/cache/mission-control.json` or an equivalent future Mission Control
-projection API with the same schema.
-Mission Control JSON is a distinct derived presentation artifact built from
-record files plus SQLite domain-cache queries through `CacheManager`; it is not
-the SQLite domain cache or an authoritative record source.
+The TUI must not read record files directly and must not invent a state model
+separate from the Mission Control projection. Its input is a Mission Control
+projection API with the schema below. Mission Control JSON is a distinct
+derived presentation artifact built from record files; it is not an
+authoritative record source.
 
 ## Mission Control Projection Contract
 
@@ -228,10 +226,10 @@ The initial TUI must not:
 
 - claim, close, reopen, label, relate, block, unblock, or otherwise mutate
   records;
-- write tracked `.atelier/` records or `.atelier/runtime/state.db`;
+- write tracked `.atelier/` records or `.atelier/runtime/` state;
 - run workflow transitions directly;
 - resolve workflow config reload failures by falling back silently;
-- derive hidden state from Git, SQLite, or ad hoc filesystem scans.
+- derive hidden state from Git or ad hoc filesystem scans.
 
 Future mutating actions may be added only by a separate design and
 implementation issue. Those actions must route through the same CLI/domain

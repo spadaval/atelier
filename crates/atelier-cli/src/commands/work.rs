@@ -1,12 +1,12 @@
 use anyhow::{bail, Result};
+use atelier_app::record_index::RecordIndex;
 use std::collections::{BTreeMap, BTreeSet};
 
 use atelier_app::mission_overview::{
     mission_overview, MissionOverview, MissionOverviewCounts, MissionOverviewRequest,
 };
-use atelier_app::read_pipeline::{WorkBuckets, WorkClassification, WorkRow};
+use atelier_app::work_classification::{WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
-use atelier_sqlite::Database;
 
 use crate::human_output::{
     plural_suffix, render_labeled_lines, render_wrapped_lines, status_style, DisplayRole,
@@ -105,7 +105,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()> {
+pub fn queue(index: &RecordIndex, options: QueueOptions<'_>, quiet: bool) -> Result<()> {
     let state_filter_count = [
         options.ready,
         options.active,
@@ -126,7 +126,7 @@ pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()
         if options.status != "todo" || options.category.is_some() {
             bail!("--blocked cannot be combined with --status or --category");
         }
-        return crate::commands::issue::list_blocked_with_title(db, "Work Queue", quiet);
+        return crate::commands::issue::list_blocked_with_title(index, "Work Queue", quiet);
     }
     let (status, category, ready) = if options.all {
         ("all", None, false)
@@ -140,7 +140,7 @@ pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()
         (options.status, options.category, false)
     };
     crate::commands::issue::list_with_title(
-        db,
+        index,
         "Work Queue",
         Some(status),
         category,
@@ -152,12 +152,12 @@ pub fn queue(db: &Database, options: QueueOptions<'_>, quiet: bool) -> Result<()
     )
 }
 
-pub fn list(db: &Database, bucket: &str, quiet: bool) -> Result<()> {
+pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut buckets = atelier_app::read_pipeline::work_buckets(db, policy.as_ref())?;
+    let mut buckets = atelier_app::work_classification::work_buckets(index, policy.as_ref())?;
     if bucket_needs_execution_gates(bucket) {
         if let Some(policy) = policy.as_ref() {
-            apply_ready_execution_gates(db, policy, &mut buckets)?;
+            apply_ready_execution_gates(index, policy, &mut buckets)?;
         }
     }
     if quiet {
@@ -194,7 +194,7 @@ fn bucket_needs_execution_gates(bucket: &str) -> bool {
 }
 
 fn apply_ready_execution_gates(
-    db: &Database,
+    index: &RecordIndex,
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
     buckets: &mut WorkBuckets,
 ) -> Result<()> {
@@ -204,7 +204,7 @@ fn apply_ready_execution_gates(
         .map(|row| row.id.clone())
         .collect::<BTreeSet<_>>();
     let dependency = atelier_app::objective_graph::dependency_readiness_batch(
-        db,
+        index,
         policy,
         candidate_ids.iter().cloned(),
     )?;
@@ -229,9 +229,13 @@ fn apply_ready_execution_gates(
     Ok(())
 }
 
-pub fn missions(db: &Database, include_done: bool, quiet: bool) -> Result<()> {
+pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let overview = mission_overview(db, policy.as_ref(), MissionOverviewRequest { include_done })?;
+    let overview = mission_overview(
+        index,
+        policy.as_ref(),
+        MissionOverviewRequest { include_done },
+    )?;
     if quiet {
         for mission in overview.missions {
             println!("{}", mission.id);
@@ -531,14 +535,14 @@ fn display_role_for_state(state: &str) -> DisplayRole {
 }
 
 pub fn mission_dashboard(
-    db: &Database,
+    index: &RecordIndex,
     mission_ref: &str,
     options: MissionDashboardOptions,
     quiet: bool,
 ) -> Result<()> {
     let filter = options.filter()?;
-    let mission_id = crate::commands::issue::resolve_id(db, mission_ref)?;
-    let mission = db.require_issue(&mission_id)?;
+    let mission_id = crate::commands::issue::resolve_id(index, mission_ref)?;
+    let mission = index.require_issue(&mission_id)?;
     if mission.issue_type != "mission" {
         bail!(
             "{} is issue_type '{}'; work mission requires issue_type 'mission'",
@@ -546,11 +550,11 @@ pub fn mission_dashboard(
             mission.issue_type
         );
     }
-    let scoped = mission_scoped_issues(db, &mission.id)?;
-    let filtered = filter_dashboard_issues(db, &scoped, filter)?;
+    let scoped = mission_scoped_issues(index, &mission.id)?;
+    let filtered = filter_dashboard_issues(index, &scoped, filter)?;
     if quiet {
         if filter == DashboardFilter::Summary {
-            let counts = dashboard_counts(db, &scoped)?;
+            let counts = dashboard_counts(index, &scoped)?;
             println!(
                 "{} active={} ready={} blocked={} done={} backlog={}",
                 mission.id,
@@ -568,11 +572,11 @@ pub fn mission_dashboard(
         return Ok(());
     }
 
-    let counts = dashboard_counts(db, &scoped)?;
+    let counts = dashboard_counts(index, &scoped)?;
     let panels = if filter == DashboardFilter::Summary {
-        dashboard_panels(db, &scoped)?
+        dashboard_panels(index, &scoped)?
     } else {
-        vec![dashboard_panel_for_filter(db, filter, &filtered)?]
+        vec![dashboard_panel_for_filter(index, filter, &filtered)?]
     };
     let title = strip_mission_title_prefix(&mission.title);
     let mut metadata = MetadataPanel::untitled()
@@ -603,9 +607,9 @@ pub fn mission_dashboard(
     Ok(())
 }
 
-pub fn epic_dashboard(db: &Database, epic_ref: &str, quiet: bool) -> Result<()> {
-    let epic_id = crate::commands::issue::resolve_id(db, epic_ref)?;
-    let epic = db.require_issue(&epic_id)?;
+pub fn epic_dashboard(index: &RecordIndex, epic_ref: &str, quiet: bool) -> Result<()> {
+    let epic_id = crate::commands::issue::resolve_id(index, epic_ref)?;
+    let epic = index.require_issue(&epic_id)?;
     if epic.issue_type != "epic" {
         bail!(
             "{} is issue_type '{}'; work epic requires issue_type 'epic'",
@@ -613,10 +617,10 @@ pub fn epic_dashboard(db: &Database, epic_ref: &str, quiet: bool) -> Result<()> 
             epic.issue_type
         );
     }
-    let mut scoped = descendant_issues(db, &epic.id)?;
+    let mut scoped = descendant_issues(index, &epic.id)?;
     scoped.insert(0, epic.clone());
     if quiet {
-        let counts = dashboard_counts(db, &scoped)?;
+        let counts = dashboard_counts(index, &scoped)?;
         println!(
             "{} active={} ready={} blocked={} done={} backlog={} proof_gaps={}",
             epic.id,
@@ -625,21 +629,21 @@ pub fn epic_dashboard(db: &Database, epic_ref: &str, quiet: bool) -> Result<()> 
             counts.blocked,
             counts.done,
             counts.backlog,
-            proof_gap_count(db, &scoped)?
+            proof_gap_count(index, &scoped)?
         );
         return Ok(());
     }
 
-    let counts = dashboard_counts(db, &scoped)?;
-    let proof_gaps = proof_gap_count(db, &scoped)?;
-    let transition = transition_readiness(db, &epic.id, "start")?;
-    let panels = dashboard_panels(db, &scoped)?;
+    let counts = dashboard_counts(index, &scoped)?;
+    let proof_gaps = proof_gap_count(index, &scoped)?;
+    let transition = transition_readiness(index, &epic.id, "start")?;
+    let panels = dashboard_panels(index, &scoped)?;
     let mut page = Page::new(format!("Work Epic {} - {}", epic.id, epic.title)).panel(
         MetadataPanel::untitled()
             .row("Status", epic.status.clone())
             .row(
                 "Mission",
-                containing_mission(db, &epic.id)?.unwrap_or_else(|| "(none)".to_string()),
+                containing_mission(index, &epic.id)?.unwrap_or_else(|| "(none)".to_string()),
             )
             .row(
                 "Work",
@@ -680,11 +684,11 @@ struct DashboardCounts {
     backlog: usize,
 }
 
-fn dashboard_counts(db: &Database, issues: &[Issue]) -> Result<DashboardCounts> {
+fn dashboard_counts(index: &RecordIndex, issues: &[Issue]) -> Result<DashboardCounts> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut counts = DashboardCounts::default();
     for issue in issues {
-        match issue_category(db, policy.as_ref(), issue)?.as_str() {
+        match issue_category(index, policy.as_ref(), issue)?.as_str() {
             "active" => counts.active += 1,
             "blocked" => counts.blocked += 1,
             "done" => counts.done += 1,
@@ -695,11 +699,11 @@ fn dashboard_counts(db: &Database, issues: &[Issue]) -> Result<DashboardCounts> 
     Ok(counts)
 }
 
-fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPanel>> {
+fn dashboard_panels(index: &RecordIndex, issues: &[Issue]) -> Result<Vec<IssueListPanel>> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut buckets = BTreeMap::<String, Vec<IssueListRow>>::new();
     for issue in issues {
-        let category = issue_category(db, policy.as_ref(), issue)?;
+        let category = issue_category(index, policy.as_ref(), issue)?;
         let role = match category.as_str() {
             "active" => DisplayRole::Executable,
             "blocked" => DisplayRole::Blocked,
@@ -707,7 +711,7 @@ fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPane
             _ => DisplayRole::Selectable,
         };
         let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
-            db,
+            index,
             policy.as_ref(),
             &issue.id,
         )?;
@@ -734,7 +738,7 @@ fn dashboard_panels(db: &Database, issues: &[Issue]) -> Result<Vec<IssueListPane
 }
 
 fn dashboard_panel_for_filter(
-    db: &Database,
+    index: &RecordIndex,
     filter: DashboardFilter,
     issues: &[Issue],
 ) -> Result<IssueListPanel> {
@@ -749,7 +753,7 @@ fn dashboard_panel_for_filter(
     let rows = issues
         .iter()
         .map(|issue| {
-            let category = issue_category(db, policy.as_ref(), issue)?;
+            let category = issue_category(index, policy.as_ref(), issue)?;
             let role = match category.as_str() {
                 "active" => DisplayRole::Executable,
                 "blocked" => DisplayRole::Blocked,
@@ -757,7 +761,7 @@ fn dashboard_panel_for_filter(
                 _ => DisplayRole::Selectable,
             };
             let open_blockers = crate::commands::issue_workflow::open_blocker_ids_with_policy(
-                db,
+                index,
                 policy.as_ref(),
                 &issue.id,
             )?;
@@ -785,7 +789,7 @@ fn dashboard_row(issue: &Issue, role: DisplayRole, open_blockers: Vec<String>) -
 }
 
 fn filter_dashboard_issues(
-    db: &Database,
+    index: &RecordIndex,
     issues: &[Issue],
     filter: DashboardFilter,
 ) -> Result<Vec<Issue>> {
@@ -795,21 +799,23 @@ fn filter_dashboard_issues(
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     issues
         .iter()
-        .filter_map(|issue| match issue_category(db, policy.as_ref(), issue) {
-            Ok(category)
-                if matches!(
-                    (filter, category.as_str()),
-                    (DashboardFilter::Ready, "todo")
-                        | (DashboardFilter::Blocked, "blocked")
-                        | (DashboardFilter::Active, "active")
-                        | (DashboardFilter::Done, "done")
-                ) =>
-            {
-                Some(Ok(issue.clone()))
-            }
-            Ok(_) => None,
-            Err(error) => Some(Err(error)),
-        })
+        .filter_map(
+            |issue| match issue_category(index, policy.as_ref(), issue) {
+                Ok(category)
+                    if matches!(
+                        (filter, category.as_str()),
+                        (DashboardFilter::Ready, "todo")
+                            | (DashboardFilter::Blocked, "blocked")
+                            | (DashboardFilter::Active, "active")
+                            | (DashboardFilter::Done, "done")
+                    ) =>
+                {
+                    Some(Ok(issue.clone()))
+                }
+                Ok(_) => None,
+                Err(error) => Some(Err(error)),
+            },
+        )
         .collect()
 }
 
@@ -847,11 +853,11 @@ fn mission_footer(mission_id: &str, counts: &DashboardCounts) -> FooterPanel {
 }
 
 fn issue_category(
-    db: &Database,
+    index: &RecordIndex,
     policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
     issue: &Issue,
 ) -> Result<String> {
-    let classified = atelier_app::read_pipeline::classify_issue(db, policy, issue)?;
+    let classified = atelier_app::work_classification::classify_issue(index, policy, issue)?;
     Ok(match classified.classification {
         WorkClassification::Ready => "todo",
         other => other.label(),
@@ -859,43 +865,47 @@ fn issue_category(
     .to_string())
 }
 
-fn mission_scoped_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut scoped = crate::commands::objective_status::mission_issue_ids(db, mission_id)?
+fn mission_scoped_issues(index: &RecordIndex, mission_id: &str) -> Result<Vec<Issue>> {
+    let mut scoped = crate::commands::objective_status::mission_issue_ids(index, mission_id)?
         .into_iter()
-        .filter_map(|id| db.get_issue(&id).transpose())
-        .collect::<Result<Vec<_>>>()?;
+        .filter_map(|id| index.get_issue(&id))
+        .collect::<Vec<_>>();
     scoped.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(scoped)
 }
 
-fn descendant_issues(db: &Database, root_id: &str) -> Result<Vec<Issue>> {
+fn descendant_issues(index: &RecordIndex, root_id: &str) -> Result<Vec<Issue>> {
     let mut out = Vec::new();
-    let mut stack = db
-        .get_subissues(root_id)?
+    let mut stack = index
+        .get_subissues(root_id)
         .into_iter()
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
     while let Some(id) = stack.pop() {
-        let issue = db.require_issue(&id)?;
-        stack.extend(db.get_subissues(&id)?.into_iter().map(|child| child.id));
+        let issue = index.require_issue(&id)?;
+        stack.extend(index.get_subissues(&id).into_iter().map(|child| child.id));
         out.push(issue);
     }
     out.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(out)
 }
 
-fn proof_gap_count(db: &Database, issues: &[Issue]) -> Result<usize> {
+fn proof_gap_count(index: &RecordIndex, issues: &[Issue]) -> Result<usize> {
     let mut count = 0;
     for issue in issues {
-        if !crate::commands::issue::issue_evidence_gate_status(db, issue, None)?.passed {
+        if !crate::commands::issue::issue_evidence_gate_status(index, issue, None)?.passed {
             count += 1;
         }
     }
     Ok(count)
 }
 
-fn transition_readiness(db: &Database, issue_id: &str, transition_name: &str) -> Result<String> {
-    let options = match crate::commands::workflow::issue_transition_options(db, issue_id) {
+fn transition_readiness(
+    index: &RecordIndex,
+    issue_id: &str,
+    transition_name: &str,
+) -> Result<String> {
+    let options = match crate::commands::workflow::issue_transition_options(index, issue_id) {
         Ok(options) => options,
         Err(error) => {
             let message = error.to_string();
@@ -937,10 +947,10 @@ fn transition_readiness(db: &Database, issue_id: &str, transition_name: &str) ->
     }
 }
 
-fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
-    for mission in db.list_issues(Some("all"), None, None)? {
+fn containing_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
+    for mission in index.list_issues(Some("all"), None, None)? {
         if mission.issue_type == "mission"
-            && crate::commands::objective_status::mission_issue_ids(db, &mission.id)?
+            && crate::commands::objective_status::mission_issue_ids(index, &mission.id)?
                 .contains(issue_id)
         {
             return Ok(Some(mission.id));

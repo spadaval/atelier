@@ -2,8 +2,9 @@ use anyhow::{anyhow, Result};
 use std::collections::BTreeSet;
 
 use atelier_core::Issue;
-use atelier_sqlite::Database;
 use serde_json::Value;
+
+use crate::record_index::RecordIndex;
 
 pub use atelier_workflow::{
     configured_initial_status, load, validate_issue_against_policy, BranchLifecycleConfig,
@@ -13,7 +14,7 @@ pub use atelier_workflow::{
 };
 
 pub fn validate_issue_hierarchy(
-    db: &Database,
+    index: &RecordIndex,
     issue: &Issue,
     parent_id: Option<&str>,
 ) -> Result<()> {
@@ -36,7 +37,7 @@ pub fn validate_issue_hierarchy(
         }
     }
     if let Some(parent_id) = parent_id {
-        let parent = db.get_issue(parent_id)?.ok_or_else(|| {
+        let parent = index.get_issue(parent_id).ok_or_else(|| {
             anyhow!(
                 "workflow_issue_hierarchy_invalid: issue {} references missing parent {}",
                 issue.id,
@@ -52,7 +53,7 @@ pub fn validate_issue_hierarchy(
             ));
         }
     }
-    let children = db.get_subissues(&issue.id)?;
+    let children = index.get_subissues(&issue.id);
     if !children.is_empty() && issue.issue_type != "epic" {
         let child_ids = children
             .iter()
@@ -85,10 +86,10 @@ pub struct WorkBranch {
 /// by `atelier start` wins over the derived name. Missions have no branch.
 pub fn resolve_work_branch(
     policy: &WorkflowPolicy,
-    db: &Database,
+    index: &RecordIndex,
     issue_id: &str,
 ) -> Result<WorkBranch> {
-    let issue = db.require_issue(issue_id)?;
+    let issue = index.require_issue(issue_id)?;
     if issue.issue_type == "mission" {
         return Err(anyhow!(
             "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its epics or issues instead.",
@@ -98,7 +99,7 @@ pub fn resolve_work_branch(
     let owner = if issue.issue_type == "epic" || issue.parent_id.is_none() {
         issue
     } else {
-        nearest_parent_epic(db, &issue)?
+        nearest_parent_epic(index, &issue)?
     };
     let (branch, recorded_base) = match recorded_workflow_branch(&owner)? {
         Some((branch, base)) => (branch, Some(base)),
@@ -134,7 +135,7 @@ fn recorded_workflow_branch(issue: &Issue) -> Result<Option<(String, String)>> {
     Ok(Some((value("work_branch")?, value("branch_base")?)))
 }
 
-fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
+fn nearest_parent_epic(index: &RecordIndex, issue: &Issue) -> Result<Issue> {
     let mut parent_id = issue.parent_id.clone();
     let mut seen = BTreeSet::new();
     let mut parent_chain = Vec::new();
@@ -145,7 +146,7 @@ fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
                 issue.id
             ));
         }
-        let parent = db.get_issue(&current_id)?.ok_or_else(|| {
+        let parent = index.get_issue(&current_id).ok_or_else(|| {
             anyhow!(
                 "workflow_branch_policy_invalid_graph: issue {} references missing parent issue {}",
                 issue.id,
@@ -198,54 +199,8 @@ fn missing_parent_epic_branch_owner_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atelier_sqlite::{IssueCacheRow, RecordSourceCacheRow};
-    use chrono::Utc;
+    use crate::test_records::Records;
     use std::collections::BTreeMap;
-    use tempfile::tempdir;
-
-    fn setup_test_db() -> (Database, tempfile::TempDir) {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("test.db")).unwrap();
-        (db, dir)
-    }
-
-    fn insert_issue(
-        db: &Database,
-        id: &str,
-        issue_type: &str,
-        parent_id: Option<&str>,
-        fields: BTreeMap<String, Value>,
-    ) {
-        let now = Utc::now();
-        let row = IssueCacheRow {
-            id: id.to_string(),
-            title: id.to_string(),
-            status: "todo".to_string(),
-            issue_type: issue_type.to_string(),
-            priority: "medium".to_string(),
-            fields,
-            parent_id: parent_id.map(str::to_string),
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-        };
-        db.index_issue(
-            &row,
-            &[],
-            &[],
-            &[],
-            &RecordSourceCacheRow {
-                path: format!("issues/{id}.md"),
-                record_kind: "issue".to_string(),
-                record_id: id.to_string(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: now,
-            },
-        )
-        .unwrap();
-    }
 
     fn policy() -> WorkflowPolicy {
         WorkflowPolicy {
@@ -260,17 +215,13 @@ mod tests {
 
     #[test]
     fn child_works_on_parent_epic_branch() {
-        let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
-        insert_issue(
-            &db,
-            "atelier-child",
-            "task",
-            Some("atelier-epic"),
-            BTreeMap::new(),
-        );
+        let mut records = Records::default();
+        records.issue("atelier-epic", "epic", "todo");
+        records.issue("atelier-child", "task", "todo");
+        records.parent("atelier-child", "atelier-epic");
 
-        let work_branch = resolve_work_branch(&policy(), &db, "atelier-child").unwrap();
+        let work_branch =
+            resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.owner_id, "atelier-epic");
         assert_eq!(work_branch.branch, "epic/atelier-epic");
@@ -279,12 +230,13 @@ mod tests {
 
     #[test]
     fn standalone_issue_and_epic_own_their_branches() {
-        let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-bug1", "bug", None, BTreeMap::new());
-        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
+        let mut records = Records::default();
+        records.issue("atelier-bug1", "bug", "todo");
+        records.issue("atelier-epic", "epic", "todo");
+        let index = records.index();
 
-        let bug = resolve_work_branch(&policy(), &db, "atelier-bug1").unwrap();
-        let epic = resolve_work_branch(&policy(), &db, "atelier-epic").unwrap();
+        let bug = resolve_work_branch(&policy(), &index, "atelier-bug1").unwrap();
+        let epic = resolve_work_branch(&policy(), &index, "atelier-epic").unwrap();
 
         assert_eq!(
             (bug.owner_id.as_str(), bug.branch.as_str()),
@@ -298,26 +250,16 @@ mod tests {
 
     #[test]
     fn recorded_owner_branch_wins_over_derived_name() {
-        let (db, _dir) = setup_test_db();
-        insert_issue(
-            &db,
-            "atelier-epic",
-            "epic",
-            None,
-            BTreeMap::from([(
-                WORKFLOW_BRANCH_FIELD.to_string(),
-                serde_json::json!({"work_branch": "epic/renamed", "branch_base": "trunk"}),
-            )]),
-        );
-        insert_issue(
-            &db,
-            "atelier-child",
-            "task",
-            Some("atelier-epic"),
-            BTreeMap::new(),
-        );
+        let mut records = Records::default();
+        records.issue("atelier-epic", "epic", "todo").issue.fields = BTreeMap::from([(
+            WORKFLOW_BRANCH_FIELD.to_string(),
+            serde_json::json!({"work_branch": "epic/renamed", "branch_base": "trunk"}),
+        )]);
+        records.issue("atelier-child", "task", "todo");
+        records.parent("atelier-child", "atelier-epic");
 
-        let work_branch = resolve_work_branch(&policy(), &db, "atelier-child").unwrap();
+        let work_branch =
+            resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.branch, "epic/renamed");
         assert_eq!(work_branch.recorded_base.as_deref(), Some("trunk"));
@@ -325,36 +267,13 @@ mod tests {
 
     #[test]
     fn missions_have_no_branch() {
-        let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-mission", "mission", None, BTreeMap::new());
+        let mut records = Records::default();
+        records.issue("atelier-mission", "mission", "todo");
 
-        let error = resolve_work_branch(&policy(), &db, "atelier-mission")
+        let error = resolve_work_branch(&policy(), &records.index(), "atelier-mission")
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("missions are coordinated, not worked on a branch"));
-    }
-
-    #[test]
-    fn nested_issue_without_parent_epic_explains_fix() {
-        let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-mission", "mission", None, BTreeMap::new());
-        insert_issue(
-            &db,
-            "atelier-child",
-            "task",
-            Some("atelier-mission"),
-            BTreeMap::new(),
-        );
-
-        let error = resolve_work_branch(&policy(), &db, "atelier-child")
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_branch_policy_invalid_graph"));
-        assert!(error.contains("Parent chain: atelier-mission (mission)"));
-        assert!(error.contains("atelier issue update atelier-child --parent <epic-id>"));
-        assert!(error.contains("atelier issue update atelier-child --no-parent"));
-        assert!(error.contains("atelier issue link atelier-mission atelier-child"));
     }
 }

@@ -7,7 +7,7 @@ active missions, open work, recent terminal work, and proof that still blocks a
 current decision.
 
 `atelier prune` is the explicit maintenance surface for shrinking accumulated
-state. It is dry-run by default. Apply mode may remove only classes whose
+state. It runs only inside an Atelier repository and is dry-run by default. Apply mode may remove only classes whose
 eligibility, protection rules, and audit output are implemented and reported in
 the dry run.
 
@@ -33,11 +33,9 @@ classes. Apply output must name each affected class, removed count, skipped
 count, recovery command shape, and any failure. If a class is not implemented
 yet, output must keep reporting it as deferred rather than silently ignoring it.
 
-Canonical record pruning requires a clean tracked checkout and a healthy tracker
-state. If canonical Markdown is invalid, the projection is stale in a way the
-command cannot refresh, or tracked files are dirty, apply mode must stop before
-removing canonical records. Ignored local artifact cleanup may still run when it
-can do so without reading or mutating tracked records.
+Canonical record pruning requires a clean tracked checkout and valid record
+files. If any record file is invalid, prune fails before reporting candidates;
+if tracked files are dirty, apply mode stops before removing canonical records.
 
 Quiet output may collapse paths and record titles to counts and stable tokens,
 but normal output must give enough IDs or paths to inspect the candidate set.
@@ -49,8 +47,7 @@ but is never removed by `--apply`.
 
 | Class | Default policy | Observable prune behavior and apply safety |
 | --- | --- | --- |
-| Ignored runtime and domain-cache artifacts | Keep rebuildable local state while it is current or locked by a running command. Orphaned temp files, stale cache entries, and corrupt rebuildable caches are disposable. | Reports ignored candidates separately from canonical state. `--apply` deletes only unlocked, rebuildable local files and then names `check --fix` recovery when cache state changed. It never treats an ignored file as canonical input. |
-| Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Reports each candidate with an ID/path and protection reason. `--apply` removes only eligible terminal records and their eligible sidecars from a clean tracked checkout, then refreshes the domain cache. Recovery uses Git history for the removed path or ID. |
+| Canonical issue, mission, epic, evidence, review, and activity records | Keep active, blocked, review-bound, recently terminal, or proof-relevant records in the active tree. Terminal records become candidates after their retention window and after all current references are closed. | Reports each candidate with an ID/path and protection reason. `--apply` removes only eligible terminal records and their eligible sidecars from a clean tracked checkout. Recovery uses Git history for the removed path or ID. |
 | Evidence payload references | Preserve metadata while any retained record depends on it. External payload deletion is out of scope for v1. | May remove eligible metadata only with its sole terminal dependents; never deletes an external payload. |
 | Native review rooms | Keep while the branch owner is open, under review, or has unmerged branch state. | Reports owner/review protection. `--apply` prunes only with the terminal owner after review completion and branch integration are proven. |
 | Git branches | Keep base, current, protected, unmerged, unpushed, or owner-active branches. | Reports the branch and its protection reason. `--apply` deletes only non-current owner branches whose terminal owner is eligible and whose commits are already integrated according to branch policy. |
@@ -66,8 +63,7 @@ canonical_retention_days = 7
 ```
 
 The `atelier prune --retention-days <days>` flag is an explicit command override
-for the current run. Ignored local artifacts keep their separate 30-day default
-when the flag is omitted.
+for the current run.
 
 ## Protection Rules
 
@@ -89,26 +85,18 @@ checkout, match the configured base branch, contain commits not integrated into
 the configured base/review target, have a dirty worktree, or are associated with
 active workflow state.
 
-Runtime/cache cleanup is additionally protected when a command lock, active
-rebuild, or current runtime ownership makes deletion unsafe. A failure to
-inspect canonical or Git state must not turn a local cleanup into a canonical or
-Git mutation.
-
 ## Apply And Recovery Sequence
 
 Before applying cleanup, inspect the dry-run report and resolve every protected
 or failed item that the operator expected to remove. Apply does not force past a
 protection rule. Canonical removal requires a clean tracked checkout; branch
-and worktree removal requires the corresponding Git safety checks; local cleanup
-requires only the class-specific ignored-state safety checks.
+and worktree removal requires the corresponding Git safety checks.
 
 After an interrupted or partial apply, rerun `atelier prune` to obtain the new
 candidate set, then use the recovery surface named for the affected class:
 
 - canonical records: inspect the removed path in Git history and restore it if
   needed;
-- runtime/cache or projection state: run `atelier check --fix` and rerun the
-  original command;
 - Git branches/worktrees: inspect Git state before recreating a checkout or
   restoring a branch.
 

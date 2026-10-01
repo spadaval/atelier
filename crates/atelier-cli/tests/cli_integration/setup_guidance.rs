@@ -20,7 +20,6 @@ fn test_init_creates_atelier_directory() {
         "fresh init must verify setup before suggesting issue creation:\n{stdout}"
     );
     assert!(dir.path().join(".atelier").exists());
-    assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
     assert!(dir.path().join(".atelier").join("workflow.yaml").exists());
     assert!(!dir
@@ -48,7 +47,6 @@ fn test_init_twice_is_idempotent() {
 
     assert!(success);
     assert!(stdout.contains("Atelier initialized successfully"));
-    assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(!dir.path().join(".claude").exists());
 }
 
@@ -80,136 +78,6 @@ fn test_integrations_command_is_removed() {
 }
 
 #[test]
-fn test_doctor_human_separates_cache_and_runtime_state_health() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    run_atelier(dir.path(), &["issue", "create", "Health check"]);
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
-    assert!(success, "doctor failed: {stderr}");
-    assert!(stdout.contains("Install health:"));
-    assert!(stdout.contains("ignored_runtime_paths: ok"));
-    assert!(stdout.contains("Cache rebuild:"));
-    assert!(stdout.contains("rebuild_ready: ok"));
-    assert!(stdout.contains("cache_fresh: ok"));
-    assert!(stdout.contains("Cache health:"));
-    assert!(stdout.contains("source_metadata: ok"));
-    assert!(stdout.contains("Cache database:"));
-    assert!(stdout.contains("database: ok"));
-}
-
-#[test]
-fn test_doctor_distinguishes_missing_runtime_cache_database() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Missing cache db"]);
-    assert!(success, "issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
-
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
-    assert!(success, "doctor failed: {stderr}");
-    assert!(stdout.contains("Cache rebuild:"));
-    assert!(stdout.contains("cache_fresh: not ok"));
-    assert!(stdout.contains("Cache database:"));
-    assert!(stdout.contains("database: missing"));
-    assert!(stdout.contains("source_metadata: stale"));
-}
-
-#[test]
-fn test_doctor_help_documents_fix_boundary() {
-    let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["doctor", "--help"]);
-    assert!(success, "doctor help failed: {stderr}");
-    assert!(stdout.contains("--fix"));
-    assert!(stdout.contains("Repair ignored local runtime/cache state"));
-    assert!(stdout.contains("never edits tracked record files"));
-}
-
-#[test]
-fn test_doctor_fix_repairs_missing_and_stale_local_cache_state() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Doctor fix cache"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
-
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(success, "doctor --fix failed for missing db: {stderr}");
-    assert!(stdout.contains("Repair:"));
-    assert!(stdout.contains("local_cache: repaired"));
-    assert!(stdout.contains("record_files: unchanged"));
-    assert!(stdout.contains("cache_fresh: ok"));
-    assert!(stdout.contains("database: ok"));
-
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Doctor fix cache", "Doctor fix cache repaired")
-    });
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(success, "doctor --fix failed for stale cache: {stderr}");
-    assert!(stdout.contains("local_cache: repaired"));
-    assert!(stdout.contains("cache_fresh: ok"));
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-    assert!(success, "issue show failed after doctor --fix: {stderr}");
-    assert!(stdout.contains("Doctor fix cache repaired"));
-}
-
-#[test]
-fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let body = "## Description\n\nDoctor boundary body.\n\n## Outcome\n\nDoctor continues reporting runtime health when canonical Markdown is malformed.\n\n## Evidence\n\n- `atelier doctor` reports runtime health while `atelier check` reports invalid YAML.";
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Doctor runtime boundary",
-            "--description",
-            body,
-        ],
-    );
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-
-    corrupt_issue_title_yaml(dir.path(), &issue_id, "Doctor runtime boundary");
-
-    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(
-        !lint_success,
-        "lint must reject malformed canonical Markdown, stdout: {lintstdout}"
-    );
-    let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
-    assert!(
-        lint_transcript.contains("Tracker record files are invalid")
-            && lint_transcript.contains("Invalid YAML front matter"),
-        "unexpected lint error: {lint_transcript}"
-    );
-
-    let (doctor_success, doctorstdout, doctor_stderr) = run_atelier(dir.path(), &["doctor"]);
-    assert!(
-        doctor_success,
-        "doctor should continue reporting health: {doctor_stderr}"
-    );
-    assert!(doctorstdout.contains("Cache rebuild:"));
-    assert!(doctorstdout.contains("rebuild_ready: not ok"));
-    assert!(doctorstdout.contains("Cache database:"));
-    assert!(doctorstdout.contains("database: ok"));
-}
-
-#[test]
 fn test_prune_help_describes_both_retention_classes() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["prune", "--help"]);
@@ -218,115 +86,6 @@ fn test_prune_help_describes_both_retention_classes() {
         stdout.contains("Override canonical record retention for this prune pass"),
         "{stdout}"
     );
-}
-
-#[test]
-fn test_prune_removes_ignored_orphaned_runtime_artifacts_but_protects_locks() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    commit_all(dir.path(), "prune local artifacts fixture");
-
-    let runtime = dir.path().join(".atelier/runtime");
-    let cache = dir.path().join(".atelier/cache");
-    let orphan = cache.join("orphan.tmp");
-    let lock = runtime.join(".state.db.rebuild.lock");
-    fs::create_dir_all(&cache).unwrap();
-    fs::write(&orphan, "interrupted rebuild").unwrap();
-    fs::write(&lock, "pid=999\n").unwrap();
-    let status = Command::new("touch")
-        .args(["-d", "45 days ago", orphan.to_str().unwrap()])
-        .status()
-        .unwrap();
-    assert!(status.success(), "failed to age orphaned cache artifact");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
-    assert!(success, "prune dry-run failed: {stderr}");
-    assert!(
-        stdout.contains("Ignored Runtime, Cache, And Projection Artifacts"),
-        "{stdout}"
-    );
-    assert!(stdout.contains("eligible stale-cache"), "{stdout}");
-    assert!(stdout.contains("protected runtime-lock"), "{stdout}");
-    assert!(orphan.exists(), "dry-run removed orphaned artifact");
-    assert!(lock.exists(), "dry-run removed lock");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
-    assert!(success, "prune apply failed: {stderr}");
-    assert!(stdout.contains("removed stale-cache"), "{stdout}");
-    assert!(stdout.contains("atelier check --fix"), "{stdout}");
-    assert!(!orphan.exists(), "apply left orphaned artifact in place");
-    assert!(lock.exists(), "apply removed protected lock");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(
-        success,
-        "cache health failed after actual prune mutation: {stderr}"
-    );
-}
-
-#[test]
-fn test_prune_protects_aged_open_and_locked_cache_temp() {
-    use fs2::FileExt;
-    use std::fs::OpenOptions;
-
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    commit_all(dir.path(), "aged locked cache artifact fixture");
-
-    let artifact = dir.path().join(".atelier/cache/aged-open.tmp");
-    fs::create_dir_all(artifact.parent().unwrap()).unwrap();
-    fs::write(&artifact, "still owned by another process").unwrap();
-    let status = Command::new("touch")
-        .args(["-d", "45 days ago", artifact.to_str().unwrap()])
-        .status()
-        .unwrap();
-    assert!(status.success(), "failed to age locked cache artifact");
-    let owner = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&artifact)
-        .unwrap();
-    owner.lock_exclusive().unwrap();
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
-    assert!(success, "prune apply failed: {stderr}");
-    assert!(stdout.contains("protected stale-cache"), "{stdout}");
-    assert!(
-        stdout.contains("open or locked") && stdout.contains("exclusive ownership"),
-        "{stdout}"
-    );
-    assert!(
-        artifact.exists(),
-        "apply unlinked an aged artifact while another owner held its lock"
-    );
-}
-
-#[test]
-fn test_prune_protects_fresh_local_artifacts_and_preserves_cache_health() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    commit_all(dir.path(), "fresh local artifact fixture");
-
-    let fresh = dir.path().join(".atelier/cache/fresh.tmp");
-    fs::create_dir_all(fresh.parent().unwrap()).unwrap();
-    fs::write(&fresh, "possibly active cache work").unwrap();
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
-    assert!(success, "prune apply failed: {stderr}");
-    assert!(stdout.contains("protected stale-cache"), "{stdout}");
-    assert!(
-        stdout.contains("within local artifact retention window"),
-        "{stdout}"
-    );
-    assert!(fresh.exists(), "apply removed a fresh cache artifact");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(success, "cache health failed after prune: {stderr}");
 }
 
 #[test]
@@ -342,37 +101,6 @@ fn test_prune_quiet_reports_compact_equivalent_counts() {
     assert!(stdout.contains(" protected="), "{stdout}");
     assert!(stdout.contains(" removed=0 failures=0"), "{stdout}");
     assert_eq!(stdout.lines().count(), 1, "{stdout}");
-}
-
-#[test]
-fn test_prune_protects_active_projection_rebuild_artifacts() {
-    use fs2::FileExt;
-    use std::fs::OpenOptions;
-
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    commit_all(dir.path(), "active projection prune fixture");
-    let runtime = dir.path().join(".atelier/runtime");
-    let artifact = runtime.join(".state.db.1.2.rebuild-tmp");
-    let lock_path = runtime.join(".state.db.rebuild.lock");
-    fs::write(&artifact, "active rebuild").unwrap();
-    let lock = OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .open(lock_path)
-        .unwrap();
-    lock.lock_exclusive().unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
-    assert!(success, "prune apply failed: {stderr}");
-    assert!(stdout.contains("protected orphaned-temp"), "{stdout}");
-    assert!(
-        stdout.contains("projection rebuild lock is active"),
-        "{stdout}"
-    );
-    assert!(artifact.exists(), "apply removed active rebuild artifact");
 }
 
 #[test]
@@ -983,6 +711,16 @@ fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
 }
 
 #[test]
+fn test_prune_requires_a_repository() {
+    let dir = tempdir().unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["prune"]);
+
+    assert!(!success, "prune outside a repository must fail");
+    assert!(stderr.contains("Not an Atelier repository"), "{stderr}");
+}
+
+#[test]
 fn test_prune_protects_old_evidence_attached_to_retained_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -997,11 +735,6 @@ fn test_prune_protects_old_evidence_attached_to_retained_issue() {
         "old evidence remains required by active work",
     );
     make_record_before_retention(dir.path(), "evidence", &evidence_id, 45);
-    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(
-        success,
-        "doctor --fix failed after evidence fixture edit: {stderr}"
-    );
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
     assert!(success, "prune dry-run failed: {stderr}");
@@ -1115,7 +848,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue transition <issue-id>",
         "atelier check",
         "atelier check <issue-id>",
-        "atelier check --fix",
     ] {
         assert!(
             stdout.contains(common),
@@ -1197,19 +929,6 @@ fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
             && dashboards.contains("mission  Live mission orchestration dashboard"),
         "{dashboards}"
     );
-}
-
-#[test]
-fn test_hidden_rebuild_help_routes_local_repair_to_check() {
-    let dir = tempdir().unwrap();
-
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["rebuild", "--help"]);
-    assert!(success, "rebuild help failed: {stderr}");
-    assert!(
-        stdout.contains("explicit local repair uses check --fix"),
-        "rebuild help was stale:\n{stdout}"
-    );
-    assert!(!stdout.contains("repair uses doctor"), "{stdout}");
 }
 
 #[test]
@@ -1366,7 +1085,6 @@ fn test_root_status_summarizes_checkout_orientation() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Atelier Status"));
-    assert!(stdout.contains("Tracker"));
     assert!(stdout.contains("Ready work:"));
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Current missions:"));
@@ -1391,7 +1109,6 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(success, "quiet status failed: {stderr}");
     assert!(quiet.contains("work="));
     assert!(quiet.contains("ready="));
-    assert!(quiet.contains("tracker="));
 }
 
 #[test]
@@ -1404,8 +1121,7 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
     assert!(docs.contains("lint.none_blocking"));
-    assert!(docs.contains("Domain-cache freshness is an"));
-    assert!(docs.contains("internal command-storage health concern"));
+    assert!(docs.contains("Record-file validity is checked whenever a command loads"));
     assert!(!docs.contains("| `tracker.current` |"));
 }
 
@@ -2093,10 +1809,10 @@ fn test_issue_transition_rejects_unmigrated_issue_status() {
         issue_text.replace("status: \"todo\"", "status: \"open\""),
     )
     .unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(
         !success,
-        "rebuild should reject legacy status before transition handling"
+        "loading records should reject legacy status before transition handling"
     );
     assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("status 'open'"), "{stderr}");

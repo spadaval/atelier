@@ -19,12 +19,13 @@ use atelier_app::issue_inventory::{
     IssueInventorySnapshot, IssueInventoryStatusFilter,
 };
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
+use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{EvidenceRecord, Issue, IssuePriority, ISSUE_NOTE_KINDS};
+use atelier_records::validate_issue_type;
 use atelier_records::{
     parse_issue_sections, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
 };
-use atelier_sqlite::{validate_issue_type, Database};
 
 const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
@@ -213,17 +214,17 @@ pub struct IssueObject {
     pub closed_at: Option<String>,
 }
 
-pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
-    if let Some(id) = db.resolve_issue_ref(issue_ref)? {
+pub fn resolve_id(index: &RecordIndex, issue_ref: &str) -> Result<String> {
+    if let Some(id) = index.resolve_issue_ref(issue_ref)? {
         return Ok(id);
     }
 
-    if let Some(actual_kind) = db.record_kind_for_id(issue_ref)? {
+    if let Some(actual_kind) = index.record_kind_for_id(issue_ref) {
         bail!(
             "{} is a {} record, not an issue record. Use `{}`.",
             issue_ref,
             actual_kind,
-            show_command_for_kind(&actual_kind, issue_ref)
+            show_command_for_kind(actual_kind, issue_ref)
         );
     }
 
@@ -238,8 +239,8 @@ fn show_command_for_kind(kind: &str, id: &str) -> String {
     }
 }
 
-fn issue_id_for_agent(db: &Database, issue: &Issue) -> Result<String> {
-    let _ = db;
+fn issue_id_for_agent(index: &RecordIndex, issue: &Issue) -> Result<String> {
+    let _ = index;
     Ok(format_issue_id(&issue.id))
 }
 
@@ -249,51 +250,42 @@ fn label_value(labels: &[String], prefix: &str) -> Option<String> {
         .find_map(|label| label.strip_prefix(prefix).map(str::to_string))
 }
 
-fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
-    let issue = db
-        .get_issue(id)?
+fn dependency_summary(index: &RecordIndex, id: &str) -> Result<DependencySummary> {
+    let issue = index
+        .get_issue(id)
         .ok_or_else(|| anyhow!("Dependency issue {} was not found", format_issue_id(id)))?;
     Ok(DependencySummary {
-        id: issue_id_for_agent(db, &issue)?,
+        id: issue_id_for_agent(index, &issue)?,
     })
 }
 
-pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
-    let labels = db.get_labels(&issue.id)?;
-    issue_object_from_parts(db, issue, labels, None, Relationships::default())
-}
-
-fn issue_object_from_canonical(
-    db: &Database,
-    cached_issue: Issue,
-    record: CanonicalIssueRecord,
+fn issue_object_from_record(
+    index: &RecordIndex,
+    record: &CanonicalIssueRecord,
 ) -> Result<IssueObject> {
-    let mut issue = record.issue;
-    issue.parent_id = cached_issue.parent_id;
-    issue.closed_at = cached_issue.closed_at.or(issue.closed_at);
     issue_object_from_parts(
-        db,
-        issue,
-        record.labels,
-        Some(record.sections),
-        record.relationships,
+        index,
+        record.issue.clone(),
+        record.labels.clone(),
+        Some(record.sections.clone()),
+        record.relationships.clone(),
     )
 }
 
 fn issue_object_from_parts(
-    db: &Database,
+    index: &RecordIndex,
     issue: Issue,
     labels: Vec<String>,
     sections: Option<IssueSections>,
     relationships: Relationships,
 ) -> Result<IssueObject> {
     let parent = match &issue.parent_id {
-        Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
+        Some(parent_id) => Some(dependency_summary(index, parent_id)?.id),
         None => None,
     };
 
     Ok(IssueObject {
-        id: issue_id_for_agent(db, &issue)?,
+        id: issue_id_for_agent(index, &issue)?,
         title: issue.title,
         description: issue.description,
         sections,
@@ -311,14 +303,6 @@ fn issue_object_from_parts(
     })
 }
 
-fn canonical_issue_detail(issue_id: &str) -> Result<Option<CanonicalIssueRecord>> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
-    };
-    let store = RecordStore::new(state_dir);
-    Ok(Some(store.load_issue_by_id(issue_id)?))
-}
-
 fn canonical_issue_path_from_state(state_dir: &Path, issue_id: &str) -> PathBuf {
     state_dir.join("issues").join(format!("{issue_id}.md"))
 }
@@ -328,44 +312,38 @@ fn canonical_issue_path(issue_id: &str) -> Result<Option<PathBuf>> {
         .map(|state_dir| canonical_issue_path_from_state(&state_dir, issue_id)))
 }
 
-fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
+fn issue_summary(index: &RecordIndex, issue: Issue) -> Result<IssueSummary> {
     Ok(IssueSummary {
-        id: issue_id_for_agent(db, &issue)?,
+        id: issue_id_for_agent(index, &issue)?,
         title: issue.title,
         status: issue.status,
         issue_type: issue.issue_type,
         priority: issue.priority,
         parent: issue
             .parent_id
-            .map(|id| dependency_summary(db, &id).map(|summary| summary.id))
+            .map(|id| dependency_summary(index, &id).map(|summary| summary.id))
             .transpose()?,
         updated_at: issue.updated_at,
     })
 }
 
-pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
-    let id = resolve_id(db, issue_ref)?;
-    let issue = db.require_issue(&id)?;
-    let (object, degraded) = match canonical_issue_detail(&id) {
-        Ok(Some(record)) => (issue_object_from_canonical(db, issue, record)?, None),
-        Ok(None) => (issue_object(db, issue)?, None),
-        Err(error) => (
-            issue_object(db, issue)?,
-            Some(format!("Issue record file is malformed: {error:#}")),
-        ),
-    };
-    render_issue_show_human(db, &id, &object, degraded.as_deref())
+pub fn show(index: &RecordIndex, issue_ref: &str) -> Result<()> {
+    let id = resolve_id(index, issue_ref)?;
+    let record = index
+        .issue_record(&id)
+        .ok_or_else(|| anyhow!("Issue {id} not found"))?;
+    let object = issue_object_from_record(index, record)?;
+    render_issue_show_human(index, &id, &object)
 }
 
 fn render_issue_show_human(
-    db: &Database,
+    index: &RecordIndex,
     canonical_id: &str,
     object: &IssueObject,
-    degraded: Option<&str>,
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
     let objective_summary =
-        objective_read_summary_for_show(db, canonical_id, workflow_policy.as_ref())?;
+        objective_read_summary_for_show(index, canonical_id, workflow_policy.as_ref())?;
     let status_category = issue_status_category(workflow_policy.as_ref(), &object.status);
     let identity = format!(
         "{} [{}] {} - {}",
@@ -406,17 +384,8 @@ fn render_issue_show_human(
     if let Some(path) = canonical_issue_path(canonical_id)? {
         println!("File:     {}", path.display());
     }
-    if let Some(degraded) = degraded {
-        println!();
-        println!("Tracker Degraded");
-        println!("----------------");
-        println!("{degraded}");
-        println!("Fallback: showing the last valid cache-backed view for orientation only.");
-        println!("Next: atelier check {}", object.id);
-    }
-
-    render_parent_context(db, canonical_id)?;
-    render_transition_readiness(db, canonical_id, object)?;
+    render_parent_context(index, canonical_id)?;
+    render_transition_readiness(index, canonical_id, object)?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -428,28 +397,28 @@ fn render_issue_show_human(
         print_text_section("Description", object.description.as_deref());
     }
 
-    render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
-    render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
-    render_issue_link_section(db, canonical_id, &object.relationships)?;
+    render_dependency_section(index, "Blocked by", index.get_blockers(canonical_id), true)?;
+    render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
+    render_issue_link_section(index, canonical_id, &object.relationships)?;
     render_objective_rollup_section(objective_summary.as_ref());
-    render_subissue_section(db, canonical_id)?;
-    render_impact_section(db, canonical_id)?;
+    render_subissue_section(index, canonical_id)?;
+    render_impact_section(index, canonical_id)?;
     render_command_footer(canonical_id, object)?;
     Ok(())
 }
 
 fn objective_read_summary_for_show(
-    db: &Database,
+    index: &RecordIndex,
     canonical_id: &str,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<Option<ObjectiveReadSummary>> {
-    let active_issue_ids = active_issue_ids(db)?;
+    let active_issue_ids = active_issue_ids(index)?;
     let active_issue_refs = active_issue_ids
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
     atelier_app::issue_read::objective_read_summary(
-        db,
+        index,
         canonical_id,
         workflow_policy,
         &active_issue_refs,
@@ -561,7 +530,7 @@ fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], to
 }
 
 fn render_issue_link_section(
-    db: &Database,
+    index: &RecordIndex,
     issue_id: &str,
     relationships: &Relationships,
 ) -> Result<()> {
@@ -575,7 +544,7 @@ fn render_issue_link_section(
         if !seen.insert(key) {
             continue;
         }
-        let other = db.require_issue(&relation.id)?;
+        let other = index.require_issue(&relation.id)?;
         rows.push(format!(
             "{} {} [{}] {} - {}",
             relation.relation_type,
@@ -593,21 +562,21 @@ fn render_issue_link_section(
     Ok(())
 }
 
-pub fn transition_options(db: &Database, issue_ref: &str, verbose: bool) -> Result<()> {
-    let id = resolve_id(db, issue_ref)?;
-    let issue = db.require_issue(&id)?;
-    let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
+pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -> Result<()> {
+    let id = resolve_id(index, issue_ref)?;
+    let issue = index.require_issue(&id)?;
+    let options = crate::commands::workflow::issue_transition_options(index, issue_ref)?;
     crate::commands::workflow::print_issue_transition_options(&issue, &options, verbose);
     Ok(())
 }
 
 fn render_transition_readiness(
-    db: &Database,
+    index: &RecordIndex,
     canonical_id: &str,
     object: &IssueObject,
 ) -> Result<()> {
     let mut lines = Vec::new();
-    match crate::commands::workflow::issue_transition_options(db, canonical_id) {
+    match crate::commands::workflow::issue_transition_options(index, canonical_id) {
         Ok(options) => {
             for option in options {
                 let state = if option.allowed { "allowed" } else { "blocked" };
@@ -644,9 +613,9 @@ fn render_transition_readiness(
     Ok(())
 }
 
-fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<EvidenceRecord>> {
+fn linked_validating_evidence(index: &RecordIndex, issue_id: &str) -> Result<Vec<EvidenceRecord>> {
     let mut evidence = Vec::new();
-    for link in db.list_record_links("issue", issue_id)? {
+    for link in index.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
             continue;
         }
@@ -658,10 +627,7 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Evide
             None
         };
         if let Some(evidence_id) = evidence_id {
-            db.require_record("evidence", &evidence_id)?;
-            if let Some(record) = canonical_evidence_record(&evidence_id)? {
-                evidence.push(record);
-            }
+            evidence.push(index.require_evidence(&evidence_id)?.clone());
         }
     }
     evidence.sort_by(|a, b| a.header.id.cmp(&b.header.id));
@@ -675,11 +641,11 @@ pub(crate) struct EvidenceGateStatus {
 }
 
 pub(crate) fn issue_evidence_gate_status(
-    db: &Database,
+    index: &RecordIndex,
     issue: &Issue,
     sections: Option<&IssueSections>,
 ) -> Result<EvidenceGateStatus> {
-    let evidence = linked_validating_evidence(db, &issue.id)?;
+    let evidence = linked_validating_evidence(index, &issue.id)?;
     Ok(issue_evidence_gate_status_from_records(
         issue, sections, &evidence,
     ))
@@ -716,14 +682,6 @@ fn issue_evidence_gate_status_from_records(
     }
 }
 
-fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
-    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
-        return Ok(None);
-    };
-    let store = RecordStore::new(state_dir);
-    Ok(store.load_evidence_by_id(id).ok())
-}
-
 pub(crate) fn evidence_help_hint() -> String {
     "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
 }
@@ -736,11 +694,11 @@ fn evidence_gate(
     EvidenceGateStatus { passed }
 }
 
-fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
-    let issue = db.require_issue(canonical_id)?;
+fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> {
+    let issue = index.require_issue(canonical_id)?;
     let line = match issue.parent_id {
         Some(parent_id) => {
-            let parent = db.require_issue(&parent_id)?;
+            let parent = index.require_issue(&parent_id)?;
             format!(
                 "Parent: {} [{}] {} - {}",
                 format_issue_id(&parent.id),
@@ -760,12 +718,12 @@ fn print_text_section(title: &str, body: Option<&str>) {
 }
 
 fn render_dependency_section(
-    db: &Database,
+    index: &RecordIndex,
     title: &str,
     ids: Vec<String>,
     blockers: bool,
 ) -> Result<()> {
-    let rows = dependency_rows_for_text(db, ids, blockers)?;
+    let rows = dependency_rows_for_text(index, ids, blockers)?;
     print_panel(LinesPanel::new(
         title,
         rows.into_iter().map(|row| format!("  {row}")),
@@ -774,14 +732,14 @@ fn render_dependency_section(
 }
 
 fn dependency_rows_for_text(
-    db: &Database,
+    index: &RecordIndex,
     ids: Vec<String>,
     blockers: bool,
 ) -> Result<Vec<String>> {
     let workflow_policy = load_issue_workflow_policy()?;
     ids.into_iter()
         .map(|id| {
-            let issue = db.require_issue(&id)?;
+            let issue = index.require_issue(&id)?;
             let marker = if blockers && issue_blocks_work(workflow_policy.as_ref(), &issue) {
                 " (open blocker)"
             } else {
@@ -789,7 +747,7 @@ fn dependency_rows_for_text(
             };
             Ok(format!(
                 "{} [{}] {} - {}{}",
-                issue_id_for_agent(db, &issue)?,
+                issue_id_for_agent(index, &issue)?,
                 issue_status_label(workflow_policy.as_ref(), &issue.status),
                 issue.priority,
                 issue.title,
@@ -799,20 +757,20 @@ fn dependency_rows_for_text(
         .collect()
 }
 
-fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
-    let mut subissues = db.get_subissues(canonical_id)?;
+fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()> {
+    let mut subissues = index.get_subissues(canonical_id);
     let workflow_policy = load_issue_workflow_policy()?;
     if subissues.is_empty() {
         print_panel(LinesPanel::new("Subissues", Vec::<String>::new()));
         return Ok(());
     }
 
-    subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
+    subissues = order_issues_by_work(index, workflow_policy.as_ref(), subissues)?;
     let classified_subissues = subissues
         .into_iter()
         .map(|subissue| {
-            let classified = atelier_app::read_pipeline::classify_issue(
-                db,
+            let classified = atelier_app::work_classification::classify_issue(
+                index,
                 workflow_policy.as_ref(),
                 &subissue,
             )?;
@@ -863,8 +821,8 @@ fn display_role_for_bucket(label: &str) -> DisplayRole {
     }
 }
 
-fn render_impact_section(db: &Database, canonical_id: &str) -> Result<()> {
-    let affected = db.downstream_impact(canonical_id)?;
+fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> {
+    let affected = index.downstream_impact(canonical_id);
     if affected.is_empty() {
         print_panel(LinesPanel::new(
             "Impact",
@@ -886,7 +844,7 @@ fn render_impact_section(db: &Database, canonical_id: &str) -> Result<()> {
             .map(|issue| {
                 Ok(format!(
                     "  {} [{}] {} - {}",
-                    issue_id_for_agent(db, issue)?,
+                    issue_id_for_agent(index, issue)?,
                     issue_status_label(workflow_policy.as_ref(), &issue.status),
                     issue.priority,
                     issue.title
@@ -902,13 +860,13 @@ fn render_impact_section(db: &Database, canonical_id: &str) -> Result<()> {
 }
 
 fn order_issues_by_work(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issues: Vec<Issue>,
 ) -> Result<Vec<Issue>> {
     let rows = issues
         .iter()
-        .map(|issue| work_order_row_for_issue(db, workflow_policy, issue))
+        .map(|issue| work_order_row_for_issue(index, workflow_policy, issue))
         .collect::<Result<Vec<_>>>()?;
     let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
     Ok(crate::commands::work_order::ordered_work_indices(&rows)
@@ -918,7 +876,7 @@ fn order_issues_by_work(
 }
 
 fn work_order_row_for_issue(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     issue: &Issue,
 ) -> Result<WorkOrderRow> {
@@ -927,7 +885,7 @@ fn work_order_row_for_issue(
         status_category: issue_status_category(workflow_policy, &issue.status),
         priority: issue.priority.clone(),
         updated_at: issue.updated_at,
-        open_blockers: open_blocker_ids_with_policy(db, workflow_policy, &issue.id)?,
+        open_blockers: open_blocker_ids_with_policy(index, workflow_policy, &issue.id)?,
     })
 }
 
@@ -1007,7 +965,7 @@ fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
 }
 
 pub fn list(
-    db: &Database,
+    index: &RecordIndex,
     status: Option<&str>,
     category: Option<&str>,
     label: Option<&str>,
@@ -1016,7 +974,7 @@ pub fn list(
     quiet: bool,
 ) -> Result<()> {
     list_with_title(
-        db,
+        index,
         "Issue Queue",
         status,
         category,
@@ -1030,7 +988,7 @@ pub fn list(
 
 #[allow(clippy::too_many_arguments)]
 pub fn list_inventory(
-    db: &Database,
+    index: &RecordIndex,
     status: &str,
     category: Option<&str>,
     issue_type: Option<&str>,
@@ -1069,7 +1027,7 @@ pub fn list_inventory(
         IssueStatusFilter::category(workflow_policy.as_ref(), category)?;
     }
     let limit = IssueInventoryLimit::new(limit)?;
-    let issues = db.list_issues(Some("all"), label, priority)?;
+    let issues = index.list_issues(Some("all"), label, priority)?;
     let snapshots = issues.into_iter().map(|issue| IssueInventorySnapshot {
         status_category: workflow_policy
             .as_ref()
@@ -1110,7 +1068,7 @@ pub fn list_inventory(
 }
 
 pub(crate) fn list_with_title(
-    db: &Database,
+    index: &RecordIndex,
     title: &str,
     status: Option<&str>,
     category: Option<&str>,
@@ -1148,7 +1106,7 @@ pub(crate) fn list_with_title(
         missing_policy: workflow_policy.is_none(),
         unmigrated_filter: false,
     };
-    let mut rows = db
+    let mut rows = index
         .list_issues(Some("all"), label, priority)?
         .into_iter()
         .filter(|issue| {
@@ -1157,29 +1115,29 @@ pub(crate) fn list_with_title(
             }
             ready || status_filter.matches(workflow_policy.as_ref(), issue, &mut read_context)
         })
-        .map(|issue| issue_summary(db, issue))
-        .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
+        .map(|issue| issue_summary(index, issue))
+        .map(|summary| summary.and_then(|issue| queue_row(index, workflow_policy.as_ref(), issue)))
         .collect::<Result<Vec<_>>>()?;
     if ready {
-        rows = filter_ready_rows(db, workflow_policy.as_ref(), rows)?;
+        rows = filter_ready_rows(index, workflow_policy.as_ref(), rows)?;
     }
     if rows.is_empty() {
         println!("No issues found.");
     } else if quiet {
         render_queue_ids_quiet(order_queue_rows(rows));
     } else {
-        render_issue_queue_human(db, title, rows, true)?;
+        render_issue_queue_human(index, title, rows, true)?;
     }
     print_workflow_read_guidance(read_context);
     Ok(())
 }
 
-pub(crate) fn list_blocked_with_title(db: &Database, title: &str, quiet: bool) -> Result<()> {
-    list_blocked_filtered_with_title(db, title, None, None, None, quiet)
+pub(crate) fn list_blocked_with_title(index: &RecordIndex, title: &str, quiet: bool) -> Result<()> {
+    list_blocked_filtered_with_title(index, title, None, None, None, quiet)
 }
 
 fn list_blocked_filtered_with_title(
-    db: &Database,
+    index: &RecordIndex,
     title: &str,
     issue_type: Option<&str>,
     label: Option<&str>,
@@ -1204,28 +1162,33 @@ fn list_blocked_filtered_with_title(
             );
         }
     }
-    let rows = db
+    let rows = index
         .list_issues(Some("all"), label, priority)?
         .into_iter()
         .filter(|issue| issue_type.is_none_or(|issue_type| issue.issue_type == issue_type))
         .map(|issue| {
-            let classification =
-                atelier_app::read_pipeline::classify_issue(db, workflow_policy.as_ref(), &issue)?
-                    .classification;
+            let classification = atelier_app::work_classification::classify_issue(
+                index,
+                workflow_policy.as_ref(),
+                &issue,
+            )?
+            .classification;
             Ok((issue, classification))
         })
         .map(|result: Result<_>| {
             result.and_then(|(issue, classification)| {
-                issue_summary(db, issue).map(|summary| (summary, classification))
+                issue_summary(index, issue).map(|summary| (summary, classification))
             })
         })
         .map(|result| {
             result.and_then(|(issue, classification)| {
-                queue_row(db, workflow_policy.as_ref(), issue).map(|row| (row, classification))
+                queue_row(index, workflow_policy.as_ref(), issue).map(|row| (row, classification))
             })
         })
         .filter_map(|result| match result {
-            Ok((row, atelier_app::read_pipeline::WorkClassification::Blocked)) => Some(Ok(row)),
+            Ok((row, atelier_app::work_classification::WorkClassification::Blocked)) => {
+                Some(Ok(row))
+            }
             Ok((_row, _)) => None,
             Err(error) => Some(Err(error)),
         })
@@ -1235,14 +1198,15 @@ fn list_blocked_filtered_with_title(
     } else if quiet {
         render_queue_ids_quiet(order_queue_rows(rows));
     } else {
-        render_issue_queue_human(db, title, rows, true)?;
+        render_issue_queue_human(index, title, rows, true)?;
     }
     Ok(())
 }
 
-fn active_issue_ids(db: &Database) -> Result<BTreeSet<String>> {
+fn active_issue_ids(index: &RecordIndex) -> Result<BTreeSet<String>> {
     let workflow_policy = load_issue_workflow_policy()?;
-    let active_issues = crate::commands::status::current_work_issues(db, workflow_policy.as_ref())?;
+    let active_issues =
+        crate::commands::status::current_work_issues(index, workflow_policy.as_ref())?;
     Ok(active_issues
         .into_iter()
         .map(|issue| issue.id)
@@ -1256,7 +1220,7 @@ fn render_queue_ids_quiet(items: Vec<QueueRow>) {
 }
 
 fn render_issue_queue_human(
-    db: &Database,
+    index: &RecordIndex,
     title: &str,
     items: Vec<QueueRow>,
     show_status: bool,
@@ -1266,7 +1230,7 @@ fn render_issue_queue_human(
     human_output::print_heading(title);
     println!("{}", queue_summary(&rows));
 
-    let mut groups = queue_groups(db, rows)?;
+    let mut groups = queue_groups(index, rows)?;
     groups.sort_by(|a, b| {
         priority_rank(a.priority.as_deref().unwrap_or("low"))
             .cmp(&priority_rank(b.priority.as_deref().unwrap_or("low")))
@@ -1292,12 +1256,12 @@ fn render_issue_queue_human(
 }
 
 fn queue_row(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     item: IssueSummary,
 ) -> Result<QueueRow> {
-    let open_blockers = open_blocker_ids_with_policy(db, workflow_policy, &item.id)?;
-    let depth = ancestry_depth(db, &item.id)?;
+    let open_blockers = open_blocker_ids_with_policy(index, workflow_policy, &item.id)?;
+    let depth = ancestry_depth(index, &item.id)?;
     let status_category = issue_status_category(workflow_policy, &item.status);
     Ok(QueueRow {
         id: item.id,
@@ -1318,11 +1282,11 @@ fn order_queue_rows(rows: Vec<QueueRow>) -> Vec<QueueRow> {
 }
 
 fn filter_ready_rows(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     rows: Vec<QueueRow>,
 ) -> Result<Vec<QueueRow>> {
-    let children = children_by_parent(db)?;
+    let children = children_by_parent(index)?;
     let candidate_ids = rows
         .iter()
         .map(|row| row.id.clone())
@@ -1330,7 +1294,7 @@ fn filter_ready_rows(
     let dependency_ready = match workflow_policy {
         Some(policy) => {
             atelier_app::objective_graph::dependency_readiness_batch(
-                db,
+                index,
                 policy,
                 candidate_ids.iter().cloned(),
             )?
@@ -1340,10 +1304,10 @@ fn filter_ready_rows(
     };
     rows.into_iter()
         .map(|row| {
-            let issue = db.require_issue(&row.id)?;
-            if atelier_app::read_pipeline::classify_issue(db, workflow_policy, &issue)?
+            let issue = index.require_issue(&row.id)?;
+            if atelier_app::work_classification::classify_issue(index, workflow_policy, &issue)?
                 .classification
-                != atelier_app::read_pipeline::WorkClassification::Ready
+                != atelier_app::work_classification::WorkClassification::Ready
             {
                 return Ok((row, false));
             }
@@ -1353,7 +1317,7 @@ fn filter_ready_rows(
             }
             if has_descendants(&children, &row.id) {
                 let external =
-                    external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
+                    external_blockers_for_subtree(index, workflow_policy, &children, &row.id)?;
                 let is_ready =
                     external.is_empty() && queue_row_can_enter_active(workflow_policy, &row)?;
                 Ok((row, is_ready))
@@ -1381,17 +1345,17 @@ fn queue_row_can_enter_active(
     }
 }
 
-fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
+fn queue_groups(index: &RecordIndex, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
     let row_ids = rows
         .iter()
         .map(|row| row.id.clone())
         .collect::<BTreeSet<_>>();
-    let children = children_by_parent(db)?;
+    let children = children_by_parent(index)?;
     let mut grouped = BTreeMap::<String, Vec<QueueRow>>::new();
     let mut standalone = Vec::new();
 
     for row in rows {
-        if let Some(group_id) = row_root_parent(db, &row.id)? {
+        if let Some(group_id) = row_root_parent(index, &row.id)? {
             grouped.entry(group_id).or_default().push(row);
         } else if has_descendants(&children, &row.id) {
             grouped.entry(row.id.clone()).or_default().push(row);
@@ -1403,10 +1367,10 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
     let mut groups = Vec::new();
     for (group_id, mut rows) in grouped {
         rows = order_queue_rows(rows);
-        let issue = db.require_issue(&group_id)?;
+        let issue = index.require_issue(&group_id)?;
         let workflow_policy = load_issue_workflow_policy()?;
         let external_blockers =
-            external_blockers_for_subtree(db, workflow_policy.as_ref(), &children, &group_id)?;
+            external_blockers_for_subtree(index, workflow_policy.as_ref(), &children, &group_id)?;
         let include_header_row = row_ids.contains(&group_id);
         if include_header_row {
             rows.retain(|row| row.id != group_id);
@@ -1436,9 +1400,9 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
     Ok(groups)
 }
 
-fn children_by_parent(db: &Database) -> Result<BTreeMap<String, Vec<String>>> {
+fn children_by_parent(index: &RecordIndex) -> Result<BTreeMap<String, Vec<String>>> {
     let mut children = BTreeMap::<String, Vec<String>>::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
+    for issue in index.list_issues(Some("all"), None, None)? {
         if let Some(parent_id) = issue.parent_id {
             children.entry(parent_id).or_default().push(issue.id);
         }
@@ -1453,22 +1417,22 @@ fn has_descendants(children: &BTreeMap<String, Vec<String>>, issue_id: &str) -> 
         .unwrap_or(false)
 }
 
-fn row_root_parent(db: &Database, issue_id: &str) -> Result<Option<String>> {
-    let mut current = db.require_issue(issue_id)?;
+fn row_root_parent(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
+    let mut current = index.require_issue(issue_id)?;
     let mut root = None;
     while let Some(parent_id) = current.parent_id.clone() {
         root = Some(parent_id.clone());
-        current = db.require_issue(&parent_id)?;
+        current = index.require_issue(&parent_id)?;
     }
     Ok(root)
 }
 
-fn ancestry_depth(db: &Database, issue_id: &str) -> Result<usize> {
-    let mut current = db.require_issue(issue_id)?;
+fn ancestry_depth(index: &RecordIndex, issue_id: &str) -> Result<usize> {
+    let mut current = index.require_issue(issue_id)?;
     let mut depth = 0;
     while let Some(parent_id) = current.parent_id.clone() {
         depth += 1;
-        current = db.require_issue(&parent_id)?;
+        current = index.require_issue(&parent_id)?;
     }
     Ok(depth)
 }
@@ -1487,7 +1451,7 @@ fn subtree_ids(children: &BTreeMap<String, Vec<String>>, root_id: &str) -> BTree
 }
 
 fn external_blockers_for_subtree(
-    db: &Database,
+    index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
     children: &BTreeMap<String, Vec<String>>,
     root_id: &str,
@@ -1495,8 +1459,8 @@ fn external_blockers_for_subtree(
     let subtree = subtree_ids(children, root_id);
     let mut blockers = BTreeSet::<String>::new();
     for issue_id in &subtree {
-        for blocker_id in db.get_blockers(issue_id)? {
-            let blocker = db.require_issue(&blocker_id)?;
+        for blocker_id in index.get_blockers(issue_id) {
+            let blocker = index.require_issue(&blocker_id)?;
             if issue_blocks_work(workflow_policy, &blocker) && !subtree.contains(&blocker_id) {
                 blockers.insert(format_issue_id(&blocker_id));
             }
@@ -1684,8 +1648,8 @@ pub struct LifecycleCreateInput<'a> {
 }
 
 pub fn create_lifecycle(
+    index: &RecordIndex,
     state_dir: &Path,
-    db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
     if input.title.len() > MAX_ISSUE_TITLE_LEN {
@@ -1703,10 +1667,9 @@ pub fn create_lifecycle(
     }
     validate_priority(input.priority)?;
     validate_configured_issue_type(state_dir, input.issue_type)?;
-    let db = Database::open(db_path)?;
     let parent_id = input
         .parent
-        .map(|parent| resolve_id(&db, parent))
+        .map(|parent| resolve_id(index, parent))
         .transpose()?;
 
     let store = RecordStore::new(state_dir);
@@ -1743,11 +1706,10 @@ pub fn create_lifecycle(
         relationships: Relationships::default(),
     };
     atelier_app::workflow_policy::validate_issue_hierarchy(
-        &db,
+        index,
         &record.issue,
         parent_id.as_deref(),
     )?;
-    drop(db);
     store.write_issue_atomic(&record)?;
     if let Some(parent_id) = &parent_id {
         store.add_issue_child(parent_id, &id)?;
@@ -1956,13 +1918,16 @@ pub struct UpdateInput<'a> {
     pub parent: Option<Option<&'a str>>,
 }
 
-pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>) -> Result<()> {
-    let db = Database::open(db_path)?;
-    let id = resolve_id(&db, input.issue_ref)?;
-    let previous = db.require_issue(&id)?;
+pub fn update_lifecycle(
+    index: &RecordIndex,
+    state_dir: &Path,
+    input: UpdateInput<'_>,
+) -> Result<()> {
+    let id = resolve_id(index, input.issue_ref)?;
+    let previous = index.require_issue(&id)?;
     let requested_parent_id = input
         .parent
-        .map(|parent| parent.map(|parent| resolve_id(&db, parent)).transpose())
+        .map(|parent| parent.map(|parent| resolve_id(index, parent)).transpose())
         .transpose()?
         .flatten();
     let parent_id = if input.parent.is_some() {
@@ -2012,11 +1977,10 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;
     atelier_app::workflow_policy::validate_issue_hierarchy(
-        &db,
+        index,
         &record.issue,
         parent_id.as_deref(),
     )?;
-    drop(db);
     if let Some(old_parent) = old_parent_for_update {
         if old_parent.as_deref() != parent_id.as_deref() {
             if let Some(old_parent) = old_parent {
@@ -2082,9 +2046,12 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
-pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
+pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
     let outcome = atelier_app::lint::lint(atelier_app::Request {
-        input: atelier_app::lint::LintRequest { db, issue_ref },
+        input: atelier_app::lint::LintRequest {
+            state_dir,
+            issue_ref,
+        },
     })?;
     let view = outcome.value.data;
     if view.findings.is_empty() {
@@ -2102,97 +2069,6 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     }
 }
 
-pub fn doctor(
-    db: &Database,
-    repo_root: &Path,
-    state_dir: &Path,
-    db_path: &Path,
-    cache_db_existed: bool,
-    fix: bool,
-) -> Result<()> {
-    let outcome = atelier_app::health::doctor(atelier_app::Request {
-        input: atelier_app::health::DoctorRequest {
-            db,
-            repo_root: repo_root.to_path_buf(),
-            state_dir: state_dir.to_path_buf(),
-            db_path: db_path.to_path_buf(),
-            cache_db_existed,
-            fix,
-        },
-    })?;
-    render_doctor(outcome.value.data);
-    Ok(())
-}
-
-fn render_doctor(view: atelier_app::health::DoctorView) {
-    println!("Database: {}", view.db_path.display());
-    println!("State: {}", view.state_dir.display());
-    if view.fix {
-        println!("Repair:");
-        println!("  local_cache: repaired");
-        println!("  record_files: unchanged");
-    }
-    println!("Install health:");
-    println!("  config: {}", if view.config_ok { "ok" } else { "not ok" });
-    println!(
-        "  ignored_runtime_paths: {}",
-        if view.ignore_rules_current {
-            "ok"
-        } else {
-            "not ok"
-        }
-    );
-    println!("Cache rebuild:");
-    println!(
-        "  state_dir: {}",
-        if view.state_dir_ok { "ok" } else { "not ok" }
-    );
-    println!(
-        "  rebuild_ready: {}",
-        if view.rebuild_ready { "ok" } else { "not ok" }
-    );
-    println!(
-        "  cache_fresh: {}",
-        if view.cache_fresh { "ok" } else { "not ok" }
-    );
-    println!(
-        "  tables: {}",
-        atelier_sqlite::DOMAIN_CACHE_TABLES.join(", ")
-    );
-    println!("Cache health:");
-    println!("  cache_dir: {}", view.cache_dir_status);
-    println!(
-        "  source_metadata: {}",
-        if view.cache_fresh { "ok" } else { "stale" }
-    );
-    println!("Cache database:");
-    println!(
-        "  database: {}",
-        if view.runtime_db_available {
-            "ok"
-        } else {
-            "missing"
-        }
-    );
-    println!("Legacy health:");
-    for (key, value) in view.health {
-        println!("{key}: {}", if value { "ok" } else { "not ok" });
-    }
-}
-
-pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
-    atelier_app::rebuild::run(state_dir, db_path)?;
-    println!("Runtime state rebuilt");
-    println!("State:    {}", state_dir.display());
-    println!("Database: {}", db_path.display());
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier doctor");
-    println!("  atelier check");
-    Ok(())
-}
-
 pub fn validate_priority(priority: &str) -> Result<()> {
     IssuePriority::from_cli_input(priority)
         .map(|_| ())
@@ -2202,13 +2078,31 @@ pub fn validate_priority(priority: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::test_support::DomainCacheFixture;
+    use atelier_records::issue_relationship_target;
     use tempfile::tempdir;
 
-    fn setup_test_db() -> (Database, tempfile::TempDir) {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("test.db")).unwrap();
-        (db, dir)
+    fn fixture_record(id: &str, title: &str, status: &str, priority: &str) -> CanonicalIssueRecord {
+        let now = Utc::now();
+        CanonicalIssueRecord {
+            issue: Issue {
+                id: id.to_string(),
+                title: title.to_string(),
+                description: None,
+                status: status.to_string(),
+                issue_type: "task".to_string(),
+                priority: priority.to_string(),
+                fields: BTreeMap::new(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
+            },
+            labels: Vec::new(),
+            sections: IssueSections::unchecked_from_body(Some(
+                "## Description\n\nFixture.\n\n## Outcome\n\nFixture.",
+            )),
+            relationships: Relationships::default(),
+        }
     }
 
     #[test]
@@ -2282,36 +2176,52 @@ mod tests {
 
     #[test]
     fn dependency_rows_include_context_and_open_blocker_marker() {
-        let (db, _dir) = setup_test_db();
-        let blocked = db
-            .cache_fixture_issue("Blocked issue", None, "medium")
-            .unwrap();
-        let blocker = db
-            .cache_fixture_issue("Blocking issue", None, "high")
-            .unwrap();
-        db.add_dependency(&blocked, &blocker).unwrap();
+        let blocked = "atelier-blocked";
+        let blocker = "atelier-blocker";
+        let mut blocker_record = fixture_record(blocker, "Blocking issue", "todo", "high");
+        blocker_record
+            .relationships
+            .blocks
+            .push(issue_relationship_target(blocked));
+        let index = RecordIndex::from_records(
+            vec![
+                fixture_record(blocked, "Blocked issue", "todo", "medium"),
+                blocker_record,
+            ],
+            Vec::new(),
+        )
+        .unwrap();
 
-        let rows = dependency_rows_for_text(&db, db.get_blockers(&blocked).unwrap(), true).unwrap();
+        let rows = dependency_rows_for_text(&index, index.get_blockers(blocked), true).unwrap();
 
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].contains(&format_issue_id(&blocker)));
+        assert!(rows[0].contains(&format_issue_id(blocker)));
         assert!(rows[0].contains("[todo] high - Blocking issue"));
         assert!(rows[0].contains("(open blocker)"));
     }
 
     #[test]
     fn subissue_summary_counts_statuses_and_priorities() {
-        let (db, _dir) = setup_test_db();
-        let parent = db.cache_fixture_issue("Parent", None, "high").unwrap();
-        let child_a = db
-            .cache_fixture_subissue(&parent, "First child", None, "high")
-            .unwrap();
-        let child_b = db
-            .cache_fixture_subissue(&parent, "Second child", None, "low")
-            .unwrap();
-        db.cache_fixture_close(&child_b).unwrap();
+        let mut parent = fixture_record("atelier-parent", "Parent", "todo", "high");
+        parent.issue.issue_type = "epic".to_string();
+        for child in ["atelier-child-a", "atelier-child-b"] {
+            parent
+                .relationships
+                .children
+                .push(issue_relationship_target(child));
+        }
+        let child_a = "atelier-child-a";
+        let index = RecordIndex::from_records(
+            vec![
+                parent,
+                fixture_record(child_a, "First child", "todo", "high"),
+                fixture_record("atelier-child-b", "Second child", "done", "low"),
+            ],
+            Vec::new(),
+        )
+        .unwrap();
 
-        let subissues = db.get_subissues(&parent).unwrap();
+        let subissues = index.get_subissues("atelier-parent");
         let summary = subissue_summary(
             subissues.len(),
             subissues

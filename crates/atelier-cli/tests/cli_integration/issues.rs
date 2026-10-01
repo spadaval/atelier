@@ -956,9 +956,6 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
     assert!(success, "custom issue show failed: {stderr}");
     assert!(stdout.contains("Type:     incident"), "{stdout}");
     assert!(stdout.contains("Status:   in_progress"), "{stdout}");
-
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "custom issue rebuild failed: {stderr}");
 }
 
 #[test]
@@ -1475,16 +1472,6 @@ fn test_issue_show_reads_detail_body_from_record_store() {
     edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
         text.replace("No description provided.", "Canonical Markdown body")
     });
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let obsolete_table_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'issues'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(obsolete_table_count, 0);
-
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
 
     assert!(success, "show failed: {stderr}");
@@ -1492,7 +1479,7 @@ fn test_issue_show_reads_detail_body_from_record_store() {
 }
 
 #[test]
-fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
+fn test_issue_sections_are_canonical_after_direct_markdown_edit() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1505,7 +1492,7 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
         .join(format!("{issue_id}.md"));
     let edited_body = "Edited direct Markdown section";
     let edited_outcome = "Direct edits are projected from issue body sections.";
-    let edited_evidence = "- `atelier rebuild` refreshes derived search text.";
+    let edited_evidence = "- `atelier issue show` reads the edited record file.";
     let issue_text = std::fs::read_to_string(&issue_path)
         .unwrap()
         .replace("No description provided.", edited_body)
@@ -1515,36 +1502,11 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
         );
     std::fs::write(&issue_path, issue_text).unwrap();
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains(edited_body), "{stdout}");
     assert!(stdout.contains(edited_outcome), "{stdout}");
     assert!(stdout.contains(edited_evidence), "{stdout}");
-
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let cached_title: String = conn
-        .query_row(
-            "SELECT title FROM issue_index WHERE id = ?1",
-            [&issue_id],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert!(!cached_title.is_empty());
-    let body_columns: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('issue_index')
-             WHERE name IN ('description', 'body', 'outcome', 'fields_json')",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        body_columns, 0,
-        "detail bodies must remain record-file sourced"
-    );
 }
 
 #[test]
@@ -1581,16 +1543,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     );
     assert!(success, "evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Canonical evidence summary");
-
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let obsolete_table_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('records', 'record_labels', 'record_links')",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(obsolete_table_count, 0);
 
     let (success, mission_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
@@ -1901,15 +1853,13 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
 }
 
 #[test]
-fn test_issue_show_recovers_notes_and_close_reason_after_rebuild() {
+fn test_issue_show_reads_notes_and_close_reason_from_the_record() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Rebuild notes"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Record notes"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Rebuild notes");
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Record notes");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1943,10 +1893,6 @@ fn test_issue_show_recovers_notes_and_close_reason_after_rebuild() {
     );
     assert!(success, "close failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Close Reason"));
@@ -1974,75 +1920,11 @@ fn test_issue_create_is_durable_from_record_files() {
     assert!(success, "create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Create-only durable");
 
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-    assert!(success, "show failed after rebuild: {stderr}");
+    assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Create-only durable"));
     assert!(stdout.contains("Created body"));
     assert!(stdout.contains("Priority: high"));
-}
-
-#[test]
-fn test_issue_mutations_leave_stale_cache_for_one_lazy_repair() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutation source"]);
-    assert!(success, "source create failed: {stderr}");
-    let source_id = issue_id_by_title(dir.path(), "Mutation source");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutation target"]);
-    assert!(success, "target create failed: {stderr}");
-    let target_id = issue_id_by_title(dir.path(), "Mutation target");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "update",
-            &source_id,
-            "--title",
-            "Mutation source updated",
-            "--priority",
-            "high",
-        ],
-    );
-    assert!(success, "update failed: {stderr}");
-
-    for args in [
-        vec!["issue", "update", &source_id, "--label", "remove-me"],
-        vec!["issue", "update", &source_id, "--remove-label", "remove-me"],
-        vec!["issue", "update", &source_id, "--label", "keep-me"],
-        vec!["issue", "link", &source_id, &target_id],
-        vec!["issue", "unlink", &source_id, &target_id],
-        vec!["issue", "link", &source_id, &target_id],
-    ] {
-        let (success, _, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "{args:?} failed: {stderr}");
-    }
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
-    assert!(success, "show failed: {stderr}");
-    assert!(
-        stderr.contains("Local cache was stale"),
-        "first query after mutations should repair the stale cache: {stderr}"
-    );
-    assert!(stdout.contains("Mutation source updated"));
-    assert!(stdout.contains("Priority: high"));
-    assert!(stdout.contains("keep-me"));
-    assert!(stdout.contains(&target_id));
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
-    assert!(success, "second show failed: {stderr}");
-    assert!(
-        !stderr.contains("Local cache was stale"),
-        "cache should be fresh after one lazy repair: {stderr}"
-    );
-
-    let source_text = read_canonical_record(dir.path(), "issues", &source_id);
-    assert!(!source_text.contains("- \"remove-me\""));
 }
 
 // ==================== Dependencies Tests ====================
@@ -2142,8 +2024,6 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
     run_atelier(dir.path(), &["issue", "create", "Done task"]);
     let done_id = issue_id_by_title(dir.path(), "Done task");
     set_issue_status(dir.path(), &done_id, "done");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
 
     let (success, all, stderr) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success, "issue list failed: {stderr}");
@@ -2293,9 +2173,6 @@ fn test_issue_blocker_mutations_are_durable_from_record_files() {
     );
     assert!(success, "issue link failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after issue link failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
     assert!(success, "issue show after issue link failed: {stderr}");
     assert!(stdout.contains(&blocker_id), "{stdout}");
@@ -2313,14 +2190,11 @@ fn test_issue_blocker_mutations_are_durable_from_record_files() {
     );
     assert!(success, "issue unlink failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after issue unlink failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
     assert!(success, "issue show after issue unlink failed: {stderr}");
     assert!(
         stdout.contains("Blocked by") && stdout.contains("(none)"),
-        "dependency should be removed after rebuild: {stdout}"
+        "dependency should be removed: {stdout}"
     );
 }
 
@@ -2622,7 +2496,7 @@ fn test_issue_list_bounds_blocker_footer_actions() {
 }
 
 #[test]
-fn test_issue_update_issue_type_persists_through_rebuild() {
+fn test_issue_update_issue_type_persists() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2636,10 +2510,6 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
     assert!(success, "issue type update failed: {stderr}");
     assert!(stdout.contains("Type:     epic"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Container work"));
@@ -2822,8 +2692,6 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     set_issue_status(dir.path(), &blocked_id, "done");
     set_issue_status(dir.path(), &blocker_id, "done");
     set_issue_status(dir.path(), &draft_epic_id, "done");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after status setup failed: {stderr}");
     move_mission_directly_to_ready(dir.path(), &mission_id);
     commit_all(dir.path(), "reviewed dashboard mission");
     let (success, closeout_ready, stderr) =
@@ -2924,8 +2792,6 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     ] {
         set_issue_status(dir.path(), issue_id, status);
     }
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "classification fixture rebuild failed: {stderr}");
 
     let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
@@ -3026,8 +2892,6 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     for issue_id in [&active_epic_id, &blocked_id] {
         set_issue_status(dir.path(), issue_id, "done");
     }
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "terminal mission fixture rebuild failed: {stderr}");
     let (success, retired_epic, stderr) =
         run_atelier(dir.path(), &["work", "epic", &retired_epic_id]);
     assert!(success, "retired epic view failed: {stderr}");

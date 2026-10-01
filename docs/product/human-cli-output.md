@@ -112,8 +112,8 @@ Command and app logic own state correctness:
 
 - deciding whether an issue is executable, selectable, blocked,
   blocked-through-parent, context-only, or omitted;
-- repairing or rejecting stale cache data before a status-like view claims
-  current state;
+- rejecting invalid record files before a status-like view claims current
+  state;
 - checking Git state, workflow validators, configured policy, permissions, and
   provider review state;
 - choosing the exact next commands and public recovery path.
@@ -127,8 +127,7 @@ footer ranking rules, or private workflow vocabulary.
 Domain and workflow services should not return UI annotations, section plans,
 or command strings. They return typed facts and rule evaluations: current
 workflow status, available transitions, unsatisfied requirements, observed
-evidence counts, open blockers, review state, cache health, and checkout
-facts.
+evidence counts, open blockers, review state, and checkout facts.
 
 Application/read-model code assembles those facts for a particular command.
 For example, the status read model may combine checkout changes, active work,
@@ -312,11 +311,10 @@ their need:
   checkpoint intent lives in the accountable record prose or referenced
   repository Markdown artifacts until first-class records are reintroduced.
 - Use committed-state commands for handoff gates. `atelier check` is the
-  supported noninteractive check for invalid tracker state. Local runtime repair
-  commands are admin repair tools, not normal script workflow.
-- Preserve blocked-command and record context in stale cache or invalid
-  canonical-record errors, then give one ordered recovery path through lint,
-  record repair, health check or fix, and rerunning the blocked command.
+  supported noninteractive check for invalid tracker state.
+- Name the invalid record file in canonical-record errors, then give one
+  ordered recovery path through `atelier check`, record repair, and rerunning
+  the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier issue show <objective-id>`,
   `atelier work ready`, `atelier work blocked`, and issue linker commands over

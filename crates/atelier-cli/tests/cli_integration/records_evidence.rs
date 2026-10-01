@@ -401,8 +401,6 @@ fn test_stress_very_long_description() {
     assert!(success);
     let issue_id = issue_ref(dir.path(), 1);
     set_issue_description(dir.path(), &issue_id, &long_desc);
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after description edit failed: {stderr}");
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success);
@@ -621,15 +619,11 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier_raw(dir.path(), &["--json", "doctor"]);
+    let (success, _, stderr) = run_atelier_raw(dir.path(), &["--json", "status"]);
     assert!(!success, "--json should not be accepted");
     assert!(stderr.contains("unexpected argument '--json'"));
 
-    for args in [
-        vec!["work", "queue", "--json"],
-        vec!["work", "queue", "--json"],
-        vec!["doctor", "--json"],
-    ] {
+    for args in [vec!["work", "queue", "--json"], vec!["check", "--json"]] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} should reject --json");
         assert!(
@@ -641,7 +635,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     for args in [
         vec!["issue", "--help"],
         vec!["issue", "show", "--help"],
-        vec!["doctor", "--help"],
+        vec!["check", "--help"],
     ] {
         let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(success, "{args:?} help failed: {stderr}");
@@ -754,12 +748,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    for args in [
-        vec!["work", "queue", "--status", "all"],
-        vec!["check"],
-        vec!["doctor"],
-        vec!["rebuild"],
-    ] {
+    for args in [vec!["work", "queue", "--status", "all"], vec!["check"]] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
         assert!(!stdout.trim_start().starts_with('{'), "{args:?}");
@@ -1000,13 +989,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
     let (success, shown, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
-    assert!(success, "lazy evidence query failed: {stderr}");
+    assert!(success, "evidence query failed: {stderr}");
     assert!(shown.contains("issue command proof"));
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr.contains("Local cache was stale; repaired changed record sources"),
-        "missing lazy evidence repair diagnostic: {stderr}"
-    );
     let issue_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
     assert!(issue_evidence_front_matter["proof_scope"].is_null());
@@ -1630,20 +1614,12 @@ fn test_evidence_list_bounds_default_output() {
     }
     evidence_ids.sort_by(|(_, left), (_, right)| left.cmp(right));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
-    assert!(
-        success,
-        "initial evidence list/cache repair failed: {stderr}"
-    );
-
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     for (rank, (_, evidence_id)) in evidence_ids.iter().enumerate() {
         let timestamp = format!("2024-01-{:02}T00:00:00+00:00", rank + 1);
-        conn.execute(
-            "UPDATE evidence_index SET created_at = ?1, updated_at = ?1 WHERE id = ?2",
-            rusqlite::params![timestamp, evidence_id],
-        )
-        .unwrap();
+        edit_canonical_record(dir.path(), "evidence", evidence_id, |markdown| {
+            let markdown = replace_front_matter_scalar(&markdown, "created_at", &timestamp);
+            replace_front_matter_scalar(&markdown, "updated_at", &timestamp)
+        });
     }
     let oldest_by_timestamp = format!("bounded evidence proof {:02}", evidence_ids[0].0);
     let newest_by_timestamp = format!(
@@ -2104,10 +2080,10 @@ fn test_workflow_check_rejects_legacy_issue_statuses_without_migration_path() {
         issue_text.replace("status: \"todo\"", "status: \"open\""),
     )
     .unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(
         !success,
-        "rebuild should reject legacy status before workflow check"
+        "loading records should reject legacy status before workflow check"
     );
     assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("open"), "{stderr}");
@@ -2129,10 +2105,10 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     )
     .unwrap();
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(
         !success,
-        "rebuild should reject status mismatch before workflow check"
+        "loading records should reject status mismatch before workflow check"
     );
     assert!(
         stderr.contains("workflow_issue_status_invalid"),

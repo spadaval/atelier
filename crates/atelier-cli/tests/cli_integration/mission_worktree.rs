@@ -16,9 +16,7 @@ fn canonical_tree_snapshot(
         for entry in entries {
             let path = entry.path();
             let relative = path.strip_prefix(root).unwrap();
-            if relative.components().count() == 1
-                && matches!(relative.to_str(), Some("runtime" | "cache" | "locks"))
-            {
+            if relative.components().count() == 1 && matches!(relative.to_str(), Some("runtime")) {
                 continue;
             }
             if path.is_dir() {
@@ -547,11 +545,6 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     let published = markdown.replacen("status: \"draft\"", "status: \"done\"", 1);
     assert_ne!(published, markdown, "mission fixture status was not draft");
     std::fs::write(&mission_path, published).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(
-        success,
-        "rebuild published mission fixture failed: {stderr}"
-    );
 
     let (success, default, stderr) = run_atelier(dir.path(), &["work", "missions"]);
     assert!(success, "default Mission Overview failed: {stderr}");
@@ -994,7 +987,7 @@ fn test_mission_start_is_removed_without_compatibility_guidance() {
 }
 
 #[test]
-fn test_first_class_record_rebuild_rejects_schema_drift() {
+fn test_record_load_rejects_schema_drift() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1008,19 +1001,18 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     edit_canonical_record(dir.path(), "issues", &mission_id, |markdown| {
         markdown.replace("schema: \"atelier.issue\"", "schema: \"atelier.evidence\"")
     });
-    remove_cache_state(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(!success, "rebuild should reject issue schema drift");
+    let (success, _, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(!success, "status should reject issue schema drift");
     assert!(
         stderr.contains("Unsupported schema 'atelier.evidence'")
             && stderr.contains("expected atelier.issue"),
-        "unexpected rebuild error: {stderr}"
+        "unexpected load error: {stderr}"
     );
 }
 
 #[test]
-fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
+fn test_queries_fail_naming_the_invalid_record_file() {
     let schema_dir = tempdir().unwrap();
     init_atelier(schema_dir.path());
 
@@ -1030,20 +1022,14 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
     edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
         markdown.replace("schema_version: 1", "schema_version: 99")
     });
-    remove_cache_state(schema_dir.path());
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
-    assert!(!success, "schema drift should block cache-backed query");
+    assert!(!success, "schema drift should block the query");
     assert!(
-        stderr.contains("schema this atelier binary does not understand")
-            && stderr.contains("target/debug/atelier")
-            && stderr.contains("update the installed `atelier` binary")
-            && stderr.contains("Unsupported schema_version 99"),
-        "schema drift diagnostic should name stale-binary repair: {stderr}"
-    );
-    assert!(
-        !stderr.contains("fix tracker record files before querying"),
-        "schema drift should not be presented as ordinary malformed records: {stderr}"
+        stderr.contains(&format!(
+            "Invalid record file .atelier/issues/{schema_issue_id}.md"
+        )) && stderr.contains("Unsupported schema_version 99"),
+        "schema drift diagnostic should name the file: {stderr}"
     );
 
     let malformed_dir = tempdir().unwrap();
@@ -1059,420 +1045,63 @@ fn test_cache_query_distinguishes_schema_drift_from_malformed_records() {
         &malformed_issue_id,
         "Malformed source",
     );
-    remove_cache_state(malformed_dir.path());
 
-    let (success, _, stderr) = run_atelier(malformed_dir.path(), &["work", "queue"]);
-    assert!(
-        !success,
-        "malformed records should block cache-backed query"
-    );
-    assert!(
-        stderr.contains("recovery: 1. run `atelier check`")
-            && stderr.contains("2. fix the named record file")
-            && stderr.contains("4. rerun the blocked command")
-            && stderr.contains("Invalid YAML front matter"),
-        "malformed diagnostic should stay record-focused: {stderr}"
-    );
-    assert!(
-        !stderr.contains("schema this atelier binary does not understand"),
-        "malformed records should not be presented as stale binary drift: {stderr}"
-    );
+    for args in [
+        &["work", "queue"][..],
+        &["status"],
+        &["issue", "list"],
+        &["issue", "show", &malformed_issue_id],
+    ] {
+        let (success, _, stderr) = run_atelier(malformed_dir.path(), args);
+        assert!(!success, "malformed records should block {args:?}");
+        assert!(
+            stderr.contains(&format!(
+                "Invalid record file .atelier/issues/{malformed_issue_id}.md"
+            )) && stderr.contains("Invalid YAML front matter"),
+            "{args:?} diagnostic should name the file: {stderr}"
+        );
+    }
 }
 
 #[test]
-fn test_cache_rebuilds_changed_sources_before_issue_queries() {
+fn test_check_reports_every_invalid_record_file() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Indexed title"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "fresh list failed: {stderr}");
-    assert!(list_out.contains("Indexed title"));
-
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Indexed title", "Markdown title")
-    });
-
-    let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "stale list should transparently rebuild: {stderr}");
-    assert!(list_out.contains("Markdown title"));
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing automatic rebuild diagnostic: {stderr}"
-    );
-}
-
-#[test]
-fn test_cache_query_rebuilds_missing_cache_on_demand() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Lazy missing cache"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    remove_cache_state(dir.path());
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
-
-    assert!(success, "query should rebuild missing cache: {stderr}");
-    assert!(stdout.contains("Lazy missing cache"));
-    assert!(
-        stderr.contains("Local cache was missing; rebuilt SQLite cache"),
-        "missing lazy rebuild diagnostic: {stderr}"
-    );
-}
-
-#[test]
-fn test_cache_decision_query_never_returns_known_stale_rows() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Known stale decision"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("schema_version: 1", "schema_version: 99")
-    });
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-
-    assert!(!success, "decision query must reject invalid source state");
-    assert!(
-        !stdout.contains("Known stale decision"),
-        "known-stale cache row escaped into decision output: {stdout}"
-    );
-    assert!(
-        stderr
-            .contains("tracker record files use a schema this atelier binary does not understand"),
-        "missing source-schema diagnostic: {stderr}"
-    );
-    assert!(
-        stderr.contains("Tracker record files are invalid"),
-        "missing record-file validity prefix: {stderr}"
-    );
-}
-
-#[test]
-fn test_cache_orientation_names_degraded_last_good_state() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Degraded orientation"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("status: todo", "status: in_progress")
-    });
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("schema_version: 1", "schema_version: 99")
-    });
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
-
-    assert!(success, "orientation should use last good cache: {stderr}");
-    assert!(stdout.contains("Atelier Status"));
-    assert!(
-        stderr.contains("using the existing local cache for orientation only"),
-        "missing degraded orientation diagnostic: {stderr}"
-    );
-    assert!(
-        stderr.contains("Record-file diagnostic:"),
-        "missing record-file diagnostic label: {stderr}"
-    );
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-    assert!(success, "degraded issue show failed: {stderr}");
-    assert!(
-        stdout.contains("Issue record file is malformed:"),
-        "{stdout}"
-    );
-    assert!(!stdout.contains("Canonical issue record"), "{stdout}");
-}
-
-#[test]
-fn test_cache_bounds_many_changed_sources_and_rebuilds() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let mut issue_ids = Vec::new();
-    for index in 0..12 {
-        let title = format!("Bulk indexed {index}");
-        let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", &title]);
+    let titles = ["First broken", "Second broken"];
+    for title in titles {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
         assert!(success, "issue create failed: {stderr}");
-        assert!(issue_out.contains("Created issue atelier-"));
-        issue_ids.push(issue_ref(dir.path(), index + 1));
     }
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    for (index, issue_id) in issue_ids.iter().enumerate() {
-        edit_canonical_issue(dir.path(), issue_id, |markdown| {
-            markdown.replace(
-                &format!("title: \"Bulk indexed {index}\""),
-                &format!("title: \"Bulk markdown {index}\""),
-            )
-        });
+    let ids = titles
+        .map(|title| issue_id_by_title(dir.path(), title))
+        .to_vec();
+    for (id, title) in ids.iter().zip(titles) {
+        corrupt_issue_title_yaml(dir.path(), id, title);
     }
-
-    let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(
-        success,
-        "many changed sources should transparently rebuild: {stderr}"
-    );
-    assert!(list_out.contains("Bulk markdown 0"));
-    assert!(list_out.contains("Bulk markdown 11"));
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing automatic rebuild diagnostic: {stderr}"
-    );
-}
-
-#[test]
-fn test_cache_repairs_deleted_and_unindexed_sources_before_issue_queries() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, first_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "First indexed issue"]);
-    assert!(success, "first create failed: {stderr}");
-    assert!(first_out.contains("Created issue atelier-"));
-    let first_id = issue_ref(dir.path(), 1);
-    let (success, second_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Second indexed issue"]);
-    assert!(success, "second create failed: {stderr}");
-    assert!(second_out.contains("Created issue atelier-"));
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    let first_path = canonical_issue_path(dir.path(), &first_id);
-    let first_markdown = read_canonical_record(dir.path(), "issues", &first_id);
-    std::fs::remove_file(&first_path).unwrap();
-
-    let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(
-        success,
-        "deleted source list should transparently rebuild: {stderr}"
-    );
-    assert!(!list_out.contains("First indexed issue"));
-    assert!(list_out.contains("Second indexed issue"));
-    assert!(
-        stderr.contains("Local cache was stale; repaired changed record sources incrementally")
-            || stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing automatic repair diagnostic: {stderr}"
-    );
-
-    std::fs::write(&first_path, first_markdown).unwrap();
-    let unindexed_path = dir.path().join(".atelier/issues/atelier-zzzz.md");
     std::fs::write(
-        &unindexed_path,
-        r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-zzzz"
-issue_type: "task"
-labels: []
-priority: "P2"
-relationships:
-  blocks: []
-  children: []
-  attachments: []
-  relates: []
-schema: "atelier.issue"
-schema_version: 1
-status: "todo"
-title: "Unindexed issue"
-updated_at: "2026-06-10T12:00:00+00:00"
----
-
-## Description
-
-Body
-
-## Outcome
-
-The unindexed issue is discoverable after rebuild.
-
-## Evidence
-
-- `atelier issue show atelier-zzzz` shows the record.
-"#,
+        dir.path().join(".atelier/evidence/atelier-bad1.md"),
+        "not an evidence record",
     )
     .unwrap();
 
-    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", "atelier-zzzz"]);
-    assert!(
-        success,
-        "unindexed issue show should transparently rebuild: {stderr}"
-    );
-    assert!(show_out.contains("Unindexed issue"));
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing automatic rebuild diagnostic: {stderr}"
-    );
-}
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
 
-#[test]
-fn test_cache_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let first_body = "## Description\n\nCache root body.\n\n## Outcome\n\nCache root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier check` output prints `Lint passed.` after automatic rebuild.";
-    let second_body = "## Description\n\nCache leaf body.\n\n## Outcome\n\nCache leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue show <id>` output shows the linked root.";
-
-    let (success, first_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Cache root", "--description", first_body],
-    );
-    assert!(success, "first create failed: {stderr}");
-    assert!(first_out.contains("Created issue atelier-"));
-    let first_id = issue_ref(dir.path(), 1);
-    let (success, second_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Cache leaf",
-            "--description",
-            second_body,
-        ],
-    );
-    assert!(success, "second create failed: {stderr}");
-    assert!(second_out.contains("Created issue atelier-"));
-    let second_id = issue_ref(dir.path(), 2);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "link",
-            &second_id,
-            &first_id,
-            "--role",
-            "blocked_by",
-        ],
-    );
-    assert!(success, "issue link failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-    ensure_issue_completion_sections(dir.path(), &first_id);
-    ensure_issue_completion_sections(dir.path(), &second_id);
-
-    std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
-    std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
-    let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(
-        success,
-        "derived files should not stale work queue --ready: {stderr}"
-    );
-    assert!(ready_out.contains("Cache root"));
-
-    edit_canonical_issue(dir.path(), &first_id, |markdown| {
-        markdown.replace("Cache root", "Cache root changed")
-    });
-
-    let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "show", &second_id]);
-    assert!(
-        success,
-        "stale issue show should transparently rebuild: {stderr}"
-    );
-    assert!(dep_out.contains("Cache root changed"));
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing automatic rebuild diagnostic: {stderr}"
-    );
-
-    let (success, lint_out, stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(
-        success,
-        "lint should run after automatic rebuild:\nstdout:\n{lint_out}\nstderr:\n{stderr}"
-    );
-    assert!(lint_out.contains("Lint passed."));
-}
-
-#[test]
-fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier check` output prints `Lint passed.`, `atelier doctor` exits 0, and `atelier doctor --fix` exits 0 while rebuild temp files exist.";
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Temp rebuild filter",
-            "--description",
-            body,
-        ],
-    );
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(success, "doctor --fix failed: {stderr}");
-    ensure_issue_completion_sections(dir.path(), &issue_id);
-    write_ignored_canonical_artifacts(dir.path(), &issue_id);
-
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        markdown.replace("Temp rebuild filter", "Temp rebuild filter changed")
-    });
-
-    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-    assert!(success, "query should ignore rebuild tmp file: {stderr}");
-    assert!(show_out.contains("Temp rebuild filter changed"));
-    assert!(
-        !stderr.contains("rebuild-tmp"),
-        "query diagnostics must not report rebuild tmp path: {stderr}"
-    );
-
-    let commands: &[&[&str]] = &[&["check"], &["doctor"], &["doctor", "--fix"]];
-    for args in commands {
-        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+    assert!(!success, "check must fail: {stdout}");
+    assert!(stdout.contains("Lint found 3 issue(s)"), "{stdout}");
+    for path in [
+        format!(".atelier/issues/{}.md", ids[0]),
+        format!(".atelier/issues/{}.md", ids[1]),
+        ".atelier/evidence/atelier-bad1.md".to_string(),
+    ] {
         assert!(
-            success,
-            "{args:?} should ignore rebuild tmp file:\nstdout: {stdout}\nstderr: {stderr}"
-        );
-        let combined = format!("{stdout}\n{stderr}");
-        assert!(
-            !combined.contains("rebuild-tmp")
-                && !combined.contains(".md.lock")
-                && !combined.contains(".md-journal")
-                && !combined.contains("cache.lock"),
-            "{args:?} diagnostics must not report ignored local artifacts: {combined}"
+            stdout.contains(&format!("Invalid record file {path}")),
+            "missing {path}: {stdout}\n{stderr}"
         );
     }
 }
 
 #[test]
-fn test_lint_validates_record_markdown_even_when_cache_metadata_is_fresh() {
+fn test_lint_validates_record_markdown_and_ignores_local_artifacts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let issue_id = "atelier-lint1".to_string();
@@ -1512,45 +1141,13 @@ Lint rejects malformed canonical state.
 "#
         .to_string(),
     );
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "fixture rebuild failed: {stderr}");
-
-    let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = read_canonical_record(dir.path(), "issues", &issue_id);
     let invalid_markdown = markdown.replace(
         "title: \"Lint canonical source\"",
         "title: [Lint canonical source",
     );
-    write_canonical_record(dir.path(), "issues", &issue_id, invalid_markdown.clone());
+    write_canonical_record(dir.path(), "issues", &issue_id, invalid_markdown);
     write_ignored_canonical_artifacts(dir.path(), &issue_id);
-
-    let metadata = std::fs::metadata(&issue_path).unwrap();
-    let modified_micros = metadata
-        .modified()
-        .unwrap()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_micros() as i64;
-    let mut hasher = Sha256::new();
-    hasher.update(invalid_markdown.as_bytes());
-    let invalid_hash = hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    conn.execute(
-        "UPDATE record_source_index
-         SET size_bytes = ?1, modified_micros = ?2, content_hash = ?3
-         WHERE path = ?4",
-        rusqlite::params![
-            i64::try_from(metadata.len()).unwrap(),
-            modified_micros,
-            invalid_hash,
-            format!("issues/{issue_id}.md")
-        ],
-    )
-    .unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
@@ -1564,140 +1161,23 @@ Lint rejects malformed canonical state.
     );
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
-        !transcript.contains("rebuild-tmp")
-            && !transcript.contains(".md.lock")
-            && !transcript.contains(".md-journal")
-            && !transcript.contains("cache.lock"),
+        !transcript.contains(".md.lock")
+            && !transcript.contains(".tmp")
+            && !transcript.contains("canonical-mutation.lock"),
         "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
     assert!(stderr.contains("Lint failed"));
-    assert!(
-        !stdout.contains("Lint passed."),
-        "lint must not pass from stale SQLite rows: {stdout}"
-    );
+    assert!(!stdout.contains("Lint passed."), "{stdout}");
 }
 
 #[test]
-fn test_lint_repairs_unindexed_issue_before_indexed_rules_run() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    std::fs::create_dir_all(dir.path().join(".atelier/issues")).unwrap();
-    std::fs::write(
-        dir.path().join(".atelier/issues/atelier-base1.md"),
-        r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-base1"
-issue_type: "task"
-labels: []
-priority: "P1"
-relationships: { blocks: [], children: [], attachments: [], relates: [] }
-schema: "atelier.issue"
-schema_version: 1
-status: "todo"
-title: "Indexed lint base"
-updated_at: "2026-06-10T12:00:00+00:00"
----
-
-## Description
-
-Base record.
-
-## Outcome
-
-Base record is indexed.
-
-## Evidence
-
-- Command transcript from `atelier check` passes.
-"#,
-    )
-    .unwrap();
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "fixture rebuild failed: {stderr}");
-
-    std::fs::write(
-        dir.path().join(".atelier/issues/atelier-new1.md"),
-        r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-new1"
-issue_type: "task"
-labels: []
-priority: "P1"
-relationships: { blocks: [], children: [], attachments: [], relates: [] }
-schema: "atelier.issue"
-schema_version: 1
-status: "todo"
-title: "Unindexed invalid issue"
-updated_at: "2026-06-10T12:00:00+00:00"
----
-
-## Description
-
-This new record is absent from the stale cache.
-
-## Outcome
-
-Lint must repair the cache before checking this scoped record.
-
-## Evidence
-
-Evidence will be added.
-"#,
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", "atelier-new1"]);
-    assert!(!success, "lint must reject the unindexed invalid issue");
-    assert!(
-        stdout.contains("atelier-new1") && stdout.contains("section Evidence"),
-        "unexpected lint output:\n{stdout}\n{stderr}"
-    );
-    assert!(
-        !stderr.contains("repaired changed record sources incrementally"),
-        "lint should diagnose record files without eagerly repairing cache: {stderr}"
-    );
-}
-
-#[test]
-fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint rebuilds a missing state database from canonical Markdown.\n\n## Evidence\n\n- `atelier check` prints `Lint passed.` after rebuilding state.db.";
-
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Lint without state db",
-            "--description",
-            body,
-        ],
-    );
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    remove_cache_state(dir.path());
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(
-        success,
-        "lint should validate without rebuilding state.db: {stderr}"
-    );
-    assert!(stdout.contains("Lint passed."));
-    assert!(
-        !stderr.contains("rebuilt SQLite cache"),
-        "lint should not eagerly rebuild disposable cache: {stderr}"
-    );
-}
-
-#[test]
-fn test_status_recovers_when_runtime_directory_is_missing() {
+fn test_status_works_without_runtime_directory() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
     migrate_default_issue_workflow(dir.path());
 
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nStatus recovers current work from canonical Markdown after ignored runtime deletion.\n\n## Evidence\n\n- `atelier status` prints the current-work issue after recreating `.atelier/runtime/state.db`.";
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nStatus reads current work from record files after ignored runtime deletion.\n\n## Evidence\n\n- `atelier status` prints the current-work issue.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1719,14 +1199,9 @@ fn test_status_recovers_when_runtime_directory_is_missing() {
     std::fs::remove_dir_all(dir.path().join(".atelier/runtime")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
-    assert!(
-        success,
-        "status should recreate missing runtime dir: {stderr}"
-    );
-    assert!(stderr.contains("Local cache was missing; rebuilt SQLite cache"));
+    assert!(success, "status should not need the runtime dir: {stderr}");
     assert!(stdout.contains("Current work:  1 issue(s)"), "{stdout}");
-    assert!(stdout.contains(&format!("{issue_id}")));
-    assert!(dir.path().join(".atelier/runtime/state.db").exists());
+    assert!(stdout.contains(&issue_id));
 }
 
 #[test]
@@ -1957,7 +1432,7 @@ fn assert_lint_rejects_canonical_mutation(
 }
 
 #[test]
-fn test_bundle_apply_records_links_and_rebuild() {
+fn test_bundle_apply_records_links() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let bundle_path = dir.path().join("bundle.json");
@@ -2030,8 +1505,6 @@ fn test_bundle_apply_records_links_and_rebuild() {
     )
     .unwrap();
     let bundle_arg = bundle_path.to_str().unwrap();
-    let db_path = dir.path().join(".atelier/runtime/state.db");
-    let db_before_preview = std::fs::read(&db_path).unwrap();
 
     let (success, dry_run_out, stderr) =
         run_atelier(dir.path(), &["bundle", "preview", bundle_arg]);
@@ -2060,11 +1533,6 @@ fn test_bundle_apply_records_links_and_rebuild() {
         );
         previous_position = position;
     }
-    assert_eq!(
-        std::fs::read(&db_path).unwrap(),
-        db_before_preview,
-        "bundle preview mutated SQLite"
-    );
     assert_eq!(
         std::fs::read_dir(dir.path().join(".atelier/issues"))
             .unwrap()
@@ -2110,17 +1578,7 @@ fn test_bundle_apply_records_links_and_rebuild() {
     let blocked_id = issue_id_by_title(dir.path(), "Blocked bundle work");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "lazy query after bundle apply failed: {stderr}");
-    assert!(
-        stderr.contains("Local cache was stale; rebuilt SQLite cache")
-            || stderr
-                .contains("Local cache was stale; repaired changed record sources incrementally"),
-        "missing one-time lazy rebuild diagnostic: {stderr}"
-    );
-
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after bundle apply failed: {stderr}");
+    assert!(success, "query after bundle apply failed: {stderr}");
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show after bundle apply failed: {stderr}");
@@ -2202,8 +1660,6 @@ fn test_bundle_preview_rejects_duplicate_normalized_relationships_without_mutati
 }"#,
     )
     .unwrap();
-    let db_path = dir.path().join(".atelier/runtime/state.db");
-    let db_before_preview = std::fs::read(&db_path).unwrap();
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -2216,7 +1672,6 @@ fn test_bundle_preview_rejects_duplicate_normalized_relationships_without_mutati
             && stderr.contains("(blocks)"),
         "stdout: {stdout}\nstderr: {stderr}"
     );
-    assert_eq!(std::fs::read(&db_path).unwrap(), db_before_preview);
     assert_eq!(
         std::fs::read_dir(dir.path().join(".atelier/issues"))
             .unwrap()
@@ -2343,9 +1798,7 @@ fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserve
         )
         .unwrap();
         let state_dir = dir.path().join(".atelier");
-        let db_path = state_dir.join("runtime/state.db");
         let canonical_before = canonical_tree_snapshot(&state_dir);
-        let db_before = std::fs::read(&db_path).unwrap();
 
         let (success, _stdout, stderr) = run_atelier(
             dir.path(),
@@ -2359,7 +1812,6 @@ fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserve
         );
         assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
         assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
-        assert_eq!(std::fs::read(db_path).unwrap(), db_before);
     }
 }
 
@@ -2404,7 +1856,7 @@ fn test_bundle_apply_accepts_non_executable_initial_statuses() {
     let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         success,
-        "applied initial statuses must rebuild cleanly: {stderr}"
+        "applied initial statuses must load cleanly: {stderr}"
     );
 }
 
@@ -2414,8 +1866,6 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
     init_git_repo(dir.path());
     init_atelier(dir.path());
     let mission_id = create_mission_fixture(dir.path(), "Reviewed executable mission");
-    let (success, _, stderr) = run_atelier(dir.path(), &["check", "--fix"]);
-    assert!(success, "fixture cache refresh failed: {stderr}");
     let bundle_path = dir.path().join("stale-reviewed-mission.json");
     std::fs::write(
         &bundle_path,
@@ -2440,7 +1890,6 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
     )
     .unwrap();
     let state_dir = dir.path().join(".atelier");
-    let db_path = state_dir.join("runtime/state.db");
     let canonical_before = canonical_tree_snapshot(&state_dir);
 
     let (success, _stdout, stderr) = run_atelier(
@@ -2450,7 +1899,6 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
 
     assert!(success, "ordinary graph edit should apply: {stderr}");
     assert_ne!(canonical_tree_snapshot(&state_dir), canonical_before);
-    assert!(db_path.exists());
 }
 
 #[test]
@@ -2563,8 +2011,6 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
     )
     .unwrap();
     let state_dir = dir.path().join(".atelier");
-    let db_path = state_dir.join("runtime/state.db");
-    let db_before = std::fs::read(&db_path).unwrap();
     let issue_count = count_markdown_records(dir.path(), "issues");
     let evidence_count = count_markdown_records(dir.path(), "evidence");
 
@@ -2602,11 +2048,6 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
         "evidence",
         "Cleanup committed evidence"
     ));
-    assert_eq!(
-        std::fs::read(&db_path).unwrap(),
-        db_before,
-        "post-commit cleanup changed SQLite before lazy repair"
-    );
 
     let mut backups = std::fs::read_dir(state_dir.join("runtime"))
         .unwrap()
@@ -2699,8 +2140,6 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
     )
     .unwrap();
     let state_dir = dir.path().join(".atelier");
-    let db_path = state_dir.join("runtime/state.db");
-    let db_before = std::fs::read(&db_path).unwrap();
     let counts_before = (
         count_markdown_records(dir.path(), "issues"),
         count_markdown_records(dir.path(), "evidence"),
@@ -2743,11 +2182,6 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
         "evidence",
         "Stage cleanup committed evidence"
     ));
-    assert_eq!(
-        std::fs::read(&db_path).unwrap(),
-        db_before,
-        "post-commit stage cleanup changed SQLite before lazy repair"
-    );
 
     let mut stages = std::fs::read_dir(dir.path())
         .unwrap()
@@ -2997,8 +2431,6 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("validation"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
     let issue_record = std::fs::read_to_string(
         dir.path()
             .join(".atelier/issues")

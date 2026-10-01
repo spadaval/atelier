@@ -1,18 +1,16 @@
 use anyhow::{bail, Result};
 use atelier_core::EvidenceRecord;
 use atelier_records::IssueSections;
-use atelier_sqlite::Database;
 use serde::Serialize;
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
-use crate::lint::{self, LintRequest};
+use crate::record_index::RecordIndex;
 use crate::workflow_policy::{ValidatorDefinition, ValidatorParams, WorkflowPolicy};
 
 pub struct ValidatorRequest<'a> {
-    pub db: &'a Database,
+    pub index: &'a RecordIndex,
     pub repo_root: &'a Path,
     pub policy: &'a WorkflowPolicy,
     pub issue_id: &'a str,
@@ -30,7 +28,7 @@ pub struct ValidatorResult {
 
 /// Runs a transition's read-only validators against one issue.
 pub fn evaluate_policy_transition(request: ValidatorRequest<'_>) -> Result<Vec<ValidatorResult>> {
-    request.db.require_issue(request.issue_id)?;
+    request.index.require_issue(request.issue_id)?;
     let mut results = Vec::new();
     for definition in request.validators {
         let started = Instant::now();
@@ -51,7 +49,7 @@ fn evaluate_builtin(
     definition: &ValidatorDefinition,
 ) -> Result<(bool, String, Option<String>)> {
     let ValidatorRequest {
-        db,
+        index,
         repo_root,
         policy,
         issue_id,
@@ -59,23 +57,21 @@ fn evaluate_builtin(
     } = *request;
     match definition.builtin.as_str() {
         "issue.sections_parseable" => {
-            issue_sections_parseable(repo_root, issue_id).map(without_validator_help)
+            issue_sections_parseable(index, repo_root, issue_id).map(without_validator_help)
         }
         "blockers.none_open" => {
-            let open = open_blockers(db, policy, repo_root, issue_id)?;
+            let open = open_blockers(index, policy, repo_root, issue_id)?;
             if open.is_empty() {
                 Ok((true, "no open blockers".to_string(), None))
             } else {
                 Ok((false, format!("open blockers: {}", open.join(", ")), None))
             }
         }
-        "blockers.transitive_none_open" => transitive_blockers_none_open(db, policy, issue_id),
-        "evidence.attached" => {
-            evidence_attached(db, repo_root, issue_id, definition.params.as_ref())
-        }
-        "lint.none_blocking" => lint_none_blocking(db).map(without_validator_help),
+        "blockers.transitive_none_open" => transitive_blockers_none_open(index, policy, issue_id),
+        "evidence.attached" => evidence_attached(index, issue_id, definition.params.as_ref()),
+        "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
-        "work.terminal" => work_terminal(db, policy, issue_id).map(without_validator_help),
+        "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
         other => bail!("unsupported builtin validator: {other}"),
     }
 }
@@ -85,14 +81,12 @@ fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Op
 }
 
 fn evidence_attached(
-    db: &Database,
-    repo_root: &Path,
+    index: &RecordIndex,
     issue_id: &str,
     params: Option<&ValidatorParams>,
 ) -> Result<(bool, String, Option<String>)> {
     if let Some(ValidatorParams::EvidenceAttached { min_count, kind }) = params {
-        let validating_count =
-            linked_evidence_records(db, repo_root, issue_id, kind.as_deref())?.len();
+        let validating_count = linked_evidence_records(index, issue_id, kind.as_deref())?.len();
         if validating_count < *min_count as usize {
             return Ok((
                 false,
@@ -108,7 +102,7 @@ fn evidence_attached(
             ));
         }
     }
-    let gate = issue_evidence_gate_status(db, repo_root, issue_id)?;
+    let gate = issue_evidence_gate_status(index, issue_id)?;
     Ok((gate.passed, gate.reason, gate.help))
 }
 
@@ -119,12 +113,8 @@ struct EvidenceGateStatus {
     help: Option<String>,
 }
 
-fn issue_evidence_gate_status(
-    db: &Database,
-    repo_root: &Path,
-    issue_id: &str,
-) -> Result<EvidenceGateStatus> {
-    let evidence = linked_evidence_records(db, repo_root, issue_id, None)?;
+fn issue_evidence_gate_status(index: &RecordIndex, issue_id: &str) -> Result<EvidenceGateStatus> {
+    let evidence = linked_evidence_records(index, issue_id, None)?;
     if evidence.is_empty() {
         return Ok(EvidenceGateStatus {
             passed: false,
@@ -156,70 +146,53 @@ fn evidence_help_hint() -> String {
     "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
 }
 
-fn linked_evidence_records(
-    db: &Database,
-    repo_root: &Path,
+fn linked_evidence_records<'a>(
+    index: &'a RecordIndex,
     issue_id: &str,
     required_kind: Option<&str>,
-) -> Result<Vec<EvidenceRecord>> {
+) -> Result<Vec<&'a EvidenceRecord>> {
     let mut records = Vec::new();
-    for link in db.list_record_links("issue", issue_id)? {
+    for link in index.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
             continue;
         }
         let evidence_id = if link.source_kind == "evidence" {
-            Some(link.source_id)
+            link.source_id
         } else if link.target_kind == "evidence" {
-            Some(link.target_id)
+            link.target_id
         } else {
-            None
-        };
-        let Some(evidence_id) = evidence_id else {
             continue;
         };
-        db.require_record("evidence", &evidence_id)?;
-        let Some(record) = canonical_evidence_record(repo_root, &evidence_id)? else {
+        let record = index.require_evidence(&evidence_id)?;
+        if required_kind.is_some_and(|kind| record.data.evidence_type != kind) {
             continue;
-        };
-        if let Some(required_kind) = required_kind {
-            if record.data.evidence_type != required_kind {
-                continue;
-            }
         }
         records.push(record);
     }
     Ok(records)
 }
 
-fn canonical_evidence_record(repo_root: &Path, id: &str) -> Result<Option<EvidenceRecord>> {
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    Ok(crate::use_cases::load_canonical_evidence(&state_dir, id).ok())
-}
-
-fn lint_none_blocking(db: &Database) -> Result<(bool, String)> {
-    let outcome = lint::lint(crate::Request {
-        input: LintRequest {
-            db,
-            issue_ref: None,
-        },
-    })?;
-    let findings = outcome.value.data.findings;
+fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
+    let findings = crate::lint::issue_findings(index.issue_records(), repo_root, false);
     if findings.is_empty() {
-        Ok((true, "lint passed".to_string()))
+        (true, "lint passed".to_string())
     } else {
-        Ok((
+        (
             false,
             format!("atelier check failed with {} finding(s)", findings.len()),
-        ))
+        )
     }
 }
 
-fn issue_sections_parseable(repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
+fn issue_sections_parseable(
+    index: &RecordIndex,
+    repo_root: &Path,
+    issue_id: &str,
+) -> Result<(bool, String)> {
     let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let record = match crate::use_cases::load_canonical_issue(&state_dir, issue_id) {
-        Ok(record) => record,
-        Err(error) => return Ok((false, error.to_string())),
-    };
+    let record = index
+        .issue_record(issue_id)
+        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
     let invalid = record
         .sections
         .section_states()
@@ -253,10 +226,14 @@ fn issue_sections_parseable(repo_root: &Path, issue_id: &str) -> Result<(bool, S
 
 /// Passes when every child (recursively) and, for missions, all work linked
 /// by `advances` is in a done-category status.
-fn work_terminal(db: &Database, policy: &WorkflowPolicy, issue_id: &str) -> Result<(bool, String)> {
+fn work_terminal(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    issue_id: &str,
+) -> Result<(bool, String)> {
     let mut open = Vec::new();
-    for id in crate::objective_graph::issue_descendant_ids(db, issue_id)? {
-        let issue = db.require_issue(&id)?;
+    for id in crate::objective_graph::issue_descendant_ids(index, issue_id)? {
+        let issue = index.require_issue(&id)?;
         if policy.status_category(&issue.status) != Some("done") {
             open.push(format!("{} [{}]", issue.id, issue.status));
         }
@@ -269,11 +246,11 @@ fn work_terminal(db: &Database, policy: &WorkflowPolicy, issue_id: &str) -> Resu
 }
 
 fn transitive_blockers_none_open(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     issue_id: &str,
 ) -> Result<(bool, String, Option<String>)> {
-    match crate::mission_readiness::dependency_diagnosis(db, policy, issue_id)? {
+    match crate::mission_readiness::dependency_diagnosis(index, policy, issue_id)? {
         Some(diagnosis) => Ok((
             false,
             diagnosis.summary,
@@ -288,21 +265,15 @@ fn transitive_blockers_none_open(
 }
 
 fn open_blockers(
-    db: &Database,
+    index: &RecordIndex,
     policy: &WorkflowPolicy,
     repo_root: &Path,
     issue_id: &str,
 ) -> Result<Vec<String>> {
     let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
     let mut open = Vec::new();
-    for blocker_id in db
-        .get_blockers(issue_id)?
-        .into_iter()
-        .collect::<BTreeSet<_>>()
-    {
-        let Some(blocker) = db.get_issue(&blocker_id)? else {
-            continue;
-        };
+    for blocker_id in index.get_blockers(issue_id) {
+        let blocker = index.require_issue(&blocker_id)?;
         crate::workflow_policy::validate_issue_against_policy(policy, &blocker, &policy_path)?;
         if policy.status_category(&blocker.status) != Some("done") {
             open.push(blocker.id);
@@ -354,11 +325,9 @@ fn git_worktree_clean(repo_root: &Path) -> Result<(bool, String)> {
 #[cfg(test)]
 mod tests {
     use super::work_terminal;
+    use crate::test_records::Records;
     use crate::workflow_policy::{BranchLifecycleConfig, StatusDefinition, WorkflowPolicy};
-    use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
-    use chrono::Utc;
     use std::collections::BTreeMap;
-    use tempfile::tempdir;
 
     fn policy() -> WorkflowPolicy {
         let statuses = [
@@ -386,76 +355,41 @@ mod tests {
         }
     }
 
-    fn index(db: &Database, id: &str, issue_type: &str, status: &str, parent: Option<&str>) {
-        let now = Utc::now();
-        db.index_issue(
-            &IssueCacheRow {
-                id: id.to_string(),
-                title: id.to_string(),
-                status: status.to_string(),
-                issue_type: issue_type.to_string(),
-                priority: "medium".to_string(),
-                fields: BTreeMap::new(),
-                parent_id: parent.map(str::to_string),
-                created_at: now,
-                updated_at: now,
-                closed_at: None,
-            },
-            &[],
-            &[],
-            &[],
-            &RecordSourceCacheRow {
-                path: format!("issues/{id}.md"),
-                record_kind: "issue".to_string(),
-                record_id: id.to_string(),
-                size_bytes: 0,
-                modified_micros: None,
-                content_hash: None,
-                indexed_at: now,
-            },
-        )
-        .unwrap();
-    }
-
     #[test]
     fn work_terminal_requires_every_child_done() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("test.db")).unwrap();
-        index(&db, "atelier-epic", "epic", "in_progress", None);
-        index(&db, "atelier-done", "task", "done", Some("atelier-epic"));
-        index(
-            &db,
-            "atelier-open",
-            "task",
-            "in_progress",
-            Some("atelier-epic"),
-        );
+        let mut records = Records::default();
+        records.issue("atelier-epic", "epic", "in_progress");
+        records.issue("atelier-done", "task", "done");
+        records.issue("atelier-open", "task", "in_progress");
+        records.parent("atelier-done", "atelier-epic");
+        records.parent("atelier-open", "atelier-epic");
 
-        let (passed, reason) = work_terminal(&db, &policy(), "atelier-epic").unwrap();
+        let (passed, reason) = work_terminal(&records.index(), &policy(), "atelier-epic").unwrap();
         assert!(!passed);
         assert_eq!(reason, "open work: atelier-open [in_progress]");
 
-        index(&db, "atelier-open", "task", "done", Some("atelier-epic"));
-        let (passed, reason) = work_terminal(&db, &policy(), "atelier-epic").unwrap();
+        records.get("atelier-open").issue.status = "done".to_string();
+        let (passed, reason) = work_terminal(&records.index(), &policy(), "atelier-epic").unwrap();
         assert!(passed, "{reason}");
     }
 
     #[test]
     fn work_terminal_follows_mission_advances_links() {
-        let dir = tempdir().unwrap();
-        let db = Database::open(&dir.path().join("test.db")).unwrap();
-        index(&db, "atelier-mission", "mission", "in_progress", None);
-        index(&db, "atelier-epic", "epic", "done", None);
-        index(&db, "atelier-child", "task", "todo", Some("atelier-epic"));
-        db.add_typed_relation("atelier-mission", "atelier-epic", "advances")
-            .unwrap();
+        let mut records = Records::default();
+        records.issue("atelier-mission", "mission", "in_progress");
+        records.issue("atelier-epic", "epic", "done");
+        records.issue("atelier-child", "task", "todo");
+        records.parent("atelier-child", "atelier-epic");
+        records.relate("atelier-mission", "atelier-epic", "advances");
 
-        let (passed, reason) = work_terminal(&db, &policy(), "atelier-mission").unwrap();
+        let (passed, reason) =
+            work_terminal(&records.index(), &policy(), "atelier-mission").unwrap();
         assert!(!passed);
         assert_eq!(reason, "open work: atelier-child [todo]");
 
-        index(&db, "atelier-child", "task", "done", Some("atelier-epic"));
-        let (passed, reason) = work_terminal(&db, &policy(), "atelier-mission").unwrap();
+        records.get("atelier-child").issue.status = "done".to_string();
+        let (passed, reason) =
+            work_terminal(&records.index(), &policy(), "atelier-mission").unwrap();
         assert!(passed, "{reason}");
     }
 }

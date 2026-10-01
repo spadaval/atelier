@@ -81,8 +81,6 @@ fn test_unicode_in_descriptions_and_comments() {
         &issue_id,
         "Description with 日本語 and émojis 🚀",
     );
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after description edit failed: {stderr}");
 
     // Add Unicode comment
     let (success, _, _) = run_atelier(

@@ -1,6 +1,6 @@
 //! Core Atelier domain vocabulary.
 //!
-//! This crate is intentionally free of filesystem, SQLite, and Clap
+//! This crate is intentionally free of filesystem and Clap
 //! dependencies. Concrete domain types move here as the migration advances.
 
 use chrono::{DateTime, NaiveDate, Utc};

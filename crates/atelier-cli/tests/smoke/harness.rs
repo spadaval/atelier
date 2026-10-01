@@ -231,11 +231,6 @@ impl SmokeHarness {
         self.edit_canonical_record("issues", issue_ref, edit);
     }
 
-    /// Path to the SQLite database.
-    pub fn db_path(&self) -> PathBuf {
-        self.atelier_dir().join("runtime/state.db")
-    }
-
     pub fn issue_id(&self, ordinal: usize) -> String {
         self.issue_ref(ordinal)
     }
