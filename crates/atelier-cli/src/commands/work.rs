@@ -439,15 +439,22 @@ fn open_blockers(count: usize) -> String {
 }
 
 fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
-    let rows = match bucket {
-        "ready" => &buckets.ready,
-        "blocked" => &buckets.blocked,
-        "active" => &buckets.active,
-        "all" => &buckets.ready,
-        _ => &buckets.ready,
+    let groups: &[&[WorkRow]] = match bucket {
+        "ready" => &[&buckets.ready],
+        "blocked" => &[&buckets.blocked],
+        "active" => &[&buckets.active],
+        "all" => &[
+            &buckets.active,
+            &buckets.ready,
+            &buckets.blocked,
+            &buckets.backlog,
+        ],
+        _ => &[&buckets.ready],
     };
-    for row in rows {
-        println!("{}", row.id);
+    for rows in groups {
+        for row in *rows {
+            println!("{}", row.id);
+        }
     }
 }
 

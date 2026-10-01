@@ -2648,6 +2648,74 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
 }
 
 #[test]
+fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for (title, issue_type) in [
+        ("Quiet mission", "mission"),
+        ("Quiet epic", "epic"),
+        ("Unscoped ready", "task"),
+        ("Unscoped active", "task"),
+        ("Unscoped blocked", "task"),
+        ("Completed history", "task"),
+    ] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", title, "--issue-type", issue_type],
+        );
+        assert!(success, "work-all fixture create failed: {stderr}");
+    }
+    let mission_id = issue_id_by_title(dir.path(), "Quiet mission");
+    let epic_id = issue_id_by_title(dir.path(), "Quiet epic");
+    let ready_id = issue_id_by_title(dir.path(), "Unscoped ready");
+    let active_id = issue_id_by_title(dir.path(), "Unscoped active");
+    let blocked_id = issue_id_by_title(dir.path(), "Unscoped blocked");
+    let done_id = issue_id_by_title(dir.path(), "Completed history");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Scoped ready", "--parent", &epic_id],
+    );
+    assert!(success, "scoped fixture create failed: {stderr}");
+    let scoped_id = issue_id_by_title(dir.path(), "Scoped ready");
+    set_issue_status(dir.path(), &active_id, "in_progress");
+    set_issue_status(dir.path(), &blocked_id, "blocked");
+    set_issue_status(dir.path(), &done_id, "done");
+
+    let mut ready_ids = vec![ready_id, scoped_id];
+    ready_ids.sort();
+    let mut backlog_ids = vec![mission_id, epic_id];
+    backlog_ids.sort();
+    let expected = [vec![active_id], ready_ids, vec![blocked_id], backlog_ids].concat();
+
+    let (success, human, stderr) = run_atelier(dir.path(), &["work", "all"]);
+    assert!(success, "human work all failed: {stderr}");
+    let human_ids: Vec<_> = human
+        .lines()
+        .filter_map(|line| {
+            expected
+                .iter()
+                .find(|id| line.contains(id.as_str()))
+                .cloned()
+        })
+        .collect();
+    assert_eq!(human_ids, expected, "{human}");
+    assert!(!human.contains(&done_id), "{human}");
+
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "all"]);
+    assert!(success, "quiet work all failed: {stderr}");
+    let quiet_ids: Vec<_> = quiet.lines().map(str::to_owned).collect();
+    assert_eq!(quiet_ids, expected, "{quiet}");
+    assert_eq!(
+        quiet_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        quiet_ids.len()
+    );
+}
+
+#[test]
 fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
