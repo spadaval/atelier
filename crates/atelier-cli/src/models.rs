@@ -1,6 +1,6 @@
 pub use atelier_core::{
-    Comment, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
-    Issue, IssueId, RecordLink, Relation, WorkAssociation,
+    EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget, Issue,
+    IssueId, RecordLink, Relation, WorkAssociation,
 };
 
 #[cfg(test)]
@@ -109,42 +109,6 @@ mod tests {
         );
     }
 
-    // ==================== Comment Tests ====================
-
-    #[test]
-    fn test_comment_serialization() {
-        let comment = Comment {
-            id: 1,
-            issue_id: "atelier-0016".to_string(),
-            content: "A comment".to_string(),
-            created_at: Utc::now(),
-            kind: "note".to_string(),
-        };
-
-        let json = serde_json::to_string(&comment).unwrap();
-        let deserialized: Comment = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(comment.id, deserialized.id);
-        assert_eq!(comment.issue_id, deserialized.issue_id);
-        assert_eq!(comment.content, deserialized.content);
-    }
-
-    #[test]
-    fn test_comment_empty_content() {
-        let comment = Comment {
-            id: 1,
-            issue_id: "atelier-0001".to_string(),
-            content: "".to_string(),
-            created_at: Utc::now(),
-            kind: "note".to_string(),
-        };
-
-        let json = serde_json::to_string(&comment).unwrap();
-        let deserialized: Comment = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(deserialized.content, "");
-    }
-
     // ==================== Property-Based Tests ====================
 
     proptest! {
@@ -176,28 +140,6 @@ mod tests {
             prop_assert_eq!(deserialized.title, title);
             prop_assert_eq!(deserialized.status, status);
             prop_assert_eq!(deserialized.priority, priority);
-        }
-
-        #[test]
-        fn prop_comment_json_roundtrip(
-            id in 1i64..10000,
-            issue_id in 1i64..10000,
-            content in "[a-zA-Z0-9 ]{0,500}"
-        ) {
-            let comment = Comment {
-                id,
-                issue_id: format!("atelier-{issue_id:04}"),
-                content: content.clone(),
-                created_at: Utc::now(),
-                kind: "note".to_string(),
-            };
-
-            let json = serde_json::to_string(&comment).unwrap();
-            let deserialized: Comment = serde_json::from_str(&json).unwrap();
-
-            prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(deserialized.issue_id, format!("atelier-{issue_id:04}"));
-            prop_assert_eq!(deserialized.content, content);
         }
 
         #[test]

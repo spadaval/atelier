@@ -37,7 +37,7 @@ impl Database {
         if self.get_issue(id)?.is_some() {
             return Ok(true);
         }
-        Ok(self.evidence_cache_row(id)?.is_some() || self.review_room_cache_row(id)?.is_some())
+        Ok(self.evidence_cache_row(id)?.is_some())
     }
 
     pub fn record_kind_for_id(&self, id: &str) -> Result<Option<String>> {
@@ -50,8 +50,6 @@ impl Database {
 
         if self.evidence_cache_row(id)?.is_some() {
             Ok(Some("evidence".to_string()))
-        } else if self.review_room_cache_row(id)?.is_some() {
-            Ok(Some("review".to_string()))
         } else {
             Ok(None)
         }
@@ -82,20 +80,6 @@ impl Database {
                 .map(|row| RecordSummary {
                     kind: "evidence".to_string(),
                     source_path: source_path("evidence", &row.id),
-                    id: row.id,
-                    title: row.title,
-                    status: row.status,
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
-                })
-                .collect(),
-            "review" => self
-                .review_room_cache_rows()?
-                .into_iter()
-                .filter(|row| status.is_none_or(|status| row.status == status))
-                .map(|row| RecordSummary {
-                    kind: "review".to_string(),
-                    source_path: source_path("review", &row.id),
                     id: row.id,
                     title: row.title,
                     status: row.status,

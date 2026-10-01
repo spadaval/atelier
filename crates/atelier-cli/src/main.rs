@@ -30,8 +30,6 @@ Planning:
 
 Records:
   evidence      Capture validation evidence
-  review        Manage configured review artifacts
-  history       Inspect bounded durable repository or issue activity
 
 Maintenance:
   check         Validate tracker health; use --fix for local repair
@@ -61,7 +59,6 @@ Common commands:
   atelier issue transition <mission-id> request_publish
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
-  atelier history
   atelier issue transition <issue-id>
   atelier issue transition <issue-id> start
   atelier issue transition <issue-id> close --reason \"...\"
@@ -167,29 +164,6 @@ enum Commands {
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
-    },
-
-    /// Configured review artifacts
-    Review {
-        #[command(subcommand)]
-        action: ReviewCommands,
-    },
-
-    /// Admin recovery for Forgejo role author accounts
-    #[command(hide = true)]
-    Forgejo {
-        #[command(subcommand)]
-        action: ForgejoCommands,
-    },
-
-    /// Inspect bounded durable repository or issue activity
-    History {
-        /// Scope to one issue record; mission and epic dashboards own descendant views
-        #[arg(long)]
-        issue: Option<String>,
-        /// Maximum number of matching events to print
-        #[arg(long, default_value_t = commands::history::DEFAULT_LIMIT)]
-        limit: usize,
     },
 
     /// Advanced/debug workflow policy diagnostics
@@ -443,7 +417,7 @@ enum IssueCommands {
         no_parent: bool,
     },
 
-    /// Add an activity note to an issue
+    /// Append a dated note to the issue record's Notes section
     Note {
         /// Issue ID
         id: String,
@@ -534,86 +508,6 @@ another target.")]
         #[arg(long)]
         status: Option<String>,
     },
-}
-
-#[derive(Subcommand)]
-enum ReviewCommands {
-    /// Open or confirm the active review artifact for an issue owner
-    Open {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        role: Option<String>,
-        /// Link an existing provider review instead of creating one
-        #[arg(long, conflicts_with = "role")]
-        existing: Option<String>,
-    },
-    /// Show linked review state and optionally its comments
-    Show {
-        #[arg(long)]
-        issue: Option<String>,
-        /// Include review comments or native room findings
-        #[arg(long)]
-        comments: bool,
-        /// Show only unresolved review comments or native room findings
-        #[arg(long)]
-        unresolved: bool,
-    },
-    /// Merge or confirm the linked review artifact without changing Atelier workflow state
-    Merge {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        role: Option<String>,
-    },
-    /// Submit one comment, approval, or change request
-    Submit {
-        #[arg(long)]
-        issue: Option<String>,
-        #[arg(long)]
-        role: Option<String>,
-        /// Approve the review artifact
-        #[arg(long)]
-        approve: bool,
-        /// Request changes on the review artifact
-        #[arg(long)]
-        request_changes: bool,
-        /// Add a review artifact comment
-        #[arg(long, value_name = "TEXT", conflicts_with = "body")]
-        comment: Option<String>,
-        /// Optional body for an approval or change request
-        #[arg(long, conflicts_with = "comment")]
-        body: Option<String>,
-        /// Record this room comment as a finding instead of a plain timeline comment
-        #[arg(long, requires = "comment")]
-        finding: bool,
-        /// Finding severity for native room mode
-        #[arg(long, requires = "finding")]
-        severity: Option<String>,
-    },
-    /// Resolve a native room finding
-    Resolve {
-        #[arg(long)]
-        issue: Option<String>,
-        finding: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum ForgejoCommands {
-    /// Provision and verify Forgejo role author accounts
-    Roles {
-        #[command(subcommand)]
-        action: ForgejoRolesCommands,
-    },
-}
-
-#[derive(Subcommand)]
-enum ForgejoRolesCommands {
-    /// Verify configured role author users, repo permissions, and sudo access
-    Check,
-    /// Create missing role author users and grant repository access
-    Provision,
 }
 
 #[derive(Subcommand)]
@@ -990,153 +884,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Review { action } => {
-            let storage = use_cases::review_cache()?;
-            match action {
-                ReviewCommands::Open {
-                    issue,
-                    role,
-                    existing,
-                } => {
-                    if let Some(existing) = existing {
-                        commands::pr::link(
-                            storage.db(),
-                            storage.repo_root(),
-                            &storage.state_dir(),
-                            &storage.db_path(),
-                            issue.as_deref(),
-                            &existing,
-                        )
-                    } else {
-                        commands::pr::open(
-                            storage.db(),
-                            storage.repo_root(),
-                            &storage.state_dir(),
-                            &storage.db_path(),
-                            issue.as_deref(),
-                            role.as_deref(),
-                        )
-                    }
-                }
-                ReviewCommands::Show {
-                    issue,
-                    comments,
-                    unresolved,
-                } => {
-                    commands::pr::show(
-                        storage.db(),
-                        storage.repo_root(),
-                        &storage.state_dir(),
-                        issue.as_deref(),
-                    )?;
-                    if comments || unresolved {
-                        commands::pr::comments(
-                            storage.db(),
-                            storage.repo_root(),
-                            &storage.state_dir(),
-                            issue.as_deref(),
-                            unresolved,
-                        )
-                    } else {
-                        Ok(())
-                    }
-                }
-                ReviewCommands::Merge { issue, role } => commands::pr::merge(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    role.as_deref(),
-                ),
-                ReviewCommands::Submit {
-                    issue,
-                    role,
-                    approve,
-                    request_changes,
-                    comment,
-                    body,
-                    finding,
-                    severity,
-                } => {
-                    let action_count = usize::from(approve)
-                        + usize::from(request_changes)
-                        + usize::from(comment.is_some());
-                    if action_count == 0 {
-                        bail!("review_submit_action_required: pass exactly one of --approve, --request-changes, or --comment <text>");
-                    }
-                    if action_count > 1 {
-                        bail!("review_submit_action_conflict: pass only one of --approve, --request-changes, or --comment <text>");
-                    }
-                    if let Some(comment) = comment {
-                        commands::pr::comment(
-                            storage.db(),
-                            storage.repo_root(),
-                            &storage.state_dir(),
-                            &storage.db_path(),
-                            issue.as_deref(),
-                            role.as_deref(),
-                            &comment,
-                            finding,
-                            severity.as_deref(),
-                        )
-                    } else {
-                        commands::pr::review(
-                            storage.db(),
-                            storage.repo_root(),
-                            &storage.state_dir(),
-                            &storage.db_path(),
-                            issue.as_deref(),
-                            role.as_deref(),
-                            if approve {
-                                "approve"
-                            } else {
-                                "request-changes"
-                            },
-                            body.as_deref().unwrap_or(""),
-                        )
-                    }
-                }
-                ReviewCommands::Resolve { issue, finding } => commands::pr::resolve(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    issue.as_deref(),
-                    &finding,
-                ),
-            }
-        }
-
-        Commands::Forgejo { action } => {
-            let repo_root = atelier_app::storage_layout::find_repo_root()?;
-            match action {
-                ForgejoCommands::Roles { action } => match action {
-                    ForgejoRolesCommands::Check => commands::forgejo::roles_check(&repo_root),
-                    ForgejoRolesCommands::Provision => {
-                        commands::forgejo::roles_provision(&repo_root)
-                    }
-                },
-            }
-        }
-
-        Commands::History { issue, limit } => {
-            let storage = use_cases::history_query_cache()?;
-            let issue = issue
-                .as_deref()
-                .map(|id| resolve_issue_arg(storage.db(), id))
-                .transpose()?;
-            commands::history::run(
-                storage.db(),
-                &storage.state_dir(),
-                commands::history::HistoryOptions {
-                    issue,
-                    limit,
-                    quiet,
-                },
-            )
-        }
-
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => {
                 let storage = use_cases::workflow_query_cache()?;
@@ -1354,20 +1101,6 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
         },
-        Commands::Review { action } => match action {
-            ReviewCommands::Open { .. } => "review open",
-            ReviewCommands::Show { .. } => "review show",
-            ReviewCommands::Merge { .. } => "review merge",
-            ReviewCommands::Submit { .. } => "review submit",
-            ReviewCommands::Resolve { .. } => "review resolve",
-        },
-        Commands::Forgejo { action } => match action {
-            ForgejoCommands::Roles { action } => match action {
-                ForgejoRolesCommands::Check => "forgejo roles check",
-                ForgejoRolesCommands::Provision => "forgejo roles provision",
-            },
-        },
-        Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => "workflow check",
         },
@@ -1510,8 +1243,6 @@ mod cache_acquisition_tests {
             "work_query_cache()",
             "evidence_query_cache()",
             "bundle_query_cache()",
-            "review_cache()",
-            "history_query_cache()",
             "workflow_query_cache()",
             "branch_decision_cache()",
             "lint_cache()",
@@ -1533,8 +1264,6 @@ mod cache_acquisition_tests {
             include_str!("commands/workflow.rs"),
             include_str!("commands/relate.rs"),
             include_str!("commands/bundle.rs"),
-            include_str!("../../atelier-app/src/pr.rs"),
-            include_str!("../../atelier-app/src/review_room.rs"),
         ];
         let eager_helper = ["refresh_after_", "canonical_write"].concat();
 

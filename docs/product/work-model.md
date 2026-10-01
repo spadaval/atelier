@@ -284,13 +284,6 @@ Independent review moves to the epic by default. Ordinary implementation issues
 close with their own proof, while epic completion maps child issue proof to the
 parent outcome and records the review or validation judgment for the branch.
 
-Workflow transitions may prepare review state through declared actions. For
-example, an epic `request_review` transition can open or link the configured
-review artifact after validators pass, then write the artifact link to the
-branch-owning issue. That action prepares the review workspace only. Review
-comments, approvals, change requests, finding resolution, and merge stay on
-`atelier review`; issue status changes stay on `atelier issue transition`.
-
 ## Relationships
 
 Use hierarchy for ownership and typed links for contribution, validation, and

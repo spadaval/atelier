@@ -21,8 +21,7 @@ use atelier_app::issue_inventory::{
 };
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority};
-use atelier_records::activity::{list_issue_activities, ActivityEventType};
+use atelier_core::{EvidenceRecord, Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::{
     parse_issue_sections, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
 };
@@ -219,20 +218,11 @@ pub struct IssueObject {
     pub priority: String,
     pub labels: Vec<String>,
     pub parent: Option<String>,
-    pub notes: Vec<NoteObject>,
     pub assignee: Option<String>,
     pub owner: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub closed_at: Option<String>,
-    pub close_reason: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct NoteObject {
-    pub kind: String,
-    pub created_at: String,
-    pub body: String,
 }
 
 pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
@@ -269,95 +259,6 @@ fn label_value(labels: &[String], prefix: &str) -> Option<String> {
     labels
         .iter()
         .find_map(|label| label.strip_prefix(prefix).map(str::to_string))
-}
-
-fn note_object(comment: Comment) -> NoteObject {
-    NoteObject {
-        kind: comment.kind,
-        created_at: comment.created_at.to_rfc3339(),
-        body: comment.content,
-    }
-}
-
-fn comment_metadata_value(comments: &[Comment], key: &str) -> Option<String> {
-    let prefix = format!("{key}:");
-    comments.iter().find_map(|comment| {
-        comment.content.lines().find_map(|line| {
-            line.strip_prefix(&prefix)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-        })
-    })
-}
-
-fn activity_note_objects(issue_id: &str) -> Result<Vec<NoteObject>> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(Vec::new());
-    };
-    Ok(list_issue_activities(&state_dir, issue_id)?
-        .into_iter()
-        .filter(|activity| {
-            matches!(
-                activity.event_type,
-                ActivityEventType::Comment
-                    | ActivityEventType::Note
-                    | ActivityEventType::Handoff
-                    | ActivityEventType::Plan
-            )
-        })
-        .map(|activity| NoteObject {
-            kind: activity.event_type.to_string(),
-            created_at: activity.created_at.to_rfc3339(),
-            body: activity.body,
-        })
-        .collect())
-}
-
-fn activity_close_reason(issue_id: &str) -> Result<Option<String>> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
-    };
-    Ok(list_issue_activities(&state_dir, issue_id)?
-        .into_iter()
-        .rev()
-        .find(|activity| activity.event_type == ActivityEventType::CloseReason)
-        .map(|activity| activity.body))
-}
-
-fn activity_field_new_value(issue_id: &str, field: &str) -> Result<Option<String>> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
-    };
-    for activity in list_issue_activities(&state_dir, issue_id)?
-        .into_iter()
-        .rev()
-        .filter(|activity| activity.event_type == ActivityEventType::FieldChanged)
-    {
-        if !activity
-            .body
-            .lines()
-            .any(|line| scalar_line_value(line, "field").as_deref() == Some(field))
-        {
-            continue;
-        }
-        if let Some(value) = activity
-            .body
-            .lines()
-            .find_map(|line| scalar_line_value(line, "new"))
-        {
-            return Ok(Some(value));
-        }
-    }
-    Ok(None)
-}
-
-fn scalar_line_value(line: &str, key: &str) -> Option<String> {
-    let value = line.strip_prefix(&format!("{key}: "))?.trim();
-    if value == "null" {
-        return None;
-    }
-    serde_json::from_str::<String>(value).ok()
 }
 
 fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
@@ -403,18 +304,6 @@ fn issue_object_from_parts(
         None => None,
     };
 
-    let raw_comments = db.list_legacy_import_comments(&issue.id)?;
-    let imported_owner = comment_metadata_value(&raw_comments, "owner");
-    let imported_assignee = comment_metadata_value(&raw_comments, "assignee");
-    let close_reason = comment_metadata_value(&raw_comments, "Close reason")
-        .or_else(|| label_value(&labels, "close-reason:"))
-        .or(activity_close_reason(&issue.id)?);
-    let comments = if raw_comments.is_empty() {
-        activity_note_objects(&issue.id)?
-    } else {
-        raw_comments.into_iter().map(note_object).collect()
-    };
-
     Ok(IssueObject {
         id: issue_id_for_agent(db, &issue)?,
         title: issue.title,
@@ -425,16 +314,12 @@ fn issue_object_from_parts(
         issue_type: issue.issue_type,
         priority: issue.priority,
         parent,
-        notes: comments,
-        assignee: label_value(&labels, "assignee:")
-            .or(imported_assignee)
-            .or(activity_field_new_value(&issue.id, "assignee")?),
-        owner: label_value(&labels, "owner:").or(imported_owner),
+        assignee: label_value(&labels, "assignee:"),
+        owner: label_value(&labels, "owner:"),
         labels,
         created_at: issue.created_at.to_rfc3339(),
         updated_at: issue.updated_at.to_rfc3339(),
         closed_at: issue.closed_at.map(|dt| dt.to_rfc3339()),
-        close_reason,
     })
 }
 
@@ -551,10 +436,10 @@ fn render_issue_show_human(
         print_text_section("Outcome", Some(&sections.outcome));
         print_text_section("Evidence", Some(&sections.evidence));
         print_text_section("Notes", sections.notes.as_deref());
+        print_text_section("Close Reason", sections.close_reason.as_deref());
     } else {
         print_text_section("Description", object.description.as_deref());
     }
-    print_text_section("Close Reason", object.close_reason.as_deref());
 
     render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
     render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
@@ -562,7 +447,6 @@ fn render_issue_show_human(
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(db, canonical_id)?;
     render_impact_section(db, canonical_id)?;
-    render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
     Ok(())
 }
@@ -1143,15 +1027,6 @@ fn priority_rank(priority: &str) -> u8 {
         .unwrap_or(4)
 }
 
-fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> Result<()> {
-    let activity = recent_activity_lines(canonical_id, object)?;
-    print_panel(LinesPanel::new(
-        "Recent Activity",
-        activity.into_iter().map(|line| format!("  {line}")),
-    ));
-    Ok(())
-}
-
 fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()> {
     let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
@@ -1168,10 +1043,6 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         FooterAction::new(
             "Add a note",
             format!("atelier issue note {} \"...\"", object.id),
-        ),
-        FooterAction::new(
-            "Show full activity",
-            format!("atelier history --issue {}", object.id),
         ),
         FooterAction::new(
             "Show transition options",
@@ -1193,49 +1064,6 @@ fn print_panel(panel: impl Panel) {
     }
     println!();
     println!("{}", lines.join("\n"));
-}
-
-fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec<String>> {
-    if let Some(state_dir) = find_state_dir_from_cwd()? {
-        let activities = list_issue_activities(&state_dir, canonical_id)?;
-        if !activities.is_empty() {
-            return Ok(activities
-                .iter()
-                .rev()
-                .take(8)
-                .map(|activity| {
-                    let body = human_activity_body(&activity.body).replace('\n', "\n  ");
-                    let timestamp = format_human_datetime(activity.created_at);
-                    if body.trim().is_empty() {
-                        format!(
-                            "[{}] {}: {}",
-                            timestamp, activity.event_type, activity.summary
-                        )
-                    } else {
-                        format!(
-                            "[{}] {}: {}\n  {}",
-                            timestamp, activity.event_type, activity.summary, body
-                        )
-                    }
-                })
-                .collect());
-        }
-    }
-
-    Ok(object
-        .notes
-        .iter()
-        .rev()
-        .take(8)
-        .map(|note| {
-            format!(
-                "[{}] {}: {}",
-                format_human_datetime_str(&note.created_at),
-                note.kind,
-                note.body.replace('\n', "\n  ")
-            )
-        })
-        .collect())
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
@@ -1915,77 +1743,6 @@ fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
         .to_string()
 }
 
-fn human_activity_body(body: &str) -> String {
-    let mut field = None;
-    let mut old = None;
-    let mut new = None;
-    let mut transition = None;
-    let mut from = None;
-    let mut to = None;
-    let mut reason = None;
-    let mut evidence_id = None;
-    let mut result = None;
-    let mut all_structured = true;
-    for line in body.lines().filter(|line| !line.trim().is_empty()) {
-        if let Some(value) = activity_scalar_line_value(line, "field").flatten() {
-            field = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "old").flatten() {
-            old = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "new").flatten() {
-            new = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "transition").flatten() {
-            transition = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "from").flatten() {
-            from = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "to").flatten() {
-            to = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "reason") {
-            reason = value;
-        } else if let Some(value) = activity_scalar_line_value(line, "evidence_id").flatten() {
-            evidence_id = Some(value);
-        } else if let Some(value) = activity_scalar_line_value(line, "result").flatten() {
-            result = Some(value);
-        } else {
-            all_structured = false;
-        }
-    }
-    if all_structured {
-        if let Some(field) = field {
-            let old = old.unwrap_or_else(|| "(none)".to_string());
-            let new = new.unwrap_or_else(|| "(none)".to_string());
-            return format!("Changed {field}: {old} -> {new}");
-        }
-        if let Some(transition) = transition {
-            let from = from.unwrap_or_else(|| "(unknown)".to_string());
-            let to = to.unwrap_or_else(|| "(unknown)".to_string());
-            if let Some(reason) = reason {
-                return format!("Transition {transition}: {from} -> {to}; blocked by {reason}");
-            }
-            return format!("Transition {transition}: {from} -> {to}");
-        }
-        if let Some(evidence_id) = evidence_id {
-            let result = result.unwrap_or_else(|| "(unknown result)".to_string());
-            return format!("Evidence {evidence_id} attached; result {result}");
-        }
-    }
-    body.to_string()
-}
-
-fn activity_scalar_line_value(line: &str, key: &str) -> Option<Option<String>> {
-    let value = line.strip_prefix(&format!("{key}: "))?.trim();
-    if value == "null" {
-        return Some(None);
-    }
-    if let Ok(parsed) = serde_json::from_str::<String>(value) {
-        return Some(Some(parsed));
-    }
-    if value.is_empty() {
-        Some(None)
-    } else {
-        Some(Some(value.to_string()))
-    }
-}
-
 pub struct LifecycleCreateInput<'a> {
     pub title: &'a str,
     pub description: Option<&'a str>,
@@ -2271,7 +2028,6 @@ pub struct UpdateInput<'a> {
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
-    pub append_notes: Option<&'a str>,
 }
 
 pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>) -> Result<()> {
@@ -2302,51 +2058,27 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     if let Some(title) = input.title {
         record.issue.title = title.to_string();
         changed_fields.push("title");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "title",
-            Some(&previous.title),
-            Some(title),
-        )?;
     }
     if let Some(priority) = input.priority {
         validate_priority(priority)?;
         record.issue.priority = priority.to_string();
         changed_fields.push("priority");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "priority",
-            Some(&previous.priority),
-            Some(priority),
-        )?;
     }
     if let Some(issue_type) = input.issue_type {
         validate_configured_issue_type(state_dir, issue_type)?;
         record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "issue_type",
-            Some(&previous.issue_type),
-            Some(issue_type),
-        )?;
     }
     for label in input.labels {
         push_unique(&mut record.labels, label.to_string());
         changed_fields.push("labels");
-        crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
     }
     for label in input.remove_labels {
         record.labels.retain(|existing| existing != label);
         changed_fields.push("labels");
-        crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
     }
     if input.parent.is_some() {
         changed_fields.push("parent");
-    }
-    if let Some(note) = input.append_notes {
-        changed_fields.push("notes");
-        crate::commands::activity_log::record_note(&id, note)?;
     }
     if changed_fields.is_empty() {
         bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
@@ -2367,12 +2099,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
             if let Some(parent_id) = &parent_id {
                 store.add_issue_child(parent_id, &id)?;
             }
-            crate::commands::activity_log::record_field_changed(
-                &id,
-                "parent",
-                previous.parent_id.as_deref(),
-                parent_id.as_deref(),
-            )?;
         }
     }
     store.write_issue_atomic(&record)?;
@@ -2397,6 +2123,27 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     println!("Next Commands");
     println!("-------------");
     println!("  atelier issue show {}", record.issue.id);
+    Ok(())
+}
+
+/// Append a dated note to the issue record's Notes section.
+pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> Result<()> {
+    if !ISSUE_NOTE_KINDS.contains(&kind) {
+        bail!(
+            "Invalid note kind '{kind}'. Valid kinds: {}",
+            ISSUE_NOTE_KINDS.join(", ")
+        );
+    }
+    if text.trim().is_empty() {
+        bail!("Note text for issue {issue_id} must not be empty");
+    }
+    let store = RecordStore::new(state_dir);
+    let mut record = store.load_issue_by_id(issue_id)?;
+    let now = Utc::now();
+    record.sections.append_note(now.date_naive(), kind, text);
+    record.issue.updated_at = now;
+    store.write_issue_atomic(&record)?;
+    println!("Added note to issue {}", format_issue_id(issue_id));
     Ok(())
 }
 
@@ -2641,17 +2388,6 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         "  source_metadata: {}",
         if view.cache_fresh { "ok" } else { "stale" }
     );
-    println!("Review backend:");
-    println!("  mode: {}", view.review_backend.mode);
-    println!(
-        "  provider: {}",
-        view.review_backend.provider.as_deref().unwrap_or("(none)")
-    );
-    println!("  status: {}", view.review_backend.status);
-    if let Some(token_config) = &view.review_backend.token_config {
-        println!("  token_config: {}", token_config);
-    }
-    println!("  detail: {}", view.review_backend.detail);
     println!("Cache database:");
     println!(
         "  database: {}",

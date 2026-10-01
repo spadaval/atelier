@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use std::path::Path;
 
 use crate::cache_manager::{CacheAccess, CacheManager, CacheUse};
-use atelier_core::{EvidenceRecord, EvidenceRecordData, ReviewRecord};
+use atelier_core::{EvidenceRecord, EvidenceRecordData};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 use atelier_sqlite::Database;
 
@@ -50,14 +50,6 @@ pub const CACHE_COMMAND_ROUTES: &[CacheCommandRoute] = &[
     },
     CacheCommandRoute {
         command_family: "bundle preview",
-        cache_use: CacheUse::Decision,
-    },
-    CacheCommandRoute {
-        command_family: "review read",
-        cache_use: CacheUse::Decision,
-    },
-    CacheCommandRoute {
-        command_family: "history/graph",
         cache_use: CacheUse::Decision,
     },
     CacheCommandRoute {
@@ -102,14 +94,6 @@ pub fn bundle_query_cache() -> Result<CacheAccess> {
     cache(CacheUse::Decision)
 }
 
-pub fn review_cache() -> Result<CacheAccess> {
-    cache(CacheUse::Decision)
-}
-
-pub fn history_query_cache() -> Result<CacheAccess> {
-    cache(CacheUse::Decision)
-}
-
 pub fn workflow_query_cache() -> Result<CacheAccess> {
     cache(CacheUse::Decision)
 }
@@ -143,14 +127,6 @@ pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) ->
 
 pub fn write_canonical_evidence(state_dir: &Path, record: &EvidenceRecord) -> Result<()> {
     RecordStore::new(state_dir).write_evidence_atomic(record)
-}
-
-pub fn load_review(state_dir: &Path, id: &str) -> Result<ReviewRecord> {
-    RecordStore::new(state_dir).load_review_by_id(id)
-}
-
-pub fn write_review(state_dir: &Path, record: &ReviewRecord) -> Result<()> {
-    RecordStore::new(state_dir).write_review_atomic(record)
 }
 
 pub fn create_evidence_record(
@@ -289,7 +265,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atelier_core::{RecordHeader, Relationships};
     use chrono::Utc;
     use tempfile::tempdir;
 
@@ -324,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn concrete_evidence_and_review_services_round_trip_domain_types() {
+    fn concrete_evidence_service_round_trips_domain_type() {
         let dir = tempdir().unwrap();
         let state_dir = dir.path().join(".atelier");
         let now = Utc::now();
@@ -358,25 +333,5 @@ mod tests {
             load_canonical_evidence(&state_dir, &evidence.header.id).unwrap(),
             evidence
         );
-
-        let review = ReviewRecord {
-            header: RecordHeader {
-                kind: "review".to_string(),
-                id: "atelier-rvw1".to_string(),
-                title: "Typed review".to_string(),
-                status: "open".to_string(),
-                labels: vec!["review".to_string()],
-                relationships: Relationships::default(),
-                created_at: now,
-                updated_at: now,
-            },
-            mode: "room".to_string(),
-            issue_id: "atelier-issue".to_string(),
-            source_branch: "feature/atelier-issue".to_string(),
-            target_branch: "main".to_string(),
-            events: Vec::new(),
-        };
-        write_review(&state_dir, &review).unwrap();
-        assert_eq!(load_review(&state_dir, "atelier-rvw1").unwrap(), review);
     }
 }

@@ -42,7 +42,6 @@ struct CanonicalCandidate {
     status: String,
     path: PathBuf,
     latest_at: DateTime<Utc>,
-    activity_count: usize,
     protection: Option<String>,
 }
 
@@ -50,7 +49,6 @@ struct CanonicalCandidate {
 struct CanonicalRemoval {
     kind: &'static str,
     id: String,
-    activity_removed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -954,7 +952,6 @@ fn issue_candidates(
         .iter()
         .map(|issue| issue.id.clone())
         .collect::<BTreeSet<_>>();
-    let activity_latest = issue_activity_latest(&tracker.state_dir)?;
     let links = tracker.db.list_all_record_links()?;
     let retained_records = retained_record_ids(&tracker.db, cutoff)?;
     let active_descendants = active_descendants_by_ancestor(policy.as_ref(), &all_issues);
@@ -964,7 +961,7 @@ fn issue_candidates(
         if !crate::commands::issue_workflow::issue_is_done(policy.as_ref(), issue) {
             continue;
         }
-        let latest_at = latest_issue_time(issue, activity_latest.get(&issue.id));
+        let latest_at = issue.closed_at.unwrap_or(issue.updated_at);
         if latest_at.date_naive() < cutoff {
             old_terminal.insert(issue.id.clone());
         }
@@ -979,11 +976,7 @@ fn issue_candidates(
         if !old_terminal.contains(&issue.id) {
             continue;
         }
-        let latest_at = latest_issue_time(&issue, activity_latest.get(&issue.id));
-        let activity_count = activity_latest
-            .get(&issue.id)
-            .map(|activity| activity.count)
-            .unwrap_or(0);
+        let latest_at = issue.closed_at.unwrap_or(issue.updated_at);
         let protection = active_descendants
             .get(&issue.id)
             .map(|descendant| format!("terminal record has active descendant {descendant}"))
@@ -1003,7 +996,6 @@ fn issue_candidates(
             status: issue.status,
             path: PathBuf::from("issues").join(format!("{}.md", issue.id)),
             latest_at,
-            activity_count,
             protection,
         });
     }
@@ -1091,43 +1083,11 @@ fn evidence_candidates(
             status: record.status,
             path,
             latest_at: record.updated_at,
-            activity_count: 0,
             protection,
         });
     }
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(candidates)
-}
-
-fn latest_issue_time(issue: &Issue, activity: Option<&IssueActivityLatest>) -> DateTime<Utc> {
-    let mut latest = issue.closed_at.unwrap_or(issue.updated_at);
-    if let Some(activity) = activity {
-        latest = latest.max(activity.latest_at);
-    }
-    latest
-}
-
-#[derive(Debug, Clone)]
-struct IssueActivityLatest {
-    latest_at: DateTime<Utc>,
-    count: usize,
-}
-
-fn issue_activity_latest(state_dir: &Path) -> Result<BTreeMap<String, IssueActivityLatest>> {
-    let mut latest = BTreeMap::<String, IssueActivityLatest>::new();
-    for activity in atelier_records::activity::list_all_issue_activities(state_dir)? {
-        latest
-            .entry(activity.subject_id)
-            .and_modify(|entry| {
-                entry.latest_at = entry.latest_at.max(activity.created_at);
-                entry.count += 1;
-            })
-            .or_insert(IssueActivityLatest {
-                latest_at: activity.created_at,
-                count: 1,
-            });
-    }
-    Ok(latest)
 }
 
 fn retained_record_ids(db: &Database, cutoff: NaiveDate) -> Result<BTreeSet<(String, String)>> {
@@ -1276,28 +1236,10 @@ fn remove_candidate(
 ) {
     let absolute = state_dir.join(&candidate.path);
     match fs::remove_file(&absolute) {
-        Ok(()) => {
-            let mut activity_removed = false;
-            if candidate.kind == "issue" {
-                let activity_dir = state_dir
-                    .join("issues")
-                    .join(format!("{}.activity", candidate.id));
-                if activity_dir.exists() {
-                    match fs::remove_dir_all(&activity_dir) {
-                        Ok(()) => activity_removed = true,
-                        Err(error) => failures.push((
-                            PathBuf::from("issues").join(format!("{}.activity", candidate.id)),
-                            error.to_string(),
-                        )),
-                    }
-                }
-            }
-            removed.push(CanonicalRemoval {
-                kind: candidate.kind,
-                id: candidate.id.clone(),
-                activity_removed,
-            });
-        }
+        Ok(()) => removed.push(CanonicalRemoval {
+            kind: candidate.kind,
+            id: candidate.id.clone(),
+        }),
         Err(error) => failures.push((candidate.path.clone(), error.to_string())),
     }
 }
@@ -1564,9 +1506,6 @@ fn print_canonical_candidate(
         candidate.latest_at.date_naive(),
         display_state_path(&candidate.path)
     );
-    if candidate.activity_count > 0 {
-        println!("{}", canonical_activity_line(candidate, summary));
-    }
     println!(
         "    recover: git log --all -- {}; git show <commit>:{}",
         display_git_path(&candidate.path),
@@ -1575,35 +1514,6 @@ fn print_canonical_candidate(
     if !candidate.title.trim().is_empty() {
         println!("    title: {}", candidate.title);
     }
-}
-
-fn canonical_activity_line(
-    candidate: &CanonicalCandidate,
-    summary: &CanonicalPruneSummary,
-) -> String {
-    let activity_path = PathBuf::from("issues").join(format!("{}.activity", candidate.id));
-    let activity_removed = summary
-        .removed
-        .iter()
-        .find(|removal| removal.kind == candidate.kind && removal.id == candidate.id)
-        .map(|removal| removal.activity_removed)
-        .unwrap_or(false);
-    let activity_failed = summary
-        .failures
-        .iter()
-        .any(|(path, _)| path == &activity_path);
-    let activity_status = if activity_removed {
-        "removed"
-    } else if activity_failed {
-        "failed"
-    } else {
-        "eligible"
-    };
-    format!(
-        "    {activity_status} activity-sidecars {} ({} file(s))",
-        display_state_path(&activity_path),
-        candidate.activity_count
-    )
 }
 
 fn print_deferred_classes() {
@@ -1738,49 +1648,5 @@ mod tests {
             !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
                 .unwrap()
         );
-    }
-
-    #[test]
-    fn failed_activity_sidecar_removal_is_not_reported_as_removed() {
-        let state = tempdir().unwrap();
-        let issues = state.path().join("issues");
-        fs::create_dir_all(&issues).unwrap();
-        let id = "atelier-sidecar";
-        fs::write(issues.join(format!("{id}.md")), "record").unwrap();
-        // A file at the activity-directory path makes remove_dir_all fail on
-        // every platform, exercising the independent sidecar failure state.
-        let activity = issues.join(format!("{id}.activity"));
-        fs::write(&activity, "not a directory").unwrap();
-        let candidate = CanonicalCandidate {
-            kind: "issue",
-            id: id.to_string(),
-            title: String::new(),
-            status: "done".to_string(),
-            path: PathBuf::from("issues").join(format!("{id}.md")),
-            latest_at: Utc::now(),
-            activity_count: 1,
-            protection: None,
-        };
-        let mut removed = Vec::new();
-        let mut failures = Vec::new();
-
-        remove_candidate(state.path(), &candidate, &mut removed, &mut failures);
-
-        assert_eq!(removed.len(), 1);
-        assert!(!removed[0].activity_removed);
-        let relative_activity = PathBuf::from("issues").join(format!("{id}.activity"));
-        assert!(failures.iter().any(|(path, _)| path == &relative_activity));
-        let summary = CanonicalPruneSummary {
-            retention_days: 7,
-            cutoff: Utc::now().date_naive(),
-            issues: vec![candidate.clone()],
-            evidence: Vec::new(),
-            removed,
-            failures,
-            unavailable: None,
-            rebuilt_cache: false,
-        };
-        assert!(canonical_activity_line(&candidate, &summary)
-            .contains("failed activity-sidecars .atelier/issues/atelier-sidecar.activity"));
     }
 }

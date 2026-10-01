@@ -1,8 +1,6 @@
 use anyhow::{bail, Result};
-use atelier_app::project_config;
 use atelier_app::workflow_policy::{
     ActionParams, BranchLifecycleResolution, GitPrepareBranchBase, MergeStrategy,
-    WorkflowForgejoRoleAuthors,
 };
 use atelier_core::Issue;
 use atelier_sqlite::Database;
@@ -33,10 +31,6 @@ pub struct PlannedAction {
     pub base_branch: String,
     pub merge_strategy: MergeStrategy,
     pub merge_owned: bool,
-    pub review_artifact_target: Option<String>,
-    pub review_artifact_provider: Option<String>,
-    pub review_artifact_role: Option<String>,
-    pub forgejo_role_authors: Option<project_config::ForgejoRoleAuthors>,
     pub confirmation_required: bool,
     pub skip_reason: Option<String>,
     pub block_reason: Option<String>,
@@ -167,29 +161,18 @@ pub(crate) fn plan_actions_for_resolution(
     actions
         .iter()
         .enumerate()
-        .map(|(index, action)| {
-            let review_artifact = review_artifact_action_plan(action, resolution);
-            PlannedAction {
-                order: start_order + index,
-                name: action.builtin.clone(),
-                target_issue_id: issue.id.clone(),
-                branch_owner_id: resolution.owner_id.clone(),
-                expected_branch: resolution.expected_branch.clone(),
-                base_branch: resolution.base_branch.clone(),
-                merge_strategy: resolution.merge_strategy,
-                merge_owned: resolution.merge_owned,
-                review_artifact_target: review_artifact
-                    .as_ref()
-                    .map(|review| review.target_issue_id.clone()),
-                review_artifact_provider: review_artifact
-                    .as_ref()
-                    .and_then(|review| review.provider.clone()),
-                review_artifact_role: review_artifact.as_ref().map(|review| review.role.clone()),
-                forgejo_role_authors: review_artifact.and_then(|review| review.role_authors),
-                confirmation_required: action.builtin == "git.integrate",
-                skip_reason: None,
-                block_reason: None,
-            }
+        .map(|(index, action)| PlannedAction {
+            order: start_order + index,
+            name: action.builtin.clone(),
+            target_issue_id: issue.id.clone(),
+            branch_owner_id: resolution.owner_id.clone(),
+            expected_branch: resolution.expected_branch.clone(),
+            base_branch: resolution.base_branch.clone(),
+            merge_strategy: resolution.merge_strategy,
+            merge_owned: resolution.merge_owned,
+            confirmation_required: action.builtin == "git.integrate",
+            skip_reason: None,
+            block_reason: None,
         })
         .collect()
 }
@@ -204,47 +187,6 @@ fn action_uses_current_branch_base(
             true
         }
         _ => false,
-    }
-}
-
-struct ReviewArtifactActionPlan {
-    target_issue_id: String,
-    provider: Option<String>,
-    role: String,
-    role_authors: Option<project_config::ForgejoRoleAuthors>,
-}
-
-fn review_artifact_action_plan(
-    action: &atelier_app::workflow_policy::ActionDefinition,
-    resolution: &BranchLifecycleResolution,
-) -> Option<ReviewArtifactActionPlan> {
-    if action.builtin != "review.open" {
-        return None;
-    }
-    let Some(atelier_app::workflow_policy::ActionParams::ReviewArtifact(params)) =
-        action.params.as_ref()
-    else {
-        return None;
-    };
-    Some(ReviewArtifactActionPlan {
-        target_issue_id: resolution.owner_id.clone(),
-        provider: params.provider.clone(),
-        role: params.role.clone(),
-        role_authors: params
-            .role_authors
-            .as_ref()
-            .map(workflow_role_authors_to_project),
-    })
-}
-
-fn workflow_role_authors_to_project(
-    role_authors: &WorkflowForgejoRoleAuthors,
-) -> project_config::ForgejoRoleAuthors {
-    project_config::ForgejoRoleAuthors {
-        worker: role_authors.worker.clone(),
-        reviewer: role_authors.reviewer.clone(),
-        validator: role_authors.validator.clone(),
-        manager: role_authors.manager.clone(),
     }
 }
 
@@ -413,13 +355,7 @@ pub(crate) fn planned_actions_need_branch_context(planned_actions: &[PlannedActi
     planned_actions.iter().any(|action| {
         matches!(
             action.name.as_str(),
-            "git.prepare_branch"
-                | "tracker.commit"
-                | "git.push"
-                | "review.merge"
-                | "git.sync"
-                | "git.integrate"
-                | "review.open"
+            "git.prepare_branch" | "tracker.commit" | "git.push" | "git.sync" | "git.integrate"
         )
     })
 }
@@ -480,19 +416,6 @@ mod tests {
         }
     }
 
-    fn review_action() -> ActionDefinition {
-        ActionDefinition {
-            builtin: "review.open".to_string(),
-            params: Some(atelier_app::workflow_policy::ActionParams::ReviewArtifact(
-                atelier_app::workflow_policy::ReviewArtifactActionParams {
-                    provider: None,
-                    role: "worker".to_string(),
-                    role_authors: None,
-                },
-            )),
-        }
-    }
-
     #[test]
     fn transition_action_plan_is_ordered_and_side_effect_free() {
         let issue = test_issue("atelier-epic1");
@@ -507,27 +430,19 @@ mod tests {
             merge_owned: true,
             nested_under_epic: false,
         };
-        let actions = vec![review_action(), action("git.integrate")];
+        let actions = vec![action("git.prepare_branch"), action("git.integrate")];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
 
         assert_eq!(issue.status, "in_progress");
         assert_eq!(plan.len(), 2);
         assert_eq!(plan[0].order, 1);
-        assert_eq!(plan[0].name, "review.open");
+        assert_eq!(plan[0].name, "git.prepare_branch");
         assert_eq!(plan[0].target_issue_id, "atelier-epic1");
         assert_eq!(plan[0].branch_owner_id, "atelier-epic1");
-        assert_eq!(
-            plan[0].review_artifact_target.as_deref(),
-            Some("atelier-epic1")
-        );
-        assert_eq!(plan[0].review_artifact_provider.as_deref(), None);
-        assert_eq!(plan[0].review_artifact_role.as_deref(), Some("worker"));
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
         assert_eq!(plan[1].name, "git.integrate");
-        assert!(plan[1].review_artifact_target.is_none());
-        assert!(plan[1].review_artifact_role.is_none());
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|action| action.skip_reason.is_none()));
         assert!(plan.iter().all(|action| action.block_reason.is_none()));
@@ -644,7 +559,6 @@ mod tests {
         let actions = vec![
             action("tracker.commit"),
             action("git.push"),
-            action("review.merge"),
             action("git.sync"),
         ];
 
@@ -654,7 +568,7 @@ mod tests {
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
+            vec!["tracker.commit", "git.push", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "git.integrate"));

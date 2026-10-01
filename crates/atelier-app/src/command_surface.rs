@@ -935,32 +935,32 @@ mod tests {
     }
 
     #[test]
-    fn visible_grouped_review_references_target_subcommand_help() {
-        let groups = grouped_paths(&[&[], &["review"]]);
-        let uses = expand_command_reference("atelier review submit --approve --body", &groups);
+    fn visible_grouped_references_target_subcommand_help() {
+        let groups = grouped_paths(&[&[], &["evidence"]]);
+        let uses = expand_command_reference("atelier evidence record --kind --target", &groups);
 
         assert_eq!(
             uses,
             vec![CommandUse {
-                display: "atelier review submit --approve --body".to_string(),
-                path: vec!["review".to_string(), "submit".to_string(),],
-                options: vec!["--approve".to_string(), "--body".to_string()],
+                display: "atelier evidence record --kind --target".to_string(),
+                path: vec!["evidence".to_string(), "record".to_string(),],
+                options: vec!["--kind".to_string(), "--target".to_string()],
             }]
         );
     }
 
     #[test]
     fn nested_visible_group_references_target_nested_subcommand_help() {
-        let groups = grouped_paths(&[&[], &["forgejo"], &["forgejo", "roles"]]);
-        let uses = expand_command_reference("atelier forgejo roles check", &groups);
+        let groups = grouped_paths(&[&[], &["outer"], &["outer", "inner"]]);
+        let uses = expand_command_reference("atelier outer inner check", &groups);
 
         assert_eq!(
             uses,
             vec![CommandUse {
-                display: "atelier forgejo roles check".to_string(),
+                display: "atelier outer inner check".to_string(),
                 path: vec![
-                    "forgejo".to_string(),
-                    "roles".to_string(),
+                    "outer".to_string(),
+                    "inner".to_string(),
                     "check".to_string(),
                 ],
                 options: Vec::new(),
@@ -978,11 +978,11 @@ mod tests {
 
     #[test]
     fn subcommand_help_parser_extracts_commands_section() {
-        let help = "Configured review artifacts\n\nUsage: atelier review [OPTIONS] <COMMAND>\n\nCommands:\n  open    Open or link a review artifact\n  show    Show review state\n  submit  Submit a review action\n  help    Print this message\n\nOptions:\n  -h, --help       Print help\n";
+        let help = "First-class evidence records\n\nUsage: atelier evidence [OPTIONS] <COMMAND>\n\nCommands:\n  record  Record proof\n  show    Show an evidence record\n  attach  Reuse an evidence record\n  help    Print this message\n\nOptions:\n  -h, --help       Print help\n";
         let commands = parse_subcommand_help_commands(help);
 
-        assert!(commands.contains("open"));
-        assert!(commands.contains("submit"));
+        assert!(commands.contains("record"));
+        assert!(commands.contains("attach"));
         assert!(commands.contains("help"));
         assert!(!commands.contains("--help"));
     }

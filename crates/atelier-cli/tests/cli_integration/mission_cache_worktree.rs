@@ -894,7 +894,6 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
-    complete_room_review(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2221,18 +2220,6 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     );
 
     assert_lint_rejects_canonical_mutation(
-        "Malformed activity sidecar fixture",
-        |dir, issue_id| {
-            let activity_path = dir
-                .join(".atelier/issues")
-                .join(format!("{issue_id}.activity"))
-                .join("bad.md");
-            std::fs::create_dir_all(activity_path.parent().unwrap()).unwrap();
-            std::fs::write(activity_path, "not front matter\n").unwrap();
-        },
-        &["Missing YAML front matter", ".activity/bad.md"],
-    );
-    assert_lint_rejects_canonical_mutation(
         "Unsupported committed file fixture",
         |dir, _issue_id| {
             std::fs::write(dir.join(".atelier/issues/junk.txt"), "junk\n").unwrap();
@@ -2523,20 +2510,13 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     .unwrap();
     assert!(blocker_markdown.contains(&format!("id: \"{work_id}\"")));
     assert!(blocker_markdown.contains(&format!("id: \"{blocked_id}\"")));
-    let mut note_paths = std::fs::read_dir(
+    let note_bodies = std::fs::read_to_string(
         dir.path()
             .join(".atelier/issues")
-            .join(format!("{work_id}.activity")),
+            .join(format!("{work_id}.md")),
     )
-    .unwrap()
-    .map(|entry| entry.unwrap().path())
-    .collect::<Vec<_>>();
-    note_paths.sort();
-    let note_bodies = note_paths
-        .iter()
-        .map(|path| std::fs::read_to_string(path).unwrap())
-        .collect::<Vec<_>>()
-        .join("\n");
+    .unwrap();
+    assert!(note_bodies.contains("## Notes\n\n- "), "{note_bodies}");
     let first_note = note_bodies.find("Zulu authored first").unwrap();
     let second_note = note_bodies.find("Alpha authored second").unwrap();
     assert!(
@@ -3546,6 +3526,11 @@ fn test_epic_start_from_mission_branch_uses_current_branch_base() {
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after epic start failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &epic_id, "request_validation"],
+    );
+    assert!(success, "request_validation after rebuild failed: {stderr}");
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &epic_id, "--verbose"]);
     assert!(success, "transition options after rebuild failed: {stderr}");
@@ -4306,11 +4291,10 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
 }
 
 #[test]
-fn test_standalone_issue_close_squash_merges_to_base_in_provider_configured_repo() {
+fn test_standalone_issue_close_squash_merges_to_base() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
-    write_provider_config_without_role_authors(dir.path());
     Command::new("git")
         .current_dir(dir.path())
         .args(["branch", "-M", "main"])

@@ -145,18 +145,6 @@ impl SmokeHarness {
         self.run_ok(&["issue", "transition", issue_ref, "start"]);
         self.run_ok(&["issue", "transition", issue_ref, "request_review"]);
         self.run_ok(&[
-            "review",
-            "submit",
-            "--issue",
-            issue_ref,
-            "--role",
-            "reviewer",
-            "--approve",
-            "--body",
-            "fixture approval",
-        ]);
-        self.run_ok(&["review", "merge", "--issue", issue_ref, "--role", "manager"]);
-        self.run_ok(&[
             "issue",
             "transition",
             issue_ref,

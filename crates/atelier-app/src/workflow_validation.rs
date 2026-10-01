@@ -8,11 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use crate::forgejo::{ForgejoClient, UreqForgejoTransport};
 use crate::lint::{self, LintRequest};
-use crate::pr as app_pr;
-use crate::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
-use crate::review_room;
 use crate::workflow_policy::{ValidatorDefinition, ValidatorParams, WorkflowPolicy};
 
 pub struct ValidatorRequest<'a> {
@@ -73,7 +69,6 @@ pub fn evaluate_policy_transition(request: ValidatorRequest<'_>) -> Result<Vec<V
             request.policy,
             request.target_kind,
             request.target_id,
-            request.transition,
             &definition.builtin,
             definition.params.as_ref(),
         )?;
@@ -114,7 +109,6 @@ fn evaluate_builtin_with_params(
     policy: &WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
-    transition: &str,
     validator: &str,
     params: Option<&ValidatorParams>,
 ) -> Result<(bool, String, Option<String>)> {
@@ -176,11 +170,6 @@ fn evaluate_builtin_with_params(
         "closeout.failures_classified" => {
             closeout_failures_classified(db, repo_root).map(without_validator_help)
         }
-        "review.linked_pr_merged" => {
-            linked_pr_merged(db, repo_root, target_kind, target_id).map(without_validator_help)
-        }
-        "review.complete" => review_complete(db, repo_root, target_kind, target_id, transition)
-            .map(without_validator_help),
         "children.proof_complete" => {
             epic_child_proof_complete(db, repo_root, policy, target_kind, target_id)
                 .map(without_validator_help)
@@ -854,119 +843,6 @@ fn issue_is_open_for_workflow(policy: &WorkflowPolicy, issue: &Issue) -> Result<
     Ok(policy.status_category(&issue.status) != Some("done"))
 }
 
-fn linked_pr_merged(
-    db: &Database,
-    repo_root: &Path,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<(bool, String)> {
-    if target_kind != "issue" {
-        return Ok((
-            true,
-            format!("linked PR merge state does not apply to {target_kind} records"),
-        ));
-    }
-
-    let config_path = repo_root.join(".atelier/config.toml");
-    let forgejo = match ProjectConfig::load(repo_root)
-        .and_then(|config| config.require_forgejo(&config_path).cloned())
-    {
-        Ok(forgejo) => forgejo,
-        Err(error) => {
-            return Ok((
-                false,
-                format!(
-                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review show --issue {}`",
-                    error,
-                    target_id,
-                    target_id
-                ),
-            ));
-        }
-    };
-    let token = match crate::project_config::load_forgejo_admin_token() {
-        Ok(token) => token,
-        Err(error) => {
-            return Ok((
-                false,
-                format!(
-                    "{error:#}; run `atelier review show --issue {}` after configuring ~/.config/atelier.toml",
-                    target_id
-                ),
-            ));
-        }
-    };
-    let client = ForgejoClient::new(
-        forgejo.clone(),
-        UreqForgejoTransport::new(&forgejo.host, token),
-    );
-    app_pr::linked_pull_request_merge_status_with_client(db, repo_root, target_id, &client)
-}
-
-fn review_complete(
-    db: &Database,
-    repo_root: &Path,
-    target_kind: &str,
-    target_id: &str,
-    _transition: &str,
-) -> Result<(bool, String)> {
-    if target_kind != "issue" {
-        return Ok((
-            true,
-            format!("review completion does not apply to {target_kind}"),
-        ));
-    }
-    match ProjectConfig::load(repo_root) {
-        Ok(ProjectConfig {
-            review: ReviewConfig::Room,
-            ..
-        }) => room_review_complete(db, repo_root, target_id),
-        Ok(ProjectConfig {
-            review:
-                ReviewConfig::Provider(crate::project_config::ReviewProviderConfig {
-                    provider: ReviewProviderKind::Forgejo(_),
-                }),
-            ..
-        }) => linked_pr_merged(db, repo_root, target_kind, target_id),
-        Err(error) => Ok((
-            false,
-            format!("{}; run `atelier review show --issue {}`", error, target_id),
-        )),
-    }
-}
-
-fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
-    let outcome = match review_room::status(
-        db,
-        review_room::RoomStatusRequest {
-            repo_root,
-            state_dir: &state_dir,
-            issue_ref: Some(issue_id),
-        },
-    ) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            return Ok((
-                false,
-                format!("{}; run `atelier review show --issue {}`", error, issue_id),
-            ))
-        }
-    };
-
-    if outcome.status == "merged" {
-        Ok((true, format!("review room {} is merged", outcome.review_id)))
-    } else {
-        Ok((
-            false,
-            format!(
-                "review room {} is {}; run `atelier review show --issue {}`",
-                outcome.review_id, outcome.status, issue_id
-            ),
-        ))
-    }
-}
-
 fn git_worktree_clean(repo_root: &Path) -> Result<(bool, String)> {
     let output = Command::new("git")
         .args(["status", "--porcelain", "--untracked-files=all"])
@@ -1244,6 +1120,7 @@ mod tests {
                     outcome: "Fixture outcome".to_string(),
                     evidence: evidence.to_string(),
                     notes: None,
+                    close_reason: None,
                 },
                 relationships: Relationships::default(),
             })
@@ -1305,6 +1182,7 @@ mod tests {
             outcome: "Outcome".to_string(),
             evidence: evidence.to_string(),
             notes: None,
+            close_reason: None,
         };
 
         assert!(!evidence_guidance_present(&sections("")));

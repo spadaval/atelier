@@ -277,8 +277,10 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             println!("  3. atelier issue transition <epic-id> ready - Make the next expanded epic executable.");
         }
         Role::Reviewer => {
-            println!("  1. atelier issue show <id> - Inspect the work and linked review artifact.");
-            println!("  2. atelier review show <review-id> - Inspect the configured code review.");
+            println!("  1. atelier issue show <id> - Inspect the work, notes, and linked proof.");
+            println!(
+                "  2. atelier issue note <id> \"...\" --kind result - Record the review judgment."
+            );
             println!("  3. atelier issue transition <id> - Follow current review-state guidance.");
         }
         Role::Validator => {
@@ -324,8 +326,8 @@ fn print_normal_loop(role: Role) {
         }
         Role::Reviewer => {
             println!("  atelier issue show <id>");
-            println!("  atelier review show <review-id>");
-            println!("  atelier history --issue <id>");
+            println!("  atelier issue note <id> \"...\" --kind result");
+            println!("  atelier issue transition <id>");
         }
         Role::Validator => {
             println!("  atelier issue show <id>");

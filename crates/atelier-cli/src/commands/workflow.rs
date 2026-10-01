@@ -6,16 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::human_output::{self, DecisionState, StylePolicy};
-use atelier_app::forgejo::{ForgejoClient, UreqForgejoTransport};
-use atelier_app::pr as app_pr;
-use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
-use atelier_app::review_room;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::Issue;
 use atelier_records::CanonicalIssueRecord;
 use atelier_sqlite::Database;
-use serde_json::Value;
 
 pub(crate) use crate::commands::workflow_actions::action_preflight_blockers;
 pub(crate) use crate::commands::workflow_planning::{
@@ -64,6 +59,9 @@ pub fn transition_issue(
     close_reason: Option<&str>,
 ) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
+    if let Some(reason) = close_reason {
+        ensure_close_reason_fits_record(&issue_id, reason)?;
+    }
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let before = db.require_issue(&issue_id)?;
@@ -102,7 +100,6 @@ pub fn transition_issue(
         &planned_actions,
     )?;
     let action_results = match execute_transition_actions(
-        db,
         state_dir,
         db_path,
         &repo_root,
@@ -160,7 +157,6 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
     print_active_mission_context(db, &issue.id)?;
     let branch = git_current_branch(&repo_root()?).ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
-    crate::commands::activity_log::record_work_started(&issue.id, branch.as_deref(), Some(&path))?;
     println!("Started work on {} {}", issue.id, issue.title);
     if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
         println!(
@@ -336,10 +332,8 @@ struct AppliedAction {
 struct TransitionApply<'a> {
     state_dir: &'a Path,
     issue: &'a Issue,
-    transition_name: &'a str,
     policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
     transition: &'a atelier_app::workflow_policy::TransitionDefinition,
-    planned_actions: &'a [PlannedAction],
     close_reason: Option<&'a str>,
 }
 
@@ -352,14 +346,11 @@ impl TransitionApply<'_> {
             &mut record,
             self.transition,
             self.close_reason,
-        )?;
-        record_applied_actions(&self.issue.id, self.transition_name, self.planned_actions)?;
-        record_applied_transition(self.issue, self.transition_name, self.transition)
+        )
     }
 }
 
 fn execute_transition_actions(
-    db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
@@ -375,10 +366,8 @@ fn execute_transition_actions(
     let transition_apply = TransitionApply {
         state_dir,
         issue,
-        transition_name,
         policy,
         transition,
-        planned_actions,
         close_reason,
     };
     let mut applied = Vec::new();
@@ -410,13 +399,6 @@ fn execute_transition_actions(
                     detail,
                 })
             }
-            "review.merge" => {
-                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
-                Ok(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                })
-            }
             "git.sync" => {
                 let detail = sync_base_action(repo_root, action)?;
                 Ok(AppliedAction {
@@ -426,21 +408,6 @@ fn execute_transition_actions(
             }
             "git.integrate" => {
                 let detail = integrate_branch_action(repo_root, issue, action)?;
-                Ok(AppliedAction {
-                    name: action.name.clone(),
-                    detail,
-                })
-            }
-            "review.open" => {
-                let detail = open_review_artifact_action(
-                    db,
-                    state_dir,
-                    db_path,
-                    repo_root,
-                    issue,
-                    transition_name,
-                    action,
-                )?;
                 Ok(AppliedAction {
                     name: action.name.clone(),
                     detail,
@@ -471,10 +438,7 @@ fn execute_transition_actions(
 }
 
 fn action_requires_applied_transition(name: &str) -> bool {
-    matches!(
-        name,
-        "tracker.commit" | "review.merge" | "git.sync" | "git.integrate"
-    )
+    matches!(name, "tracker.commit" | "git.sync" | "git.integrate")
 }
 
 fn prepare_branch_action(
@@ -774,34 +738,6 @@ fn push_branch_action(repo_root: &Path, issue: &Issue, action: &PlannedAction) -
     Ok(format!("pushed {}", action.expected_branch))
 }
 
-fn merge_review_action(
-    repo_root: &Path,
-    state_dir: &Path,
-    db_path: &Path,
-    issue: &Issue,
-    _action: &PlannedAction,
-) -> Result<String> {
-    let db = app_use_cases::open_database(db_path)?;
-    let policy = atelier_app::workflow_policy::load(repo_root)?;
-    let role = policy.status_role(&issue.status).ok_or_else(|| {
-        anyhow::anyhow!(
-            "review_role_missing: issue {} is in status '{}' and that status has no role; configure statuses.{}.role before using review.merge as a transition action",
-            issue.id,
-            issue.status,
-            issue.status
-        )
-    })?;
-    crate::commands::pr::merge(
-        &db,
-        repo_root,
-        &state_dir,
-        &db_path,
-        Some(&issue.id),
-        Some(role),
-    )?;
-    Ok("provider review merged".to_string())
-}
-
 fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
     let remote_ref = format!("origin/{}", action.base_branch);
     let remote_tracking_ref = format!("refs/remotes/{remote_ref}");
@@ -912,156 +848,16 @@ fn ensure_expected_branch_checked_out(
     })
 }
 
-fn open_review_artifact_action(
-    db: &Database,
-    state_dir: &Path,
-    db_path: &Path,
-    repo_root: &Path,
-    issue: &Issue,
-    _transition_name: &str,
-    action: &PlannedAction,
-) -> Result<String> {
-    let policy = atelier_app::workflow_policy::load(repo_root)?;
-    let resolution =
-        atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-    if let Some(detail) = existing_review_artifact_detail(state_dir, &resolution.owner_id)? {
-        return Ok(detail);
-    }
-    let context = app_pr::derive_review_open_context(db, repo_root, Some(&issue.id))?;
-    let role = action.review_artifact_role.as_deref().ok_or_else(|| {
-        anyhow!(
-            "action {} failed: missing workflow action role",
-            action.name
-        )
-    })?;
-    match ProjectConfig::load(repo_root)?.review {
-        ReviewConfig::Room => {
-            if action.review_artifact_provider.is_some() {
-                bail!(
-                    "action {} failed: provider action config is only valid when review.mode = \"provider\"",
-                    action.name
-                );
-            }
-            let outcome = review_room::open(
-                db,
-                review_room::RoomOpenRequest {
-                    repo_root,
-                    state_dir,
-                    db_path,
-                    issue_ref: Some(&resolution.owner_id),
-                    role,
-                    title: &context.title,
-                    body: &context.body,
-                    source_branch: &context.source_branch,
-                    target_branch: &context.target_branch,
-                },
-            )?;
-            Ok(format!("opened room {}", outcome.review_id))
-        }
-        ReviewConfig::Provider(provider) => match provider.provider {
-            ReviewProviderKind::Forgejo(mut forgejo) => {
-                if action.review_artifact_provider.as_deref() != Some("forgejo") {
-                    bail!(
-                        "action {} failed: provider review open requires workflow action provider: forgejo",
-                        action.name
-                    );
-                }
-                forgejo.role_authors = Some(action.forgejo_role_authors.clone().ok_or_else(|| {
-                    anyhow!(
-                        "action {} failed: provider review open requires workflow action role_authors",
-                        action.name
-                    )
-                })?);
-                let token = atelier_app::project_config::load_forgejo_admin_token()
-                    .with_context(|| format!("action {} failed", action.name))?;
-                let client = ForgejoClient::new(
-                    forgejo.clone(),
-                    UreqForgejoTransport::new(&forgejo.host, token),
-                );
-                let outcome = app_pr::open_with_client(
-                    db,
-                    app_pr::PrOpenRequest {
-                        repo_root,
-                        state_dir,
-                        db_path,
-                        issue_ref: Some(&resolution.owner_id),
-                        role,
-                        title: &context.title,
-                        body: &context.body,
-                        source_branch: &context.source_branch,
-                        target_branch: &context.target_branch,
-                    },
-                    &forgejo,
-                    &client,
-                )?;
-                Ok(format!("opened provider review {}", outcome.pull.url))
-            }
-        },
-    }
-}
-
-fn existing_review_artifact_detail(state_dir: &Path, owner_id: &str) -> Result<Option<String>> {
-    let owner = app_use_cases::load_canonical_issue(state_dir, owner_id)?;
-    let Some(review) = owner.issue.fields.get("review") else {
-        return Ok(None);
-    };
-    let kind = review
-        .get("kind")
-        .and_then(Value::as_str)
-        .unwrap_or("review");
-    let detail = match kind {
-        "room" => review
-            .get("id")
-            .and_then(Value::as_str)
-            .map(|id| format!("reused room {id}"))
-            .unwrap_or_else(|| "reused room review".to_string()),
-        "pull_request" => {
-            let provider = review
-                .get("provider")
-                .and_then(Value::as_str)
-                .unwrap_or("provider");
-            let number = review
-                .get("number")
-                .and_then(Value::as_i64)
-                .map(|number| format!("#{number}"))
-                .unwrap_or_else(|| "review".to_string());
-            format!("reused provider review {provider}{number}")
-        }
-        other => format!("reused {other} review"),
-    };
-    Ok(Some(detail))
-}
-
-fn record_applied_actions(
-    issue_id: &str,
-    transition_name: &str,
-    planned_actions: &[PlannedAction],
-) -> Result<()> {
-    for action in planned_actions {
-        crate::commands::activity_log::record_note(
-            issue_id,
-            &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nsource_branch: {}\nbase_branch: {}\nreview_target: {}\nintegration_target: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
-                transition_name,
-                action.name,
-                action.order,
-                action.target_issue_id,
-                action.branch_owner_id,
-                action.expected_branch,
-                action.base_branch,
-                action.base_branch,
-                action.base_branch,
-                action
-                    .review_artifact_target
-                    .as_deref()
-                    .unwrap_or("(none)"),
-                action
-                    .review_artifact_provider
-                    .as_deref()
-                    .unwrap_or("(none)"),
-                action.review_artifact_role.as_deref().unwrap_or("(none)")
-            ),
-        )?;
+/// The close reason is stored as the record's `## Close Reason` body section,
+/// so it must not open another level-two section.
+fn ensure_close_reason_fits_record(issue_id: &str, reason: &str) -> Result<()> {
+    if reason.lines().any(|line| {
+        line.strip_prefix("##")
+            .is_some_and(|rest| !rest.starts_with('#'))
+    }) {
+        bail!(
+            "close reason for issue {issue_id} must not contain a `##` Markdown heading; it is stored in the record's `## Close Reason` section"
+        );
     }
     Ok(())
 }
@@ -1081,24 +877,13 @@ fn apply_transition_record(
     } else {
         None
     };
-    app_use_cases::write_canonical_issue(state_dir, record)?;
-    if let Some(reason) = close_reason {
-        crate::commands::activity_log::record_close_reason(&record.issue.id, reason)?;
+    if let Some(reason) = close_reason
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+    {
+        record.sections.close_reason = Some(reason.to_string());
     }
-    Ok(())
-}
-
-fn record_applied_transition(
-    issue: &Issue,
-    transition_name: &str,
-    transition: &atelier_app::workflow_policy::TransitionDefinition,
-) -> Result<()> {
-    crate::commands::activity_log::record_transition_applied(
-        &issue.id,
-        transition_name,
-        &issue.status,
-        &transition.to,
-    )
+    app_use_cases::write_canonical_issue(state_dir, record)
 }
 
 pub fn close_issue(
@@ -1209,7 +994,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "git.integrate"
+            "tracker.commit" | "git.push" | "git.sync" | "git.integrate"
         )
     })
 }
@@ -1217,7 +1002,7 @@ fn transition_declares_branch_git_actions(
 fn transition_git_action_names(name: &str) -> bool {
     matches!(
         name,
-        "tracker.commit" | "git.push" | "review.merge" | "git.sync" | "git.integrate"
+        "tracker.commit" | "git.push" | "git.sync" | "git.integrate"
     )
 }
 
@@ -2016,15 +1801,6 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
                 action.base_branch,
                 action.base_branch
             );
-            if let Some(review_target) = &action.review_artifact_target {
-                line.push_str(&format!(" review_target={review_target}"));
-            }
-            if let Some(provider) = &action.review_artifact_provider {
-                line.push_str(&format!(" provider={provider}"));
-            }
-            if let Some(role) = &action.review_artifact_role {
-                line.push_str(&format!(" role={role}"));
-            }
             if action.confirmation_required {
                 line.push_str(" confirmation=required");
             }
@@ -2253,10 +2029,7 @@ mod tests {
     use crate::commands::test_support::DomainCacheFixture;
     use crate::commands::workflow_planning::plan_actions_for_resolution;
     use crate::human_output::ColorChoice;
-    use atelier_app::workflow_policy::{
-        ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
-    };
-    use atelier_records::{IssueSections, Record, RecordStore, Relationships};
+    use atelier_records::{IssueSections, RecordStore, Relationships};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
@@ -2372,34 +2145,7 @@ mod tests {
         }
     }
 
-    fn review_action() -> atelier_app::workflow_policy::ActionDefinition {
-        atelier_app::workflow_policy::ActionDefinition {
-            builtin: "review.open".to_string(),
-            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
-                provider: None,
-                role: "worker".to_string(),
-                role_authors: None,
-            })),
-        }
-    }
-
-    fn forgejo_review_action() -> atelier_app::workflow_policy::ActionDefinition {
-        atelier_app::workflow_policy::ActionDefinition {
-            builtin: "review.open".to_string(),
-            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
-                provider: Some("forgejo".to_string()),
-                role: "worker".to_string(),
-                role_authors: Some(WorkflowForgejoRoleAuthors {
-                    worker: "forge-worker".to_string(),
-                    reviewer: "forge-reviewer".to_string(),
-                    validator: "forge-validator".to_string(),
-                    manager: "forge-manager".to_string(),
-                }),
-            })),
-        }
-    }
-
-    fn write_room_config_and_workflow(dir: &TempDir) {
+    fn write_config_and_workflow(dir: &TempDir) {
         std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
         std::fs::write(
             dir.path().join(".atelier/config.toml"),
@@ -2409,9 +2155,6 @@ project_slug = "atelier-test"
 
 [paths]
 state_root = ".atelier"
-
-[review]
-mode = "room"
 "#,
         )
         .unwrap();
@@ -2419,30 +2162,6 @@ mode = "room"
             dir.path().join(".atelier/workflow.yaml"),
             atelier_app::workflow_policy::STARTER_POLICY_YAML
                 .replace("base_branch: main", "base_branch: master"),
-        )
-        .unwrap();
-    }
-
-    fn write_provider_config_without_role_authors(dir: &TempDir) {
-        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
-        std::fs::write(
-            dir.path().join(".atelier/config.toml"),
-            r#"schema = "atelier.project_config"
-schema_version = 1
-project_slug = "atelier-test"
-
-[paths]
-state_root = ".atelier"
-
-[review]
-mode = "provider"
-provider = "forgejo"
-
-[review.providers.forgejo]
-host = "https://forge.example.test"
-owner = "tools"
-repo = "atelier"
-"#,
         )
         .unwrap();
     }
@@ -2460,48 +2179,6 @@ repo = "atelier"
         RecordStore::new(state_dir)
             .write_issue_atomic(&record)
             .unwrap();
-    }
-
-    fn setup_pr_validator_repo() -> (TempDir, Database) {
-        let dir = tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
-        std::fs::write(
-            dir.path().join(".atelier/workflow.yaml"),
-            atelier_app::workflow_policy::STARTER_POLICY_YAML
-                .replace("base_branch: main", "base_branch: master"),
-        )
-        .unwrap();
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-        let now = Utc::now();
-        db.cache_fixture_insert(&Issue {
-            id: "atelier-hw9t".to_string(),
-            title: "Epic".to_string(),
-            description: None,
-            status: "validation".to_string(),
-            issue_type: "epic".to_string(),
-            priority: "medium".to_string(),
-            fields: BTreeMap::new(),
-            parent_id: None,
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-        })
-        .unwrap();
-        db.cache_fixture_insert(&Issue {
-            id: "atelier-val1".to_string(),
-            title: "Validation".to_string(),
-            description: None,
-            status: "validation".to_string(),
-            issue_type: "validation".to_string(),
-            priority: "medium".to_string(),
-            fields: BTreeMap::new(),
-            parent_id: None,
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-        })
-        .unwrap();
-        (dir, db)
     }
 
     fn setup_sync_repo() -> (TempDir, TempDir, PlannedAction) {
@@ -2635,27 +2312,19 @@ repo = "atelier"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let actions = vec![review_action(), action("git.integrate")];
+        let actions = vec![action("git.prepare_branch"), action("git.integrate")];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions, 1);
 
         assert_eq!(issue.status, "in_progress");
         assert_eq!(plan.len(), 2);
         assert_eq!(plan[0].order, 1);
-        assert_eq!(plan[0].name, "review.open");
+        assert_eq!(plan[0].name, "git.prepare_branch");
         assert_eq!(plan[0].target_issue_id, "atelier-epic1");
         assert_eq!(plan[0].branch_owner_id, "atelier-epic1");
-        assert_eq!(
-            plan[0].review_artifact_target.as_deref(),
-            Some("atelier-epic1")
-        );
-        assert_eq!(plan[0].review_artifact_provider.as_deref(), None);
-        assert_eq!(plan[0].review_artifact_role.as_deref(), Some("worker"));
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
         assert_eq!(plan[1].name, "git.integrate");
-        assert!(plan[1].review_artifact_target.is_none());
-        assert!(plan[1].review_artifact_role.is_none());
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|action| action.skip_reason.is_none()));
         assert!(plan.iter().all(|action| action.block_reason.is_none()));
@@ -2678,7 +2347,6 @@ repo = "atelier"
         let actions = vec![
             action("tracker.commit"),
             action("git.push"),
-            action("review.merge"),
             action("git.sync"),
         ];
 
@@ -2688,19 +2356,17 @@ repo = "atelier"
             plan.iter()
                 .map(|action| action.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tracker.commit", "git.push", "review.merge", "git.sync"]
+            vec!["tracker.commit", "git.push", "git.sync"]
         );
         assert!(plan.iter().all(|action| !action.confirmation_required));
         assert!(plan.iter().all(|action| action.name != "git.integrate"));
     }
 
     #[test]
-    fn action_transition_barrier_preserves_configured_push_before_review_open() {
+    fn action_transition_barrier_applies_status_before_tracker_and_merge_actions() {
         assert!(!action_requires_applied_transition("git.prepare_branch"));
         assert!(!action_requires_applied_transition("git.push"));
-        assert!(!action_requires_applied_transition("review.open"));
         assert!(action_requires_applied_transition("tracker.commit"));
-        assert!(action_requires_applied_transition("review.merge"));
         assert!(action_requires_applied_transition("git.sync"));
         assert!(action_requires_applied_transition("git.integrate"));
     }
@@ -2788,308 +2454,46 @@ repo = "atelier"
     }
 
     #[test]
-    fn provider_review_action_preflight_uses_workflow_role_authors_and_global_secret() {
-        let issue = test_issue("atelier-epic1");
-        let resolution = BranchLifecycleResolution {
-            issue_id: "atelier-epic1".to_string(),
-            owner_id: "atelier-epic1".to_string(),
-            owner_issue_type: "epic".to_string(),
-            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
-            expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "master".to_string(),
-            merge_strategy: MergeStrategy::Squash,
-            merge_owned: true,
-            nested_under_epic: false,
-        };
-        let dir = tempdir().unwrap();
-        write_provider_config_without_role_authors(&dir);
-
-        let actions =
-            plan_actions_for_resolution(&issue, &resolution, &[forgejo_review_action()], 1);
-        let blockers = action_preflight_blockers(dir.path(), &actions);
-
-        assert!(blockers.len() <= 1);
-        if let Some(blocker) = blockers.first() {
-            assert!(blocker.contains(".config/atelier.toml"));
-            assert!(!blocker.contains("role_authors"));
-        }
-        assert_eq!(
-            actions[0].review_artifact_provider.as_deref(),
-            Some("forgejo")
-        );
-        assert_eq!(actions[0].review_artifact_role.as_deref(), Some("worker"));
-        assert_eq!(
-            actions[0].forgejo_role_authors.as_ref().unwrap().worker,
-            "forge-worker"
-        );
+    fn close_reason_rejects_level_two_headings() {
+        assert!(ensure_close_reason_fits_record("atelier-x", "Done\n### Detail").is_ok());
+        let error = ensure_close_reason_fits_record("atelier-x", "Done\n## Evidence")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("atelier-x"), "{error}");
+        assert!(error.contains("`##` Markdown heading"), "{error}");
     }
 
     #[test]
-    fn review_open_action_persists_room_review_field() {
+    fn transition_record_stores_close_reason_in_issue_record() {
         let dir = tempdir().unwrap();
-        write_room_config_and_workflow(&dir);
+        write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
         let db_path = dir.path().join(".atelier/runtime/state.db");
         let db = Database::open(&db_path).unwrap();
         let mut issue = test_issue("atelier-epic1");
-        issue.fields.insert(
-            atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "owner_issue_id": "atelier-epic1",
-                "work_branch": "epic/atelier-epic1",
-                "branch_base": "mission/atelier-miss",
-                "review_target": "mission/atelier-miss",
-                "integration_target": "mission/atelier-miss",
-                "owner_kind": "epic",
-                "merge_strategy": "squash",
-            }),
-        );
-        insert_canonical_issue(&db, &state_dir, issue.clone());
-        let resolution = BranchLifecycleResolution {
-            issue_id: "atelier-epic1".to_string(),
-            owner_id: "atelier-epic1".to_string(),
-            owner_issue_type: "epic".to_string(),
-            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
-            expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "mission/atelier-miss".to_string(),
-            merge_strategy: MergeStrategy::Squash,
-            merge_owned: true,
-            nested_under_epic: false,
-        };
-        let action =
-            plan_actions_for_resolution(&issue, &resolution, &[review_action()], 1).remove(0);
-
-        let detail = open_review_artifact_action(
-            &db,
-            &state_dir,
-            &db_path,
-            dir.path(),
-            &issue,
-            "request_review",
-            &action,
-        )
-        .unwrap();
-
-        assert!(detail.contains("opened room"));
-        let owner = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
-        let review = owner.issue.fields.get("review").unwrap();
-        assert_eq!(review["kind"], "room");
-        assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
-        let Record::Review(review_record) = RecordStore::new(&state_dir)
-            .load_record_by_id("review", review["id"].as_str().unwrap())
-            .unwrap()
-        else {
-            panic!("expected review record");
-        };
-        assert_eq!(review_record.header.title, "atelier-epic1: Issue");
-        assert_eq!(review_record.source_branch, "epic/atelier-epic1");
-        assert_eq!(review_record.target_branch, "mission/atelier-miss");
-        assert!(review_record.events[0]["body"]
-            .as_str()
-            .unwrap()
-            .contains("atelier issue show atelier-epic1"));
-
-        let second_detail = open_review_artifact_action(
-            &db,
-            &state_dir,
-            &db_path,
-            dir.path(),
-            &issue,
-            "request_review",
-            &action,
-        )
-        .unwrap();
-        assert!(second_detail.contains("reused room"));
-    }
-
-    #[test]
-    fn transition_status_write_preserves_review_field_from_pre_action_reload() {
-        let dir = tempdir().unwrap();
-        write_room_config_and_workflow(&dir);
-        let state_dir = dir.path().join(".atelier");
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        let db = Database::open(&db_path).unwrap();
-        let issue = test_issue("atelier-epic1");
+        issue.status = "draft".to_string();
         insert_canonical_issue(&db, &state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
-        let transition = resolve_issue_transition(&policy, &issue, "request_review").unwrap();
-        let stale_record =
-            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
-        let resolution = BranchLifecycleResolution {
-            issue_id: "atelier-epic1".to_string(),
-            owner_id: "atelier-epic1".to_string(),
-            owner_issue_type: "epic".to_string(),
-            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
-            expected_branch: "epic/atelier-epic1".to_string(),
-            base_branch: "master".to_string(),
-            merge_strategy: MergeStrategy::Squash,
-            merge_owned: true,
-            nested_under_epic: false,
-        };
-        let action =
-            plan_actions_for_resolution(&issue, &resolution, &[review_action()], 1).remove(0);
+        let transition = resolve_issue_transition(&policy, &issue, "supersede").unwrap();
 
-        open_review_artifact_action(
-            &db,
-            &state_dir,
-            &db_path,
-            dir.path(),
-            &issue,
-            "request_review",
-            &action,
-        )
-        .unwrap();
-        assert!(!stale_record.issue.fields.contains_key("review"));
-
-        let mut reloaded_record =
-            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
-        apply_transition_record(&policy, &state_dir, &mut reloaded_record, transition, None)
-            .unwrap();
-
-        let final_record =
-            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
-        assert_eq!(final_record.issue.status, "review");
-        let review = final_record.issue.fields.get("review").unwrap();
-        assert_eq!(review["kind"], "room");
-        assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
-    }
-
-    #[test]
-    fn room_review_complete_requires_merged_room_artifact() {
-        let dir = tempdir().unwrap();
-        write_room_config_and_workflow(&dir);
-        let state_dir = dir.path().join(".atelier");
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        let db = Database::open(&db_path).unwrap();
-        let mut issue = test_issue("atelier-epic1");
-        issue.status = "review".to_string();
-        insert_canonical_issue(&db, &state_dir, issue);
-
-        let outcome = review_room::open(
-            &db,
-            review_room::RoomOpenRequest {
-                repo_root: dir.path(),
-                state_dir: &state_dir,
-                db_path: &db_path,
-                issue_ref: Some("atelier-epic1"),
-                role: "worker",
-                title: "Review atelier-epic1",
-                body: "Please review.",
-                source_branch: "epic/atelier-epic1",
-                target_branch: "master",
-            },
-        )
-        .unwrap();
-        drop(db);
-        atelier_app::rebuild::run(&state_dir, &db_path).unwrap();
-        let db = Database::open(&db_path).unwrap();
-
-        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
-        let validators = vec![atelier_app::workflow_policy::ValidatorDefinition {
-            builtin: "review.complete".to_string(),
-            params: None,
-        }];
-        let results = atelier_app::workflow_validation::evaluate_policy_transition(
-            atelier_app::workflow_validation::ValidatorRequest {
-                db: &db,
-                repo_root: dir.path(),
-                policy: &policy,
-                target_kind: "issue",
-                target_id: "atelier-epic1",
-                transition: "close",
-                validators: &validators,
-            },
-        )
-        .unwrap();
-        let result = results.first().unwrap();
-        let passed = result.passed;
-        let reason = result.reason.clone();
-        assert!(!passed);
-        assert!(
-            reason.contains(&format!("review room {}", outcome.review_id)),
-            "{reason}"
-        );
-        assert!(
-            reason.contains("atelier review show --issue atelier-epic1"),
-            "{reason}"
-        );
-
-        review_room::approve(
-            &db,
-            review_room::RoomDecisionRequest {
-                repo_root: dir.path(),
-                state_dir: &state_dir,
-                db_path: &db_path,
-                issue_ref: Some("atelier-epic1"),
-                role: "reviewer",
-                body: "Approved.",
-            },
-        )
-        .unwrap();
-        review_room::merge(
-            &db,
-            review_room::RoomMergeRequest {
-                repo_root: dir.path(),
-                state_dir: &state_dir,
-                db_path: &db_path,
-                issue_ref: Some("atelier-epic1"),
-                role: "manager",
-            },
-        )
-        .unwrap();
-
-        let results = atelier_app::workflow_validation::evaluate_policy_transition(
-            atelier_app::workflow_validation::ValidatorRequest {
-                db: &db,
-                repo_root: dir.path(),
-                policy: &policy,
-                target_kind: "issue",
-                target_id: "atelier-epic1",
-                transition: "close",
-                validators: &validators,
-            },
-        )
-        .unwrap();
-        let result = results.first().unwrap();
-        let passed = result.passed;
-        let reason = result.reason.clone();
-        assert!(passed);
-        assert_eq!(
-            reason,
-            format!("review room {} is merged", outcome.review_id)
-        );
-    }
-
-    #[test]
-    fn linked_pr_merged_is_not_in_starter_close_policy() {
-        let (dir, db) = setup_pr_validator_repo();
-        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
-        let epic_workflow = policy.workflow_by_issue_type.get("epic").unwrap();
-        let epic_close = &policy.workflows[epic_workflow].transitions["close"];
-        let linked_pr_validators = epic_close
-            .validators
-            .iter()
-            .filter(|validator| validator.builtin == "review.linked_pr_merged")
-            .cloned()
-            .collect::<Vec<_>>();
-        assert!(linked_pr_validators.is_empty());
-
-        let results = evaluate_policy_transition(
-            &db,
+        let mut record = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        apply_transition_record(
             &policy,
-            "issue",
-            "atelier-hw9t",
-            "close",
-            &linked_pr_validators,
+            &state_dir,
+            &mut record,
+            transition,
+            Some("  Replaced by a smaller epic.  "),
         )
         .unwrap();
-        assert!(results.is_empty());
 
-        let validation_workflow = policy.workflow_by_issue_type.get("validation").unwrap();
-        let validation_close = &policy.workflows[validation_workflow].transitions["close"];
-        assert!(!validation_close
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "review.linked_pr_merged"));
+        let stored = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        assert_eq!(stored.issue.status, "superseded");
+        assert!(stored.issue.closed_at.is_some());
+        assert_eq!(
+            stored.sections.close_reason.as_deref(),
+            Some("Replaced by a smaller epic.")
+        );
+        let text = std::fs::read_to_string(state_dir.join("issues/atelier-epic1.md")).unwrap();
+        assert!(text.contains("## Close Reason\n\nReplaced by a smaller epic."));
     }
 }

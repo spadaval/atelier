@@ -6,7 +6,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{EvidenceRecordData, Issue, Record};
-use atelier_records::activity::{create_issue_activity, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
@@ -708,15 +707,11 @@ fn apply_bundle_to_state(
             _ => note.note.body.clone(),
         };
         let _ = &note.note.created_at;
-        create_issue_activity(
-            state_dir,
-            &target.id,
-            ActivityEventType::Note,
-            &current_actor(),
-            chrono::Utc::now(),
-            "Added note",
-            &body,
-        )?;
+        let mut record = store.load_issue_by_id(&target.id)?;
+        record
+            .sections
+            .append_note(chrono::Utc::now().date_naive(), "note", &body);
+        store.write_issue_atomic(&record)?;
     }
 
     let mut applied_relationships = Vec::new();
@@ -955,12 +950,6 @@ fn restore_bundle_backups(backup: &Path, state_dir: &Path, names: &[&str]) -> Re
         }
     }
     Ok(())
-}
-
-fn current_actor() -> String {
-    std::env::var("ATELIER_AGENT")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_else(|_| "agent".to_string())
 }
 
 impl BundleFile {

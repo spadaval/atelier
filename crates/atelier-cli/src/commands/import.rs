@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use crate::record_id;
 use crate::utils::format_issue_id;
 use atelier_core::{Issue, IssuePriority};
-use atelier_records::activity::{create_issue_activity, ActivityEventType};
 use atelier_records::{
     issue_record_path, relationship_target, CanonicalIssueRecord, IssueSections, RecordStore,
     Relationships,
@@ -76,16 +75,8 @@ struct LossyField {
     handling: String,
 }
 
-struct ImportedActivity {
-    issue_id: String,
-    event_type: ActivityEventType,
-    created_at: DateTime<Utc>,
-    body: String,
-}
-
 struct BeadsImportPlan {
     records: Vec<CanonicalIssueRecord>,
-    activities: Vec<ImportedActivity>,
     report: BeadsImportReport,
 }
 
@@ -137,7 +128,7 @@ fn parse_beads_jsonl(input_path: &Path) -> Result<BeadsImportPlan> {
     let mut issues = BTreeMap::new();
     let mut relationships = BTreeMap::new();
     let mut labels = BTreeMap::new();
-    let mut activities = Vec::new();
+    let mut sections = BTreeMap::new();
     let mut lossy_fields = Vec::new();
     let mut parent_edges = BTreeSet::new();
     let mut block_edges = BTreeSet::new();
@@ -149,7 +140,10 @@ fn parse_beads_jsonl(input_path: &Path) -> Result<BeadsImportPlan> {
         );
         relationships.insert(id.clone(), Relationships::default());
         labels.insert(id.clone(), source.labels.clone().unwrap_or_default());
-        collect_preserved_activities(source, &id, &mut activities, &mut lossy_fields)?;
+        let issue = issues.get(&id).expect("issue was just imported");
+        let mut issue_sections = IssueSections::unchecked_from_body(issue.description.as_deref());
+        preserve_notes_and_close_reason(source, &mut issue_sections, &mut lossy_fields)?;
+        sections.insert(id.clone(), issue_sections);
         report_extra_fields(source, &mut lossy_fields);
     }
 
@@ -187,14 +181,13 @@ fn parse_beads_jsonl(input_path: &Path) -> Result<BeadsImportPlan> {
 
     let records = issues
         .into_iter()
-        .map(|(id, issue)| {
-            let sections = IssueSections::unchecked_from_body(issue.description.as_deref());
-            CanonicalIssueRecord {
-                issue,
-                labels: labels.remove(&id).unwrap_or_default(),
-                sections,
-                relationships: relationships.remove(&id).unwrap_or_default(),
-            }
+        .map(|(id, issue)| CanonicalIssueRecord {
+            issue,
+            labels: labels.remove(&id).unwrap_or_default(),
+            sections: sections
+                .remove(&id)
+                .expect("sections exist for every issue"),
+            relationships: relationships.remove(&id).unwrap_or_default(),
         })
         .collect();
     let report = BeadsImportReport {
@@ -207,11 +200,7 @@ fn parse_beads_jsonl(input_path: &Path) -> Result<BeadsImportPlan> {
         lossy_fields,
         id_mapping,
     };
-    Ok(BeadsImportPlan {
-        records,
-        activities,
-        report,
-    })
+    Ok(BeadsImportPlan { records, report })
 }
 
 fn write_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
@@ -252,20 +241,6 @@ fn apply_import_plan(state_dir: &Path, plan: &BeadsImportPlan) -> Result<()> {
     let store = RecordStore::new(state_dir);
     for record in &plan.records {
         store.write_issue_atomic(record)?;
-    }
-    for activity in &plan.activities {
-        create_issue_activity(
-            state_dir,
-            &activity.issue_id,
-            activity.event_type,
-            "beads-import",
-            activity.created_at,
-            match activity.event_type {
-                ActivityEventType::CloseReason => "Imported close reason",
-                _ => "Imported note",
-            },
-            &activity.body,
-        )?;
     }
     Ok(())
 }
@@ -506,10 +481,9 @@ fn import_priority(priority: i64, source_id: &str, lossy_fields: &mut Vec<LossyF
     .to_string()
 }
 
-fn collect_preserved_activities(
+fn preserve_notes_and_close_reason(
     record: &BeadsIssue,
-    id: &str,
-    activities: &mut Vec<ImportedActivity>,
+    sections: &mut IssueSections,
     lossy_fields: &mut Vec<LossyField>,
 ) -> Result<()> {
     let created_at = parse_optional_datetime(
@@ -521,22 +495,12 @@ fn collect_preserved_activities(
     .unwrap_or(DateTime::UNIX_EPOCH);
     if let Some(notes) = record.notes.as_deref() {
         if !notes.trim().is_empty() {
-            activities.push(ImportedActivity {
-                issue_id: id.to_string(),
-                event_type: ActivityEventType::Note,
-                created_at,
-                body: notes.trim().to_string(),
-            });
+            sections.append_note(created_at.date_naive(), "note", notes);
         }
     }
     if let Some(reason) = record.close_reason.as_deref() {
         if !reason.trim().is_empty() {
-            activities.push(ImportedActivity {
-                issue_id: id.to_string(),
-                event_type: ActivityEventType::CloseReason,
-                created_at,
-                body: reason.trim().to_string(),
-            });
+            sections.close_reason = Some(reason.trim().to_string());
         }
     }
 
@@ -741,20 +705,19 @@ mod tests {
     }
 
     #[test]
-    fn test_import_beads_preserves_notes_as_activity_records() {
+    fn test_import_beads_preserves_notes_in_issue_record() {
         let dir = tempdir().unwrap();
         let state_dir = dir.path().join(".atelier");
         let plan = parse_beads_jsonl(&fixture_path(&dir)).unwrap();
         write_import_plan(&state_dir, &plan).unwrap();
 
-        let activities = atelier_records::activity::list_issue_activities(
-            &state_dir,
-            &record_id::legacy_issue_id(1),
-        )
-        .unwrap();
-        assert_eq!(activities.len(), 1);
-        assert_eq!(activities[0].event_type, ActivityEventType::Note);
-        assert!(activities[0].body.contains("replacement is sequenced"));
+        let record = RecordStore::new(&state_dir)
+            .load_issue_by_id(&record_id::legacy_issue_id(1))
+            .unwrap();
+        let notes = record.sections.notes.unwrap();
+        assert!(notes.starts_with("- "), "{notes}");
+        assert!(notes.contains("[note] "), "{notes}");
+        assert!(notes.contains("replacement is sequenced"), "{notes}");
     }
 
     #[test]
@@ -856,11 +819,6 @@ mod tests {
         for index in 1..=2 {
             let id = record_id::legacy_issue_id(index);
             assert!(!state_dir.join(issue_record_path(&id)).exists());
-            assert!(
-                atelier_records::activity::list_issue_activities(&state_dir, &id)
-                    .unwrap()
-                    .is_empty()
-            );
         }
         assert_no_import_artifacts(&state_dir);
 
@@ -878,30 +836,5 @@ mod tests {
         assert!(state_dir
             .join(issue_record_path(&record_id::legacy_issue_id(2)))
             .exists());
-    }
-
-    #[test]
-    fn test_import_staging_failure_leaves_no_records_or_activities_and_allows_retry() {
-        let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier");
-        let import_path = write_jsonl(&dir, &[beads_issue("first", "task", Some("first note"))]);
-        let id = record_id::legacy_issue_id(1);
-        let activity_blocker = state_dir.join("issues").join(format!("{id}.activity"));
-        fs::create_dir_all(activity_blocker.parent().unwrap()).unwrap();
-        fs::write(&activity_blocker, "blocks activity directory creation").unwrap();
-
-        let error = run_beads_jsonl(&import_path, &state_dir).unwrap_err();
-        assert!(error.to_string().contains("Failed to create"));
-        assert!(!state_dir.join(issue_record_path(&id)).exists());
-        assert!(activity_blocker.is_file());
-        assert_no_import_artifacts(&state_dir);
-
-        fs::remove_file(&activity_blocker).unwrap();
-        run_beads_jsonl(&import_path, &state_dir).unwrap();
-        assert!(state_dir.join(issue_record_path(&id)).exists());
-        let activities = atelier_records::activity::list_issue_activities(&state_dir, &id).unwrap();
-        assert_eq!(activities.len(), 1);
-        assert_eq!(activities[0].body, "first note");
-        assert_no_import_artifacts(&state_dir);
     }
 }

@@ -17,23 +17,6 @@ state_root = ".atelier"
 
 [prune]
 canonical_retention_days = 7
-
-# Native room mode stores review rooms under .atelier/reviews. Provider mode
-# currently supports Forgejo.
-[review]
-mode = "room"
-
-# To use Forgejo instead, replace the [review] table above with:
-#
-# [review]
-# mode = "provider"
-# provider = "forgejo"
-#
-# [review.providers.forgejo]
-# host = "forge.example.test"
-# owner = "workspace"
-# repo = "atelier"
-# Store the Forgejo admin token in ~/.config/atelier.toml, not in this file.
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[

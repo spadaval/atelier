@@ -60,12 +60,10 @@ explain and low-value to operate, fold it, hide it, or remove it.
 - [bundle](bundle.md)
 - [check](check.md)
 - [evidence](evidence.md)
-- [history](history.md)
 - [init](init.md)
 - [issue](issue.md)
 - [man](man.md)
 - [prune](prune.md)
-- [review](review.md)
 - [status](status.md)
 - [work](work.md)
 
@@ -81,7 +79,6 @@ not be taught as ordinary workflow:
   guidance comes from status, work dashboards, issue detail, and transitions.
 - [doctor](doctor.md): hidden legacy repair entry; normal repair starts from
   visible `check` and explicit `check --fix`.
-- [forgejo](forgejo.md): hidden provider setup diagnostics.
 - [import-beads](import-beads.md): hidden explicit predecessor import escape
   hatch; normal setup uses `init --import-beads`.
 - [lint](lint.md): hidden compatibility health probe; normal validation uses

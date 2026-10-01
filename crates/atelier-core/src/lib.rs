@@ -3,7 +3,7 @@
 //! This crate is intentionally free of filesystem, SQLite, Clap, and telemetry
 //! dependencies. Concrete domain types move here as the migration advances.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Component, Path};
@@ -135,7 +135,6 @@ pub struct Issue {
     pub closed_at: Option<DateTime<Utc>>,
 }
 
-pub const ISSUE_REVIEW_FIELD: &str = "review";
 pub const ISSUE_STRATEGY_FIELD: &str = "strategy";
 
 /// A mission's governing strategy document at the revision used to commission it.
@@ -195,88 +194,14 @@ impl IssueStrategy {
     }
 }
 
-/// The review artifact linked from an issue record.
-///
-/// Known issue fields get concrete domain accessors here as they are promoted;
-/// callers should not interpret their JSON storage representation directly.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum IssueReview {
-    Room { id: String },
-    ForgejoPullRequest { number: u64 },
-}
-
-impl IssueReview {
-    pub fn room(id: impl Into<String>) -> Result<Self, IssueFieldError> {
-        let id = id.into();
-        if id.trim().is_empty() {
-            return Err(IssueFieldError::InvalidReview(
-                "room review id must be a non-empty string".to_string(),
-            ));
-        }
-        Ok(Self::Room { id })
-    }
-
-    pub fn from_value(value: &serde_json::Value) -> Result<Self, IssueFieldError> {
-        let object = value.as_object().ok_or_else(|| {
-            IssueFieldError::InvalidReview("review must be an object".to_string())
-        })?;
-        match object.get("kind").and_then(serde_json::Value::as_str) {
-            Some("room") => object
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| {
-                    IssueFieldError::InvalidReview(
-                        "room review id must be a non-empty string".to_string(),
-                    )
-                })
-                .and_then(Self::room),
-            Some("pull_request")
-                if object.get("provider").and_then(serde_json::Value::as_str)
-                    == Some("forgejo") =>
-            {
-                object
-                    .get("number")
-                    .and_then(serde_json::Value::as_u64)
-                    .filter(|number| *number > 0)
-                    .map(|number| Self::ForgejoPullRequest { number })
-                    .ok_or_else(|| {
-                        IssueFieldError::InvalidReview(
-                            "Forgejo pull request must include a positive number".to_string(),
-                        )
-                    })
-            }
-            Some(kind) => Err(IssueFieldError::InvalidReview(format!(
-                "unsupported review kind '{kind}'"
-            ))),
-            None => Err(IssueFieldError::InvalidReview(
-                "review kind must be a string".to_string(),
-            )),
-        }
-    }
-
-    pub fn to_value(&self) -> serde_json::Value {
-        match self {
-            Self::Room { id } => serde_json::json!({ "kind": "room", "id": id }),
-            Self::ForgejoPullRequest { number } => serde_json::json!({
-                "kind": "pull_request",
-                "provider": "forgejo",
-                "number": number,
-            }),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IssueFieldError {
-    InvalidReview(String),
     InvalidStrategy(String),
 }
 
 impl fmt::Display for IssueFieldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidReview(detail) => write!(f, "invalid issue review field: {detail}"),
             Self::InvalidStrategy(detail) => write!(f, "invalid issue strategy field: {detail}"),
         }
     }
@@ -285,24 +210,6 @@ impl fmt::Display for IssueFieldError {
 impl std::error::Error for IssueFieldError {}
 
 impl Issue {
-    pub fn review(&self) -> Result<Option<IssueReview>, IssueFieldError> {
-        self.fields
-            .get(ISSUE_REVIEW_FIELD)
-            .map(IssueReview::from_value)
-            .transpose()
-    }
-
-    pub fn set_review(&mut self, review: IssueReview) {
-        self.fields
-            .insert(ISSUE_REVIEW_FIELD.to_string(), review.to_value());
-    }
-
-    pub fn clear_review(&mut self) -> Option<IssueReview> {
-        self.fields
-            .remove(ISSUE_REVIEW_FIELD)
-            .and_then(|value| IssueReview::from_value(&value).ok())
-    }
-
     pub fn strategy(&self) -> Result<Option<IssueStrategy>, IssueFieldError> {
         self.fields
             .get(ISSUE_STRATEGY_FIELD)
@@ -320,20 +227,6 @@ impl Issue {
             .remove(ISSUE_STRATEGY_FIELD)
             .and_then(|value| IssueStrategy::from_value(&value).ok())
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct Comment {
-    pub id: i64,
-    pub issue_id: IssueId,
-    pub content: String,
-    pub created_at: DateTime<Utc>,
-    #[serde(default = "default_comment_kind")]
-    pub kind: String,
-}
-
-fn default_comment_kind() -> String {
-    "note".to_string()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -388,7 +281,6 @@ pub struct RecordHeader {
 pub enum Record {
     Issue(IssueRecord),
     Evidence(EvidenceRecord),
-    Review(ReviewRecord),
 }
 
 impl Record {
@@ -396,7 +288,6 @@ impl Record {
         match self {
             Record::Issue(record) => &record.header,
             Record::Evidence(record) => &record.header,
-            Record::Review(record) => &record.header,
         }
     }
 
@@ -404,7 +295,6 @@ impl Record {
         match self {
             Record::Issue(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
-            Record::Review(record) => &mut record.header,
         }
     }
 
@@ -428,30 +318,6 @@ pub struct IssueRecord {
     pub sections: IssueSections,
 }
 
-impl IssueRecord {
-    pub fn review(&self) -> Result<Option<IssueReview>, IssueFieldError> {
-        self.fields
-            .get(ISSUE_REVIEW_FIELD)
-            .map(IssueReview::from_value)
-            .transpose()
-    }
-
-    pub fn set_review(&mut self, review: IssueReview) {
-        self.fields
-            .insert(ISSUE_REVIEW_FIELD.to_string(), review.to_value());
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ReviewRecord {
-    pub header: RecordHeader,
-    pub mode: String,
-    pub issue_id: String,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub events: Vec<serde_json::Value>,
-}
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceRecord {
     pub header: RecordHeader,
@@ -465,6 +331,7 @@ pub struct IssueSections {
     pub outcome: String,
     pub evidence: String,
     pub notes: Option<String>,
+    pub close_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -473,7 +340,20 @@ pub enum IssueSectionName {
     Outcome,
     Evidence,
     Notes,
+    CloseReason,
 }
+
+/// Note kinds accepted by `IssueSections::append_note`.
+pub const ISSUE_NOTE_KINDS: &[&str] = &[
+    "note",
+    "plan",
+    "observation",
+    "blocker",
+    "resolution",
+    "result",
+    "handoff",
+    "human",
+];
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IssueSectionState {
@@ -487,11 +367,12 @@ impl IssueSections {
     pub const REQUIRED_NAMES: [IssueSectionName; 2] =
         [IssueSectionName::Description, IssueSectionName::Outcome];
 
-    pub const ALL_NAMES: [IssueSectionName; 4] = [
+    pub const ALL_NAMES: [IssueSectionName; 5] = [
         IssueSectionName::Description,
         IssueSectionName::Outcome,
         IssueSectionName::Evidence,
         IssueSectionName::Notes,
+        IssueSectionName::CloseReason,
     ];
 
     pub fn unchecked_from_body(body: Option<&str>) -> Self {
@@ -507,7 +388,31 @@ impl IssueSections {
             outcome: "Outcome was not specified.".to_string(),
             evidence: String::new(),
             notes: None,
+            close_reason: None,
         }
+    }
+
+    /// Append one dated `- YYYY-MM-DD [kind] text` bullet to the Notes
+    /// section, creating the section when absent. Continuation lines are
+    /// indented so note text cannot open a new record section.
+    pub fn append_note(&mut self, date: NaiveDate, kind: &str, text: &str) {
+        let mut lines = text.trim().lines();
+        let mut bullet = format!(
+            "- {} [{kind}] {}",
+            date.format("%Y-%m-%d"),
+            lines.next().unwrap_or_default().trim_end()
+        );
+        for line in lines {
+            bullet.push('\n');
+            if !line.trim().is_empty() {
+                bullet.push_str("  ");
+                bullet.push_str(line.trim_end());
+            }
+        }
+        self.notes = Some(match self.notes.as_deref().map(str::trim) {
+            Some(existing) if !existing.is_empty() => format!("{existing}\n{bullet}"),
+            _ => bullet,
+        });
     }
 
     pub fn section(&self, name: IssueSectionName) -> Option<&str> {
@@ -518,6 +423,7 @@ impl IssueSections {
                 (!self.evidence.trim().is_empty()).then_some(&self.evidence)
             }
             IssueSectionName::Notes => self.notes.as_deref(),
+            IssueSectionName::CloseReason => self.close_reason.as_deref(),
         }
     }
 
@@ -551,6 +457,7 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
     let mut outcome = String::new();
     let mut evidence = String::new();
     let mut notes = String::new();
+    let mut close_reason = String::new();
 
     for line in body.lines() {
         if let Some(heading) = line.strip_prefix("## ") {
@@ -559,6 +466,7 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
                 "Outcome" => Some("outcome"),
                 "Evidence" => Some("evidence"),
                 "Notes" => Some("notes"),
+                "Close Reason" => Some("close_reason"),
                 _ => return None,
             };
             break;
@@ -573,6 +481,7 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
                 "Outcome" => "outcome",
                 "Evidence" => "evidence",
                 "Notes" => "notes",
+                "Close Reason" => "close_reason",
                 _ => return None,
             };
             continue;
@@ -594,6 +503,10 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
                 notes.push_str(line);
                 notes.push('\n');
             }
+            "close_reason" => {
+                close_reason.push_str(line);
+                close_reason.push('\n');
+            }
             _ => {}
         }
     }
@@ -609,6 +522,7 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
         outcome,
         evidence,
         notes: (!notes.trim().is_empty()).then(|| notes.trim().to_string()),
+        close_reason: (!close_reason.trim().is_empty()).then(|| close_reason.trim().to_string()),
     })
 }
 
@@ -619,6 +533,7 @@ impl IssueSectionName {
             IssueSectionName::Outcome => "Outcome",
             IssueSectionName::Evidence => "Evidence",
             IssueSectionName::Notes => "Notes",
+            IssueSectionName::CloseReason => "Close Reason",
         }
     }
 
@@ -795,39 +710,6 @@ pub fn validate_non_empty(field: &'static str, value: &str) -> Result<(), ValueE
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn issue_review_has_typed_room_and_provider_forms() {
-        let room = IssueReview::from_value(&serde_json::json!({
-            "kind": "room",
-            "id": "atelier-rvw1"
-        }))
-        .unwrap();
-        assert_eq!(
-            room,
-            IssueReview::Room {
-                id: "atelier-rvw1".to_string()
-            }
-        );
-        assert_eq!(
-            room.to_value(),
-            serde_json::json!({"kind": "room", "id": "atelier-rvw1"})
-        );
-
-        let pull = IssueReview::from_value(&serde_json::json!({
-            "kind": "pull_request",
-            "provider": "forgejo",
-            "number": 42
-        }))
-        .unwrap();
-        assert_eq!(pull, IssueReview::ForgejoPullRequest { number: 42 });
-        assert!(IssueReview::from_value(&serde_json::json!({
-            "kind": "pull_request",
-            "provider": "forgejo",
-            "number": 0
-        }))
-        .is_err());
-    }
 
     #[test]
     fn record_id_rejects_empty_values() {

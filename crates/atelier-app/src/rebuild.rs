@@ -10,14 +10,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use atelier_core::{Issue, Record};
 use atelier_records as record_store;
-use atelier_records::activity::IssueActivity;
 use atelier_records::{
     Relationships, FIRST_CLASS_RECORD_KINDS, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 use atelier_sqlite::source_freshness;
 use atelier_sqlite::{
     Database, EvidenceCacheRow, EvidenceTargetCacheRow, IssueBlockCacheRow, IssueCacheRow,
-    IssueRelationCacheRow, RecordSourceCacheRow, ReviewRoomCacheRow,
+    IssueRelationCacheRow, RecordSourceCacheRow,
 };
 
 #[derive(Debug)]
@@ -97,19 +96,17 @@ pub fn repair_incremental(
         source_freshness::SourceFreshnessProblem::MissingSource { path } => stored_by_path
             .get(path.as_str())
             .map(|source| match source.record_kind.as_str() {
-                "review" => 1,
-                "evidence" => 2,
-                "issue" => 3,
-                _ => 4,
+                "evidence" => 1,
+                "issue" => 2,
+                _ => 3,
             })
-            .unwrap_or(4),
+            .unwrap_or(3),
         source_freshness::SourceFreshnessProblem::ChangedSource { path }
         | source_freshness::SourceFreshnessProblem::UnindexedSource { path } => {
             match canonical_spec_for_path(path).map(|spec| spec.kind) {
-                Some("issue") => 5,
-                Some("evidence") => 6,
-                Some("review") => 7,
-                _ => 8,
+                Some("issue") => 4,
+                Some("evidence") => 5,
+                _ => 6,
             }
         }
     });
@@ -269,8 +266,6 @@ struct CacheRebuildLoader<'a> {
     global_ids: BTreeSet<String>,
     record_refs: BTreeSet<(String, String)>,
     canonical_paths: BTreeSet<PathBuf>,
-    activity_issue_subject_ids: BTreeSet<String>,
-    activity_record_refs: BTreeSet<(String, String)>,
 }
 
 impl<'a> CacheRebuildLoader<'a> {
@@ -284,21 +279,18 @@ impl<'a> CacheRebuildLoader<'a> {
             global_ids: BTreeSet::new(),
             record_refs: BTreeSet::new(),
             canonical_paths: BTreeSet::new(),
-            activity_issue_subject_ids: BTreeSet::new(),
-            activity_record_refs: BTreeSet::new(),
         }
     }
 
     fn load(mut self) -> Result<CacheRebuild> {
         self.load_issues()?;
-        self.load_issue_activities()?;
         self.load_records()?;
         ensure_no_unsupported_canonical_files(self.state_dir, &self.canonical_paths)?;
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
         self.collect_record_links()?;
         validate_issue_hierarchy_shapes(&self.issues, &child_edges)?;
-        self.validate_issue_fields(&child_edges)?;
+        self.validate_issue_fields()?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
         self.validate_mission_execution_dependencies(&dependency_edges)?;
@@ -337,20 +329,6 @@ impl<'a> CacheRebuildLoader<'a> {
         }
         if !self.global_ids.insert(id.to_string()) {
             bail!("Duplicate record ID in record files: {}", id);
-        }
-        Ok(())
-    }
-
-    fn load_issue_activities(&mut self) -> Result<()> {
-        for relative in discover_activity_paths(self.state_dir)? {
-            let activity = IssueActivity::load(self.state_dir, &relative)?;
-            self.canonical_paths.insert(relative);
-            if activity.subject_kind == "issue" {
-                self.activity_issue_subject_ids
-                    .insert(activity.subject_id.clone());
-            }
-            self.activity_record_refs
-                .insert((activity.subject_kind, activity.subject_id));
         }
         Ok(())
     }
@@ -394,14 +372,6 @@ impl<'a> CacheRebuildLoader<'a> {
     )> {
         let custom_issue_link_types = self.custom_issue_link_types()?;
         let mut graph = IssueRelationshipIndex::default();
-        for subject_id in &self.activity_issue_subject_ids {
-            ensure_issue_exists(subject_id, &self.issue_ids, "activity", subject_id)?;
-        }
-        for (kind, id) in &self.activity_record_refs {
-            if kind != "issue" && !self.record_refs.contains(&(kind.clone(), id.clone())) {
-                bail!("Activity references missing {kind} record: {id}");
-            }
-        }
         for issue in &self.issues {
             graph.collect_issue(
                 issue,
@@ -459,26 +429,7 @@ impl<'a> CacheRebuildLoader<'a> {
         Ok(record_links)
     }
 
-    fn validate_issue_fields(&self, child_edges: &[(String, String)]) -> Result<()> {
-        let parent_by_child = child_edges
-            .iter()
-            .map(|(child_id, parent_id)| (child_id.as_str(), parent_id.as_str()))
-            .collect::<BTreeMap<_, _>>();
-        for issue in &self.issues {
-            if let Some(parent_id) = parent_by_child.get(issue.issue.id.as_str()) {
-                if issue
-                    .issue
-                    .fields
-                    .contains_key(crate::workflow_policy::REVIEW_FIELD)
-                {
-                    bail!(
-                        "workflow_issue_field_invalid: issue {} defines review directly, but child issues inherit review from parent issue {}; move review to the owning epic or remove it from the child",
-                        issue.issue.id,
-                        parent_id
-                    );
-                }
-            }
-        }
+    fn validate_issue_fields(&self) -> Result<()> {
         let repo_root = self.state_dir.parent().ok_or_else(|| {
             anyhow!(
                 "Cannot determine repository root for {}",
@@ -738,13 +689,6 @@ fn collect_canonical_record_paths(
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
             collect_canonical_record_paths(root, &path, extension, kind_name, records)?;
         } else if path.is_file() {
             let relative = path
@@ -763,37 +707,6 @@ fn collect_canonical_record_paths(
                 );
             }
             records.push(relative);
-        }
-    }
-    Ok(())
-}
-
-fn discover_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut records = Vec::new();
-    for root_name in ["issues"] {
-        let root_dir = state_dir.join(root_name);
-        if root_dir.exists() {
-            collect_activity_paths(state_dir, &root_dir, &mut records)?;
-        }
-    }
-    records.sort();
-    Ok(records)
-}
-
-fn collect_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                collect_activity_files(root, &path, records)?;
-            } else {
-                collect_activity_paths(root, &path, records)?;
-            }
         }
     }
     Ok(())
@@ -849,35 +762,8 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
         if crate::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
-        if relative.components().any(|component| {
-            component
-                .as_os_str()
-                .to_string_lossy()
-                .ends_with(".activity")
-        }) {
-            continue;
-        }
         if path.is_dir() {
             collect_canonical_files(root, &path, files)?;
-        } else if path.is_file() {
-            files.push(relative.to_path_buf());
-        }
-    }
-    Ok(())
-}
-
-fn collect_activity_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let relative = path
-            .strip_prefix(root)
-            .context("Failed to relativize activity path")?;
-        if crate::storage_layout::is_local_atelier_path(relative) {
-            continue;
-        }
-        if path.is_dir() {
-            collect_activity_files(root, &path, files)?;
         } else if path.is_file() {
             files.push(relative.to_path_buf());
         }
@@ -1019,30 +905,6 @@ fn index_domain_record(db: &Database, state_dir: &Path, record: &Record) -> Resu
             )?;
             db.index_evidence(&row, &targets, &source)
         }
-        Record::Review(review) => {
-            let (approvals, unresolved_blocking, unresolved_nonblocking) =
-                review_room_counts(&review.events);
-            let row = ReviewRoomCacheRow {
-                id: header.id.clone(),
-                issue_id: review.issue_id.clone(),
-                title: header.title.clone(),
-                status: header.status.clone(),
-                source_branch: review.source_branch.clone(),
-                target_branch: review.target_branch.clone(),
-                approvals,
-                unresolved_blocking,
-                unresolved_nonblocking,
-                created_at: header.created_at,
-                updated_at: header.updated_at,
-            };
-            let source = record_source_row(
-                state_dir,
-                &source_path,
-                header.kind.as_str(),
-                header.id.as_str(),
-            )?;
-            db.index_review_room(&row, &source)
-        }
         Record::Issue(_) => bail!("issue records must use the issue indexer"),
     }
 }
@@ -1071,48 +933,6 @@ fn record_source_row(
         content_hash: None,
         indexed_at: chrono::Utc::now(),
     })
-}
-
-fn review_room_counts(events: &[serde_json::Value]) -> (i64, i64, i64) {
-    let latest_change_request = events
-        .iter()
-        .enumerate()
-        .filter_map(|(index, event)| {
-            (event.get("kind").and_then(serde_json::Value::as_str) == Some("changes_requested"))
-                .then_some(index)
-        })
-        .max();
-    let approvals = events
-        .iter()
-        .enumerate()
-        .filter(|(index, event)| {
-            latest_change_request.is_none_or(|latest| *index > latest)
-                && event.get("kind").and_then(serde_json::Value::as_str) == Some("approval")
-        })
-        .count() as i64;
-    let resolved = events
-        .iter()
-        .filter(|event| event.get("kind").and_then(serde_json::Value::as_str) == Some("resolved"))
-        .filter_map(|event| event.get("finding").and_then(serde_json::Value::as_str))
-        .collect::<BTreeSet<_>>();
-    let unresolved = events
-        .iter()
-        .filter(|event| event.get("kind").and_then(serde_json::Value::as_str) == Some("finding"))
-        .filter(|event| {
-            event
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .is_none_or(|id| !resolved.contains(id))
-        })
-        .collect::<Vec<_>>();
-    let blocking = unresolved
-        .iter()
-        .filter(|event| {
-            event.get("severity").and_then(serde_json::Value::as_str) == Some("blocking")
-        })
-        .count() as i64;
-    let nonblocking = unresolved.len() as i64 - blocking;
-    (approvals, blocking, nonblocking)
 }
 
 fn canonical_spec_for_path(path: &str) -> Option<&'static record_store::RecordKindSpec> {
@@ -1204,7 +1024,6 @@ fn index_changed_record(
                 let exists = match target.kind.as_str() {
                     "issue" => db.issue_cache_row(&target.id)?.is_some(),
                     "evidence" => db.evidence_cache_row(&target.id)?.is_some(),
-                    "review" => db.review_room_cache_row(&target.id)?.is_some(),
                     _ => false,
                 };
                 if !exists {
@@ -1212,12 +1031,6 @@ fn index_changed_record(
                 }
             }
             index_domain_record(db, state_dir, &Record::Evidence(record))?;
-        }
-        Record::Review(record) => {
-            if db.issue_cache_row(&record.issue_id)?.is_none() {
-                return Ok(IncrementalRepair::NeedsFullRebuild);
-            }
-            index_domain_record(db, state_dir, &Record::Review(record))?;
         }
     }
     let source = db.record_source_cache_row(path)?.ok_or_else(|| {
@@ -1244,7 +1057,6 @@ fn remove_missing_source(
             db.remove_indexed_issue(&source.record_id, &source.path)?;
         }
         "evidence" => db.remove_indexed_evidence(&source.record_id, &source.path)?,
-        "review" => db.remove_indexed_review_room(&source.record_id, &source.path)?,
         _ => return Ok(IncrementalRepair::NeedsFullRebuild),
     }
     Ok(IncrementalRepair::Repaired)
@@ -1529,11 +1341,10 @@ fn display_state_path(relative_path: &Path) -> String {
 mod tests {
     use atelier_core::{
         AttachmentRelationship, EvidenceRecord, EvidenceRecordData, IssueSections, RecordHeader,
-        RelatesRelationship, ReviewRecord,
+        RelatesRelationship,
     };
     use atelier_records::{CanonicalIssueRecord, RecordStore};
     use chrono::{DateTime, Utc};
-    use serde_json::json;
     use std::io::{Seek, SeekFrom};
     use tempfile::TempDir;
 
@@ -1543,7 +1354,6 @@ mod tests {
     struct CacheSnapshot {
         issues: Vec<(IssueCacheRow, Vec<String>)>,
         evidence: Vec<(EvidenceCacheRow, Vec<EvidenceTargetCacheRow>)>,
-        rooms: Vec<ReviewRoomCacheRow>,
         sources: Vec<(String, String, String, i64, Option<i64>)>,
     }
 
@@ -1637,43 +1447,9 @@ mod tests {
             .unwrap();
     }
 
-    fn write_review(state_dir: &Path, id: &str, title: &str, issue_id: &str, revision: i64) {
-        let events = if revision > 1 {
-            vec![
-                json!({"id": "event-1", "kind": "opened"}),
-                json!({"id": "finding-2", "kind": "finding", "severity": "blocking"}),
-                json!({"id": "event-3", "kind": "resolved", "finding": "finding-2"}),
-                json!({"id": "event-4", "kind": "approval"}),
-            ]
-        } else {
-            vec![json!({"id": "event-1", "kind": "opened"})]
-        };
-        let record = Record::Review(ReviewRecord {
-            header: RecordHeader {
-                kind: "review".to_string(),
-                id: id.to_string(),
-                title: title.to_string(),
-                status: "open".to_string(),
-                labels: vec!["review".to_string()],
-                relationships: Relationships::default(),
-                created_at: timestamp(1),
-                updated_at: timestamp(revision),
-            },
-            mode: "room".to_string(),
-            issue_id: issue_id.to_string(),
-            source_branch: format!("epic/{issue_id}"),
-            target_branch: "main".to_string(),
-            events,
-        });
-        RecordStore::new(state_dir)
-            .write_record_atomic(&record)
-            .unwrap();
-    }
-
-    fn write_domain_set(state_dir: &Path, suffix: &str, revision: i64) -> [String; 3] {
+    fn write_domain_set(state_dir: &Path, suffix: &str, revision: i64) -> [String; 2] {
         let issue_id = format!("atelier-{suffix}");
         let evidence_id = format!("atelier-{suffix}e");
-        let review_id = format!("atelier-{suffix}r");
         write_issue(
             state_dir,
             &issue_id,
@@ -1689,21 +1465,13 @@ mod tests {
             &issue_id,
             revision,
         );
-        write_review(
-            state_dir,
-            &review_id,
-            &format!("Review {revision}"),
-            &issue_id,
-            revision,
-        );
-        [issue_id, evidence_id, review_id]
+        [issue_id, evidence_id]
     }
 
-    fn domain_paths(ids: &[String; 3]) -> [String; 3] {
+    fn domain_paths(ids: &[String; 2]) -> [String; 2] {
         [
             format!("issues/{}.md", ids[0]),
             format!("evidence/{}.md", ids[1]),
-            format!("reviews/{}.yaml", ids[2]),
         ]
     }
 
@@ -1738,12 +1506,6 @@ mod tests {
                 (row, targets)
             })
             .collect();
-        let rooms = database
-            .query_issue_cache(&atelier_sqlite::IssueCacheQuery::default())
-            .unwrap()
-            .into_iter()
-            .flat_map(|issue| database.review_room_cache_for_issue(&issue.id).unwrap())
-            .collect();
         let sources = database
             .record_source_cache_rows()
             .unwrap()
@@ -1761,7 +1523,6 @@ mod tests {
         CacheSnapshot {
             issues,
             evidence,
-            rooms,
             sources,
         }
     }
@@ -2041,7 +1802,7 @@ mod tests {
             Relationships::default(),
         );
         let paths = domain_paths(&ids);
-        fs::write(state_dir.join(&paths[2]), "invalid review YAML").unwrap();
+        fs::write(state_dir.join(&paths[1]), "invalid evidence record").unwrap();
 
         let error = repair_incremental(
             &database,
@@ -2051,7 +1812,7 @@ mod tests {
                     path: paths[0].clone(),
                 },
                 source_freshness::SourceFreshnessProblem::ChangedSource {
-                    path: paths[2].clone(),
+                    path: paths[1].clone(),
                 },
             ]),
         )

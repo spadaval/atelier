@@ -44,15 +44,13 @@ or mission:
 - `atelier issue link/unlink <objective-id> <issue-id> --role advances`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list`
-- `atelier review open/show/submit/resolve/merge`
-- `atelier history`
 - `atelier issue note <id> "..."`
 - `atelier check`
 - `atelier prune`
 
 The target normal surface deliberately excludes the old mission namespace, the
-old objective-status command, blocker/table shortcuts, root search, scoped
-history variants, provider roots such as Forgejo, normal branch repair, and
+old objective-status command, blocker/table shortcuts, root search, normal
+branch repair, and
 destructive maintenance. Those names are implementation debt during the
 migration, not compatibility contracts.
 
@@ -64,8 +62,8 @@ may be cited as ordinary workflow proof.
 
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
-| Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, manage review artifacts, inspect high-level history, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `review show`, `history`, `bundle preview`, `check` | Removed/deprecated surfaces, admin repair commands, and hidden diagnostics. |
-| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply`; hidden/manual branch or provider repair only when a transition cannot own it safely | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
+| Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `bundle preview`, `check` | Removed/deprecated surfaces, admin repair commands, and hidden diagnostics. |
+| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply`; hidden/manual branch repair only when a transition cannot own it safely | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
 | Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
 
@@ -132,11 +130,9 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
-| `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends activity without field mutation. | Inventory IDs, status tokens, changed fields, relationship roles, activity IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record, `history`. |
+| `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends a dated bullet to the record's `## Notes` section. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
-| `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
-| `review` | Manage the configured review artifact for issue or epic work. | `atelier review open` derives routine artifact fields from issue and workflow state; `atelier review show` owns status/detail and optional comments; `atelier review submit` owns exactly one comment, approval, or change request; resolve and merge keep their distinct jobs. Mutating commands use explicit `--role` or infer role from the owner issue status. Merge enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id>`, configured review artifact. |
-| `history` | Inspect durable repository or single-issue activity. | Newest-first bounded activity feed with broad repository context or one issue record. Mission and epic descendant views remain in their dashboards. | Event counts and timestamps only. | Return to `issue show` or `issue transition <id>` for current state. |
+| `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `issue show <id>`. |
 ### Specialized But Visible Surfaces
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
@@ -159,9 +155,6 @@ in the command audit:
   `init --import-beads`.
 - `branch`: hidden advanced/manual owner-branch recovery. Routine branch guidance comes
   from status, issue detail, transition, and recovery output.
-- `forgejo roles`: hidden provider-specific role-account recovery. Routine review
-  commands use the configured provider; readiness failures may name this surface
-  when an admin must inspect or provision role authors.
 - `worktree`: removed visible workspace-management surface pending redesign.
 
 Hidden advanced diagnostics probes may remain callable for local performance
@@ -177,7 +170,8 @@ time pressure:
 
 - Orient: answer what is active, ready, blocked, stale, or unsafe to change.
   Owned by `atelier status`, `atelier work ready`, bounded `atelier work`
-  views, `atelier issue show`, and high-level `atelier history`.
+  views, and `atelier issue show`; Git history of the record files is the
+  audit trail.
 - Select and run work: choose a clear slice, inspect workflow state, leave notes
   and proof, and follow the lifecycle or recovery command Atelier prints for
   the current item. Owned by `atelier status`, `atelier issue ...`, `atelier
@@ -390,15 +384,6 @@ The predecessor evidence add/capture shapes split one operator job into two
 verbs. New help and Agent Factory guidance should teach `evidence record`;
 implementation may keep old entrypoints only as internal migration scaffolding
 until the unified surface is shipped.
-`atelier history` is the canonical high-level project-history view. Repo-wide
-history and the focused `atelier history --issue <id>` form read canonical
-activity sidecars, first-class records, evidence, and record links. History
-defaults to newest first with a 20-event budget; `--limit` is its only breadth
-control. It does not expose actor, event-kind, time-window, descendant, mission,
-or epic query flags. `issue show <id>` owns current record context,
-`work mission <id>` and `work epic <id>` own descendant objective state, and
-`evidence show <id>` owns full proof inspection. This keeps history a bounded
-activity reader rather than a second tracker query language.
 Issue workflow commands mutate the canonical Markdown tracker copy. They must
 not create a second durable active-work pointer in runtime state. Current-work
 orientation is derived from the set of canonical `in_progress` issues in that
@@ -540,31 +525,6 @@ product workflow or root help. Public orientation commands such as
 `atelier status`, `atelier check`, and record-specific repair guidance should
 absorb routine cache recovery, naming admin repair only when local state is
 degraded.
-
-Review commands are visible only for review artifacts. They may create or link,
-inspect, merge or confirm merge state for, submit comments or decisions on, and
-resolve review artifacts owned by the configured review mode. Routine creation
-derives title, body, source branch, target branch, issue owner, role context,
-and provider/mode context; manual provider plumbing is not a public fallback.
-Static docs should not tell agents which review mode, provider, artifact shape,
-or role applies to a work item. Atelier configuration and command output own
-that routing. Mutating review commands must print whether their role was
-explicit or inferred from status. Review commands must not start, close, or
-otherwise transition Atelier issues.
-
-Workflow transitions may run a configured review artifact open action.
-That action is reached through the explicit issue transition that printed it,
-not by treating `atelier review` as workflow authority. Review commands remain
-the artifact inspection and artifact-action surface; transition/status output
-remains the workflow routing surface.
-
-Workflow validators read review state and return actionable pass/fail guidance
-through transition/status surfaces. The local facts Atelier owns are the active
-review field, configured review identity, expected source and target branches
-when workflow policy needs them, merged state, review-complete state when a
-configured transition asks for it, and unresolved review-comment counts for
-operator guidance. The configured review system remains the authority for its
-own external protection, approval, merge-method, and permission details.
 
 ## Integration Or Experimental
 

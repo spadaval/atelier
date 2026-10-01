@@ -1486,7 +1486,14 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
-    assert!(stdout.contains("history       Inspect bounded durable repository or issue activity"));
+    for removed in ["history", "review", "forgejo"] {
+        assert!(
+            !stdout
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{removed} "))),
+            "root help should not expose removed {removed} command:\n{stdout}"
+        );
+    }
     assert!(!stdout.contains("Inspect canonical repo"));
 
     for heading in [
@@ -1503,7 +1510,7 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "work", "issue", "bundle", "evidence", "history", "check",
+        "init", "man", "status", "work", "issue", "bundle", "evidence", "check",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -1562,7 +1569,7 @@ fn test_top_level_help_only_shows_core_commands() {
             .any(|line| line.trim_start().starts_with("diagnostics ")),
         "root help should not present diagnostics as a normal operator command:\n{stdout}"
     );
-    for hidden in ["forgejo", "branch", "maintenance", "lint", "doctor"] {
+    for hidden in ["branch", "maintenance", "lint", "doctor"] {
         assert!(
             !stdout.lines().any(|line| {
                 let command = line.trim_start();
@@ -1590,7 +1597,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <mission-id>",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
-        "atelier history",
         "atelier issue transition <issue-id> start",
         "atelier issue transition <issue-id>",
         "atelier issue transition <mission-id> request_publish",
@@ -1693,33 +1699,6 @@ fn test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped
         .find("atelier work mission <mission-id>")
         .expect("manager guide should name scoped mission drill-down");
     assert!(overview < scoped, "{manager}");
-}
-
-#[test]
-fn test_forgejo_role_setup_is_hidden_from_normal_guidance_but_callable_for_recovery() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, root_help, stderr) = run_atelier_raw(dir.path(), &["--help"]);
-    assert!(success, "root help failed: {stderr}");
-    assert!(
-        !root_help.contains("forgejo"),
-        "root help must not teach provider setup as routine workflow:\n{root_help}"
-    );
-
-    for role in ["worker", "reviewer", "validator", "manager", "admin"] {
-        let (success, guide, stderr) = run_atelier(dir.path(), &["man", role]);
-        assert!(success, "man {role} failed: {stderr}");
-        assert!(
-            !guide.contains("forgejo roles"),
-            "{role} guidance must not teach provider setup as routine workflow:\n{guide}"
-        );
-    }
-
-    let (success, recovery_help, stderr) =
-        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
-    assert!(success, "Forgejo recovery help failed: {stderr}");
-    assert!(recovery_help.contains("Create missing role author users"));
 }
 
 #[test]
@@ -1830,32 +1809,6 @@ fn test_root_active_pointer_cleanup_commands_are_removed() {
 }
 
 #[test]
-fn test_forgejo_roles_provision_write_config_flag_is_removed() {
-    let dir = tempdir().unwrap();
-
-    let (success, help_out, stderr) =
-        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
-    assert!(success, "forgejo roles provision help failed: {stderr}");
-    assert!(
-        !help_out.contains("--write-config"),
-        "removed write-config flag should not appear in help:\n{help_out}"
-    );
-
-    let (success, stdout, stderr) = run_atelier_raw(
-        dir.path(),
-        &["forgejo", "roles", "provision", "--write-config"],
-    );
-    assert!(
-        !success,
-        "removed write-config flag should be rejected:\n{stdout}"
-    );
-    assert!(
-        stderr.contains("unexpected argument '--write-config'"),
-        "{stderr}"
-    );
-}
-
-#[test]
 fn test_generic_note_command_rejects_with_record_specific_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1930,19 +1883,6 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     ));
     assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
-}
-
-#[test]
-fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
-    let guidance =
-        std::fs::read_to_string(workspace_root().join(".agents/skills/agent-factory/SKILL.md"))
-            .unwrap();
-    assert!(guidance.contains("Assign exactly one subskill"));
-    assert!(!guidance.contains("atelier workflow validate issue"));
-    assert!(!guidance.contains("atelier workflow validate mission"));
-    assert!(!guidance.contains("## Checks"));
-    assert!(!guidance.contains("atelier worktree remove <issue-id>"));
-    assert!(!guidance.contains("cargo nextest run --profile extended --run-ignored=only"));
 }
 
 #[test]
@@ -2291,17 +2231,6 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         issue_text.contains("status: \"in_progress\""),
         "{issue_text}"
     );
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_applied",
-        &[
-            "Applied transition start",
-            "transition: \"start\"",
-            "to: \"in_progress\"",
-        ],
-    );
 }
 
 #[test]
@@ -2444,26 +2373,23 @@ fn test_issue_transition_options_and_blocked_attempts_do_not_write() {
         "no-argument transition should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
     );
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
-    assert!(success, "start failed: {stderr}");
+    for transition in ["start", "request_validation"] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "transition", &issue_id, transition]);
+        assert!(success, "{transition} failed: {stderr}");
+    }
 
-    let activities_before = issue_activity_texts(dir.path(), &issue_id);
+    let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
     let git_before = git_status_short(dir.path());
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(
-        !success,
-        "request_validation should fail without a completed review"
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    assert!(!success, "close should be blocked by its validators");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review.complete"), "{stderr}");
+    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
     assert_eq!(
-        activities_before,
-        issue_activity_texts(dir.path(), &issue_id),
-        "blocked transition should not append canonical activity"
+        record_before,
+        read_canonical_record(dir.path(), "issues", &issue_id),
+        "blocked transition should not rewrite the issue record"
     );
     assert_eq!(
         git_before,
@@ -2509,35 +2435,6 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Current work:  1 issue(s)"));
     assert!(status_out.contains(&format!("{issue_id}")));
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_applied",
-        &[
-            "Applied transition start",
-            "transition: \"start\"",
-            "to: \"in_progress\"",
-        ],
-    );
-    assert_activity_contains(
-        &activities,
-        "work_started",
-        &["branch: ", "worktree_path: "],
-    );
-    let transition_index = activities
-        .iter()
-        .position(|text| text.contains("event_type: \"transition_applied\""))
-        .expect("missing transition_applied activity");
-    let work_started_index = activities
-        .iter()
-        .position(|text| text.contains("event_type: \"work_started\""))
-        .expect("missing work_started activity");
-    assert!(
-        transition_index < work_started_index,
-        "workflow transition should be recorded before work association:\n{}",
-        activities.join("\n--- activity ---\n")
-    );
 }
 
 #[test]
@@ -2611,7 +2508,7 @@ fn test_root_start_same_issue_reports_already_started_work() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "first start failed: {stderr}");
-    let activities_before = issue_activity_texts(dir.path(), &issue_id);
+    let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
     let (success, restart_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "second start should be guarded:\n{restart_out}");
@@ -2620,9 +2517,9 @@ fn test_root_start_same_issue_reports_already_started_work() {
         "{stderr}"
     );
     assert_eq!(
-        activities_before,
-        issue_activity_texts(dir.path(), &issue_id),
-        "unavailable transition should not append canonical activity"
+        record_before,
+        read_canonical_record(dir.path(), "issues", &issue_id),
+        "unavailable transition should not rewrite the issue record"
     );
 }
 
@@ -2723,20 +2620,6 @@ fn test_root_start_reports_workflow_validator_failure() {
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert!(
-        activities.is_empty(),
-        "blocked start should not record canonical activity:\n{}",
-        activities.join("\n--- activity ---\n")
-    );
-    assert!(
-        !activities
-            .iter()
-            .any(|text| text.contains("event_type: \"work_started\"")),
-        "blocked start should not record work_started:\n{}",
-        activities.join("\n--- activity ---\n")
-    );
 }
 
 #[test]
@@ -2760,9 +2643,11 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     move_epic_directly_to_ready(dir.path(), &issue_id);
     migrate_default_issue_workflow(dir.path());
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
-    assert!(success, "start failed: {stderr}");
+    for transition in ["start", "request_validation"] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "transition", &issue_id, transition]);
+        assert!(success, "{transition} failed: {stderr}");
+    }
 
     let evidence_dir = dir.path().join(".atelier").join("evidence");
     let evidence_before = std::fs::read_dir(&evidence_dir)
@@ -2775,24 +2660,19 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
                 .unwrap_or(false)
         })
         .count();
-    let activities_before = issue_activity_texts(dir.path(), &issue_id);
+    let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(
-        !success,
-        "request_validation should fail without a completed review"
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    assert!(!success, "close should be blocked by its validators");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review.complete"), "{stderr}");
+    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
     assert!(stderr.contains("blocked"), "{stderr}");
 
     assert_eq!(
-        activities_before,
-        issue_activity_texts(dir.path(), &issue_id),
-        "blocked transition should not append canonical activity"
+        record_before,
+        read_canonical_record(dir.path(), "issues", &issue_id),
+        "blocked transition should not rewrite the issue record"
     );
 
     let evidence_after = std::fs::read_dir(&evidence_dir)
@@ -2812,7 +2692,7 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
 }
 
 #[test]
-fn test_issue_transition_close_reports_blockers_without_recording_activity() {
+fn test_issue_transition_close_reports_blockers_without_writing_the_record() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2839,12 +2719,9 @@ fn test_issue_transition_close_reports_blockers_without_recording_activity() {
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
-        if args[3] == "request_review" {
-            complete_room_review(dir.path(), &issue_id);
-        }
     }
 
-    let activities_before = issue_activity_texts(dir.path(), &issue_id);
+    let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked by the dirty worktree");
@@ -2855,9 +2732,9 @@ fn test_issue_transition_close_reports_blockers_without_recording_activity() {
     assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 
     assert_eq!(
-        activities_before,
-        issue_activity_texts(dir.path(), &issue_id),
-        "blocked close should not append canonical activity"
+        record_before,
+        read_canonical_record(dir.path(), "issues", &issue_id),
+        "blocked close should not rewrite the issue record"
     );
 }
 
@@ -2892,7 +2769,6 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
-    complete_room_review(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2925,16 +2801,9 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Current work:  none"), "{status_out}");
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "transition_applied",
-        &[
-            "Applied transition close",
-            "transition: \"close\"",
-            "to: \"done\"",
-        ],
+    assert!(
+        issue_text.contains("## Close Reason\n\ndone"),
+        "{issue_text}"
     );
 }
 
@@ -2973,7 +2842,7 @@ fn test_removed_issue_close_command_rejects_to_and_reason_flags() {
 }
 
 #[test]
-fn test_removed_abandon_preserves_issue_status_and_activity() {
+fn test_removed_abandon_preserves_issue_status() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -3015,15 +2884,6 @@ fn test_removed_abandon_preserves_issue_status_and_activity() {
         "{status_out}"
     );
     assert!(status_out.contains(&format!("{issue_id}")));
-
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert!(
-        !activities
-            .iter()
-            .any(|activity| activity.contains("event_type: \"work_abandoned\"")),
-        "removed abandon command must not record work_abandoned activity:\n{}",
-        activities.join("\n--- activity ---\n")
-    );
 }
 
 #[test]
@@ -3125,9 +2985,6 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
-        if args[3] == "request_review" {
-            complete_room_review(dir.path(), &issue_id);
-        }
     }
 
     let (success, options_out, stderr) =

@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
-
 use crate::commands::workflow::PlannedAction;
 
 pub(crate) fn action_preflight_blockers(
@@ -12,9 +10,9 @@ pub(crate) fn action_preflight_blockers(
         .iter()
         .filter_map(|action| match action.name.as_str() {
             "git.prepare_branch" => branch_prepare_preflight(repo_root, action),
-            "tracker.commit" | "git.push" | "review.merge" | "git.sync"
-            | "git.integrate" => branch_post_action_preflight(repo_root, action),
-            "review.open" => review_open_preflight(repo_root, action),
+            "tracker.commit" | "git.push" | "git.sync" | "git.integrate" => {
+                branch_post_action_preflight(repo_root, action)
+            }
             other => Some(format!(
                 "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
             )),
@@ -70,12 +68,6 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
             dirty.join("\n")
         )),
         Err(error) => Some(format!("action {} failed preflight: {error:#}", action.name)),
-        _ if provider_action_names(action.name.as_str()) && !review_config_is_provider(repo_root) => {
-            Some(format!(
-                "action {} failed preflight: provider terminal action requires review.mode = \"provider\"",
-                action.name
-            ))
-        }
         _ if action.name == "git.integrate"
             && action.merge_owned
             && !crate::commands::workflow::branch_exists_at(repo_root, &action.base_branch)
@@ -90,17 +82,6 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
     }
 }
 
-fn provider_action_names(name: &str) -> bool {
-    matches!(name, "git.push" | "review.merge" | "git.sync")
-}
-
-fn review_config_is_provider(repo_root: &Path) -> bool {
-    matches!(
-        ProjectConfig::load(repo_root).map(|config| config.review),
-        Ok(ReviewConfig::Provider(_))
-    )
-}
-
 fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<(), String> {
     match crate::commands::workflow::is_git_repo(repo_root) {
         Ok(true) => Ok(()),
@@ -111,56 +92,6 @@ fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<()
         Err(error) => Err(format!(
             "action {} failed preflight: {error:#}",
             action.name
-        )),
-    }
-}
-
-fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
-    if action.review_artifact_target.is_none() {
-        return Some(format!(
-            "action {} failed preflight: missing review artifact target",
-            action.name
-        ));
-    }
-    let Some(role) = &action.review_artifact_role else {
-        return Some(format!(
-            "action {} failed preflight: missing review artifact role",
-            action.name
-        ));
-    };
-    match ProjectConfig::load(repo_root).map(|config| config.review) {
-        Ok(ReviewConfig::Room) => {
-            if action.review_artifact_provider.is_some() {
-                return Some(format!(
-                    "action {} failed preflight: provider action config is only valid when review.mode = \"provider\"",
-                    action.name
-                ));
-            }
-            let _ = role;
-            None
-        }
-        Ok(ReviewConfig::Provider(provider)) => match provider.provider {
-            ReviewProviderKind::Forgejo(_forgejo) => {
-                if action.review_artifact_provider.as_deref() != Some("forgejo") {
-                    return Some(format!(
-                        "action {} failed preflight: provider review open requires workflow action provider: forgejo",
-                        action.name
-                    ));
-                }
-                if action.forgejo_role_authors.is_none() {
-                    return Some(format!(
-                        "action {} failed preflight: provider review open requires workflow action role_authors",
-                        action.name
-                    ));
-                }
-                atelier_app::project_config::load_forgejo_admin_token()
-                    .err()
-                    .map(|error| format!("action {} failed preflight: {error:#}", action.name))
-            }
-        },
-        Err(error) => Some(format!(
-            "action {} failed preflight: {}",
-            action.name, error
         )),
     }
 }

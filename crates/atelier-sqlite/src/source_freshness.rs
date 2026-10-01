@@ -282,13 +282,6 @@ fn collect_source_files(root: &Path, dir: &Path, entries: &mut Vec<SourceEntry>)
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
             collect_source_files(root, &path, entries)?;
         } else if path.is_file() {
             let relative = path
@@ -308,13 +301,6 @@ fn collect_source_stats(root: &Path, dir: &Path, entries: &mut Vec<SourceStat>) 
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
             collect_source_stats(root, &path, entries)?;
         } else if path.is_file() {
             let relative = path

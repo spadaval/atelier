@@ -311,13 +311,7 @@ fn print_status_next_commands(
         mission.id
     );
     match lifecycle.as_str() {
-        "closed" => {
-            println!(
-                "  Inspect mission activity: atelier history --issue {}",
-                mission.id
-            );
-            return;
-        }
+        "closed" => return,
         "draft" => {
             println!(
                 "  Shape mission work or move to ready when gates permit: atelier issue show {}",

@@ -7,7 +7,7 @@ use crate::{parse_datetime, Database};
 
 /// Domain-cache schema identity. A mismatch means the ignored cache must be rebuilt.
 pub const CACHE_APPLICATION_ID: i32 = 0x4154_4c52; // "ATLR"
-pub const CACHE_SCHEMA_VERSION: i32 = 3;
+pub const CACHE_SCHEMA_VERSION: i32 = 4;
 
 pub const DOMAIN_CACHE_TABLES: &[&str] = &[
     "issue_index",
@@ -16,7 +16,6 @@ pub const DOMAIN_CACHE_TABLES: &[&str] = &[
     "issue_relation_index",
     "evidence_index",
     "evidence_target_index",
-    "review_room_index",
     "record_source_index",
 ];
 
@@ -112,21 +111,6 @@ pub struct EvidenceTargetCacheRow {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReviewRoomCacheRow {
-    pub id: String,
-    pub issue_id: String,
-    pub title: String,
-    pub status: String,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub approvals: i64,
-    pub unresolved_blocking: i64,
-    pub unresolved_nonblocking: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordSourceCacheRow {
     pub path: String,
     pub record_kind: String,
@@ -149,10 +133,6 @@ impl Database {
                 status TEXT NOT NULL,
                 issue_type TEXT NOT NULL,
                 priority TEXT NOT NULL,
-                review_kind TEXT,
-                review_id TEXT,
-                review_provider TEXT,
-                review_number INTEGER,
                 strategy_path TEXT,
                 strategy_revision INTEGER,
                 workflow_owner_issue_id TEXT,
@@ -227,24 +207,6 @@ impl Database {
             CREATE INDEX idx_evidence_target_index_target
                 ON evidence_target_index(target_kind, target_id, role, evidence_id);
 
-            CREATE TABLE review_room_index (
-                id TEXT PRIMARY KEY,
-                issue_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                status TEXT NOT NULL,
-                source_branch TEXT NOT NULL,
-                target_branch TEXT NOT NULL,
-                approvals INTEGER NOT NULL,
-                unresolved_blocking INTEGER NOT NULL,
-                unresolved_nonblocking INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE INDEX idx_review_room_index_issue
-                ON review_room_index(issue_id, updated_at DESC, id);
-            CREATE INDEX idx_review_room_index_status
-                ON review_room_index(status, issue_id);
-
             CREATE TABLE record_source_index (
                 path TEXT PRIMARY KEY,
                 record_kind TEXT NOT NULL,
@@ -282,37 +244,16 @@ impl Database {
             self.remove_issue_rows(&issue.id)?;
             self.conn.execute(
                 "INSERT INTO issue_index
-                 (id, title, status, issue_type, priority, review_kind, review_id, review_provider,
-                  review_number, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch, workflow_branch_base,
+                 (id, title, status, issue_type, priority, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch, workflow_branch_base,
                   workflow_review_target, workflow_integration_target, workflow_owner_kind,
                   workflow_merge_strategy, parent_id, created_at, updated_at, closed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     issue.id,
                     issue.title,
                     issue.status,
                     issue.issue_type,
                     issue.priority,
-                    issue
-                        .fields
-                        .get("review")
-                        .and_then(|value| value.get("kind"))
-                        .and_then(serde_json::Value::as_str),
-                    issue
-                        .fields
-                        .get("review")
-                        .and_then(|value| value.get("id"))
-                        .and_then(serde_json::Value::as_str),
-                    issue
-                        .fields
-                        .get("review")
-                        .and_then(|value| value.get("provider"))
-                        .and_then(serde_json::Value::as_str),
-                    issue
-                        .fields
-                        .get("review")
-                        .and_then(|value| value.get("number"))
-                        .and_then(serde_json::Value::as_i64),
                     field_str(&issue.fields, "strategy", "path"),
                     issue
                         .fields
@@ -399,8 +340,7 @@ impl Database {
     pub fn issue_cache_row(&self, id: &str) -> Result<Option<IssueCacheRow>> {
         self.conn
             .query_row(
-                "SELECT id, title, status, issue_type, priority, review_kind, review_id,
-                        review_provider, review_number, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch,
+                "SELECT id, title, status, issue_type, priority, strategy_path, strategy_revision, workflow_owner_issue_id, workflow_work_branch,
                         workflow_branch_base, workflow_review_target, workflow_integration_target,
                         workflow_owner_kind, workflow_merge_strategy, parent_id, created_at, updated_at, closed_at
                  FROM issue_index WHERE id = ?1",
@@ -445,8 +385,7 @@ impl Database {
 
     pub fn query_issue_cache(&self, query: &IssueCacheQuery<'_>) -> Result<Vec<IssueCacheRow>> {
         let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.status, i.issue_type, i.priority, i.review_kind,
-                    i.review_id, i.review_provider, i.review_number, i.strategy_path, i.strategy_revision, i.workflow_owner_issue_id,
+            "SELECT DISTINCT i.id, i.title, i.status, i.issue_type, i.priority, i.strategy_path, i.strategy_revision, i.workflow_owner_issue_id,
                     i.workflow_work_branch, i.workflow_branch_base, i.workflow_review_target,
                     i.workflow_integration_target, i.workflow_owner_kind, i.workflow_merge_strategy,
                     i.parent_id, i.created_at, i.updated_at, i.closed_at
@@ -685,95 +624,6 @@ impl Database {
         Ok(rows)
     }
 
-    pub fn index_review_room(
-        &self,
-        room: &ReviewRoomCacheRow,
-        source: &RecordSourceCacheRow,
-    ) -> Result<()> {
-        if room.approvals < 0 || room.unresolved_blocking < 0 || room.unresolved_nonblocking < 0 {
-            anyhow::bail!("review room aggregate counts cannot be negative");
-        }
-        self.transaction(|| {
-            self.conn.execute(
-                "INSERT INTO review_room_index
-                 (id, issue_id, title, status, source_branch, target_branch, approvals,
-                  unresolved_blocking, unresolved_nonblocking, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                 ON CONFLICT(id) DO UPDATE SET
-                    issue_id = excluded.issue_id,
-                    title = excluded.title,
-                    status = excluded.status,
-                    source_branch = excluded.source_branch,
-                    target_branch = excluded.target_branch,
-                    approvals = excluded.approvals,
-                    unresolved_blocking = excluded.unresolved_blocking,
-                    unresolved_nonblocking = excluded.unresolved_nonblocking,
-                    created_at = excluded.created_at,
-                    updated_at = excluded.updated_at",
-                params![
-                    room.id,
-                    room.issue_id,
-                    room.title,
-                    room.status,
-                    room.source_branch,
-                    room.target_branch,
-                    room.approvals,
-                    room.unresolved_blocking,
-                    room.unresolved_nonblocking,
-                    room.created_at.to_rfc3339(),
-                    room.updated_at.to_rfc3339(),
-                ],
-            )?;
-            self.replace_source(source, "review", &room.id)
-        })
-    }
-
-    pub fn remove_indexed_review_room(&self, id: &str, source_path: &str) -> Result<()> {
-        self.transaction(|| {
-            self.conn
-                .execute("DELETE FROM review_room_index WHERE id = ?1", [id])?;
-            self.remove_source(source_path, "review", id)
-        })
-    }
-
-    pub fn review_room_cache_row(&self, id: &str) -> Result<Option<ReviewRoomCacheRow>> {
-        self.conn
-            .query_row(
-                "SELECT id, issue_id, title, status, source_branch, target_branch, approvals,
-                        unresolved_blocking, unresolved_nonblocking, created_at, updated_at
-                 FROM review_room_index WHERE id = ?1",
-                [id],
-                review_room_cache_row,
-            )
-            .optional()
-            .map_err(Into::into)
-    }
-
-    pub fn review_room_cache_for_issue(&self, issue_id: &str) -> Result<Vec<ReviewRoomCacheRow>> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, issue_id, title, status, source_branch, target_branch, approvals,
-                    unresolved_blocking, unresolved_nonblocking, created_at, updated_at
-             FROM review_room_index WHERE issue_id = ?1
-             ORDER BY updated_at DESC, id",
-        )?;
-        let rows = statement
-            .query_map([issue_id], review_room_cache_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
-    pub fn review_room_cache_rows(&self) -> Result<Vec<ReviewRoomCacheRow>> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, issue_id, title, status, source_branch, target_branch, approvals,
-                    unresolved_blocking, unresolved_nonblocking, created_at, updated_at
-             FROM review_room_index ORDER BY updated_at DESC, id",
-        )?;
-        let rows = statement
-            .query_map([], review_room_cache_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
     pub fn record_source_cache_row(&self, path: &str) -> Result<Option<RecordSourceCacheRow>> {
         self.conn
             .query_row(
@@ -888,29 +738,11 @@ impl Database {
 }
 
 fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
-    let review_kind = row.get::<_, Option<String>>(5)?;
     let mut fields = BTreeMap::new();
-    if let Some(kind) = review_kind {
-        let mut review = serde_json::Map::new();
-        review.insert("kind".to_string(), serde_json::Value::String(kind));
-        if let Some(id) = row.get::<_, Option<String>>(6)? {
-            review.insert("id".to_string(), serde_json::Value::String(id));
-        }
-        if let Some(provider) = row.get::<_, Option<String>>(7)? {
-            review.insert("provider".to_string(), serde_json::Value::String(provider));
-        }
-        if let Some(number) = row.get::<_, Option<i64>>(8)? {
-            review.insert(
-                "number".to_string(),
-                serde_json::Value::Number(number.into()),
-            );
-        }
-        fields.insert("review".to_string(), serde_json::Value::Object(review));
-    }
-    if let Some(path) = row.get::<_, Option<String>>(9)? {
+    if let Some(path) = row.get::<_, Option<String>>(5)? {
         let mut strategy = serde_json::Map::new();
         strategy.insert("path".to_string(), serde_json::Value::String(path));
-        if let Some(revision) = row.get::<_, Option<i64>>(10)? {
+        if let Some(revision) = row.get::<_, Option<i64>>(6)? {
             strategy.insert(
                 "revision".to_string(),
                 serde_json::Value::Number(revision.into()),
@@ -919,13 +751,13 @@ fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
         fields.insert("strategy".to_string(), serde_json::Value::Object(strategy));
     }
     let workflow_values = [
-        ("owner_issue_id", 11),
-        ("work_branch", 12),
-        ("branch_base", 13),
-        ("review_target", 14),
-        ("integration_target", 15),
-        ("owner_kind", 16),
-        ("merge_strategy", 17),
+        ("owner_issue_id", 7),
+        ("work_branch", 8),
+        ("branch_base", 9),
+        ("review_target", 10),
+        ("integration_target", 11),
+        ("owner_kind", 12),
+        ("merge_strategy", 13),
     ];
     let mut workflow = serde_json::Map::new();
     for (name, index) in workflow_values {
@@ -946,10 +778,10 @@ fn issue_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueCacheRow> {
         issue_type: row.get(3)?,
         priority: row.get(4)?,
         fields,
-        parent_id: row.get(18)?,
-        created_at: parse_datetime(row.get(19)?),
-        updated_at: parse_datetime(row.get(20)?),
-        closed_at: row.get::<_, Option<String>>(21)?.map(parse_datetime),
+        parent_id: row.get(14)?,
+        created_at: parse_datetime(row.get(15)?),
+        updated_at: parse_datetime(row.get(16)?),
+        closed_at: row.get::<_, Option<String>>(17)?.map(parse_datetime),
     })
 }
 
@@ -994,22 +826,6 @@ fn evidence_target_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Eviden
         target_kind: row.get(1)?,
         target_id: row.get(2)?,
         role: row.get(3)?,
-    })
-}
-
-fn review_room_cache_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReviewRoomCacheRow> {
-    Ok(ReviewRoomCacheRow {
-        id: row.get(0)?,
-        issue_id: row.get(1)?,
-        title: row.get(2)?,
-        status: row.get(3)?,
-        source_branch: row.get(4)?,
-        target_branch: row.get(5)?,
-        approvals: row.get(6)?,
-        unresolved_blocking: row.get(7)?,
-        unresolved_nonblocking: row.get(8)?,
-        created_at: parse_datetime(row.get(9)?),
-        updated_at: parse_datetime(row.get(10)?),
     })
 }
 
@@ -1086,22 +902,6 @@ mod tests {
         }
     }
 
-    fn room(id: &str, title: &str, revision: i64) -> ReviewRoomCacheRow {
-        ReviewRoomCacheRow {
-            id: id.to_string(),
-            issue_id: "atelier-issue".to_string(),
-            title: title.to_string(),
-            status: "open".to_string(),
-            source_branch: "epic/cache".to_string(),
-            target_branch: "main".to_string(),
-            approvals: revision,
-            unresolved_blocking: 0,
-            unresolved_nonblocking: 0,
-            created_at: timestamp(1),
-            updated_at: timestamp(revision),
-        }
-    }
-
     #[test]
     fn new_database_has_only_domain_tables_and_explicit_indexes() {
         let (_directory, database) = database();
@@ -1152,7 +952,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(index_count, 12);
+        assert_eq!(index_count, 10);
     }
 
     #[test]
@@ -1436,54 +1236,6 @@ mod tests {
             .remove_indexed_evidence(id, "evidence/atelier-proof.md")
             .unwrap();
         assert!(database.evidence_cache_row(id).unwrap().is_none());
-        assert!(database.record_source_cache_rows().unwrap().is_empty());
-    }
-
-    #[test]
-    fn review_room_rows_add_replace_query_and_delete_atomically() {
-        let (_directory, database) = database();
-        let id = "atelier-review";
-        database
-            .index_review_room(
-                &room(id, "first", 1),
-                &source("review", id, "reviews/atelier-review.md", 1),
-            )
-            .unwrap();
-        assert_eq!(
-            database
-                .review_room_cache_for_issue("atelier-issue")
-                .unwrap()
-                .len(),
-            1
-        );
-
-        database
-            .index_review_room(
-                &room(id, "second", 2),
-                &source("review", id, "reviews/atelier-review.md", 2),
-            )
-            .unwrap();
-        assert_eq!(
-            database.review_room_cache_row(id).unwrap().unwrap().title,
-            "second"
-        );
-
-        let error = database
-            .index_review_room(
-                &room(id, "rolled back", 3),
-                &source("review", "wrong-id", "reviews/atelier-review.md", 3),
-            )
-            .unwrap_err();
-        assert!(error.to_string().contains("expected review/atelier-review"));
-        assert_eq!(
-            database.review_room_cache_row(id).unwrap().unwrap().title,
-            "second"
-        );
-
-        database
-            .remove_indexed_review_room(id, "reviews/atelier-review.md")
-            .unwrap();
-        assert!(database.review_room_cache_row(id).unwrap().is_none());
         assert!(database.record_source_cache_rows().unwrap().is_empty());
     }
 }

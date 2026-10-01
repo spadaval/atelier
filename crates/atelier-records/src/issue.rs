@@ -5,5 +5,5 @@
 
 pub use crate::{issue_record_path, parse_issue_record, render_issue_record, CanonicalIssueRecord};
 pub use atelier_core::{
-    IssueFieldError, IssueRecord, IssueReview, IssueSectionName, IssueSectionState, IssueSections,
+    IssueFieldError, IssueRecord, IssueSectionName, IssueSectionState, IssueSections,
 };

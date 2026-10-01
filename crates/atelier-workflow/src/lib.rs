@@ -93,7 +93,6 @@ workflows:
           - git.worktree_clean
         actions:
           - tracker.commit
-          - review.open: { role: manager }
 
   task:
     applies_to: [bug, feature, task]
@@ -164,15 +163,11 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open: { role: worker }
+        description: "Hand this work to independent review."
       request_validation:
         from: [in_progress, review]
         to: validation
         description: "Move reviewed work into validation after review is complete."
-        validators:
-          - review.complete
       close:
         from: [validation]
         to: done
@@ -206,15 +201,11 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open: { role: worker }
+        description: "Hand this work to independent review."
       request_validation:
         from: [in_progress, review]
         to: validation
         description: "Move reviewed work into validation after review is complete."
-        validators:
-          - review.complete
       complete_parented:
         from: [in_progress]
         to: done
@@ -260,9 +251,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        description: "Open the configured review artifact for this spike."
-        actions:
-          - review.open: { role: worker }
+        description: "Hand this spike to independent review."
       revise:
         from: [review]
         to: in_progress
@@ -270,9 +259,7 @@ workflows:
       close:
         from: [review]
         to: done
-        description: "Closing requires complete review."
-        validators:
-          - review.complete
+        description: "Close the spike after independent review."
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -282,7 +269,6 @@ const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "issue.sections_parseable",
     "evidence.attached",
-    "review.complete",
     "children.proof_complete",
     "epic.proof_route_present",
     "validation.criteria_satisfied",
@@ -293,7 +279,6 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "blockers.transitive_none_open",
     "baseline.default_checks",
     "closeout.failures_classified",
-    "review.linked_pr_merged",
     "blockers.none_open",
     "lint.none_blocking",
     "command_surface_current",
@@ -306,10 +291,8 @@ const BUILTIN_ACTIONS: &[&str] = &[
     "git.prepare_branch",
     "tracker.commit",
     "git.push",
-    "review.merge",
     "git.sync",
     "git.integrate",
-    "review.open",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -439,7 +422,6 @@ pub enum ValidatorParams {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionParams {
     GitPrepareBranch(GitPrepareBranchActionParams),
-    ReviewArtifact(ReviewArtifactActionParams),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -451,21 +433,6 @@ pub struct GitPrepareBranchActionParams {
 pub enum GitPrepareBranchBase {
     Configured,
     Current,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReviewArtifactActionParams {
-    pub provider: Option<String>,
-    pub role: String,
-    pub role_authors: Option<WorkflowForgejoRoleAuthors>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowForgejoRoleAuthors {
-    pub worker: String,
-    pub reviewer: String,
-    pub validator: String,
-    pub manager: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1375,13 +1342,8 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
-    let actions = parse_transition_actions(
-        workflow_name,
-        transition_name,
-        &raw.actions,
-        &raw.to,
-        display_path,
-    )?;
+    let actions =
+        parse_transition_actions(workflow_name, transition_name, &raw.actions, display_path)?;
 
     Ok(TransitionDefinition {
         from,
@@ -1397,7 +1359,6 @@ fn parse_transition_actions(
     workflow_name: &str,
     transition_name: &str,
     raw: &[Value],
-    to_status: &str,
     display_path: &str,
 ) -> Result<Vec<ActionDefinition>> {
     let mut actions = Vec::new();
@@ -1417,16 +1378,6 @@ fn parse_transition_actions(
                 display_path,
                 format!(
                     "workflows.{}.transitions.{}.actions contains duplicate action '{}'",
-                    workflow_name, transition_name, name
-                ),
-            ));
-        }
-        if name == "review.open" && to_status != "review" && !to_status.ends_with("_review") {
-            return Err(policy_error(
-                "workflow_config_invalid_action",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.actions declares '{}' but review artifact actions are only supported on transitions to review or *_review statuses",
                     workflow_name, transition_name, name
                 ),
             ));
@@ -1488,23 +1439,6 @@ fn parse_transition_action_definition(
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ReviewArtifactActionParamsRaw {
-    provider: Option<String>,
-    role: Option<String>,
-    role_authors: Option<WorkflowForgejoRoleAuthorsRaw>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WorkflowForgejoRoleAuthorsRaw {
-    worker: Option<String>,
-    reviewer: Option<String>,
-    validator: Option<String>,
-    manager: Option<String>,
-}
-
 fn parse_transition_action_params(
     workflow_name: &str,
     transition_name: &str,
@@ -1516,64 +1450,6 @@ fn parse_transition_action_params(
         "workflows.{}.transitions.{}.actions.{}",
         workflow_name, transition_name, name
     );
-    if name == "review.open" {
-        let params = params.ok_or_else(|| {
-            policy_error_with_field(
-                "workflow_config_invalid_action",
-                display_path,
-                &field,
-                format!("built-in action '{}' requires params", name),
-            )
-        })?;
-        let raw = deserialize_entry::<ReviewArtifactActionParamsRaw>(
-            params,
-            display_path,
-            &field,
-            "workflow_config_invalid_action",
-        )?;
-        let role = raw.role.ok_or_else(|| {
-            policy_error_with_field(
-                "workflow_config_invalid_action",
-                display_path,
-                format!("{field}.role"),
-                format!("built-in action '{}' requires role", name),
-            )
-        })?;
-        validate_workflow_role(
-            &role,
-            display_path,
-            &format!("{field}.role"),
-            "workflow_config_invalid_action",
-        )?;
-        let role_authors = parse_workflow_forgejo_role_authors(
-            raw.role_authors,
-            raw.provider.as_deref(),
-            display_path,
-            &field,
-        )?;
-        if let Some(provider) = &raw.provider {
-            if provider != "forgejo" {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_action",
-                    display_path,
-                    format!("{field}.provider"),
-                    format!(
-                        "built-in action '{}' provider must be 'forgejo', got '{}'",
-                        name, provider
-                    ),
-                ));
-            }
-        }
-        return Ok(ActionDefinition {
-            builtin: name.to_string(),
-            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
-                provider: raw.provider,
-                role,
-                role_authors,
-            })),
-        });
-    }
-
     if name == "git.prepare_branch" {
         let base = match params {
             None => GitPrepareBranchBase::Configured,
@@ -1653,64 +1529,6 @@ fn validate_workflow_role(
             role
         ),
     ))
-}
-
-fn parse_workflow_forgejo_role_authors(
-    raw: Option<WorkflowForgejoRoleAuthorsRaw>,
-    provider: Option<&str>,
-    display_path: &str,
-    field: &str,
-) -> Result<Option<WorkflowForgejoRoleAuthors>> {
-    let Some(raw) = raw else {
-        if provider == Some("forgejo") {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_action",
-                display_path,
-                format!("{field}.role_authors"),
-                "Forgejo review artifact actions require role_authors",
-            ));
-        }
-        return Ok(None);
-    };
-    if provider != Some("forgejo") {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_action",
-            display_path,
-            format!("{field}.role_authors"),
-            "role_authors is only supported with provider: forgejo",
-        ));
-    }
-    Ok(Some(WorkflowForgejoRoleAuthors {
-        worker: require_workflow_role_author(raw.worker, display_path, field, "worker")?,
-        reviewer: require_workflow_role_author(raw.reviewer, display_path, field, "reviewer")?,
-        validator: require_workflow_role_author(raw.validator, display_path, field, "validator")?,
-        manager: require_workflow_role_author(raw.manager, display_path, field, "manager")?,
-    }))
-}
-
-fn require_workflow_role_author(
-    value: Option<String>,
-    display_path: &str,
-    field: &str,
-    role: &str,
-) -> Result<String> {
-    let value = value.ok_or_else(|| {
-        policy_error_with_field(
-            "workflow_config_invalid_action",
-            display_path,
-            format!("{field}.role_authors.{role}"),
-            format!("Forgejo role author '{}' is required", role),
-        )
-    })?;
-    if value.trim().is_empty() {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_action",
-            display_path,
-            format!("{field}.role_authors.{role}"),
-            format!("Forgejo role author '{}' must not be empty", role),
-        ));
-    }
-    Ok(value)
 }
 
 fn validate_builtin_action_name(
@@ -2099,32 +1917,16 @@ fn validate_issue_fields_against_policy(
     policy_path: &Path,
 ) -> Result<()> {
     for (field_name, value) in &issue.fields {
-        if field_name == "review" {
-            validate_review_field(value, issue, policy_path)?;
-        } else if field_name == ISSUE_STRATEGY_FIELD {
+        if field_name == ISSUE_STRATEGY_FIELD {
             validate_strategy_field(value, issue, policy_path)?;
         } else if field_name == WORKFLOW_BRANCH_FIELD {
             validate_workflow_branch_field(value, issue, policy_path)?;
-        } else if field_name == "pull_request" {
-            return Err(WorkflowPolicyError {
-                code: "workflow_issue_field_legacy",
-                path: policy_path.display().to_string(),
-                message: format!(
-                    "issue {} defines legacy field 'pull_request'; migrate to structured 'review'",
-                    issue.id
-                ),
-                field: Some("pull_request".to_string()),
-                reference: Some(issue.id.clone()),
-                line: None,
-                column: None,
-            }
-            .into());
         } else {
             return Err(WorkflowPolicyError {
                 code: "workflow_issue_field_unknown",
                 path: policy_path.display().to_string(),
                 message: format!(
-                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'review', 'strategy', and 'workflow_branch'",
+                    "issue {} defines field '{}' but schema_version 3 only supports built-in fields 'strategy' and 'workflow_branch'",
                     issue.id, field_name
                 ),
                 field: Some(field_name.to_string()),
@@ -2271,68 +2073,6 @@ fn invalid_workflow_branch_field(issue: &Issue, policy_path: &Path, detail: &str
         path: policy_path.display().to_string(),
         message: format!("issue {} has invalid workflow_branch: {detail}", issue.id),
         field: Some(WORKFLOW_BRANCH_FIELD.to_string()),
-        reference: Some(issue.id.clone()),
-        line: None,
-        column: None,
-    }
-    .into())
-}
-
-fn validate_review_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
-    let Some(object) = value.as_object() else {
-        return invalid_review_field(issue, policy_path, "field 'review' must be an object");
-    };
-    let kind = object.get("kind").and_then(JsonValue::as_str).unwrap_or("");
-    match kind {
-        "room" => {
-            let valid = object
-                .get("id")
-                .and_then(JsonValue::as_str)
-                .is_some_and(|id| id.starts_with("atelier-"));
-            if valid {
-                Ok(())
-            } else {
-                invalid_review_field(
-                    issue,
-                    policy_path,
-                    "room review must include id: <review-id>",
-                )
-            }
-        }
-        "pull_request" => {
-            let provider_ok = object.get("provider").and_then(JsonValue::as_str) == Some("forgejo");
-            let number_ok = object
-                .get("number")
-                .and_then(|number| {
-                    number
-                        .as_u64()
-                        .or_else(|| number.as_i64().and_then(|n| u64::try_from(n).ok()))
-                })
-                .is_some_and(|number| number > 0);
-            if provider_ok && number_ok {
-                Ok(())
-            } else {
-                invalid_review_field(
-                    issue,
-                    policy_path,
-                    "provider review must include provider: forgejo and positive number",
-                )
-            }
-        }
-        _ => invalid_review_field(
-            issue,
-            policy_path,
-            "field 'review.kind' must be 'room' or 'pull_request'",
-        ),
-    }
-}
-
-fn invalid_review_field(issue: &Issue, policy_path: &Path, reason: &str) -> Result<()> {
-    Err(WorkflowPolicyError {
-        code: "workflow_issue_field_invalid",
-        path: policy_path.display().to_string(),
-        message: format!("issue {} field 'review' is invalid: {}", issue.id, reason),
-        field: Some("review".to_string()),
         reference: Some(issue.id.clone()),
         line: None,
         column: None,
@@ -2593,8 +2333,8 @@ mod tests {
             })
         );
         assert_eq!(
-            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
-            vec!["review.open"]
+            action_names(&policy.workflows["epic"].transitions["start"].actions),
+            vec!["git.prepare_branch"]
         );
         assert_eq!(
             validator_names(&policy.workflows["epic"].transitions["start"].validators),
@@ -2645,13 +2385,13 @@ mod tests {
         assert!(error.contains("category active"));
     }
 
-    fn review_action_line() -> &'static str {
-        "          - review.open: { role: worker }"
+    fn action_line() -> &'static str {
+        "          - git.prepare_branch\n"
     }
 
     #[test]
     fn rejects_unknown_transition_action() {
-        let policy = valid_policy().replace(review_action_line(), "          - nope_run");
+        let policy = valid_policy().replace(action_line(), "          - nope_run\n");
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
@@ -2660,43 +2400,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_legacy_review_artifact_action_identifier() {
-        let legacy_name = ["review", "artifact", "open"].join("_");
-        let policy = valid_policy().replace(
-            review_action_line(),
-            &format!("          - {legacy_name}: {{ role: worker }}"),
-        );
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains(&legacy_name));
-    }
-
-    #[test]
     fn rejects_duplicate_transition_action() {
         let policy = valid_policy().replace(
-            review_action_line(),
-            "          - review.open: { role: worker }\n          - review.open: { role: worker }",
+            action_line(),
+            "          - git.prepare_branch\n          - git.prepare_branch\n",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
         assert!(error.contains("workflow_config_invalid_action"));
         assert!(error.contains("duplicate action"));
-    }
-
-    #[test]
-    fn rejects_review_action_on_non_review_transition() {
-        let policy = valid_policy().replace(
-            "        validators:\n          - review.complete",
-            "        actions:\n          - review.open: { role: worker }\n        validators:\n          - review.complete",
-        );
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("transitions to review"));
     }
 
     #[test]
@@ -2710,25 +2423,26 @@ mod tests {
 
     #[test]
     fn accepts_empty_action_param_object() {
-        let policy = valid_policy().replace(
-            "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - git.prepare_branch: {}",
-        );
+        let policy = valid_policy().replace(action_line(), "          - git.prepare_branch: {}\n");
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        let action = &policy.workflows["task"].transitions["start"].actions[0];
+        assert_eq!(action.builtin, "git.prepare_branch");
         assert_eq!(
-            action_names(&policy.workflows["epic"].transitions["request_review"].actions),
-            vec!["git.prepare_branch"]
+            action.params.as_ref(),
+            Some(&ActionParams::GitPrepareBranch(
+                GitPrepareBranchActionParams {
+                    base: GitPrepareBranchBase::Configured,
+                }
+            ))
         );
     }
 
     #[test]
     fn accepts_git_prepare_branch_current_scalar_param() {
-        let policy = valid_policy().replace(
-            "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - git.prepare_branch: current",
-        );
+        let policy =
+            valid_policy().replace(action_line(), "          - git.prepare_branch: current\n");
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["task"].transitions["start"].actions[0];
 
         assert_eq!(action.builtin, "git.prepare_branch");
         assert_eq!(
@@ -2743,10 +2457,8 @@ mod tests {
 
     #[test]
     fn rejects_git_prepare_branch_unknown_scalar_param() {
-        let policy = valid_policy().replace(
-            "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - git.prepare_branch: mission",
-        );
+        let policy =
+            valid_policy().replace(action_line(), "          - git.prepare_branch: mission\n");
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
@@ -2765,7 +2477,7 @@ mod tests {
             "branch_integrate",
         ] {
             let policy =
-                valid_policy().replace(review_action_line(), &format!("          - {obsolete}"));
+                valid_policy().replace(action_line(), &format!("          - {obsolete}\n"));
             let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
                 .unwrap_err()
                 .to_string();
@@ -2778,63 +2490,14 @@ mod tests {
     #[test]
     fn rejects_invalid_action_params() {
         let policy = valid_policy().replace(
-            review_action_line(),
-            "          - review.open: { provider: forgejo, role: worker }",
+            "          - tracker.commit\n",
+            "          - tracker.commit: { force: true }\n",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
         assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("role_authors"));
-    }
-
-    #[test]
-    fn parses_forgejo_review_action_params() {
-        let policy = valid_policy().replace(
-            review_action_line(),
-            "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
-        );
-
-        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic"].transitions["request_review"].actions[0];
-
-        assert_eq!(action.builtin, "review.open");
-        assert_eq!(
-            action.params.as_ref(),
-            Some(&ActionParams::ReviewArtifact(ReviewArtifactActionParams {
-                provider: Some("forgejo".to_string()),
-                role: "worker".to_string(),
-                role_authors: Some(WorkflowForgejoRoleAuthors {
-                    worker: "forge-worker".to_string(),
-                    reviewer: "forge-reviewer".to_string(),
-                    validator: "forge-validator".to_string(),
-                    manager: "forge-manager".to_string(),
-                }),
-            }))
-        );
-    }
-
-    #[test]
-    fn starter_policy_does_not_require_legacy_pr_merge_gate() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-
-        for issue_type in policy.issue_types.keys() {
-            let workflow_name = policy.workflow_by_issue_type.get(issue_type).unwrap();
-            let Some(close) = policy.workflows[workflow_name].transitions.get("close") else {
-                continue;
-            };
-            let close_validators = close
-                .validators
-                .iter()
-                .map(|validator| validator.builtin.as_str())
-                .collect::<Vec<_>>();
-            let has_linked_pr_merged = close_validators.contains(&"review.linked_pr_merged");
-            assert_eq!(
-                has_linked_pr_merged,
-                false,
-                "unexpected review.linked_pr_merged close validator for {issue_type}: {close_validators:?}"
-            );
-        }
+        assert!(error.contains("does not accept params"));
     }
 
     #[test]
@@ -2925,19 +2588,6 @@ mod tests {
     }
 
     #[test]
-    fn validates_review_field_shape() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
-            "review".to_string(),
-            serde_json::json!({"kind": "pull_request", "provider": "forgejo", "number": 42}),
-        );
-        let issue = issue_with_fields(fields);
-
-        validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
-    }
-
-    #[test]
     fn validates_strategy_field_as_mission_only() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut issue = issue_with_fields(BTreeMap::from([(
@@ -3007,40 +2657,6 @@ mod tests {
 
         assert!(error.contains("workflow_branch_field_invalid"));
         assert!(error.contains("owner_issue_id"));
-    }
-
-    #[test]
-    fn rejects_mismatched_review_field_shape() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
-            "review".to_string(),
-            serde_json::json!({"kind": "pull_request", "provider": "forgejo"}),
-        );
-        let issue = issue_with_fields(fields);
-
-        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_issue_field_invalid"));
-        assert!(error.contains("review"));
-        assert!(error.contains("positive number"));
-    }
-
-    #[test]
-    fn rejects_legacy_pull_request_field_shape() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert("pull_request".to_string(), serde_json::json!(42));
-        let issue = issue_with_fields(fields);
-
-        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_issue_field_legacy"));
-        assert!(error.contains("pull_request"));
     }
 
     #[test]
@@ -3214,13 +2830,11 @@ mod tests {
     fn rejects_obsolete_flat_validator_names() {
         let obsolete_names = [
             ("evidence_attached", "evidence.attached"),
-            ("review_complete", "review.complete"),
             ("epic_child_proof_complete", "children.proof_complete"),
             (
                 "validation_criteria_satisfied",
                 "validation.criteria_satisfied",
             ),
-            ("linked_pr_merged", "review.linked_pr_merged"),
             ("no_open_blockers", "blockers.none_open"),
             ("no_blocking_lints", "lint.none_blocking"),
             ("git_worktree_clean", "git.worktree_clean"),

@@ -1438,32 +1438,12 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
     assert!(stdout.contains("Downstream issue"));
-    assert!(stdout.contains("Recent Activity"));
-    assert!(stdout.contains("Recent note"));
+    assert!(stdout.contains("Notes"));
+    assert!(stdout.contains("[note] Recent note"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue note"));
     assert!(!stdout.contains("atelier issue com"));
     assert!(stdout.contains("atelier issue transition"));
-}
-
-#[test]
-fn test_issue_show_recent_activity_humanizes_structured_bodies() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
-    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
-    run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-
-    assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Recent Activity"), "{stdout}");
-    assert!(
-        stdout.contains("Transition start: todo -> in_progress"),
-        "{stdout}"
-    );
-    assert!(!stdout.contains("transition: \"start\""), "{stdout}");
 }
 
 #[test]
@@ -1518,7 +1498,6 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     assert!(stdout.contains("JSON description"));
     assert!(stdout.contains("Blocked by"));
     assert!(stdout.contains("Blocking"));
-    assert!(stdout.contains("Recent Activity"));
     assert!(stdout.contains("Next Commands"));
 }
 
@@ -1707,252 +1686,6 @@ fn test_show_closed_issue_includes_close_reason() {
 }
 
 #[test]
-fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
-    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
-    let activity_dir = dir
-        .path()
-        .join(".atelier")
-        .join("issues")
-        .join(format!("{issue_id}.activity"));
-    std::fs::create_dir_all(&activity_dir).unwrap();
-    std::fs::write(
-        activity_dir.join("20260610T181920123456Z.md"),
-        format!(
-            "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Canonical activity\"\n---\n\nSidecar body\n"
-        ),
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-
-    assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Canonical activity"));
-    assert!(stdout.contains("Sidecar body"));
-    assert!(!stdout.contains("Legacy note"));
-}
-
-#[test]
-fn test_history_repo_wide_is_bounded_and_routes_to_issue_drill_downs() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "First issue"]);
-    run_atelier(dir.path(), &["issue", "create", "Second issue"]);
-    let first = issue_id_by_title(dir.path(), "First issue");
-    let second = issue_id_by_title(dir.path(), "Second issue");
-    write_activity_fixture(
-        dir.path(),
-        &first,
-        "20990610T181920123456Z",
-        "comment",
-        "First comment",
-        "First body",
-    );
-    write_activity_fixture(
-        dir.path(),
-        &second,
-        "20990610T181921123456Z",
-        "evidence_attached",
-        "Evidence attached",
-        "evidence_id: \"ev-1\"\nresult: \"pass\"",
-    );
-    write_activity_fixture(
-        dir.path(),
-        &second,
-        "20990610T181922123456Z",
-        "comment",
-        "Second comment",
-        "Second body",
-    );
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--limit", "1"]);
-    assert!(success, "history failed: {stderr}");
-    assert!(stdout.contains("History"));
-    assert!(stdout.contains("Scope:          repository"));
-    assert!(stdout.contains("Source:         durable .atelier"));
-    assert!(stdout.contains("Ordering:       newest first"));
-    assert!(!stdout.contains("Filters:"));
-    assert!(stdout.contains("Showing:        1 of"));
-    assert!(stdout.contains("Second issue: Second comment"));
-    assert!(stdout.contains(&format!("comment | tester | issue/{second}")));
-    assert!(!stdout.contains("First comment"));
-    assert!(stdout.contains("Next Commands"));
-    assert!(stdout.contains("atelier issue show <id>"));
-    assert!(stdout.contains("atelier history --issue <id>"));
-    assert!(stdout.contains("Omitted:"));
-}
-
-#[test]
-fn test_history_issue_scope_stays_on_one_record_and_includes_linked_evidence() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Parent history", "--issue-type", "epic"],
-    );
-    assert!(success, "parent create failed: {stderr}");
-    let parent_id = issue_id_by_title(dir.path(), "Parent history");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Child history", "--parent", &parent_id],
-    );
-    assert!(success, "child create failed: {stderr}");
-    let child_id = issue_id_by_title(dir.path(), "Child history");
-    write_activity_fixture(
-        dir.path(),
-        &parent_id,
-        "20260610T191920123456Z",
-        "note",
-        "Parent note",
-        "Parent body",
-    );
-    write_activity_fixture(
-        dir.path(),
-        &child_id,
-        "20260610T191921123456Z",
-        "note",
-        "Child note",
-        "Child body",
-    );
-    let (success, _evidence_out, stderr) = run_atelier(
-        dir.path(),
-        &["evidence", "record", "--kind", "test", "Cargo test passed"],
-    );
-    assert!(success, "evidence record failed: {stderr}");
-    let evidence_id = record_id_by_title(dir.path(), "evidence", "Cargo test passed");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "evidence",
-            "attach",
-            &evidence_id,
-            "issue",
-            parent_id.as_str(),
-        ],
-    );
-    assert!(success, "evidence attach failed: {stderr}");
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["history", "--issue", parent_id.as_str()]);
-
-    assert!(success, "history failed: {stderr}");
-    assert!(stdout.contains(&format!("Scope:          issue {parent_id}")));
-    assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
-    assert!(stdout.contains("Parent note"));
-    assert!(!stdout.contains("Child note"));
-    assert!(stdout.contains(&format!("atelier issue show {parent_id}")));
-}
-
-#[test]
-fn test_history_issue_scope_excludes_other_targets_of_reused_evidence() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "History issue A"]);
-    run_atelier(dir.path(), &["issue", "create", "History issue B"]);
-    let issue_a = issue_id_by_title(dir.path(), "History issue A");
-    let issue_b = issue_id_by_title(dir.path(), "History issue B");
-    write_activity_fixture(
-        dir.path(),
-        &issue_b,
-        "20990610T191920123456Z",
-        "note",
-        "Issue B private activity",
-        "Must stay out of issue A history",
-    );
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["evidence", "record", "--kind", "test", "Shared proof"],
-    );
-    assert!(success, "evidence record failed: {stderr}");
-    let evidence_id = record_id_by_title(dir.path(), "evidence", "Shared proof");
-    for issue_id in [&issue_a, &issue_b] {
-        let (success, _, stderr) = run_atelier(
-            dir.path(),
-            &["evidence", "attach", &evidence_id, "issue", issue_id],
-        );
-        assert!(success, "evidence reuse failed for {issue_id}: {stderr}");
-    }
-
-    let (success, history_a, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_a]);
-    assert!(success, "issue A history failed: {stderr}");
-    assert!(history_a.contains(&issue_a));
-    assert!(history_a.contains(&evidence_id));
-    assert!(!history_a.contains(&issue_b));
-    assert!(!history_a.contains("Issue B private activity"));
-
-    let (success, history_b, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_b]);
-    assert!(success, "issue B history failed: {stderr}");
-    assert!(history_b.contains(&issue_b));
-    assert!(history_b.contains("Issue B private activity"));
-}
-
-#[test]
-fn test_history_rejects_removed_query_and_objective_scope_flags() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    for args in [
-        vec!["history", "--mission", "atelier-test"],
-        vec!["history", "--epic", "atelier-test"],
-        vec!["history", "--include-descendants"],
-        vec!["history", "--event-kind", "note"],
-        vec!["history", "--actor", "tester"],
-        vec!["history", "--since", "7d"],
-    ] {
-        let (success, _, stderr) = run_atelier(dir.path(), &args);
-        assert!(!success, "removed history flag should fail: {args:?}");
-        assert!(
-            stderr.contains("unexpected argument"),
-            "removed flag should be rejected by help: {stderr}"
-        );
-    }
-}
-
-#[test]
-fn test_history_empty_states_and_invalid_limit() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
-    assert!(success, "empty history failed: {stderr}");
-    assert!(stdout.contains("No durable history found for repository."));
-    assert!(stdout.contains("Source:"));
-    assert!(stdout.contains("Next Commands"));
-
-    run_atelier(dir.path(), &["issue", "create", "Quiet history"]);
-    let issue_id = issue_id_by_title(dir.path(), "Quiet history");
-    write_activity_fixture(
-        dir.path(),
-        &issue_id,
-        "20260610T181920123456Z",
-        "note",
-        "Quiet note",
-        "Quiet body",
-    );
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["--quiet", "history", "--issue", issue_id.as_str()],
-    );
-    assert!(success, "quiet history failed: {stderr}");
-    assert!(stdout.starts_with("events "));
-    assert!(stdout.contains("2026-06-10T18:19:20.123456+00:00"));
-    assert!(!stdout.contains("Quiet note"));
-    assert!(!stdout.contains("History\n"));
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["history", "--limit", "0"]);
-    assert!(!success, "zero limit should fail");
-    assert!(stderr.contains("--limit must be greater than 0"));
-}
-
-#[test]
 fn test_show_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1960,34 +1693,6 @@ fn test_show_nonexistent_issue() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", "999"]);
 
     assert!(!success || stderr.contains("not found") || stderr.contains("No issue"));
-}
-
-fn write_activity_fixture(
-    dir: &Path,
-    issue_id: &str,
-    activity_id: &str,
-    event_type: &str,
-    summary: &str,
-    body: &str,
-) {
-    let activity_dir = dir
-        .join(".atelier")
-        .join("issues")
-        .join(format!("{issue_id}.activity"));
-    std::fs::create_dir_all(&activity_dir).unwrap();
-    std::fs::write(
-        activity_dir.join(format!("{activity_id}.md")),
-        format!(
-            "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"{activity_id}\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"{event_type}\"\nactor: \"tester\"\ncreated_at: \"{}-{}-{}T{}:{}:{}.123456Z\"\nsummary: \"{summary}\"\n---\n\n{body}\n",
-            &activity_id[0..4],
-            &activity_id[4..6],
-            &activity_id[6..8],
-            &activity_id[9..11],
-            &activity_id[11..13],
-            &activity_id[13..15],
-        ),
-    )
-    .unwrap();
 }
 
 // ==================== Issue Update Tests ====================
@@ -2159,10 +1864,6 @@ fn test_import_beads_late_invalid_record_is_failure_atomic_and_retryable() {
     assert!(stderr.contains("Invalid issue_type"), "{stderr}");
     for id in ["atelier-0001", "atelier-0002"] {
         assert!(!dir.path().join(format!(".atelier/issues/{id}.md")).exists());
-        assert!(!dir
-            .path()
-            .join(format!(".atelier/issues/{id}.activity"))
-            .exists());
     }
 
     std::fs::write(&import_path, invalid.replace("invalid type", "task")).unwrap();
@@ -2172,10 +1873,9 @@ fn test_import_beads_late_invalid_record_is_failure_atomic_and_retryable() {
     assert!(stdout.contains("imported issues: 2"), "{stdout}");
     assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
     assert!(dir.path().join(".atelier/issues/atelier-0002.md").exists());
-    assert!(dir
-        .path()
-        .join(".atelier/issues/atelier-0001.activity")
-        .is_dir());
+    let first = read_canonical_record(dir.path(), "issues", "atelier-0001");
+    assert!(first.contains("## Notes\n\n- "), "{first}");
+    assert!(first.contains("[note] first note"), "{first}");
 }
 
 // ==================== Issue Delete Tests ====================
@@ -2247,28 +1947,34 @@ fn test_add_comment() {
 }
 
 #[test]
-fn test_issue_mutations_create_activity_sidecars() {
+fn test_issue_notes_and_close_reason_are_written_to_the_record() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Noted issue"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
-    assert!(success, "cache repair query failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Noted issue");
 
     for (kind, body) in [
-        ("human", "Plain comment body"),
-        ("note", "Operator note body"),
+        ("human", "Human note body"),
         ("plan", "Plan body"),
         ("handoff", "Handoff body"),
     ] {
-        let (success, _, stderr) = run_atelier(
+        let (success, stdout, stderr) = run_atelier(
             dir.path(),
             &["issue", "note", &issue_id, body, "--kind", kind],
         );
         assert!(success, "issue note {kind} failed: {stderr}");
+        assert!(
+            stdout.contains(&format!("Added note to issue {issue_id}")),
+            "{stdout}"
+        );
     }
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "note", &issue_id, "Default kind body"],
+    );
+    assert!(success, "issue note failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2282,32 +1988,20 @@ fn test_issue_mutations_create_activity_sidecars() {
         ],
     );
     assert!(!success, "invalid note kind should be rejected");
-    assert!(stderr.contains("Invalid comment kind 'decision'"));
+    assert!(stderr.contains("Invalid note kind 'decision'"), "{stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", &issue_id, "   "]);
+    assert!(!success, "empty note should be rejected");
+    assert!(stderr.contains("must not be empty"), "{stderr}");
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "note", &issue_id, "Append note body"],
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let record = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(
+        record.contains(&format!(
+            "## Notes\n\n- {today} [human] Human note body\n- {today} [plan] Plan body\n- {today} [handoff] Handoff body\n- {today} [note] Default kind body"
+        )),
+        "{record}"
     );
-    assert!(success, "issue note failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &issue_id, "--claim"]);
-    assert!(!success, "issue claim should be rejected");
-    assert!(stderr.contains("unexpected argument '--claim'"));
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "update",
-            &issue_id,
-            "--title",
-            "Activity issue renamed",
-            "--priority",
-            "high",
-            "--label",
-            "activity-label",
-        ],
-    );
-    assert!(success, "issue update fields failed: {stderr}");
+    assert!(!record.contains("Invalid body"), "{record}");
 
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
@@ -2322,49 +2016,33 @@ fn test_issue_mutations_create_activity_sidecars() {
             "Close reason body",
         ],
     );
-    assert!(success, "issue transition close reason failed: {stderr}");
+    assert!(success, "issue transition close failed: {stderr}");
 
-    let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(&activities, "comment", &["Plain comment body"]);
-    assert_activity_contains(&activities, "note", &["Operator note body"]);
-    assert_activity_contains(&activities, "note", &["Append note body"]);
-    assert_activity_contains(&activities, "plan", &["Plan body"]);
-    assert_activity_contains(&activities, "handoff", &["Handoff body"]);
-    assert_activity_contains(
-        &activities,
-        "field_changed",
-        &[
-            "field: \"title\"",
-            "old: \"Activity issue\"",
-            "new: \"Activity issue renamed\"",
-        ],
+    let record = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(
+        record.contains("## Close Reason\n\nClose reason body"),
+        "{record}"
     );
-    assert_activity_contains(
-        &activities,
-        "field_changed",
-        &["field: \"priority\"", "old: \"medium\"", "new: \"high\""],
-    );
-    assert_activity_contains(
-        &activities,
-        "field_changed",
-        &["field: \"labels\"", "new: \"activity-label\""],
-    );
-    assert_activity_contains(
-        &activities,
-        "transition_applied",
-        &["transition: \"close\"", "to: \"done\""],
-    );
-    assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
+    assert!(!dir
+        .path()
+        .join(format!(".atelier/issues/{issue_id}.activity"))
+        .exists());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Handoff body"), "{stdout}");
+    assert!(stdout.contains("Close Reason"), "{stdout}");
+    assert!(stdout.contains("Close reason body"), "{stdout}");
 }
 
 #[test]
-fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
+fn test_issue_show_recovers_notes_and_close_reason_after_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Rebuild activity"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Rebuild notes"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Rebuild activity");
+    let issue_id = issue_id_by_title(dir.path(), "Rebuild notes");
     let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
     assert!(success, "cache repair query failed: {stderr}");
 
@@ -2408,9 +2086,6 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Canonical close"));
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_id]);
-    assert!(success, "history failed: {stderr}");
     assert!(stdout.contains("Canonical handoff"));
 }
 

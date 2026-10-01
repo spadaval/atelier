@@ -220,7 +220,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     } else {
                         parent.as_deref().map(Some)
                     },
-                    append_notes: None,
                 },
             )
         }
@@ -228,7 +227,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Note { id, text, kind } => {
             let cache = use_cases::mutation_cache()?;
             let id = super::resolve_issue_arg(cache.db(), &id)?;
-            commands::comment::run_issue_note(cache.db(), &id, &text, &kind)
+            drop(cache);
+            let (state_dir, _) = state_and_db_paths()?;
+            commands::issue::append_note(&state_dir, &id, &kind, &text)
         }
 
         super::IssueCommands::Link { id, target, role } => {

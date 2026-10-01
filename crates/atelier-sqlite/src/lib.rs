@@ -1,5 +1,4 @@
 mod cache;
-mod comments;
 mod dependencies;
 mod issues;
 mod labels;
@@ -12,15 +11,15 @@ mod relations;
 pub use cache::{
     cache_incompatibility, CacheIncompatibility, EvidenceCacheQuery, EvidenceCacheRow,
     EvidenceTargetCacheRow, IssueBlockCacheRow, IssueCacheQuery, IssueCacheRow,
-    IssueRelationCacheRow, RecordSourceCacheRow, ReviewRoomCacheRow, CACHE_APPLICATION_ID,
-    CACHE_SCHEMA_VERSION, DOMAIN_CACHE_TABLES,
+    IssueRelationCacheRow, RecordSourceCacheRow, CACHE_APPLICATION_ID, CACHE_SCHEMA_VERSION,
+    DOMAIN_CACHE_TABLES,
 };
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OpenFlags};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use atelier_core::{IssuePriority, ISSUE_PRIORITY_LABELS};
 use atelier_records as record_store;
@@ -233,7 +232,6 @@ pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
 
 pub struct Database {
     pub(crate) conn: Connection,
-    pub(crate) path: PathBuf,
 }
 
 impl Database {
@@ -244,10 +242,7 @@ impl Database {
             })?;
         }
         let conn = Connection::open(path).context("Failed to open database")?;
-        let db = Database {
-            conn,
-            path: path.to_path_buf(),
-        };
+        let db = Database { conn };
         db.init_schema()?;
         Ok(db)
     }

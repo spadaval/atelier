@@ -12,16 +12,14 @@ use atelier_core::{
     ISSUE_PRIORITY_LABELS, ISSUE_STRATEGY_FIELD,
 };
 pub use atelier_core::{
-    EvidenceRecord, IssueFieldError, IssueRecord, IssueReview, IssueSectionName, IssueSectionState,
-    IssueSections, IssueStrategy, Record, RecordHeader, ReviewRecord,
+    EvidenceRecord, IssueFieldError, IssueRecord, IssueSectionName, IssueSectionState,
+    IssueSections, IssueStrategy, Record, RecordHeader,
 };
 
-pub mod activity;
 pub mod document;
 pub mod evidence;
 pub mod issue;
 pub mod mutation_lock;
-pub mod review;
 pub mod store;
 pub mod validation;
 
@@ -45,7 +43,6 @@ pub use relationships::{
 pub enum RecordKind {
     Evidence,
     Issue,
-    Review,
 }
 
 impl RecordKind {
@@ -53,7 +50,6 @@ impl RecordKind {
         match self {
             Self::Evidence => "evidence",
             Self::Issue => "issues",
-            Self::Review => "reviews",
         }
     }
 }
@@ -314,14 +310,6 @@ impl RecordStore {
         parse_evidence_record_file(&text, &relative)
     }
 
-    pub fn load_review_by_id(&self, id: &str) -> Result<ReviewRecord> {
-        record_id::validate_record_id(id)?;
-        let spec = canonical_record_kind("review")?;
-        let relative = canonical_record_path(spec, id)?;
-        let text = self.read_record_file(&relative)?;
-        parse_review_record_file(&text, &relative)
-    }
-
     pub fn load_issues(&self) -> Result<Vec<CanonicalIssueRecord>> {
         let mut records = Vec::new();
         let mut ids = BTreeSet::new();
@@ -394,13 +382,6 @@ impl RecordStore {
         let spec = canonical_record_kind("evidence")?;
         let relative = canonical_record_path(spec, &record.header.id)?;
         self.write_atomic(&relative, render_evidence_record_file(record)?)
-    }
-
-    pub fn write_review_atomic(&self, record: &ReviewRecord) -> Result<()> {
-        let _transaction = mutation_lock::CanonicalMutationLock::shared(&self.state_dir)?;
-        let spec = canonical_record_kind("review")?;
-        let relative = canonical_record_path(spec, &record.header.id)?;
-        self.write_atomic(&relative, render_review_record_file(record)?)
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
@@ -853,15 +834,6 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     let mut fields = record.issue.fields.clone();
-    if let Some(review) = fields.remove(atelier_core::ISSUE_REVIEW_FIELD) {
-        let review = IssueReview::from_value(&review)
-            .context("Invalid issue review field while rendering record file")?;
-        write_yaml_value(
-            &mut output,
-            atelier_core::ISSUE_REVIEW_FIELD,
-            &review.to_value(),
-        )?;
-    }
     if let Some(strategy) = fields.remove(ISSUE_STRATEGY_FIELD) {
         let strategy = IssueStrategy::from_value(&strategy)
             .context("Invalid issue strategy field while rendering record file")?;
@@ -935,6 +907,15 @@ fn render_issue_sections(sections: &IssueSections) -> String {
         body.push_str("\n\n## Notes\n\n");
         body.push_str(notes);
     }
+    if let Some(close_reason) = sections
+        .close_reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+    {
+        body.push_str("\n\n## Close Reason\n\n");
+        body.push_str(close_reason);
+    }
     normalize_body(&body)
 }
 
@@ -952,10 +933,8 @@ pub fn render_record(record: &Record) -> Result<String> {
     let mut relationships = record.header().relationships.clone();
     sort_relationships(&mut relationships);
 
-    match spec.kind {
-        "evidence" => return render_evidence_record(&record, &relationships, spec),
-        "review" => return render_review_record(&record, &relationships, spec),
-        _ => {}
+    if spec.kind == "evidence" {
+        return render_evidence_record(&record, &relationships, spec);
     }
     bail!(
         "Unsupported record kind '{}' for typed rendering",
@@ -976,25 +955,6 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
         Record::Evidence(record) => Ok(record),
         other => bail!(
             "Expected evidence record in {}, found {}",
-            display_state_path(relative),
-            other.kind()
-        ),
-    }
-}
-
-/// Render a concrete native review-room record through its YAML file codec.
-pub fn render_review_record_file(record: &ReviewRecord) -> Result<String> {
-    render_record(&Record::Review(record.clone()))
-}
-
-/// Parse a concrete native review-room record without exposing mixed-kind
-/// dispatch to review services.
-pub fn parse_review_record_file(text: &str, relative: &Path) -> Result<ReviewRecord> {
-    let spec = canonical_record_kind("review")?;
-    match parse_record(text, relative, spec)? {
-        Record::Review(record) => Ok(record),
-        other => bail!(
-            "Expected review record in {}, found {}",
             display_state_path(relative),
             other.kind()
         ),
@@ -1056,24 +1016,6 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
     let fields = optional_object(&front_matter, "fields", relative)?;
-    if front_matter.contains_key("pull_request") {
-        bail!(
-            "Legacy pull_request field in {}; use structured review field",
-            display_state_path(relative)
-        );
-    }
-    let review = front_matter
-        .get(atelier_core::ISSUE_REVIEW_FIELD)
-        .map(IssueReview::from_value)
-        .transpose()
-        .map_err(|error| {
-            anyhow!(
-                "workflow_issue_field_invalid: issue {} has an invalid review field in {}: {}",
-                id,
-                display_state_path(relative),
-                error
-            )
-        })?;
     let strategy = front_matter
         .get(ISSUE_STRATEGY_FIELD)
         .map(IssueStrategy::from_value)
@@ -1102,9 +1044,6 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         updated_at,
         closed_at: closed_at.or((status == "closed").then_some(updated_at)),
     };
-    if let Some(review) = review {
-        issue.set_review(review);
-    }
     if let Some(strategy) = strategy {
         issue.set_strategy(strategy);
     }
@@ -1120,9 +1059,6 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
 pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
     if spec.kind == ISSUE_KIND.kind {
         return Ok(parse_issue_record(text, relative)?.into_record());
-    }
-    if spec.kind == "review" {
-        return parse_review_record(text, relative, spec);
     }
 
     let (front_matter, body) = split_front_matter(text, relative)?;
@@ -1166,9 +1102,8 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
         );
     }
     reject_forbidden_data_front_matter(&front_matter, relative)?;
-    match spec.kind {
-        "evidence" => return parse_evidence_record(front_matter, body, relative, spec, id),
-        _ => {}
+    if spec.kind == "evidence" {
+        return parse_evidence_record(front_matter, body, relative, spec, id);
     }
     bail!(
         "Unsupported record kind '{}' in {}",
@@ -1225,162 +1160,10 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
             display_state_path(relative)
         )
     })?;
-    match spec.kind {
-        "evidence" => {
-            validate_evidence_record(record, relative)?;
-            return Ok(());
-        }
-        "review" => {
-            validate_review_record(record, relative)?;
-            return Ok(());
-        }
-        _ => {}
+    if spec.kind == "evidence" {
+        return validate_evidence_record(record, relative);
     }
     validate_relationships(&record.header().relationships, relative)?;
-    Ok(())
-}
-
-fn render_review_record(
-    record: &Record,
-    relationships: &Relationships,
-    spec: &RecordKindSpec,
-) -> Result<String> {
-    let Record::Review(record) = record else {
-        bail!("Expected review record");
-    };
-    let mut labels = record.header.labels.clone();
-    labels.sort();
-    labels.dedup();
-    let mut output = String::new();
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.header.created_at.to_rfc3339()),
-    )?;
-    write_yaml_value(&mut output, "events", &Value::Array(record.events.clone()))?;
-    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
-    write_yaml_scalar(&mut output, "issue", Some(&record.issue_id))?;
-    write_yaml_array(&mut output, "labels", &labels)?;
-    write_yaml_scalar(&mut output, "mode", Some(&record.mode))?;
-    write_yaml_relationships(&mut output, relationships)?;
-    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
-    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "source_branch", Some(&record.source_branch))?;
-    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
-    write_yaml_scalar(&mut output, "target_branch", Some(&record.target_branch))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.header.updated_at.to_rfc3339()),
-    )?;
-    Ok(output)
-}
-
-fn parse_review_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
-    let front_matter = parse_yaml_document(text, relative)?;
-    let schema = require_scalar(&front_matter, "schema", relative)?;
-    if schema != spec.schema {
-        bail!(
-            "Unsupported schema '{}' in {}; expected {}",
-            schema,
-            display_state_path(relative),
-            spec.schema
-        );
-    }
-    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
-    if schema_version != spec.schema_version {
-        bail!(
-            "Unsupported schema_version {} in {}; expected {}",
-            schema_version,
-            display_state_path(relative),
-            spec.schema_version
-        );
-    }
-    let id = require_scalar(&front_matter, "id", relative)?;
-    record_id::validate_record_id(&id).with_context(|| {
-        format!(
-            "Invalid review id {} in {}",
-            id,
-            display_state_path(relative)
-        )
-    })?;
-    let expected = canonical_record_path(spec, &id)?;
-    if relative != expected {
-        bail!(
-            "review id {} in {} does not match record-file path {}",
-            id,
-            display_state_path(relative),
-            display_state_path(&expected)
-        );
-    }
-    reject_forbidden_data_front_matter(&front_matter, relative)?;
-    let relationships = parse_relationships(&front_matter, relative)?;
-    let mode = require_scalar(&front_matter, "mode", relative)?;
-    if mode != "room" {
-        bail!(
-            "Review record {} mode must be 'room', got '{}'",
-            display_state_path(relative),
-            mode
-        );
-    }
-    let events = front_matter
-        .get("events")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let labels = string_array(&front_matter, "labels", relative)?;
-    validate_sorted_unique("labels", &labels, relative)?;
-    let status = require_scalar(&front_matter, "status", relative)?;
-    validate_status(&status)
-        .with_context(|| format!("Invalid review status in {}", display_state_path(relative)))?;
-    let issue_id = require_scalar(&front_matter, "issue", relative)?;
-    record_id::validate_record_id(&issue_id).with_context(|| {
-        format!(
-            "Invalid review issue id {} in {}",
-            issue_id,
-            display_state_path(relative)
-        )
-    })?;
-    Ok(Record::Review(ReviewRecord {
-        header: RecordHeader {
-            id,
-            kind: spec.kind.to_string(),
-            title: require_scalar(&front_matter, "title", relative)?,
-            status,
-            labels,
-            relationships,
-            created_at: require_datetime(&front_matter, "created_at", relative)?,
-            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
-        },
-        mode,
-        issue_id,
-        source_branch: require_scalar(&front_matter, "source_branch", relative)?,
-        target_branch: require_scalar(&front_matter, "target_branch", relative)?,
-        events,
-    }))
-}
-
-fn validate_review_record(record: &Record, relative: &Path) -> Result<()> {
-    let Record::Review(record) = record else {
-        bail!("Expected review record in {}", display_state_path(relative));
-    };
-    if record.mode != "room" {
-        bail!(
-            "Review record mode must be 'room' in {}",
-            display_state_path(relative)
-        );
-    }
-    record_id::validate_record_id(&record.issue_id).with_context(|| {
-        format!(
-            "Invalid review issue id '{}' in {}",
-            record.issue_id,
-            display_state_path(relative)
-        )
-    })?;
-    validate_status(&record.header.status)
-        .with_context(|| format!("Invalid review status in {}", display_state_path(relative)))?;
-    validate_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
@@ -1519,20 +1302,6 @@ fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
     Ok(())
 }
 
-fn validate_sorted_unique(key: &str, values: &[String], relative: &Path) -> Result<()> {
-    let mut sorted = values.to_vec();
-    sorted.sort();
-    sorted.dedup();
-    if sorted != values {
-        bail!(
-            "{} in {} must be sorted and unique",
-            key,
-            display_state_path(relative)
-        );
-    }
-    Ok(())
-}
-
 fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> Relationships {
     let mut normalized_attachments = relationships.attachments.clone();
     for relation in &relationships.relates {
@@ -1614,13 +1383,6 @@ fn collect_record_paths(
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
             collect_record_paths(root, &path, extension, kind_name, records)?;
         } else if path.is_file() {
             let relative = path
@@ -1709,11 +1471,6 @@ fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, V
             display_state_path(relative)
         )
     })
-}
-
-fn parse_yaml_document(text: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
-    serde_yaml::from_str(text)
-        .with_context(|| format!("Invalid YAML document in {}", display_state_path(relative)))
 }
 
 fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {
@@ -2069,12 +1826,14 @@ pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections
         .cloned()
         .unwrap_or_default();
     let notes = sections.get(IssueSectionName::Notes.title()).cloned();
+    let close_reason = sections.get(IssueSectionName::CloseReason.title()).cloned();
 
     Ok(IssueSections {
         description,
         outcome,
         evidence,
         notes,
+        close_reason,
     })
 }
 
@@ -2892,29 +2651,6 @@ mod tests {
         }
     }
 
-    fn review_record(id: &str) -> ReviewRecord {
-        ReviewRecord {
-            header: record_header(
-                "review",
-                id,
-                "Review room",
-                "open",
-                vec!["review".to_string()],
-                Relationships::default(),
-            ),
-            mode: "room".to_string(),
-            issue_id: "atelier-epic".to_string(),
-            source_branch: "epic/atelier-epic".to_string(),
-            target_branch: "master".to_string(),
-            events: vec![serde_json::json!({
-                "id": "evt-0001",
-                "kind": "comment",
-                "actor": "reviewer",
-                "body": "Looks good"
-            })],
-        }
-    }
-
     fn sectioned_issue_text(id: &str, body: &str) -> String {
         format!(
             r#"---
@@ -2960,17 +2696,14 @@ updated_at: "2026-06-10T13:00:00+00:00"
             vec![
                 ("issue", "atelier.issue", 1, Some("issues")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
-                ("review", "atelier.review", 1, Some("reviews")),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
             assert!(validate_canonical_record_kind(kind).is_ok());
             let spec = canonical_record_kind(kind).unwrap();
-            let extension = if kind == "review" { "yaml" } else { "md" };
             assert_eq!(
                 canonical_record_path(spec, "atelier-abcd").unwrap(),
-                PathBuf::from(spec.canonical_dir.unwrap())
-                    .join(format!("atelier-abcd.{extension}"))
+                PathBuf::from(spec.canonical_dir.unwrap()).join("atelier-abcd.md")
             );
         }
 
@@ -2978,7 +2711,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["evidence", "review"]);
+        assert_eq!(generic_contracts, vec!["evidence"]);
     }
 
     #[test]
@@ -3022,76 +2755,27 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn issue_record_round_trips_review_link() {
-        let mut record = issue_record("atelier-flds");
+    fn issue_record_round_trips_dated_notes_and_close_reason() {
+        let mut record = issue_record("atelier-note");
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
         record
-            .issue
-            .set_review(IssueReview::room("atelier-rvw1").unwrap());
+            .sections
+            .append_note(date, "handoff", "First line\n## not a heading");
+        record.sections.append_note(date, "note", "Second note");
+        record.sections.close_reason = Some("Shipped with proof".to_string());
 
         let text = render_issue_record(&record).unwrap();
-        let parsed = parse_issue_record(&text, &issue_record_path("atelier-flds")).unwrap();
-
-        assert_eq!(parsed.issue.fields, record.issue.fields);
-        assert_eq!(
-            parsed.issue.review().unwrap(),
-            Some(IssueReview::Room {
-                id: "atelier-rvw1".to_string()
-            })
-        );
-        assert_eq!(render_issue_record(&parsed).unwrap(), text);
-        assert!(text.contains("review:\n"));
-        assert!(text.contains("kind: room"));
-        assert!(text.contains("id: atelier-rvw1"));
-        assert!(!text.contains("fields:\n"));
-    }
-
-    #[test]
-    fn issue_record_rejects_legacy_pull_request_field() {
-        let text = sectioned_issue_text(
-            "atelier-flds",
-            "## Description\n\nBody\n\n## Outcome\n\nDone\n\n## Evidence\n\nProof",
-        )
-        .replace("priority: \"P1\"\n", "priority: \"P1\"\npull_request: 42\n");
-
-        let error = parse_issue_record(&text, &issue_record_path("atelier-flds"))
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("Legacy pull_request field"));
-    }
-
-    #[test]
-    fn issue_record_rejects_invalid_typed_review_field() {
-        let text = sectioned_issue_text(
-            "atelier-flds",
-            "## Description\n\nBody\n\n## Outcome\n\nDone\n\n## Evidence\n\nProof",
-        )
-        .replace(
-            "priority: \"P1\"\n",
-            "priority: \"P1\"\nreview:\n  kind: room\n  id: \"\"\n",
-        );
-
-        let error = parse_issue_record(&text, &issue_record_path("atelier-flds"))
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_issue_field_invalid"));
-        assert!(error.contains("room review id"));
-    }
-
-    #[test]
-    fn review_room_record_renders_and_parses_yaml() {
-        let record = review_record("atelier-rvw1");
-        let spec = canonical_record_kind("review").unwrap();
-        let path = canonical_record_path(spec, "atelier-rvw1").unwrap();
-        let text = render_review_record_file(&record).unwrap();
-        let parsed = parse_review_record_file(&text, &path).unwrap();
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-note")).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_review_record_file(&parsed).unwrap(), text);
-        assert!(text.contains("schema: \"atelier.review\""));
-        assert!(text.contains("events:\n"));
-        assert!(!text.starts_with("---"));
+        assert!(text.contains(
+            "## Notes\n\n- 2026-09-30 [handoff] First line\n  ## not a heading\n- 2026-09-30 [note] Second note"
+        ));
+        assert!(text.contains("## Close Reason\n\nShipped with proof"));
+        assert_eq!(
+            parsed.sections.section(IssueSectionName::CloseReason),
+            Some("Shipped with proof")
+        );
     }
 
     #[test]
@@ -3100,15 +2784,12 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let store = RecordStore::new(dir.path().join(".atelier"));
         let issue = issue_record("atelier-iss1");
         let evidence = evidence_record("atelier-evd1");
-        let review = review_record("atelier-rvw1");
 
         store.write_issue_atomic(&issue).unwrap();
         store.write_evidence_atomic(&evidence).unwrap();
-        store.write_review_atomic(&review).unwrap();
 
         assert_eq!(store.load_issue_by_id("atelier-iss1").unwrap(), issue);
         assert_eq!(store.load_evidence_by_id("atelier-evd1").unwrap(), evidence);
-        assert_eq!(store.load_review_by_id("atelier-rvw1").unwrap(), review);
         assert_eq!(
             store.discover_record_paths("issue").unwrap(),
             vec![PathBuf::from("issues/atelier-iss1.md")]
@@ -3116,10 +2797,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(
             store.discover_record_paths("evidence").unwrap(),
             vec![PathBuf::from("evidence/atelier-evd1.md")]
-        );
-        assert_eq!(
-            store.discover_record_paths("review").unwrap(),
-            vec![PathBuf::from("reviews/atelier-rvw1.yaml")]
         );
     }
 

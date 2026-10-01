@@ -1,6 +1,6 @@
 //! Cooperative repository lock for canonical tracker mutations.
 //!
-//! Ordinary record/activity writers take a shared lock. Repository-wide
+//! Ordinary record writers take a shared lock. Repository-wide
 //! migrations take the exclusive form so their validated snapshot cannot be
 //! interleaved with another Atelier mutation.
 

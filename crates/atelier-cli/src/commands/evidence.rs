@@ -468,14 +468,6 @@ fn attach_impl(
         target_id,
         role,
     )?;
-    if inserted && target.canonical_kind == "issue" {
-        let evidence = canonical_evidence_record(id)?;
-        super::activity_log::record_evidence_attached(
-            target_id,
-            id,
-            Some(&evidence.header.status),
-        )?;
-    }
     let Some(quiet) = quiet else {
         return Ok(());
     };

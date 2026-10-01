@@ -272,8 +272,6 @@ pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
 
     let actual_kind = if db.evidence_cache_row(issue_ref)?.is_some() {
         Some("evidence")
-    } else if db.review_room_cache_row(issue_ref)?.is_some() {
-        Some("review")
     } else {
         None
     };
