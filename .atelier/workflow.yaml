@@ -21,349 +21,103 @@ issue_types:
 statuses:
   draft:
     category: todo
-  ready:
-    category: todo
   todo:
     category: todo
   in_progress:
     category: active
-    role: worker
   blocked:
     category: blocked
   review:
     category: active
-    role: reviewer
-  publish_review:
-    category: done
-  validation:
-    category: active
-    role: validator
   done:
-    category: done
-  closed:
     category: done
   superseded:
     category: done
 workflows:
-  mission:
+  objective:
     applies_to:
     - mission
-    initial_status: draft
-    done_statuses:
-    - publish_review
-    - closed
-    - superseded
-    transitions:
-      ready:
-        from:
-        - draft
-        to: ready
-        description: Make a worker-usable mission ready for execution.
-        validators:
-        - issue.sections_parseable
-        - blockers.transitive_none_open
-      start:
-        from:
-        - ready
-        to: in_progress
-        description: Start coordinated mission work.
-        validators:
-        - blockers.transitive_none_open
-        - git.worktree_clean
-        actions:
-        - git.prepare_branch
-      request_publish:
-        from:
-        - ready
-        - in_progress
-        - validation
-        to: publish_review
-        description: Open the mission publish review from the mission branch to the configured base branch.
-        validators:
-        - objective.work_present
-        - objective.work_terminal
-        - objective.blockers_none_open
-        - issue.sections_parseable
-        - validation.criteria_satisfied
-        - closeout.failures_classified
-        - lint.none_blocking
-        - command_surface_current
-        - ignored_tests_reviewed
-        - git.worktree_clean
-        actions:
-        - tracker.commit
-        - git.push
-        - review.open:
-            provider: forgejo
-            role: manager
-            role_authors:
-              worker: atelier-worker
-              reviewer: atelier-reviewer
-              validator: atelier-validator
-              manager: atelier-manager
-  task:
-    applies_to:
-    - bug
-    - feature
-    - task
-    initial_status: todo
-    done_statuses:
-    - done
-    transitions:
-      start:
-        from:
-        - todo
-        - blocked
-        to: in_progress
-        description: Start active work on this item.
-        validators:
-        - blockers.transitive_none_open
-        actions:
-        - git.prepare_branch
-      block:
-        from:
-        - todo
-        - in_progress
-        - validation
-        to: blocked
-        description: Mark work blocked while preserving current proof expectations.
-      close:
-        from:
-        - in_progress
-        - validation
-        to: done
-        required_fields:
-        - close_reason
-        description: Closing requires attached evidence and no open blockers.
-        validators:
-        - evidence.attached:
-            min_count: 1
-        - blockers.none_open
-        - lint.none_blocking
-        actions:
-        - tracker.commit
-        - git.integrate
-  epic:
-    applies_to:
     - epic
     initial_status: draft
     done_statuses:
     - done
     - superseded
     transitions:
-      adopt_draft:
-        from:
-        - todo
-        to: draft
-        description: Adopt a legacy unexpanded epic into the draft outcome map.
       ready:
-        from:
-        - draft
-        to: ready
-        description: Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution.
+        from: [draft]
+        to: todo
+        description: The outcome, immediate work, and proof route are clear enough to execute.
         validators:
         - issue.sections_parseable
-        - objective.work_present
-        - epic.proof_route_present
-        - blockers.transitive_none_open
-        - lint.none_blocking
       start:
-        from:
-        - ready
-        - blocked
+        from: [todo, blocked]
         to: in_progress
-        description: Start active work on this item.
+        description: Start work.
         validators:
         - blockers.transitive_none_open
-        actions:
-        - git.prepare_branch
       block:
-        from:
-        - ready
-        - in_progress
-        - review
-        - validation
+        from: [todo, in_progress, review]
         to: blocked
-        description: Mark work blocked while preserving current proof expectations.
-      supersede:
-        from:
-        - draft
-        - ready
-        - blocked
-        to: superseded
-        required_fields:
-        - close_reason
-        description: Retire speculative epic work while preserving its outcome, history, and evidence.
+        description: Record a blocker.
       request_review:
-        from:
-        - in_progress
+        from: [in_progress]
         to: review
-        description: Open the configured review artifact for this work.
-        validators:
-        - git.worktree_clean
-        actions:
-        - git.push
-        - review.open:
-            provider: forgejo
-            role: worker
-            role_authors:
-              worker: atelier-worker
-              reviewer: atelier-reviewer
-              validator: atelier-validator
-              manager: atelier-manager
-      request_validation:
-        from:
-        - in_progress
-        - review
-        to: validation
-        description: Move reviewed work into validation after review is complete.
-        validators:
-        - review.complete
+        description: Ready for independent review.
+      revise:
+        from: [review]
+        to: in_progress
+        description: Return to active work after review findings.
       close:
-        from:
-        - validation
+        from: [in_progress, review]
         to: done
-        description: Closing requires complete child proof, validation, review merge, and a clean worktree.
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
         validators:
-        - children.proof_complete
         - blockers.none_open
-        - lint.none_blocking
-        - git.worktree_clean
-        actions:
-        - tracker.commit
-        - git.push
-        - review.merge
-        - git.sync
-  validation:
+      supersede:
+        from: [draft, todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that evidence made obsolete.
+  work:
     applies_to:
+    - bug
+    - feature
+    - spike
+    - task
     - validation
     initial_status: todo
     done_statuses:
     - done
+    - superseded
     transitions:
       start:
-        from:
-        - todo
-        - blocked
+        from: [todo, blocked]
         to: in_progress
-        description: Start active work on this item.
+        description: Start work.
         validators:
         - blockers.transitive_none_open
-        actions:
-        - git.prepare_branch
       block:
-        from:
-        - todo
-        - in_progress
-        - review
-        - validation
+        from: [todo, in_progress, review]
         to: blocked
-        description: Mark work blocked while preserving current proof expectations.
+        description: Record a blocker.
       request_review:
-        from:
-        - in_progress
+        from: [in_progress]
         to: review
-        description: Open the configured review artifact for this work.
-        validators:
-        - git.worktree_clean
-        actions:
-        - git.push
-        - review.open:
-            provider: forgejo
-            role: worker
-            role_authors:
-              worker: atelier-worker
-              reviewer: atelier-reviewer
-              validator: atelier-validator
-              manager: atelier-manager
-      request_validation:
-        from:
-        - in_progress
-        - review
-        to: validation
-        description: Move reviewed work into validation after review is complete.
-        validators:
-        - review.complete
-      complete_parented:
-        from:
-        - in_progress
-        to: done
-        description: Complete validation whose parent epic owns the review boundary.
-        validators:
-        - validation.parent_epic
-        - evidence.attached:
-            min_count: 1
-        - blockers.none_open
-        - lint.none_blocking
-        - git.worktree_clean
-        actions:
-        - tracker.commit
-      close:
-        from:
-        - validation
-        to: done
-        description: Closing standalone validation requires attached evidence, complete review, and a clean worktree.
-        validators:
-        - evidence.attached:
-            min_count: 1
-        - blockers.none_open
-        - lint.none_blocking
-        - git.worktree_clean
-        actions:
-        - tracker.commit
-        - git.push
-        - review.merge
-        - git.sync
-  spike:
-    applies_to:
-    - spike
-    initial_status: todo
-    done_statuses:
-    - done
-    transitions:
-      start:
-        from:
-        - todo
-        - blocked
-        to: in_progress
-        description: Start active work on this item.
-        validators:
-        - blockers.transitive_none_open
-        actions:
-        - git.prepare_branch
-      block:
-        from:
-        - todo
-        - in_progress
-        - review
-        to: blocked
-        description: Mark spike work blocked while preserving review expectations.
-      request_review:
-        from:
-        - in_progress
-        to: review
-        description: Open the configured review artifact for this spike.
-        validators:
-        - git.worktree_clean
-        actions:
-        - git.push
-        - review.open:
-            provider: forgejo
-            role: worker
-            role_authors:
-              worker: atelier-worker
-              reviewer: atelier-reviewer
-              validator: atelier-validator
-              manager: atelier-manager
+        description: Ready for independent review.
       revise:
-        from:
-        - review
+        from: [review]
         to: in_progress
-        description: Return a reviewed spike to active work.
+        description: Return to active work after review findings.
       close:
-        from:
-        - review
+        from: [in_progress, review]
         to: done
-        description: Closing requires complete review.
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
         validators:
-        - review.complete
+        - blockers.none_open
+      supersede:
+        from: [todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that is no longer needed.
