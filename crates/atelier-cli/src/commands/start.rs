@@ -12,10 +12,9 @@ use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 use crate::commands::workflow;
-use atelier_app::use_cases as app_use_cases;
+use crate::commands::{bundle, git};
 use atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD;
 use atelier_records::CanonicalIssueRecord;
 
@@ -28,15 +27,16 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     let branch =
         atelier_app::workflow_policy::resolve_work_branch(&policy, index, &issue_id)?.branch;
 
-    let current = current_branch(&repo_root)?;
+    let current = git::current_branch(&repo_root)?;
     let switch_needed = current.as_deref() != Some(branch.as_str());
-    let branch_exists = branch_exists(&repo_root, &branch)?;
+    let existing = git::work_ref(&repo_root, &branch)?;
+    let branch_exists = existing.is_some();
     if switch_needed {
-        let dirty = dirty_entries(&repo_root)?;
+        let dirty = atelier_app::git_freshness::working_paths(&repo_root)?;
         if !dirty.is_empty() {
             bail!(
                 "start_checkout_dirty: cannot switch to branch '{branch}' to start {issue_id}; the checkout has uncommitted changes:\n{}\nCommit or stash them, then rerun `atelier start {issue_id}`.",
-                dirty.join("\n")
+                dirty.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join("\n")
             );
         }
         if !branch_exists && current.is_none() {
@@ -50,7 +50,11 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     // switches to an existing branch, otherwise this checkout's (a new branch
     // starts from the clean current HEAD).
     let snapshot = if switch_needed && branch_exists {
-        Some(BranchSnapshot::export(&repo_root, state_dir, &branch)?)
+        Some(git::Snapshot::at(
+            &repo_root,
+            state_dir,
+            &existing.as_ref().unwrap().1,
+        )?)
     } else {
         None
     };
@@ -146,22 +150,70 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     } else if record_branch {
         writes.push(owner);
     }
+    // Stage the entire issue directory, so owner + child install as one
+    // rollback-protected transaction under the command's exclusive lock.
+    let staged = if writes.is_empty() {
+        None
+    } else {
+        let source = view_root.join(".atelier/issues");
+        let fingerprint = crate::commands::bulk_canonical::canonical_tree_fingerprint(&source)?;
+        let runtime = state_dir.join("runtime");
+        std::fs::create_dir_all(&runtime)?;
+        let stage = tempfile::tempdir_in(&runtime)?;
+        bundle::copy_dir_recursive(&source, &stage.path().join("issues"))?;
+        let store = atelier_records::RecordStore::new(stage.path());
+        for record in &writes {
+            store.write_issue_atomic(record)?;
+        }
+        Some((stage, fingerprint))
+    };
     drop(snapshot);
+    let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;
 
     // Act.
     if switch_needed {
-        let args: &[&str] = if branch_exists {
-            &["switch", &branch]
-        } else {
-            &["switch", "-c", &branch]
+        let args: Vec<&str> = match &existing {
+            Some((reference, _)) if reference.starts_with("refs/remotes/") => {
+                vec!["switch", "-c", &branch, "--track", reference]
+            }
+            Some(_) => vec!["switch", &branch],
+            None => vec!["switch", "-c", &branch],
         };
         println!("git {}", args.join(" "));
-        git_stdout(&repo_root, args)?;
+        checkout(&repo_root, &args)?;
     } else {
         println!("Already on branch {branch}; no git operations.");
     }
-    for record in &writes {
-        app_use_cases::write_canonical_issue(state_dir, record)?;
+    let install = (|| -> Result<()> {
+        let expected = existing
+            .as_ref()
+            .map(|(_, pin)| pin)
+            .unwrap_or(&previous_head);
+        if atelier_app::git_freshness::head_commit(&repo_root)? != *expected
+            || git::current_branch(&repo_root)?.as_deref() != Some(&branch)
+        {
+            bail!("start_branch_drift: branch changed after validation; no records installed");
+        }
+        if let Some((stage, fingerprint)) = &staged {
+            crate::commands::bulk_canonical::ensure_unchanged(
+                &state_dir.join("issues"),
+                fingerprint,
+            )?;
+            bundle::install_directories(stage.path(), state_dir, &["issues"], &mut |_| Ok(()))?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = install {
+        if switch_needed {
+            let restore = match &current {
+                Some(previous) => checkout(&repo_root, &["switch", previous]),
+                None => checkout(&repo_root, &["switch", "--detach", &previous_head]),
+            };
+            restore.context(
+                "start rollback: record install failed; could not restore previous checkout",
+            )?;
+        }
+        return Err(error).context("start record transaction failed; prior records restored. Inspect git status before retrying; a newly created local branch may remain.");
     }
 
     if record_branch {
@@ -188,99 +240,39 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     Ok(())
 }
 
-/// A read-only copy of another branch's tracker records, loaded into an
-/// index so `start` can check the records it is about to change before
-/// switching.
-struct BranchSnapshot {
-    dir: tempfile::TempDir,
-    index: RecordIndex,
+fn checkout(repo: &Path, args: &[&str]) -> Result<String> {
+    // Git hooks may create commits or mutate records, outside start's contract.
+    let args = ["-c", "core.hooksPath=/dev/null"]
+        .into_iter()
+        .chain(args.iter().copied())
+        .collect::<Vec<_>>();
+    git::text(repo, &args)
 }
 
-impl BranchSnapshot {
-    fn export(repo_root: &Path, state_dir: &Path, branch: &str) -> Result<Self> {
-        let state_relative = state_dir.strip_prefix(repo_root).with_context(|| {
-            format!(
-                "tracker state {} is outside repository {}",
-                state_dir.display(),
-                repo_root.display()
-            )
-        })?;
-        let dir = tempfile::tempdir().context("failed to create branch snapshot directory")?;
-        // Fully qualified: Git resolves a bare name to a same-named tag first.
-        let branch_ref = format!("refs/heads/{branch}");
-        let mut archive = Command::new("git")
-            .current_dir(repo_root)
-            .args(["archive", "--format=tar", &branch_ref, "--"])
-            .arg(state_relative)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("failed to run git archive")?;
-        let tar = Command::new("tar")
-            .current_dir(dir.path())
-            .args(["-xf", "-"])
-            .stdin(archive.stdout.take().context("git archive has no stdout")?)
-            .output()
-            .context("failed to run tar")?;
-        let archive = archive.wait_with_output()?;
-        if !archive.status.success() || !tar.status.success() {
-            bail!(
-                "start_branch_snapshot: cannot read tracker records from branch '{branch}': {}{}",
-                String::from_utf8_lossy(&archive.stderr).trim(),
-                String::from_utf8_lossy(&tar.stderr).trim()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn paired_owner_child_install_failure_restores_all_previous_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        let staged = dir.path().join("stage");
+        for root in [&state, &staged] {
+            std::fs::create_dir_all(root.join("issues")).unwrap();
+        }
+        for name in ["owner.md", "child.md"] {
+            std::fs::write(state.join("issues").join(name), "prior record").unwrap();
+            std::fs::write(staged.join("issues").join(name), "new record").unwrap();
+        }
+        let result = bundle::install_directories(&staged, &state, &["issues"], &mut |_| {
+            bail!("installation failure")
+        });
+        assert!(result.is_err());
+        for name in ["owner.md", "child.md"] {
+            assert_eq!(
+                std::fs::read_to_string(state.join("issues").join(name)).unwrap(),
+                "prior record"
             );
         }
-        let index =
-            RecordIndex::load_structural(&dir.path().join(state_relative)).with_context(|| {
-                format!("start_branch_snapshot: tracker records on branch '{branch}' are invalid")
-            })?;
-        Ok(Self { dir, index })
     }
-
-    fn root(&self) -> &Path {
-        self.dir.path()
-    }
-}
-
-fn current_branch(repo_root: &Path) -> Result<Option<String>> {
-    let branch = git_stdout(repo_root, &["branch", "--show-current"])?;
-    Ok(Some(branch).filter(|branch| !branch.is_empty()))
-}
-
-fn branch_exists(repo_root: &Path, branch: &str) -> Result<bool> {
-    Ok(Command::new("git")
-        .current_dir(repo_root)
-        .args([
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            &format!("refs/heads/{branch}"),
-        ])
-        .output()
-        .context("failed to run git rev-parse")?
-        .status
-        .success())
-}
-
-fn dirty_entries(repo_root: &Path) -> Result<Vec<String>> {
-    Ok(git_stdout(repo_root, &["status", "--porcelain"])?
-        .lines()
-        .map(str::to_string)
-        .collect())
-}
-
-fn git_stdout(repo_root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
-        .args(args)
-        .output()
-        .with_context(|| format!("failed to run git {}", args.join(" ")))?;
-    if !output.status.success() {
-        bail!(
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }

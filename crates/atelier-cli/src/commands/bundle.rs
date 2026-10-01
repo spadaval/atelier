@@ -808,7 +808,7 @@ fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
+pub(crate) fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
     fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
     for entry in
         fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
@@ -853,11 +853,24 @@ fn install_bundle_stage_with(
     state_dir: &Path,
     mut before_install: impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    install_directories(
+        stage,
+        state_dir,
+        &["issues", "evidence"],
+        &mut before_install,
+    )
+}
+
+pub(crate) fn install_directories(
+    stage: &Path,
+    state_dir: &Path,
+    names: &[&str],
+    before_install: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     let backup_parent = state_dir.join("runtime");
     fs::create_dir_all(&backup_parent)
         .with_context(|| format!("Failed to create {}", backup_parent.display()))?;
     let backup = create_bundle_backup_dir(&backup_parent)?;
-    let names = ["issues", "evidence"];
     let result = (|| {
         for name in names {
             crate::commands::bulk_canonical::validate_directory_path(&stage.join(name), true)?;

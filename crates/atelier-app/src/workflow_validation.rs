@@ -26,11 +26,20 @@ pub struct ValidatorResult {
 
 /// Runs a transition's read-only validators against one issue.
 pub fn evaluate_policy_transition(request: ValidatorRequest<'_>) -> Result<Vec<ValidatorResult>> {
+    evaluate_with_freshness(request, true)
+}
+pub(crate) fn evaluate_with_freshness(
+    request: ValidatorRequest<'_>,
+    fresh: bool,
+) -> Result<Vec<ValidatorResult>> {
     request.index.require_issue(request.issue_id)?;
     let mut results = Vec::new();
     for definition in request.validators {
+        if !fresh && definition.builtin == "git.worktree_clean" {
+            continue;
+        }
         let started = Instant::now();
-        let (passed, reason, help) = evaluate_builtin(&request, definition)?;
+        let (passed, reason, help) = evaluate_builtin(&request, definition, fresh)?;
         results.push(ValidatorResult {
             validator: definition.builtin.clone(),
             passed,
@@ -45,6 +54,7 @@ pub fn evaluate_policy_transition(request: ValidatorRequest<'_>) -> Result<Vec<V
 fn evaluate_builtin(
     request: &ValidatorRequest<'_>,
     definition: &ValidatorDefinition,
+    fresh: bool,
 ) -> Result<(bool, String, Option<String>)> {
     let ValidatorRequest {
         index,
@@ -66,9 +76,13 @@ fn evaluate_builtin(
             }
         }
         "blockers.transitive_none_open" => transitive_blockers_none_open(index, policy, issue_id),
-        "evidence.attached" => {
-            evidence_attached(index, repo_root, issue_id, definition.params.as_ref())
-        }
+        "evidence.attached" => evidence_attached(
+            index,
+            repo_root,
+            issue_id,
+            definition.params.as_ref(),
+            fresh,
+        ),
         "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
         "shell.check" => {
@@ -103,6 +117,7 @@ fn evidence_attached(
     repo_root: &Path,
     issue_id: &str,
     params: Option<&ValidatorParams>,
+    fresh: bool,
 ) -> Result<(bool, String, Option<String>)> {
     let (min_count, kind) = match params {
         Some(ValidatorParams::EvidenceAttached { min_count, kind }) => {
@@ -110,8 +125,8 @@ fn evidence_attached(
         }
         _ => (1, None),
     };
-    let gate = crate::evidence_freshness::issue_evidence_gate_status(
-        index, repo_root, issue_id, min_count, kind,
+    let gate = crate::evidence_freshness::issue_evidence_gate_status_with_freshness(
+        index, repo_root, issue_id, min_count, kind, fresh,
     )?;
     Ok((gate.passed, gate.reason, (!gate.passed).then(|| "Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`".to_string())))
 }
