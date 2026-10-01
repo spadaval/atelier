@@ -403,3 +403,140 @@ fn objective_readiness_requires_agent_factory_acceptance_content() {
         assert!(ok, "{error}");
     }
 }
+
+fn freshness_git(dir: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn staged_code_restored_in_worktree_rejects_capture_and_stales_proof() {
+    for name in ["src.rs", "source with\na newline.rs"] {
+        let (dir, id) = proof_fixture(true);
+        let path = dir.path().join(name);
+        std::fs::write(&path, "before\n").unwrap();
+        commit_all(dir.path(), "tracked capture input");
+        manual(dir.path(), &id, "pass", "Proof before staged edit");
+        commit_all(dir.path(), "proof before staged edit");
+        std::fs::write(&path, "staged change\n").unwrap();
+        freshness_git(dir.path(), &["add", "--", name]);
+        std::fs::write(&path, "before\n").unwrap();
+        let before = count_markdown_records(dir.path(), "evidence");
+        let (ok, _, error) = run_atelier_raw(
+            dir.path(),
+            &[
+                "evidence", "record", "--kind", "test", "--", "sh", "-c", "exit 0",
+            ],
+        );
+        assert!(
+            !ok && error.contains("requires committed code"),
+            "{name:?}: {error}"
+        );
+        assert_eq!(count_markdown_records(dir.path(), "evidence"), before);
+        assert!(
+            !close(dir.path(), &id).0,
+            "staged {name:?} must stale old proof"
+        );
+    }
+}
+
+#[test]
+fn record_only_merge_from_before_pin_preserves_proof_in_either_parent_order() {
+    for pin_in_first_parent in [true, false] {
+        let (dir, id) = proof_fixture(true);
+        let main = git_current_branch(dir.path());
+        freshness_git(dir.path(), &["branch", "old-records"]);
+        std::fs::write(dir.path().join("src.rs"), "tested code\n").unwrap();
+        commit_all(dir.path(), "code tested at pin");
+        manual(dir.path(), &id, "pass", "Proof of newer code");
+        commit_all(dir.path(), "passing proof");
+        freshness_git(dir.path(), &["checkout", "old-records"]);
+        let (ok, _, error) =
+            run_atelier_raw(dir.path(), &["issue", "note", &id, "Side branch handoff"]);
+        assert!(ok, "{error}");
+        commit_all(dir.path(), "record-only side commit");
+        if pin_in_first_parent {
+            freshness_git(dir.path(), &["checkout", main.trim()]);
+            freshness_git(
+                dir.path(),
+                &["merge", "--no-ff", "old-records", "-m", "record-only merge"],
+            );
+        } else {
+            freshness_git(
+                dir.path(),
+                &[
+                    "merge",
+                    "--no-ff",
+                    main.trim(),
+                    "-m",
+                    "pin in second parent",
+                ],
+            );
+        }
+        let (ok, _, error) = close(dir.path(), &id);
+        assert!(
+            ok,
+            "record-only merge (pin first={pin_in_first_parent}) must preserve proof: {error}"
+        );
+    }
+}
+
+#[test]
+fn side_branch_edits_reverts_and_merge_result_code_changes_stale_proof() {
+    for history in [
+        "code revert",
+        "policy revert",
+        "acceptance revert",
+        "merge result",
+    ] {
+        let (dir, id) = proof_fixture(true);
+        let main = git_current_branch(dir.path());
+        freshness_git(dir.path(), &["branch", "side"]);
+        manual(dir.path(), &id, "pass", "Proof before merge");
+        commit_all(dir.path(), "passing proof");
+        freshness_git(dir.path(), &["checkout", "side"]);
+        if history != "merge result" {
+            let path = match history {
+                "policy revert" => dir.path().join(".atelier/workflow.yaml"),
+                "acceptance revert" => canonical_issue_path(dir.path(), &id),
+                _ => dir.path().join("src.rs"),
+            };
+            let original = std::fs::read_to_string(&path).unwrap();
+            let edited = if history == "acceptance revert" {
+                original.replace(
+                    "The focused test proves the expected behavior.",
+                    "Changed side acceptance.",
+                )
+            } else {
+                format!("{original}\n# changed on side\n")
+            };
+            for body in [&edited, &original] {
+                std::fs::write(&path, body).unwrap();
+                commit_all(dir.path(), "side relevant edit or revert");
+            }
+        } else {
+            let (ok, _, error) = run_atelier_raw(
+                dir.path(),
+                &["issue", "note", &id, "Record-only side history"],
+            );
+            assert!(ok, "{error}");
+            commit_all(dir.path(), "side bookkeeping");
+        }
+        freshness_git(dir.path(), &["checkout", main.trim()]);
+        freshness_git(dir.path(), &["merge", "--no-ff", "--no-commit", "side"]);
+        if history == "merge result" {
+            std::fs::write(dir.path().join("src.rs"), "new code in merge result\n").unwrap();
+        }
+        freshness_git(dir.path(), &["add", "-A"]);
+        freshness_git(dir.path(), &["commit", "-m", "merge side branch"]);
+        assert!(!close(dir.path(), &id).0, "{history} must invalidate proof");
+    }
+}

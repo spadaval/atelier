@@ -145,6 +145,15 @@ await review on the mission branch.
    failures include `atelier check` recovery guidance. Public bundle examples
    preview/apply/check successfully; the negative example rejects its intended
    unsupported resource. Full logs are in `/tmp/step6-*.log` for review.
+   Independent review reported R1/R2; the orchestrator accepted both for repair.
+   Fixes now detect staged edits
+   even when the worktree matches HEAD, and preserve fresh proof through
+   record-only merges from before its pin. Introduced side-branch edits/reverts
+   and merge-result code changes still invalidate proof. Regression proof is in
+   `/tmp/step6-reviewfix-*.log`: all 484 tests, formatting, whitespace and the
+   dead/unused-code scan pass. The fixes await independent re-review.
+   R3 (exclusive prune apply) and R4 (atomic prune) remain outstanding and are
+   assigned to the gates slice. Step 6 source remains review-pending.
 7. In-repo review records, gates as graph nodes, `atelier merge` (S1, S2).
 8. Policy from the base branch; shell checks.
 9. `prime`, `land`, `setup` (S6); cross-branch status.

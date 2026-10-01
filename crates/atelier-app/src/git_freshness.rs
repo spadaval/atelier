@@ -1,6 +1,7 @@
 //! Git history primitives shared by evidence and review freshness checks.
 use anyhow::{bail, Context, Result};
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -46,7 +47,9 @@ pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathB
         &["diff", "--name-only", "-z", before, after, "--"],
     )?)
 }
-/// Enumerates every edge after an ancestor pin, so edit/revert history is visible.
+/// Inspects all introduced commits, including side-branch edit/revert history.
+/// Merge results are compared to a parent containing the tested pin when possible:
+/// older parents must not reintroduce changes already present at the pin.
 pub fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
     if !matches!(pin.len(), 40 | 64) || !pin.bytes().all(|b| b.is_ascii_hexdigit()) {
         bail!("pin must be a full Git commit ID");
@@ -55,11 +58,20 @@ pub fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
     git_output(repo, &["merge-base", "--is-ancestor", pin, "HEAD"])?;
     let range = format!("{pin}..HEAD");
     let commits = String::from_utf8(git_output(repo, &["rev-list", "--parents", &range])?)?;
+    let descendants =
+        String::from_utf8(git_output(repo, &["rev-list", "--ancestry-path", &range])?)?;
+    let mut tested_context: HashSet<&str> = descendants.lines().collect();
+    tested_context.insert(pin);
     let mut edges = Vec::new();
     for line in commits.lines() {
         let mut parts = line.split_whitespace();
         let commit = parts.next().expect("rev-list commit");
-        for parent in parts {
+        let parents: Vec<_> = parts.collect();
+        if let Some(parent) = parents
+            .iter()
+            .find(|parent| tested_context.contains(**parent))
+            .or_else(|| parents.first())
+        {
             edges.push(CommitEdge {
                 parent: parent.to_string(),
                 commit: commit.to_string(),
@@ -72,8 +84,12 @@ pub fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
 pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     let mut changed = paths(git_output(
         repo,
-        &["diff", "--name-only", "-z", "HEAD", "--"],
+        &["diff", "--cached", "--name-only", "-z", "HEAD", "--"],
     )?)?;
+    changed.extend(paths(git_output(
+        repo,
+        &["diff", "--name-only", "-z", "--"],
+    )?)?);
     changed.extend(paths(git_output(
         repo,
         &["ls-files", "--others", "--exclude-standard", "-z"],
