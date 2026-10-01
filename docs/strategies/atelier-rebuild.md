@@ -175,7 +175,8 @@ checks pass. The 1,000-issue/200-evidence release benchmark passes 10 runs:
 medians 31.1–43.0 ms and maximum 54.1 ms. Non-test physical Rust is 18,753 lines,
 down exactly 1,500 from the step-6 candidate at `8a4b850d` (20,253); this count
 retains blanks/comments, includes build scripts, and excludes integration-test
-files, the cfg-gated test helper, and complete `cfg(test)` item spans.
+files, the cfg-gated test helper, and complete `cfg(test)` item spans. Reproduce
+a committed tree with `scripts/count_non_test_rust.py <commit>`.
 
 Deferred review findings to resolve in later steps:
 

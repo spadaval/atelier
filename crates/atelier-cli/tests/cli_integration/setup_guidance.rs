@@ -1064,7 +1064,7 @@ fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
     let (success, dashboards, stderr) = run_atelier(dir.path(), &["work"]);
     assert!(success, "bare work guidance failed: {stderr}");
     assert!(
-        dashboards.contains("missions Cross-mission Mission Overview with collapsed epics")
+        dashboards.contains("missions Flat mission summaries with complete scope counts")
             && dashboards.contains("Compare missions: atelier work missions")
             && dashboards.contains("mission  Live mission orchestration dashboard"),
         "{dashboards}"

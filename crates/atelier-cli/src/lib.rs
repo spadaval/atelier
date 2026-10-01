@@ -4,5 +4,4 @@
 
 pub mod commands;
 pub(crate) mod human_output;
-pub mod identity;
 pub mod utils;

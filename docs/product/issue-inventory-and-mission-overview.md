@@ -5,8 +5,11 @@ issues, with filters for exact status, category, type, label, and priority.
 The default limit is 50; output reports omitted matches. Inventory uses neutral
 ID ordering and does not pretend every row is actionable work.
 
-`atelier work missions` summarizes current missions; `--all` includes terminal
-missions. `atelier work mission <id>` shows one mission's outcome, scope,
+`atelier work missions` lists flat mission summaries with complete scope counts,
+open blockers, and a command to inspect each mission; `--all` includes terminal
+missions. Human output shows at most 20 missions and reports omissions. Quiet
+output includes every matching mission ID in the same status, priority, and ID
+order. `atelier work mission <id>` shows one mission's outcome, scope,
 blockers, and operational work. `atelier work epic <id>` focuses on an epic and
 its direct children. `issue show` remains the detailed record view.
 
@@ -14,7 +17,7 @@ Objective counts use the complete scope. Display limits trim visible rows,
 without changing counts or the underlying scope facts.
 
 Mission membership follows `advances`, not parent hierarchy. A linked epic
-includes its direct children in mission execution context. Work outside mission
+includes its descendants in mission execution context. Work outside mission
 scope remains visible through repository-wide work and inventory commands.
 
 `work ready`, `blocked`, `active`, and `all` answer operational questions.

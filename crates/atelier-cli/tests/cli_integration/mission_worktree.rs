@@ -331,7 +331,7 @@ fn test_issue_ready_work_and_direct_start_require_transitive_dependency_closure(
 }
 
 #[test]
-fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_output() {
+fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let long_title = "X".repeat(100);
@@ -425,33 +425,19 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
         "{overview}"
     );
     assert!(
-        overview.contains("Progress: 0 active · 2 todo · 0 done · 1 blocked"),
+        overview.contains("Scope: 3 issues: 0 active, 2 ready, 1 blocked, 0 done, 0 backlog"),
+        "{overview}"
+    );
+    assert!(overview.contains("Open blockers: 1"), "{overview}");
+    assert!(
+        overview.contains(&format!("Drill down: atelier work mission {mission_id}")),
         "{overview}"
     );
     assert!(
-        overview.contains(&format!("  {epic_id}  epic  todo  medium  Overview epic")),
+        overview.contains("Unassigned: 2 nonterminal issues"),
         "{overview}"
     );
-    assert!(
-        overview.contains("Children: 1 issue · 0 active · 1 todo · 0 done · 0 blocked"),
-        "{overview}"
-    );
-    assert!(overview.contains("Blockers: 1 open blocker"), "{overview}");
-    assert!(
-        overview.contains("Direct work: 1 root · 0 active · 1 todo · 0 done · 0 blocked"),
-        "{overview}"
-    );
-    assert!(
-        overview.contains(&format!("Drill down: atelier work epic {epic_id}"))
-            && overview.contains(&format!("Drill down: atelier work mission {mission_id}")),
-        "{overview}"
-    );
-    assert!(
-        overview.contains("Outside visible missions")
-            && overview.contains("Unassigned: 2 nonterminal issues")
-            && overview.contains("Linked only to done missions: 0 nonterminal issues"),
-        "{overview}"
-    );
+    assert!(!overview.contains(&epic_id), "{overview}");
     assert!(!overview.contains("Collapsed epic child"), "{overview}");
     assert!(!overview.contains('\u{1b}'), "{overview:?}");
 
@@ -479,20 +465,16 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
     );
     assert!(
         narrow.contains(&format!(
-            "  {epic_id}  epic\n    State: todo\n    Priority: medium\n    Title: Overview epic"
-        )),
-        "{narrow}"
-    );
-    assert!(
-        narrow.contains(&format!(
-            "    Drill down:\n      atelier work epic {epic_id}"
-        )) && narrow.contains(&format!(
             "  Drill down:\n    atelier work mission {mission_id}"
         )),
         "{narrow}"
     );
     assert!(narrow.contains("  Status: draft"), "{narrow}");
-    assert!(narrow.contains("Outside visible missions"), "{narrow}");
+    assert!(
+        narrow.contains("Unassigned: 2 nonterminal issues"),
+        "{narrow}"
+    );
+    assert!(!narrow.contains(&epic_id), "{narrow}");
     assert!(!narrow.contains("Collapsed epic child"), "{narrow}");
     assert!(!narrow.contains('\u{1b}'), "{narrow:?}");
     let rendered_long_title = narrow
@@ -509,6 +491,30 @@ fn test_work_missions_renders_collapsed_scope_exceptional_work_and_plain_quiet_o
         vec![mission_id.as_str(), long_title_mission_id.as_str()]
     );
     assert!(!quiet.contains('\u{1b}'), "{quiet:?}");
+}
+
+#[test]
+fn test_quiet_work_missions_is_complete_beyond_the_human_display_limit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mut expected = Vec::new();
+    for number in 0..23 {
+        let title = format!("Complete mission {number:02}");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", &title, "--issue-type", "mission"],
+        );
+        assert!(success, "mission fixture create failed: {stderr}");
+        expected.push(issue_id_by_title(dir.path(), &title));
+    }
+    expected.sort();
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "missions"]);
+    assert!(success, "quiet mission listing failed: {stderr}");
+    assert_eq!(quiet.lines().collect::<Vec<_>>(), expected);
+    let (success, human, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "human mission listing failed: {stderr}");
+    assert!(human.contains("3 more missions omitted"), "{human}");
+    assert!(!human.contains(expected.last().unwrap()), "{human}");
 }
 
 #[test]
@@ -577,7 +583,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
         "{all}"
     );
     assert!(all.contains("Status: done"), "{all}");
-    assert!(all.contains("Direct work: 1 root"), "{all}");
+    assert!(all.contains("Scope: 1 issues: 0 active, 1 ready"), "{all}");
     assert!(!all.contains("Work linked only to done mission"), "{all}");
     assert!(!all.contains("Outside visible missions"), "{all}");
 
