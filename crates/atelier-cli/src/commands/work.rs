@@ -7,8 +7,8 @@ use atelier_app::work_classification::{WorkBuckets, WorkClassification, WorkRow}
 use atelier_core::Issue;
 
 use crate::human_output::{
-    plural_suffix, render_labeled_lines, DisplayRole, FooterAction, FooterPanel, IssueHeadingRow,
-    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext, TextStyle,
+    render_labeled_lines, DisplayRole, FooterAction, FooterPanel, IssueHeadingRow, IssueListPanel,
+    IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
