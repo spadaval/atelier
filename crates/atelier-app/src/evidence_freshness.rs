@@ -3,7 +3,7 @@ use crate::{git_freshness as git, record_index::RecordIndex};
 use anyhow::Result;
 use atelier_core::{EvidenceRecord, EvidenceResult};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 #[derive(Debug)]
 pub struct EvidenceGateStatus {
@@ -27,15 +27,82 @@ pub(crate) fn at_commit(repo: &Path, commit: &str, issue_id: &str) -> Result<Can
         &relative,
     )
 }
+/// A single immutable read phase. Create a new context after any mutation or
+/// external command; mutable filesystem checks must never cross those fences.
+pub struct EvidenceReadContext<'a> {
+    repo: &'a Path,
+    head: Option<String>,
+    clean: Option<bool>,
+    ranges: HashMap<String, Vec<git::CommitEdge>>,
+}
+impl<'a> EvidenceReadContext<'a> {
+    pub fn new(repo: &'a Path) -> Self {
+        Self {
+            repo,
+            head: None,
+            clean: None,
+            ranges: HashMap::new(),
+        }
+    }
+    /// Reuse HEAD and dirty paths just inspected in this same read phase.
+    pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[std::path::PathBuf]) -> Self {
+        Self {
+            repo,
+            head: Some(head),
+            clean: Some(!dirty.iter().any(|path| !git::is_record_path(path))),
+            ranges: HashMap::new(),
+        }
+    }
+    pub fn evidence_is_fresh(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+    ) -> Result<bool> {
+        let pin = &record.data.commit;
+        if !self.ranges.contains_key(pin) {
+            if self.head.is_none() {
+                self.head = Some(git::head_commit(self.repo)?);
+            }
+            self.ranges.insert(
+                pin.clone(),
+                git::commit_edges_to(
+                    self.repo,
+                    pin,
+                    self.head.as_deref().expect("read HEAD pinned"),
+                )?,
+            );
+        }
+        if !evidence_matches_edges(self.repo, issue, record, &self.ranges[pin])? {
+            return Ok(false);
+        }
+        let clean = match self.clean {
+            Some(clean) => clean,
+            None => {
+                let clean = git::working_code_paths(self.repo)?.is_empty();
+                self.clean = Some(clean);
+                clean
+            }
+        };
+        Ok(clean)
+    }
+    pub fn issue_gate(
+        &mut self,
+        index: &RecordIndex,
+        issue_id: &str,
+        min_count: usize,
+        kind: Option<&str>,
+    ) -> Result<EvidenceGateStatus> {
+        evaluate_issue_gate(index, issue_id, min_count, kind, true, |issue, record| {
+            self.evidence_is_fresh(issue, record)
+        })
+    }
+}
 pub fn evidence_is_fresh(
     repo: &Path,
     issue: &CanonicalIssueRecord,
     record: &EvidenceRecord,
 ) -> Result<bool> {
-    Ok(evidence_valid_through(repo, issue, record, "HEAD")?
-        && !git::working_paths(repo)?
-            .iter()
-            .any(|path| !git::is_record_path(path)))
+    EvidenceReadContext::new(repo).evidence_is_fresh(issue, record)
 }
 fn evidence_valid_through(
     repo: &Path,
@@ -43,12 +110,25 @@ fn evidence_valid_through(
     record: &EvidenceRecord,
     end: &str,
 ) -> Result<bool> {
+    evidence_matches_edges(
+        repo,
+        issue,
+        record,
+        &git::commit_edges_to(repo, &record.data.commit, end)?,
+    )
+}
+fn evidence_matches_edges(
+    repo: &Path,
+    issue: &CanonicalIssueRecord,
+    record: &EvidenceRecord,
+    edges: &[git::CommitEdge],
+) -> Result<bool> {
     let original = at_commit(repo, &record.data.commit, &issue.issue.id)?;
     if !acceptance_matches(&original, issue) {
         return Ok(false);
     }
     let target = Path::new(".atelier").join(issue_record_path(&issue.issue.id));
-    for edge in git::commit_edges_to(repo, &record.data.commit, end)? {
+    for edge in edges {
         if edge.paths.iter().any(|path| !git::is_record_path(path)) {
             return Ok(false);
         }
@@ -81,6 +161,18 @@ pub(crate) fn issue_evidence_gate_status_with_freshness(
     kind: Option<&str>,
     fresh: bool,
 ) -> Result<EvidenceGateStatus> {
+    evaluate_issue_gate(index, issue_id, min_count, kind, fresh, |issue, record| {
+        proof_matches(repo, issue, record, fresh)
+    })
+}
+fn evaluate_issue_gate(
+    index: &RecordIndex,
+    issue_id: &str,
+    min_count: usize,
+    kind: Option<&str>,
+    fresh: bool,
+    mut proof_matches: impl FnMut(&CanonicalIssueRecord, &EvidenceRecord) -> Result<bool>,
+) -> Result<EvidenceGateStatus> {
     let issue = index
         .issue_record(issue_id)
         .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
@@ -112,7 +204,7 @@ pub(crate) fn issue_evidence_gate_status_with_freshness(
     for record in &records {
         if record.data.result == EvidenceResult::Pass
             && last_failure.is_none_or(|failed_at| record.data.captured_at > failed_at)
-            && proof_matches(repo, issue, record, fresh).unwrap_or(false)
+            && proof_matches(issue, record).unwrap_or(false)
         {
             passing += 1;
         }
@@ -216,4 +308,139 @@ pub(crate) fn claim_endpoint(repo: &Path, issue_id: &str, pin: &str) -> Result<S
         claim
     };
     Ok(end.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_records::{evidence_record, issue_record};
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn shared_read_proof_matches_fresh_checks_and_new_context_observes_mutation() {
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+        ] {
+            git::git_output(repo.path(), &args).unwrap();
+        }
+        fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+        let issues = [
+            issue_record("atelier-a001", "task", "todo"),
+            issue_record("atelier-a002", "task", "todo"),
+        ];
+        for issue in &issues {
+            fs::write(
+                repo.path()
+                    .join(".atelier")
+                    .join(issue_record_path(&issue.issue.id)),
+                atelier_records::render_issue_record(issue).unwrap(),
+            )
+            .unwrap();
+        }
+        fs::write(repo.path().join("code.rs"), "original code").unwrap();
+        git::git_output(repo.path(), &["add", "."]).unwrap();
+        git::git_output(repo.path(), &["commit", "-qm", "proof pin"]).unwrap();
+        let pin = git::head_commit(repo.path()).unwrap();
+        let mut evidence = evidence_record("atelier-v001", "atelier-a001", "validates");
+        evidence.data.commit = pin;
+        let mut reads = EvidenceReadContext::new(repo.path());
+        for issue in &issues {
+            assert!(reads.evidence_is_fresh(issue, &evidence).unwrap());
+            assert!(evidence_is_fresh(repo.path(), issue, &evidence).unwrap());
+        }
+        assert_eq!(reads.ranges.len(), 1);
+        let index =
+            RecordIndex::from_records(issues.to_vec(), vec![evidence.clone()], Vec::new()).unwrap();
+        for (min_count, kind) in [(1, None), (2, None), (1, Some("other"))] {
+            let shared = reads
+                .issue_gate(&index, "atelier-a001", min_count, kind)
+                .unwrap();
+            let separate =
+                issue_evidence_gate_status(&index, repo.path(), "atelier-a001", min_count, kind)
+                    .unwrap();
+            assert_eq!(
+                (shared.passed, shared.reason),
+                (separate.passed, separate.reason)
+            );
+        }
+        let mut failure = evidence.clone();
+        failure.header.id = "atelier-v002".into();
+        failure.header.status = "fail".into();
+        failure.data.result = EvidenceResult::Fail;
+        failure.data.captured_at += chrono::Duration::seconds(1);
+        let failed =
+            RecordIndex::from_records(issues.to_vec(), vec![evidence.clone(), failure], Vec::new())
+                .unwrap();
+        assert!(
+            !reads
+                .issue_gate(&failed, "atelier-a001", 1, None)
+                .unwrap()
+                .passed
+        );
+        fs::write(repo.path().join("code.rs"), "changed code").unwrap();
+        assert!(!evidence_is_fresh(repo.path(), &issues[0], &evidence).unwrap());
+        let dirty = git::working_paths(repo.path()).unwrap();
+        let mut snapshot_read = EvidenceReadContext::from_snapshot(
+            repo.path(),
+            git::head_commit(repo.path()).unwrap(),
+            &dirty,
+        );
+        assert!(!snapshot_read
+            .evidence_is_fresh(&issues[0], &evidence)
+            .unwrap());
+        let mut next_read = EvidenceReadContext::new(repo.path());
+        assert!(!next_read.evidence_is_fresh(&issues[0], &evidence).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn code_clean_filter_keeps_hidden_modes_and_policy_but_skips_record_modes() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+            vec!["config", "core.filemode", "false"],
+        ] {
+            git::git_output(repo.path(), &args).unwrap();
+        }
+        fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+        for path in [
+            "code.rs",
+            ".atelier/workflow.yaml",
+            ".atelier/issues/atelier-a001.md",
+        ] {
+            fs::write(repo.path().join(path), "original bytes").unwrap();
+        }
+        git::git_output(repo.path(), &["add", "."]).unwrap();
+        git::git_output(repo.path(), &["commit", "-qm", "initial modes"]).unwrap();
+        let record = repo.path().join(".atelier/issues/atelier-a001.md");
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(git::working_code_paths(repo.path()).unwrap().is_empty());
+        assert!(git::working_paths(repo.path())
+            .unwrap()
+            .contains(&PathBuf::from(".atelier/issues/atelier-a001.md")));
+        let code = repo.path().join("code.rs");
+        fs::set_permissions(&code, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(git::working_code_paths(repo.path())
+            .unwrap()
+            .contains(&PathBuf::from("code.rs")));
+        git::git_output(
+            repo.path(),
+            &[
+                "update-index",
+                "--assume-unchanged",
+                ".atelier/workflow.yaml",
+            ],
+        )
+        .unwrap();
+        fs::write(repo.path().join(".atelier/workflow.yaml"), "changed policy").unwrap();
+        assert!(git::working_code_paths(repo.path())
+            .unwrap()
+            .contains(&PathBuf::from(".atelier/workflow.yaml")));
+    }
 }
