@@ -1312,3 +1312,64 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
         assert!(!pass && output.contains("findings.disposed"), "{output}");
     }
 }
+
+#[test]
+fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
+    for mutation in ["rewrite", "delete", "edit_revert"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let id = ok(
+            f.path(),
+            &["-q", "issue", "create", "Immutable review history"],
+        );
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Reviewed finding",
+            ],
+        );
+        let disposition = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "disposition",
+                &finding,
+                "--identity",
+                "Reviewer",
+                "--decision",
+                "no_action",
+                "Independent accepted disposition",
+            ],
+        );
+        f.terminal(&id);
+        ok(f.path(), &["land"]);
+        let path = f.path().join(format!(".atelier/reviews/{disposition}.md"));
+        let original = fs::read_to_string(&path).unwrap();
+        if mutation == "delete" {
+            fs::remove_file(&path).unwrap();
+        } else {
+            fs::write(&path, original.replace("Reviewer", "Author")).unwrap();
+        }
+        commit(f.path(), "invalid historical event mutation");
+        if mutation == "edit_revert" {
+            fs::write(&path, &original).unwrap();
+            commit(
+                f.path(),
+                "restore original bytes without erasing invalid history",
+            );
+        }
+        fs::write(f.path().join("later-code"), "unrelated later work\n").unwrap();
+        commit(f.path(), "aging cannot legitimate rewritten event");
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(!pass && output.contains("review_append_only"), "{output}");
+    }
+}

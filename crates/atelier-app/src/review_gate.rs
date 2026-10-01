@@ -155,6 +155,49 @@ pub fn append_only(repo: &Path, base_commit: &str) -> Result<()> {
     Ok(())
 }
 
+/// Historical acceptance is valid only while review events remain append-only.
+pub fn append_only_history(repo: &Path) -> Result<()> {
+    let history = String::from_utf8(git::git_output(
+        repo,
+        &[
+            "log",
+            "--reverse",
+            "--diff-filter=A",
+            "--format=%H",
+            "--",
+            ".atelier/reviews/",
+        ],
+    )?)?;
+    let Some(first) = history.lines().next() else {
+        return Ok(());
+    };
+    let parent = git::git_output(
+        repo,
+        &["rev-parse", "--verify", &format!("{first}^{{commit}}^1")],
+    );
+    let pin = match parent {
+        Ok(bytes) => String::from_utf8(bytes)?.trim().to_owned(),
+        Err(_) => {
+            let modes = String::from_utf8(git::git_output(
+                repo,
+                &[
+                    "ls-tree",
+                    "-r",
+                    "--format=%(objectmode)",
+                    first,
+                    "--",
+                    ".atelier/reviews/",
+                ],
+            )?)?;
+            if modes.lines().any(|mode| mode != "100644") {
+                bail!("review_append_only: initial review events must be regular non-executable files");
+            }
+            first.to_owned()
+        }
+    };
+    append_only(repo, &pin)
+}
+
 pub fn author_identities(
     repo: &Path,
     base_commit: &str,
@@ -663,6 +706,13 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
         .lines()
         .next()
         .context("review event history missing")?;
+    let path = Path::new(&event_path);
+    if entry(repo, event, path)? != entry(repo, "HEAD", path)? {
+        bail!(
+            "review_append_only: {} differs from its original event",
+            record.header.id
+        );
+    }
     let paths = ids
         .iter()
         .map(|id| format!(".atelier/issues/{id}.md"))
