@@ -14,10 +14,7 @@
 - Atelier: the product and live repository tracker: a local-first, agent-native work tracker for
   complex software missions.
 - Beads: the predecessor tracker replaced by Atelier. Beads data was imported
-  and the repository archive was purged; external Beads data is migration input,
-  not ongoing Atelier state.
-- Beads migration input: repo-local `.beads/issues.manual.jsonl` data that
-  `atelier init --import-beads` may import when explicitly requested.
+  once and the repository archive was purged; Atelier no longer imports it.
 - Record files: deterministic tracked Markdown files under `.atelier/`; they
   are the durable project state and can rebuild the local SQLite domain cache.
 - RecordStore: the target component that owns record-file reads, writes,

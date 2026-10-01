@@ -194,9 +194,11 @@ impl BranchSnapshot {
             )
         })?;
         let dir = tempfile::tempdir().context("failed to create branch snapshot directory")?;
+        // Fully qualified: Git resolves a bare name to a same-named tag first.
+        let branch_ref = format!("refs/heads/{branch}");
         let mut archive = Command::new("git")
             .current_dir(repo_root)
-            .args(["archive", "--format=tar", branch, "--"])
+            .args(["archive", "--format=tar", &branch_ref, "--"])
             .arg(state_relative)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

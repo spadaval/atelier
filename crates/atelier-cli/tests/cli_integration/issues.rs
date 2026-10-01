@@ -2025,10 +2025,21 @@ fn test_issue_mutations_leave_stale_cache_for_one_lazy_repair() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
+    assert!(
+        stderr.contains("Local cache was stale"),
+        "first query after mutations should repair the stale cache: {stderr}"
+    );
     assert!(stdout.contains("Mutation source updated"));
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("keep-me"));
     assert!(stdout.contains(&target_id));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
+    assert!(success, "second show failed: {stderr}");
+    assert!(
+        !stderr.contains("Local cache was stale"),
+        "cache should be fresh after one lazy repair: {stderr}"
+    );
 
     let source_text = read_canonical_record(dir.path(), "issues", &source_id);
     assert!(!source_text.contains("- \"remove-me\""));

@@ -3250,6 +3250,31 @@ fn test_start_refuses_existing_owner_branch_without_the_issue_record() {
     assert!(git_status_short(dir.path()).is_empty());
 }
 
+#[test]
+fn test_start_reads_the_owner_branch_not_a_same_named_tag() {
+    let dir = start_fixture();
+    let epic_id = create_issue(dir.path(), &["Tagged owner", "--issue-type", "epic"]);
+    commit_all(dir.path(), "epic fixture");
+    git_ok(dir.path(), &["switch", "-c", "develop"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
+    assert!(success, "epic start failed: {stderr}");
+    commit_all(dir.path(), "epic started");
+    git_ok(dir.path(), &["switch", "main"]);
+    let child_id = create_issue(dir.path(), &["Tag-only child", "--parent", &epic_id]);
+    commit_all(dir.path(), "child created on main only");
+    git_ok(dir.path(), &["tag", &format!("epic/{epic_id}"), "main"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+
+    assert!(
+        !success,
+        "start must read the owner branch, not a same-named tag:\n{stdout}"
+    );
+    assert!(stderr.contains("start_branch_missing_record"), "{stderr}");
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert!(git_status_short(dir.path()).is_empty());
+}
+
 fn git_ok(dir: &std::path::Path, args: &[&str]) {
     let output = Command::new("git")
         .current_dir(dir)

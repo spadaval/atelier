@@ -18,8 +18,6 @@ pub struct MissionReadinessDiagnosis {
     pub next_command: String,
 }
 
-impl MissionReadinessDiagnosis {}
-
 pub fn dependency_diagnosis(
     db: &Database,
     policy: &WorkflowPolicy,
