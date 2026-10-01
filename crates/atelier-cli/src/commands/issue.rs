@@ -7,7 +7,6 @@ use crate::commands::issue_workflow::{
     format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
     load_issue_workflow_policy,
 };
-use crate::commands::work_order::WorkOrderRow;
 use crate::human_output::{
     render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction, FooterPanel,
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext, TextPanel,
@@ -397,17 +396,7 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             Ok((subissue, classified))
         })
         .collect::<Result<Vec<_>>>()?;
-    let order_rows = classified_subissues
-        .iter()
-        .map(|(issue, classified)| WorkOrderRow {
-            id: issue.id.clone(),
-            classification: classified.classification,
-            priority: issue.priority.clone(),
-            updated_at: issue.updated_at,
-            open_blockers: classified.open_blockers.clone(),
-        })
-        .collect::<Vec<_>>();
-    let order = crate::commands::work_order::ordered_work_indices(&order_rows);
+    let order = crate::commands::work_order::ordered_work_indices(&classified_subissues);
     let summary = subissue_summary(
         classified_subissues.len(),
         classified_subissues.iter().map(|(subissue, classified)| {
@@ -983,9 +972,10 @@ mod tests {
                 closed_at: None,
             },
             labels: Vec::new(),
-            sections: atelier_records::parse_issue_sections(
+            sections: atelier_records::parse_issue_sections_for_type(
                 "## Goal\n\nFixture.\n\n## Done when\n\nFixture.",
                 Path::new("<fixture>"),
+                "task",
             )
             .unwrap(),
             relationships: Relationships::default(),
@@ -1014,9 +1004,10 @@ mod tests {
                     closed_at: None,
                 },
                 labels: Vec::new(),
-                sections: atelier_records::parse_issue_sections(
+                sections: atelier_records::parse_issue_sections_for_type(
                     "## Goal\n\nNotes race.\n\n## Done when\n\nNo note is lost.",
                     Path::new("<fixture>"),
+                    "task",
                 )
                 .unwrap(),
                 relationships: Relationships::default(),

@@ -171,9 +171,6 @@ impl Issue {
             .map(|strategy| IssueStrategy::new(&strategy.path))
             .transpose()
     }
-    pub fn set_strategy(&mut self, strategy: IssueStrategy) {
-        self.strategy = Some(strategy);
-    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]

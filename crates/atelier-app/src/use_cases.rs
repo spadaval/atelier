@@ -1,11 +1,9 @@
 //! App-layer use-case entrypoints for command families that still render in CLI.
 
 use anyhow::{anyhow, bail, Result};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::record_index::RecordIndex;
-use atelier_core::{EvidenceRecord, EvidenceRecordData};
-use atelier_records::{CanonicalIssueRecord, RecordStore};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceTargetArg {
@@ -21,62 +19,6 @@ pub fn load_repository() -> Result<(PathBuf, RecordIndex)> {
         anyhow!("{error:#}\nNext: run `atelier check`, fix every named record file, and rerun.")
     })?;
     Ok((state_dir, index))
-}
-
-pub fn load_canonical_evidence(state_dir: &Path, id: &str) -> Result<EvidenceRecord> {
-    RecordStore::new(state_dir).load_evidence_by_id(id)
-}
-
-pub fn load_canonical_issue(state_dir: &Path, id: &str) -> Result<CanonicalIssueRecord> {
-    RecordStore::new(state_dir).load_issue_by_id(id)
-}
-
-pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) -> Result<()> {
-    RecordStore::new(state_dir).write_issue_atomic(record)
-}
-
-pub fn create_evidence_record(
-    state_dir: &Path,
-    summary: &str,
-    status: &str,
-    body: &str,
-    data: EvidenceRecordData,
-) -> Result<EvidenceRecord> {
-    RecordStore::new(state_dir).create_evidence(summary, status, body, data)
-}
-
-pub fn add_record_relationship(
-    state_dir: &Path,
-    source_kind: &str,
-    source_id: &str,
-    target_kind: &str,
-    target_id: &str,
-    relation: &str,
-) -> Result<bool> {
-    RecordStore::new(state_dir).add_relates_relationship(
-        source_kind,
-        source_id,
-        target_kind,
-        target_id,
-        relation,
-    )
-}
-
-pub fn add_attachment_relationship(
-    state_dir: &Path,
-    source_kind: &str,
-    source_id: &str,
-    target_kind: &str,
-    target_id: &str,
-    relation: &str,
-) -> Result<bool> {
-    RecordStore::new(state_dir).add_attachment_relationship(
-        source_kind,
-        source_id,
-        target_kind,
-        target_id,
-        relation,
-    )
 }
 
 pub fn resolve_issue_ref(index: &RecordIndex, issue_ref: &str) -> Result<String> {
@@ -131,6 +73,8 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use atelier_core::EvidenceRecordData;
+    use atelier_records::RecordStore;
     use chrono::Utc;
     use tempfile::tempdir;
 
@@ -149,36 +93,38 @@ mod tests {
         let dir = tempdir().unwrap();
         let state_dir = dir.path().join(".atelier");
         let now = Utc::now();
-        let evidence = create_evidence_record(
-            &state_dir,
-            "Typed evidence",
-            "recorded",
-            "Concrete evidence service proof.",
-            EvidenceRecordData {
-                commit: "a".repeat(40),
-                result: atelier_core::EvidenceResult::Pass,
-                evidence_type: "test".to_string(),
-                captured_at: now,
-                command: None,
-                path: None,
-                uri: None,
-                producer: None,
-                proof_scope: None,
-                agent_identity: None,
-                independence_level: None,
-                residual_risks: Vec::new(),
-                follow_up_ids: Vec::new(),
-                exit_code: None,
-                exit_status: None,
-                success: None,
-                spawn_error: None,
-                output: None,
-                target: None,
-            },
-        )
-        .unwrap();
+        let evidence = RecordStore::new(&state_dir)
+            .create_evidence(
+                "Typed evidence",
+                "recorded",
+                "Concrete evidence service proof.",
+                EvidenceRecordData {
+                    commit: "a".repeat(40),
+                    result: atelier_core::EvidenceResult::Pass,
+                    evidence_type: "test".to_string(),
+                    captured_at: now,
+                    command: None,
+                    path: None,
+                    uri: None,
+                    producer: None,
+                    proof_scope: None,
+                    agent_identity: None,
+                    independence_level: None,
+                    residual_risks: Vec::new(),
+                    follow_up_ids: Vec::new(),
+                    exit_code: None,
+                    exit_status: None,
+                    success: None,
+                    spawn_error: None,
+                    output: None,
+                    target: None,
+                },
+            )
+            .unwrap();
         assert_eq!(
-            load_canonical_evidence(&state_dir, &evidence.header.id).unwrap(),
+            RecordStore::new(&state_dir)
+                .load_evidence_by_id(&evidence.header.id)
+                .unwrap(),
             evidence
         );
     }

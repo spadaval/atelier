@@ -9,7 +9,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
-    ISSUE_PRIORITY_LABELS,
 };
 pub use atelier_core::{
     EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueRecord, IssueSectionName,
@@ -33,31 +32,13 @@ pub use record_id::validate_record_id;
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
     validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
-    FIRST_CLASS_RECORD_KINDS, ISSUE_KIND, REVIEW_KIND,
+    ISSUE_KIND, REVIEW_KIND,
 };
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
     relates_relationship, relationship_target, sort_relationships, AttachmentRelationship,
     RelatesRelationship, RelationshipTarget, Relationships,
 };
-
-/// Canonical record kind vocabulary shared by parser and application code.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RecordKind {
-    Review,
-    Evidence,
-    Issue,
-}
-
-impl RecordKind {
-    pub fn directory(self) -> &'static str {
-        match self {
-            Self::Review => "reviews",
-            Self::Evidence => "evidence",
-            Self::Issue => "issues",
-        }
-    }
-}
 
 /// Split a canonical Markdown document into YAML front matter and body text.
 pub fn split_document(input: &str) -> Option<(&str, &str)> {
@@ -93,28 +74,19 @@ pub fn validate_issue_relation_type(relation_type: &str) -> Result<()> {
     Ok(())
 }
 
-pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
-pub const VALID_ISSUE_TYPES: &[&str] = &[
-    "bug",
-    "epic",
-    "feature",
-    "mission",
-    "spike",
-    "task",
-    "validation",
-];
 pub const MAX_LABEL_LEN: usize = 128;
 pub fn validate_status(status: &str) -> Result<()> {
-    let mut chars = status.chars();
+    validate_token(status, "status", "Status")
+}
+
+fn validate_token(value: &str, field: &str, label: &str) -> Result<()> {
+    let mut chars = value.chars();
     if matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
         && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
     {
         Ok(())
     } else {
-        bail!(
-            "Invalid status '{}'. Status values must match ^[a-z][a-z0-9_]*$",
-            status,
-        )
+        bail!("Invalid {field} '{value}'. {label} values must match ^[a-z][a-z0-9_]*$")
     }
 }
 
@@ -125,27 +97,10 @@ pub fn validate_priority(priority: &str) -> Result<()> {
 }
 
 pub fn validate_issue_type(issue_type: &str) -> Result<()> {
-    let mut chars = issue_type.chars();
-    if matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
-        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
-    {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid issue_type '{}'. Issue type values must match ^[a-z][a-z0-9_]*$",
-            issue_type,
-        )
-    }
+    validate_token(issue_type, "issue_type", "Issue type")
 }
 
 pub fn validate_relation_type(relation_type: &str) -> Result<()> {
-    if relation_type.is_empty() {
-        bail!("Relation type cannot be empty");
-    }
-    validate_relation_type_syntax(relation_type)
-}
-
-fn validate_relation_type_syntax(relation_type: &str) -> Result<()> {
     let mut chars = relation_type.chars();
     let Some(first) = chars.next() else {
         bail!("Relation type cannot be empty");
@@ -174,7 +129,7 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
         Ok(())
     } else {
-        validate_relation_type_syntax(relation_type)
+        validate_relation_type(relation_type)
     }
 }
 
@@ -256,10 +211,7 @@ impl RecordStore {
     /// and extension contract.
     pub fn discover_record_paths(&self, kind: &str) -> Result<Vec<PathBuf>> {
         let spec = canonical_record_kind(kind)?;
-        let directory = spec
-            .canonical_dir
-            .ok_or_else(|| anyhow!("Record kind '{}' has no record-file directory", spec.kind))?;
-        let record_dir = self.state_dir.join(directory);
+        let record_dir = self.state_dir.join(spec.canonical_dir);
         if !record_dir.exists() {
             return Ok(Vec::new());
         }
@@ -442,23 +394,6 @@ impl RecordStore {
         Ok(true)
     }
 
-    pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
-        if label.len() > MAX_LABEL_LEN {
-            bail!(
-                "Label exceeds maximum length of {} characters",
-                MAX_LABEL_LEN
-            );
-        }
-        let mut record = self.load_issue_by_id(issue_id)?;
-        if record.labels.iter().any(|existing| existing == label) {
-            return Ok(false);
-        }
-        record.labels.push(label.to_string());
-        self.write_issue_atomic(&record)?;
-        Ok(true)
-    }
-
     pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if parent_id == child_id {
@@ -551,18 +486,6 @@ impl RecordStore {
             }
             Ok(changed)
         }
-    }
-
-    pub fn remove_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
-        let mut record = self.load_issue_by_id(issue_id)?;
-        let original_len = record.labels.len();
-        record.labels.retain(|existing| existing != label);
-        if record.labels.len() == original_len {
-            return Ok(false);
-        }
-        self.write_issue_atomic(&record)?;
-        Ok(true)
     }
 
     pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
@@ -853,13 +776,15 @@ pub fn render_record(record: &Record) -> Result<String> {
     if spec.kind == ISSUE_KIND.kind {
         return render_issue_record(&canonical_issue_record_from_record(record)?);
     }
-    let record = record.clone();
-    validate_record(&record, Path::new("<record>"), spec)?;
+    validate_record(record, Path::new("<record>"), spec)?;
     let mut relationships = record.header().relationships.clone();
     sort_relationships(&mut relationships);
 
     if spec.kind == "evidence" {
-        return render_evidence_record(&record, &relationships, spec);
+        let Record::Evidence(record) = record else {
+            bail!("Expected evidence record");
+        };
+        return render_evidence_record(record, &relationships, spec);
     }
     bail!(
         "Unsupported record kind '{}' for typed rendering",
@@ -889,45 +814,7 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
 pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueRecord> {
     let (front_matter, body) = split_front_matter(text, relative)?;
 
-    require_scalar(&front_matter, "schema", relative).and_then(|schema| {
-        if schema == ISSUE_KIND.schema {
-            Ok(())
-        } else {
-            bail!(
-                "Unsupported schema '{}' in {}; expected {}",
-                schema,
-                display_state_path(relative),
-                ISSUE_KIND.schema
-            )
-        }
-    })?;
-    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
-    if schema_version != ISSUE_KIND.schema_version {
-        bail!(
-            "Unsupported schema_version {} in {}; expected {}",
-            schema_version,
-            display_state_path(relative),
-            ISSUE_KIND.schema_version
-        );
-    }
-
-    let id = require_scalar(&front_matter, "id", relative)?;
-    record_id::validate_record_id(&id).with_context(|| {
-        format!(
-            "Invalid issue id {} in {}",
-            id,
-            display_state_path(relative)
-        )
-    })?;
-    let expected = issue_record_path(&id);
-    if relative != expected {
-        bail!(
-            "Issue id {} in {} does not match record-file path {}",
-            id,
-            display_state_path(relative),
-            display_state_path(&expected)
-        );
-    }
+    let id = validate_record_front_matter(&front_matter, relative, &ISSUE_KIND)?;
 
     reject_legacy_relationship_keys(&front_matter, relative)?;
     reject_legacy_issue_keys(&front_matter, relative)?;
@@ -985,44 +872,7 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
 
     let (front_matter, body) = split_front_matter(text, relative)?;
 
-    let schema = require_scalar(&front_matter, "schema", relative)?;
-    if schema != spec.schema {
-        bail!(
-            "Unsupported schema '{}' in {}; expected {}",
-            schema,
-            display_state_path(relative),
-            spec.schema
-        );
-    }
-    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
-    if schema_version != spec.schema_version {
-        bail!(
-            "Unsupported schema_version {} in {}; expected {}",
-            schema_version,
-            display_state_path(relative),
-            spec.schema_version
-        );
-    }
-
-    let id = require_scalar(&front_matter, "id", relative)?;
-    record_id::validate_record_id(&id).with_context(|| {
-        format!(
-            "Invalid {} id {} in {}",
-            spec.kind,
-            id,
-            display_state_path(relative)
-        )
-    })?;
-    let expected = canonical_record_path(spec, &id)?;
-    if relative != expected {
-        bail!(
-            "{} id {} in {} does not match record-file path {}",
-            spec.kind,
-            id,
-            display_state_path(relative),
-            display_state_path(&expected)
-        );
-    }
+    let id = validate_record_front_matter(&front_matter, relative, spec)?;
     reject_forbidden_data_front_matter(&front_matter, relative)?;
     if spec.kind == "evidence" {
         return parse_evidence_record(front_matter, body, relative, spec, id);
@@ -1032,6 +882,57 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
         spec.kind,
         display_state_path(relative)
     )
+}
+
+fn validate_record_front_matter(
+    front_matter: &BTreeMap<String, Value>,
+    relative: &Path,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let schema = require_scalar(front_matter, "schema", relative)?;
+    if schema != spec.schema {
+        bail!(
+            "Unsupported schema '{}' in {}; expected {}",
+            schema,
+            display_state_path(relative),
+            spec.schema
+        );
+    }
+    let schema_version = require_i64(front_matter, "schema_version", relative)?;
+    if schema_version != spec.schema_version {
+        bail!(
+            "Unsupported schema_version {} in {}; expected {}",
+            schema_version,
+            display_state_path(relative),
+            spec.schema_version
+        );
+    }
+
+    let id = require_scalar(front_matter, "id", relative)?;
+    record_id::validate_record_id(&id).with_context(|| {
+        format!(
+            "Invalid {} id {} in {}",
+            spec.kind,
+            id,
+            display_state_path(relative)
+        )
+    })?;
+    let expected = canonical_record_path(spec, &id)?;
+    let kind_label = if spec.kind == "issue" {
+        "Issue"
+    } else {
+        spec.kind
+    };
+    if relative != expected {
+        bail!(
+            "{} id {} in {} does not match record-file path {}",
+            kind_label,
+            id,
+            display_state_path(relative),
+            display_state_path(&expected)
+        );
+    }
+    Ok(id)
 }
 
 fn reject_forbidden_data_front_matter(
@@ -1118,6 +1019,12 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
         )
     })?;
     if spec.kind == "evidence" {
+        let Record::Evidence(record) = record else {
+            bail!(
+                "Expected evidence record in {}",
+                display_state_path(relative)
+            );
+        };
         return validate_evidence_record(record, relative);
     }
     validate_relationships(&record.header().relationships, relative)?;
@@ -1125,15 +1032,12 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
 }
 
 fn render_evidence_record(
-    record: &Record,
+    record: &EvidenceRecord,
     relationships: &Relationships,
     spec: &RecordKindSpec,
 ) -> Result<String> {
-    let Record::Evidence(record) = record else {
-        bail!("Expected evidence record");
-    };
-    let data = record.data.clone();
-    let body = render_evidence_body(Some(&record.summary), &data);
+    let data = &record.data;
+    let body = render_evidence_body(Some(&record.summary), data);
 
     let mut output = String::new();
     output.push_str("---\n");
@@ -1225,7 +1129,7 @@ fn parse_evidence_record(
     };
     apply_evidence_body_sections(&mut data, body);
 
-    let record = Record::Evidence(EvidenceRecord {
+    let record = EvidenceRecord {
         header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
@@ -1238,19 +1142,13 @@ fn parse_evidence_record(
         },
         data,
         summary: body.to_string(),
-    });
+    };
     validate_evidence_record(&record, relative)?;
-    Ok(record)
+    Ok(Record::Evidence(record))
 }
 
-fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
-    let Record::Evidence(record) = record else {
-        bail!(
-            "Expected evidence record in {}",
-            display_state_path(relative)
-        );
-    };
-    let data = record.data.clone();
+fn validate_evidence_record(record: &EvidenceRecord, relative: &Path) -> Result<()> {
+    let data = &record.data;
     if data.evidence_type.trim().is_empty() {
         bail!(
             "Evidence record {} must include evidence_type",
@@ -1423,7 +1321,11 @@ fn require_datetime(
     relative: &Path,
 ) -> Result<DateTime<Utc>> {
     let value = require_scalar(values, key, relative)?;
-    DateTime::parse_from_rfc3339(&value)
+    parse_datetime(&value, key, relative)
+}
+
+fn parse_datetime(value: &str, key: &str, relative: &Path) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
         .with_context(|| {
             format!(
@@ -1440,12 +1342,9 @@ fn optional_datetime(
     key: &str,
     relative: &Path,
 ) -> Result<Option<DateTime<Utc>>> {
-    let Some(value) = values.get(key) else {
+    let Some(value) = optional_value(values, key) else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
     let Some(value) = value.as_str() else {
         bail!(
             "Front matter key '{}' in {} must be a string",
@@ -1453,25 +1352,17 @@ fn optional_datetime(
             display_state_path(relative)
         );
     };
-    DateTime::parse_from_rfc3339(value)
-        .map(|dt| Some(dt.with_timezone(&Utc)))
-        .with_context(|| {
-            format!(
-                "Invalid datetime '{}' in key '{}' of {}",
-                value,
-                key,
-                display_state_path(relative)
-            )
-        })
+    parse_datetime(value, key, relative).map(Some)
+}
+
+fn optional_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a Value> {
+    values.get(key).filter(|value| !value.is_null())
 }
 
 fn optional_scalar(values: &BTreeMap<String, Value>, key: &str) -> Result<Option<String>> {
-    let Some(value) = values.get(key) else {
+    let Some(value) = optional_value(values, key) else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
     value
         .as_str()
         .map(|value| Some(value.to_string()))
@@ -1483,12 +1374,9 @@ fn optional_i32(
     key: &str,
     relative: &Path,
 ) -> Result<Option<i32>> {
-    let Some(value) = values.get(key) else {
+    let Some(value) = optional_value(values, key) else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
     let value = value.as_i64().ok_or_else(|| {
         anyhow!(
             "Front matter key '{}' in {} must be an integer",
@@ -1510,12 +1398,9 @@ fn optional_bool(
     key: &str,
     relative: &Path,
 ) -> Result<Option<bool>> {
-    let Some(value) = values.get(key) else {
+    let Some(value) = optional_value(values, key) else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
     value.as_bool().map(Some).ok_or_else(|| {
         anyhow!(
             "Front matter key '{}' in {} must be a boolean",
@@ -1530,16 +1415,18 @@ fn string_array(
     key: &str,
     relative: &Path,
 ) -> Result<Vec<String>> {
+    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
+        anyhow!(
+            "Missing array front matter key '{}' in {}",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+    string_array_values(values, key, relative)
+}
+
+fn string_array_values(values: &[Value], key: &str, relative: &Path) -> Result<Vec<String>> {
     values
-        .get(key)
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            anyhow!(
-                "Missing array front matter key '{}' in {}",
-                key,
-                display_state_path(relative)
-            )
-        })?
         .iter()
         .map(|value| {
             value.as_str().map(str::to_string).ok_or_else(|| {
@@ -1568,19 +1455,7 @@ fn optional_string_array(
             display_state_path(relative)
         )
     })?;
-    values
-        .iter()
-        .map(|value| {
-            value.as_str().map(str::to_string).ok_or_else(|| {
-                anyhow!(
-                    "Array '{}' in {} must contain strings",
-                    key,
-                    display_state_path(relative)
-                )
-            })
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(Some)
+    string_array_values(values, key, relative).map(Some)
 }
 
 fn optional_yaml_value<T: serde::de::DeserializeOwned>(
@@ -1588,12 +1463,9 @@ fn optional_yaml_value<T: serde::de::DeserializeOwned>(
     key: &str,
     relative: &Path,
 ) -> Result<Option<T>> {
-    let Some(value) = values.get(key) else {
+    let Some(value) = optional_value(values, key) else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
     serde_json::from_value(value.clone())
         .with_context(|| {
             format!(
@@ -1634,10 +1506,6 @@ fn reject_legacy_issue_keys(values: &BTreeMap<String, Value>, relative: &Path) -
         );
     }
     Ok(())
-}
-
-pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections> {
-    parse_issue_sections_for_type(body, relative, "task")
 }
 
 pub fn parse_issue_sections_for_type(
@@ -1852,11 +1720,11 @@ pub fn parse_relationships(
     Ok(relationships)
 }
 
-fn relationship_targets(
-    values: &serde_json::Map<String, Value>,
-    key: &str,
-    relative: &Path,
-) -> Result<Vec<RelationshipTarget>> {
+fn relationship_objects<'a>(
+    values: &'a serde_json::Map<String, Value>,
+    key: &'a str,
+    relative: &'a Path,
+) -> Result<impl Iterator<Item = Result<&'a serde_json::Map<String, Value>>> + 'a> {
     let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
         anyhow!(
             "Missing relationships.{} array in {}",
@@ -1864,33 +1732,30 @@ fn relationship_targets(
             display_state_path(relative)
         )
     })?;
-
-    let mut targets = Vec::new();
-    let mut seen = BTreeSet::new();
-    for value in values {
-        let object = value.as_object().ok_or_else(|| {
+    Ok(values.iter().map(move |value| {
+        value.as_object().ok_or_else(|| {
             anyhow!(
                 "relationships.{} in {} must contain objects",
                 key,
                 display_state_path(relative)
             )
-        })?;
-        let kind = object.get("kind").and_then(Value::as_str).ok_or_else(|| {
-            anyhow!(
-                "relationships.{} entry in {} is missing kind",
-                key,
-                display_state_path(relative)
-            )
-        })?;
-        validate_record_kind(kind)?;
-        let id = object.get("id").and_then(Value::as_str).ok_or_else(|| {
-            anyhow!(
-                "relationships.{} entry in {} is missing id",
-                key,
-                display_state_path(relative)
-            )
-        })?;
-        record_id::validate_record_id(id).with_context(|| {
+        })
+    }))
+}
+
+fn relationship_targets(
+    values: &serde_json::Map<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Vec<RelationshipTarget>> {
+    let mut targets = Vec::new();
+    let mut seen = BTreeSet::new();
+    for object in relationship_objects(values, key, relative)? {
+        let object = object?;
+        let kind = required_relationship_string(object, key, "kind", relative)?;
+        validate_record_kind(&kind)?;
+        let id = required_relationship_string(object, key, "id", relative)?;
+        record_id::validate_record_id(&id).with_context(|| {
             format!(
                 "Invalid relationships.{} id '{}' in {}",
                 key,
@@ -1921,23 +1786,10 @@ fn attachment_relationships(
     key: &str,
     relative: &Path,
 ) -> Result<Vec<AttachmentRelationship>> {
-    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
-        anyhow!(
-            "Missing relationships.{} array in {}",
-            key,
-            display_state_path(relative)
-        )
-    })?;
     let mut attachments = Vec::new();
     let mut seen = BTreeSet::new();
-    for value in values {
-        let object = value.as_object().ok_or_else(|| {
-            anyhow!(
-                "relationships.{} in {} must contain objects",
-                key,
-                display_state_path(relative)
-            )
-        })?;
+    for object in relationship_objects(values, key, relative)? {
+        let object = object?;
         let attachment = AttachmentRelationship {
             kind: required_relationship_string(object, key, "kind", relative)?,
             id: required_relationship_string(object, key, "id", relative)?,
@@ -1966,23 +1818,10 @@ fn relates_relationships(
     key: &str,
     relative: &Path,
 ) -> Result<Vec<RelatesRelationship>> {
-    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
-        anyhow!(
-            "Missing relationships.{} array in {}",
-            key,
-            display_state_path(relative)
-        )
-    })?;
     let mut relates = Vec::new();
     let mut seen = BTreeSet::new();
-    for value in values {
-        let object = value.as_object().ok_or_else(|| {
-            anyhow!(
-                "relationships.{} in {} must contain objects",
-                key,
-                display_state_path(relative)
-            )
-        })?;
+    for object in relationship_objects(values, key, relative)? {
+        let object = object?;
         let relation = RelatesRelationship {
             kind: required_relationship_string(object, key, "kind", relative)?,
             id: required_relationship_string(object, key, "id", relative)?,
@@ -2327,77 +2166,68 @@ fn empty_evidence_stream() -> atelier_core::EvidenceStreamSummary {
 
 pub fn write_yaml_relationships(output: &mut String, relationships: &Relationships) -> Result<()> {
     output.push_str("relationships:\n");
-    write_relationship_targets(output, "blocks", &relationships.blocks)?;
-    write_relationship_targets(output, "children", &relationships.children)?;
-    write_attachment_relationships(output, &relationships.attachments)?;
-    write_relates_relationships(output, &relationships.relates)?;
+    write_relationship_entries(
+        output,
+        "blocks",
+        relationships
+            .blocks
+            .iter()
+            .map(|value| [("kind", value.kind.as_str()), ("id", value.id.as_str())]),
+    )?;
+    write_relationship_entries(
+        output,
+        "children",
+        relationships
+            .children
+            .iter()
+            .map(|value| [("kind", value.kind.as_str()), ("id", value.id.as_str())]),
+    )?;
+    write_relationship_entries(
+        output,
+        "attachments",
+        relationships.attachments.iter().map(|value| {
+            [
+                ("kind", value.kind.as_str()),
+                ("id", value.id.as_str()),
+                ("role", value.role.as_str()),
+            ]
+        }),
+    )?;
+    write_relationship_entries(
+        output,
+        "relates",
+        relationships.relates.iter().map(|value| {
+            [
+                ("kind", value.kind.as_str()),
+                ("id", value.id.as_str()),
+                ("type", value.relation_type.as_str()),
+            ]
+        }),
+    )?;
     Ok(())
 }
 
-fn write_relationship_targets(
+fn write_relationship_entries<'a, const N: usize>(
     output: &mut String,
     key: &str,
-    values: &[RelationshipTarget],
+    entries: impl IntoIterator<Item = [(&'static str, &'a str); N]>,
 ) -> Result<()> {
+    let mut entries = entries.into_iter().peekable();
     output.push_str("  ");
     output.push_str(key);
-    if values.is_empty() {
+    if entries.peek().is_none() {
         output.push_str(": []\n");
         return Ok(());
     }
     output.push_str(":\n");
-    for value in values {
-        output.push_str("  - kind: ");
-        output.push_str(&serde_json::to_string(&value.kind)?);
-        output.push('\n');
-        output.push_str("    id: ");
-        output.push_str(&serde_json::to_string(&value.id)?);
-        output.push('\n');
-    }
-    Ok(())
-}
-
-fn write_attachment_relationships(
-    output: &mut String,
-    values: &[AttachmentRelationship],
-) -> Result<()> {
-    output.push_str("  attachments");
-    if values.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for value in values {
-        output.push_str("  - kind: ");
-        output.push_str(&serde_json::to_string(&value.kind)?);
-        output.push('\n');
-        output.push_str("    id: ");
-        output.push_str(&serde_json::to_string(&value.id)?);
-        output.push('\n');
-        output.push_str("    role: ");
-        output.push_str(&serde_json::to_string(&value.role)?);
-        output.push('\n');
-    }
-    Ok(())
-}
-
-fn write_relates_relationships(output: &mut String, values: &[RelatesRelationship]) -> Result<()> {
-    output.push_str("  relates");
-    if values.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for value in values {
-        output.push_str("  - kind: ");
-        output.push_str(&serde_json::to_string(&value.kind)?);
-        output.push('\n');
-        output.push_str("    id: ");
-        output.push_str(&serde_json::to_string(&value.id)?);
-        output.push('\n');
-        output.push_str("    type: ");
-        output.push_str(&serde_json::to_string(&value.relation_type)?);
-        output.push('\n');
+    for entry in entries {
+        for (position, (key, value)) in entry.into_iter().enumerate() {
+            let indent = if position == 0 { "  - " } else { "    " };
+            output.push_str(&format!(
+                "{indent}{key}: {}\n",
+                serde_json::to_string(value)?
+            ));
+        }
     }
     Ok(())
 }
@@ -2449,7 +2279,7 @@ mod tests {
                 closed_at: None,
             },
             labels: vec!["record-store".to_string(), "storage".to_string()],
-            sections: parse_issue_sections(body, &issue_record_path(id)).unwrap(),
+            sections: parse_issue_sections_for_type(body, &issue_record_path(id), "task").unwrap(),
             relationships: Relationships {
                 blocks: vec![RelationshipTarget {
                     kind: "issue".to_string(),
@@ -2577,9 +2407,9 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(
             canonical_contracts,
             vec![
-                ("issue", "atelier.issue", 2, Some("issues")),
-                ("review", "atelier.review", 1, Some("reviews")),
-                ("evidence", "atelier.evidence", 2, Some("evidence")),
+                ("issue", "atelier.issue", 2, "issues"),
+                ("review", "atelier.review", 1, "reviews"),
+                ("evidence", "atelier.evidence", 2, "evidence"),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
@@ -2587,20 +2417,33 @@ updated_at: "2026-06-10T13:00:00+00:00"
             let spec = canonical_record_kind(kind).unwrap();
             assert_eq!(
                 canonical_record_path(spec, "atelier-abcd").unwrap(),
-                PathBuf::from(spec.canonical_dir.unwrap()).join("atelier-abcd.md")
+                PathBuf::from(spec.canonical_dir).join("atelier-abcd.md")
             );
         }
-
-        let generic_contracts = FIRST_CLASS_RECORD_KINDS
-            .iter()
-            .map(|spec| spec.kind)
-            .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["review", "evidence"]);
     }
 
     #[test]
-    fn workflow_validator_kind_is_registered_but_not_canonical_yet() {
-        validate_record_kind("workflow_validator").unwrap();
+    fn workflow_validator_is_only_a_gate_kind_and_cannot_be_a_record_or_link_kind() {
+        assert!(validate_record_kind("workflow_validator").is_err());
+        let mut record = issue_record("atelier-abcd");
+        record.relationships.relates.push(relates_relationship(
+            "workflow_validator",
+            "atelier-node",
+            "related",
+        ));
+        assert!(render_issue_record(&record)
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid record kind 'workflow_validator'"));
+        let text = render_issue_record(&issue_record("atelier-abcd"))
+            .unwrap()
+            .replace("kind: \"issue\"", "kind: \"workflow_validator\"");
+        assert!(
+            parse_issue_record(&text, &issue_record_path("atelier-abcd"))
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid record kind 'workflow_validator'")
+        );
         assert!(validate_canonical_record_kind("workflow_validator").is_err());
         assert!(canonical_record_kind("workflow_validator").is_err());
     }
@@ -2704,9 +2547,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
         record.issue.issue_type = "mission".to_string();
         record.sections = IssueSections::for_type("mission", Some("Mission outcome."));
         record.issue.status = "draft".to_string();
-        record
-            .issue
-            .set_strategy(IssueStrategy::new("docs/strategies/adaptive-mission.md").unwrap());
+        record.issue.strategy =
+            Some(IssueStrategy::new("docs/strategies/adaptive-mission.md").unwrap());
 
         let text = render_issue_record(&record).unwrap();
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-strg")).unwrap();
@@ -2925,7 +2767,9 @@ Legacy evidence summary.
     #[test]
     fn issue_sections_report_shared_presence_state_and_search_text() {
         let body = "## Goal\n\nCanonical problem statement.\n\n## Done when\n\nThe desired finished world is observable.\n\n## Context\n\n- `atelier check atelier-abcd` passes.";
-        let sections = parse_issue_sections(body, &issue_record_path("atelier-abcd")).unwrap();
+        let sections =
+            parse_issue_sections_for_type(body, &issue_record_path("atelier-abcd"), "task")
+                .unwrap();
         let states = sections.section_states();
 
         assert_eq!(
@@ -3095,14 +2939,14 @@ Legacy evidence summary.
         record.labels.clear();
         store.write_issue_atomic(&record).unwrap();
 
-        assert!(store.add_issue_label("atelier-abcd", "graph").unwrap());
-        assert!(!store.add_issue_label("atelier-abcd", "graph").unwrap());
+        record.labels.push("graph".into());
+        store.write_issue_atomic(&record).unwrap();
         assert_eq!(
             store.load_issue_by_id("atelier-abcd").unwrap().labels,
             vec!["graph".to_string()]
         );
-        assert!(store.remove_issue_label("atelier-abcd", "graph").unwrap());
-        assert!(!store.remove_issue_label("atelier-abcd", "graph").unwrap());
+        record.labels.clear();
+        store.write_issue_atomic(&record).unwrap();
         assert!(store
             .load_issue_by_id("atelier-abcd")
             .unwrap()
