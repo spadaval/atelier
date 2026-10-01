@@ -109,17 +109,43 @@ daemon needs the human.
 
 # Plan
 
-Tracked here until S8 (this section is the temporary tracker, not strategy):
+Tracked here until S8 (this section is the temporary tracker, not strategy).
+Work happens on branch `mission/atelier-rebuild`; every code commit has had
+an independent review.
 
-1. Simplify this repository's `workflow.yaml`; archive terminal records and
-   activity files.
-2. Delete Forgejo, review rooms, PR and review commands.
-3. Delete transition actions and most validators; keep `start`.
-4. Replace the SQLite cache with direct parsing.
-5. Delete leftovers: import, export, telemetry, `doctor`, `rules`, `man`,
-   hidden `branch` commands, `history`.
-6. Reshape records and evidence (S3, S7).
+1. [done] Simplify this repository's `workflow.yaml`; archive terminal
+   records and activity files.
+2. [done] Delete Forgejo, review rooms, PR and review commands.
+3. [done] Delete transition actions and most validators; add `start`.
+4. [done] Replace the SQLite cache with direct parsing (S4 met: medians
+   28–42 ms, max under 52 ms, release build, 32 cores).
+5. [done] Delete leftovers: import, export, telemetry, `doctor`, `rules`,
+   `man`, hidden `branch` commands, `history`.
+6. Reshape records and evidence (S3, S7). Absorb open issue `atelier-a0h0`
+   (generic `fields` map).
 7. In-repo review records, gates as graph nodes, `atelier merge` (S1, S2).
 8. Policy from the base branch; shell checks.
 9. `prime`, `land`, `setup` (S6); cross-branch status.
 10. Rewrite product docs and `PRODUCT_INTENT.md`; dogfood (S8).
+
+Deferred review findings to resolve in later steps:
+
+- Read-modify-write under a shared lock in `issue update`, link/unlink, and
+  transitions (concurrent writers can lose changes).
+- `start` treats a remote-only branch as new and branches from HEAD.
+- `start` writes owner and issue records separately after switching.
+- `work.terminal` passes for an empty mission; no gate uses it yet (step 7).
+- `close_reason` may be required on a non-done transition and is then
+  dropped; reject in policy validation.
+- `check` reports only the first graph error when several exist.
+- Leftover ignored files from the old model (`.atelier/state.db`,
+  `.atelier/cache/`, `.atelier/rules/`, `.activity/` directories, `[review]`
+  config) now fail commands; needed for the one-time migration of other repos.
+- Git-cleanup failures in `prune` still exit 0; prune gives no branch
+  recovery hint.
+- Recovery hint missing on the evidence-capture load path.
+- `nearest_parent_epic` has branches made unreachable by load-time checks.
+- Test hooks (`ATELIER_TEST_*` env vars) ship in the production binary.
+- Docs still describing removed behavior: `workflow-configuration.md` review
+  sections, `work-model.md`, `cli-surface.md`, command-audit pages, quality
+  docs (`check --fix`), `CONTEXT.md`, `PRODUCT_INTENT.md` (step 10).
