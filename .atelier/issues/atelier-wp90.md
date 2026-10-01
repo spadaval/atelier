@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-01T22:45:47.852942578+00:00"
+status: "done"
 title: "Complete and dogfood session commands"
-updated_at: "2026-10-01T21:19:59.606157714+00:00"
+updated_at: "2026-10-01T22:45:47.852942578+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ Session commands, harness hooks and focused tests.
 ## Context
 
 docs/strategies/atelier-rebuild.md, S6.
+
+## Close Reason
+
+Session commands and supported hooks pass fresh tests and an actual Codex prime/land dogfood; R1–R8 are repaired and independently reviewed.

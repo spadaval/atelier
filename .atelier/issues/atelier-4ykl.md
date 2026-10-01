@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-01T22:45:47.903529049+00:00"
+status: "done"
 title: "Align product and architecture documentation"
-updated_at: "2026-10-01T21:19:59.636594463+00:00"
+updated_at: "2026-10-01T22:45:47.903529049+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ PRODUCT_INTENT.md, CONTEXT.md, docs and the in-repo Agent Factory guidance.
 ## Context
 
 docs/strategies/atelier-rebuild.md; docs/adr/0019-verified-repo-native-tracker.md.
+
+## Close Reason
+
+Current product and architecture guidance is independently reviewed; documented commands and hook examples pass against the integrated production binary.

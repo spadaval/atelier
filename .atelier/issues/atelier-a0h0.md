@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-10-01T22:45:47.803917821+00:00"
+status: "done"
 title: "Clarify or remove generic issue fields storage"
-updated_at: "2026-10-01T21:19:17.840874362+00:00"
+updated_at: "2026-10-01T22:45:47.803917821+00:00"
 ---
 
 ## Goal
@@ -61,3 +62,7 @@ Review/merge gates and session commands remain separate rebuild slices.
   The exclusive and atomic prune repairs passed independent review in the gates
   candidate. Final integrated proof and completion remain outstanding under
   epic `atelier-1ioo`; the earlier author evidence remains historical.
+
+## Close Reason
+
+Typed records and full commit/result evidence are implemented, independently reviewed, and proven by fresh schema/freshness/concurrency tests.
