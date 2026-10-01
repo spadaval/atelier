@@ -7,7 +7,7 @@ use crate::commands;
 use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
 };
-use atelier_app::work_classification::{StatusNextAction, StatusView};
+use atelier_app::work_classification::StatusView;
 
 pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -92,25 +92,18 @@ fn print_status_view(view: &StatusView) {
         }
     };
 
-    let next_actions = match view.next_action {
-        StatusNextAction::InspectReadyWork { count } => {
-            vec![
-                format!(
-                    "  Choose ready work ({count} ready issue(s) available): atelier work ready"
-                ),
-                "  Inspect selected work transitions: atelier issue transition <issue-id>"
-                    .to_string(),
-            ]
-        }
-        StatusNextAction::InspectBlockedWork => {
-            vec![
-                "  Inspect blocked work (no ready work is available): atelier work blocked"
-                    .to_string(),
-            ]
-        }
-        StatusNextAction::NoSpecificAction => {
-            vec!["  No specific next action is available from checkout state.".to_string()]
-        }
+    let ready = view.work.ready.len();
+    let next_actions = if ready > 0 {
+        vec![
+            format!("  Choose ready work ({ready} ready issue(s) available): atelier work ready"),
+            "  Inspect selected work transitions: atelier issue transition <issue-id>".to_string(),
+        ]
+    } else if !view.work.blocked.is_empty() {
+        vec![
+            "  Inspect blocked work (no ready work is available): atelier work blocked".to_string(),
+        ]
+    } else {
+        vec!["  No specific next action is available from checkout state.".to_string()]
     };
 
     Page::new("Atelier Status")

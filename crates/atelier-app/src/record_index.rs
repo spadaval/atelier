@@ -10,12 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{
-    EvidenceRecord, Issue, IssuePriority, RecordLink, Relation, ReviewEvent, ReviewRecord,
-};
+use atelier_core::{EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, ReviewRecord};
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
-    validate_record_id, validate_record_kind, validate_status, CanonicalIssueRecord, Relationships,
+    validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships,
     WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 
@@ -740,39 +738,6 @@ impl RecordIndex {
         self.issues_by_recency
             .iter()
             .map(|id| &self.issues[id].issue)
-    }
-
-    /// Issues matching optional exact status (`all` disables), label, and
-    /// priority filters, most recently updated first.
-    pub fn list_issues(
-        &self,
-        status_filter: Option<&str>,
-        label_filter: Option<&str>,
-        priority_filter: Option<&str>,
-    ) -> Result<Vec<Issue>> {
-        let status = status_filter.filter(|status| *status != "all");
-        if let Some(status) = status {
-            validate_status(status)?;
-        }
-        let priority = priority_filter
-            .map(IssuePriority::from_cli_input)
-            .transpose()?
-            .map(|priority| priority.label().to_string());
-        Ok(self
-            .issues_by_recency
-            .iter()
-            .map(|id| &self.issues[id])
-            .filter(|record| status.is_none_or(|status| record.issue.status == status))
-            .filter(|record| {
-                priority
-                    .as_deref()
-                    .is_none_or(|priority| record.issue.priority == priority)
-            })
-            .filter(|record| {
-                label_filter.is_none_or(|label| record.labels.iter().any(|l| l == label))
-            })
-            .map(|record| record.issue.clone())
-            .collect())
     }
 
     pub fn get_subissues(&self, parent_id: &str) -> Vec<Issue> {

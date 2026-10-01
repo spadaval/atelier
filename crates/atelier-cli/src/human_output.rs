@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::io::IsTerminal;
 
-use atelier_app::issue_inventory::{IssueInventoryRow, IssueInventoryView};
+use atelier_app::issue_inventory::IssueInventoryView;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RenderContext {
@@ -469,112 +469,63 @@ impl Panel for IssueListPanel {
     }
 }
 
-// The command adapter is a separate slice. Keep this target-state renderer
-// compile-checked while it waits for that adapter to consume it.
-#[allow(dead_code)]
-pub(crate) struct IssueInventoryPanel {
-    view: IssueInventoryView,
-}
-
-#[allow(dead_code)]
-impl IssueInventoryPanel {
-    pub(crate) fn new(view: &IssueInventoryView) -> Self {
-        Self { view: view.clone() }
+pub(crate) fn render_issue_inventory(
+    view: &IssueInventoryView<'_>,
+    context: RenderContext,
+) -> String {
+    let headings = ["ID", "Type", "Status", "Priority"];
+    fn fields(record: &atelier_records::CanonicalIssueRecord) -> [&str; 4] {
+        [
+            record.issue.id.as_str(),
+            record.issue.issue_type.as_str(),
+            record.issue.status.as_str(),
+            record.issue.priority.as_str(),
+        ]
     }
-}
-
-impl Panel for IssueInventoryPanel {
-    fn render(&self, context: RenderContext) -> Vec<String> {
-        if self.view.is_empty() {
-            return vec!["No issues match the selected filters.".to_string()];
+    let mut widths = headings.map(str::len);
+    for record in &view.rows {
+        for (width, value) in widths.iter_mut().zip(fields(record)) {
+            *width = (*width).max(value.len());
         }
-
-        let widths = InventoryColumnWidths::for_rows(&self.view.rows);
-        let mut lines = vec![widths.header(context)];
-        lines.extend(self.view.rows.iter().map(|row| widths.row(row, context)));
+    }
+    let columns = |values: [&str; 4]| {
+        values
+            .into_iter()
+            .zip(widths)
+            .map(|(value, width)| format!("{value:<width$}"))
+            .collect::<Vec<_>>()
+    };
+    let mut lines = if view.matching_count == 0 {
+        vec!["No issues match the selected filters.".to_string()]
+    } else {
+        vec![context.paint(
+            TextStyle::Heading,
+            format!("{}  Title", columns(headings).join("  ")),
+        )]
+    };
+    for record in &view.rows {
+        let issue = &record.issue;
+        let mut row = columns(fields(record));
+        let category = view
+            .policy
+            .and_then(|policy| policy.status_category(&issue.status));
+        row[2] = context.paint(status_style(category.unwrap_or_default()), &row[2]);
+        row[3] = context.paint(priority_style(&issue.priority), &row[3]);
+        lines.push(format!("{}  {}", row.join("  "), issue.title));
+    }
+    if view.matching_count > 0 {
         lines.push(String::new());
         lines.push(format!(
             "Showing {} of {} issues",
-            self.view.shown_count(),
-            self.view.matching_count
+            view.rows.len(),
+            view.matching_count
         ));
-        if self.view.is_truncated() {
+        if view.rows.len() < view.matching_count {
             lines.push("Narrow the metadata filters or raise --limit.".to_string());
         }
-        lines
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
-struct InventoryColumnWidths {
-    id: usize,
-    issue_type: usize,
-    status: usize,
-    priority: usize,
-}
-
-#[allow(dead_code)]
-impl InventoryColumnWidths {
-    fn for_rows(rows: &[IssueInventoryRow]) -> Self {
-        Self {
-            id: max_width("ID", rows.iter().map(|row| row.id.as_str())),
-            issue_type: max_width("Type", rows.iter().map(|row| row.issue_type.as_str())),
-            status: max_width("Status", rows.iter().map(|row| row.status.as_str())),
-            priority: max_width("Priority", rows.iter().map(|row| row.priority.as_str())),
-        }
-    }
-
-    fn header(self, context: RenderContext) -> String {
-        context.paint(
-            TextStyle::Heading,
-            format!(
-                "{:<id_width$}  {:<type_width$}  {:<status_width$}  {:<priority_width$}  Title",
-                "ID",
-                "Type",
-                "Status",
-                "Priority",
-                id_width = self.id,
-                type_width = self.issue_type,
-                status_width = self.status,
-                priority_width = self.priority,
-            ),
-        )
-    }
-
-    fn row(self, row: &IssueInventoryRow, context: RenderContext) -> String {
-        let status = context.paint(
-            status_style(row.status_category.as_deref().unwrap_or_default()),
-            format!("{:<width$}", row.status, width = self.status),
-        );
-        let priority = context.paint(
-            priority_style(&row.priority),
-            format!("{:<width$}", row.priority, width = self.priority),
-        );
-        format!(
-            "{:<id_width$}  {:<type_width$}  {}  {}  {}",
-            row.id,
-            row.issue_type,
-            status,
-            priority,
-            row.title,
-            id_width = self.id,
-            type_width = self.issue_type,
-        )
-    }
-}
-
-#[allow(dead_code)]
-fn max_width<'a>(heading: &str, values: impl Iterator<Item = &'a str>) -> usize {
-    values
-        .map(str::len)
-        .fold(heading.len(), |width, value| width.max(value))
-}
-
-#[allow(dead_code)]
-pub(crate) fn render_issue_inventory(view: &IssueInventoryView, context: RenderContext) -> String {
     Page::new("Issue Inventory")
-        .panel(IssueInventoryPanel::new(view))
+        .panel(LinesPanel::new("", lines))
         .panel(FooterPanel::new(
             "Drill Down",
             [FooterAction::new(
@@ -585,11 +536,10 @@ pub(crate) fn render_issue_inventory(view: &IssueInventoryView, context: RenderC
         .render(context)
 }
 
-#[allow(dead_code)]
-pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView) -> String {
+pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView<'_>) -> String {
     view.rows
         .iter()
-        .map(|row| row.id.as_str())
+        .map(|record| record.issue.id.as_str())
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -742,6 +692,15 @@ pub(crate) enum DisplayRole {
 }
 
 impl DisplayRole {
+    pub(crate) fn for_work(label: &str) -> Self {
+        match label {
+            "active" => Self::Executable,
+            "ready" => Self::Selectable,
+            "blocked" => Self::Blocked,
+            _ => Self::ContextOnly,
+        }
+    }
+
     pub(crate) fn label(self) -> &'static str {
         match self {
             DisplayRole::Executable => "active",
@@ -846,11 +805,37 @@ pub(crate) fn plural_suffix(count: usize) -> &'static str {
 mod tests {
     use super::*;
 
-    fn inventory_view(rows: Vec<IssueInventoryRow>, matching_count: usize) -> IssueInventoryView {
-        IssueInventoryView {
-            rows,
+    struct InventoryFixture {
+        records: Vec<atelier_records::CanonicalIssueRecord>,
+        matching_count: usize,
+        policy: atelier_app::workflow_policy::WorkflowPolicy,
+    }
+
+    impl InventoryFixture {
+        fn view(&self) -> IssueInventoryView<'_> {
+            IssueInventoryView {
+                rows: self.records.iter().collect(),
+                matching_count: self.matching_count,
+                policy: Some(&self.policy),
+            }
+        }
+    }
+
+    fn inventory_view(
+        records: Vec<atelier_records::CanonicalIssueRecord>,
+        matching_count: usize,
+    ) -> InventoryFixture {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".atelier")).unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/workflow.yaml"),
+            atelier_app::workflow_policy::STARTER_POLICY_YAML,
+        )
+        .unwrap();
+        InventoryFixture {
+            records,
             matching_count,
-            limit: 50,
+            policy: atelier_app::workflow_policy::load(dir.path()).unwrap(),
         }
     }
 
@@ -858,17 +843,28 @@ mod tests {
         id: &str,
         issue_type: &str,
         status: &str,
-        status_category: &str,
         priority: &str,
         title: &str,
-    ) -> IssueInventoryRow {
-        IssueInventoryRow {
-            id: id.to_string(),
-            issue_type: issue_type.to_string(),
-            status: status.to_string(),
-            status_category: Some(status_category.to_string()),
-            priority: priority.to_string(),
-            title: title.to_string(),
+    ) -> atelier_records::CanonicalIssueRecord {
+        let now = chrono::Utc::now();
+        atelier_records::CanonicalIssueRecord {
+            issue: atelier_core::Issue {
+                id: id.to_string(),
+                issue_type: issue_type.to_string(),
+                status: status.to_string(),
+                priority: priority.to_string(),
+                title: title.to_string(),
+                description: None,
+                strategy: None,
+                workflow_branch: None,
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
+            },
+            labels: Vec::new(),
+            sections: atelier_records::IssueSections::for_type(issue_type, None),
+            relationships: Default::default(),
         }
     }
 
@@ -1054,14 +1050,12 @@ mod tests {
                     "atelier-a",
                     "mission",
                     "in_progress",
-                    "active",
                     "high",
                     "Coordinate the mission",
                 ),
                 inventory_row(
                     "atelier-b",
                     "epic",
-                    "todo",
                     "todo",
                     "critical",
                     "Own a parent slice",
@@ -1070,14 +1064,12 @@ mod tests {
                     "atelier-c",
                     "task",
                     "blocked",
-                    "blocked",
                     "medium",
                     "A linked child record",
                 ),
                 inventory_row(
                     "atelier-d",
                     "bug",
-                    "done",
                     "done",
                     "low",
                     "A completed standalone record",
@@ -1086,7 +1078,7 @@ mod tests {
             4,
         );
 
-        let output = render_issue_inventory(&view, RenderContext::plain());
+        let output = render_issue_inventory(&view.view(), RenderContext::plain());
 
         assert!(output.starts_with("Issue Inventory\n===============\n\nID"));
         assert!(output.contains("atelier-a  mission  in_progress  high"));
@@ -1116,14 +1108,13 @@ mod tests {
                 "atelier-a",
                 "task",
                 "todo",
-                "todo",
                 "medium",
                 "Visible",
             )],
             3,
         );
 
-        let output = render_issue_inventory(&view, RenderContext::plain());
+        let output = render_issue_inventory(&view.view(), RenderContext::plain());
 
         assert!(output.contains("Showing 1 of 3 issues"));
         assert!(output.contains("Narrow the metadata filters or raise --limit."));
@@ -1133,23 +1124,26 @@ mod tests {
     fn issue_inventory_empty_and_quiet_states_are_explicit() {
         let view = inventory_view(Vec::new(), 0);
 
-        let human = render_issue_inventory(&view, RenderContext::plain());
+        let human = render_issue_inventory(&view.view(), RenderContext::plain());
         assert!(human.contains("No issues match the selected filters."));
         assert!(!human.contains("Showing 0 of 0 issues"));
-        assert_eq!(render_issue_inventory_quiet(&view), "");
+        assert_eq!(render_issue_inventory_quiet(&view.view()), "");
     }
 
     #[test]
     fn issue_inventory_quiet_uses_view_order_and_contains_only_ids() {
         let view = inventory_view(
             vec![
-                inventory_row("atelier-a", "task", "todo", "todo", "high", "First"),
-                inventory_row("atelier-b", "epic", "done", "done", "low", "Second"),
+                inventory_row("atelier-a", "task", "todo", "high", "First"),
+                inventory_row("atelier-b", "epic", "done", "low", "Second"),
             ],
             4,
         );
 
-        assert_eq!(render_issue_inventory_quiet(&view), "atelier-a\natelier-b");
+        assert_eq!(
+            render_issue_inventory_quiet(&view.view()),
+            "atelier-a\natelier-b"
+        );
     }
 
     #[test]
@@ -1159,19 +1153,18 @@ mod tests {
                 "atelier-a",
                 "task",
                 "blocked",
-                "blocked",
                 "critical",
                 "Needs attention",
             )],
             1,
         );
-        let plain = render_issue_inventory(&view, RenderContext::plain());
+        let plain = render_issue_inventory(&view.view(), RenderContext::plain());
         let colored = render_issue_inventory(
-            &view,
+            &view.view(),
             RenderContext::from_parts(ColorChoice::Always, true, false),
         );
         let no_color = render_issue_inventory(
-            &view,
+            &view.view(),
             RenderContext::from_parts(ColorChoice::Always, true, true),
         );
 

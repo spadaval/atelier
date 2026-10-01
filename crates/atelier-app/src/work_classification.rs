@@ -35,20 +35,16 @@ pub struct ClassifiedWork {
     pub classification: WorkClassification,
     pub status_category: Option<String>,
     pub open_blockers: Vec<String>,
-    pub can_enter_active: bool,
-    pub terminal_ancestor: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkRow {
     pub id: String,
     pub title: String,
-    pub issue_type: String,
     pub status: String,
     pub status_category: Option<String>,
     pub priority: String,
     pub open_blockers: Vec<String>,
-    pub can_enter_active: bool,
     pub classification: WorkClassification,
 }
 
@@ -75,39 +71,18 @@ pub struct MissionSummary {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StatusNextAction {
-    InspectReadyWork { count: usize },
-    InspectBlockedWork,
-    NoSpecificAction,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StatusView {
     pub work: WorkBuckets,
     pub current_missions: Vec<MissionSummary>,
-    pub next_action: StatusNextAction,
 }
 
 pub fn status_view(
     index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
 ) -> Result<StatusView> {
-    let work = work_buckets(index, workflow_policy)?;
-    let current_missions = current_missions(index, workflow_policy);
-    let next_action = if !work.ready.is_empty() {
-        StatusNextAction::InspectReadyWork {
-            count: work.ready.len(),
-        }
-    } else if !work.blocked.is_empty() {
-        StatusNextAction::InspectBlockedWork
-    } else {
-        StatusNextAction::NoSpecificAction
-    };
-
     Ok(StatusView {
-        work,
-        current_missions,
-        next_action,
+        work: work_buckets(index, workflow_policy)?,
+        current_missions: current_missions(index, workflow_policy),
     })
 }
 
@@ -143,12 +118,10 @@ fn work_row(
     Ok(WorkRow {
         id: issue.id.clone(),
         title: issue.title,
-        issue_type: issue.issue_type,
         status: issue.status,
         status_category: classified.status_category,
         priority: issue.priority,
         open_blockers: classified.open_blockers,
-        can_enter_active: classified.can_enter_active,
         classification: classified.classification,
     })
 }
@@ -169,56 +142,40 @@ pub fn classify_issue(
         .map(str::to_string);
     let open_blockers = open_blockers(index, workflow_policy, &issue.id)?;
 
-    if status_category.as_deref() == Some("done") {
-        return Ok(ClassifiedWork {
-            classification: WorkClassification::Done,
-            status_category,
-            open_blockers,
-            can_enter_active: false,
-            terminal_ancestor: None,
-        });
-    }
-
-    let terminal_ancestor = terminal_ancestor(index, workflow_policy, issue)?;
-    if terminal_ancestor.is_some() {
-        return Ok(ClassifiedWork {
-            classification: WorkClassification::Backlog,
-            status_category,
-            open_blockers,
-            can_enter_active: false,
-            terminal_ancestor,
-        });
-    }
-
-    let classification = match status_category.as_deref() {
-        Some("active") => WorkClassification::Active,
-        Some("blocked") => WorkClassification::Blocked,
-        Some("todo") => {
-            if !open_blockers.is_empty() {
-                WorkClassification::Blocked
-            } else {
-                let can_enter_active = match workflow_policy {
-                    Some(policy) => policy.can_enter_active(&issue.issue_type, &issue.status)?,
-                    None => issue.status == "todo",
-                };
-                if can_enter_active {
-                    WorkClassification::Ready
+    let classification = if status_category.as_deref() == Some("done") {
+        WorkClassification::Done
+    } else if terminal_ancestor(index, workflow_policy, issue)?.is_some() {
+        WorkClassification::Backlog
+    } else {
+        match status_category.as_deref() {
+            Some("active") => WorkClassification::Active,
+            Some("blocked") => WorkClassification::Blocked,
+            Some("todo") => {
+                if !open_blockers.is_empty() {
+                    WorkClassification::Blocked
                 } else {
-                    WorkClassification::Backlog
+                    let can_enter_active = match workflow_policy {
+                        Some(policy) => {
+                            policy.can_enter_active(&issue.issue_type, &issue.status)?
+                        }
+                        None => issue.status == "todo",
+                    };
+                    if can_enter_active {
+                        WorkClassification::Ready
+                    } else {
+                        WorkClassification::Backlog
+                    }
                 }
             }
+            _ if !open_blockers.is_empty() => WorkClassification::Blocked,
+            _ if workflow_policy.is_none() && issue.status == "todo" => WorkClassification::Ready,
+            _ => WorkClassification::Backlog,
         }
-        _ if !open_blockers.is_empty() => WorkClassification::Blocked,
-        _ if workflow_policy.is_none() && issue.status == "todo" => WorkClassification::Ready,
-        _ => WorkClassification::Backlog,
     };
-    let can_enter_active = classification == WorkClassification::Ready;
     Ok(ClassifiedWork {
         classification,
         status_category,
         open_blockers,
-        can_enter_active,
-        terminal_ancestor: None,
     })
 }
 
@@ -411,16 +368,16 @@ mod tests {
     }
 
     #[test]
-    fn status_view_selects_ready_work_before_generic_guidance() {
+    fn status_view_retains_complete_bucket_facts() {
         let index = records_with_rows().index();
         let policy = test_policy();
 
         let view = status_view(&index, Some(&policy)).unwrap();
 
-        assert_eq!(
-            view.next_action,
-            StatusNextAction::InspectReadyWork { count: 1 }
-        );
+        assert_eq!(view.work.ready.len(), 1);
+        assert_eq!(view.work.blocked.len(), 1);
+        assert_eq!(view.work.active.len(), 1);
+        assert_eq!(view.work.done.len(), 1);
     }
 
     #[test]

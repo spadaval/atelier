@@ -13,10 +13,7 @@ use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext, TextPanel,
 };
 use crate::utils::format_issue_id;
-use atelier_app::issue_inventory::{
-    issue_inventory, IssueInventoryFilters, IssueInventoryLimit, IssueInventoryRequest,
-    IssueInventorySnapshot, IssueInventoryStatusFilter,
-};
+use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::{ObjectiveIssueSummary, ObjectiveReadSummary};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
@@ -234,7 +231,7 @@ fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], to
     let rows = issues
         .iter()
         .map(|issue| IssueListRow {
-            role: display_role_for_bucket(issue.bucket.label()),
+            role: DisplayRole::for_work(issue.bucket.label()),
             id: format_issue_id(&issue.id),
             status: Some(issue.status.clone()),
             priority: issue.priority.clone(),
@@ -463,7 +460,7 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
         .map(|index| {
             let (subissue, classified) = &classified_subissues[index];
             IssueListRow {
-                role: display_role_for_bucket(classified.classification.label()),
+                role: DisplayRole::for_work(classified.classification.label()),
                 id: format_issue_id(&subissue.id),
                 status: Some(classified.classification.label().to_string()),
                 priority: subissue.priority.clone(),
@@ -482,15 +479,6 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
     );
     print_panel(LinesPanel::new("Subissues", lines));
     Ok(())
-}
-
-fn display_role_for_bucket(label: &str) -> DisplayRole {
-    match label {
-        "active" => DisplayRole::Executable,
-        "ready" => DisplayRole::Selectable,
-        "blocked" => DisplayRole::Blocked,
-        _ => DisplayRole::ContextOnly,
-    }
 }
 
 fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> {
@@ -612,78 +600,18 @@ pub fn list_inventory(
     quiet: bool,
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
-    if let Some(issue_type) = issue_type {
-        let Some(policy) = workflow_policy.as_ref() else {
-            bail!("--issue-type requires a workflow policy");
-        };
-        if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
-    let status_filter = if status == "all" {
-        IssueInventoryStatusFilter::All
-    } else {
-        // Reuse workflow parsing for configured-status validation, while keeping
-        // category as a separate exact inventory filter.
-        if workflow_policy
-            .as_ref()
-            .is_some_and(|policy| !policy.statuses.contains_key(status))
-        {
-            bail!("Invalid issue status '{status}'. Use an exact workflow status or `all`.");
-        }
-        IssueInventoryStatusFilter::Exact(status.to_string())
-    };
-    if let Some(category) = category {
-        let policy = workflow_policy
-            .as_ref()
-            .ok_or_else(|| anyhow!("--category requires a workflow policy"))?;
-        if !policy
-            .statuses
-            .values()
-            .any(|status| status.category == category)
-        {
-            bail!("Invalid issue category '{category}'. Use a category from the workflow policy.");
-        }
-    }
-    let limit = IssueInventoryLimit::new(limit)?;
-    let issues = index.list_issues(Some("all"), label, priority)?;
-    let snapshots = issues.into_iter().map(|issue| IssueInventorySnapshot {
-        status_category: workflow_policy
-            .as_ref()
-            .and_then(|policy| policy.status_category(&issue.status))
-            .map(str::to_string),
-        id: issue.id.to_string(),
-        issue_type: issue.issue_type,
-        status: issue.status,
-        priority: issue.priority,
-        title: issue.title,
-        labels: label.into_iter().map(str::to_string).collect(),
-    });
     let view = issue_inventory(
-        snapshots,
-        &IssueInventoryRequest {
-            filters: IssueInventoryFilters {
-                status: status_filter,
-                category: category.map(str::to_string),
-                issue_type: issue_type.map(str::to_string),
-                label: label.map(str::to_string),
-                priority: priority
-                    .map(IssuePriority::from_cli_input)
-                    .transpose()?
-                    .map(|priority| priority.label().to_string()),
-            },
-            limit,
+        index,
+        workflow_policy.as_ref(),
+        IssueInventoryFilters {
+            status: (status != "all").then_some(status),
+            category,
+            issue_type,
+            label,
+            priority,
         },
-    );
+        limit,
+    )?;
     let output = if quiet {
         render_issue_inventory_quiet(&view)
     } else {
