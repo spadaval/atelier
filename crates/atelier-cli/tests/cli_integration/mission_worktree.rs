@@ -1,6 +1,6 @@
 use super::*;
 
-fn canonical_tree_snapshot(
+pub(super) fn canonical_tree_snapshot(
     state_dir: &std::path::Path,
 ) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
     fn collect(
@@ -588,7 +588,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
 }
 
 #[test]
-fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
+fn test_ready_work_remains_visible_when_proof_blocks_start_transition() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -598,7 +598,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     migrate_default_issue_workflow(dir.path());
 
     let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(ready_out.contains(&ready_id), "{ready_out}");
 
@@ -613,8 +613,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     )
     .unwrap();
 
-    let (success, blocked_ready_out, stderr) =
-        run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    let (success, blocked_ready_out, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(
         success,
         "ready list with blocked transition should remain readable: {stderr}"
@@ -1020,7 +1019,7 @@ fn test_queries_fail_naming_the_invalid_record_file() {
         markdown.replace("schema_version: 2", "schema_version: 99")
     });
 
-    let (success, _, stderr) = run_atelier(schema_dir.path(), &["work", "queue"]);
+    let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
     assert!(!success, "schema drift should block the query");
     assert!(
         stderr.contains(&format!(
@@ -1044,7 +1043,7 @@ fn test_queries_fail_naming_the_invalid_record_file() {
     );
 
     for args in [
-        &["work", "queue"][..],
+        &["issue", "list"][..],
         &["status"],
         &["issue", "list"],
         &["issue", "show", &malformed_issue_id],
@@ -1606,7 +1605,7 @@ fn test_bundle_apply_records_links() {
     let blocker_id = issue_id_by_title(dir.path(), "Complete prerequisite");
     let blocked_id = issue_id_by_title(dir.path(), "Blocked bundle work");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "query after bundle apply failed: {stderr}");
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
@@ -2477,13 +2476,14 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(stdout.contains("Typed issue"));
     assert!(stdout.contains("Category: todo"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--status", "all"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "list failed: {stderr}");
     assert!(stdout.contains("validation"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success, "ready failed: {stderr}");
-    assert!(stdout.contains("validation"));
+    assert!(stdout.contains(&issue_id));
+    assert!(stdout.contains("Typed issue"));
 
     let issue_record = std::fs::read_to_string(
         dir.path()

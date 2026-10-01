@@ -14,18 +14,6 @@ use crate::human_output::{
     MetadataPanel, Page, Panel, RenderContext, TextStyle,
 };
 
-pub struct QueueOptions<'a> {
-    pub status: &'a str,
-    pub category: Option<&'a str>,
-    pub label: Option<&'a str>,
-    pub priority: Option<&'a str>,
-    pub ready: bool,
-    pub active: bool,
-    pub blocked: bool,
-    pub backlog: bool,
-    pub all: bool,
-}
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MissionDashboardOptions {
     pub ready: bool,
@@ -72,7 +60,11 @@ impl MissionDashboardOptions {
 
 pub fn dashboards(quiet: bool) -> Result<()> {
     if quiet {
-        println!("queue");
+        println!("ready");
+        println!("blocked");
+        println!("active");
+        println!("all");
+        println!("missions");
         println!("mission");
         println!("epic");
         return Ok(());
@@ -103,53 +95,6 @@ pub fn dashboards(quiet: bool) -> Result<()> {
         ))
         .print(RenderContext::for_stdout());
     Ok(())
-}
-
-pub fn queue(index: &RecordIndex, options: QueueOptions<'_>, quiet: bool) -> Result<()> {
-    let state_filter_count = [
-        options.ready,
-        options.active,
-        options.blocked,
-        options.backlog,
-        options.all,
-    ]
-    .into_iter()
-    .filter(|flag| *flag)
-    .count();
-    if state_filter_count > 1 {
-        bail!("choose only one queue state filter");
-    }
-    if options.ready && (options.status != "todo" || options.category.is_some()) {
-        bail!("--ready cannot be combined with --status or --category");
-    }
-    if options.blocked {
-        if options.status != "todo" || options.category.is_some() {
-            bail!("--blocked cannot be combined with --status or --category");
-        }
-        return crate::commands::issue::list_blocked_with_title(index, "Work Queue", quiet);
-    }
-    let (status, category, ready) = if options.all {
-        ("all", None, false)
-    } else if options.ready {
-        ("todo", None, true)
-    } else if options.active {
-        ("todo", Some("active"), false)
-    } else if options.backlog {
-        ("todo", Some("backlog"), false)
-    } else {
-        (options.status, options.category, false)
-    };
-    crate::commands::issue::list_with_title(
-        index,
-        "Work Queue",
-        Some(status),
-        category,
-        None,
-        options.label,
-        options.priority,
-        ready,
-        quiet,
-    )
 }
 
 pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
@@ -863,7 +808,7 @@ fn issue_category(
 }
 
 fn mission_scoped_issues(index: &RecordIndex, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut scoped = crate::commands::objective_status::mission_issue_ids(index, mission_id)?
+    let mut scoped = atelier_app::objective_graph::mission_issue_ids(index, mission_id)?
         .into_iter()
         .filter_map(|id| index.get_issue(&id))
         .collect::<Vec<_>>();
@@ -872,19 +817,10 @@ fn mission_scoped_issues(index: &RecordIndex, mission_id: &str) -> Result<Vec<Is
 }
 
 fn descendant_issues(index: &RecordIndex, root_id: &str) -> Result<Vec<Issue>> {
-    let mut out = Vec::new();
-    let mut stack = index
-        .get_subissues(root_id)
+    atelier_app::objective_graph::issue_descendant_ids(index, root_id)?
         .into_iter()
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    while let Some(id) = stack.pop() {
-        let issue = index.require_issue(&id)?;
-        stack.extend(index.get_subissues(&id).into_iter().map(|child| child.id));
-        out.push(issue);
-    }
-    out.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(out)
+        .map(|id| index.require_issue(&id))
+        .collect()
 }
 
 fn proof_gap_count(index: &RecordIndex, issues: &[Issue]) -> Result<usize> {
@@ -947,7 +883,7 @@ fn transition_readiness(
 fn containing_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
     for mission in index.list_issues(Some("all"), None, None)? {
         if mission.issue_type == "mission"
-            && crate::commands::objective_status::mission_issue_ids(index, &mission.id)?
+            && atelier_app::objective_graph::mission_issue_ids(index, &mission.id)?
                 .contains(issue_id)
         {
             return Ok(Some(mission.id));

@@ -150,6 +150,24 @@ await review on the mission branch.
 9. `prime`, `land`, `setup` (S6); cross-branch status.
 10. Rewrite product docs and `PRODUCT_INTENT.md`; dogfood (S8).
 
+Bounded UI simplification candidate (author proof complete; independent review
+pending): removed the legacy `work queue` without an alias and deleted the
+unreachable per-objective status renderer/model. Metadata filtering stays in
+`issue list`; operational selection stays in `work ready/blocked/active/all`
+and scoped dashboards. Objective views use the shared app graph traversal and
+classification, retain every scoped row, and apply limits only when rendering.
+This removes duplicate hierarchy/readiness machinery without changing record,
+policy, evidence, or merge guards. Migrated tests retain readiness, blockers,
+Unicode, quiet output, and custom-status coverage; obsolete queue presentation
+tests are removed. A regression first failed on the old five-row app truncation,
+then passed with complete scope and active work included in recent activity.
+All 480 workspace tests, formatting, whitespace, and required dead/unused-code
+checks pass. The 1,000-issue/200-evidence release benchmark passes 10 runs:
+medians 31.1–43.0 ms and maximum 54.1 ms. Non-test physical Rust is 18,753 lines,
+down exactly 1,500 from the step-6 candidate at `8a4b850d` (20,253); this count
+retains blanks/comments, includes build scripts, and excludes integration-test
+files, the cfg-gated test helper, and complete `cfg(test)` item spans.
+
 Deferred review findings to resolve in later steps:
 
 - `start` treats a remote-only branch as new and branches from HEAD.

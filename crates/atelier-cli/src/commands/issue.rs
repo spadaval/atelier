@@ -7,11 +7,10 @@ use crate::commands::issue_workflow::{
     format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
     load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
-use crate::commands::work_order::{order_work_rows, WorkOrderRow};
+use crate::commands::work_order::WorkOrderRow;
 use crate::human_output::{
-    self, render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction,
-    FooterPanel, IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext,
-    StylePolicy, TextPanel,
+    render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction, FooterPanel,
+    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext, TextPanel,
 };
 use crate::utils::format_issue_id;
 use atelier_app::issue_inventory::{
@@ -25,168 +24,9 @@ use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::validate_issue_type;
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
+const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
 const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
-
-#[derive(Debug, Clone)]
-pub struct IssueSummary {
-    pub id: String,
-    pub title: String,
-    pub status: String,
-    pub issue_type: String,
-    pub priority: String,
-    pub parent: Option<String>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
-struct QueueRow {
-    id: String,
-    title: String,
-    status: String,
-    status_category: Option<String>,
-    issue_type: String,
-    priority: String,
-    parent: Option<String>,
-    open_blockers: Vec<String>,
-    depth: usize,
-    updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
-struct QueueGroup {
-    id: Option<String>,
-    title: String,
-    issue_type: Option<String>,
-    priority: Option<String>,
-    external_blockers: Vec<String>,
-    rows: Vec<QueueRow>,
-}
-
-impl QueueRow {
-    fn work_order_row(&self) -> WorkOrderRow {
-        WorkOrderRow {
-            id: self.id.clone(),
-            status_category: self.status_category.clone(),
-            priority: self.priority.clone(),
-            updated_at: self.updated_at,
-            open_blockers: self.open_blockers.clone(),
-        }
-    }
-
-    fn state_label(&self) -> &'static str {
-        self.work_order_row().state().label()
-    }
-}
-
-#[derive(Debug, Clone)]
-enum IssueStatusFilter {
-    All,
-    Exact(String),
-    Category(String),
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct WorkflowReadContext {
-    missing_policy: bool,
-    unmigrated_filter: bool,
-}
-
-impl IssueStatusFilter {
-    fn from_input(
-        policy: Option<&WorkflowPolicy>,
-        status: &str,
-        category: Option<&str>,
-    ) -> Result<Self> {
-        if let Some(category) = category {
-            if status != "todo" && status != "all" {
-                bail!("--status and --category cannot be combined");
-            }
-            return Self::category(policy, category);
-        }
-        Self::status(policy, status)
-    }
-
-    fn status(policy: Option<&WorkflowPolicy>, input: &str) -> Result<Self> {
-        if input == "all" {
-            return Ok(Self::All);
-        }
-        if let Some(policy) = policy {
-            if policy.statuses.contains_key(input) {
-                return Ok(Self::Exact(input.to_string()));
-            }
-            bail!(
-                "Invalid issue status '{input}'. Use an exact workflow status, `all`, or `--category <category>`."
-            );
-        }
-        Ok(Self::Exact(input.to_string()))
-    }
-
-    fn category(policy: Option<&WorkflowPolicy>, input: &str) -> Result<Self> {
-        let Some(policy) = policy else {
-            bail!("--category requires a workflow policy");
-        };
-        if policy
-            .statuses
-            .values()
-            .any(|status| status.category == input)
-        {
-            return Ok(Self::Category(input.to_string()));
-        }
-        bail!("Invalid issue category '{input}'. Use a category from the workflow policy.")
-    }
-
-    fn matches(
-        &self,
-        policy: Option<&WorkflowPolicy>,
-        issue: &Issue,
-        context: &mut WorkflowReadContext,
-    ) -> bool {
-        match self {
-            Self::All => true,
-            Self::Exact(status) => {
-                if policy.is_some()
-                    && !policy
-                        .and_then(|policy| policy.status_category(status))
-                        .is_some()
-                    && issue.status == *status
-                {
-                    context.unmigrated_filter = true;
-                }
-                issue.status == *status
-            }
-            Self::Category(category) => {
-                let issue_category = issue_status_category(policy, &issue.status);
-                if policy.is_some()
-                    && issue_category.is_some()
-                    && !policy_status_known(policy, &issue.status)
-                {
-                    context.unmigrated_filter = true;
-                }
-                issue_category.as_deref() == Some(category.as_str())
-            }
-        }
-    }
-}
-
-fn policy_status_known(policy: Option<&WorkflowPolicy>, status: &str) -> bool {
-    issue_status_category(policy, status).is_some()
-}
-
-fn print_workflow_read_guidance(context: WorkflowReadContext) {
-    if context.missing_policy {
-        println!();
-        println!(
-            "Workflow policy missing: run `atelier check` to inspect tracker setup and restore the committed policy."
-        );
-    }
-    if context.unmigrated_filter {
-        println!();
-        println!(
-            "Issue statuses outside the configured workflow are present; fix the records, then rerun `atelier check`."
-        );
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct DependencySummary {
@@ -310,21 +150,6 @@ fn canonical_issue_path(issue_id: &str) -> Result<Option<PathBuf>> {
         .map(|state_dir| canonical_issue_path_from_state(&state_dir, issue_id)))
 }
 
-fn issue_summary(index: &RecordIndex, issue: Issue) -> Result<IssueSummary> {
-    Ok(IssueSummary {
-        id: issue_id_for_agent(index, &issue)?,
-        title: issue.title,
-        status: issue.status,
-        issue_type: issue.issue_type,
-        priority: issue.priority,
-        parent: issue
-            .parent_id
-            .map(|id| dependency_summary(index, &id).map(|summary| summary.id))
-            .transpose()?,
-        updated_at: issue.updated_at,
-    })
-}
-
 pub fn show(index: &RecordIndex, issue_ref: &str) -> Result<()> {
     let id = resolve_id(index, issue_ref)?;
     let record = index
@@ -340,8 +165,11 @@ fn render_issue_show_human(
     object: &IssueObject,
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
-    let objective_summary =
-        objective_read_summary_for_show(index, canonical_id, workflow_policy.as_ref())?;
+    let objective_summary = atelier_app::issue_read::objective_read_summary(
+        index,
+        canonical_id,
+        workflow_policy.as_ref(),
+    )?;
     let status_category = issue_status_category(workflow_policy.as_ref(), &object.status);
     let identity = format!(
         "{} [{}] {} - {}",
@@ -403,24 +231,6 @@ fn render_issue_show_human(
     Ok(())
 }
 
-fn objective_read_summary_for_show(
-    index: &RecordIndex,
-    canonical_id: &str,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Option<ObjectiveReadSummary>> {
-    let active_issue_ids = active_issue_ids(index)?;
-    let active_issue_refs = active_issue_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<BTreeSet<_>>();
-    atelier_app::issue_read::objective_read_summary(
-        index,
-        canonical_id,
-        workflow_policy,
-        &active_issue_refs,
-    )
-}
-
 fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     let Some(summary) = summary else {
         return;
@@ -471,6 +281,11 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     );
 
     render_objective_issue_rows(
+        "Active Work",
+        &summary.scope.active,
+        summary.scope.totals.active,
+    );
+    render_objective_issue_rows(
         "Ready Work",
         &summary.scope.ready,
         summary.scope.totals.ready,
@@ -489,6 +304,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                 .recent_activity
                 .recently_updated
                 .iter()
+                .take(OBJECTIVE_ROLLUP_LIMIT)
                 .map(|issue| {
                     format!(
                         "  updated {} [{}] {} - {}",
@@ -521,7 +337,7 @@ fn render_objective_issue_rows(title: &str, issues: &[ObjectiveIssueSummary], to
     print_panel(
         IssueListPanel::new(title, rows)
             .total_count(total_count)
-            .limit(issues.len()),
+            .limit(OBJECTIVE_ROLLUP_LIMIT),
     );
 }
 
@@ -854,12 +670,6 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn priority_rank(priority: &str) -> u8 {
-    IssuePriority::from_label(priority)
-        .map(|priority| priority.sort_rank())
-        .unwrap_or(4)
-}
-
 fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()> {
     let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
@@ -903,28 +713,6 @@ fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
     atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }
 
-pub fn list(
-    index: &RecordIndex,
-    status: Option<&str>,
-    category: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    ready: bool,
-    quiet: bool,
-) -> Result<()> {
-    list_with_title(
-        index,
-        "Issue Queue",
-        status,
-        category,
-        None,
-        label,
-        priority,
-        ready,
-        quiet,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn list_inventory(
     index: &RecordIndex,
@@ -959,11 +747,25 @@ pub fn list_inventory(
     } else {
         // Reuse workflow parsing for configured-status validation, while keeping
         // category as a separate exact inventory filter.
-        IssueStatusFilter::from_input(workflow_policy.as_ref(), status, None)?;
+        if workflow_policy
+            .as_ref()
+            .is_some_and(|policy| !policy.statuses.contains_key(status))
+        {
+            bail!("Invalid issue status '{status}'. Use an exact workflow status or `all`.");
+        }
         IssueInventoryStatusFilter::Exact(status.to_string())
     };
     if let Some(category) = category {
-        IssueStatusFilter::category(workflow_policy.as_ref(), category)?;
+        let policy = workflow_policy
+            .as_ref()
+            .ok_or_else(|| anyhow!("--category requires a workflow policy"))?;
+        if !policy
+            .statuses
+            .values()
+            .any(|status| status.category == category)
+        {
+            bail!("Invalid issue category '{category}'. Use a category from the workflow policy.");
+        }
     }
     let limit = IssueInventoryLimit::new(limit)?;
     let issues = index.list_issues(Some("all"), label, priority)?;
@@ -1004,551 +806,6 @@ pub fn list_inventory(
         println!("{output}");
     }
     Ok(())
-}
-
-pub(crate) fn list_with_title(
-    index: &RecordIndex,
-    title: &str,
-    status: Option<&str>,
-    category: Option<&str>,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    ready: bool,
-    quiet: bool,
-) -> Result<()> {
-    let workflow_policy = load_issue_workflow_policy()?;
-    if let Some(issue_type) = issue_type {
-        let Some(policy) = workflow_policy.as_ref() else {
-            bail!("--issue-type requires a workflow policy");
-        };
-        if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
-    let status_input = status.unwrap_or("todo");
-    if ready && ((status_input != "todo" && status_input != "all") || category.is_some()) {
-        bail!("--ready uses startable todo-category work; do not combine it with --status or --category");
-    }
-    let status_filter =
-        IssueStatusFilter::from_input(workflow_policy.as_ref(), status_input, category)?;
-    let mut read_context = WorkflowReadContext {
-        missing_policy: workflow_policy.is_none(),
-        unmigrated_filter: false,
-    };
-    let mut rows = index
-        .list_issues(Some("all"), label, priority)?
-        .into_iter()
-        .filter(|issue| {
-            if issue_type.is_some_and(|issue_type| issue.issue_type != issue_type) {
-                return false;
-            }
-            ready || status_filter.matches(workflow_policy.as_ref(), issue, &mut read_context)
-        })
-        .map(|issue| issue_summary(index, issue))
-        .map(|summary| summary.and_then(|issue| queue_row(index, workflow_policy.as_ref(), issue)))
-        .collect::<Result<Vec<_>>>()?;
-    if ready {
-        rows = filter_ready_rows(index, workflow_policy.as_ref(), rows)?;
-    }
-    if rows.is_empty() {
-        println!("No issues found.");
-    } else if quiet {
-        render_queue_ids_quiet(order_queue_rows(rows));
-    } else {
-        render_issue_queue_human(index, title, rows, true)?;
-    }
-    print_workflow_read_guidance(read_context);
-    Ok(())
-}
-
-pub(crate) fn list_blocked_with_title(index: &RecordIndex, title: &str, quiet: bool) -> Result<()> {
-    list_blocked_filtered_with_title(index, title, None, None, None, quiet)
-}
-
-fn list_blocked_filtered_with_title(
-    index: &RecordIndex,
-    title: &str,
-    issue_type: Option<&str>,
-    label: Option<&str>,
-    priority: Option<&str>,
-    quiet: bool,
-) -> Result<()> {
-    let workflow_policy = load_issue_workflow_policy()?;
-    if let Some(issue_type) = issue_type {
-        let Some(policy) = workflow_policy.as_ref() else {
-            bail!("--issue-type requires a workflow policy");
-        };
-        if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
-    let rows = index
-        .list_issues(Some("all"), label, priority)?
-        .into_iter()
-        .filter(|issue| issue_type.is_none_or(|issue_type| issue.issue_type == issue_type))
-        .map(|issue| {
-            let classification = atelier_app::work_classification::classify_issue(
-                index,
-                workflow_policy.as_ref(),
-                &issue,
-            )?
-            .classification;
-            Ok((issue, classification))
-        })
-        .map(|result: Result<_>| {
-            result.and_then(|(issue, classification)| {
-                issue_summary(index, issue).map(|summary| (summary, classification))
-            })
-        })
-        .map(|result| {
-            result.and_then(|(issue, classification)| {
-                queue_row(index, workflow_policy.as_ref(), issue).map(|row| (row, classification))
-            })
-        })
-        .filter_map(|result| match result {
-            Ok((row, atelier_app::work_classification::WorkClassification::Blocked)) => {
-                Some(Ok(row))
-            }
-            Ok((_row, _)) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>>>()?;
-    if rows.is_empty() {
-        println!("No issues found.");
-    } else if quiet {
-        render_queue_ids_quiet(order_queue_rows(rows));
-    } else {
-        render_issue_queue_human(index, title, rows, true)?;
-    }
-    Ok(())
-}
-
-fn active_issue_ids(index: &RecordIndex) -> Result<BTreeSet<String>> {
-    let workflow_policy = load_issue_workflow_policy()?;
-    let active_issues =
-        crate::commands::status::current_work_issues(index, workflow_policy.as_ref())?;
-    Ok(active_issues
-        .into_iter()
-        .map(|issue| issue.id)
-        .collect::<BTreeSet<_>>())
-}
-
-fn render_queue_ids_quiet(items: Vec<QueueRow>) {
-    for item in items {
-        println!("{}", item.id);
-    }
-}
-
-fn render_issue_queue_human(
-    index: &RecordIndex,
-    title: &str,
-    items: Vec<QueueRow>,
-    show_status: bool,
-) -> Result<()> {
-    let rows = order_queue_rows(items);
-
-    human_output::print_heading(title);
-    println!("{}", queue_summary(&rows));
-
-    let mut groups = queue_groups(index, rows)?;
-    groups.sort_by(|a, b| {
-        priority_rank(a.priority.as_deref().unwrap_or("low"))
-            .cmp(&priority_rank(b.priority.as_deref().unwrap_or("low")))
-            .then(a.id.cmp(&b.id))
-            .then(a.title.cmp(&b.title))
-    });
-    let (footer_actions, omitted_footer_actions) = queue_footer_actions(&groups, 5);
-    for group in groups {
-        print_queue_group(group, show_status);
-    }
-    if !footer_actions.is_empty() {
-        println!();
-        println!(
-            "{}",
-            human_output::render_footer("Next Commands", footer_actions)
-        );
-        if omitted_footer_actions > 0 {
-            println!("  {omitted_footer_actions} more blocker drill-downs omitted");
-        }
-    }
-
-    Ok(())
-}
-
-fn queue_row(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    item: IssueSummary,
-) -> Result<QueueRow> {
-    let open_blockers = open_blocker_ids_with_policy(index, workflow_policy, &item.id)?;
-    let depth = ancestry_depth(index, &item.id)?;
-    let status_category = issue_status_category(workflow_policy, &item.status);
-    Ok(QueueRow {
-        id: item.id,
-        title: item.title,
-        status: item.status,
-        status_category,
-        issue_type: item.issue_type,
-        priority: item.priority,
-        parent: item.parent,
-        open_blockers,
-        depth,
-        updated_at: item.updated_at,
-    })
-}
-
-fn order_queue_rows(rows: Vec<QueueRow>) -> Vec<QueueRow> {
-    order_work_rows(rows, QueueRow::work_order_row)
-}
-
-fn filter_ready_rows(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    rows: Vec<QueueRow>,
-) -> Result<Vec<QueueRow>> {
-    let children = children_by_parent(index)?;
-    let candidate_ids = rows
-        .iter()
-        .map(|row| row.id.clone())
-        .collect::<BTreeSet<_>>();
-    let dependency_ready = match workflow_policy {
-        Some(policy) => {
-            atelier_app::objective_graph::dependency_readiness_batch(
-                index,
-                policy,
-                candidate_ids.iter().cloned(),
-            )?
-            .ready_by_issue
-        }
-        None => BTreeMap::new(),
-    };
-    rows.into_iter()
-        .map(|row| {
-            let issue = index.require_issue(&row.id)?;
-            if atelier_app::work_classification::classify_issue(index, workflow_policy, &issue)?
-                .classification
-                != atelier_app::work_classification::WorkClassification::Ready
-            {
-                return Ok((row, false));
-            }
-            if workflow_policy.is_some() && !dependency_ready.get(&row.id).copied().unwrap_or(false)
-            {
-                return Ok((row, false));
-            }
-            if has_descendants(&children, &row.id) {
-                let external =
-                    external_blockers_for_subtree(index, workflow_policy, &children, &row.id)?;
-                let is_ready =
-                    external.is_empty() && queue_row_can_enter_active(workflow_policy, &row)?;
-                Ok((row, is_ready))
-            } else {
-                let is_ready = row.open_blockers.is_empty()
-                    && queue_row_can_enter_active(workflow_policy, &row)?;
-                Ok((row, is_ready))
-            }
-        })
-        .filter_map(|result: Result<(QueueRow, bool)>| match result {
-            Ok((row, true)) => Some(Ok(row)),
-            Ok((_row, false)) => None,
-            Err(err) => Some(Err(err)),
-        })
-        .collect()
-}
-
-fn queue_row_can_enter_active(
-    workflow_policy: Option<&WorkflowPolicy>,
-    row: &QueueRow,
-) -> Result<bool> {
-    match workflow_policy {
-        Some(policy) => policy.can_enter_active(&row.issue_type, &row.status),
-        None => Ok(row.status == "todo"),
-    }
-}
-
-fn queue_groups(index: &RecordIndex, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
-    let row_ids = rows
-        .iter()
-        .map(|row| row.id.clone())
-        .collect::<BTreeSet<_>>();
-    let children = children_by_parent(index)?;
-    let mut grouped = BTreeMap::<String, Vec<QueueRow>>::new();
-    let mut standalone = Vec::new();
-
-    for row in rows {
-        if let Some(group_id) = row_root_parent(index, &row.id)? {
-            grouped.entry(group_id).or_default().push(row);
-        } else if has_descendants(&children, &row.id) {
-            grouped.entry(row.id.clone()).or_default().push(row);
-        } else {
-            standalone.push(row);
-        }
-    }
-
-    let mut groups = Vec::new();
-    for (group_id, mut rows) in grouped {
-        rows = order_queue_rows(rows);
-        let issue = index.require_issue(&group_id)?;
-        let workflow_policy = load_issue_workflow_policy()?;
-        let external_blockers =
-            external_blockers_for_subtree(index, workflow_policy.as_ref(), &children, &group_id)?;
-        let include_header_row = row_ids.contains(&group_id);
-        if include_header_row {
-            rows.retain(|row| row.id != group_id);
-        }
-        groups.push(QueueGroup {
-            id: Some(format_issue_id(&issue.id)),
-            title: issue.title,
-            issue_type: Some(issue.issue_type),
-            priority: Some(issue.priority),
-            external_blockers,
-            rows,
-        });
-    }
-
-    if !standalone.is_empty() {
-        standalone = order_queue_rows(standalone);
-        groups.push(QueueGroup {
-            id: None,
-            title: "Standalone".to_string(),
-            issue_type: None,
-            priority: None,
-            external_blockers: Vec::new(),
-            rows: standalone,
-        });
-    }
-
-    Ok(groups)
-}
-
-fn children_by_parent(index: &RecordIndex) -> Result<BTreeMap<String, Vec<String>>> {
-    let mut children = BTreeMap::<String, Vec<String>>::new();
-    for issue in index.list_issues(Some("all"), None, None)? {
-        if let Some(parent_id) = issue.parent_id {
-            children.entry(parent_id).or_default().push(issue.id);
-        }
-    }
-    Ok(children)
-}
-
-fn has_descendants(children: &BTreeMap<String, Vec<String>>, issue_id: &str) -> bool {
-    children
-        .get(issue_id)
-        .map(|children| !children.is_empty())
-        .unwrap_or(false)
-}
-
-fn row_root_parent(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
-    let mut current = index.require_issue(issue_id)?;
-    let mut root = None;
-    while let Some(parent_id) = current.parent_id.clone() {
-        root = Some(parent_id.clone());
-        current = index.require_issue(&parent_id)?;
-    }
-    Ok(root)
-}
-
-fn ancestry_depth(index: &RecordIndex, issue_id: &str) -> Result<usize> {
-    let mut current = index.require_issue(issue_id)?;
-    let mut depth = 0;
-    while let Some(parent_id) = current.parent_id.clone() {
-        depth += 1;
-        current = index.require_issue(&parent_id)?;
-    }
-    Ok(depth)
-}
-
-fn subtree_ids(children: &BTreeMap<String, Vec<String>>, root_id: &str) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    let mut stack = vec![root_id.to_string()];
-    while let Some(id) = stack.pop() {
-        if ids.insert(id.clone()) {
-            if let Some(child_ids) = children.get(&id) {
-                stack.extend(child_ids.iter().cloned());
-            }
-        }
-    }
-    ids
-}
-
-fn external_blockers_for_subtree(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    children: &BTreeMap<String, Vec<String>>,
-    root_id: &str,
-) -> Result<Vec<String>> {
-    let subtree = subtree_ids(children, root_id);
-    let mut blockers = BTreeSet::<String>::new();
-    for issue_id in &subtree {
-        for blocker_id in index.get_blockers(issue_id) {
-            let blocker = index.require_issue(&blocker_id)?;
-            if issue_blocks_work(workflow_policy, &blocker) && !subtree.contains(&blocker_id) {
-                blockers.insert(format_issue_id(&blocker_id));
-            }
-        }
-    }
-    Ok(blockers.into_iter().collect())
-}
-
-fn queue_summary(rows: &[QueueRow]) -> String {
-    let mut categories = BTreeMap::<String, usize>::new();
-    let mut statuses = BTreeMap::<String, usize>::new();
-    let mut priorities = BTreeMap::<String, usize>::new();
-    let mut blocked = 0;
-    for row in rows {
-        *categories
-            .entry(
-                row.status_category
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
-            )
-            .or_default() += 1;
-        *statuses.entry(row.status.clone()).or_default() += 1;
-        *priorities.entry(row.priority.clone()).or_default() += 1;
-        if !row.open_blockers.is_empty() {
-            blocked += 1;
-        }
-    }
-    format!(
-        "{} total | Categories: {} | Statuses: {} | Priorities: {} | Blocked: {}",
-        rows.len(),
-        joined_count_phrases(categories),
-        joined_count_phrases(statuses),
-        joined_count_phrases(priorities),
-        blocked
-    )
-}
-
-fn joined_count_phrases(counts: BTreeMap<String, usize>) -> String {
-    if counts.is_empty() {
-        return "none".to_string();
-    }
-    counts
-        .into_iter()
-        .map(|(name, count)| format!("{count} {name}"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn print_queue_group(group: QueueGroup, show_status: bool) {
-    let mut heading = match (&group.id, &group.issue_type, &group.priority) {
-        (Some(id), Some(issue_type), Some(priority)) => {
-            format!("[{issue_type}] {id} {priority} - {}", group.title)
-        }
-        _ => group.title,
-    };
-    if group.id.is_some() && !group.external_blockers.is_empty() {
-        let policy = StylePolicy::for_stdout();
-        heading.push_str(&format!(
-            " ({}; {})",
-            DisplayRole::ContextOnly.render(policy),
-            DisplayRole::BlockedThroughParent.render(policy)
-        ));
-    }
-    println!("\n{}", human_output::section_heading(&heading));
-    if !group.external_blockers.is_empty() {
-        println!(
-            "  blocked by {} external blocker{}",
-            group.external_blockers.len(),
-            plural_suffix(group.external_blockers.len())
-        );
-    }
-    if group.rows.is_empty() {
-        return;
-    }
-    let all_blocked = group.rows.iter().all(|row| !row.open_blockers.is_empty());
-    let row_limit = if all_blocked { 5 } else { 20 };
-    let total_rows = group.rows.len();
-    for row in group.rows.into_iter().take(row_limit) {
-        let status_text = if show_status {
-            format!("{} ", row.state_label())
-        } else {
-            String::new()
-        };
-        let parent = if group.id.is_none() {
-            row.parent
-                .as_deref()
-                .map(|parent| format!(" parent:{parent}"))
-                .unwrap_or_default()
-        } else {
-            String::new()
-        };
-        let blockers = blocker_suffix(&row.id, &row.open_blockers);
-        let indent = "  ".repeat(row.depth.max(1));
-        println!(
-            "  {}[{}] {}{} - {}{}",
-            format!("{indent}{status_text}"),
-            row.issue_type,
-            row.id,
-            parent,
-            row.title,
-            blockers
-        );
-    }
-    if total_rows > row_limit {
-        let omitted = total_rows - row_limit;
-        let label = if all_blocked { "blocked" } else { "work" };
-        println!(
-            "  {omitted} more {label} issue{} omitted",
-            plural_suffix(omitted)
-        );
-    }
-}
-
-fn blocker_suffix(_issue_id: &str, blockers: &[String]) -> String {
-    if blockers.is_empty() {
-        String::new()
-    } else {
-        format!(
-            " ({} blocker{})",
-            blockers.len(),
-            plural_suffix(blockers.len()),
-        )
-    }
-}
-
-fn queue_footer_actions(groups: &[QueueGroup], limit: usize) -> (Vec<FooterAction>, usize) {
-    let mut actions = Vec::new();
-    for group in groups {
-        if let Some(group_id) = &group.id {
-            if !group.external_blockers.is_empty() {
-                actions.push(FooterAction::new(
-                    format!("Inspect blockers for {group_id}"),
-                    format!("atelier issue show {group_id}"),
-                ));
-            }
-        }
-        for row in &group.rows {
-            if !row.open_blockers.is_empty() {
-                actions.push(FooterAction::new(
-                    format!("Inspect blockers for {}", row.id),
-                    format!("atelier issue show {}", row.id),
-                ));
-            }
-        }
-    }
-    let total = actions.len();
-    let (actions, omitted) = human_output::bounded_items(&actions, limit);
-    debug_assert_eq!(omitted, total.saturating_sub(actions.len()));
-    (actions, omitted)
 }
 
 fn plural_suffix(count: usize) -> &'static str {

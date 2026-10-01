@@ -185,9 +185,9 @@ information.
 
 ## Legacy Queue Boundary
 
-The legacy `atelier work queue` is not the Mission Overview and is not the
-generic inventory owner. Current guidance routes flat browsing to `issue list`,
+The legacy `atelier work queue` is removed without an alias or fallback.
+Current guidance routes flat browsing to `issue list`,
 cross-mission coordination to `work missions`, scoped coordination to `work
 mission` or `work epic`, and selection or triage to `work ready` or `work
-blocked`. The legacy queue must not gain a compatibility alias or fallback to
-either new read model; it can be removed once remaining callers are migrated.
+blocked`. Metadata filters remain available through `issue list`; operational
+buckets and scoped dashboards use the shared graph and work classification.

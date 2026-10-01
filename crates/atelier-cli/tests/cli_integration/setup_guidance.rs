@@ -1300,9 +1300,9 @@ fn test_issue_ready_list_uses_current_workflow_commands() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Next item");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success, "issue ready list failed: {stderr}");
-    assert!(stdout.contains("Work Queue"));
+    assert!(stdout.contains("Ready Work"));
     assert!(stdout.contains(&issue_id));
     assert!(stdout.contains("Next item"));
     assert!(

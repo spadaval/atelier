@@ -48,7 +48,7 @@ fn test_boundary_title_null_bytes() {
     match output {
         Ok(o) => {
             if o.status.success() {
-                let list = h.run_ok(&["work", "queue", "--all"]);
+                let list = h.run_ok(&["issue", "list"]);
                 assert!(list.success);
             }
         }
@@ -129,7 +129,7 @@ fn test_removed_description_flag_rejects_oversized_value() {
 fn test_boundary_empty_title() {
     let h = SmokeHarness::new();
     let _result = h.run(&["issue", "create", ""]);
-    let list = h.run_ok(&["work", "queue", "--all"]);
+    let list = h.run_ok(&["issue", "list"]);
     assert!(list.success);
 }
 
@@ -137,7 +137,7 @@ fn test_boundary_empty_title() {
 fn test_boundary_whitespace_title() {
     let h = SmokeHarness::new();
     let _result = h.run(&["issue", "create", "   "]);
-    let list = h.run_ok(&["work", "queue", "--all"]);
+    let list = h.run_ok(&["issue", "list"]);
     assert!(list.success);
 }
 
@@ -172,7 +172,7 @@ fn test_boundary_status_invalid() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Test issue"]);
 
-    let result = h.run(&["work", "queue", "-s", "bogus"]);
+    let result = h.run(&["issue", "list", "-s", "bogus"]);
     if result.success {
         assert!(
             !result.stdout.contains("Test issue"),
@@ -205,7 +205,7 @@ fn test_inject_sql_title() {
 
     h.run_ok(&["issue", "create", "Normal issue after injection"]);
 
-    let list = h.run_ok(&["work", "queue", "--all"]);
+    let list = h.run_ok(&["issue", "list"]);
     // Both issues should exist
     assert!(list.stdout.contains("Normal issue after injection"));
     assert!(list.stdout.contains(payload) || list.stdout.contains("DROP TABLE"));
@@ -221,7 +221,7 @@ fn test_inject_sql_search() {
     assert!(!result.success);
     assert!(result.stderr.contains("unrecognized subcommand 'search'"));
     // DB should remain intact
-    let list = h.run_ok(&["work", "queue", "--all"]);
+    let list = h.run_ok(&["issue", "list"]);
     assert!(list.stdout.contains("Findable issue"));
     assert!(list.stdout.contains("Another issue"));
 }
@@ -368,6 +368,6 @@ fn test_concurrent_creates_5() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    let result = h.run_ok(&["work", "queue", "--all"]);
+    let result = h.run_ok(&["issue", "list"]);
     assert!(result.success);
 }

@@ -15,6 +15,7 @@ pub(crate) enum WorkRowState {
     NotReady,
 }
 
+#[cfg(test)]
 impl WorkRowState {
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -115,18 +116,6 @@ pub(crate) fn ordered_work_indices(rows: &[WorkOrderRow]) -> Vec<usize> {
     }
 
     ordered
-}
-
-pub(crate) fn order_work_rows<T, F>(rows: Vec<T>, mut to_work_row: F) -> Vec<T>
-where
-    F: FnMut(&T) -> WorkOrderRow,
-{
-    let keys = rows.iter().map(&mut to_work_row).collect::<Vec<_>>();
-    let mut keyed = rows.into_iter().map(Some).collect::<Vec<_>>();
-    ordered_work_indices(&keys)
-        .into_iter()
-        .filter_map(|index| keyed[index].take())
-        .collect()
 }
 
 fn pop_front<T>(items: &mut Vec<T>) -> Option<T> {

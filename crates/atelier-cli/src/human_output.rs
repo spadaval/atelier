@@ -859,10 +859,6 @@ pub(crate) fn section_heading(title: &str) -> String {
     format!("{title}\n{}", "-".repeat(title.len()))
 }
 
-pub(crate) fn print_heading(title: &str) {
-    println!("{}", heading(title));
-}
-
 pub(crate) fn print_section_heading(title: &str) {
     println!("{}", section_heading(title));
 }

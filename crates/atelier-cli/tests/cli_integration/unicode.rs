@@ -22,7 +22,7 @@ fn test_unicode_arrows_in_title() {
     assert!(success);
 
     // List should not panic
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("←") || stdout.contains("...")); // Either shows or truncates
 }
@@ -62,7 +62,7 @@ fn test_unicode_variety_in_titles() {
     }
 
     // List all - tests truncation on long Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -121,7 +121,7 @@ fn test_unicode_long_string_truncation() {
     assert!(success);
 
     // List must not panic on truncation
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("...") || stdout.contains("Long:"));
 
@@ -130,7 +130,7 @@ fn test_unicode_long_string_truncation() {
     let (success, _, _) = run_atelier(dir.path(), &["issue", "create", &mixed]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -148,11 +148,11 @@ fn test_unicode_in_dependencies() {
     );
 
     // Blocked list with Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue", "--blocked"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "blocked"]);
     assert!(success);
 
     // Ready list
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    let (success, _, _) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success);
 }
 
@@ -186,6 +186,6 @@ fn test_unicode_special_characters() {
     assert!(success);
 
     // All should list without panic
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }

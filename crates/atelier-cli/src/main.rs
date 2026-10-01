@@ -145,36 +145,6 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum WorkCommands {
-    /// Show the legacy repo-wide operational queue
-    Queue {
-        /// Filter by exact workflow status, or all
-        #[arg(short, long, default_value = "todo")]
-        status: String,
-        /// Filter by derived workflow category
-        #[arg(long)]
-        category: Option<String>,
-        /// Filter by label
-        #[arg(short, long)]
-        label: Option<String>,
-        /// Filter by priority
-        #[arg(short, long)]
-        priority: Option<String>,
-        /// Show only ready work
-        #[arg(long)]
-        ready: bool,
-        /// Show active-category work
-        #[arg(long)]
-        active: bool,
-        /// Show blocked-category work
-        #[arg(long)]
-        blocked: bool,
-        /// Show backlog-category work
-        #[arg(long)]
-        backlog: bool,
-        /// Show all statuses
-        #[arg(long)]
-        all: bool,
-    },
     /// Show one mission dashboard
     Mission {
         id: String,
@@ -537,31 +507,6 @@ fn run() -> Result<()> {
             let (_, index) = load_repository()?;
             match action {
                 None => commands::work::dashboards(quiet),
-                Some(WorkCommands::Queue {
-                    status,
-                    category,
-                    label,
-                    priority,
-                    ready,
-                    active,
-                    blocked,
-                    backlog,
-                    all,
-                }) => commands::work::queue(
-                    &index,
-                    commands::work::QueueOptions {
-                        status: &status,
-                        category: category.as_deref(),
-                        label: label.as_deref(),
-                        priority: priority.as_deref(),
-                        ready,
-                        active,
-                        blocked,
-                        backlog,
-                        all,
-                    },
-                    quiet,
-                ),
                 Some(WorkCommands::Mission {
                     id,
                     ready,

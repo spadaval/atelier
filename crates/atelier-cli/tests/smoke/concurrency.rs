@@ -39,7 +39,7 @@ fn test_concurrent_creates_10() {
     );
 
     // Reads after concurrent writers parse the resulting record files.
-    let result = h.run_ok(&["work", "queue", "--all"]);
+    let result = h.run_ok(&["issue", "list"]);
     assert!(result.success);
 }
 
@@ -63,7 +63,7 @@ fn test_concurrent_reads() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["work", "queue", "--all"])
+                    .args(["issue", "list"])
                     .output()
                     .expect("failed to execute atelier");
                 output.status.success()
@@ -115,7 +115,7 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["work", "queue", "--all"])
+                .args(["issue", "list"])
                 .output()
                 .expect("failed to execute atelier");
             output.status.success()
@@ -144,6 +144,6 @@ fn test_concurrent_mixed_operations() {
     );
 
     // Reads after concurrent writers parse the resulting record files.
-    let result = h.run_ok(&["work", "queue", "--all"]);
+    let result = h.run_ok(&["issue", "list"]);
     assert!(result.success);
 }

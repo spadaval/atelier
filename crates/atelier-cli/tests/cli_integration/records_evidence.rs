@@ -375,7 +375,7 @@ fn test_stress_very_long_title() {
     assert!(stdout.contains("atelier-"));
 
     // Verify it can be listed and shown
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 
     let issue_id = issue_ref(dir.path(), 1);
@@ -423,7 +423,7 @@ fn test_stress_many_issues() {
     }
 
     // Verify list works
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--limit", "100"]);
     assert!(success);
     assert!(stdout.contains("Issue number 99"));
 
@@ -480,7 +480,7 @@ fn test_security_sql_injection_title() {
     }
 
     // Verify all issues exist and DB is intact
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("DROP TABLE")); // Title should be stored literally
 }
@@ -495,7 +495,7 @@ fn test_security_sql_injection_titles_keep_db_intact() {
     run_atelier(dir.path(), &["issue", "create", "%' OR 1=1 --"]);
 
     // DB should still be intact
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Normal issue"));
 }
@@ -513,7 +513,7 @@ fn test_security_null_bytes() {
     let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Test with special: \t\r"]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -536,7 +536,7 @@ fn test_security_control_characters() {
         assert!(success, "Failed with input containing control chars");
     }
 
-    let (success, _, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -609,7 +609,7 @@ fn test_stress_rapid_operations() {
     }
 
     // Verify all operations completed
-    let (success, stdout, _) = run_atelier(dir.path(), &["work", "queue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Rapid issue 19"));
 }
@@ -624,7 +624,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(!success, "--json should not be accepted");
     assert!(stderr.contains("unexpected argument '--json'"));
 
-    for args in [vec!["work", "queue", "--json"], vec!["check", "--json"]] {
+    for args in [vec!["issue", "list", "--json"], vec!["check", "--json"]] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} should reject --json");
         assert!(
@@ -699,9 +699,10 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "queue", "--ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success, "ready failed: {stderr}");
-    assert!(stdout.contains("1 total"));
+    assert!(stdout.contains(&task_id));
+    assert!(stdout.contains("Ready Work"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -749,7 +750,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    for args in [vec!["work", "queue", "--status", "all"], vec!["check"]] {
+    for args in [vec!["issue", "list", "--status", "all"], vec!["check"]] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
         assert!(!stdout.trim_start().starts_with('{'), "{args:?}");

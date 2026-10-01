@@ -8,7 +8,6 @@ use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
 };
 use atelier_app::work_classification::{StatusNextAction, StatusView};
-use atelier_core::Issue;
 
 pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -111,22 +110,6 @@ fn print_status_view(view: &StatusView) {
         .panel(local_state)
         .panel(LinesPanel::new("Next Actions", next_actions))
         .print(RenderContext::for_stdout());
-}
-
-pub(crate) fn current_work_issues(
-    index: &RecordIndex,
-    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-) -> Result<Vec<Issue>> {
-    let mut issues = Vec::new();
-    for issue in index.list_issues(Some("all"), None, None)? {
-        if atelier_app::work_classification::classify_issue(index, workflow_policy, &issue)?
-            .classification
-            == atelier_app::work_classification::WorkClassification::Active
-        {
-            issues.push(issue);
-        }
-    }
-    commands::objective_status::order_issues_by_work(index, workflow_policy, issues)
 }
 
 struct GitState {

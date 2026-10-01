@@ -192,7 +192,7 @@ it commits the lifecycle change and records the reason. `atelier issue update
 direct status update does not run completion validators.
 
 Issue mutation commands write concrete Markdown records through `RecordStore`.
-Query commands such as work queues, ready queues, issue detail/status, and lint
+Query commands such as work buckets, issue inventory, issue detail, and lint
 read the current record files on every invocation.
 Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
@@ -206,9 +206,13 @@ categories are a separate concept and use `atelier issue list --category
 Mission Overview contracts are in [Issue Inventory And Mission
 Overview](issue-inventory-and-mission-overview.md).
 Category values are the exact category names from `.atelier/workflow.yaml`,
-such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
-tokens such as `in_progress` are not category aliases. The legacy `work queue`
-is neither the normal inventory nor the Mission Overview.
+such as `todo`, `active`, `blocked`, and `done`; status
+tokens such as `in_progress` are not category aliases. `work queue` is removed
+without an alias. Use `issue list` for metadata filters, `work ready`,
+`work blocked`, `work active`, or `work all` for operational buckets, and
+`work mission` or `work epic` for scoped work. Objective rollups use complete
+app-layer scope facts; display limits apply after totals and recent work are
+computed.
 `atelier issue create` has one work-type decision. Use `--issue-type` for the
 canonical type (`bug`, `completion`, `epic`, `feature`, `mission`, `spike`,
 `task`, or `validation`) or use a template preset whose default type is
@@ -408,7 +412,7 @@ surface is `delete` unless it is in the core list above.
 | Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
 | Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
-| Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, `work queue`, issue detail, record-specific notes, `evidence`, and `status`. |
+| Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, `work ready/blocked/active/all`, issue detail, record-specific notes, `evidence`, and `status`. |
 | Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and work dashboards as next-step sources. |
 | `mission` root namespace | Remove | Mission objectives are issue records, so a parallel root namespace duplicates lifecycle, linking, and status concepts. | `issue create --issue-type mission`, `issue show <objective-id>`, `work mission <objective-id>`, `issue link <objective-id> <issue-id> --role advances`, and `issue transition <objective-id> close --reason "..."`. |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle, blockers, links, detail, and objective status. |
@@ -423,8 +427,10 @@ Removed command surfaces:
 - The normal `work start` and `work status` group; use status, issue workflow
   detail, and transition output instead.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
-  `update`, `block`, `unblock`, `work queue`, `relate`, `related`, and `tree`; use
+  `update`, `block`, `unblock`, `relate`, `related`, and `tree`; use
   `atelier issue ...`.
+- The legacy `work queue` dashboard; use metadata inventory or the focused
+  operational work buckets.
 - Flat timer aliases such as `stop`, and the `timer` group.
 - Legacy groups `archive`, `milestone`, `daemon`, `cpitd`, `usage`,
   `agent`, `locks`, and `sync`.

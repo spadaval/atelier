@@ -10,7 +10,7 @@ fn test_next_suggests_highest_priority() {
     h.run_ok(&["issue", "create", "Critical task", "-p", "critical"]);
     h.run_ok(&["issue", "create", "Medium task", "-p", "medium"]);
 
-    let next = h.run_ok(&["work", "queue", "--ready"]);
+    let next = h.run_ok(&["work", "ready"]);
     // The critical task should be suggested first
     assert!(
         next.stdout.contains("Critical task"),
@@ -36,7 +36,7 @@ fn test_next_skips_blocked() {
         "blocked_by",
     ]);
 
-    let next = h.run_ok(&["work", "queue", "--ready"]);
+    let next = h.run_ok(&["work", "ready"]);
     // Should suggest the blocker (which is unblocked) not the blocked task
     assert!(
         !next.stdout.contains("Blocked task") || next.stdout.contains("Blocker task"),
