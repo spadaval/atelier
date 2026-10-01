@@ -4,16 +4,8 @@ use crate::objective_graph::dependency_closure;
 use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum MissionReadinessKind {
-    DirectBlocker,
-    TransitiveBlocker,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MissionReadinessDiagnosis {
-    pub kind: MissionReadinessKind,
-    pub mission_id: String,
     pub summary: String,
     pub next_command: String,
 }
@@ -36,19 +28,12 @@ pub fn dependency_diagnosis(
         .last()
         .cloned()
         .unwrap_or_else(|| mission_id.to_string());
-    let kind = if path.len() <= 2 {
-        MissionReadinessKind::DirectBlocker
-    } else {
-        MissionReadinessKind::TransitiveBlocker
-    };
-    let label = if kind == MissionReadinessKind::DirectBlocker {
+    let label = if path.len() <= 2 {
         "direct blocker"
     } else {
         "transitive blocker"
     };
     Ok(Some(MissionReadinessDiagnosis {
-        kind,
-        mission_id: mission_id.to_string(),
         summary: format!(
             "mission {mission_id} has {label} path {}",
             path.join(" -> ")

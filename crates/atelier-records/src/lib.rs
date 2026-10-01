@@ -2948,7 +2948,8 @@ Legacy evidence summary.
                 && state.empty
         }));
         assert!(sections
-            .searchable_text()
+            .section(IssueSectionName::DoneWhen)
+            .unwrap()
             .contains("The desired finished world is observable."));
     }
 

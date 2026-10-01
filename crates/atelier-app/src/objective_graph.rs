@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use atelier_core::{Issue, RecordLink};
+use atelier_core::Issue;
 use std::collections::{BTreeSet, HashSet};
 
 use crate::record_index::RecordIndex;
@@ -257,61 +257,6 @@ pub fn issue_descendant_ids(index: &RecordIndex, issue_id: &str) -> Result<BTree
     Ok(issue_ids)
 }
 
-pub fn direct_blocker_ids(index: &RecordIndex, kind: &str, id: &str) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for link in index.list_record_links(kind, id)? {
-        if link.relation_type != "blocked_by" {
-            continue;
-        }
-        let Some((linked_kind, linked_id)) = other_side(&link, kind, id) else {
-            continue;
-        };
-        if linked_kind == "issue" {
-            blockers.push(linked_id.to_string());
-        }
-    }
-    Ok(blockers)
-}
-
-pub fn open_issue_blockers(
-    index: &RecordIndex,
-    issue_id: &str,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for blocker_id in index.get_blockers(issue_id) {
-        if issue_blocks_work(workflow_policy, &index.require_issue(&blocker_id)?) {
-            blockers.push(blocker_id);
-        }
-    }
-    blockers.sort();
-    Ok(blockers)
-}
-
-pub fn open_objective_blockers(
-    index: &RecordIndex,
-    objective_kind: &str,
-    objective_id: &str,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Result<Vec<String>> {
-    let mut blocker_ids = direct_blocker_ids(index, objective_kind, objective_id)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    for issue_id in mission_issue_ids(index, objective_id)? {
-        for blocker_id in index.get_blockers(&issue_id) {
-            blocker_ids.insert(blocker_id);
-        }
-    }
-    let mut open = blocker_ids
-        .into_iter()
-        .filter_map(|id| index.get_issue(&id))
-        .filter(|issue| issue_blocks_work(workflow_policy, issue))
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    open.sort();
-    Ok(open)
-}
-
 pub fn issue_blocks_work(workflow_policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
     workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
 }
@@ -328,16 +273,6 @@ fn collect_issue_and_descendants(
         collect_issue_and_descendants(index, child_id, issue_ids)?;
     }
     Ok(())
-}
-
-fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str, &'a str)> {
-    if link.source_kind == kind && link.source_id == id {
-        Some((&link.target_kind, &link.target_id))
-    } else if link.target_kind == kind && link.target_id == id {
-        Some((&link.source_kind, &link.source_id))
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]

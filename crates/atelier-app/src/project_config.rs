@@ -13,14 +13,8 @@ pub const DEFAULT_CANONICAL_PRUNE_RETENTION_DAYS: u64 = 7;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectConfig {
     pub project_slug: String,
-    pub paths: ProjectPaths,
     pub issue_links: IssueLinkConfig,
     pub prune: PruneConfig,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ProjectPaths {
-    pub state_root: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -83,14 +77,11 @@ pub fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectCon
     let raw = parse_raw_project_config(text, config_path)?;
     validate_schema_fields(&raw, config_path)?;
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;
-    let paths = ProjectPaths {
-        state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
-    };
+    require_non_empty(&raw.paths.state_root, config_path, "paths.state_root")?;
     let issue_links = parse_issue_link_config(raw.issue_links, config_path)?;
     let prune = parse_prune_config(raw.prune, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
-        paths,
         issue_links,
         prune,
     })
@@ -184,11 +175,6 @@ fn validate_custom_issue_link_type(relation_type: &str, config_path: &Path) -> R
         );
     }
     Ok(())
-}
-
-fn require_owned(value: String, config_path: &Path, field: &str) -> Result<String> {
-    require_non_empty(&value, config_path, field)?;
-    Ok(value)
 }
 
 fn require_non_empty(value: &str, config_path: &Path, field: &str) -> Result<()> {
