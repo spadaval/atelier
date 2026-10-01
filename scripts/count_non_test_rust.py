@@ -57,7 +57,9 @@ def item_end(code, start):
         char = code[pos]
         if char in '([':
             stack.append(char)
-        elif char == '<' and ((not value_expression and '{' not in stack) or code[:pos].rstrip().endswith('::')):
+        elif char == '<' and all(group == '<' for group in stack) and (
+            not value_expression or code[:pos].rstrip().endswith('::')
+        ):
             stack.append(char)
         elif char in pairs and stack and stack[-1] == pairs[char]:
             stack.pop()
@@ -101,6 +103,8 @@ def self_check():
         ('nested signature', '#[cfg(test)]\nfn helper(f: fn() -> [u8; 3]) -> ([u8; 3], u8) {\n    (f(), 1)\n}\n', 0),
         ('generic const', '#[cfg(test)]\nfn helper() -> Buffer<{ 3 }> {\n    Buffer::new()\n}\n', 0),
         ('const block', '#[cfg(test)]\nconst ITEM: usize = {\n    3\n};\n', 0),
+        ('array shift', '#[cfg(test)]\nfn helper() -> [u8; 1 << 2] {\n    [0; 4]\n}\n', 0),
+        ('array comparison', '#[cfg(test)]\nfn helper() -> [u8; (1 < 2) as usize] {\n    [0; 1]\n}\n', 0),
         ('production after helper', '#[cfg(test)]\nfn helper() -> [u8; 3] {\n    [1, 2, 3]\n}\n// Production comment\n\npub fn production() -> u8 {\n    4\n}\n', 5),
     ]
     for name, source, expected in cases:
