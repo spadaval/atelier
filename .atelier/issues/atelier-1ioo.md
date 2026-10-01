@@ -13,6 +13,8 @@ relationships:
   - kind: "issue"
     id: "atelier-4ykl"
   - kind: "issue"
+    id: "atelier-8ud1"
+  - kind: "issue"
     id: "atelier-a0h0"
   - kind: "issue"
     id: "atelier-wp90"
@@ -27,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Complete session workflow, docs and mission validation"
-updated_at: "2026-10-01T21:19:18.046605233+00:00"
+updated_at: "2026-10-01T23:04:17.649510962+00:00"
 ---
 
 ## Outcome

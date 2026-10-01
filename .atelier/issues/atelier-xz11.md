@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "blocked"
 title: "Validate rebuild success criteria independently"
-updated_at: "2026-10-01T22:45:47.953977763+00:00"
+updated_at: "2026-10-01T23:04:17.725496985+00:00"
 ---
 
 ## Goal
