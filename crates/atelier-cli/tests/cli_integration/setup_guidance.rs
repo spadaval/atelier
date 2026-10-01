@@ -779,6 +779,60 @@ fn test_prune_protects_owner_record_with_staged_or_unstaged_changes() {
     );
 }
 
+#[test]
+fn test_prune_rechecks_late_recorded_owner_association() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Late owner"]);
+    assert!(success, "{stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    commit_all(dir.path(), "old record without a branch");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains(&format!("eligible issue {issue_id}")),
+        "{stdout}"
+    );
+    let branch = "custom/late-owner";
+    assert!(Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", branch])
+        .status()
+        .unwrap()
+        .success());
+    let store = atelier_records::RecordStore::new(dir.path().join(".atelier"));
+    let mut record = store.load_issue_by_id(&issue_id).unwrap();
+    record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
+        work_branch: branch.into(),
+        branch_base: "main".into(),
+    });
+    store.write_issue_atomic(&record).unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {branch}")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("owner record has uncommitted changes"),
+        "{stdout}"
+    );
+    commit_all(dir.path(), "record late owner association");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {branch}")),
+        "{stdout}"
+    );
+    assert!(stdout.contains("has no upstream"), "{stdout}");
+    assert!(
+        !stdout.contains("no terminal owner record association"),
+        "{stdout}"
+    );
+}
+
 /// Gives `issue_id` a pushed `task/<id>` owner branch whose work is
 /// squash-merged into main. Returns the bare remote (keep it alive) and the
 /// branch name.
