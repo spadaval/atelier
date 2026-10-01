@@ -8,7 +8,9 @@ labels:
 - "schema"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-xz11"
   children: []
   attachments: []
   relates: []
@@ -16,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "review"
 title: "Clarify or remove generic issue fields storage"
-updated_at: "2026-10-01T20:21:21.230270+00:00"
+updated_at: "2026-10-01T21:19:17.840874362+00:00"
 ---
 
 ## Goal
@@ -54,3 +56,8 @@ Review/merge gates and session commands remain separate rebuild slices.
   The shared-lock regression reproduced a lost label before the lock fix.
   Bundle preview's evidence count and read-time commit validation regressions
   were observed failing and then corrected. Logs: `/tmp/step6-*.log`.
+
+- 2026-10-01 [handoff] Evidence freshness repairs passed independent re-review.
+  The exclusive and atomic prune repairs passed independent review in the gates
+  candidate. Final integrated proof and completion remain outstanding under
+  epic `atelier-1ioo`; the earlier author evidence remains historical.

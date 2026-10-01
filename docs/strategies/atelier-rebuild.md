@@ -1,7 +1,7 @@
 ---
 status: active
-mission: none yet; tracked in the Plan section below until S8
-last_changed: "2026-09-30: initial strategy (human-directed rebuild)"
+mission: atelier-kgcr
+last_changed: "2026-10-01: native tail tracker created"
 ---
 
 # Why
@@ -109,10 +109,11 @@ daemon needs the human.
 
 # Plan
 
-Tracked here until S8 (this section is the temporary tracker, not strategy).
-Work happens on branch `mission/atelier-rebuild`. Each non-trivial increment
-is independently reviewed before it reaches `master`; current candidates may
-await review on the mission branch.
+Execution state now lives in mission `atelier-kgcr`, epic `atelier-1ioo`, and
+their child records in `.atelier/`. Work happens on `mission/atelier-rebuild`.
+The migration notes below preserve earlier proof and handoffs; the native
+records own current status. Each non-trivial increment is independently
+reviewed before it reaches `master`.
 
 1. [done] Simplify this repository's `workflow.yaml`; archive terminal
    records and activity files.
