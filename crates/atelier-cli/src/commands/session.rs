@@ -211,6 +211,20 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     };
     index.validate_policy(&source.policy, repo)?;
     let mut lines = source.diagnostics;
+    let active = index
+        .issues()
+        .filter(|issue| {
+            source.policy.status_category(&issue.status) == Some("active")
+                && issue.issue_type != "mission"
+        })
+        .collect::<Vec<_>>();
+    for issue in active {
+        let work = workflow_policy::resolve_work_branch(&source.policy, &index, &issue.id)?;
+        let owner = index.require_issue(&work.owner_id)?;
+        if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
+            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
+        }
+    }
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
         let ownership = issue.workflow_branch.as_ref().context("land_work_untraceable: owner has no committed branch metadata; run atelier start and commit the record")?;
@@ -254,20 +268,6 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier prime for current findings and proof.", initial_paths.len()));
         }
     } else {
-        let active = index
-            .issues()
-            .filter(|issue| {
-                source.policy.status_category(&issue.status) == Some("active")
-                    && issue.issue_type != "mission"
-            })
-            .collect::<Vec<_>>();
-        for issue in active {
-            let work = workflow_policy::resolve_work_branch(&source.policy, &index, &issue.id)?;
-            let owner = index.require_issue(&work.owner_id)?;
-            if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
-                bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
-            }
-        }
         if branch != source.policy.branch_policy.base_branch {
             bail!("land_work_untraceable: branch {branch} has no owner; run atelier start <id> before claiming work on it");
         }

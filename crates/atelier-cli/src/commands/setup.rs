@@ -47,6 +47,7 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
         None => "atelier".into(),
     };
     for (event, action) in [("SessionStart", "prime"), ("Stop", "land")] {
+        let marker = format!(" # atelier-managed:{event}");
         let groups = hooks
             .entry(event)
             .or_insert_with(|| json!([]))
@@ -58,9 +59,9 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
                 .context("Claude matcher groups require a hooks array")?;
             handlers.retain(|handler| {
                 !(handler["type"] == "command"
-                    && handler["command"].as_str().is_some_and(|command| {
-                        command.ends_with(&format!(" {action} --hook claude"))
-                    }))
+                    && handler["command"]
+                        .as_str()
+                        .is_some_and(|command| command.ends_with(&marker)))
             });
         }
         groups.retain(|group| {
@@ -68,7 +69,7 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
                 .as_array()
                 .is_none_or(|handlers| !handlers.is_empty())
         });
-        groups.push(json!({"hooks": [{"type": "command", "command": format!("{command} {action} --hook claude"), "timeout": 30}]}));
+        groups.push(json!({"hooks": [{"type": "command", "command": format!("{command} {action} --hook claude{marker}"), "timeout": 30}]}));
     }
     let mut after = serde_json::to_vec_pretty(&settings)?;
     after.push(b'\n');

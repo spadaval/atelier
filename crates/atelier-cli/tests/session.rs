@@ -287,7 +287,9 @@ fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
         assert!(handler["hooks"][0]["command"]
             .as_str()
             .unwrap()
-            .ends_with(&format!(" {action} --hook claude")));
+            .ends_with(&format!(
+                " {action} --hook claude # atelier-managed:{event}"
+            )));
     }
     // Execute the installed quoted command, proving paths with spaces/quotes.
     let command = parsed["hooks"]["SessionStart"][1]["hooks"][0]["command"]
@@ -852,4 +854,80 @@ fn hidden_executable_modes_allow_active_handoff_but_fence_completion() {
             & 0o111,
         0
     );
+}
+
+#[test]
+fn review_regression_owned_checkout_checks_all_active_work_traceability() {
+    let f = Fixture::new();
+    let other = ok(f.path(), &["-q", "issue", "create", "Untraced active work"]);
+    let mut record = f.store().load_issue_by_id(&other).unwrap();
+    record.issue.status = "in_progress".into();
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "untraced unrelated active work");
+    f.refusal("land_work_untraceable");
+    let f = Fixture::new();
+    let child = epic_child(&f);
+    let mut record = f.store().load_issue_by_id(&child).unwrap();
+    record.issue.status = "in_progress".into();
+    assert!(record.issue.workflow_branch.is_none());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "active child inherits existing owner branch");
+    ok(f.path(), &["land"]);
+}
+#[test]
+fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
+    let f = Fixture::new();
+    let other = ok(f.path(), &["-q", "issue", "create", "Other active owner"]);
+    let branch = format!("task/{other}");
+    let mut record = f.store().load_issue_by_id(&other).unwrap();
+    record.issue.status = "in_progress".into();
+    record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
+        work_branch: branch.clone(),
+        branch_base: "main".into(),
+    });
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "two owners in shared committed tree");
+    git(f.path(), &["branch", &branch]);
+    git(f.path(), &["switch", "main"]);
+    let output = ok(f.path(), &["status"]);
+    assert!(
+        output.contains(&format!("{} @", f.branch)) && output.contains(&format!("{branch} @")),
+        "{output}"
+    );
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+}
+#[test]
+fn review_regression_setup_preserves_foreign_wrappers_and_updates_owned_binary() {
+    let f = Fixture::new();
+    let directory = f.path().join(".claude");
+    fs::create_dir(&directory).unwrap();
+    let path = directory.join("settings.json");
+    let foreign = serde_json::json!({"hooks":[{"type":"command", "command":"printf audit; /usr/local/bin/company-session land --hook claude", "timeout":7}]});
+    fs::write(
+        &path,
+        serde_json::to_vec(&serde_json::json!({"hooks":{"Stop":[foreign]}})).unwrap(),
+    )
+    .unwrap();
+    ok(f.path(), &["setup", "claude"]);
+    ok(
+        f.path(),
+        &["setup", "claude", "--binary", env!("CARGO_BIN_EXE_atelier")],
+    );
+    let once = fs::read(&path).unwrap();
+    ok(
+        f.path(),
+        &["setup", "claude", "--binary", env!("CARGO_BIN_EXE_atelier")],
+    );
+    assert_eq!(fs::read(&path).unwrap(), once);
+    let settings: serde_json::Value = serde_json::from_slice(&once).unwrap();
+    assert_eq!(settings["hooks"]["Stop"][0], foreign);
+    assert_eq!(settings["hooks"]["Stop"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        settings["hooks"]["SessionStart"].as_array().unwrap().len(),
+        1
+    );
+    assert!(settings["hooks"]["Stop"][1]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .contains(env!("CARGO_BIN_EXE_atelier")));
 }

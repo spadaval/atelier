@@ -2,7 +2,7 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::{git_freshness, record_index::RecordIndex, workflow_policy};
 use std::{
-    collections::BTreeSet,
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
     path::Path,
     process::{Command, Stdio},
 };
@@ -117,7 +117,7 @@ pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Res
         ],
     )?;
     let mut lines = Vec::new();
-    let mut seen_trees = BTreeSet::new();
+    let mut snapshots = BTreeMap::new();
     for head in heads.lines() {
         let Some((reference, commit)) = head.split_once(' ') else {
             continue;
@@ -202,12 +202,11 @@ pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Res
             if owners.is_empty() {
                 bail!("no compatible started owner record");
             }
-            let tree = resolve(repo, commit)
-                .and_then(|_| text(repo, &["rev-parse", &format!("{commit}:.atelier")]))?;
-            if !seen_trees.insert(tree) {
-                return Ok(Vec::new());
-            }
-            let snapshot = Snapshot::at(repo, state, commit)?;
+            let tree = text(repo, &["rev-parse", &format!("{commit}:.atelier")])?;
+            let snapshot = match snapshots.entry(tree) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => entry.insert(Snapshot::at(repo, state, commit)?),
+            };
             snapshot
                 .index
                 .validate_policy(&branch_policy, snapshot.root())?;
