@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use atelier_core::Issue;
@@ -86,7 +86,6 @@ pub struct StatusView {
     pub stale_records: usize,
     pub work: WorkBuckets,
     pub current_missions: Vec<MissionSummary>,
-    pub active_role_counts: BTreeMap<String, usize>,
     pub next_action: StatusNextAction,
 }
 
@@ -97,7 +96,6 @@ pub fn status_view(
 ) -> Result<StatusView> {
     let work = work_buckets(db, workflow_policy)?;
     let current_missions = current_missions(db, workflow_policy)?;
-    let active_role_counts = active_role_counts(&work.active, workflow_policy);
     let _ = state_dir;
     // CacheManager establishes freshness before constructing this read model.
     let stale_records = 0;
@@ -123,7 +121,6 @@ pub fn status_view(
         stale_records,
         work,
         current_missions,
-        active_role_counts,
         next_action,
     })
 }
@@ -313,21 +310,6 @@ fn current_missions(
     Ok(missions)
 }
 
-fn active_role_counts(
-    active: &[WorkRow],
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for row in active {
-        let role = workflow_policy
-            .and_then(|policy| policy.status_role(&row.status))
-            .unwrap_or("unconfigured")
-            .to_string();
-        *counts.entry(role).or_insert(0) += 1;
-    }
-    counts
-}
-
 fn sort_work_rows(rows: &mut [WorkRow]) {
     rows.sort_by(|left, right| {
         priority_rank(&right.priority)
@@ -353,6 +335,7 @@ mod tests {
     use atelier_core::Issue;
     use atelier_sqlite::{Database, IssueCacheRow, RecordSourceCacheRow};
     use chrono::Utc;
+    use std::collections::BTreeMap;
     use tempfile::tempdir;
 
     fn issue(id: &str, title: &str, status: &str, priority: &str) -> Issue {
@@ -424,42 +407,36 @@ mod tests {
             "ready".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "todo".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "todo".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "todo".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "in_progress".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "active".to_string(),
-                role: Some("worker".to_string()),
             },
         );
         statuses.insert(
             "done".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "done".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "blocked".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "blocked".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "superseded".to_string(),
             crate::workflow_policy::StatusDefinition {
                 category: "done".to_string(),
-                role: None,
             },
         );
         let mut workflow_by_issue_type = BTreeMap::new();
@@ -484,7 +461,6 @@ mod tests {
                         required_fields: Vec::new(),
                         description: None,
                         validators: Vec::new(),
-                        actions: Vec::new(),
                     },
                 )]),
             },
@@ -525,7 +501,6 @@ mod tests {
             StatusNextAction::InspectReadyWork { count: 1 }
         );
         assert_eq!(view.tracker_state, "current");
-        assert_eq!(view.active_role_counts.get("worker"), Some(&1));
     }
 
     #[test]

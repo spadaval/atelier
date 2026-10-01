@@ -748,6 +748,7 @@ fn test_show_issue() {
 fn test_issue_show_surfaces_evidence_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    write_evidence_gated_workflow(dir.path());
     init_git_repo(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Evidence status issue"]);
@@ -769,7 +770,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(!stdout.contains("Evidence Status"));
     assert!(!stdout.contains("Attached Proof: missing - no validating evidence link found"));
 
-    move_issue_to_validation(dir.path(), &issue_id);
+    move_issue_to_review(dir.path(), &issue_id);
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(
@@ -1136,15 +1137,12 @@ fn test_unregistered_issue_type_reports_configured_values() {
 fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let (success, _stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Validation task"]);
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Draft epic", "--issue-type", "epic"],
+    );
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Validation task");
-    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        replace_front_matter_scalar(&markdown, "status", "validation")
-    });
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Draft epic");
 
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
@@ -1152,14 +1150,13 @@ fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     );
     assert!(!success, "incompatible issue type update should fail");
     assert!(
-        stderr.contains("status 'validation' that is not allowed")
-            || stderr.contains("not allowed by the workflow policy")
-            || stderr.contains("status 'validation' which is not valid"),
+        stderr.contains("status 'draft' which is not valid")
+            || stderr.contains("not allowed by the workflow policy"),
         "{stderr}"
     );
 
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
-    assert!(issue_text.contains("issue_type: \"task\""), "{issue_text}");
+    assert!(issue_text.contains("issue_type: \"epic\""), "{issue_text}");
     assert!(
         !issue_text.contains("issue_type: \"spike\""),
         "{issue_text}"
@@ -1444,39 +1441,6 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("atelier issue note"));
     assert!(!stdout.contains("atelier issue com"));
     assert!(stdout.contains("atelier issue transition"));
-}
-
-#[test]
-fn test_issue_show_summarizes_dirty_checkout_state() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    init_atelier(dir.path());
-
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Dirty checkout issue",
-            "--issue-type",
-            "epic",
-        ],
-    );
-    let issue_id = issue_id_by_title(dir.path(), "Dirty checkout issue");
-    move_epic_directly_to_ready(dir.path(), &issue_id);
-    std::fs::write(dir.path().join("tracked.txt"), "clean").unwrap();
-    commit_all(dir.path(), "baseline");
-    std::fs::write(dir.path().join("tracked.txt"), "dirty").unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
-
-    assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Checkout"), "{stdout}");
-    assert!(
-        stdout.contains("State  : dirty checkout: 1 path:"),
-        "{stdout}"
-    );
-    assert!(stdout.contains("tracked.txt"), "{stdout}");
 }
 
 #[test]
@@ -2003,7 +1967,7 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
     );
     assert!(!record.contains("Invalid body"), "{record}");
 
-    move_issue_to_validation(dir.path(), &issue_id);
+    move_issue_to_review(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2063,7 +2027,7 @@ fn test_issue_show_recovers_notes_and_close_reason_after_rebuild() {
         &["issue", "note", &issue_id, "Canonical handoff"],
     );
     assert!(success, "issue note failed: {stderr}");
-    move_issue_to_validation(dir.path(), &issue_id);
+    move_issue_to_review(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2970,19 +2934,13 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, closeout_ready, stderr) =
         run_atelier(dir.path(), &["work", "mission", &mission_id]);
     assert!(success, "closeout-ready work mission failed: {stderr}");
-    assert!(closeout_ready.contains("Publish"), "{closeout_ready}");
+    assert!(!closeout_ready.contains("Publish"), "{closeout_ready}");
 
     let (success, transition, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "issue transition failed: {stderr}");
-    assert!(
-        transition.contains("request_publish [allowed]"),
-        "{transition}"
-    );
-    assert!(transition.contains("To:   publish_review"), "{transition}");
-    assert!(transition.contains(&format!(
-        "atelier issue transition {mission_id} request_publish"
-    )));
+    assert!(transition.contains("start [allowed]"), "{transition}");
+    assert!(!transition.contains("publish"), "{transition}");
 
     let (success, verbose, stderr) = run_atelier(
         dir.path(),
@@ -3147,28 +3105,13 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
 
     let workflow_path = dir.path().join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path).unwrap();
-    let task_close = r#"      close:
-        from: [in_progress, validation]
-        to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence and no open blockers."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-        actions:
-          - tracker.commit
-          - git.integrate"#;
+    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n";
     assert!(workflow.contains(task_close));
     std::fs::write(
         &workflow_path,
         workflow.replace(
             task_close,
-            r#"      close:
-        from: [todo, in_progress, validation]
-        to: done
-        required_fields: [close_reason]
-        description: "Retire work without re-entering execution.""#,
+            "      close:\n        from: [todo, in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Retire work without re-entering execution.\n      supersede:\n        from: [todo, blocked, in_progress]\n",
         ),
     )
     .unwrap();
@@ -3192,37 +3135,11 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         "{close_out}"
     );
 
-    let (success, publish_blocked, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--verbose"],
-    );
-    assert!(success, "mission publish options failed: {stderr}");
-    assert!(publish_blocked.contains("fail  objective.work_terminal"));
-    let terminal_reason = publish_blocked
-        .lines()
-        .find(|line| line.contains("open advancing work via advances"))
-        .unwrap();
-    assert!(terminal_reason.contains(&active_epic_id));
-    assert!(terminal_reason.contains(&blocked_id));
-    for retired_id in [&retired_blocked_id, &retired_active_id] {
-        assert!(!terminal_reason.contains(retired_id), "{publish_blocked}");
-    }
-
     for issue_id in [&active_epic_id, &blocked_id] {
         set_issue_status(dir.path(), issue_id, "done");
     }
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "terminal mission fixture rebuild failed: {stderr}");
-    let (success, publish_retired, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "--verbose"],
-    );
-    assert!(success, "retired mission publish options failed: {stderr}");
-    assert!(
-        publish_retired.contains("pass  objective.work_terminal"),
-        "{publish_retired}"
-    );
-
     let (success, retired_epic, stderr) =
         run_atelier(dir.path(), &["work", "epic", &retired_epic_id]);
     assert!(success, "retired epic view failed: {stderr}");
@@ -3279,26 +3196,23 @@ fn write_incident_issue_type_workflow(dir: &std::path::Path) {
     let workflow = std::fs::read_to_string(&workflow_path)
         .expect("failed to read workflow policy")
         .replace(
-            "  task: { label: Task }\n  validation: { label: Validation }",
-            "  task: { label: Task }\n  incident: { label: Incident }\n  validation: { label: Validation }",
+            "  validation:\n    label: Validation\n",
+            "  validation:\n    label: Validation\n  incident:\n    label: Incident\n",
         )
-        .replace(
-            "applies_to: [bug, feature, task]",
-            "applies_to: [bug, feature, incident, task]",
-        );
+        .replace("    - task\n", "    - task\n    - incident\n");
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
 
 fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
     let workflow_path = dir.join(".atelier/workflow.yaml");
-    let workflow = std::fs::read_to_string(&workflow_path)
-        .expect("failed to read workflow policy")
-        .replace("  mission: { label: Mission }\n", "");
-    let start = workflow
-        .find("  mission:\n    applies_to: [mission]\n")
-        .unwrap();
-    let end = workflow[start..].find("\n  task:\n").unwrap() + start;
-    let workflow = format!("{}{}", &workflow[..start], &workflow[end + 1..]);
+    let original = std::fs::read_to_string(&workflow_path).expect("failed to read workflow policy");
+    let workflow = original
+        .replace("  mission:\n    label: Mission\n", "")
+        .replace(
+            "    applies_to:\n    - mission\n    - epic\n",
+            "    applies_to:\n    - epic\n",
+        );
+    assert!(!workflow.contains("mission"), "{workflow}");
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
 

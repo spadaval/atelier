@@ -200,7 +200,7 @@ fn prune_git_artifacts(
     let mut branch_owners = BTreeMap::<String, Vec<GitBranchOwner>>::new();
     for issue in &all_issues {
         if let Ok(resolution) =
-            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
+            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.db, &issue.id)
         {
             if resolution.owner_id == issue.id {
                 let protection =
@@ -217,12 +217,14 @@ fn prune_git_artifacts(
                         ))
                     };
                 branch_owners
-                    .entry(resolution.expected_branch)
+                    .entry(resolution.branch)
                     .or_default()
                     .push(GitBranchOwner {
                         id: issue.id.clone(),
-                        base: resolution.base_branch,
-                        merge_strategy: resolution.merge_strategy,
+                        base: resolution
+                            .recorded_base
+                            .unwrap_or_else(|| policy.branch_policy.base_branch.clone()),
+                        merge_strategy: policy.branch_policy.merge_strategy,
                         protection,
                         active_descendants: BTreeSet::new(),
                     });
@@ -234,7 +236,7 @@ fn prune_git_artifacts(
             continue;
         }
         let Ok(resolution) =
-            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, &tracker.db, &issue.id)
+            atelier_app::workflow_policy::resolve_work_branch(&policy, &tracker.db, &issue.id)
         else {
             continue;
         };
@@ -242,7 +244,7 @@ fn prune_git_artifacts(
             continue;
         }
         if let Some(owner) = branch_owners
-            .get_mut(&resolution.expected_branch)
+            .get_mut(&resolution.branch)
             .and_then(|owners| {
                 owners
                     .iter_mut()

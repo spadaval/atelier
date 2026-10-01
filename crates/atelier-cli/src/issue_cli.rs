@@ -159,12 +159,10 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             verbose,
         } => {
             if let Some(transition) = transition {
-                let (state_dir, db_path) = state_and_db_paths()?;
                 let cache = use_cases::mutation_cache()?;
                 commands::workflow::transition_issue(
                     cache.db(),
-                    &state_dir,
-                    &db_path,
+                    &cache.state_dir(),
                     &id,
                     &transition,
                     close_reason.as_deref(),

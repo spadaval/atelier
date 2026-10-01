@@ -13,253 +13,127 @@ pub use atelier_core::RecordId;
 
 pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 3
-
 branch_policy:
   base_branch: main
   merge_strategy: squash
-
 issue_types:
-  bug: { label: Bug }
-  epic: { label: Epic }
-  feature: { label: Feature }
-  mission: { label: Mission }
-  spike: { label: Spike }
-  task: { label: Task }
-  validation: { label: Validation }
-
+  bug:
+    label: Bug
+  epic:
+    label: Epic
+  feature:
+    label: Feature
+  mission:
+    label: Mission
+  spike:
+    label: Spike
+  task:
+    label: Task
+  validation:
+    label: Validation
 statuses:
   draft:
-    category: todo
-  ready:
     category: todo
   todo:
     category: todo
   in_progress:
     category: active
-    role: worker
   blocked:
     category: blocked
   review:
     category: active
-    role: reviewer
-  publish_review:
-    category: done
-  validation:
-    category: active
-    role: validator
   done:
-    category: done
-  closed:
     category: done
   superseded:
     category: done
-
 workflows:
-  mission:
-    applies_to: [mission]
+  objective:
+    applies_to:
+    - mission
+    - epic
     initial_status: draft
-    done_statuses: [publish_review, closed]
+    done_statuses:
+    - done
+    - superseded
     transitions:
       ready:
         from: [draft]
-        to: ready
-        description: "Make a worker-usable mission ready for execution."
+        to: todo
+        description: The outcome, immediate work, and proof route are clear enough to execute.
         validators:
-          - issue.sections_parseable
-          - blockers.transitive_none_open
-      start:
-        from: [ready]
-        to: in_progress
-        description: "Start coordinated mission work."
-        validators:
-          - blockers.transitive_none_open
-          - git.worktree_clean
-        actions:
-          - git.prepare_branch
-      request_publish:
-        from: [ready, in_progress, validation]
-        to: publish_review
-        description: "Mark the mission ready to publish once its work is terminal and checks pass."
-        validators:
-          - objective.work_present
-          - objective.work_terminal
-          - objective.blockers_none_open
-          - issue.sections_parseable
-          - validation.criteria_satisfied
-          - closeout.failures_classified
-          - lint.none_blocking
-          - command_surface_current
-          - ignored_tests_reviewed
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-
-  task:
-    applies_to: [bug, feature, task]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
+        - issue.sections_parseable
       start:
         from: [todo, blocked]
         to: in_progress
-        description: "Start active work on this item."
+        description: Start work.
         validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [todo, in_progress, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      close:
-        from: [in_progress, validation]
-        to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence and no open blockers."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-        actions:
-          - tracker.commit
-          - git.integrate
-
-  epic:
-    applies_to: [epic]
-    initial_status: draft
-    done_statuses: [done, superseded]
-    transitions:
-      adopt_draft:
-        from: [todo]
-        to: draft
-        description: "Adopt a legacy unexpanded epic into the draft outcome map."
-      ready:
-        from: [draft]
-        to: ready
-        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
-        validators:
-          - issue.sections_parseable
-          - objective.work_present
-          - epic.proof_route_present
-          - blockers.transitive_none_open
-          - lint.none_blocking
-      start:
-        from: [ready, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [ready, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      supersede:
-        from: [draft, ready, blocked]
-        to: superseded
-        required_fields: [close_reason]
-        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Hand this work to independent review."
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move work into validation."
-      close:
-        from: [validation]
-        to: done
-        description: "Closing requires complete child proof and a clean worktree."
-        validators:
-          - children.proof_complete
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-          - git.integrate
-
-  validation:
-    applies_to: [validation]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [todo, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Hand this work to independent review."
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move work into validation."
-      complete_parented:
-        from: [in_progress]
-        to: done
-        description: "Complete validation whose parent epic owns the review boundary."
-        validators:
-          - validation.parent_epic
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-      close:
-        from: [validation]
-        to: done
-        description: "Closing standalone validation requires attached evidence and a clean worktree."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-          - git.integrate
-
-  spike:
-    applies_to: [spike]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
+        - blockers.transitive_none_open
       block:
         from: [todo, in_progress, review]
         to: blocked
-        description: "Mark spike work blocked while preserving review expectations."
+        description: Record a blocker.
       request_review:
         from: [in_progress]
         to: review
-        description: "Hand this spike to independent review."
+        description: Ready for independent review.
       revise:
         from: [review]
         to: in_progress
-        description: "Return a reviewed spike to active work."
+        description: Return to active work after review findings.
       close:
-        from: [review]
+        from: [in_progress, review]
         to: done
-        description: "Close the spike after independent review."
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
+        validators:
+        - blockers.none_open
+      supersede:
+        from: [draft, todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that evidence made obsolete.
+  work:
+    applies_to:
+    - bug
+    - feature
+    - spike
+    - task
+    - validation
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        description: Start work.
+        validators:
+        - blockers.transitive_none_open
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+        description: Record a blocker.
+      request_review:
+        from: [in_progress]
+        to: review
+        description: Ready for independent review.
+      revise:
+        from: [review]
+        to: in_progress
+        description: Return to active work after review findings.
+      close:
+        from: [in_progress, review]
+        to: done
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
+        validators:
+        - blockers.none_open
+      supersede:
+        from: [todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that is no longer needed.
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -268,31 +142,12 @@ const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "issue.sections_parseable",
-    "evidence.attached",
-    "children.proof_complete",
-    "epic.proof_route_present",
-    "validation.criteria_satisfied",
-    "validation.parent_epic",
-    "objective.work_present",
-    "objective.work_terminal",
-    "objective.blockers_none_open",
-    "blockers.transitive_none_open",
-    "baseline.default_checks",
-    "closeout.failures_classified",
     "blockers.none_open",
+    "blockers.transitive_none_open",
+    "evidence.attached",
     "lint.none_blocking",
-    "command_surface_current",
-    "ignored_tests_reviewed",
-    "git.on_base",
-    "git.on_mission_branch",
     "git.worktree_clean",
-];
-const BUILTIN_ACTIONS: &[&str] = &[
-    "git.prepare_branch",
-    "tracker.commit",
-    "git.push",
-    "git.sync",
-    "git.integrate",
+    "work.terminal",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -352,32 +207,13 @@ impl MergeStrategy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BranchOwnerKind {
-    Epic,
-    Mission,
-    StandaloneIssue,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BranchLifecycleResolution {
-    pub issue_id: String,
-    pub owner_id: String,
-    pub owner_issue_type: String,
-    pub owner_kind: BranchOwnerKind,
-    pub expected_branch: String,
-    pub base_branch: String,
-    pub merge_strategy: MergeStrategy,
-    pub merge_owned: bool,
-    pub nested_under_epic: bool,
-}
-
+/// Issue field recording the branch an owner (epic or standalone issue) is
+/// worked on and the branch it was started from. Written by `atelier start`.
 pub const WORKFLOW_BRANCH_FIELD: &str = "workflow_branch";
 
 #[derive(Debug, Clone)]
 pub struct StatusDefinition {
     pub category: String,
-    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -405,39 +241,12 @@ pub struct ValidatorDefinition {
     pub params: Option<ValidatorParams>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ActionDefinition {
-    pub builtin: String,
-    pub params: Option<ActionParams>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidatorParams {
     EvidenceAttached {
         min_count: i64,
         kind: Option<String>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ActionParams {
-    GitPrepareBranch(GitPrepareBranchActionParams),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GitPrepareBranchActionParams {
-    pub base: GitPrepareBranchBase,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GitPrepareBranchBase {
-    Configured,
-    Current,
-}
-
-#[derive(Debug, Clone)]
-pub struct GuidanceTemplate {
-    pub template: String,
 }
 
 #[derive(Debug, Clone)]
@@ -455,7 +264,6 @@ pub struct TransitionDefinition {
     pub required_fields: Vec<String>,
     pub description: Option<String>,
     pub validators: Vec<ValidatorDefinition>,
-    pub actions: Vec<ActionDefinition>,
 }
 
 impl WorkflowPolicy {
@@ -490,12 +298,6 @@ impl WorkflowPolicy {
         self.statuses
             .get(status)
             .map(|status| status.category.as_str())
-    }
-
-    pub fn status_role(&self, status: &str) -> Option<&str> {
-        self.statuses
-            .get(status)
-            .and_then(|status| status.role.as_deref())
     }
 
     pub fn issue_status_is_terminal(&self, issue_type: &str, status: &str) -> Result<bool> {
@@ -556,16 +358,10 @@ impl WorkflowPolicy {
             })
     }
 
-    pub fn branch_name_for_owner(
-        &self,
-        owner: &Issue,
-        owner_kind: &BranchOwnerKind,
-    ) -> Result<String> {
-        let branch = match owner_kind {
-            BranchOwnerKind::Epic => format!("epic/{}", owner.id),
-            BranchOwnerKind::Mission => format!("mission/{}", owner.id),
-            BranchOwnerKind::StandaloneIssue => format!("{}/{}", owner.issue_type, owner.id),
-        };
+    /// Canonical branch for a branch owner: `epic/<id>` for epics and
+    /// `<issue_type>/<id>` for standalone issues.
+    pub fn branch_name_for_owner(&self, owner: &Issue) -> Result<String> {
+        let branch = format!("{}/{}", owner.issue_type, owner.id);
         validate_branch_value(
             &branch,
             WORKFLOW_POLICY_PATH,
@@ -613,7 +409,6 @@ impl std::error::Error for WorkflowPolicyError {}
 #[serde(deny_unknown_fields)]
 struct StatusDefinitionRaw {
     category: String,
-    role: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -642,8 +437,6 @@ struct TransitionDefinitionRaw {
     description: Option<String>,
     #[serde(default)]
     validators: Vec<Value>,
-    #[serde(default)]
-    actions: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1070,27 +863,10 @@ fn parse_statuses(
                 ),
             ));
         }
-        if let Some(role) = raw.role.as_deref() {
-            validate_workflow_role(
-                role,
-                display_path,
-                &format!("statuses.{}.role", name),
-                "workflow_config_invalid_status",
-            )?;
-            if raw.category != "active" {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_status",
-                    display_path,
-                    format!("statuses.{}.role", name),
-                    "status roles are only valid for statuses with category active",
-                ));
-            }
-        }
         statuses.insert(
             name.to_string(),
             StatusDefinition {
                 category: raw.category,
-                role: raw.role,
             },
         );
     }
@@ -1342,215 +1118,13 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
-    let actions =
-        parse_transition_actions(workflow_name, transition_name, &raw.actions, display_path)?;
-
     Ok(TransitionDefinition {
         from,
         to: raw.to,
         required_fields: raw.required_fields,
         description: raw.description,
         validators,
-        actions,
     })
-}
-
-fn parse_transition_actions(
-    workflow_name: &str,
-    transition_name: &str,
-    raw: &[Value],
-    display_path: &str,
-) -> Result<Vec<ActionDefinition>> {
-    let mut actions = Vec::new();
-    let mut seen = BTreeSet::new();
-    for value in raw {
-        let action = parse_transition_action_definition(
-            workflow_name,
-            transition_name,
-            value,
-            display_path,
-        )?;
-        let name = action.builtin.as_str();
-        validate_builtin_action_name(workflow_name, transition_name, name, display_path)?;
-        if !seen.insert(name.to_string()) {
-            return Err(policy_error(
-                "workflow_config_invalid_action",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.actions contains duplicate action '{}'",
-                    workflow_name, transition_name, name
-                ),
-            ));
-        }
-        actions.push(action);
-    }
-    Ok(actions)
-}
-
-fn parse_transition_action_definition(
-    workflow_name: &str,
-    transition_name: &str,
-    value: &Value,
-    display_path: &str,
-) -> Result<ActionDefinition> {
-    match value {
-        Value::String(name) => {
-            parse_transition_action_params(workflow_name, transition_name, name, None, display_path)
-        }
-        Value::Mapping(mapping) if mapping.len() == 1 => {
-            let (key, params) = mapping.iter().next().expect("mapping has one entry");
-            let Some(name) = key.as_str() else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_action",
-                    display_path,
-                    format!(
-                        "workflows.{}.transitions.{}.actions",
-                        workflow_name, transition_name
-                    ),
-                    "action map keys must be strings",
-                ));
-            };
-            parse_transition_action_params(
-                workflow_name,
-                transition_name,
-                name,
-                Some(params),
-                display_path,
-            )
-        }
-        Value::Mapping(_) => Err(policy_error_with_field(
-            "workflow_config_invalid_action",
-            display_path,
-            format!(
-                "workflows.{}.transitions.{}.actions",
-                workflow_name, transition_name
-            ),
-            "action maps must contain exactly one built-in action name",
-        )),
-        _ => Err(policy_error_with_field(
-            "workflow_config_invalid_action",
-            display_path,
-            format!(
-                "workflows.{}.transitions.{}.actions",
-                workflow_name, transition_name
-            ),
-            "actions must contain built-in action strings or parameter objects",
-        )),
-    }
-}
-
-fn parse_transition_action_params(
-    workflow_name: &str,
-    transition_name: &str,
-    name: &str,
-    params: Option<&Value>,
-    display_path: &str,
-) -> Result<ActionDefinition> {
-    let field = format!(
-        "workflows.{}.transitions.{}.actions.{}",
-        workflow_name, transition_name, name
-    );
-    if name == "git.prepare_branch" {
-        let base = match params {
-            None => GitPrepareBranchBase::Configured,
-            Some(Value::String(value)) if value == "current" => GitPrepareBranchBase::Current,
-            Some(Value::Mapping(mapping)) if mapping.is_empty() => GitPrepareBranchBase::Configured,
-            Some(Value::String(value)) => {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_action",
-                    display_path,
-                    &field,
-                    format!(
-                        "built-in action '{}' only accepts scalar param 'current', got '{}'",
-                        name, value
-                    ),
-                ));
-            }
-            Some(_) => {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_action",
-                    display_path,
-                    &field,
-                    format!(
-                        "built-in action '{}' only accepts scalar param 'current' or an empty mapping",
-                        name
-                    ),
-                ));
-            }
-        };
-        return Ok(ActionDefinition {
-            builtin: name.to_string(),
-            params: Some(ActionParams::GitPrepareBranch(
-                GitPrepareBranchActionParams { base },
-            )),
-        });
-    }
-
-    if let Some(params) = params {
-        let params = params.as_mapping().ok_or_else(|| {
-            policy_error_with_field(
-                "workflow_config_invalid_action",
-                display_path,
-                &field,
-                "action params must be a mapping",
-            )
-        })?;
-        if !params.is_empty() {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_action",
-                display_path,
-                &field,
-                format!("built-in action '{}' does not accept params", name),
-            ));
-        }
-    }
-
-    Ok(ActionDefinition {
-        builtin: name.to_string(),
-        params: None,
-    })
-}
-
-fn validate_workflow_role(
-    role: &str,
-    display_path: &str,
-    field: &str,
-    error_code: &'static str,
-) -> Result<()> {
-    if ["worker", "reviewer", "validator", "manager"].contains(&role) {
-        return Ok(());
-    }
-    Err(policy_error_with_field(
-        error_code,
-        display_path,
-        field,
-        format!(
-            "role must be worker, reviewer, validator, or manager, got '{}'",
-            role
-        ),
-    ))
-}
-
-fn validate_builtin_action_name(
-    workflow_name: &str,
-    transition_name: &str,
-    action_name: &str,
-    display_path: &str,
-) -> Result<()> {
-    if BUILTIN_ACTIONS.contains(&action_name) {
-        return Ok(());
-    }
-    Err(policy_error(
-        "workflow_config_invalid_action",
-        display_path,
-        format!(
-            "workflows.{}.transitions.{}.actions has unsupported built-in action '{}'; expected {}",
-            workflow_name,
-            transition_name,
-            action_name,
-            BUILTIN_ACTIONS.join(", ")
-        ),
-    ))
 }
 
 fn parse_transition_validators(
@@ -1989,15 +1563,7 @@ fn validate_workflow_branch_field(
             "field 'workflow_branch' must be an object",
         );
     };
-    let allowed_keys = [
-        "owner_issue_id",
-        "work_branch",
-        "branch_base",
-        "review_target",
-        "integration_target",
-        "owner_kind",
-        "merge_strategy",
-    ];
+    let allowed_keys = ["work_branch", "branch_base"];
     for key in object.keys() {
         if !allowed_keys.contains(&key.as_str()) {
             return invalid_workflow_branch_field(
@@ -2008,61 +1574,19 @@ fn validate_workflow_branch_field(
         }
     }
     for key in allowed_keys {
-        match object.get(key).and_then(JsonValue::as_str) {
-            Some(value) if !value.trim().is_empty() => {}
-            _ => {
-                return invalid_workflow_branch_field(
-                    issue,
-                    policy_path,
-                    &format!("field 'workflow_branch.{key}' must be a non-empty string"),
-                );
-            }
-        }
-    }
-    if object
-        .get("owner_issue_id")
-        .and_then(JsonValue::as_str)
-        .is_some_and(|owner_id| owner_id != issue.id)
-    {
-        return invalid_workflow_branch_field(
-            issue,
-            policy_path,
-            "field 'workflow_branch.owner_issue_id' must match the issue id",
-        );
-    }
-    for key in [
-        "work_branch",
-        "branch_base",
-        "review_target",
-        "integration_target",
-    ] {
-        let branch = object.get(key).and_then(JsonValue::as_str).unwrap_or("");
+        let Some(branch) = object.get(key).and_then(JsonValue::as_str) else {
+            return invalid_workflow_branch_field(
+                issue,
+                policy_path,
+                &format!("field 'workflow_branch.{key}' must be a non-empty string"),
+            );
+        };
         validate_branch_value(
             branch,
             &policy_path.display().to_string(),
             &format!("workflow_branch.{key}"),
             "workflow branch field",
         )?;
-    }
-    match object.get("owner_kind").and_then(JsonValue::as_str) {
-        Some("epic" | "mission" | "issue") => {}
-        _ => {
-            return invalid_workflow_branch_field(
-                issue,
-                policy_path,
-                "field 'workflow_branch.owner_kind' must be 'epic', 'mission', or 'issue'",
-            );
-        }
-    }
-    match object.get("merge_strategy").and_then(JsonValue::as_str) {
-        Some("squash" | "merge_commit" | "fast_forward_only") => {}
-        _ => {
-            return invalid_workflow_branch_field(
-                issue,
-                policy_path,
-                "field 'workflow_branch.merge_strategy' must be 'squash', 'merge_commit', or 'fast_forward_only'",
-            );
-        }
     }
     Ok(())
 }
@@ -2264,6 +1788,19 @@ mod tests {
         )
     }
 
+    fn work_close_validators() -> &'static str {
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n"
+    }
+
+    fn with_work_close_validators(validators: &str) -> String {
+        valid_policy().replace(
+            work_close_validators(),
+            &format!(
+                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [todo, blocked, in_progress]\n"
+            ),
+        )
+    }
+
     fn issue_with_fields(fields: std::collections::BTreeMap<String, JsonValue>) -> Issue {
         Issue {
             id: "atelier-pr01".to_string(),
@@ -2280,77 +1817,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn parses_valid_policy() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        assert_eq!(policy.schema_version, 3);
-        assert_eq!(
-            policy
-                .workflow_by_issue_type
-                .get("task")
-                .map(String::as_str),
-            Some("task")
-        );
-        assert_eq!(
-            policy
-                .workflow_by_issue_type
-                .get("epic")
-                .map(String::as_str),
-            Some("epic")
-        );
-        assert_eq!(
-            policy
-                .workflow_by_issue_type
-                .get("validation")
-                .map(String::as_str),
-            Some("validation")
-        );
-        assert_eq!(
-            policy
-                .issue_types
-                .get("task")
-                .map(|issue_type| issue_type.label.as_str()),
-            Some("Task")
-        );
-        assert_eq!(
-            policy
-                .statuses
-                .get("done")
-                .map(|status| status.category.as_str()),
-            Some("done")
-        );
-        assert_eq!(policy.status_role("in_progress"), Some("worker"));
-        assert_eq!(policy.status_role("review"), Some("reviewer"));
-        assert_eq!(policy.status_role("validation"), Some("validator"));
-        assert_eq!(policy.status_role("todo"), None);
-        let close = &policy.workflows["task"].transitions["close"];
-        assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
-        assert_eq!(
-            close.validators[0].params.as_ref(),
-            Some(&ValidatorParams::EvidenceAttached {
-                min_count: 1,
-                kind: None,
-            })
-        );
-        assert_eq!(
-            action_names(&policy.workflows["epic"].transitions["start"].actions),
-            vec!["git.prepare_branch"]
-        );
-        assert_eq!(
-            validator_names(&policy.workflows["epic"].transitions["start"].validators),
-            vec!["blockers.transitive_none_open"]
-        );
-        assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
-        assert_eq!(policy.branch_policy.base_branch, "main");
-    }
-
-    fn action_names(actions: &[ActionDefinition]) -> Vec<&str> {
-        actions
-            .iter()
-            .map(|action| action.builtin.as_str())
-            .collect()
-    }
-
     fn validator_names(validators: &[ValidatorDefinition]) -> Vec<&str> {
         validators
             .iter()
@@ -2359,232 +1825,140 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_status_role() {
-        let policy = valid_policy().replace("role: worker", "role: operator");
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_invalid_status"));
-        assert!(error.contains("statuses.in_progress.role"));
-        assert!(error.contains("worker, reviewer, validator, or manager"));
-    }
-
-    #[test]
-    fn rejects_role_on_non_active_status() {
-        let policy = valid_policy().replace(
-            "  todo:\n    category: todo",
-            "  todo:\n    category: todo\n    role: worker",
-        );
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_invalid_status"));
-        assert!(error.contains("statuses.todo.role"));
-        assert!(error.contains("category active"));
-    }
-
-    fn action_line() -> &'static str {
-        "          - git.prepare_branch\n"
-    }
-
-    #[test]
-    fn rejects_unknown_transition_action() {
-        let policy = valid_policy().replace(action_line(), "          - nope_run\n");
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("nope_run"));
-    }
-
-    #[test]
-    fn rejects_duplicate_transition_action() {
-        let policy = valid_policy().replace(
-            action_line(),
-            "          - git.prepare_branch\n          - git.prepare_branch\n",
-        );
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("duplicate action"));
-    }
-
-    #[test]
-    fn rejects_legacy_transition_effects_field() {
-        let policy = valid_policy().replace("actions:", "effects:");
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("effects"));
-    }
-
-    #[test]
-    fn accepts_empty_action_param_object() {
-        let policy = valid_policy().replace(action_line(), "          - git.prepare_branch: {}\n");
-        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["task"].transitions["start"].actions[0];
-        assert_eq!(action.builtin, "git.prepare_branch");
-        assert_eq!(
-            action.params.as_ref(),
-            Some(&ActionParams::GitPrepareBranch(
-                GitPrepareBranchActionParams {
-                    base: GitPrepareBranchBase::Configured,
-                }
-            ))
-        );
-    }
-
-    #[test]
-    fn accepts_git_prepare_branch_current_scalar_param() {
-        let policy =
-            valid_policy().replace(action_line(), "          - git.prepare_branch: current\n");
-        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["task"].transitions["start"].actions[0];
-
-        assert_eq!(action.builtin, "git.prepare_branch");
-        assert_eq!(
-            action.params.as_ref(),
-            Some(&ActionParams::GitPrepareBranch(
-                GitPrepareBranchActionParams {
-                    base: GitPrepareBranchBase::Current,
-                }
-            ))
-        );
-    }
-
-    #[test]
-    fn rejects_git_prepare_branch_unknown_scalar_param() {
-        let policy =
-            valid_policy().replace(action_line(), "          - git.prepare_branch: mission\n");
-        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("current"));
-        assert!(error.contains("mission"));
-    }
-
-    #[test]
-    fn rejects_obsolete_git_action_names() {
-        for obsolete in [
-            "branch.prepare",
-            "branch.push",
-            "base.sync",
-            "branch_integrate",
+    fn parses_valid_policy() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(policy.schema_version, 3);
+        for (issue_type, workflow) in [
+            ("mission", "objective"),
+            ("epic", "objective"),
+            ("task", "work"),
+            ("validation", "work"),
         ] {
-            let policy =
-                valid_policy().replace(action_line(), &format!("          - {obsolete}\n"));
-            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-                .unwrap_err()
-                .to_string();
-
-            assert!(error.contains("workflow_config_invalid_action"));
-            assert!(error.contains(obsolete));
+            assert_eq!(
+                policy
+                    .workflow_by_issue_type
+                    .get(issue_type)
+                    .map(String::as_str),
+                Some(workflow)
+            );
         }
+        assert_eq!(
+            policy
+                .issue_types
+                .get("task")
+                .map(|issue_type| issue_type.label.as_str()),
+            Some("Task")
+        );
+        assert_eq!(policy.status_category("done"), Some("done"));
+        assert_eq!(policy.status_category("review"), Some("active"));
+        let close = &policy.workflows["work"].transitions["close"];
+        assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
+        assert_eq!(
+            validator_names(&close.validators),
+            vec!["blockers.none_open"]
+        );
+        assert_eq!(
+            validator_names(&policy.workflows["objective"].transitions["start"].validators),
+            vec!["blockers.transitive_none_open"]
+        );
+        assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
+        assert_eq!(policy.branch_policy.base_branch, "main");
     }
 
     #[test]
-    fn rejects_invalid_action_params() {
+    fn starter_policy_has_objective_and_work_workflows_only() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(
+            policy
+                .workflows
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["objective", "work"]
+        );
+        assert!(!policy.statuses.contains_key("publish_review"));
+    }
+
+    #[test]
+    fn transition_actions_are_unknown_fields() {
         let policy = valid_policy().replace(
-            "          - tracker.commit\n",
-            "          - tracker.commit: { force: true }\n",
+            "        validators:\n        - blockers.transitive_none_open\n",
+            "        validators:\n        - blockers.transitive_none_open\n        actions:\n        - git.prepare_branch\n",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_action"));
-        assert!(error.contains("does not accept params"));
+        assert!(error.contains("workflow_config_unknown_field"), "{error}");
+        assert!(error.contains("actions"), "{error}");
     }
 
     #[test]
-    fn starter_policy_does_not_expose_projection_freshness_validator() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-
-        for (workflow_name, workflow) in &policy.workflows {
-            for (transition_name, transition) in &workflow.transitions {
-                let validator_names = transition
-                    .validators
-                    .iter()
-                    .map(|validator| validator.builtin.as_str())
-                    .collect::<Vec<_>>();
-                assert!(
-                    !validator_names.contains(&"tracker.current"),
-                    "unexpected tracker.current validator for {workflow_name}.{transition_name}: {validator_names:?}"
-                );
-            }
-        }
+    fn status_role_is_an_unknown_field() {
+        let policy = valid_policy().replace(
+            "  in_progress:\n    category: active\n",
+            "  in_progress:\n    category: active\n    role: worker\n",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_unknown_field"), "{error}");
+        assert!(error.contains("role"), "{error}");
     }
 
     #[test]
-    fn starter_policy_keeps_mission_planning_lightweight() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mission = &policy.workflows["mission"];
-        assert_eq!(mission.transitions["ready"].from, ["draft"]);
-        assert!(mission.transitions["ready"]
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "issue.sections_parseable"));
-        assert!(mission.transitions["start"]
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "blockers.transitive_none_open"));
-    }
-
-    #[test]
-    fn starter_policy_distinguishes_draft_epics_from_execution_ready_epics() {
+    fn starter_policy_distinguishes_draft_objectives_from_execution_ready_objectives() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
 
         assert!(!policy.can_enter_active("epic", "draft").unwrap());
-        assert!(policy.can_enter_active("epic", "ready").unwrap());
+        assert!(policy.can_enter_active("epic", "todo").unwrap());
+        assert!(policy.can_enter_active("task", "todo").unwrap());
     }
 
     #[test]
-    fn starter_policy_checks_proof_route_only_when_epic_becomes_ready() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let epic = &policy.workflows["epic"];
-
-        assert_eq!(epic.initial_status, "draft");
-        assert!(epic.transitions["ready"]
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "epic.proof_route_present"));
-        assert!(epic.transitions["adopt_draft"].validators.is_empty());
+    fn accepts_retained_validators_with_evidence_params() {
+        let policy = with_work_close_validators(
+            "        - issue.sections_parseable\n        - blockers.none_open\n        - blockers.transitive_none_open\n        - evidence.attached: { min_count: 2, kind: test }\n        - lint.none_blocking\n        - git.worktree_clean\n        - work.terminal\n",
+        );
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        let close = &policy.workflows["work"].transitions["close"];
+        assert_eq!(close.validators.len(), 7);
+        assert_eq!(
+            close.validators[3].params.as_ref(),
+            Some(&ValidatorParams::EvidenceAttached {
+                min_count: 2,
+                kind: Some("test".to_string()),
+            })
+        );
     }
 
     #[test]
-    fn starter_policy_avoids_duplicate_epic_proof_and_parented_validation_review() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let epic_close = &policy.workflows["epic"].transitions["close"];
-        let epic_validators = epic_close
-            .validators
-            .iter()
-            .map(|validator| validator.builtin.as_str())
-            .collect::<Vec<_>>();
-        assert!(epic_validators.contains(&"children.proof_complete"));
-        assert!(!epic_validators.contains(&"evidence.attached"));
-
-        let validation = &policy.workflows["validation"];
-        let parented = &validation.transitions["complete_parented"];
-        assert_eq!(parented.from, ["in_progress"]);
-        assert_eq!(parented.to, "done");
-        assert!(parented
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "validation.parent_epic"));
-        assert!(parented
-            .validators
-            .iter()
-            .any(|validator| validator.builtin == "evidence.attached"));
-
-        let standalone_close = &validation.transitions["close"];
-        assert!(standalone_close
-            .validators
-            .iter()
-            .all(|validator| validator.builtin != "children.proof_complete"));
+    fn rejects_removed_validators() {
+        for removed in [
+            "children.proof_complete",
+            "objective.work_terminal",
+            "objective.work_present",
+            "epic.proof_route_present",
+            "validation.criteria_satisfied",
+            "validation.parent_epic",
+            "closeout.failures_classified",
+            "baseline.default_checks",
+            "command_surface_current",
+            "ignored_tests_reviewed",
+            "git.on_base",
+            "git.on_mission_branch",
+            "no_open_work",
+            "tracker.current",
+        ] {
+            let policy = with_work_close_validators(&format!("        - {removed}\n"));
+            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("workflow_config_invalid_validator"),
+                "{error}"
+            );
+            assert!(error.contains(removed), "{error}");
+        }
     }
 
     #[test]
@@ -2615,48 +1989,35 @@ mod tests {
     #[test]
     fn validates_workflow_branch_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
+        let issue = issue_with_fields(BTreeMap::from([(
             WORKFLOW_BRANCH_FIELD.to_string(),
             serde_json::json!({
-                "owner_issue_id": "atelier-pr01",
-                "work_branch": "epic/atelier-pr01",
-                "branch_base": "mission/atelier-root",
-                "review_target": "mission/atelier-root",
-                "integration_target": "mission/atelier-root",
-                "owner_kind": "epic",
-                "merge_strategy": "squash",
+                "work_branch": "task/atelier-pr01",
+                "branch_base": "main",
             }),
-        );
-        let issue = issue_with_fields(fields);
+        )]));
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
     }
 
     #[test]
-    fn rejects_mismatched_workflow_branch_owner() {
+    fn rejects_integration_sub_fields_in_workflow_branch() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
+        let issue = issue_with_fields(BTreeMap::from([(
             WORKFLOW_BRANCH_FIELD.to_string(),
             serde_json::json!({
-                "owner_issue_id": "atelier-other",
-                "work_branch": "epic/atelier-test",
-                "branch_base": "mission/atelier-root",
-                "review_target": "mission/atelier-root",
-                "integration_target": "mission/atelier-root",
-                "owner_kind": "epic",
-                "merge_strategy": "squash",
+                "work_branch": "task/atelier-pr01",
+                "branch_base": "main",
+                "integration_target": "main",
             }),
-        );
-        let issue = issue_with_fields(fields);
+        )]));
 
         let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
             .unwrap_err()
             .to_string();
 
-        assert!(error.contains("workflow_branch_field_invalid"));
-        assert!(error.contains("owner_issue_id"));
+        assert!(error.contains("workflow_branch_field_invalid"), "{error}");
+        assert!(error.contains("integration_target"), "{error}");
     }
 
     #[test]
@@ -2686,20 +2047,6 @@ mod tests {
     }
 
     #[test]
-    fn obsolete_cache_table_fields_are_plain_unknown_fields() {
-        for field in ["workflow_projection_tables", "projection_tables"] {
-            let text = format!("{}\n{field}: []\n", valid_policy());
-            let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
-                .unwrap_err()
-                .to_string();
-
-            assert!(error.contains("workflow_config_unknown_field"));
-            assert!(error.contains(field));
-            assert!(!error.contains("workflow_config_deferred_feature"));
-        }
-    }
-
-    #[test]
     fn parses_configured_branch_policy() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(policy.branch_policy.base_branch, "trunk");
@@ -2707,20 +2054,6 @@ mod tests {
             policy.branch_policy.merge_strategy,
             MergeStrategy::FastForwardOnly
         );
-    }
-
-    #[test]
-    fn rejects_obsolete_branch_templates() {
-        let text = valid_policy().replace(
-            default_branch_policy(),
-            "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n",
-        );
-        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_unknown_field"));
-        assert!(error.contains("branch_templates"));
     }
 
     #[test]
@@ -2748,27 +2081,20 @@ mod tests {
     }
 
     #[test]
-    fn branch_name_for_owner_uses_canonical_issue_type_and_id() {
+    fn branch_name_for_owner_uses_issue_type_and_id() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        let issue = Issue {
-            id: "atelier-abc1".to_string(),
-            title: "Branch owner".to_string(),
-            description: None,
-            status: "todo".to_string(),
-            priority: "medium".to_string(),
-            issue_type: "task".to_string(),
-            fields: Default::default(),
-            parent_id: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            closed_at: None,
-        };
+        let mut issue = issue_with_fields(Default::default());
+        issue.id = "atelier-abc1".to_string();
 
-        let branch = policy
-            .branch_name_for_owner(&issue, &BranchOwnerKind::StandaloneIssue)
-            .unwrap();
-
-        assert_eq!(branch, "task/atelier-abc1");
+        assert_eq!(
+            policy.branch_name_for_owner(&issue).unwrap(),
+            "task/atelier-abc1"
+        );
+        issue.issue_type = "epic".to_string();
+        assert_eq!(
+            policy.branch_name_for_owner(&issue).unwrap(),
+            "epic/atelier-abc1"
+        );
     }
 
     #[test]
@@ -2798,10 +2124,7 @@ mod tests {
     #[test]
     fn rejects_unknown_inline_validator() {
         let error = parse_policy_text(
-            &valid_policy().replace(
-                "          - blockers.none_open\n",
-                "          - missing_validator\n",
-            ),
+            &with_work_close_validators("        - missing_validator\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2811,52 +2134,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_removed_tracker_current_validator() {
-        let error = parse_policy_text(
-            &valid_policy().replace(
-                "          - blockers.none_open\n",
-                "          - blockers.none_open\n          - tracker.current\n",
-            ),
-            WORKFLOW_POLICY_PATH,
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(error.contains("workflow_config_invalid_validator"));
-        assert!(error.contains("tracker.current"));
-    }
-
-    #[test]
-    fn rejects_obsolete_flat_validator_names() {
-        let obsolete_names = [
-            ("evidence_attached", "evidence.attached"),
-            ("epic_child_proof_complete", "children.proof_complete"),
-            (
-                "validation_criteria_satisfied",
-                "validation.criteria_satisfied",
-            ),
-            ("no_open_blockers", "blockers.none_open"),
-            ("no_blocking_lints", "lint.none_blocking"),
-            ("git_worktree_clean", "git.worktree_clean"),
-            ("git.on_base_branch", "git.on_base"),
-        ];
-
-        for (obsolete, _) in obsolete_names {
-            let policy = valid_policy().replacen("blockers.none_open", obsolete, 1);
-            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
-                .unwrap_err()
-                .to_string();
-            assert!(error.contains("workflow_config_invalid_validator"));
-            assert!(error.contains(obsolete));
-        }
-    }
-
-    #[test]
     fn rejects_missing_issue_type_coverage() {
         let error = parse_policy_text(
             &valid_policy().replace(
-                "  validation: { label: Validation }\n",
-                "  validation: { label: Validation }\n  incident: { label: Incident }\n",
+                "  validation:\n    label: Validation\n",
+                "  validation:\n    label: Validation\n  incident:\n    label: Incident\n",
             ),
             WORKFLOW_POLICY_PATH,
         )
@@ -2870,13 +2152,10 @@ mod tests {
     fn parses_custom_issue_type_registry() {
         let policy = valid_policy()
             .replace(
-                "  validation: { label: Validation }\n",
-                "  validation: { label: Validation }\n  incident: { label: Incident }\n",
+                "  validation:\n    label: Validation\n",
+                "  validation:\n    label: Validation\n  incident:\n    label: Incident\n",
             )
-            .replace(
-                "    applies_to: [bug, feature, task]\n",
-                "    applies_to: [bug, feature, incident, task]\n",
-            );
+            .replace("    - task\n", "    - task\n    - incident\n");
 
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
 
@@ -2892,17 +2171,14 @@ mod tests {
                 .workflow_by_issue_type
                 .get("incident")
                 .map(String::as_str),
-            Some("task")
+            Some("work")
         );
     }
 
     #[test]
     fn rejects_missing_issue_type_registry_entry() {
         let error = parse_policy_text(
-            &valid_policy().replace(
-                "    applies_to: [bug, feature, task]\n",
-                "    applies_to: [bug, feature, incident, task]\n",
-            ),
+            &valid_policy().replace("    - task\n", "    - task\n    - incident\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2916,7 +2192,7 @@ mod tests {
     #[test]
     fn rejects_invalid_issue_type_name_and_label() {
         let invalid_name =
-            valid_policy().replace("  task: { label: Task }\n", "  Task: { label: Task }\n");
+            valid_policy().replace("  task:\n    label: Task\n", "  Task:\n    label: Task\n");
         let error = parse_policy_text(&invalid_name, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
@@ -2924,7 +2200,7 @@ mod tests {
         assert!(error.contains("issue type names"));
 
         let empty_label =
-            valid_policy().replace("  task: { label: Task }\n", "  task: { label: \"\" }\n");
+            valid_policy().replace("  task:\n    label: Task\n", "  task:\n    label: \"\"\n");
         let error = parse_policy_text(&empty_label, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
@@ -2935,7 +2211,7 @@ mod tests {
     #[test]
     fn rejects_invalid_evidence_validator_params() {
         let error = parse_policy_text(
-            &valid_policy().replace("min_count: 1", "min_count: 0"),
+            &with_work_close_validators("        - evidence.attached: { min_count: 0 }\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2947,10 +2223,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_issue_type_coverage() {
         let error = parse_policy_text(
-            &valid_policy().replace(
-                "    applies_to: [spike]\n",
-                "    applies_to: [spike, task]\n",
-            ),
+            &valid_policy().replace("    - epic\n", "    - epic\n    - task\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()

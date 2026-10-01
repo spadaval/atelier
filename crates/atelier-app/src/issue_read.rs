@@ -435,28 +435,24 @@ mod tests {
             "todo".to_string(),
             StatusDefinition {
                 category: "todo".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "in_progress".to_string(),
             StatusDefinition {
                 category: "active".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "blocked".to_string(),
             StatusDefinition {
                 category: "blocked".to_string(),
-                role: None,
             },
         );
         statuses.insert(
             "done".to_string(),
             StatusDefinition {
                 category: "done".to_string(),
-                role: None,
             },
         );
         let workflow_by_issue_type = ["mission", "epic", "task"]
@@ -481,7 +477,6 @@ mod tests {
                         required_fields: Vec::new(),
                         description: None,
                         validators: Vec::new(),
-                        actions: Vec::new(),
                     },
                 )]),
             },

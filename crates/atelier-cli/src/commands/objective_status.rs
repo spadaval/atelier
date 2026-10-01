@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Issue, RecordLink};
+use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,14 +148,6 @@ pub(crate) fn order_issues_by_work(
         .collect())
 }
 
-pub(crate) fn order_issues_by_work_with_default(
-    db: &Database,
-    issues: Vec<Issue>,
-) -> Result<Vec<Issue>> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    order_issues_by_work(db, workflow_policy.as_ref(), issues)
-}
-
 pub(crate) fn work_order_row_for_issue(
     db: &Database,
     workflow_policy: Option<&WorkflowPolicy>,
@@ -171,14 +163,6 @@ pub(crate) fn work_order_row_for_issue(
         updated_at: issue.updated_at,
         open_blockers: open_issue_blockers(db, &issue.id, workflow_policy)?,
     })
-}
-
-pub(crate) fn work_order_row_for_issue_with_default(
-    db: &Database,
-    issue: &Issue,
-) -> Result<WorkOrderRow> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    work_order_row_for_issue(db, workflow_policy.as_ref(), issue)
 }
 
 pub(crate) fn open_issue_blockers(
@@ -207,32 +191,6 @@ pub(crate) fn open_issue_blockers_with_default(
     open_issue_blockers(db, issue_id, workflow_policy.as_ref())
 }
 
-pub(crate) fn open_objective_blockers(
-    db: &Database,
-    objective_kind: &str,
-    objective_id: &str,
-) -> Result<Vec<String>> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut blocker_ids = direct_blocker_ids(db, objective_kind, objective_id)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    for issue_id in mission_issue_ids(db, objective_id)? {
-        for blocker_id in db.get_blockers(&issue_id)? {
-            blocker_ids.insert(blocker_id);
-        }
-    }
-    let mut open = blocker_ids
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| {
-            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
-        })
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    open.sort();
-    Ok(open)
-}
-
 pub(crate) fn open_issue_objective_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut blocker_ids = db
@@ -245,20 +203,6 @@ pub(crate) fn open_issue_objective_blockers(db: &Database, issue_id: &str) -> Re
         }
     }
     let mut open = blocker_ids
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| {
-            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
-        })
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    open.sort();
-    Ok(open)
-}
-
-pub(crate) fn open_objective_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut open = mission_issue_ids(db, mission_id)?
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
         .filter(|issue| {
@@ -311,22 +255,6 @@ pub(crate) fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTre
     Ok(issue_ids)
 }
 
-pub(crate) fn direct_blocker_ids(db: &Database, kind: &str, id: &str) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for link in db.list_record_links(kind, id)? {
-        if link.relation_type != "blocked_by" {
-            continue;
-        }
-        let Some((linked_kind, linked_id)) = other_side(&link, kind, id) else {
-            continue;
-        };
-        if linked_kind == "issue" {
-            blockers.push(linked_id.to_string());
-        }
-    }
-    Ok(blockers)
-}
-
 pub(crate) fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
     Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
 }
@@ -354,14 +282,4 @@ fn collect_issue_and_descendants(
         collect_issue_and_descendants(db, &child.id, issue_ids)?;
     }
     Ok(())
-}
-
-fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str, &'a str)> {
-    if link.source_kind == kind && link.source_id == id {
-        Some((&link.target_kind, &link.target_id))
-    } else if link.target_kind == kind && link.target_id == id {
-        Some((&link.source_kind, &link.source_id))
-    } else {
-        None
-    }
 }

@@ -963,7 +963,6 @@ mod tests {
                 status.to_string(),
                 StatusDefinition {
                     category: category.to_string(),
-                    role: None,
                 },
             );
         }
@@ -989,7 +988,6 @@ mod tests {
                         required_fields: Vec::new(),
                         description: None,
                         validators: Vec::new(),
-                        actions: Vec::new(),
                     },
                 )]),
             },

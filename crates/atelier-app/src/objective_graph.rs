@@ -395,14 +395,12 @@ mod tests {
                 "todo".to_string(),
                 StatusDefinition {
                     category: "todo".to_string(),
-                    role: None,
                 },
             ),
             (
                 "done".to_string(),
                 StatusDefinition {
                     category: "done".to_string(),
-                    role: None,
                 },
             ),
         ]);

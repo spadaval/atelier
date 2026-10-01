@@ -20,22 +20,10 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, workflow actions, branch naming, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, domain-cache data, diagnostics, locks, or other caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, local path overrides, domain-cache content, or hidden defaults. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, and provider remote coordinates. | Issue statuses, transitions, validators, branch naming, required transition fields, provider secret values, local runtime paths or contents, domain-cache data, diagnostics, locks, or other caches. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, and static descriptions. | Side effects of any kind, provider host/owner/repo/token settings, local path overrides, domain-cache content, or hidden defaults. |
 | `~/.config/atelier.toml` | User-local global config, including plaintext provider secrets such as `review.providers.forgejo.admin_token`. | Durable project records, project policy, workflow policy, provider remote coordinates, domain-cache data, diagnostics, locks, or other caches. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, the rebuilt SQLite domain cache, and optional environment variables for local behavior overrides such as diagnostics and agent labels. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for provider credentials. |
-
-The boundary is intentionally split for review integration. `.atelier/config.toml`
-selects the review backend, such as `review.mode = "provider"` with
-`review.provider = "forgejo"`, and records the provider identity needed to
-normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
-transition opens or links the branch owner's review artifact through explicit
-actions such as `review.open`. Provider
-review actions declare the workflow role and any provider role-author mapping
-they use; provider secrets remain user-local in `~/.config/atelier.toml`.
-Provider approval rules, branch protection, and merge authorization remain with
-the provider or native room implementation; workflow validators only read enough
-review state to decide whether an Atelier transition may proceed.
 
 Custom issue links belong to `.atelier/config.toml` because they are project
 vocabulary, not workflow behavior:
@@ -62,43 +50,46 @@ Issue workflow execution is explicit:
 ```text
 atelier issue transition <id> <transition>
 atelier issue transition <id>
+atelier start <id>
 ```
 
 `atelier issue transition <id>` renders transitions available from
 the issue's current status. Each option reports whether the transition is
-currently allowed, configured read-only validator results, configured
-transition actions, static transition descriptions, branch context, and the
-next command to run. A blocked preflight attempt reports its failed requirements
-without mutating canonical records or running actions. A successful attempt
-runs declared actions in order, records a `transition_applied` activity entry,
-and updates the canonical issue `status`.
+currently allowed, configured read-only validator results, static transition
+descriptions, and the next command to run. A blocked attempt reports its failed
+requirements without writing anything. A successful attempt writes the
+canonical issue record and nothing else: transitions never commit, push, merge,
+or switch branches ([ADR 0019](../adr/0019-verified-repo-native-tracker.md)).
+
+`atelier start <id>` is the one explicit side-effecting convenience. It
+resolves the issue's branch owner (see [Branch Policy](#branch-policy)), runs
+the `start` transition's checks when the workflow offers `start` from the
+current status, and only then acts: it refuses a dirty checkout when it has to
+switch branches, creates the owner branch from the current `HEAD` or checks out
+the existing one, records the branch and its base on the owner record, and
+applies `start`. It prints every Git operation it runs and never commits;
+agents commit the record changes with the work they describe. Rerunning it
+is a no-op once the branch is checked out and recorded. Missions have no
+branch, so `atelier start <mission-id>` fails.
 
 ## Scope
 
 Workflow policy applies to issue records, including mission-shaped objectives
 whose front matter declares `issue_type: mission`. The contract defines:
 
-- a required branch policy for owner branch names, base branch, and merge
-  strategy;
+- a required branch policy for the base branch and merge strategy;
 - a repository-defined issue type registry;
-- a shared status catalog with explicit status categories and optional active
-  status roles;
+- a shared status catalog with explicit status categories;
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
 - inline read-only built-in validators and validator params;
-- inline built-in transition actions;
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
-Evidence, activity, and future durable record lifecycles stay outside
+Evidence and future durable record lifecycles stay outside
 `.atelier/workflow.yaml`. Mission lifecycle is workflow-owned because missions
 are issue records in v3, not a separate record kind or command namespace.
-
-Status `role` is allowed only when `category: active`. Valid role values are
-`worker`, `reviewer`, `validator`, and `manager`. Mutating review commands use
-explicit `--role` first; when omitted, they infer the role from the linked owner
-issue's current status role and fail if that status has none.
 
 `blockers.transitive_none_open` walks only declared `blocked_by` dependency
 edges. It rejects an incomplete direct or transitive prerequisite with the full
@@ -109,321 +100,178 @@ the shared status category alone does not make it terminal. Mission `advances`
 scope and ordinary hierarchy are not dependency edges, so incomplete internal
 mission work does not block starting the mission shell.
 
-Mission planning uses the ordinary issue workflow. Draft missions move directly to ready when their planning sections are readable and declared blockers are clear. Planning-file edits do not require a separate review or identity ceremony.
-
-Epic proof planning remains just in time. A draft epic may omit child work and
-Evidence entirely. On the `draft -> ready` transition,
-`epic.proof_route_present` requires the now-expanded epic to expose one durable
-route: authored `## Evidence` guidance on the epic, authored Evidence guidance
-on an immediate child, or an immediate child whose issue type is `validation`.
-The validator recognizes where proof will be produced; issue lint remains
-responsible for judging whether authored Evidence entries name concrete,
-observable proof targets. A blocked transition points to the records to edit or
-the command for creating an immediate validation child.
-
 ## Fixed V3 Shape
 
-The file is strict YAML with explicit schema identity:
+The file is strict YAML with explicit schema identity. `atelier init` writes
+this starter policy:
 
 ```yaml
 schema: atelier.workflow
 schema_version: 3
-
 branch_policy:
-  base_branch: master
+  base_branch: main
   merge_strategy: squash
-
 issue_types:
-  bug: { label: Bug }
-  epic: { label: Epic }
-  feature: { label: Feature }
-  mission: { label: Mission }
-  spike: { label: Spike }
-  task: { label: Task }
-  validation: { label: Validation }
-
-statuses:
-  draft: { category: todo }
-  ready: { category: todo }
-  todo: { category: todo }
-  in_progress: { category: active, role: worker }
-  blocked: { category: blocked }
-  review: { category: active, role: reviewer }
-  validation: { category: active, role: validator }
-  publish_review: { category: done }
-  done: { category: done }
-  closed: { category: done }
-  superseded: { category: done }
-
-workflows:
-  mission:
-    applies_to: [mission]
-    initial_status: draft
-    done_statuses: [publish_review, closed, superseded]
-    transitions:
-      ready:
-        from: [draft]
-        to: ready
-        description: "Make a worker-usable mission ready for execution."
-        validators:
-          - issue.sections_parseable
-          - blockers.transitive_none_open
-      start:
-        from: [ready]
-        to: in_progress
-        description: "Start coordinated mission work."
-        validators:
-          - blockers.transitive_none_open
-          - git.worktree_clean
-        actions:
-          - git.prepare_branch
-      request_publish:
-        from: [ready, in_progress, validation]
-        to: publish_review
-        description: "Open the mission publish review from the mission branch to the configured base branch."
-        validators:
-          - objective.work_present
-          - objective.work_terminal
-          - objective.blockers_none_open
-          - issue.sections_parseable
-          - validation.criteria_satisfied
-          - lint.none_blocking
-          - command_surface_current
-          - ignored_tests_reviewed
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-          - git.push
-          - review.open:
-              provider: forgejo
-              role: manager
-              role_authors:
-                worker: atelier-worker
-                reviewer: atelier-reviewer
-                validator: atelier-validator
-                manager: atelier-manager
-
-  task:
-    applies_to: [bug, feature, task]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [todo, in_progress, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      close:
-        from: [in_progress, validation]
-        to: done
-        description: "Closing requires attached evidence and no open blockers."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-
+  bug:
+    label: Bug
   epic:
-    applies_to: [epic]
+    label: Epic
+  feature:
+    label: Feature
+  mission:
+    label: Mission
+  spike:
+    label: Spike
+  task:
+    label: Task
+  validation:
+    label: Validation
+statuses:
+  draft:
+    category: todo
+  todo:
+    category: todo
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: active
+  done:
+    category: done
+  superseded:
+    category: done
+workflows:
+  objective:
+    applies_to:
+    - mission
+    - epic
     initial_status: draft
-    done_statuses: [done, superseded]
+    done_statuses:
+    - done
+    - superseded
     transitions:
-      adopt_draft:
-        from: [todo]
-        to: draft
-        description: "Adopt a legacy unexpanded epic into the draft outcome map."
       ready:
         from: [draft]
-        to: ready
-        description: "Refine the outcome, immediate child work, dependencies, and proof route so this epic is ready for execution."
+        to: todo
+        description: The outcome, immediate work, and proof route are clear enough to execute.
         validators:
-          - issue.sections_parseable
-          - objective.work_present
-          - epic.proof_route_present
-          - blockers.transitive_none_open
-          - lint.none_blocking
-      start:
-        from: [ready, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [ready, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      supersede:
-        from: [draft, ready, blocked]
-        to: superseded
-        required_fields: [close_reason]
-        description: "Retire speculative epic work while preserving its outcome, history, and evidence."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open:
-              provider: forgejo
-              role: worker
-              role_authors:
-                worker: atelier-worker
-                reviewer: atelier-reviewer
-                validator: atelier-validator
-                manager: atelier-manager
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move reviewed work into validation after review is complete."
-        validators: [review.complete]
-      close:
-        from: [validation]
-        to: done
-        description: "Closing requires complete child proof, review completion, and a clean worktree."
-        validators:
-          - children.proof_complete
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-
-  validation:
-    applies_to: [validation]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
+        - issue.sections_parseable
       start:
         from: [todo, blocked]
         to: in_progress
-        description: "Start active work on this item."
+        description: Start work.
         validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
-      block:
-        from: [todo, in_progress, review, validation]
-        to: blocked
-        description: "Mark work blocked while preserving current proof expectations."
-      request_review:
-        from: [in_progress]
-        to: review
-        description: "Open the configured review artifact for this work."
-        actions:
-          - review.open: { role: worker }
-      request_validation:
-        from: [in_progress, review]
-        to: validation
-        description: "Move reviewed work into validation after review is complete."
-        validators: [review.complete]
-      complete_parented:
-        from: [in_progress]
-        to: done
-        description: "Complete validation whose parent epic owns the review boundary."
-        validators:
-          - validation.parent_epic
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-        actions:
-          - tracker.commit
-      close:
-        from: [validation]
-        to: done
-        description: "Closing standalone validation requires attached evidence, complete review, and a clean worktree."
-        validators:
-          - evidence.attached: { min_count: 1 }
-          - blockers.none_open
-          - lint.none_blocking
-          - git.worktree_clean
-
-  spike:
-    applies_to: [spike]
-    initial_status: todo
-    done_statuses: [done]
-    transitions:
-      start:
-        from: [todo, blocked]
-        to: in_progress
-        description: "Start active work on this item."
-        validators:
-          - blockers.transitive_none_open
-        actions:
-          - git.prepare_branch
+        - blockers.transitive_none_open
       block:
         from: [todo, in_progress, review]
         to: blocked
-        description: "Mark spike work blocked while preserving review expectations."
+        description: Record a blocker.
       request_review:
         from: [in_progress]
         to: review
-        description: "Open the configured review artifact for this spike."
-        actions:
-          - review.open: { role: worker }
+        description: Ready for independent review.
       revise:
         from: [review]
         to: in_progress
-        description: "Return a reviewed spike to active work."
+        description: Return to active work after review findings.
       close:
-        from: [review]
+        from: [in_progress, review]
         to: done
-        description: "Closing requires complete review and current durable state."
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
         validators:
-          - review.complete
-          - git.worktree_clean
+        - blockers.none_open
+      supersede:
+        from: [draft, todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that evidence made obsolete.
+  work:
+    applies_to:
+    - bug
+    - feature
+    - spike
+    - task
+    - validation
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        description: Start work.
+        validators:
+        - blockers.transitive_none_open
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+        description: Record a blocker.
+      request_review:
+        from: [in_progress]
+        to: review
+        description: Ready for independent review.
+      revise:
+        from: [review]
+        to: in_progress
+        description: Return to active work after review findings.
+      close:
+        from: [in_progress, review]
+        to: done
+        required_fields: [close_reason]
+        description: Done claim; commit it on the work branch before review.
+        validators:
+        - blockers.none_open
+      supersede:
+        from: [todo, blocked, in_progress]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire work that is no longer needed.
 ```
 
 Required top-level fields are `schema`, `schema_version`, `branch_policy`,
-`issue_types`, `statuses`, and `workflows`. Unknown top-level fields are hard
-errors. Obsolete top-level fields such as `branch_lifecycle`, `validators`,
-`guidance_templates`, and `fields` are rejected. Obsolete transition fields
-such as `effects` are rejected for the target contract.
+`issue_types`, `statuses`, and `workflows`. Unknown fields at any level are
+hard errors, including obsolete top-level fields such as `branch_lifecycle`,
+`validators`, `guidance_templates`, and `fields`, and obsolete transition or
+status fields such as `effects`, `actions`, and `role`.
 
 ## Branch Policy
 
-`branch_policy` is the shared branch policy used by workflow commands, status
-surfaces, PR validation, and branch helpers. It is derived from the
-tracker graph rather than duplicated in command handlers:
+Branch ownership is derived from the tracker graph:
 
-- child issues under an epic use the nearest parent epic as branch owner;
+- child issues under an epic work on the nearest parent epic's branch;
 - standalone issues own their issue branch;
-- epics own their epic branch;
-- missions own no branch unless their workflow declares branch validators and
-  actions, in which case they own an opt-in mission integration branch;
-- child issue completion actions commit tracker state on the epic branch and do
-  not merge to base; and
-- standalone issue and epic completion actions integrate their
-  owner branch to the recorded branch base when the workflow declares that
-  action.
+- epics own their epic branch; and
+- missions own no branch; they are coordinated, not worked on a branch.
 
 | Field | Rule |
 | --- | --- |
 | `base_branch` | Required non-empty Git branch name. |
-| `merge_strategy` | Required. One of `squash`, `merge_commit`, or `fast_forward_only`. |
+| `merge_strategy` | Optional. One of `squash` (default), `merge_commit`, or `fast_forward_only`. |
 
-`base_branch` is the named repository integration branch used when no narrower
-recorded branch base applies. It is configuration, not a statement that every
-transition must run from that branch.
+`base_branch` is the repository integration branch used when no recorded base
+applies. It is configuration, not a statement that every transition must run
+from that branch.
 
-A work branch is the owner branch that carries mutation and review for a
-branch-owning record. Work branch names are canonical and are not configurable:
-`<issue_type>/<issue_id>`, for example `mission/atelier-k7mq`,
-`epic/atelier-4p7q`, or `task/atelier-z1p8`. The issue type is the registered
-`issue_types` key and the issue ID is the canonical record ID. Slugs and
-branch templates are rejected target-contract alternatives.
+Work branch names are canonical and are not configurable:
+`<issue_type>/<issue_id>`, for example `epic/atelier-4p7q` or
+`task/atelier-z1p8`. The issue type is the registered `issue_types` key and the
+issue ID is the canonical record ID. Slugs and branch templates are rejected.
 
-A branch base is the branch/ref and commit recorded when workflow branch
-actions prepare a work branch. Review target validation, provider sync, and
-local integration use the recorded branch base rather than recomputing a target
-from parent hierarchy at close time. A mission integration branch can become the
-recorded branch base for direct work that advances that mission, but only when
-the mission workflow opts in through explicit validators and actions.
+`atelier start` records the owner's branch and base in the owner's
+`workflow_branch` field:
+
+```yaml
+fields:
+  workflow_branch:
+    work_branch: epic/atelier-4p7q
+    branch_base: main
+```
+
+The base is the branch that was checked out when `start` created the work
+branch. A recorded branch wins over the derived name.
 
 ## Issue Types
 
@@ -439,8 +287,8 @@ Each issue type object currently has one required field:
 | --- | --- |
 | `label` | Required non-empty user-facing label. |
 
-The starter registry defines `bug`, `epic`, `feature`, `spike`, `task`, and
-`validation`. Repositories may add custom issue types by adding registry
+The starter registry defines `bug`, `epic`, `feature`, `mission`, `spike`,
+`task`, and `validation`. Repositories may add custom issue types by adding registry
 entries and then covering them from exactly one workflow. Unknown issue types
 in issue records are hard config or lint errors because the workflow resolver
 cannot know which status and transition rules apply.
@@ -458,8 +306,8 @@ Each status object currently has one required field:
 
 Status categories are operator-facing summary buckets. They help commands
 summarize work but do not replace workflow status in canonical issue records.
-`review` and `validation` may be configured as user-facing workflow statuses or
-issue types, but they are not required global categories.
+`review` may be configured as a user-facing workflow status, but it is not a
+required global category.
 
 Statuses in a workflow's `done_statuses` list are terminal for that workflow:
 
@@ -479,11 +327,8 @@ Starter workflow names are:
 
 | Workflow | Applies to |
 | --- | --- |
-| `mission` | `mission` |
-| `task` | `bug`, `feature`, `task` |
-| `epic` | `epic` |
-| `validation` | `validation` |
-| `spike` | `spike` |
+| `objective` | `mission`, `epic` |
+| `work` | `bug`, `feature`, `spike`, `task`, `validation` |
 
 ## Transitions
 
@@ -495,107 +340,10 @@ Each workflow defines named transitions:
 | `to` | Required destination status. It must exist. |
 | `required_fields` | Optional list of required command inputs. Currently `close_reason` is supported. |
 | `validators` | Optional list of inline read-only built-in validators. |
-| `actions` | Optional ordered list of inline built-in transition actions. |
 | `description` | Optional static text rendered near transition options and blocked transition output. |
 
 `description` is static text. There is no template registry and no template
 variable expansion.
-
-## Transition Actions
-
-Transition actions are configured work run by explicit issue transitions after
-required fields and validators pass. They are declared on a transition, planned
-in declaration order, and rendered separately from validators so operators can
-see what readiness checked and what the command intends to mutate.
-
-Built-in actions are:
-
-| Action | Purpose |
-| --- | --- |
-| `git.prepare_branch` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
-| `tracker.commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
-| `git.push` | Push the workflow-derived owner branch to the configured review provider remote. |
-| `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
-| `git.sync` | Synchronize the local base branch after provider-owned merge completion. |
-| `git.integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` when the declaring transition owns local integration. |
-| `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
-
-The workflow engine intrinsically writes the canonical issue status and
-transition activity entry for a successful transition. That status write is not
-a configurable action. The execution order for a transition is: load strict
-workflow policy, select the issue workflow, validate source status and required
-fields, evaluate read-only validators, compute branch context, plan actions in
-declaration order, run those actions, reload the canonical issue after any
-tracker-mutating action, then write the final status and transition activity.
-Reload-after-action is the v1 consistency policy for actions such as
-`review.open` or `tracker.commit` that may change canonical tracker fields; it
-avoids stale whole-record writes without introducing an issue ORM or session
-layer.
-
-Review artifact actions use the configured review mode from `.atelier/config.toml`.
-In room mode `review.open` creates or reuses a native review room. In provider
-mode it creates, fetches, or links the configured provider artifact. It does not
-approve, comment, request changes, resolve findings, merge review artifacts,
-close issues, add `pr` aliases, or replace explicit
-`atelier issue transition`.
-
-Merge authority is transition-specific. Provider-owned review transitions use
-actions such as `tracker.commit`, `git.push`, `review.merge`, and `git.sync`;
-they must not use `git.integrate` as a substitute for provider merge authority.
-A separate transition may explicitly own a local branch boundary with
-`git.integrate`, including in a repository where other workflows use provider
-review.
-
-Review artifact actions require parameter objects. Room-mode actions declare
-the local Atelier role:
-
-```yaml
-actions:
-  - review.open: { role: worker }
-```
-
-Forgejo-backed provider actions also declare `provider: forgejo` and the role
-author mapping used by the action's provider calls:
-
-```yaml
-actions:
-  - review.open:
-      provider: forgejo
-      role: worker
-      role_authors:
-        worker: atelier-worker
-        reviewer: atelier-reviewer
-        validator: atelier-validator
-        manager: atelier-manager
-```
-
-The Forgejo admin token value is not a workflow parameter and is not tracked in
-project config. It is read from the user-global config file:
-
-```toml
-schema = "atelier.user_config"
-schema_version = 1
-
-[review.providers.forgejo]
-admin_token = "..."
-```
-
-Failure behavior is part of the action contract:
-
-- Preflight failures stop before actions mutate state. This includes invalid
-  source status, missing required fields, failed validators, invalid review mode,
-  and invalid action configuration.
-- Local write failures name the failed Markdown, activity, branch, commit, or
-  integration step and leave recovery commands that can inspect the preserved
-  state.
-- Provider failures name the failed provider step and preserve local state only
-  when retry is idempotent or the command can provide an explicit repair path.
-- Idempotent retry must tolerate an already-created review artifact,
-  already-written review link, already-applied activity entry, or already-made
-  owner-branch tracker commit.
-- Recovery text must name the failed action, what state was preserved, and next
-  commands such as `atelier issue show <id>`, `atelier issue transition <id>
-  transition options`, `atelier review show --issue <id>`, or `atelier check <id>`.
 
 ## Validators
 
@@ -617,37 +365,23 @@ validators:
 There is no top-level validator alias registry. Unknown validators, obsolete
 flat validator names, and invalid params are hard config errors.
 Validators must be read-only. They may inspect canonical records, worktree
-state, evidence, blockers, and review artifacts, but they must not write
-records, create commits, change branches, open reviews, or merge anything.
-Mutating behavior belongs in transition actions. Domain-cache freshness is an
-internal command-storage health concern repaired by normal commands or explicit
-diagnostics; it is not a user-configurable workflow validator.
+state, evidence, and blockers, but they must not write records, create commits,
+or change branches. There are no transition actions.
+Domain-cache freshness is an internal command-storage health concern repaired
+by normal commands or explicit diagnostics; it is not a user-configurable
+workflow validator.
 
-Supported built-ins include:
+The built-in validators are:
 
 | Validator | Purpose |
 | --- | --- |
-| `issue.sections_parseable` | Issue Markdown sections can be parsed. |
-| `evidence.attached` | Required evidence is attached; supports `min_count`. |
-| `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
-| `children.proof_complete` | Child work is closed with validating proof. |
-| `validation.parent_epic` | The validation issue is owned by a parent epic whose review boundary can carry the validation result. |
-| `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
-| `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
-| `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
-| `validation.criteria_satisfied` | Explicit mission validation work and linked evidence satisfy the mission `Outcome` according to the configured objective publish check. |
-| `command_surface_current` | Public command-surface guidance has been checked against current help and docs for publish readiness. |
-| `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for publish risk. |
-| `blockers.none_open` | Target has no open blockers. |
+| `issue.sections_parseable` | The issue's required Markdown sections are present and non-empty. |
+| `blockers.none_open` | The issue has no open direct `blocked_by` blockers. |
+| `blockers.transitive_none_open` | The issue's declared dependency closure is complete and acyclic. |
+| `evidence.attached` | Passing validating evidence is attached; supports `min_count` and `kind`. |
 | `lint.none_blocking` | Blocking lint checks pass. |
-| `git.on_base` | Current checkout is the configured `branch_policy.base_branch`. |
-| `git.worktree_clean` | Worktree cleanliness gate passes. |
-| `review.linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
-
-Actions are not validators. They may mutate Git state, canonical review
-records, provider review artifacts, and committed tracker state. Unknown
-actions or action params unsupported by the built-in action
-are hard config errors.
+| `git.worktree_clean` | The Git checkout has no uncommitted or untracked changes. |
+| `work.terminal` | Every child and, for missions, all work linked by `advances` (with its children) is in a done-category status. |
 
 ## Review Field
 
@@ -757,6 +491,4 @@ diagnostic families include:
 | `workflow_config_invalid_status` | Status name, category, transition source, or terminal status is invalid. |
 | `workflow_config_unknown_validator` | Transition references an unsupported validator. |
 | `workflow_config_invalid_validator` | Validator params are malformed. |
-| `workflow_config_unknown_action` | Transition references an unsupported action. |
-| `workflow_config_invalid_action` | Action params are malformed or unsupported for that built-in action. |
 | `workflow_issue_field_invalid` | Canonical issue fields violate built-in workflow field rules. |

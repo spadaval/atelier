@@ -63,8 +63,8 @@ may be cited as ordinary workflow proof.
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
 | Normal workflow | Product-facing commands used to orient, select work, inspect objective/detail state, mutate canonical records explicitly, record proof, preview/apply graph bundles, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, and Agent Factory workflow guidance. | `status`, `work`, `issue show`, `issue transition <id>`, `evidence record`, `bundle preview`, `check` | Removed/deprecated surfaces, admin repair commands, and hidden diagnostics. |
-| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply`; hidden/manual branch repair only when a transition cannot own it safely | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
-| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
+| Admin maintenance | Specialized commands for setup, explicit local-state repair, explicit pruning, or manual recovery when normal workflow output routes there. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `check --fix`, `prune`, `prune --apply` | Removed objective-status and mission-status surfaces, hidden workflow diagnostics, and hidden local telemetry. |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or domain-cache debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a cache probe | `check`, `issue show`, `issue transition <id>` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
 
 Tracked Markdown under `.atelier/` is authoritative. The local SQLite domain
@@ -128,9 +128,10 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `check`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `man` | Show role-specific operating guidance and Atelier-owned product topics. | Role/topic index, a stateful role guide, or the static work-model topic. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `work ready`, `issue show <objective-id>`, role-specific commands, `man work-model`, or `man admin` when repair is needed. |
-| `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
+| `status` | Root orientation for the current checkout. | Current-work set, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `work ready`, `issue show <id>`, and admin repair guidance only for degraded local state. |
 | `work` | Show bounded operational multi-issue views. | Ready, blocked, active, scoped mission/epic dashboards, and the plural Mission Overview from the shared read pipeline. `work missions` is epic-first and collapsed; the legacy nested queue owns neither overview nor inventory. | The plural Mission Overview emits visible mission IDs only; other views emit their scoped bucket IDs. | `work mission <mission-id>`, `work epic <epic-id>`, `issue show <id>`, `issue transition <id>`, `work ready`, `work blocked`. |
 | `issue` | Create, list, show, update, transition, note, and manage typed links. | `issue list` is a flat, all-status metadata inventory with one row per matching record; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Objective health, blockers, linked work, and terminal-readiness summary belong in `issue show`; link mutations name the source, target, and role; note entry appends a dated bullet to the record's `## Notes` section. | Inventory IDs, status tokens, changed fields, relationship roles, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id>`, `work missions`, `work blocked`, edit the Markdown record. |
+| `start` | Check out an issue's owner branch, record it on the owner, and apply the `start` transition. | Each Git operation run, the recorded branch and base, and the applied transition. | Same lines. | `issue show <id>`, `issue transition <id>`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `check`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `issue show <id>`. |
 ### Specialized But Visible Surfaces
@@ -145,8 +146,6 @@ in the command audit:
 
 - `rebuild`: hidden debug diagnostic or admin repair primitive only if
   `check --fix` delegates to it; not normal workflow.
-- `workflow check`: hidden raw policy diagnostic; normal readiness uses
-  `issue transition`, `check`, and objective detail.
 - `diagnostics slow`: hidden local telemetry; not an automation contract.
 - `prune`: visible admin maintenance; dry-run by default and applies only
   explicitly supported cleanup classes from
@@ -396,10 +395,9 @@ concerns. Commands that need branch context must report the computed owner,
 target, and recovery path directly; operators should not infer branch action
 from static command-surface prose.
 
-Completion behavior must match the owner boundary and be recoverable. When a
-tracker commit, merge, push, or required integration step fails, output must
-name the failed step plus the repair or retry surface, without requiring the
-operator to infer branch or review policy from static docs.
+Transitions write records and run read-only checks only; `atelier start` is the
+explicit command that switches branches, and it prints each Git operation it
+runs.
 
 There is no target-state rule that one checkout may hold only one current issue.
 Repeated starts of the same issue are harmless, and starting a second issue in
@@ -512,8 +510,7 @@ Removed command surfaces:
 When a removed or commonly retried command is rejected, the CLI lets Clap report
 the path as unknown or invalid without a compatibility guidance shim. Examples
 include `finish`, `current-work`, `issue new`, `work start`, `archive`,
-and `timer`. `workflow check` remains a hidden low-level diagnostic;
-unsupported forms such as JSON mode fail as ordinary invalid arguments instead
+and `timer`. Unsupported forms such as JSON mode fail as ordinary invalid arguments instead
 of teaching a legacy workflow path.
 
 ## Low-Level Debug And Repair

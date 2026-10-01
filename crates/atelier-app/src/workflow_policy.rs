@@ -1,60 +1,16 @@
 use anyhow::{anyhow, Result};
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 use serde_json::Value;
 
 pub use atelier_workflow::{
-    configured_initial_status, load, validate_issue_against_policy, ActionDefinition, ActionParams,
-    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind,
-    GitPrepareBranchActionParams, GitPrepareBranchBase, GuidanceTemplate, MergeStrategy,
-    StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
-    WorkflowDefinition, WorkflowPolicy, WORKFLOW_BRANCH_FIELD, WORKFLOW_POLICY_PATH,
+    configured_initial_status, load, validate_issue_against_policy, BranchLifecycleConfig,
+    MergeStrategy, StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
+    WorkflowDefinition, WorkflowPolicy, STARTER_POLICY_YAML, WORKFLOW_BRANCH_FIELD,
+    WORKFLOW_POLICY_PATH,
 };
-
-pub use atelier_workflow::STARTER_POLICY_YAML;
-
-#[derive(Debug, Clone)]
-pub struct WorkflowCheckReport {
-    pub issue_count: usize,
-    pub policy: WorkflowPolicy,
-}
-
-pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
-    let policy_path = repo_root.join(WORKFLOW_POLICY_PATH);
-    let policy = load(repo_root)?;
-    let issues = db.list_issues(Some("all"), None, None)?;
-    for issue in &issues {
-        validate_issue_against_policy(&policy, issue, &policy_path)?;
-        validate_issue_hierarchy(db, issue, issue.parent_id.as_deref())?;
-        validate_mission_execution_dependencies(db, &policy, issue)?;
-    }
-    Ok(WorkflowCheckReport {
-        issue_count: issues.len(),
-        policy,
-    })
-}
-
-pub fn validate_mission_execution_dependencies(
-    db: &Database,
-    policy: &WorkflowPolicy,
-    issue: &Issue,
-) -> Result<()> {
-    if issue.issue_type != "mission" || !matches!(issue.status.as_str(), "ready" | "in_progress") {
-        return Ok(());
-    }
-    let closure = crate::objective_graph::dependency_closure(db, policy, &issue.id)?;
-    if let Some(reason) = closure.failure_reason() {
-        return Err(anyhow!(
-            "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
-            issue.id,
-            issue.status
-        ));
-    }
-    Ok(())
-}
 
 pub fn validate_issue_hierarchy(
     db: &Database,
@@ -113,144 +69,69 @@ pub fn validate_issue_hierarchy(
     Ok(())
 }
 
-pub fn resolve_branch_lifecycle(
+/// The branch that holds an issue's work, derived from its branch owner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkBranch {
+    /// The epic or standalone issue that owns the branch.
+    pub owner_id: String,
+    pub branch: String,
+    /// The base recorded by `atelier start` on the owner, if it was started.
+    pub recorded_base: Option<String>,
+}
+
+/// Resolves the branch owner and branch for an issue: a child issue works on
+/// its nearest parent epic's branch, an epic owns `epic/<id>`, and a
+/// standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
+/// by `atelier start` wins over the derived name. Missions have no branch.
+pub fn resolve_work_branch(
     policy: &WorkflowPolicy,
     db: &Database,
     issue_id: &str,
-) -> Result<BranchLifecycleResolution> {
+) -> Result<WorkBranch> {
     let issue = db.require_issue(issue_id)?;
-    let (owner, owner_kind, nested_under_epic) = if issue.issue_type == "epic" {
-        (issue.clone(), BranchOwnerKind::Epic, false)
-    } else if issue.issue_type == "mission" {
-        (issue.clone(), BranchOwnerKind::Mission, false)
-    } else if issue.parent_id.is_none() {
-        (issue.clone(), BranchOwnerKind::StandaloneIssue, false)
-    } else {
-        let owner = nearest_parent_epic(db, &issue)?;
-        (owner, BranchOwnerKind::Epic, true)
-    };
-    let mut expected_branch = policy.branch_name_for_owner(&owner, &owner_kind)?;
-    let mut base_branch = policy.branch_policy.base_branch.clone();
-    let mut merge_strategy = policy.branch_policy.merge_strategy;
-    if owner_kind != BranchOwnerKind::Mission {
-        if let Some(mission) = containing_mission(db, &owner.id)? {
-            if let Some(branch) = recorded_workflow_branch(&mission)? {
-                base_branch = branch.work_branch;
-                merge_strategy = branch.merge_strategy;
-            } else {
-                base_branch = policy.branch_name_for_owner(&mission, &BranchOwnerKind::Mission)?;
-            }
-        }
-    }
-    if let Some(branch) = recorded_workflow_branch(&owner)? {
-        expected_branch = branch.work_branch;
-        base_branch = branch.branch_base;
-        merge_strategy = branch.merge_strategy;
-    }
-    let merge_owned = !nested_under_epic;
-    Ok(BranchLifecycleResolution {
-        issue_id: issue.id,
-        owner_id: owner.id,
-        owner_issue_type: owner.issue_type,
-        owner_kind,
-        expected_branch,
-        base_branch,
-        merge_strategy,
-        merge_owned,
-        nested_under_epic,
-    })
-}
-
-fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<Issue>> {
-    for relation in db.get_typed_relations(issue_id)? {
-        if relation.relation_type != "advances" {
-            continue;
-        }
-        let linked_id = if relation.issue_id_1 == issue_id {
-            relation.issue_id_2
-        } else {
-            relation.issue_id_1
-        };
-        let Some(linked) = db.get_issue(&linked_id)? else {
-            continue;
-        };
-        if linked.issue_type == "mission" {
-            return Ok(Some(linked));
-        }
-    }
-    Ok(None)
-}
-
-#[derive(Debug, Clone)]
-struct RecordedWorkflowBranch {
-    work_branch: String,
-    branch_base: String,
-    merge_strategy: MergeStrategy,
-}
-
-fn recorded_workflow_branch(issue: &Issue) -> Result<Option<RecordedWorkflowBranch>> {
-    let Some(field) = issue.fields.get(WORKFLOW_BRANCH_FIELD) else {
-        return Ok(None);
-    };
-    let object = field.as_object().ok_or_else(|| {
-        anyhow!(
-            "workflow_branch_invalid: issue {} field '{}' must be an object",
-            issue.id,
-            WORKFLOW_BRANCH_FIELD
-        )
-    })?;
-    let owner_issue_id = required_workflow_branch_string(issue, object, "owner_issue_id")?;
-    if owner_issue_id != issue.id {
+    if issue.issue_type == "mission" {
         return Err(anyhow!(
-            "workflow_branch_invalid: issue {} records owner_issue_id {}, but branch owner is {}",
-            issue.id,
-            owner_issue_id,
+            "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its epics or issues instead.",
             issue.id
         ));
     }
-    let merge_strategy = merge_strategy_from_field(&required_workflow_branch_string(
-        issue,
-        object,
-        "merge_strategy",
-    )?)?;
-    Ok(Some(RecordedWorkflowBranch {
-        work_branch: required_workflow_branch_string(issue, object, "work_branch")?,
-        branch_base: required_workflow_branch_string(issue, object, "branch_base")?,
-        merge_strategy,
-    }))
+    let owner = if issue.issue_type == "epic" || issue.parent_id.is_none() {
+        issue
+    } else {
+        nearest_parent_epic(db, &issue)?
+    };
+    let (branch, recorded_base) = match recorded_workflow_branch(&owner)? {
+        Some((branch, base)) => (branch, Some(base)),
+        None => (policy.branch_name_for_owner(&owner)?, None),
+    };
+    Ok(WorkBranch {
+        owner_id: owner.id,
+        branch,
+        recorded_base,
+    })
 }
 
-fn required_workflow_branch_string(
-    issue: &Issue,
-    object: &serde_json::Map<String, Value>,
-    field: &str,
-) -> Result<String> {
-    object
-        .get(field)
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            anyhow!(
-                "workflow_branch_invalid: issue {} field '{}.{}' must be a non-empty string",
-                issue.id,
-                WORKFLOW_BRANCH_FIELD,
-                field
-            )
-        })
-}
-
-fn merge_strategy_from_field(value: &str) -> Result<MergeStrategy> {
-    match value {
-        "squash" => Ok(MergeStrategy::Squash),
-        "merge_commit" => Ok(MergeStrategy::MergeCommit),
-        "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
-        other => Err(anyhow!(
-            "workflow_branch_invalid: issue field '{}.merge_strategy' has unsupported value '{}'",
-            WORKFLOW_BRANCH_FIELD,
-            other
-        )),
-    }
+/// Returns the `(work_branch, branch_base)` pair recorded on a branch owner.
+fn recorded_workflow_branch(issue: &Issue) -> Result<Option<(String, String)>> {
+    let Some(field) = issue.fields.get(WORKFLOW_BRANCH_FIELD) else {
+        return Ok(None);
+    };
+    let value = |key: &str| {
+        field
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| {
+                anyhow!(
+                    "workflow_branch_invalid: issue {} field '{}.{}' must be a non-empty string",
+                    issue.id,
+                    WORKFLOW_BRANCH_FIELD,
+                    key
+                )
+            })
+    };
+    Ok(Some((value("work_branch")?, value("branch_base")?)))
 }
 
 fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
@@ -324,8 +205,7 @@ mod tests {
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
         let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db = Database::open(&db_path).unwrap();
+        let db = Database::open(&dir.path().join("test.db")).unwrap();
         (db, dir)
     }
 
@@ -337,10 +217,9 @@ mod tests {
         fields: BTreeMap<String, Value>,
     ) {
         let now = Utc::now();
-        let issue = Issue {
+        let row = IssueCacheRow {
             id: id.to_string(),
             title: id.to_string(),
-            description: None,
             status: "todo".to_string(),
             issue_type: issue_type.to_string(),
             priority: "medium".to_string(),
@@ -350,38 +229,114 @@ mod tests {
             updated_at: now,
             closed_at: None,
         };
-        let row = IssueCacheRow {
-            id: issue.id.clone(),
-            title: issue.title,
-            status: issue.status,
-            issue_type: issue.issue_type,
-            priority: issue.priority,
-            fields: issue.fields,
-            parent_id: issue.parent_id,
-            created_at: issue.created_at,
-            updated_at: issue.updated_at,
-            closed_at: issue.closed_at,
-        };
         db.index_issue(
             &row,
             &[],
             &[],
             &[],
             &RecordSourceCacheRow {
-                path: format!("issues/{}.md", row.id),
+                path: format!("issues/{id}.md"),
                 record_kind: "issue".to_string(),
-                record_id: row.id.clone(),
+                record_id: id.to_string(),
                 size_bytes: 0,
                 modified_micros: None,
                 content_hash: None,
-                indexed_at: Utc::now(),
+                indexed_at: now,
             },
         )
         .unwrap();
     }
 
+    fn policy() -> WorkflowPolicy {
+        WorkflowPolicy {
+            schema_version: 3,
+            branch_policy: BranchLifecycleConfig::default(),
+            issue_types: BTreeMap::new(),
+            workflow_by_issue_type: BTreeMap::new(),
+            statuses: BTreeMap::new(),
+            workflows: BTreeMap::new(),
+        }
+    }
+
     #[test]
-    fn branch_lifecycle_error_explains_nested_issue_without_parent_epic_fix() {
+    fn child_works_on_parent_epic_branch() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
+        insert_issue(
+            &db,
+            "atelier-child",
+            "task",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+
+        let work_branch = resolve_work_branch(&policy(), &db, "atelier-child").unwrap();
+
+        assert_eq!(work_branch.owner_id, "atelier-epic");
+        assert_eq!(work_branch.branch, "epic/atelier-epic");
+        assert_eq!(work_branch.recorded_base, None);
+    }
+
+    #[test]
+    fn standalone_issue_and_epic_own_their_branches() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-bug1", "bug", None, BTreeMap::new());
+        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
+
+        let bug = resolve_work_branch(&policy(), &db, "atelier-bug1").unwrap();
+        let epic = resolve_work_branch(&policy(), &db, "atelier-epic").unwrap();
+
+        assert_eq!(
+            (bug.owner_id.as_str(), bug.branch.as_str()),
+            ("atelier-bug1", "bug/atelier-bug1")
+        );
+        assert_eq!(
+            (epic.owner_id.as_str(), epic.branch.as_str()),
+            ("atelier-epic", "epic/atelier-epic")
+        );
+    }
+
+    #[test]
+    fn recorded_owner_branch_wins_over_derived_name() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(
+            &db,
+            "atelier-epic",
+            "epic",
+            None,
+            BTreeMap::from([(
+                WORKFLOW_BRANCH_FIELD.to_string(),
+                serde_json::json!({"work_branch": "epic/renamed", "branch_base": "trunk"}),
+            )]),
+        );
+        insert_issue(
+            &db,
+            "atelier-child",
+            "task",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+
+        let work_branch = resolve_work_branch(&policy(), &db, "atelier-child").unwrap();
+
+        assert_eq!(work_branch.branch, "epic/renamed");
+        assert_eq!(work_branch.recorded_base.as_deref(), Some("trunk"));
+    }
+
+    #[test]
+    fn missions_have_no_branch() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-mission", "mission", None, BTreeMap::new());
+
+        let error = resolve_work_branch(&policy(), &db, "atelier-mission")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("missions are coordinated, not worked on a branch"));
+    }
+
+    #[test]
+    fn nested_issue_without_parent_epic_explains_fix() {
         let (db, _dir) = setup_test_db();
         insert_issue(&db, "atelier-mission", "mission", None, BTreeMap::new());
         insert_issue(
@@ -392,164 +347,14 @@ mod tests {
             BTreeMap::new(),
         );
 
-        let policy = WorkflowPolicy {
-            schema_version: 3,
-            branch_policy: BranchLifecycleConfig::default(),
-            issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
-            statuses: BTreeMap::new(),
-            workflows: BTreeMap::new(),
-        };
-        let error = resolve_branch_lifecycle(&policy, &db, "atelier-child")
+        let error = resolve_work_branch(&policy(), &db, "atelier-child")
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("workflow_branch_policy_invalid_graph"));
         assert!(error.contains("Parent chain: atelier-mission (mission)"));
-        assert!(error.contains("nested issues to inherit branch ownership from a parent epic"));
-        assert!(error.contains("Standalone issues own their own issue branch"));
         assert!(error.contains("atelier issue update atelier-child --parent <epic-id>"));
         assert!(error.contains("atelier issue update atelier-child --no-parent"));
         assert!(error.contains("atelier issue link atelier-mission atelier-child"));
-    }
-
-    #[test]
-    fn branch_lifecycle_uses_recorded_workflow_branch_on_owner() {
-        let (db, _dir) = setup_test_db();
-        let mut fields = BTreeMap::new();
-        fields.insert(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "owner_issue_id": "atelier-epic",
-                "work_branch": "epic/atelier-epic",
-                "branch_base": "mission/atelier-mission",
-                "review_target": "mission/atelier-mission",
-                "integration_target": "mission/atelier-mission",
-                "owner_kind": "epic",
-                "merge_strategy": "merge_commit",
-            }),
-        );
-        insert_issue(&db, "atelier-epic", "epic", None, fields);
-        insert_issue(
-            &db,
-            "atelier-child",
-            "task",
-            Some("atelier-epic"),
-            BTreeMap::new(),
-        );
-        let policy = WorkflowPolicy {
-            schema_version: 3,
-            branch_policy: BranchLifecycleConfig {
-                base_branch: "main".to_string(),
-                ..BranchLifecycleConfig::default()
-            },
-            issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
-            statuses: BTreeMap::new(),
-            workflows: BTreeMap::new(),
-        };
-
-        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-child").unwrap();
-
-        assert_eq!(resolution.owner_id, "atelier-epic");
-        assert_eq!(resolution.expected_branch, "epic/atelier-epic");
-        assert_eq!(resolution.base_branch, "mission/atelier-mission");
-        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
-        assert!(resolution.nested_under_epic);
-    }
-
-    #[test]
-    fn branch_lifecycle_resolves_nested_work_through_its_mission_scoped_epic() {
-        let (db, _dir) = setup_test_db();
-        let mut mission_fields = BTreeMap::new();
-        mission_fields.insert(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "owner_issue_id": "atelier-mission",
-                "work_branch": "mission/atelier-mission",
-                "branch_base": "main",
-                "review_target": "main",
-                "integration_target": "main",
-                "owner_kind": "mission",
-                "merge_strategy": "merge_commit",
-            }),
-        );
-        insert_issue(&db, "atelier-mission", "mission", None, mission_fields);
-        insert_issue(&db, "atelier-epic", "epic", None, BTreeMap::new());
-        insert_issue(
-            &db,
-            "atelier-child",
-            "task",
-            Some("atelier-epic"),
-            BTreeMap::new(),
-        );
-        db.add_typed_relation("atelier-mission", "atelier-epic", "advances")
-            .unwrap();
-        let policy = WorkflowPolicy {
-            schema_version: 3,
-            branch_policy: BranchLifecycleConfig {
-                base_branch: "main".to_string(),
-                ..BranchLifecycleConfig::default()
-            },
-            issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
-            statuses: BTreeMap::new(),
-            workflows: BTreeMap::new(),
-        };
-
-        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-child").unwrap();
-
-        assert_eq!(resolution.owner_id, "atelier-epic");
-        assert_eq!(resolution.expected_branch, "epic/atelier-epic");
-        assert_eq!(resolution.base_branch, "mission/atelier-mission");
-        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
-        assert!(resolution.nested_under_epic);
-    }
-
-    #[test]
-    fn branch_lifecycle_uses_recorded_mission_branch_for_direct_scoped_work() {
-        let (db, _dir) = setup_test_db();
-        let mut mission_fields = BTreeMap::new();
-        mission_fields.insert(
-            WORKFLOW_BRANCH_FIELD.to_string(),
-            serde_json::json!({
-                "owner_issue_id": "atelier-mission",
-                "work_branch": "mission/atelier-mission",
-                "branch_base": "main",
-                "review_target": "main",
-                "integration_target": "main",
-                "owner_kind": "mission",
-                "merge_strategy": "merge_commit",
-            }),
-        );
-        insert_issue(&db, "atelier-mission", "mission", None, mission_fields);
-        insert_issue(
-            &db,
-            "atelier-validation",
-            "validation",
-            None,
-            BTreeMap::new(),
-        );
-        db.add_typed_relation("atelier-mission", "atelier-validation", "advances")
-            .unwrap();
-        let policy = WorkflowPolicy {
-            schema_version: 3,
-            branch_policy: BranchLifecycleConfig {
-                base_branch: "main".to_string(),
-                ..BranchLifecycleConfig::default()
-            },
-            issue_types: BTreeMap::new(),
-            workflow_by_issue_type: BTreeMap::new(),
-            statuses: BTreeMap::new(),
-            workflows: BTreeMap::new(),
-        };
-
-        let resolution = resolve_branch_lifecycle(&policy, &db, "atelier-validation").unwrap();
-
-        assert_eq!(resolution.owner_id, "atelier-validation");
-        assert_eq!(resolution.expected_branch, "validation/atelier-validation");
-        assert_eq!(resolution.base_branch, "mission/atelier-mission");
-        assert_eq!(resolution.merge_strategy, MergeStrategy::MergeCommit);
-        assert!(resolution.merge_owned);
     }
 }

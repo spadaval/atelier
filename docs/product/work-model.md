@@ -157,7 +157,7 @@ Example for ordinary documentation work:
 ```text
 atelier issue note atelier-isd5 "Examples checked against graph, mission, issue, and evidence help."
 atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map examples use current record-specific command families"
-atelier issue transition atelier-isd5 request_validation
+atelier issue transition atelier-isd5 request_review
 ```
 
 Example for command-backed validation:
@@ -169,8 +169,8 @@ atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/
 Example for independent completion proof:
 
 ```text
-atelier evidence record --target issue/<validation-issue-id> --kind validation "mission publish validation maps mission expectations to terminal linked work and evidence IDs"
-atelier issue transition <mission-id> request_publish
+atelier evidence record --target issue/<validation-issue-id> --kind validation "mission validation maps mission expectations to terminal linked work and evidence IDs"
+atelier issue transition <mission-id> close --reason "..."
 ```
 
 ## Parent Coverage Summaries
@@ -439,41 +439,12 @@ Atelier workflow/configuration concerns. Commands that need branch context must
 report the computed owner, target, and recovery path directly; agents should
 not infer branch action from static work-model prose.
 
-Completion behavior follows the owner boundary:
-
-Atelier command output should name the workflow transition, tracker write,
-review state, branch action, and recovery command that apply to the current
-item. Static docs should not encode a second completion recipe beside the
-configured workflow.
-
-Close must be failure-atomic for durable workflow state. If the tracker commit,
-merge, push, or configured integration step fails, the item must not appear
-closed on the integration branch. The command should leave enough state for a
-repair or retry command to explain which step failed.
-
-Workflow transitions may declare transition actions. A transition action is
-configured work run by the explicit issue transition after required fields and
-validators pass. The transition is complete only after required actions and the
-final canonical status write succeed; action output must name the affected
-artifact, local record path when relevant, and retry or recovery command.
-
-The v1 action set is limited to the built-in transition actions described by
-workflow policy. Review artifact actions use the repository's configured review
-mode to create, locate, or link the review artifact for the branch-owning issue
-or epic, then write the canonical `review` field. They do not merge the
-artifact, approve review, request changes, post comments, close hidden issues,
-revive `pr` aliases, or provide a general automation-hook mechanism. Those
-operations remain separate review or workflow commands.
-
-Action failure handling must be explicit:
-
-- Preflight failure stops before canonical status or review-link writes.
-- Local write failure names the failed write and does not report transition
-  success.
-- External provider failure leaves the issue transition incomplete and names
-  provider recovery or retry guidance.
-- Retry is idempotent by reusing an existing matching review link or artifact;
-  ambiguous provider state must route to an explicit link recovery path.
+Transitions write the issue record and run read-only checks; they never
+commit, push, merge, or switch branches
+([ADR 0019](../adr/0019-verified-repo-native-tracker.md)). `atelier start <id>`
+is the explicit command that checks out the owner branch and records it. The
+done claim is a record change the agent commits on the work branch, so the base
+branch shows an item done exactly when its code is merged.
 
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
@@ -491,13 +462,9 @@ checkouts. When more than one issue is `in_progress` in the same checkout,
 `atelier status` and `atelier work ready`/`atelier work blocked` should render that
 set directly rather than nominate one hidden active issue.
 
-The visible worktree command surface is removed pending redesign. Hidden branch
-helpers may create or locate reviewable branches for diagnostics, advanced
-repair, or manual recovery.
+The visible worktree command surface is removed pending redesign.
 Routine worker guidance should come from `atelier status`, issue detail,
-transition output, and any recovery text they print. Workflow-defined general
-hooks are deferred in v1; transition actions are the narrow configured
-integration points described by workflow policy.
+transition output, and any recovery text they print.
 
 ## Deferred Checkpoints And Validators
 

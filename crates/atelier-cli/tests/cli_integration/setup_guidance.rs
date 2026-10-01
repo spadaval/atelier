@@ -1510,7 +1510,7 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "work", "issue", "bundle", "evidence", "check",
+        "init", "man", "status", "work", "issue", "start", "bundle", "evidence", "check",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -1597,9 +1597,8 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <mission-id>",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
-        "atelier issue transition <issue-id> start",
+        "atelier start <issue-id>",
         "atelier issue transition <issue-id>",
-        "atelier issue transition <mission-id> request_publish",
         "atelier check",
         "atelier check <issue-id>",
         "atelier check --fix",
@@ -1702,35 +1701,6 @@ fn test_mission_overview_help_and_manager_guidance_distinguish_plural_and_scoped
 }
 
 #[test]
-fn test_branch_recovery_is_hidden_from_routine_work_but_callable_explicitly() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Recovery epic", "--issue-type", "epic"],
-    );
-    assert!(success, "epic create failed: {stderr}");
-    let epic_id = issue_id_by_title(dir.path(), "Recovery epic");
-
-    let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "epic", &epic_id]);
-    assert!(success, "work epic failed: {stderr}");
-    assert!(
-        dashboard.contains(&format!("atelier issue transition {epic_id}")),
-        "routine epic guidance should route through lifecycle transitions:\n{dashboard}"
-    );
-    assert!(
-        !dashboard.contains("atelier branch"),
-        "routine epic guidance must not promote branch recovery:\n{dashboard}"
-    );
-
-    let (success, recovery_help, stderr) =
-        run_atelier_raw(dir.path(), &["branch", "for-epic", "--help"]);
-    assert!(success, "branch recovery help failed: {stderr}");
-    assert!(recovery_help.contains("failed start transition"));
-}
-
-#[test]
 fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
     let dir = tempdir().unwrap();
 
@@ -1739,10 +1709,6 @@ fn test_hidden_diagnostic_help_routes_normal_health_to_check() {
         (
             vec!["rebuild", "--help"],
             "explicit local repair uses check --fix",
-        ),
-        (
-            vec!["workflow", "check", "--help"],
-            "normal operator checks use check",
         ),
     ] {
         let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
@@ -1850,18 +1816,6 @@ fn test_generic_link_command_rejects_with_record_specific_guidance() {
 }
 
 #[test]
-fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
-    let dir = tempdir().unwrap();
-    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["workflow", "--help"]);
-    assert!(success, "workflow help failed: {stderr}");
-    assert!(stdout.contains("Advanced/debug workflow policy diagnostics"));
-    assert!(!stdout.contains("\n  init"));
-    assert!(stdout.contains("check"));
-    assert!(stdout.contains("normal operator checks use check"));
-    assert!(!stdout.contains("validate"));
-}
-
-#[test]
 fn test_evidence_help_hides_predecessor_subcommands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "--help"]);
@@ -1952,7 +1906,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(!stdout.contains("no active mission focus"));
     let removed_ready_command = ["atelier", "issue", "next"].join(" ");
     assert!(!stdout.contains(&removed_ready_command));
-    assert!(stdout.contains("Active roles:   none"));
+    assert!(!stdout.contains("Active roles"), "{stdout}");
     assert!(!stdout.contains("atelier session"));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
@@ -2202,11 +2156,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
-        transition_out.contains("Planned Actions"),
-        "{transition_out}"
-    );
-    assert!(
-        !transition_out.contains("Planned Effects"),
+        !transition_out.contains("Planned Actions"),
         "{transition_out}"
     );
     assert!(transition_out.contains("Commands"), "{transition_out}");
@@ -2231,112 +2181,6 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         issue_text.contains("status: \"in_progress\""),
         "{issue_text}"
     );
-}
-
-#[test]
-fn test_parented_validation_completes_inside_epic_review_boundary() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Review-owning epic",
-            "--issue-type",
-            "epic",
-        ],
-    );
-    assert!(success, "epic create failed: {stderr}");
-    let epic_id = issue_id_by_title(dir.path(), "Review-owning epic");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Validate epic outcome",
-            "--issue-type",
-            "validation",
-            "--parent",
-            &epic_id,
-        ],
-    );
-    assert!(success, "validation create failed: {stderr}");
-    let validation_id = issue_id_by_title(dir.path(), "Validate epic outcome");
-    commit_all(dir.path(), "parented validation setup");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "start"],
-    );
-    assert!(success, "validation start failed: {stderr}");
-    commit_all(dir.path(), "start parented validation");
-    attach_issue_pass_evidence(dir.path(), &validation_id);
-    commit_all(dir.path(), "prove parented validation");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "complete_parented"],
-    );
-    assert!(success, "parented validation completion failed: {stderr}");
-    assert!(
-        stdout.contains("Applied transition complete_parented"),
-        "{stdout}"
-    );
-    assert!(stdout.contains("To:       done"), "{stdout}");
-
-    let issue_text =
-        std::fs::read_to_string(canonical_issue_path(dir.path(), &validation_id)).unwrap();
-    assert!(issue_text.contains("status: \"done\""), "{issue_text}");
-}
-
-#[test]
-fn test_standalone_validation_cannot_bypass_its_review_path() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Standalone validation",
-            "--issue-type",
-            "validation",
-        ],
-    );
-    assert!(success, "validation create failed: {stderr}");
-    let validation_id = issue_id_by_title(dir.path(), "Standalone validation");
-    commit_all(dir.path(), "standalone validation setup");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "start"],
-    );
-    assert!(success, "validation start failed: {stderr}");
-    commit_all(dir.path(), "start standalone validation");
-    attach_issue_pass_evidence(dir.path(), &validation_id);
-    commit_all(dir.path(), "prove standalone validation");
-
-    let (success, options, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "--verbose"],
-    );
-    assert!(success, "transition options failed: {stderr}");
-    assert!(options.contains("request_review [allowed]"), "{options}");
-    assert!(options.contains("complete_parented [blocked]"), "{options}");
-    assert!(options.contains("standalone validation"), "{options}");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &validation_id, "complete_parented"],
-    );
-    assert!(!success, "standalone validation bypassed review");
-    assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("validation.parent_epic"), "{stderr}");
 }
 
 #[test]
@@ -2373,19 +2217,20 @@ fn test_issue_transition_options_and_blocked_attempts_do_not_write() {
         "no-argument transition should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
     );
 
-    for transition in ["start", "request_validation"] {
-        let (success, _, stderr) =
-            run_atelier(dir.path(), &["issue", "transition", &issue_id, transition]);
-        assert!(success, "{transition} failed: {stderr}");
-    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
 
     let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
     let git_before = git_status_short(dir.path());
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
-    assert!(!success, "close should be blocked by its validators");
+    assert!(!success, "close should be blocked by its required fields");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
+    assert!(
+        stderr.contains("missing required field close_reason"),
+        "{stderr}"
+    );
     assert_eq!(
         record_before,
         read_canonical_record(dir.path(), "issues", &issue_id),
@@ -2412,8 +2257,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready start item");
 
-    let (success, start_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "root start failed: {stderr}");
     assert!(
         start_out.contains("Applied transition start"),
@@ -2421,7 +2265,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     );
     assert!(start_out.contains("To:       in_progress"), "{start_out}");
     assert!(
-        start_out.contains(&format!("Started work on {issue_id}")),
+        start_out.contains(&format!("git switch -c task/{issue_id}")),
         "{start_out}"
     );
 
@@ -2464,19 +2308,21 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "two startable items");
 
-    let (success, active_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &active_id, "start"]);
+    let (success, active_out, stderr) = run_atelier(dir.path(), &["start", &active_id]);
     assert!(success, "initial start failed: {stderr}");
     assert!(!active_out.contains("Session:"), "{active_out}");
-    commit_all(dir.path(), "active item started");
+    assert!(
+        active_out.contains(&format!("git switch -c epic/{epic_id}")),
+        "{active_out}"
+    );
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &next_id, "start"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
     assert!(success, "second current work issue should start: {stderr}");
     assert!(
-        stdout.contains(&format!("Started work on {next_id}")),
+        stdout.contains(&format!("Applied transition start to {next_id}")),
         "{stdout}"
     );
+    assert!(stdout.contains("no git operations"), "{stdout}");
 
     let next_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &next_id)).unwrap();
     assert!(
@@ -2553,7 +2399,7 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
         run_atelier(dir.path(), &["issue", "transition", &second_id, "start"]);
     assert!(success, "second start should not require abandon: {stderr}");
     assert!(
-        second_out.contains(&format!("Started work on {second_id}")),
+        second_out.contains(&format!("Applied transition start to {second_id}")),
         "{second_out}"
     );
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
@@ -2582,10 +2428,9 @@ fn test_root_start_reports_workflow_validator_failure() {
     let policy = std::fs::read_to_string(&policy_path).unwrap();
     std::fs::write(
         &policy_path,
-        policy.replacen(
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - blockers.transitive_none_open\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators: [evidence.attached]\n",
-            1,
+        policy.replace(
+            "        description: Start work.\n        validators:\n        - blockers.transitive_none_open\n",
+            "        description: Start work.\n        validators: [evidence.attached]\n",
         ),
     )
     .unwrap();
@@ -2641,13 +2486,11 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Validator blocked item");
     move_epic_directly_to_ready(dir.path(), &issue_id);
-    migrate_default_issue_workflow(dir.path());
+    add_close_validator(dir.path(), "git.worktree_clean");
 
-    for transition in ["start", "request_validation"] {
-        let (success, _, stderr) =
-            run_atelier(dir.path(), &["issue", "transition", &issue_id, transition]);
-        assert!(success, "{transition} failed: {stderr}");
-    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
 
     let evidence_dir = dir.path().join(".atelier").join("evidence");
     let evidence_before = std::fs::read_dir(&evidence_dir)
@@ -2662,8 +2505,17 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
         .count();
     let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
+    );
     assert!(!success, "close should be blocked by its validators");
     assert!(stdout.contains("Blockers"), "{stdout}");
     assert!(stderr.contains("git.worktree_clean"), "{stderr}");
@@ -2688,53 +2540,6 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     assert_eq!(
         evidence_before, evidence_after,
         "blocked transition created evidence"
-    );
-}
-
-#[test]
-fn test_issue_transition_close_reports_blockers_without_writing_the_record() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Blocked close item",
-            "--issue-type",
-            "epic",
-        ],
-    );
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Blocked close item");
-    move_epic_directly_to_ready(dir.path(), &issue_id);
-    migrate_default_issue_workflow(dir.path());
-
-    for args in [
-        vec!["issue", "transition", &issue_id, "start"],
-        vec!["issue", "transition", &issue_id, "request_review"],
-        vec!["issue", "transition", &issue_id, "request_validation"],
-    ] {
-        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "transition {:?} failed: {stderr}", args);
-    }
-
-    let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
-    assert!(!success, "close should be blocked by the dirty worktree");
-    assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stdout.contains("pass  children.proof_complete"), "{stdout}");
-    assert!(!stdout.contains("evidence.attached"), "{stdout}");
-    assert!(!stderr.contains("evidence.attached"), "{stderr}");
-    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
-
-    assert_eq!(
-        record_before,
-        read_canonical_record(dir.path(), "issues", &issue_id),
-        "blocked close should not rewrite the issue record"
     );
 }
 
@@ -2769,13 +2574,10 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(success, "request_validation failed: {stderr}");
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "ready for close");
+    let head_before = git_rev_parse(dir.path(), "HEAD");
+    let branch_before = git_current_branch(dir.path());
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
@@ -2794,6 +2596,21 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
         "{close_out}"
     );
     assert!(close_out.contains("To:       done"), "{close_out}");
+    assert_eq!(
+        git_rev_parse(dir.path(), "HEAD"),
+        head_before,
+        "close must not commit"
+    );
+    assert_eq!(
+        git_current_branch(dir.path()),
+        branch_before,
+        "close must not switch branches"
+    );
+    assert_eq!(
+        git_status_short(dir.path()).trim(),
+        format!("M .atelier/issues/{issue_id}.md"),
+        "close must write only the issue record"
+    );
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"done\""), "{issue_text}");
@@ -2955,7 +2772,7 @@ fn test_issue_transition_rejects_unmigrated_issue_status() {
     );
     assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("status 'open'"), "{stderr}");
-    assert!(stderr.contains("not valid for workflow 'task'"), "{stderr}");
+    assert!(stderr.contains("not valid for workflow 'work'"), "{stderr}");
 }
 
 #[test]
@@ -2981,7 +2798,6 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     for args in [
         vec!["issue", "transition", &issue_id, "start"],
         vec!["issue", "transition", &issue_id, "request_review"],
-        vec!["issue", "transition", &issue_id, "request_validation"],
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
@@ -2994,7 +2810,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out.contains("Closing requires complete child proof and a clean worktree."),
+        options_out.contains("Done claim; commit it on the work branch before review."),
         "{options_out}"
     );
     assert!(options_out.contains(&format!(

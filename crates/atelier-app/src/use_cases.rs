@@ -94,14 +94,6 @@ pub fn bundle_query_cache() -> Result<CacheAccess> {
     cache(CacheUse::Decision)
 }
 
-pub fn workflow_query_cache() -> Result<CacheAccess> {
-    cache(CacheUse::Decision)
-}
-
-pub fn branch_decision_cache() -> Result<CacheAccess> {
-    cache(CacheUse::Decision)
-}
-
 /// Lint owns canonical parse diagnostics and must be able to report malformed
 /// record files before cache repair is possible. It opens the last cache state
 /// without repairing it, then validates record files directly.

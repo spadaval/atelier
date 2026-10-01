@@ -24,6 +24,7 @@ Orientation:
 
 Issues:
   issue         Create, list, show, update, transition, note, and manage links
+  start         Check out an issue's owner branch and start it
 
 Planning:
   bundle        Preview and apply one-shot graph bundle files
@@ -56,11 +57,10 @@ Common commands:
   atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
-  atelier issue transition <mission-id> request_publish
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
   atelier issue transition <issue-id>
-  atelier issue transition <issue-id> start
+  atelier start <issue-id>
   atelier issue transition <issue-id> close --reason \"...\"
   atelier check
   atelier check <issue-id>
@@ -125,6 +125,12 @@ enum Commands {
         action: IssueCommands,
     },
 
+    /// Check out an issue's owner branch, record it, and apply its start transition
+    Start {
+        /// Issue ID
+        id: String,
+    },
+
     /// Advanced deterministic-renderer diagnostic; normal health uses check
     #[command(hide = true)]
     Export {
@@ -164,20 +170,6 @@ enum Commands {
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
-    },
-
-    /// Advanced/debug workflow policy diagnostics
-    #[command(hide = true)]
-    Workflow {
-        #[command(subcommand)]
-        action: WorkflowCommands,
-    },
-
-    /// Manual owner-branch recovery after workflow transition failures
-    #[command(hide = true)]
-    Branch {
-        #[command(subcommand)]
-        action: BranchCommands,
     },
 
     /// Advanced local command diagnostics; JSON is local-only telemetry, not workflow state
@@ -511,22 +503,6 @@ another target.")]
 }
 
 #[derive(Subcommand)]
-enum WorkflowCommands {
-    /// Run raw workflow-policy diagnostics; normal operator checks use check
-    Check,
-}
-
-#[derive(Subcommand)]
-enum BranchCommands {
-    /// Recover a missing epic review branch after a failed start transition
-    ForEpic { id: String },
-    /// Inspect local epic review branches during transition recovery
-    Status,
-    /// Recover integration after a failed close transition
-    Merge { id: String },
-}
-
-#[derive(Subcommand)]
 enum DiagnosticsCommands {
     /// Summarize slow command telemetry as stable local-only JSON for performance analysis
     Slow {
@@ -719,6 +695,11 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
+        Commands::Start { id } => {
+            let storage = use_cases::mutation_cache()?;
+            commands::start::run(storage.db(), &storage.state_dir(), &id)
+        }
+
         Commands::Export { output, check } => {
             let storage = CacheManager::discover()?.open_cache_for_health()?;
             let state_dir = output
@@ -883,30 +864,6 @@ fn run() -> Result<()> {
                 commands::evidence::list(&db, status.as_deref(), quiet)
             }
         },
-
-        Commands::Workflow { action } => match action {
-            WorkflowCommands::Check => {
-                let storage = use_cases::workflow_query_cache()?;
-                let db = storage.db();
-                commands::workflow::check(&db)
-            }
-        },
-
-        Commands::Branch { action } => {
-            let cache = use_cases::branch_decision_cache()?;
-            let db = cache.db();
-            match action {
-                BranchCommands::ForEpic { id } => {
-                    let id = resolve_issue_arg(db, &id)?;
-                    commands::work::branch_for_epic(db, &id)
-                }
-                BranchCommands::Status => commands::work::branch_status(db),
-                BranchCommands::Merge { id } => {
-                    let id = resolve_issue_arg(db, &id)?;
-                    commands::work::branch_merge(db, &id)
-                }
-            }
-        }
 
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { days, threshold_ms } => {
@@ -1077,6 +1034,7 @@ fn command_identity(command: &Commands) -> &'static str {
             Some(WorkCommands::All) => "work all",
             Some(WorkCommands::Missions { .. }) => "work missions",
         },
+        Commands::Start { .. } => "start",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
@@ -1105,14 +1063,6 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
-        },
-        Commands::Workflow { action } => match action {
-            WorkflowCommands::Check => "workflow check",
-        },
-        Commands::Branch { action } => match action {
-            BranchCommands::ForEpic { .. } => "branch for-epic",
-            BranchCommands::Status => "branch status",
-            BranchCommands::Merge { .. } => "branch merge",
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",
@@ -1248,8 +1198,6 @@ mod cache_acquisition_tests {
             "work_query_cache()",
             "evidence_query_cache()",
             "bundle_query_cache()",
-            "workflow_query_cache()",
-            "branch_decision_cache()",
             "lint_cache()",
         ] {
             assert!(main.contains(accessor), "missing cache accessor {accessor}");

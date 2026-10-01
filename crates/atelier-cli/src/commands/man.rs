@@ -101,15 +101,7 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let current_work = commands::status::current_work_issues(db, workflow_policy.as_ref())?
         .into_iter()
-        .map(|issue| {
-            format!(
-                "{} - {} [{}]",
-                issue.id,
-                issue.title,
-                commands::status::issue_status_role(&issue, workflow_policy.as_ref())
-                    .unwrap_or("role:unconfigured")
-            )
-        })
+        .map(|issue| format!("{} - {} [{}]", issue.id, issue.title, issue.status))
         .collect();
     let ready_count = commands::work::executable_ready_count(db)?;
     let stale_count = atelier_app::export::canonical_stale_entries(db, state_dir)?.len();
@@ -259,9 +251,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 .unwrap_or(false)
             {
                 println!("  1. atelier status - Review the checkout's current-work set.");
-                println!(
-                    "  2. atelier issue transition <id> - Review status-specific role guidance."
-                );
+                println!("  2. atelier issue transition <id> - Review available transitions.");
                 println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
                 println!("  1. atelier work ready - Find executable work.");
@@ -298,9 +288,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         Role::Admin => {
             println!("  1. atelier check - Validate committed tracker state and workflow policy.");
             println!("  2. atelier check --fix - Repair ignored runtime and cache health.");
-            println!(
-                "  3. atelier issue transition <id> - Inspect live validators and planned actions."
-            );
+            println!("  3. atelier issue transition <id> - Inspect live validators.");
         }
     }
 }

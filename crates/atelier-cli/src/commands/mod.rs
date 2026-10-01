@@ -9,16 +9,14 @@ pub mod issue;
 pub mod issue_status;
 pub mod issue_workflow;
 pub mod man;
-pub mod mission;
 pub(crate) mod objective_status;
 pub mod prune;
 pub mod relate;
+pub mod start;
 pub mod status;
 pub mod work;
 pub(crate) mod work_order;
 pub mod workflow;
-pub(crate) mod workflow_actions;
-pub mod workflow_planning;
 
 #[cfg(test)]
 pub(crate) mod test_support {

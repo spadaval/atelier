@@ -101,7 +101,7 @@ fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
 /// or closeout rather than the draft-to-ready validators themselves.
 fn move_epic_directly_to_ready(dir: &Path, epic_id: &str) {
     edit_canonical_issue(dir, epic_id, |markdown| {
-        replace_front_matter_scalar(&markdown, "status", "ready")
+        replace_front_matter_scalar(&markdown, "status", "todo")
     });
 }
 
@@ -271,20 +271,6 @@ fn git_rev_parse(dir: &Path, rev: &str) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).trim().to_string()
-}
-
-fn git_log_oneline(dir: &Path, rev: &str, count: usize) -> String {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .args(["log", "--oneline", &format!("-{count}"), rev])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git log failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
 }
 
 fn init_atelier_with_telemetry_disabled(dir: &Path) {
@@ -570,52 +556,6 @@ fn canonical_record_front_matter(
     serde_json::to_value(yaml).unwrap()
 }
 
-fn valid_command_surface_doc() -> &'static str {
-    r#"# CLI Surface Tiers
-
-## Core
-
-- `atelier init`
-- `atelier man`
-- `atelier status`
-- `atelier work ready`
-- `atelier work blocked`
-- `atelier check`
-- `atelier issue ...`
-- `atelier issue transition <issue-id> start`
-- `atelier issue create "..." --issue-type mission`
-- `atelier issue show <objective-id>`
-- `atelier issue link <objective-id> <issue-id> --role advances`
-- `atelier issue unlink <objective-id> <issue-id> --role advances`
-- `atelier issue transition <objective-id>`
-- `atelier issue note`
-- `atelier bundle preview/apply`
-- `atelier evidence record/show/list/attach`
-- `atelier prune`
-
-## Advanced Diagnostics
-
-- hidden/advanced `atelier lint`
-- hidden/advanced `atelier branch for-epic/status/merge`
-- hidden/advanced `atelier doctor`
-"#
-}
-
-fn write_command_surface_doc(dir: &Path, content: &str) {
-    let docs_dir = dir.join("docs/product");
-    fs::create_dir_all(&docs_dir).unwrap();
-    fs::write(docs_dir.join("cli-surface.md"), content).unwrap();
-}
-
-fn write_valid_command_guidance(dir: &Path) {
-    write_command_surface_doc(dir, valid_command_surface_doc());
-    fs::write(
-        dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier work queue --ready`\n- `atelier check`\n",
-    )
-    .unwrap();
-}
-
 fn remove_issue_section(markdown: &str, heading: &str) -> String {
     let marker = format!("## {heading}\n");
     let start = markdown.find(&marker).expect("section heading missing");
@@ -797,24 +737,20 @@ fn ensure_all_issue_completion_sections(dir: &Path) {
     }
 }
 
-fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
+fn move_issue_to_review(dir: &Path, issue_ref_value: &str) -> String {
     migrate_default_issue_workflow(dir);
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
-    for transition in ["start", "request_review", "request_validation"] {
+    for transition in ["start", "request_review"] {
         let (success, options, stderr) = run_atelier(dir, &["issue", "transition", &issue_id]);
         assert!(
             success,
             "transition options failed for {issue_id}: {stderr}"
         );
-        let option_present = options.contains(&format!("{transition} ["));
-        if !option_present {
+        if !options.contains(&format!("{transition} [")) {
             continue;
         }
-        let (success, _, stderr) = if transition == "start" && dir.join(".git").exists() {
-            run_atelier(dir, &["issue", "transition", &issue_id, "start"])
-        } else {
-            run_atelier(dir, &["issue", "transition", &issue_id, transition])
-        };
+        let (success, _, stderr) =
+            run_atelier(dir, &["issue", "transition", &issue_id, transition]);
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
         }
@@ -824,7 +760,7 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
 
 fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
-    move_issue_to_validation(dir, &issue_id);
+    move_issue_to_review(dir, &issue_id);
     ensure_all_issue_completion_sections(dir);
     attach_issue_pass_evidence(dir, &issue_id);
     if dir.join(".git").exists() {
@@ -838,48 +774,30 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     issue_id
 }
 
-fn add_origin_remote(dir: &Path, remote: &Path) {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .args(["remote", "add", "origin", remote.to_str().unwrap()])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git remote add failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn git_push(dir: &Path, args: &[&str]) {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-fn write_branch_action_workflow(dir: &Path) {
-    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
-    workflow = workflow.replace(
-        "          - lint.none_blocking\n\n  epic:",
-        "          - lint.none_blocking\n        actions:\n          - tracker.commit\n          - git.integrate\n\n  epic:",
-    );
-    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
-}
-
-fn write_mission_branch_workflow(dir: &Path) {
+/// Adds a validator to every `close` transition in the starter policy.
+fn add_close_validator(dir: &Path, validator: &str) {
+    let path = dir.join(".atelier/workflow.yaml");
+    let workflow = fs::read_to_string(&path).unwrap();
+    let close_validators = "        - blockers.none_open\n      supersede:";
+    assert_eq!(workflow.matches(close_validators).count(), 2, "{workflow}");
     fs::write(
-        dir.join(".atelier/workflow.yaml"),
-        atelier_workflow::STARTER_POLICY_YAML,
+        &path,
+        workflow.replace(
+            close_validators,
+            &format!("        - blockers.none_open\n        - {validator}\n      supersede:"),
+        ),
     )
     .unwrap();
+}
+
+/// Starter policy whose work `close` also requires passing evidence.
+fn write_evidence_gated_workflow(dir: &Path) {
+    let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n",
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n",
+    );
+    assert_ne!(workflow, atelier_workflow::STARTER_POLICY_YAML);
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
 
 fn register_issue_id(dir: &Path, id: String) {

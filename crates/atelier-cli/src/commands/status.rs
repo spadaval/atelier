@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -8,9 +7,7 @@ use crate::commands;
 use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
 };
-use crate::utils::format_issue_id;
 use atelier_app::read_pipeline::{StatusNextAction, StatusView};
-use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 
@@ -42,17 +39,11 @@ fn print_status_view(_db: &Database, view: &StatusView) -> Result<()> {
     } else {
         format!("{} issue(s)", view.work.active.len())
     };
-    let active_roles = if view.active_role_counts.is_empty() {
-        "none".to_string()
-    } else {
-        render_role_counts(&view.active_role_counts)
-    };
     let mut summary_lines = vec![
         format!("Tracker:       {}", view.tracker_state),
         format!("Ready work:    {}", view.work.ready.len()),
         format!("Current work:  {current_work}"),
         format!("Current missions: {}", view.current_missions.len()),
-        format!("Active roles:   {active_roles}"),
     ];
     if view.stale_records > 0 {
         summary_lines.push(format!("Local state issues: {}", view.stale_records));
@@ -151,21 +142,6 @@ pub(crate) fn current_work_issues(
     commands::objective_status::order_issues_by_work(db, workflow_policy, issues)
 }
 
-pub(crate) fn issue_status_role<'a>(
-    issue: &'a Issue,
-    workflow_policy: Option<&'a atelier_app::workflow_policy::WorkflowPolicy>,
-) -> Option<&'a str> {
-    workflow_policy.and_then(|policy| policy.status_role(&issue.status))
-}
-
-fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
-    counts
-        .iter()
-        .map(|(role, count)| format!("{role}={count}"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 struct GitState {
     branch: Option<String>,
     dirty_entries: Vec<String>,
@@ -197,49 +173,4 @@ fn git_state() -> Result<GitState> {
         branch,
         dirty_entries,
     })
-}
-
-pub fn close_all_lifecycle(
-    state_dir: &Path,
-    db_path: &Path,
-    label_filter: Option<&str>,
-    priority_filter: Option<&str>,
-) -> Result<()> {
-    let db = app_use_cases::open_database(db_path)?;
-    let issues = db.list_issues(Some("todo"), label_filter, priority_filter)?;
-    drop(db);
-
-    if issues.is_empty() {
-        println!("No matching todo issues found.");
-        return Ok(());
-    }
-
-    let mut closed_count = 0;
-    for issue in &issues {
-        let db = match app_use_cases::open_database(db_path) {
-            Ok(db) => db,
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to open tracker for {}: {}",
-                    format_issue_id(&issue.id),
-                    e
-                );
-                continue;
-            }
-        };
-        match commands::workflow::transition_issue(
-            &db,
-            state_dir,
-            db_path,
-            &issue.id,
-            "close",
-            Some("bulk close"),
-        ) {
-            Ok(()) => closed_count += 1,
-            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
-        }
-    }
-
-    println!("Closed {} issue(s).", closed_count);
-    Ok(())
 }

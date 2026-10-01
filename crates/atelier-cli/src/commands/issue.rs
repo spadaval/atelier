@@ -429,7 +429,6 @@ fn render_issue_show_human(
 
     render_parent_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
-    render_checkout_summary(db, canonical_id)?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -610,7 +609,7 @@ pub fn transition_options(db: &Database, issue_ref: &str, verbose: bool) -> Resu
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
-    crate::commands::workflow::print_issue_transition_options(db, &issue, &options, verbose);
+    crate::commands::workflow::print_issue_transition_options(&issue, &options, verbose);
     Ok(())
 }
 
@@ -654,44 +653,6 @@ fn render_transition_readiness(
     }
     lines.push(format!("  options: atelier issue transition {}", object.id));
     print_panel(LinesPanel::new("Transition Readiness", lines));
-    Ok(())
-}
-
-fn render_checkout_summary(db: &Database, canonical_id: &str) -> Result<()> {
-    let Ok(options) = crate::commands::workflow::issue_transition_options(db, canonical_id) else {
-        return Ok(());
-    };
-    let needs_branch_context = options.iter().any(|option| {
-        crate::commands::workflow_planning::planned_actions_need_branch_context(
-            &option.planned_actions,
-        )
-    });
-    if !needs_branch_context {
-        return Ok(());
-    }
-    let Ok(context) = crate::commands::workflow::branch_lifecycle_context(db, canonical_id) else {
-        return Ok(());
-    };
-    let state = if context.dirty_entries.is_empty() {
-        "clean".to_string()
-    } else {
-        format!(
-            "dirty checkout: {}",
-            human_output::path_summary(&context.dirty_entries, 3)
-        )
-    };
-    print_panel(
-        MetadataPanel::new("Checkout")
-            .row(
-                "Current",
-                context
-                    .current_branch
-                    .as_deref()
-                    .unwrap_or("(detached)")
-                    .to_string(),
-            )
-            .row("State", state),
-    );
     Ok(())
 }
 

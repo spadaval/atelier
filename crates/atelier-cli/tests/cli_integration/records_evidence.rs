@@ -629,7 +629,6 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     for args in [
         vec!["work", "queue", "--json"],
         vec!["work", "queue", "--json"],
-        vec!["workflow", "check", "--json"],
         vec!["doctor", "--json"],
     ] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
@@ -643,7 +642,6 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     for args in [
         vec!["issue", "--help"],
         vec!["issue", "show", "--help"],
-        vec!["workflow", "--help"],
         vec!["doctor", "--help"],
     ] {
         let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
@@ -1910,6 +1908,7 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
 fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    write_evidence_gated_workflow(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Target proof"]);
     assert!(success, "target issue create failed: {stderr}");
@@ -1923,7 +1922,7 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
 
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
 
-    move_issue_to_validation(dir.path(), target_id);
+    move_issue_to_review(dir.path(), target_id);
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1988,7 +1987,7 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Evidence gate proof");
 
-    move_issue_to_validation(dir.path(), &issue_id);
+    move_issue_to_review(dir.path(), &issue_id);
     attach_pass_evidence(
         dir.path(),
         "issue",
@@ -2017,6 +2016,7 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
 fn test_issue_closeout_requires_passing_evidence_records() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    write_evidence_gated_workflow(dir.path());
 
     let issue_body = "## Description\n\nValidation blocker body.\n\n## Outcome\n\nThe issue does not close without passing evidence.\n\n## Evidence\n\n- A passing transcript proves closeout readiness.";
     let (success, issue_out, stderr) = run_atelier(
@@ -2033,7 +2033,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Blocked validation proof");
 
-    move_issue_to_validation(dir.path(), &issue_id);
+    move_issue_to_review(dir.path(), &issue_id);
     attach_non_pass_evidence(
         dir.path(),
         "issue",
@@ -2067,88 +2067,6 @@ fn test_issue_closeout_requires_passing_evidence_records() {
 }
 
 #[test]
-fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    fs::create_dir_all(dir.path().join("tests")).unwrap();
-    fs::write(
-        dir.path().join("tests/legacy_session.rs"),
-        concat!(
-            "#[test]\n",
-            "fn legacy_session_still_works() {\n",
-            "    let (success, _, _) = run_atelier(dir.path(), &[\"session\", \"start\"]);\n",
-            "    assert!(success);\n",
-            "}\n"
-        ),
-    )
-    .unwrap();
-
-    let (success, mission_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Stale test closeout",
-            "--issue-type",
-            "mission",
-        ],
-    );
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("mission objective atelier-"));
-    let mission_id = issue_id_by_title(dir.path(), "Stale test closeout");
-    move_mission_directly_to_ready(dir.path(), &mission_id);
-
-    let (success, evidence_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "evidence",
-            "record",
-            "--kind",
-            "validation",
-            "stale test evidence",
-        ],
-    );
-    assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] recorded - stale test evidence"));
-    let evidence_id = record_id_by_title(dir.path(), "evidence", "stale test evidence");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["evidence", "attach", &evidence_id, "issue", &mission_id],
-    );
-    assert!(success, "evidence attach failed: {stderr}");
-    commit_all(dir.path(), "stale test closeout baseline");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &mission_id, "request_publish"],
-    );
-
-    assert!(
-        !success,
-        "mission publish should block undeferred obsolete-command tests"
-    );
-    assert!(stdout.contains("Issue Transition"));
-    assert!(stdout.contains("validator command_surface_current failed"));
-    assert!(
-        stdout.contains("docs/help drift: detected")
-            || stdout.contains("ignored test inventory reviewed"),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains("update docs, help text, or command-surface tests")
-            || stdout.contains("ignored test inventory reviewed"),
-        "{stdout}"
-    );
-    assert!(stdout.contains("tests/legacy_session.rs"));
-    assert!(stdout.contains("legacy_session_still_works"));
-    assert!(stdout.contains("atelier session start"));
-    assert!(stderr.contains("Transition 'request_publish' is blocked"));
-}
-
-#[test]
 fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     let dir = tempdir().unwrap();
 
@@ -2163,18 +2081,16 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     assert!(policy.contains("branch_policy:"));
     assert!(policy.contains("  todo:\n    category: todo"));
     assert!(policy.contains("    initial_status: todo"));
-    assert!(policy.contains("    done_statuses: [done]"));
-    assert!(policy.contains("  task:"));
-    assert!(policy.contains("  epic:"));
-    assert!(policy.contains("  validation:"));
-    assert!(policy.contains("  spike:"));
+    assert!(policy.contains("  objective:"));
+    assert!(policy.contains("  work:"));
     assert!(policy.contains("applies_to:"));
+    assert!(!policy.contains("actions:"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
     assert!(!success, "workflow init should be removed");
     assert!(stdout.is_empty(), "{stdout}");
     assert!(
-        stderr.contains("unrecognized subcommand 'init'"),
+        stderr.contains("unrecognized subcommand 'workflow'"),
         "{stderr}"
     );
     assert!(
@@ -2207,207 +2123,6 @@ fn test_workflow_check_rejects_legacy_issue_statuses_without_migration_path() {
 }
 
 #[test]
-fn test_workflow_check_reports_policy_and_issue_record_health() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow check task"]);
-    assert!(success, "issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Workflow check spike",
-            "--issue-type",
-            "spike",
-        ],
-    );
-    assert!(success, "spike issue create failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-    assert!(success, "workflow check failed: {stderr}");
-    assert!(stdout.contains("Workflow Check"));
-    assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
-    assert!(stdout.contains("Policy:         pass"));
-    assert!(stdout.contains("Applicability:"));
-    assert!(stdout.contains("Statuses:"));
-    assert!(stdout.contains("Workflows:"));
-    assert!(stdout.contains("Record Health:  pass"));
-    assert!(stdout.contains("Issues Checked: 2"));
-    assert!(stdout.contains("Docs/Help Drift: clear"));
-}
-
-#[test]
-fn test_workflow_check_rejects_stale_agent_guidance_commands() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-    fs::write(
-        dir.path().join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier timer start`\n",
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        !success,
-        "workflow check should reject stale AGENTS command"
-    );
-    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("AGENTS.md"), "{stdout}");
-    assert!(stdout.contains("atelier timer"), "{stdout}");
-    assert!(
-        stderr.contains("workflow_command_surface_drift"),
-        "{stderr}"
-    );
-}
-
-#[test]
-fn test_workflow_check_rejects_stale_agent_guidance_options() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-    fs::write(
-        dir.path().join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier work queue --not-a-real-option`\n",
-    )
-    .unwrap();
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(!success, "workflow check should reject stale AGENTS option");
-    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("AGENTS.md"), "{stdout}");
-    assert!(stdout.contains("--not-a-real-option"), "{stdout}");
-    assert!(
-        stderr.contains("workflow_command_surface_drift"),
-        "{stderr}"
-    );
-}
-
-#[test]
-fn test_workflow_check_allows_hidden_command_only_in_hidden_context() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    let surface = format!(
-        "{}\n## Low-Level Debug And Repair\n\n- `atelier diagnostics slow`\n",
-        valid_command_surface_doc()
-    );
-    write_command_surface_doc(dir.path(), &surface);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        success,
-        "workflow check should accept hidden command context: {stderr}"
-    );
-    assert!(stdout.contains("Docs/Help Drift: clear"), "{stdout}");
-}
-
-#[test]
-fn test_workflow_check_rejects_hidden_command_as_normal_workflow() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    let surface = format!(
-        "{}\n## Core\n\n- `atelier diagnostics slow`\n",
-        valid_command_surface_doc()
-    );
-    write_command_surface_doc(dir.path(), &surface);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        !success,
-        "workflow check should reject hidden command as normal guidance"
-    );
-    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("atelier diagnostics"), "{stdout}");
-    assert!(
-        stderr.contains("workflow_command_surface_drift"),
-        "{stderr}"
-    );
-}
-
-#[test]
-fn test_workflow_check_allows_removed_command_only_in_removal_history_context() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    let surface = format!(
-        "{}\n## Removed Behavior\n\n- `atelier session start`\n",
-        valid_command_surface_doc()
-    );
-    write_command_surface_doc(dir.path(), &surface);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        success,
-        "workflow check should accept removal-history context: {stderr}"
-    );
-    assert!(stdout.contains("Docs/Help Drift: clear"), "{stdout}");
-}
-
-#[test]
-fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    let surface = format!(
-        "{}\n## Core\n\n- `atelier timer start`\n",
-        valid_command_surface_doc()
-    );
-    write_command_surface_doc(dir.path(), &surface);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        !success,
-        "workflow check should reject removed command as normal guidance"
-    );
-    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("atelier timer"), "{stdout}");
-    assert!(
-        stderr.contains("workflow_command_surface_drift"),
-        "{stderr}"
-    );
-}
-
-#[test]
-fn test_workflow_check_rejects_nonexistent_option_in_hidden_context() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-
-    let surface = format!(
-        "{}\n## Low-Level Debug And Repair\n\n- `atelier diagnostics slow --not-a-real-option`\n",
-        valid_command_surface_doc()
-    );
-    write_command_surface_doc(dir.path(), &surface);
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-
-    assert!(
-        !success,
-        "workflow check should reject nonexistent option in hidden context"
-    );
-    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("--not-a-real-option"), "{stdout}");
-    assert!(
-        stderr.contains("workflow_command_surface_drift"),
-        "{stderr}"
-    );
-}
-
-#[test]
 fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2435,7 +2150,7 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
     assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains("allowed statuses: blocked, done, in_progress, todo, validation"),
+        stderr.contains("allowed statuses: blocked, done, in_progress, review, superseded, todo"),
         "stderr: {stderr}"
     );
 }
