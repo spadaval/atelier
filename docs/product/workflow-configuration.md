@@ -37,17 +37,36 @@ open direct or transitive blockers where policy selects them.
 Merge gates protect terminal committed scope, fresh passing evidence,
 independent current approval or a visible trivial exemption, finding
 dispositions, and absence of open blockers. Policy can add read-only shell
-checks. Checks must preserve honest results and identify the failed invariant.
+checks at merge, using this top-level YAML shape:
+
+```yaml
+branch_policy:
+  base_branch: master
+  merge_strategy: fast_forward_only
+merge_checks:
+  - shell.check:
+      command: "git diff --check HEAD^ HEAD"
+```
+
+This is a fragment of the full workflow schema, not a complete policy.
+`shell.check` is accepted only in `merge_checks`, never in transition validators.
+It runs in the work checkout; a zero exit status passes and output explains the
+result. Checks must preserve the pinned checkout and records. Git hooks are
+disabled during integration and cleanup, so put mandatory checks in this
+reviewed policy surface.
 
 ## Base authority
 
-Merge evaluates the base branch's committed policy. Editing the work branch's
-policy cannot loosen that branch's merge gate. Invalid policy emits a visible
-error and falls back to the last valid policy in the base's first-parent
-history. Fix the invalid policy through reviewed work; fallback is not silent
-acceptance of malformed configuration.
+Merge evaluates the base branch's committed policy. Commit a valid policy on
+the base before beginning governed work; without any valid base policy, merge
+refuses. Editing the work branch's policy cannot loosen that branch's gate.
+Invalid base policy emits visible diagnostics and falls back to its last valid
+policy in first-parent history. The work branch's candidate policy must still
+be valid; fallback does not excuse an invalid candidate. Ordinary commands can
+read working policy and visibly fall back to committed history when it is
+malformed. Fix policy through reviewed work.
 
-The supported integration strategy is `fast_forward`. Atelier never creates
+The supported gated integration strategy is `fast_forward_only`. Atelier never creates
 commits. If the base has diverged, reconcile the work using ordinary Git and
 renew any proof or approval made stale by the resulting changes.
 

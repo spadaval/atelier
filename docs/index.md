@@ -12,7 +12,9 @@ process ownership, review providers, transition actions, and the cache.
 - [Bundle input contract](spec/bundle/schema.md): one-shot authored graph input.
 - [Agent Factory](../.agents/skills/agent-factory/SKILL.md): planning,
   implementation, review, validation, and handoff process.
-- [Rebuild strategy](strategies/atelier-rebuild.md): migration mission and plan.
+- [Rebuild strategy](strategies/atelier-rebuild.md): governing intent, criteria,
+  scope, and authority. [Native mission](../.atelier/issues/atelier-kgcr.md) owns
+  current execution state.
 - [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
   decision's status and ADR 0019's supersession list before applying older rules.
 - [Development setup](product/development-setup.md): local tools and verification.

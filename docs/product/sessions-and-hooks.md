@@ -1,21 +1,53 @@
 # Sessions and Hooks
 
-`atelier prime` gives a fresh session concise context: checkout and branch,
-active work and its owner, relevant mission, blockers, proof, and repository
-guidance. It reads records and Git without changing them.
+```text
+atelier prime
+atelier land
+atelier land <owner-or-child-id>
+atelier setup claude
+atelier setup claude --binary <path-to-atelier>
+```
 
-`atelier land` checks handoff invariants. Record and policy changes must be
-committed; the graph must be valid and active work traceable. Completion claims
-must satisfy their evidence, dependency, and review requirements. A legitimate
-handoff may retain active work; landing does not mean every item is done and
-never creates a commit.
+`prime` reads fresh checkout, owner, mission, blockers, evidence, review, and
+repository guidance. It creates no session record. `land` checks a handoff
+without writing records, committing, switching, or merging; a failed plain
+command exits nonzero with the failed invariant and recovery step.
 
-`atelier setup claude` installs Claude Code lifecycle hooks so session start
-calls prime and stop checks land. Claude is the supported harness. Consult
-command help for hook protocol options and installation details; hooks are
-adapters to these explicit commands, not an agent runner.
+Canonical records and policy must match committed HEAD, including ignored
+canonical paths and files hidden by Git index flags. Active work must have a
+recorded owner branch. An active owner may hand off unfinished code without
+approval or full scope completion; report those changes honestly. Its done
+child claims still need their applicable completion checks. A terminal owner
+requires a clean checkout and the full merge gates. An explicit child ID
+resolves its owner; otherwise ownership is inferred from the current branch.
 
-`atelier status` includes labeled summaries for relevant local work branches.
-A branch can contain active or terminal claims absent from the base. These
-summaries preserve each branch's identity and never overlay its records onto
-the current checkout. Invalid or unavailable branch state should be visible.
+## Claude Code hooks
+
+Claude is the supported harness. Setup writes `.claude/settings.json` with
+managed SessionStart and Stop command handlers, preserving unrelated settings
+and handlers. Repeating setup is idempotent; invalid JSON fails before writing.
+The default executable is `atelier` on PATH. An explicit `--binary` is resolved
+to an absolute path and quoted; use it to try a local rebuilt binary while the
+installed binary still has the old model. Commit shared settings deliberately
+and restart Claude Code to load them. Existing disabled-hook settings are
+preserved and reported.
+
+Installed commands are `atelier prime --hook claude` and
+`atelier land --hook claude`, with the selected executable. The adapters read
+JSON stdin and use its `cwd` to find the checkout. SessionStart returns context
+through `hookSpecificOutput.additionalContext`. A failed Stop returns
+`decision: "block"` and a reason at exit 0. When `stop_hook_active` signals a
+repeated failure, it emits a warning and allows stopping to avoid a loop; plain
+`land` continues to fail until the invariant is fixed. These protocol fields
+follow the [official Claude Code hooks reference](https://code.claude.com/docs/en/hooks).
+
+Hooks assist handoff; their warning escape does not prove completion. Actual
+session acceptance needs a dogfooded session as well as adapter tests.
+
+## Other branches
+
+`status` shows labeled summaries of committed local work-branch scopes, while
+the current checkout uses live records. It does not fetch remote branches or
+overlay another branch's records onto the current graph. Incompatible or
+unavailable snapshots are reported separately, and duplicate tracker trees need
+not produce repeated summaries. A branch's done claim is not base completion.

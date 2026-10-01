@@ -5,20 +5,25 @@ product policy in the linked sources instead of duplicating it here.
 
 ## Current Mission
 
-Atelier is being rebuilt as a verified, repo-native tracker. Read these first;
-they override older product docs where they conflict:
+Atelier is being rebuilt as a verified, repo-native tracker. Governing sources:
 
-- Strategy and temporary plan: `docs/strategies/atelier-rebuild.md`
+- Strategy: `docs/strategies/atelier-rebuild.md`
+- Native mission: `.atelier/issues/atelier-kgcr.md`
 - Decision: `docs/adr/0019-verified-repo-native-tracker.md`
 
-`PRODUCT_INTENT.md`, `CONTEXT.md`, and most of `docs/product/` still describe
-the superseded design until the rebuild's docs step rewrites them.
+Current product and architecture docs describe the rebuilt model. The mission
+record owns execution state; strategy acceptance does not mean mission completion.
 
 ## Process Sources
 
 - Agent Factory skill: `.agents/skills/agent-factory/SKILL.md`
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
+- Start a session with `target/debug/atelier prime`; before handoff commit
+  canonical records and run `target/debug/atelier land`. Active work may remain
+  open, with unfinished code handed off honestly.
+- Use `target/debug/atelier setup claude --binary target/debug/atelier` for the
+  supported Claude Code hooks while the installed binary remains old.
 
 ## Merge Policy
 
@@ -41,4 +46,5 @@ the superseded design until the rebuild's docs step rewrites them.
 - Local debug binary: `target/debug/atelier`
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`
+- Failure-path tests: `cargo nextest run --features test-hooks`
 - Whitespace check: `git diff --check`
