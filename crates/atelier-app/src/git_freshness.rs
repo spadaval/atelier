@@ -85,6 +85,12 @@ pub(crate) fn commit_edges_to(repo: &Path, pin: &str, end: &str) -> Result<Vec<C
     Ok(edges)
 }
 pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+    working_paths_matching(repo, |_| true)
+}
+pub(crate) fn working_code_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+    working_paths_matching(repo, |path| !is_record_path(path))
+}
+fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Result<Vec<PathBuf>> {
     let mut changed = paths(git_output(
         repo,
         &["diff", "--cached", "--name-only", "-z", "HEAD", "--"],
@@ -97,8 +103,9 @@ pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
         repo,
         &["ls-files", "--others", "--exclude-standard", "-z"],
     )?)?);
-    changed.extend(crate::committed_snapshot::flagged_modified_paths(
-        repo, "HEAD",
+    changed.retain(|path| include(path));
+    changed.extend(crate::committed_snapshot::flagged_modified_paths_matching(
+        repo, "HEAD", include,
     )?);
     changed.sort();
     changed.dedup();
