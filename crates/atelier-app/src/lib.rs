@@ -3,6 +3,7 @@
 //! Command orchestration moves here as request, outcome, and view-model APIs
 //! that do not write directly to stdout or stderr.
 
+pub mod base_policy;
 pub mod evidence_freshness;
 pub mod git_freshness;
 pub mod init;
@@ -14,6 +15,7 @@ pub mod mission_readiness;
 pub mod objective_graph;
 pub mod project_config;
 pub mod record_index;
+pub mod review_gate;
 pub mod storage_layout;
 pub mod use_cases;
 pub mod work_classification;

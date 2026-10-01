@@ -490,6 +490,15 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_ref(dir.path(), 1);
     make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    let policy = dir.path().join(".atelier/workflow.yaml");
+    fs::write(
+        &policy,
+        fs::read_to_string(&policy).unwrap().replace(
+            "merge_strategy: fast_forward_only",
+            "merge_strategy: squash",
+        ),
+    )
+    .unwrap();
     commit_all(dir.path(), "terminal owner fixture");
     let branch = format!("task/{issue_id}");
     let worktree = dir.path().join("terminal-owner-worktree");
@@ -682,6 +691,17 @@ fn test_prune_apply_removes_terminal_canonical_issue_and_keeps_git_recovery() {
 /// squash-merged into main. Returns the bare remote (keep it alive) and the
 /// branch name.
 fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir, String) {
+    // Historical squash integration remains prunable when its policy says so.
+    let policy = dir.join(".atelier/workflow.yaml");
+    fs::write(
+        &policy,
+        fs::read_to_string(&policy).unwrap().replace(
+            "merge_strategy: fast_forward_only",
+            "merge_strategy: squash",
+        ),
+    )
+    .unwrap();
+    commit_all(dir, "historical squash policy");
     let remote = tempdir().unwrap();
     let branch = format!("task/{issue_id}");
     let git = |args: &[&str]| {
@@ -726,7 +746,7 @@ fn branch_exists(dir: &Path, branch: &str) -> bool {
 }
 
 #[test]
-fn test_prune_apply_stops_at_first_removal_failure() {
+fn test_prune_apply_restores_every_record_on_staging_failure() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -753,15 +773,14 @@ fn test_prune_apply_stops_at_first_removal_failure() {
     assert!(!success, "a removal failure must fail prune");
     assert!(
         stderr.contains(&format!("failed to remove .atelier/issues/{}.md", ids[1]))
-            && stderr.contains(&format!("Removed: .atelier/issues/{}.md", ids[0]))
-            && stderr.contains(&format!("Not removed: .atelier/issues/{}.md", ids[1]))
-            && stderr.contains("git restore .atelier")
+            && stderr.contains("every staged record was restored")
+            && stderr.contains("no canonical records removed")
             && stderr.contains(&format!("Git cleanup already removed branch {branch}"))
             && stderr.contains("`git restore` does not restore branches or worktrees"),
         "{stderr}"
     );
     assert!(!branch_exists(dir.path(), &branch));
-    assert!(!canonical_issue_path(dir.path(), &ids[0]).exists());
+    assert!(canonical_issue_path(dir.path(), &ids[0]).exists());
     assert!(canonical_issue_path(dir.path(), &ids[1]).exists());
     let restored = Command::new("git")
         .current_dir(dir.path())
@@ -898,7 +917,7 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
     assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
-    for removed in ["history", "review", "forgejo"] {
+    for removed in ["history", "forgejo"] {
         assert!(
             !stdout
                 .lines()

@@ -20,6 +20,7 @@ pub mod document;
 pub mod evidence;
 pub mod issue;
 pub mod mutation_lock;
+pub mod review;
 pub mod store;
 pub mod validation;
 
@@ -32,7 +33,7 @@ pub use record_id::validate_record_id;
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
     validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
-    FIRST_CLASS_RECORD_KINDS, ISSUE_KIND,
+    FIRST_CLASS_RECORD_KINDS, ISSUE_KIND, REVIEW_KIND,
 };
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
@@ -43,6 +44,7 @@ pub use relationships::{
 /// Canonical record kind vocabulary shared by parser and application code.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RecordKind {
+    Review,
     Evidence,
     Issue,
 }
@@ -50,6 +52,7 @@ pub enum RecordKind {
 impl RecordKind {
     pub fn directory(self) -> &'static str {
         match self {
+            Self::Review => "reviews",
             Self::Evidence => "evidence",
             Self::Issue => "issues",
         }
@@ -378,6 +381,9 @@ impl RecordStore {
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
+        if record.kind() == "review" {
+            bail!("review records are append-only; create a successor event");
+        }
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         let header = record.header();
         let spec = canonical_record_kind(&header.kind)?;
@@ -840,6 +846,9 @@ pub fn render_issue_sections(sections: &IssueSections) -> String {
 }
 
 pub fn render_record(record: &Record) -> Result<String> {
+    if let Record::Review(review) = record {
+        return review::render_review_record(review);
+    }
     let spec = canonical_record_kind(&record.header().kind)?;
     if spec.kind == ISSUE_KIND.kind {
         return render_issue_record(&canonical_issue_record_from_record(record)?);
@@ -967,6 +976,9 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
 }
 
 pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
+    if spec.kind == "review" {
+        return Ok(Record::Review(review::parse_review_record(text, relative)?));
+    }
     if spec.kind == ISSUE_KIND.kind {
         return Ok(parse_issue_record(text, relative)?.into_record());
     }
@@ -2566,6 +2578,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             canonical_contracts,
             vec![
                 ("issue", "atelier.issue", 2, Some("issues")),
+                ("review", "atelier.review", 1, Some("reviews")),
                 ("evidence", "atelier.evidence", 2, Some("evidence")),
             ]
         );
@@ -2582,7 +2595,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["evidence"]);
+        assert_eq!(generic_contracts, vec!["review", "evidence"]);
     }
 
     #[test]

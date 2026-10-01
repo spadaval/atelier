@@ -42,7 +42,11 @@ pub fn transition_issue(
         )?;
     }
     let repo_root = repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    let source = atelier_app::workflow_policy::action_policy(&repo_root, index, &issue_id)?;
+    for diagnostic in source.diagnostics {
+        eprintln!("{diagnostic}");
+    }
+    let policy = source.policy;
     let before = index.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
@@ -192,7 +196,11 @@ pub fn issue_transition_options(
 ) -> Result<Vec<IssueTransitionOption>> {
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let repo_root = repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    let source = atelier_app::workflow_policy::action_policy(&repo_root, index, &issue_id)?;
+    for diagnostic in source.diagnostics {
+        eprintln!("{diagnostic}");
+    }
+    let policy = source.policy;
     let issue = index.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
     let mut options = Vec::new();

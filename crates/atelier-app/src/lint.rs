@@ -38,11 +38,18 @@ pub fn lint(
         )
     })?;
     let files = read_record_files(state_dir)?;
+    let policy_error = atelier_workflow::load(repo_root).err();
     let scoped_id = issue_ref
         .map(|issue_ref| resolve_issue_id(&files, issue_ref))
         .transpose()?;
 
     let mut findings = Vec::new();
+    if let Some(error) = policy_error {
+        findings.push(LintFinding {
+            id: "(policy)".into(),
+            message: format!("Invalid workflow policy: {error:#}"),
+        });
+    }
     let mut other_file_errors = Vec::new();
     for file_error in &files.errors {
         let stem = file_error
@@ -83,6 +90,7 @@ pub fn lint(
                 state_dir,
                 files.issues.clone(),
                 files.evidence.clone(),
+                files.reviews.clone(),
             )
             .err()
             .map(|error| format!("Tracker record files are invalid: {error:#}")),

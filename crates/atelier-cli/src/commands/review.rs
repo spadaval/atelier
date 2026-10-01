@@ -1,0 +1,136 @@
+//! Creation and inspection of immutable, self-declared review events.
+use anyhow::{bail, Result};
+use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
+use atelier_core::{FindingDecision, ReviewEvent};
+use atelier_records::RecordStore;
+
+pub fn decision(value: &str) -> Result<FindingDecision> {
+    match value {
+        "fix_now" => Ok(FindingDecision::FixNow),
+        "defer" => Ok(FindingDecision::Defer),
+        "no_action" => Ok(FindingDecision::NoAction),
+        _ => bail!("decision must be fix_now, defer or no_action"),
+    }
+}
+
+pub fn append(
+    owner_ref: &str,
+    identity: &str,
+    commit: Option<&str>,
+    summary: &str,
+    event: ReviewEvent,
+    quiet: bool,
+) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    let owner = index
+        .resolve_issue_ref(owner_ref)?
+        .ok_or_else(|| anyhow::anyhow!("issue {owner_ref} not found"))?;
+    let pin = commit
+        .map(str::to_owned)
+        .unwrap_or(git::head_commit(layout.repo_root())?);
+    atelier_records::review::validate_commit(&pin)?;
+    git::git_output(
+        layout.repo_root(),
+        &["merge-base", "--is-ancestor", &pin, "HEAD"],
+    )?;
+    if let ReviewEvent::Disposition {
+        finding,
+        supersedes,
+        resolution_commit,
+        follow_up,
+        ..
+    } = &event
+    {
+        let record = index.require_review(finding)?;
+        if !matches!(record.event, ReviewEvent::Finding { .. }) || record.target != owner {
+            bail!("disposition must target the finding's owner");
+        }
+        if supersedes.as_ref().map(String::as_str)
+            != index
+                .latest_disposition(finding)
+                .map(|record| record.header.id.as_str())
+        {
+            bail!("disposition successor is not current");
+        }
+        if let Some(commit) = resolution_commit {
+            atelier_records::review::validate_commit(commit)?;
+            git::git_output(
+                layout.repo_root(),
+                &["merge-base", "--is-ancestor", commit, "HEAD"],
+            )?;
+            git::git_output(
+                layout.repo_root(),
+                &["merge-base", "--is-ancestor", &record.commit, commit],
+            )?;
+            if commit == &record.commit {
+                bail!("resolution must follow the finding's reviewed commit");
+            }
+        }
+        if let Some(id) = follow_up {
+            index.require_issue(id)?;
+        }
+    }
+    let created = RecordStore::new(layout.canonical_dir())
+        .create_review(&owner, identity, &pin, event, summary)?;
+    if quiet {
+        println!("{}", created.header.id);
+    } else {
+        println!("Review event: {}\nIdentity: {}\nCommit: {}\n{}\nCommit this record with the work it describes.", created.header.id, created.identity, created.commit, created.summary);
+    }
+    Ok(())
+}
+
+pub fn disposition(
+    finding: &str,
+    identity: &str,
+    decision: &str,
+    resolution: Option<String>,
+    follow_up: Option<String>,
+    summary: &str,
+    quiet: bool,
+) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    let original = index.require_review(finding)?;
+    let event = ReviewEvent::Disposition {
+        finding: finding.into(),
+        decision: self::decision(decision)?,
+        supersedes: index
+            .latest_disposition(finding)
+            .map(|record| record.header.id.clone()),
+        resolution_commit: resolution,
+        follow_up,
+    };
+    append(&original.target, identity, None, summary, event, quiet)
+}
+
+pub fn list(owner: Option<&str>, json: bool) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    let records = index
+        .reviews()
+        .filter(|record| owner.is_none_or(|id| record.target == id))
+        .collect::<Vec<_>>();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&records)?);
+    } else {
+        for record in records {
+            println!(
+                "{} {:?} {} {} {}",
+                record.header.id, record.event, record.target, record.identity, record.summary
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn show(id: &str) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(index.require_review(id)?)?
+    );
+    Ok(())
+}

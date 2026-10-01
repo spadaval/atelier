@@ -237,6 +237,7 @@ pub struct RecordHeader {
 pub enum Record {
     Issue(IssueRecord),
     Evidence(EvidenceRecord),
+    Review(ReviewRecord),
 }
 
 impl Record {
@@ -244,6 +245,7 @@ impl Record {
         match self {
             Record::Issue(record) => &record.header,
             Record::Evidence(record) => &record.header,
+            Record::Review(record) => &record.header,
         }
     }
 
@@ -251,6 +253,7 @@ impl Record {
         match self {
             Record::Issue(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
+            Record::Review(record) => &mut record.header,
         }
     }
 
@@ -281,6 +284,43 @@ pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
     pub summary: String,
+}
+
+/// Immutable review events. Decisions change by appending a successor.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReviewRecord {
+    pub header: RecordHeader,
+    pub target: String,
+    pub identity: String,
+    pub commit: String,
+    pub event: ReviewEvent,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingDecision {
+    FixNow,
+    Defer,
+    NoAction,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ReviewEvent {
+    Review,
+    Approval,
+    Finding {
+        recommendation: FindingDecision,
+    },
+    Disposition {
+        finding: String,
+        decision: FindingDecision,
+        supersedes: Option<String>,
+        resolution_commit: Option<String>,
+        follow_up: Option<String>,
+    },
+    TrivialExemption,
 }
 
 /// Acceptance content is typed by work kind; lifecycle notes are separate.

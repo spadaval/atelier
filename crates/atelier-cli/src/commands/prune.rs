@@ -21,6 +21,7 @@ struct CanonicalPruneSummary {
     cutoff: NaiveDate,
     issues: Vec<CanonicalCandidate>,
     evidence: Vec<CanonicalCandidate>,
+    reviews: Vec<CanonicalCandidate>,
     removed: Vec<CanonicalRemoval>,
 }
 
@@ -603,13 +604,16 @@ fn plan_canonical_records(
     apply_git_history_protection(&tracker.repo_root, &mut issues)?;
     let mut evidence = evidence;
     apply_git_history_protection(&tracker.repo_root, &mut evidence)?;
-    protect_referenced_candidates(&tracker.index, &mut issues, &mut evidence);
+    let mut reviews = review_candidates(tracker, cutoff)?;
+    apply_git_history_protection(&tracker.repo_root, &mut reviews)?;
+    protect_referenced_candidates(&tracker.index, &mut issues, &mut evidence, &mut reviews);
 
     let has_eligible = issues.iter().any(CanonicalCandidate::eligible)
-        || evidence.iter().any(CanonicalCandidate::eligible);
+        || evidence.iter().any(CanonicalCandidate::eligible)
+        || reviews.iter().any(CanonicalCandidate::eligible);
     if apply && has_eligible {
         ensure_clean_for_canonical_prune(&tracker.repo_root)?;
-        ensure_survivors_load(tracker, &issues, &evidence)?;
+        ensure_survivors_load(tracker, &issues, &evidence, &reviews)?;
     }
 
     Ok(CanonicalPruneSummary {
@@ -617,6 +621,7 @@ fn plan_canonical_records(
         cutoff,
         issues,
         evidence,
+        reviews,
         removed: Vec::new(),
     })
 }
@@ -653,37 +658,49 @@ fn git_removals_note(git: &GitPruneSummary) -> String {
 /// was clean before removal, so `git restore .atelier` undoes a partial run.
 fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummary) -> Result<()> {
     let eligible = summary
-        .evidence
+        .reviews
         .iter()
+        .chain(summary.evidence.iter())
         .chain(summary.issues.iter())
         .filter(|candidate| candidate.eligible())
-        .cloned()
         .collect::<Vec<_>>();
-    let names = |candidates: &[CanonicalCandidate]| {
-        if candidates.is_empty() {
-            "(none)".to_string()
-        } else {
-            candidates
-                .iter()
-                .map(|candidate| display_state_path(&candidate.path))
-                .collect::<Vec<_>>()
-                .join(", ")
-        }
-    };
+    let runtime = state_dir.join("runtime");
+    fs::create_dir_all(&runtime)?;
+    let staged = tempfile::tempdir_in(&runtime)
+        .context("failed to create reversible prune staging directory")?;
+    let mut moved: Vec<(&CanonicalCandidate, PathBuf)> = Vec::new();
     for (position, candidate) in eligible.iter().enumerate() {
-        if let Err(error) = remove_candidate_file(state_dir, candidate) {
-            bail!(
-                "prune --apply stopped: failed to remove {}: {error:#}\nRemoved: {}\nNot removed: {}\nNext: run `git restore .atelier` to restore every record file, then rerun `atelier prune`.",
-                display_state_path(&candidate.path),
-                names(&eligible[..position]),
-                names(&eligible[position..]),
-            );
+        let target = staged.path().join(position.to_string());
+        let result = if std::env::var("ATELIER_TEST_PRUNE_REMOVE_FAILURE").as_deref()
+            == Ok(candidate.id.as_str())
+        {
+            Err(anyhow::anyhow!("injected prune removal failure"))
+        } else {
+            fs::rename(state_dir.join(&candidate.path), &target).map_err(Into::into)
+        };
+        if let Err(error) = result {
+            let mut recovery = Vec::new();
+            for (original, staged_path) in moved.iter().rev() {
+                if let Err(restore) = fs::rename(staged_path, state_dir.join(&original.path)) {
+                    recovery.push(format!("{}: {restore}", original.path.display()));
+                }
+            }
+            if recovery.is_empty() {
+                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun atelier prune.", display_state_path(&candidate.path));
+            }
+            let recovery_dir = staged.keep();
+            bail!("prune rollback failed: {}. Record backups remain in {}. Next: restore these paths before any tracker command.", recovery.join("; "), recovery_dir.display());
         }
-        summary.removed.push(CanonicalRemoval {
+        moved.push((candidate, target));
+    }
+    // Publication is all-or-restored under the command's exclusive lock;
+    // staged files can now be discarded without exposing an invalid graph.
+    summary
+        .removed
+        .extend(eligible.into_iter().map(|candidate| CanonicalRemoval {
             kind: candidate.kind,
             id: candidate.id.clone(),
-        });
-    }
+        }));
     Ok(())
 }
 
@@ -724,6 +741,7 @@ fn protect_referenced_candidates(
     index: &RecordIndex,
     issues: &mut [CanonicalCandidate],
     evidence: &mut [CanonicalCandidate],
+    reviews: &mut [CanonicalCandidate],
 ) {
     let mut edges = Vec::new();
     for record in index.issue_records() {
@@ -736,11 +754,17 @@ fn protect_referenced_candidates(
             edges.push((("evidence", record.header.id.as_str()), (kind, id), role));
         }
     }
+    for record in index.reviews() {
+        for (kind, id, role) in declared_references(&record.header.relationships) {
+            edges.push((("review", record.header.id.as_str()), (kind, id), role));
+        }
+    }
     loop {
         let eligible = issues
             .iter()
             .map(|candidate| ("issue", candidate))
             .chain(evidence.iter().map(|candidate| ("evidence", candidate)))
+            .chain(reviews.iter().map(|candidate| ("review", candidate)))
             .filter(|(_, candidate)| candidate.eligible())
             .map(|(kind, candidate)| (kind, candidate.id.clone()))
             .collect::<BTreeSet<_>>();
@@ -768,7 +792,11 @@ fn protect_referenced_candidates(
         if reasons.is_empty() {
             return;
         }
-        for (kind, candidates) in [("issue", &mut *issues), ("evidence", &mut *evidence)] {
+        for (kind, candidates) in [
+            ("issue", &mut *issues),
+            ("evidence", &mut *evidence),
+            ("review", &mut *reviews),
+        ] {
             for candidate in candidates.iter_mut() {
                 if let Some(reason) = reasons.remove(&(kind, candidate.id.clone())) {
                     candidate.protection = Some(reason);
@@ -783,6 +811,7 @@ fn ensure_survivors_load(
     tracker: &TrackerContext,
     issues: &[CanonicalCandidate],
     evidence: &[CanonicalCandidate],
+    reviews: &[CanonicalCandidate],
 ) -> Result<()> {
     let removed = |candidates: &[CanonicalCandidate], id: &str| {
         candidates
@@ -802,11 +831,19 @@ fn ensure_survivors_load(
         .filter(|record| !removed(evidence, &record.header.id))
         .cloned()
         .collect();
-    RecordIndex::from_project_records(&tracker.state_dir, surviving_issues, surviving_evidence)
-        .map(|_| ())
-        .context(
-            "prune refused: the records left after pruning would not load; nothing was removed",
-        )
+    RecordIndex::from_project_records(
+        &tracker.state_dir,
+        surviving_issues,
+        surviving_evidence,
+        tracker
+            .index
+            .reviews()
+            .filter(|record| !removed(reviews, &record.header.id))
+            .cloned()
+            .collect(),
+    )
+    .map(|_| ())
+    .context("prune refused: the records left after pruning would not load; nothing was removed")
 }
 
 fn canonical_retention_cutoff(
@@ -910,6 +947,26 @@ fn active_descendants_by_ancestor(
         }
     }
     descendants
+}
+
+fn review_candidates(
+    tracker: &TrackerContext,
+    cutoff: NaiveDate,
+) -> Result<Vec<CanonicalCandidate>> {
+    Ok(tracker
+        .index
+        .reviews()
+        .filter(|record| record.header.created_at.date_naive() < cutoff)
+        .map(|record| CanonicalCandidate {
+            kind: "review-record",
+            id: record.header.id.clone(),
+            title: record.header.title.clone(),
+            status: record.header.status.clone(),
+            path: PathBuf::from("reviews").join(format!("{}.md", record.header.id)),
+            latest_at: record.header.created_at,
+            protection: None,
+        })
+        .collect())
 }
 
 fn evidence_candidates(
@@ -1098,13 +1155,6 @@ fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn remove_candidate_file(state_dir: &Path, candidate: &CanonicalCandidate) -> Result<()> {
-    if std::env::var("ATELIER_TEST_PRUNE_REMOVE_FAILURE").as_deref() == Ok(candidate.id.as_str()) {
-        bail!("injected prune removal failure");
-    }
-    fs::remove_file(state_dir.join(&candidate.path)).map_err(Into::into)
-}
-
 fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary, apply: bool) {
     let eligible = git
         .candidates
@@ -1115,6 +1165,7 @@ fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary,
             .issues
             .iter()
             .chain(canonical.evidence.iter())
+            .chain(canonical.reviews.iter())
             .filter(|candidate| candidate.eligible())
             .count();
     let protected = git
@@ -1126,6 +1177,7 @@ fn print_quiet_summary(git: &GitPruneSummary, canonical: &CanonicalPruneSummary,
             .issues
             .iter()
             .chain(canonical.evidence.iter())
+            .chain(canonical.reviews.iter())
             .filter(|candidate| !candidate.eligible())
             .count();
     let removed = git.removed.len() + canonical.removed.len();
@@ -1182,12 +1234,17 @@ fn print_canonical(summary: &CanonicalPruneSummary) {
     println!("Retention: {} day(s)", summary.retention_days);
     println!("Cutoff:    before {}", summary.cutoff);
 
-    let total_candidates = summary.issues.len() + summary.evidence.len();
+    let total_candidates = summary.issues.len() + summary.evidence.len() + summary.reviews.len();
     if total_candidates == 0 {
         println!("Candidates: none");
     } else {
         println!("Candidates: {total_candidates}");
-        for candidate in summary.issues.iter().chain(summary.evidence.iter()) {
+        for candidate in summary
+            .issues
+            .iter()
+            .chain(summary.evidence.iter())
+            .chain(summary.reviews.iter())
+        {
             print_canonical_candidate(candidate, summary);
         }
     }

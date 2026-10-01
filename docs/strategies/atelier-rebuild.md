@@ -166,3 +166,43 @@ Deferred review findings to resolve in later steps:
 - Docs still describing removed behavior: `workflow-configuration.md` review
   sections, `work-model.md`, `cli-surface.md`, command-audit pages, quality
   docs (`check --fix`), `CONTEXT.md`, `PRODUCT_INTENT.md` (step 10).
+
+## Step 7–8 candidate implementation notes
+
+The implementation uses fast-forward-only integration because Atelier never
+creates commits. The repository and starter policy use `fast_forward_only`;
+existing historical squash branches remain recognizable by `prune`. A diverged
+work branch must be updated, then obtain fresh proof and review before retrying.
+The committed owner and its scope must be terminal. A completion claim can be
+followed by review/evidence additions and status-only commits under ADR 0019;
+there is no requirement that the branch tip itself changes a status.
+
+Review events are append-only Markdown under `.atelier/reviews`. Explicit
+identities are compared against Git author names/emails on substantive branch
+commits, excluding allowed bookkeeping. Approvals and trivial exemptions pin a
+full commit ID. Freshness examines introduced commit history, including
+edit/revert changes; only new review/evidence records and existing in-scope
+status changes with their lifecycle fields are exempt. Existing review records
+cannot be rewritten or deleted anywhere in the work branch's history. Findings
+have explicit disposition chains, and resolving FIX NOW requires an independent
+approval that covers the resolution. Downgrading a finding requires an
+independent identity and an explanation; DEFER also requires a follow-up issue.
+
+Gate nodes are derived `workflow_validator` graph nodes. Started work evaluates
+transition guards against its committed integration base's policy. Merge also
+rechecks completion guards on committed terminal records, so direct record edits
+cannot bypass the base policy. Invalid policy visibly falls back through Git's
+first-parent history; lint and candidate policy syntax checks remain strict.
+The base policy can add `merge_checks`, including `shell.check: { command: ... }`.
+Shell checks run only at merge, outside canonical locks, followed by exclusive
+locks for both checkouts and fresh cleanliness/ref checks before integration.
+Git checkout/merge hooks are explicitly disabled during that fenced phase:
+hook children can deadlock on tracker locks or change the checked tree. Required
+read-only checks belong in `merge_checks`; the CLI prints this boundary before
+integration. Merge creates no commits or canonical records, removes only the
+pinned integrated branch tip, and leaves a separate source worktree detached
+with an explicit removal instruction.
+
+Prune apply holds an exclusive transaction from load through publication. It
+stages canonical deletions reversibly and restores the complete original
+records if staging fails, including review/finding/disposition clusters.

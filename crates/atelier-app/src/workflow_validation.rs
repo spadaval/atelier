@@ -71,6 +71,24 @@ fn evaluate_builtin(
         }
         "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
+        "shell.check" => {
+            let Some(ValidatorParams::ShellCheck { command }) = &definition.params else {
+                bail!("shell.check requires command");
+            };
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg(command)
+                .current_dir(repo_root)
+                .output()?;
+            let reason = format!(
+                "shell check {}: exit {:?}\n{}{}",
+                command,
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok((output.status.success(), reason, None))
+        }
         "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
         other => bail!("unsupported builtin validator: {other}"),
     }
@@ -283,6 +301,7 @@ mod tests {
         })
         .collect();
         WorkflowPolicy {
+            merge_checks: Vec::new(),
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),

@@ -119,6 +119,6 @@ impl Records {
     }
 
     pub fn index(&self) -> RecordIndex {
-        RecordIndex::from_records(self.issues.clone(), self.evidence.clone()).unwrap()
+        RecordIndex::from_records(self.issues.clone(), self.evidence.clone(), Vec::new()).unwrap()
     }
 }

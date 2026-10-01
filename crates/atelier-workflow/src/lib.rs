@@ -14,7 +14,7 @@ pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 3
 branch_policy:
   base_branch: main
-  merge_strategy: squash
+  merge_strategy: fast_forward_only
 issue_types:
   bug:
     label: Bug
@@ -147,6 +147,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "lint.none_blocking",
     "git.worktree_clean",
     "work.terminal",
+    "shell.check",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -163,9 +164,11 @@ const TOP_LEVEL_FIELDS: &[&str] = &[
     "issue_types",
     "statuses",
     "workflows",
+    "merge_checks",
 ];
 #[derive(Debug, Clone)]
 pub struct WorkflowPolicy {
+    pub merge_checks: Vec<ValidatorDefinition>,
     pub schema_version: i64,
     pub branch_policy: BranchLifecycleConfig,
     pub issue_types: BTreeMap<String, IssueTypeDefinition>,
@@ -184,7 +187,7 @@ impl Default for BranchLifecycleConfig {
     fn default() -> Self {
         Self {
             base_branch: "main".to_string(),
-            merge_strategy: MergeStrategy::Squash,
+            merge_strategy: MergeStrategy::FastForwardOnly,
         }
     }
 }
@@ -218,6 +221,9 @@ pub struct ValidatorDefinition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidatorParams {
+    ShellCheck {
+        command: String,
+    },
     EvidenceAttached {
         min_count: i64,
         kind: Option<String>,
@@ -461,7 +467,7 @@ pub fn configured_initial_status(repo_root: &Path, issue_type: &str) -> Result<O
     Ok(Some(workflow.initial_status.clone()))
 }
 
-fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
+pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     let root = parse_yaml(text, display_path)?;
     let root = root.as_mapping().ok_or_else(|| {
         policy_error(
@@ -508,7 +514,19 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     let workflow_by_issue_type =
         issue_type_mappings_from_workflows(&issue_types, &workflows, display_path)?;
 
+    let merge_checks = match root.get("merge_checks") {
+        None => Vec::new(),
+        Some(value) => parse_transition_validators(
+            "merge",
+            "merge",
+            value
+                .as_sequence()
+                .ok_or_else(|| anyhow!("merge_checks must be a sequence"))?,
+            display_path,
+        )?,
+    };
     let policy = WorkflowPolicy {
+        merge_checks,
         schema_version,
         branch_policy,
         issue_types,
@@ -855,6 +873,22 @@ fn parse_validator_params(
     display_path: &str,
 ) -> Result<Option<ValidatorParams>> {
     match builtin {
+        "shell.check" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct ShellParams {
+                command: String,
+            }
+            let parsed: ShellParams = serde_yaml::from_value(
+                params.ok_or_else(|| anyhow!("shell.check requires command"))?,
+            )?;
+            if parsed.command.trim().is_empty() {
+                return Err(anyhow!("shell.check command cannot be empty"));
+            }
+            Ok(Some(ValidatorParams::ShellCheck {
+                command: parsed.command,
+            }))
+        }
         "evidence.attached" => {
             let Some(params) = params else {
                 return Err(policy_error_with_field(
@@ -1112,6 +1146,9 @@ fn parse_transition_validators(
     for value in values {
         match value {
             Value::String(name) => {
+                if name == "shell.check" {
+                    return Err(anyhow!("shell.check requires command parameters"));
+                }
                 validate_builtin_validator_name(
                     workflow_name,
                     transition_name,
@@ -1182,6 +1219,9 @@ fn validate_builtin_validator_name(
     name: &str,
     display_path: &str,
 ) -> Result<()> {
+    if name == "shell.check" && workflow_name != "merge" {
+        return Err(anyhow!("shell.check is available only in merge_checks"));
+    }
     if BUILTIN_VALIDATORS.contains(&name) {
         Ok(())
     } else {
@@ -1691,7 +1731,7 @@ mod tests {
     }
 
     fn default_branch_policy() -> &'static str {
-        "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n"
+        "branch_policy:\n  base_branch: main\n  merge_strategy: fast_forward_only\n"
     }
 
     fn configured_policy() -> String {
@@ -1776,7 +1816,10 @@ mod tests {
             validator_names(&policy.workflows["objective"].transitions["start"].validators),
             vec!["blockers.transitive_none_open"]
         );
-        assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
+        assert_eq!(
+            policy.branch_policy.merge_strategy,
+            MergeStrategy::FastForwardOnly
+        );
         assert_eq!(policy.branch_policy.base_branch, "main");
     }
 
@@ -1953,7 +1996,7 @@ mod tests {
     fn rejects_configured_branch_policy_without_base_branch() {
         let text = valid_policy().replace(
             default_branch_policy(),
-            "branch_policy:\n  merge_strategy: squash\n",
+            "branch_policy:\n  merge_strategy: fast_forward_only\n",
         );
         let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
             .unwrap_err()

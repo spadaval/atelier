@@ -28,6 +28,8 @@ Planning:
 
 Records:
   evidence      Capture validation evidence
+  review        Record independent reviews, findings, and decisions
+  merge         Check gates and fast-forward a reviewed work branch
 
 Maintenance:
   check         Validate every tracker record
@@ -80,6 +82,48 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(clap::Args)]
+struct ReviewArgs {
+    id: String,
+    #[arg(long)]
+    identity: String,
+    #[arg(long)]
+    commit: Option<String>,
+    summary: String,
+}
+#[derive(Subcommand)]
+enum ReviewCommands {
+    Record(ReviewArgs),
+    Approve(ReviewArgs),
+    Finding {
+        #[command(flatten)]
+        args: ReviewArgs,
+        #[arg(long)]
+        recommendation: String,
+    },
+    Trivial(ReviewArgs),
+    Disposition {
+        finding: String,
+        #[arg(long)]
+        identity: String,
+        #[arg(long)]
+        decision: String,
+        #[arg(long)]
+        resolution_commit: Option<String>,
+        #[arg(long)]
+        follow_up: Option<String>,
+        summary: String,
+    },
+    List {
+        id: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    Show {
+        id: String,
+    },
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Initialize atelier in the current directory
@@ -110,6 +154,19 @@ enum Commands {
         id: String,
     },
 
+    /// Append-only in-repository review events
+    Review {
+        #[command(subcommand)]
+        action: ReviewCommands,
+    },
+    /// Check merge gates and fast-forward without creating commits
+    Merge {
+        id: String,
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// One-shot graph bundle files
     Bundle {
         #[command(subcommand)]
@@ -522,6 +579,15 @@ fn run() -> Result<()> {
     };
     let quiet = cli.quiet;
 
+    if !matches!(&cli.command, Commands::Init { .. }) {
+        if let Ok(layout) = StorageLayout::discover() {
+            if let Ok(source) = atelier_app::base_policy::working(layout.repo_root()) {
+                for diagnostic in source.diagnostics {
+                    eprintln!("{diagnostic}");
+                }
+            }
+        }
+    }
     match cli.command {
         Commands::Init { force } => {
             let cwd = env::current_dir()?;
@@ -601,6 +667,52 @@ fn run() -> Result<()> {
             commands::start::run(&index, &state_dir, &id)
         }
 
+        Commands::Merge { id, check, json } => commands::merge::run(&id, check, json),
+        Commands::Review { action } => {
+            use atelier_core::ReviewEvent;
+            let append = |args: ReviewArgs, event| {
+                commands::review::append(
+                    &args.id,
+                    &args.identity,
+                    args.commit.as_deref(),
+                    &args.summary,
+                    event,
+                    quiet,
+                )
+            };
+            match action {
+                ReviewCommands::Record(args) => append(args, ReviewEvent::Review),
+                ReviewCommands::Approve(args) => append(args, ReviewEvent::Approval),
+                ReviewCommands::Trivial(args) => append(args, ReviewEvent::TrivialExemption),
+                ReviewCommands::Finding {
+                    args,
+                    recommendation,
+                } => append(
+                    args,
+                    ReviewEvent::Finding {
+                        recommendation: commands::review::decision(&recommendation)?,
+                    },
+                ),
+                ReviewCommands::Disposition {
+                    finding,
+                    identity,
+                    decision,
+                    resolution_commit,
+                    follow_up,
+                    summary,
+                } => commands::review::disposition(
+                    &finding,
+                    &identity,
+                    &decision,
+                    resolution_commit,
+                    follow_up,
+                    &summary,
+                    quiet,
+                ),
+                ReviewCommands::List { id, json } => commands::review::list(id.as_deref(), json),
+                ReviewCommands::Show { id } => commands::review::show(&id),
+            }
+        }
         Commands::Bundle { action } => {
             let (state_dir, index) = load_repository()?;
             match action {
@@ -787,6 +899,18 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         // Start reads records, switches branches, and rewrites the owner and
         // issue records; no other writer may interleave.
         Commands::Start { .. } => CanonicalTransactionMode::Exclusive,
+        Commands::Prune { apply: true, .. } => CanonicalTransactionMode::Exclusive,
+        Commands::Review {
+            action:
+                ReviewCommands::Record(_)
+                | ReviewCommands::Approve(_)
+                | ReviewCommands::Finding { .. }
+                | ReviewCommands::Trivial(_)
+                | ReviewCommands::Disposition { .. },
+        } => CanonicalTransactionMode::Exclusive,
+        // Shell checks may run Atelier read commands; revalidate snapshots
+        // rather than hold a lock across arbitrary child execution.
+        Commands::Merge { .. } => CanonicalTransactionMode::None,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
         // append. The child may itself be an Atelier writer or migration.
@@ -876,7 +1000,7 @@ mod transaction_tests {
         let prune = Cli::try_parse_from(["atelier", "prune", "--apply"]).expect("prune");
         assert_eq!(
             canonical_transaction_mode(&prune.command),
-            CanonicalTransactionMode::Shared
+            CanonicalTransactionMode::Exclusive
         );
     }
 
