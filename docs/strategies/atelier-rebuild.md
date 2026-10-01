@@ -216,3 +216,12 @@ existing machine-local config, identity, runtime, lock, and temporary exclusions
 remain local inputs; merge policy and records must be committed. A separate base
 checkout must still own the exact base branch when checks finish, including when
 another branch has the same commit.
+
+Branch identity uses full `refs/heads/` references rather than Git's ambiguous
+short names; tags cannot change merge identity or prove prune integration.
+Merge also verifies modified tracked code hidden by `assume-unchanged` or
+`skip-worktree` in both checkouts before and after checks. Evidence capture's
+working-path check detects those same hidden changes before and after the child
+command. Canonical and flagged-file verification compares raw Git blob hashes
+in batches without running content filters; ordinary runtime exclusions remain
+local, and unchanged index flags do not prevent integration.

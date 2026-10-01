@@ -248,9 +248,12 @@ fn prune_git_artifacts(
     let mut summary = GitPruneSummary::default();
     let branches = git_stdout_trimmed(
         &tracker.repo_root,
-        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        &["for-each-ref", "--format=%(refname)", "refs/heads"],
     )?;
-    for branch in branches.lines().filter(|branch| !branch.is_empty()) {
+    for branch in branches
+        .lines()
+        .filter_map(|branch| branch.strip_prefix("refs/heads/"))
+    {
         let protection = if branch == current {
             Some("current checkout".to_string())
         } else if branch == base {
@@ -470,7 +473,12 @@ fn branch_is_integrated(
 ) -> Result<bool> {
     let output = Command::new("git")
         .current_dir(repo_root)
-        .args(["merge-base", "--is-ancestor", branch, base])
+        .args([
+            "merge-base",
+            "--is-ancestor",
+            &format!("refs/heads/{branch}"),
+            &format!("refs/heads/{base}"),
+        ])
         .output()
         .context("failed to inspect Git branch integration for prune candidate")?;
     if output.status.success() {
@@ -483,8 +491,10 @@ fn branch_is_integrated(
 }
 
 fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
-    let merge_base = git_stdout_trimmed(repo_root, &["merge-base", branch, base])?;
-    let branch_diff = git_diff(repo_root, &merge_base, branch)?;
+    let branch_ref = format!("refs/heads/{branch}");
+    let base_ref = format!("refs/heads/{base}");
+    let merge_base = git_stdout_trimmed(repo_root, &["merge-base", &branch_ref, &base_ref])?;
+    let branch_diff = git_diff(repo_root, &merge_base, &branch_ref)?;
     if branch_diff.is_empty() {
         return Ok(false);
     }
@@ -494,7 +504,7 @@ fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> R
             "log",
             "-z",
             "--format=%H%x00%s",
-            &format!("{merge_base}..{base}"),
+            &format!("{merge_base}..{base_ref}"),
         ])
         .output()
         .context("failed to inspect squash integration history for prune candidate")?;
@@ -538,24 +548,31 @@ fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<Strin
     let upstream = Command::new("git")
         .current_dir(repo_root)
         .args([
-            "rev-parse",
-            "--abbrev-ref",
-            &format!("{branch}@{{upstream}}"),
+            "for-each-ref",
+            "--format=%(upstream)",
+            &format!("refs/heads/{branch}"),
         ])
         .output()
         .context("failed to inspect Git upstream for prune candidate")?;
-    if !upstream.status.success() {
+    if !upstream.status.success() || upstream.stdout.iter().all(u8::is_ascii_whitespace) {
         return Ok(Some(
             "has no upstream; push or preserve it before pruning".to_string(),
         ));
     }
     let upstream = String::from_utf8_lossy(&upstream.stdout).trim().to_string();
-    let unpushed = git_stdout_trimmed(repo_root, &["rev-list", &format!("{upstream}..{branch}")])?;
+    let unpushed = git_stdout_trimmed(
+        repo_root,
+        &["rev-list", &format!("{upstream}..refs/heads/{branch}")],
+    )?;
     if unpushed.is_empty() {
         Ok(None)
     } else {
+        let label = upstream
+            .strip_prefix("refs/remotes/")
+            .or_else(|| upstream.strip_prefix("refs/heads/"))
+            .unwrap_or(&upstream);
         Ok(Some(format!(
-            "contains commits not present in upstream {upstream}"
+            "contains commits not present in upstream {label}"
         )))
     }
 }
@@ -1368,6 +1385,30 @@ mod tests {
 
         let reason = branch_push_protection(repo.path(), "main").unwrap();
         assert!(reason.unwrap().contains("has no upstream"));
+    }
+
+    #[test]
+    fn shadow_tags_cannot_prove_branch_integration() {
+        let repo = tempdir().unwrap();
+        git(repo.path(), &["init", "-b", "main"]);
+        git(repo.path(), &["config", "user.email", "test@example.com"]);
+        git(repo.path(), &["config", "user.name", "Test"]);
+        fs::write(repo.path().join("base"), "base").unwrap();
+        git(repo.path(), &["add", "base"]);
+        git(repo.path(), &["commit", "-m", "base"]);
+        git(repo.path(), &["switch", "-c", "task/owner"]);
+        fs::write(repo.path().join("work"), "unintegrated").unwrap();
+        git(repo.path(), &["add", "work"]);
+        git(repo.path(), &["commit", "-m", "work"]);
+        git(repo.path(), &["tag", "main", "HEAD"]);
+        git(repo.path(), &["tag", "task/owner", "refs/heads/main"]);
+        assert!(!branch_is_integrated(
+            repo.path(),
+            "task/owner",
+            "main",
+            MergeStrategy::FastForwardOnly
+        )
+        .unwrap());
     }
 
     #[test]

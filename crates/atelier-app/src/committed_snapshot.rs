@@ -1,14 +1,42 @@
-//! Verify canonical inputs independently of Git's ignore and index flags.
+//! Verify canonical inputs and flagged tracked files independently of Git status.
 use crate::git_freshness::git_output;
 use anyhow::{bail, Context, Result};
 use atelier_records::is_local_atelier_path;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
 
-fn collect(root: &Path, dir: &Path, paths: &mut Vec<PathBuf>) -> Result<()> {
+type Entries = BTreeMap<PathBuf, (String, String)>;
+
+fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
+    let args = if canonical {
+        vec!["ls-tree", "-rz", commit, "--", ".atelier"]
+    } else {
+        vec!["ls-tree", "-rz", commit]
+    };
+    let tree = git_output(repo, &args)?;
+    let mut entries = BTreeMap::new();
+    for entry in tree
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        let text = std::str::from_utf8(entry)?;
+        let (metadata, path) = text.split_once('\t').context("invalid Git tree entry")?;
+        if canonical && is_local_atelier_path(Path::new(path).strip_prefix(".atelier")?) {
+            continue;
+        }
+        let fields = metadata.split_whitespace().collect::<Vec<_>>();
+        if fields.len() != 3 {
+            bail!("invalid Git tree metadata");
+        }
+        entries.insert(PathBuf::from(path), (fields[0].into(), fields[2].into()));
+    }
+    Ok(entries)
+}
+
+fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -16,79 +44,155 @@ fn collect(root: &Path, dir: &Path, paths: &mut Vec<PathBuf>) -> Result<()> {
         if is_local_atelier_path(relative) {
             continue;
         }
-        let kind = entry.file_type()?;
-        if kind.is_dir() {
+        if entry.file_type()?.is_dir() {
             collect(root, &path, paths)?;
-        } else if kind.is_file() {
-            paths.push(relative.to_owned());
         } else {
-            bail!(
-                "canonical_snapshot_uncommitted: {} must be a regular file or directory",
-                path.display()
-            );
+            paths.insert(Path::new(".atelier").join(relative));
         }
     }
     Ok(())
 }
 
-/// Every canonical file must match the pinned commit's path, bytes and mode.
-/// Machine-local runtime, identity, config, lock and temporary files are excluded
-/// by the same classifier used by the record loader.
-pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
-    let tree = git_output(repo, &["ls-tree", "-rz", commit, "--", ".atelier"])?;
-    let mut expected = BTreeMap::new();
-    for entry in tree
-        .split(|byte| *byte == 0)
-        .filter(|entry| !entry.is_empty())
-    {
-        let text = std::str::from_utf8(entry)?;
-        let (metadata, path) = text.split_once('\t').context("invalid Git tree entry")?;
-        let relative = Path::new(path).strip_prefix(".atelier")?;
-        if is_local_atelier_path(relative) {
+fn modified(repo: &Path, paths: BTreeSet<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
+    let mut dirty = Vec::new();
+    let mut regular = Vec::new();
+    for path in paths {
+        let Some((mode, hash)) = entries.get(&path) else {
+            dirty.push(path);
+            continue;
+        };
+        let metadata = match fs::symlink_metadata(repo.join(&path)) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                dirty.push(path);
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.is_symlink() && mode == "120000" {
+            if fs::read_link(repo.join(&path))?
+                .as_os_str()
+                .as_encoded_bytes()
+                != git_output(repo, &["cat-file", "blob", hash])?
+            {
+                dirty.push(path);
+            }
             continue;
         }
-        let fields = metadata.split_whitespace().collect::<Vec<_>>();
-        if fields.len() != 3 || fields[1] != "blob" || !matches!(fields[0], "100644" | "100755") {
-            bail!("canonical_snapshot_uncommitted: {path} is not a regular committed file");
+        if !metadata.is_file() || !matches!(mode.as_str(), "100644" | "100755") {
+            dirty.push(path);
+            continue;
         }
-        expected.insert(
-            relative.to_owned(),
-            (fields[0].to_owned(), fields[2].to_owned()),
-        );
-    }
-    let root = repo.join(".atelier");
-    let mut actual = Vec::new();
-    collect(&root, &root, &mut actual)?;
-    for relative in actual {
-        let Some((mode, hash)) = expected.remove(&relative) else {
-            bail!("canonical_snapshot_uncommitted: .atelier/{} is absent from pinned HEAD; commit canonical records before continuing", relative.display());
-        };
-        let path = root.join(&relative);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let executable = fs::metadata(&path)?.permissions().mode() & 0o111 != 0;
-            if executable != (mode == "100755") {
-                bail!(
-                    "canonical_snapshot_uncommitted: .atelier/{} mode differs from pinned HEAD",
-                    relative.display()
-                );
+            if (metadata.permissions().mode() & 0o111 != 0) != (mode == "100755") {
+                dirty.push(path);
+                continue;
             }
         }
-        #[cfg(not(unix))]
-        let _ = mode;
-        if fs::read(&path)? != git_output(repo, &["cat-file", "blob", &hash])? {
+        regular.push((path, hash));
+    }
+    for chunk in regular.chunks(128) {
+        let mut args = vec!["hash-object", "--no-filters", "--"];
+        for (path, _) in chunk {
+            args.push(path.to_str().context("tracked path is not UTF-8")?);
+        }
+        let output = String::from_utf8(git_output(repo, &args)?)?;
+        let hashes = output.lines().collect::<Vec<_>>();
+        if hashes.len() != chunk.len() {
+            bail!("Git returned an incomplete file hash batch");
+        }
+        for ((path, expected), actual) in chunk.iter().zip(hashes) {
+            if actual != *expected {
+                dirty.push(path.clone());
+            }
+        }
+    }
+    dirty.sort();
+    Ok(dirty)
+}
+
+/// Every canonical file must match the pinned commit's path, bytes and mode.
+/// Machine-local runtime, identity, config, lock and temporary files are excluded
+/// by the same classifier used by the record loader. Hashes bypass Git filters.
+pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
+    let entries = entries(repo, commit, true)?;
+    let root = repo.join(".atelier");
+    let mut paths = entries.keys().cloned().collect::<BTreeSet<_>>();
+    collect(&root, &root, &mut paths)?;
+    for (path, (mode, _)) in &entries {
+        if !matches!(mode.as_str(), "100644" | "100755") {
             bail!(
-                "canonical_snapshot_uncommitted: .atelier/{} bytes differ from pinned HEAD",
-                relative.display()
+                "canonical_snapshot_uncommitted: {} is not a regular committed file",
+                path.display()
             );
         }
     }
-    if let Some(relative) = expected.keys().next() {
-        bail!(
-            "canonical_snapshot_uncommitted: .atelier/{} is missing from the checkout",
-            relative.display()
-        );
+    if let Some(path) = modified(repo, paths, &entries)?.first() {
+        bail!("canonical_snapshot_uncommitted: {} path, bytes or mode differs from pinned HEAD; commit canonical records before continuing", path.display());
     }
     Ok(())
+}
+
+/// Modified tracked files hidden from status by assume-unchanged/skip-worktree.
+pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
+    let output = git_output(repo, &["ls-files", "-v", "-z"])?;
+    let mut flagged = BTreeSet::new();
+    for entry in output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        if entry.len() < 3 || entry[1] != b' ' {
+            bail!("invalid Git index flag entry");
+        }
+        if entry[0].is_ascii_lowercase() || entry[0] == b'S' {
+            flagged.insert(PathBuf::from(std::str::from_utf8(&entry[2..])?));
+        }
+    }
+    if flagged.is_empty() {
+        return Ok(Vec::new());
+    }
+    modified(repo, flagged, &entries(repo, commit, false)?)
+}
+
+pub fn require_flagged_clean(repo: &Path, commit: &str) -> Result<()> {
+    if let Some(path) = flagged_modified_paths(repo, commit)?.first() {
+        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags; restore or commit the change before continuing", path.display());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batched_hashes_check_the_last_of_one_thousand_canonical_files() {
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+        ] {
+            git_output(repo.path(), &args).unwrap();
+        }
+        let issues = repo.path().join(".atelier/issues");
+        fs::create_dir_all(&issues).unwrap();
+        for number in 0..1000 {
+            fs::write(
+                issues.join(format!("issue-{number:04}.md")),
+                format!("canonical bytes {number}\n"),
+            )
+            .unwrap();
+        }
+        git_output(repo.path(), &["add", "."]).unwrap();
+        git_output(repo.path(), &["commit", "-qm", "canonical snapshot"]).unwrap();
+        let started = std::time::Instant::now();
+        require_committed(repo.path(), "HEAD").unwrap();
+        println!("1000 canonical files verified in {:?}", started.elapsed());
+        fs::write(issues.join("issue-0999.md"), "changed last batch").unwrap();
+        let error = require_committed(repo.path(), "HEAD").unwrap_err();
+        assert!(error.to_string().contains("issue-0999.md"), "{error}");
+    }
 }
