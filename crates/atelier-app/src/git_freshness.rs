@@ -211,8 +211,7 @@ struct ObjectReader {
 }
 impl ObjectReader {
     fn new(repo: &Path) -> Result<Self> {
-        let mut child = Command::new("git")
-            .current_dir(repo)
+        let mut child = command(repo)
             .args(["cat-file", "--batch"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -289,12 +288,17 @@ impl Drop for ObjectReader {
     }
 }
 
+/// Pinned evidence and review history always describe original Git objects.
+pub fn command(repo: &Path) -> Command {
+    let mut command = Command::new("git");
+    command.current_dir(repo).arg("--no-replace-objects");
+    command
+}
 pub fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     git_input(repo, args, None)
 }
 fn git_input(repo: &Path, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>> {
-    let mut child = Command::new("git")
-        .current_dir(repo)
+    let mut child = command(repo)
         .args(args)
         .stdin(if input.is_some() {
             Stdio::piped()
@@ -426,8 +430,7 @@ impl ReadContext<'_> {
                 .map(|edge| format!("{} {}\n", edge.commit, edge.parent))
                 .collect::<String>();
             if self.rename.is_none() {
-                let config = Command::new("git")
-                    .current_dir(self.repo)
+                let config = command(self.repo)
                     .args([
                         "config",
                         "--null",
@@ -802,6 +805,32 @@ mod tests {
                 bytes
             );
         }
+    }
+    #[test]
+    fn replacement_refs_cannot_reinterpret_pinned_objects_or_history() {
+        let repo = repo("sha1");
+        fs::write(repo.path().join("code"), "original").unwrap();
+        let pin = commit(repo.path(), "original");
+        fs::write(repo.path().join("code"), "changed").unwrap();
+        let end = commit(repo.path(), "changed");
+        git_output(repo.path(), &["replace", &pin, &end]).unwrap();
+        let interpreted = Command::new("git")
+            .current_dir(repo.path())
+            .args(["show", &format!("{pin}:code")])
+            .output()
+            .unwrap();
+        assert_eq!(interpreted.stdout, b"changed");
+        assert_eq!(
+            blob(repo.path(), &pin, Path::new("code")).unwrap(),
+            "original"
+        );
+        let mut read = ReadContext::new(repo.path());
+        assert_eq!(read.blob(&pin, Path::new("code")).unwrap(), "original");
+        assert!(read
+            .edges(&pin, &end)
+            .unwrap()
+            .iter()
+            .any(|edge| edge.paths.contains(&PathBuf::from("code"))));
     }
     #[test]
     fn range_boundaries_reject_wrong_missing_and_nonancestor_pins() {

@@ -1227,6 +1227,7 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
             f.path(),
             &["-q", "issue", "create", "Original author's completion"],
         );
+        let mut replacement_pin = None;
         if fix_now {
             commit(f.path(), "original author plan");
         }
@@ -1253,6 +1254,7 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
             .unwrap();
             commit(f.path(), "author resolves finding");
             let resolution = git(f.path(), &["rev-parse", "HEAD"]);
+            replacement_pin = Some(resolution.clone());
             ok(
                 f.path(),
                 &[
@@ -1306,6 +1308,28 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
         f.terminal(&id);
         let (pass, output) = cli(f.path(), &["land"]);
         assert!(!pass && output.contains("findings.disposed"), "{output}");
+        if stale {
+            let pin = replacement_pin.unwrap();
+            let head = git(f.path(), &["rev-parse", "HEAD"]);
+            let parent = git(f.path(), &["rev-parse", &format!("{pin}^")]);
+            let tree = git(f.path(), &["rev-parse", "HEAD^{tree}"]);
+            let replacement = git(
+                f.path(),
+                &[
+                    "commit-tree",
+                    &tree,
+                    "-p",
+                    &parent,
+                    "-m",
+                    "reinterpret resolution pin",
+                ],
+            );
+            git(f.path(), &["replace", &pin, &replacement]);
+            let (pass, output) = cli(f.path(), &["land"]);
+            assert!(!pass && output.contains("findings.disposed"), "{output}");
+            assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
+            git(f.path(), &["replace", "-d", &pin]);
+        }
         fs::write(f.path().join("unrelated-work"), "later unrelated work\n").unwrap();
         commit(f.path(), "aging cannot create independent acceptance");
         let (pass, output) = cli(f.path(), &["land"]);

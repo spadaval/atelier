@@ -4,10 +4,7 @@ use atelier_app::{
     base_policy, committed_snapshot, git_freshness as git, record_index::RecordIndex, review_gate,
     storage_layout::StorageLayout,
 };
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
 
 fn text(repo: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(git::git_output(repo, args)?)?
@@ -200,8 +197,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     // an upstream when configured, even when this base contains the full tip.
     let work_ref = format!("refs/heads/{branch}");
     git::git_output(target, &["update-ref", "--no-deref", "-d", &work_ref, &head]).with_context(|| format!("integration succeeded; cleanup refused because {branch} changed. Inspect the branch before deleting it."))?;
-    let metadata = Command::new("git")
-        .current_dir(target)
+    let metadata = atelier_app::git_freshness::command(target)
         .args([
             "config",
             "--local",
