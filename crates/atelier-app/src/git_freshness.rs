@@ -130,7 +130,7 @@ impl<'a> ReadContext<'a> {
                 edges.extend(selected);
             }
         }
-        self.populate_edges(&mut edges)
+        self.populate_edges(&edges)
     }
     fn parent_graph(&mut self, end: &str) -> Result<Arc<ParentGraph>> {
         let head = self.commit_id("HEAD")?;
@@ -461,7 +461,10 @@ impl ReadContext<'_> {
     // containing the tested pin, so older parents cannot reintroduce old work.
     fn load_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
         let mut edges = self.select_edges(pin, end)?;
-        self.populate_edges(&mut edges)?;
+        self.populate_edges(&edges)?;
+        for edge in &mut edges {
+            edge.paths = self.edge_paths[&(edge.parent.clone(), edge.commit.clone())].clone();
+        }
         Ok(edges)
     }
     fn select_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
@@ -517,7 +520,7 @@ impl ReadContext<'_> {
         }
         Ok(edges)
     }
-    fn populate_edges(&mut self, edges: &mut [CommitEdge]) -> Result<()> {
+    fn populate_edges(&mut self, edges: &[CommitEdge]) -> Result<()> {
         let mut missing = edges
             .iter()
             .filter(|edge| {
@@ -611,9 +614,6 @@ impl ReadContext<'_> {
         for edge in missing {
             self.edge_paths
                 .insert((edge.parent, edge.commit), edge.paths);
-        }
-        for edge in edges {
-            edge.paths = self.edge_paths[&(edge.parent.clone(), edge.commit.clone())].clone();
         }
         Ok(())
     }
