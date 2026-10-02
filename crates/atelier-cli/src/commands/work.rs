@@ -8,8 +8,9 @@ use atelier_app::work_classification::{ClassifiedWork, WorkBuckets, WorkClassifi
 use atelier_core::Issue;
 
 use crate::human_output::{
-    render_labeled_lines, DisplayRole, FooterAction, FooterPanel, IssueHeadingRow, IssueListPanel,
-    IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext, TextStyle,
+    print_page, render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
+    DisplayRole, FooterAction, IssueHeadingRow, IssueListPanel, IssueListRow, RenderContext,
+    TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -68,30 +69,34 @@ pub fn dashboards(quiet: bool) -> Result<()> {
         return Ok(());
     }
 
-    Page::new("Atelier Work")
-        .panel(LinesPanel::new(
-            "Dashboards",
-            [
-                "ready    Small top-level executable work picker",
-                "blocked  Repo-wide blocker triage",
-                "missions Flat mission summaries with complete scope counts",
-                "mission  Live mission orchestration dashboard",
-                "epic     Focused epic execution dashboard",
-            ],
-        ))
-        .panel(FooterPanel::new(
-            "Next Commands",
-            [
-                FooterAction::new("Browse ready work", "atelier work ready"),
-                FooterAction::new("Triage blockers", "atelier work blocked"),
-                FooterAction::new("Compare missions", "atelier work missions"),
-                FooterAction::new(
-                    "Open mission dashboard",
-                    "atelier work mission <mission-id>",
-                ),
-            ],
-        ))
-        .print(RenderContext::for_stdout());
+    print_page(
+        "Atelier Work",
+        [
+            render_lines_section(
+                "Dashboards",
+                [
+                    "ready    Small top-level executable work picker",
+                    "blocked  Repo-wide blocker triage",
+                    "missions Flat mission summaries with complete scope counts",
+                    "mission  Live mission orchestration dashboard",
+                    "epic     Focused epic execution dashboard",
+                ],
+            ),
+            render_footer_section(
+                "Next Commands",
+                [
+                    FooterAction::new("Browse ready work", "atelier work ready"),
+                    FooterAction::new("Triage blockers", "atelier work blocked"),
+                    FooterAction::new("Compare missions", "atelier work missions"),
+                    FooterAction::new(
+                        "Open mission dashboard",
+                        "atelier work mission <mission-id>",
+                    ),
+                ],
+            ),
+        ],
+        RenderContext::for_stdout(),
+    );
     Ok(())
 }
 
@@ -108,27 +113,26 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
         return Ok(());
     }
 
-    let mut page = Page::new("Atelier Work");
-    match bucket {
-        "ready" => {
-            page = page.panel(work_bucket_panel("Ready Work", &buckets.ready));
-        }
-        "blocked" => {
-            page = page.panel(work_bucket_panel("Blocked Work", &buckets.blocked));
-        }
-        "active" => {
-            page = page.panel(work_bucket_panel("Active Work", &buckets.active));
-        }
-        "all" => {
-            page = page
-                .panel(work_bucket_panel("Active Work", &buckets.active))
-                .panel(work_bucket_panel("Ready Work", &buckets.ready))
-                .panel(work_bucket_panel("Blocked Work", &buckets.blocked))
-                .panel(work_bucket_panel("Backlog Work", &buckets.backlog));
-        }
+    let groups = match bucket {
+        "ready" => vec![("Ready Work", &buckets.ready)],
+        "blocked" => vec![("Blocked Work", &buckets.blocked)],
+        "active" => vec![("Active Work", &buckets.active)],
+        "all" => vec![
+            ("Active Work", &buckets.active),
+            ("Ready Work", &buckets.ready),
+            ("Blocked Work", &buckets.blocked),
+            ("Backlog Work", &buckets.backlog),
+        ],
         other => bail!("unknown work bucket '{other}'"),
-    }
-    page.print(RenderContext::for_stdout());
+    };
+    let context = RenderContext::for_stdout();
+    print_page(
+        "Atelier Work",
+        groups
+            .into_iter()
+            .map(|(title, rows)| IssueListPanel::from_work_rows(title, rows).render(context)),
+        context,
+    );
     Ok(())
 }
 
@@ -265,9 +269,11 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
         "atelier issue list --issue-type mission",
         TextStyle::Secondary,
     ));
-    Page::new("Mission Overview")
-        .panel(LinesPanel::new("", lines))
-        .print(context);
+    print_page(
+        "Mission Overview",
+        [render_lines_section("", lines)],
+        context,
+    );
     Ok(())
 }
 
@@ -289,10 +295,6 @@ fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
             println!("{}", row.id);
         }
     }
-}
-
-fn work_bucket_panel(title: &str, rows: &[WorkRow]) -> IssueListPanel {
-    IssueListPanel::from_work_rows(title, rows)
 }
 
 pub fn mission_dashboard(
@@ -354,30 +356,32 @@ fn scoped_dashboard(
         return Ok(());
     }
     let counts = &work.totals;
-    let mut metadata = MetadataPanel::untitled()
-        .row("Status", issue.status.clone())
-        .row(
+    let mut metadata = vec![
+        ("Status", issue.status.clone()),
+        (
             "Work",
             format!(
                 "active {}, ready {}, blocked {}, done {}, backlog {}",
                 counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
             ),
-        );
+        ),
+    ];
     let title = if let Some(proof_gaps) = proof_gaps {
-        metadata = metadata
-            .row(
+        metadata.extend([
+            (
                 "Mission",
                 containing_mission(index, &id)?.unwrap_or_else(|| "(none)".to_string()),
-            )
-            .row("Proof gaps", proof_gaps.to_string())
-            .row(
+            ),
+            ("Proof gaps", proof_gaps.to_string()),
+            (
                 "Transition readiness",
                 transition_readiness(index, &id, "start")?,
-            );
+            ),
+        ]);
         format!("Work Epic {id} - {}", issue.title)
     } else {
         if let Some(strategy) = issue.strategy()? {
-            metadata = metadata.row("Strategy", strategy.path);
+            metadata.push(("Strategy", strategy.path));
         }
         format!(
             "{id} [mission] {} - {}",
@@ -385,12 +389,15 @@ fn scoped_dashboard(
             strip_mission_title_prefix(&issue.title)
         )
     };
-    let mut page = Page::new(title).panel(metadata);
-    for panel in work.panels(filter) {
-        page = page.panel(panel);
-    }
-    page.panel(objective_footer(&issue, counts))
-        .print(RenderContext::for_stdout());
+    let context = RenderContext::for_stdout();
+    let mut panels = vec![render_metadata(None, &metadata)];
+    panels.extend(
+        work.panels(filter)
+            .into_iter()
+            .map(|panel| panel.render(context)),
+    );
+    panels.push(objective_footer(&issue, counts));
+    print_page(&title, panels, context);
     Ok(())
 }
 
@@ -500,7 +507,7 @@ fn strip_mission_title_prefix(title: &str) -> &str {
         .unwrap_or(title)
 }
 
-fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> FooterPanel {
+fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> Vec<String> {
     let mission_id = &issue.id;
     let mut actions = vec![
         FooterAction::new(
@@ -524,7 +531,7 @@ fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> FooterPane
             format!("atelier work mission {mission_id} --blocked"),
         ));
     }
-    FooterPanel::new("Next Commands", actions)
+    render_footer_section("Next Commands", actions)
 }
 
 fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {

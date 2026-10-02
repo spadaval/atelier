@@ -3,7 +3,7 @@ use atelier_app::record_index::RecordIndex;
 
 use crate::commands;
 use crate::human_output::{
-    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
+    print_page, render_lines_section, render_metadata, IssueListPanel, IssueListRow, RenderContext,
 };
 use atelier_app::work_classification::StatusView;
 
@@ -31,9 +31,11 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
         crate::commands::git::branch_lines(layout.repo_root(), &layout.canonical_dir(), index)
             .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
     if !lines.is_empty() {
-        Page::new("Other local work branches")
-            .panel(LinesPanel::new("", lines))
-            .print(RenderContext::for_stdout());
+        print_page(
+            "Other local work branches",
+            [render_lines_section("", lines)],
+            RenderContext::for_stdout(),
+        );
     }
     Ok(())
 }
@@ -68,25 +70,25 @@ fn print_status_view(view: &StatusView) {
     let git = git_state();
     let local_state = match git {
         Ok(state) => {
-            let mut panel = MetadataPanel::new("Local State");
+            let mut rows = Vec::new();
             if let Some(branch) = state.branch {
-                panel = panel.row("Branch", branch);
+                rows.push(("Branch", branch));
             }
             if state.dirty_entries.is_empty() {
-                panel = panel.row("Checkout", "clean");
+                rows.push(("Checkout", "clean".to_string()));
             } else {
-                panel = panel.row(
+                rows.push((
                     "Checkout",
                     format!(
                         "dirty ({})",
                         crate::human_output::path_summary(&state.dirty_entries, 3)
                     ),
-                );
+                ));
             }
-            panel
+            rows
         }
         Err(error) => {
-            MetadataPanel::new("Local State").row("Checkout", format!("unavailable - {error}"))
+            vec![("Checkout", format!("unavailable - {error}"))]
         }
     };
 
@@ -104,12 +106,19 @@ fn print_status_view(view: &StatusView) {
         vec!["  No specific next action is available from checkout state.".to_string()]
     };
 
-    Page::new("Atelier Status")
-        .panel(LinesPanel::new("", summary_lines))
-        .panel(IssueListPanel::new("Current Work", active_rows).limit(8))
-        .panel(local_state)
-        .panel(LinesPanel::new("Next Actions", next_actions))
-        .print(RenderContext::for_stdout());
+    let context = RenderContext::for_stdout();
+    print_page(
+        "Atelier Status",
+        [
+            render_lines_section("", summary_lines),
+            IssueListPanel::new("Current Work", active_rows)
+                .limit(8)
+                .render(context),
+            render_metadata(Some("Local State"), &local_state),
+            render_lines_section("Next Actions", next_actions),
+        ],
+        context,
+    );
 }
 
 struct GitState {
