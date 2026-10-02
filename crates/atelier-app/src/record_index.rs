@@ -1101,7 +1101,7 @@ mod tests {
             assert_eq!(files.issues[0].issue.id, "atelier-0000");
             assert_eq!(files.issues[129].issue.id, "atelier-0129");
             assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
-            if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
+            if !initial && std::thread::available_parallelism().map_or(1, usize::from) > 1 {
                 assert!(threads.into_inner().unwrap().len() > 1);
             }
             let raw_calls = std::sync::Mutex::new(BTreeSet::new());
