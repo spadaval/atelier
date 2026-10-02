@@ -1908,6 +1908,13 @@ fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String
     } else {
         &normalized
     };
+    render_evidence_transcript(summary, data)
+        .trim_end()
+        .to_string()
+}
+
+/// Format typed command/output metadata, retaining its final transcript newline.
+pub fn render_evidence_transcript(summary: &str, data: &EvidenceRecordData) -> String {
     let mut output = String::new();
     output.push_str("## Summary\n\n");
     output.push_str(summary);
@@ -1942,7 +1949,7 @@ fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String
             output.push('\n');
         }
     }
-    output.trim_end().to_string()
+    output
 }
 
 fn evidence_body_has_transcript_sections(body: &str) -> bool {
@@ -2692,6 +2699,50 @@ Legacy evidence summary.
 "#;
         let error = parse_record(text, &path, spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
+    }
+
+    #[test]
+    fn evidence_transcript_keeps_capture_and_codec_whitespace_boundaries() {
+        let mut record = evidence_record("atelier-evdn");
+        record.data.command = Some("printf 'héllo' \t".into());
+        record.data.exit_status = Some("0".into());
+        record.data.spawn_error = Some("fixture error".into());
+        record.data.residual_risks = Vec::new();
+        record.data.output = Some(EvidenceOutputSummary {
+            limit_bytes_per_stream: 4096,
+            stdout: atelier_core::EvidenceStreamSummary {
+                bytes: 11,
+                truncated: true,
+                summary: "héllo\n \t".into(),
+            },
+            stderr: empty_evidence_stream(),
+        });
+        let summary = " \r\n## Command\n\n```text\nraw\n```\n ";
+        let transcript = render_evidence_transcript(summary, &record.data);
+        let expected = format!(
+            "## Summary\n\n{summary}\n\n## Command\n\n```console\nprintf 'héllo'\n```\n\nExit status: 0\nSpawn error: fixture error\n\n## Stdout\n\nBytes: 11\nTruncated: yes\n\n```text\nhéllo\n```\n\n## Stderr\n\nBytes: 0\nTruncated: no\n\n```text\n```\n"
+        );
+        assert_eq!(transcript, expected);
+        assert_eq!(
+            render_evidence_body(Some(&transcript), &record.data),
+            normalize_body(&expected)
+        );
+        assert_eq!(
+            render_evidence_body(Some("  plain\r\nsummary  "), &record.data),
+            render_evidence_transcript("  plain\nsummary  ", &record.data).trim_end()
+        );
+        assert_eq!(
+            render_evidence_body(Some(""), &record.data),
+            render_evidence_transcript(&record.data.evidence_type, &record.data).trim_end()
+        );
+        record.summary = transcript;
+        let rendered = render_evidence_record_file(&record).unwrap();
+        assert!(rendered.ends_with("```\n\n"));
+        record.data.output = None;
+        assert_eq!(
+            render_evidence_body(Some(" raw\r\nbody \r"), &record.data),
+            " raw\nbody \n"
+        );
     }
 
     #[test]
