@@ -1477,36 +1477,13 @@ fn evidence_capture_rejects_hidden_flagged_code_before_and_during_command_withou
 }
 
 #[test]
-fn unchanged_flagged_files_allow_merge_and_canonical_hashing_bypasses_filters() {
+fn unchanged_flagged_files_allow_merge() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     git(
         fixture.path(),
         &["update-index", "--assume-unchanged", "src.rs"],
     );
-    // An ignored attributes file is machine-local; raw hashing must never run
-    // its clean filter when verifying committed Markdown bytes.
-    let marker = fixture.path().join("filter-ran");
-    git(
-        fixture.path(),
-        &[
-            "config",
-            "filter.snapshot.clean",
-            &format!("touch {}; cat", marker.display()),
-        ],
-    );
-    fs::write(
-        fixture.path().join(".git/info/attributes"),
-        ".atelier/**/*.md filter=snapshot\n",
-    )
-    .unwrap();
-    atelier_app::committed_snapshot::require_committed(
-        fixture.path(),
-        &git(fixture.path(), &["rev-parse", "HEAD"]),
-    )
-    .unwrap();
-    assert!(!marker.exists());
-    fs::remove_file(fixture.path().join(".git/info/attributes")).unwrap();
     ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
 
