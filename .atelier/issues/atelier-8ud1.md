@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Meet the expanded rebuild read latency contract"
-updated_at: "2026-10-02T00:27:56.651256106+00:00"
+updated_at: "2026-10-02T01:13:54.521625550+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,4 @@ Independent acceptance V1 at b7aee82cb18837533ebc8ab2c1ff15041e2f5f66: /tmp/atel
 
 - 2026-10-01 [note] Expanded the checked-in release benchmark from six reads to 44 query/guard/refusal shapes (7756de5b). Fresh one-run functional smoke exercises both generated 1000-issue fixtures and reports the remaining budget failures honestly; this concurrent smoke is not latency acceptance. Prune candidate dcb7b022 reduces Git calls from 1690 to 6 and retains identical output. Its 113 ms author timing used one CPU, while the acceptance environment has 32 CPUs; preserve that result as a distinct runtime observation and remeasure the default environment quietly. Evidence candidate f030b7f4 still has epic max116 ms and successful guards above500 ms. Session/history batching and genuine source cleanup remain underway.
 - 2026-10-02 [note] Prune owner planning at d34b6e1f is independently reviewed and passes the focused six-mode benchmark (maximum 88.79 ms); xj9h records that partial result, not whole S4 acceptance. Reviewed source cleanup through ed6ac4c0 is integrated at 610edd1d, with 19649 physical non-test Rust lines before the remaining guard changes. Command-scoped history/range/object batching and raw blob hashing are being profiled; repeated fresh filesystem checks and Git launch/wait remain material costs. Preserve all failed timing evidence. Ordered parallel fresh checks and bounded executable resolution are candidates; no mutable fence may be skipped.
+- 2026-10-02 [note] Guard correctness stack through aab00773 and root composition f331bf0b is independently accepted: Git boolean parity and older-version batch framing, rename-source review immutability, root introduction history, and original-object proof pins. G9-G13 native findings have reviewed resolution events. Root fresh 549 test-hooks tests pass; exact physical non-test Rust is 19887. S4 is still failing. Ordered parallel filesystem checks showed no consistent gain and were discarded; all serial/parallel/short-PATH samples remain in /tmp/session-filesystem-timing.json. Portable-source attribution now identifies repeated immutable tree enumeration and duplicate canonical mode scans; next bounded slice will reuse only full-OID tree entries and freshly rerun all filesystem checks at every fence.
