@@ -353,24 +353,6 @@ impl RecordStore {
         })
     }
 
-    pub fn add_relates_relationship(
-        &self,
-        source_kind: &str,
-        source_id: &str,
-        target_kind: &str,
-        target_id: &str,
-        relation_type: &str,
-    ) -> Result<bool> {
-        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
-        validate_relationship_type(relation_type)?;
-        self.mutate_relationships(source_kind, source_id, |relationships| {
-            insert_unique(
-                &mut relationships.relates,
-                relates_relationship(target_kind, target_id, relation_type),
-            )
-        })
-    }
-
     pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if parent_id == child_id {

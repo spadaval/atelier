@@ -9,17 +9,13 @@ use atelier_records::{
 
 const BLOCKED_BY_ROLE: &str = "blocked_by";
 
-struct LinkEndpoint {
-    kind: String,
-    id: String,
-}
-
-pub fn link_issue(
+pub fn change_issue_link(
     index: &RecordIndex,
     state_dir: &Path,
     issue_ref: &str,
     target_ref: &str,
     role: &str,
+    unlink: bool,
 ) -> Result<()> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
@@ -31,55 +27,19 @@ pub fn link_issue(
     let source = resolve_link_endpoint(index, issue_ref)?;
     let target = resolve_link_endpoint(index, target_ref)?;
     let store = RecordStore::new(state_dir);
-    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
-        store.add_issue_block(&source.id, &target.id)?
-    } else if source.kind == "issue" && target.kind == "issue" {
-        store.add_issue_relation(&source.id, &target.id, role)?
-    } else {
-        bail!("issue link only supports issue records");
+    let changed = match (unlink, role == BLOCKED_BY_ROLE) {
+        (false, true) => store.add_issue_block(&source, &target)?,
+        (false, false) => store.add_issue_relation(&source, &target, role)?,
+        (true, true) => store.remove_issue_block(&source, &target)?,
+        (true, false) => store.remove_issue_relation(&source, &target, role)?,
     };
-    if changed {
-        println!("Linked {} -> {} ({role})", source.id, target.id);
-    } else {
-        println!(
-            "Link {} -> {} ({role}) already exists",
-            source.id, target.id
-        );
+    match (unlink, changed) {
+        (false, true) => println!("Linked {source} -> {target} ({role})"),
+        (false, false) => println!("Link {source} -> {target} ({role}) already exists"),
+        (true, true) => println!("Unlinked {source} -> {target} ({role})"),
+        (true, false) => println!("No link {source} -> {target} ({role}) exists"),
     }
-    print_link_next_commands(&source.id, &target.id);
-    Ok(())
-}
-
-pub fn unlink_issue(
-    index: &RecordIndex,
-    state_dir: &Path,
-    issue_ref: &str,
-    target_ref: &str,
-    role: &str,
-) -> Result<()> {
-    let repo_root = state_dir.parent().ok_or_else(|| {
-        anyhow!(
-            "Cannot determine repository root for {}",
-            state_dir.display()
-        )
-    })?;
-    validate_issue_link_role(repo_root, role)?;
-    let source = resolve_link_endpoint(index, issue_ref)?;
-    let target = resolve_link_endpoint(index, target_ref)?;
-    let store = RecordStore::new(state_dir);
-    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
-        store.remove_issue_block(&source.id, &target.id)?
-    } else if source.kind == "issue" && target.kind == "issue" {
-        store.remove_issue_relation(&source.id, &target.id, role)?
-    } else {
-        bail!("issue unlink only supports issue records");
-    };
-    if changed {
-        println!("Unlinked {} -> {} ({role})", source.id, target.id);
-    } else {
-        println!("No link {} -> {} ({role}) exists", source.id, target.id);
-    }
-    print_link_next_commands(&source.id, &target.id);
+    print_link_next_commands(&source, &target);
     Ok(())
 }
 
@@ -116,12 +76,9 @@ fn validate_issue_link_role(repo_root: &Path, role: &str) -> Result<()> {
     )
 }
 
-fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<LinkEndpoint> {
+fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<String> {
     if let Some(issue_id) = index.resolve_issue_ref(reference)? {
-        return Ok(LinkEndpoint {
-            kind: "issue".to_string(),
-            id: issue_id,
-        });
+        return Ok(issue_id);
     }
     if let Some(kind) = index.record_kind_for_id(reference) {
         bail!("{reference} is a {kind} record, not an issue record");
