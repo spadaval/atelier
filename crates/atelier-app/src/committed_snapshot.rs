@@ -267,27 +267,25 @@ fn flagged_paths(
         }
         let text = std::str::from_utf8(&entry[2..])?;
         let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
-        let path = PathBuf::from(path);
-        if verify_index && canonical(&path) {
-            let fields = metadata.split_whitespace().collect::<Vec<_>>();
-            if fields.len() != 3
-                || fields[2] != "0"
-                || !entries
-                    .get(&path)
-                    .is_some_and(|(mode, hash)| fields[0] == mode && fields[1] == hash)
-            {
+        let path = Path::new(path);
+        if verify_index && canonical(path) {
+            if !entries.get(path).is_some_and(|(mode, hash)| {
+                metadata
+                    .split_whitespace()
+                    .eq([mode.as_str(), hash.as_str(), "0"])
+            }) {
                 bail!("canonical_snapshot_uncommitted: {} index path, bytes or mode differs from pinned HEAD", path.display());
             }
-            indexed.insert(path.clone());
+            indexed.insert(path);
         }
-        if (entry[0].is_ascii_lowercase() || entry[0] == b'S') && include(&path) {
-            flagged.insert(path);
+        if (entry[0].is_ascii_lowercase() || entry[0] == b'S') && include(path) {
+            flagged.insert(path.to_path_buf());
         }
     }
     if verify_index {
         if let Some(path) = entries
             .keys()
-            .find(|path| canonical(path) && !indexed.contains(*path))
+            .find(|path| canonical(path) && !indexed.contains(path.as_path()))
         {
             bail!(
                 "canonical_snapshot_uncommitted: {} is absent from the Git index",
