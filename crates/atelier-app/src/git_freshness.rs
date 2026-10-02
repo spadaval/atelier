@@ -634,7 +634,7 @@ fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Resul
     changed.dedup();
     Ok(changed)
 }
-pub(crate) fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+pub fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     let status = git_output(
         repo,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],

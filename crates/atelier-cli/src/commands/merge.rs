@@ -135,8 +135,20 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         .map(|path| atelier_records::mutation_lock::CanonicalMutationLock::exclusive(path))
         .collect::<Result<Vec<_>>>()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
-    snapshot.require_clean(repo)?;
-    let final_refs = crate::commands::git::CheckoutRefs::capture(repo)?;
+    let paths = git::working_status_paths(repo)?;
+    let (final_refs, final_base_tree) = std::thread::scope(|scope| {
+        let metadata = scope.spawn(|| {
+            (
+                crate::commands::git::CheckoutRefs::capture(repo),
+                base_checkout(repo, base),
+            )
+        });
+        let clean = snapshot.require_clean_after_status(repo, paths);
+        let metadata = metadata.join().expect("merge metadata thread panicked");
+        clean?;
+        Ok::<_, anyhow::Error>(metadata)
+    })?;
+    let final_refs = final_refs?;
     if final_refs.head != *head
         || final_refs.branch.as_deref() != Some(branch)
         || final_refs
@@ -145,7 +157,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     {
         bail!("merge_snapshot_changed: Git refs changed while checks ran; retry with fresh proof and review");
     }
-    if base_checkout(repo, base)? != base_tree {
+    if final_base_tree? != base_tree {
         bail!("base checkout ownership changed while checks ran");
     }
     if let Some(path) = &base_tree {
