@@ -58,47 +58,42 @@ fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()>
 fn modified(repo: &Path, paths: BTreeSet<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
     let mut dirty = Vec::new();
     for path in paths {
-        let Some((mode, hash)) = entries.get(&path) else {
-            dirty.push(path);
-            continue;
-        };
-        let metadata = match fs::symlink_metadata(repo.join(&path)) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                dirty.push(path);
-                continue;
-            }
-            Err(error) => return Err(error.into()),
-        };
-        if metadata.is_symlink() && mode == "120000" {
-            if fs::read_link(repo.join(&path))?
-                .as_os_str()
-                .as_encoded_bytes()
-                != git_output(repo, &["cat-file", "blob", hash])?
-            {
-                dirty.push(path);
-            }
-            continue;
-        }
-        if !metadata.is_file() || !matches!(mode.as_str(), "100644" | "100755") {
-            dirty.push(path);
-            continue;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if (metadata.permissions().mode() & 0o111 != 0) != (mode == "100755") {
-                dirty.push(path);
-                continue;
-            }
-        }
-        // Hash newly read bytes, including their actual length, without filters.
-        if blob_hash(&fs::read(repo.join(&path))?, hash)? != *hash {
+        if matching_bytes(repo, &path, entries)?.is_none() {
             dirty.push(path);
         }
     }
     dirty.sort();
     Ok(dirty)
+}
+fn matching_bytes(repo: &Path, path: &Path, entries: &Entries) -> Result<Option<Vec<u8>>> {
+    let Some((mode, hash)) = entries.get(path) else {
+        return Ok(None);
+    };
+    let metadata = match fs::symlink_metadata(repo.join(path)) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.is_symlink() && mode == "120000" {
+        let bytes = fs::read_link(repo.join(path))?
+            .as_os_str()
+            .as_encoded_bytes()
+            .to_vec();
+        return Ok((bytes == git_output(repo, &["cat-file", "blob", hash])?).then_some(bytes));
+    }
+    if !metadata.is_file() || !matches!(mode.as_str(), "100644" | "100755") {
+        return Ok(None);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if (metadata.permissions().mode() & 0o111 != 0) != (mode == "100755") {
+            return Ok(None);
+        }
+    }
+    // Hash newly read bytes, including their actual length, without filters.
+    let bytes = fs::read(repo.join(path))?;
+    Ok((blob_hash(&bytes, hash)? == *hash).then_some(bytes))
 }
 
 fn blob_hash(bytes: &[u8], expected: &str) -> Result<String> {
@@ -147,6 +142,40 @@ impl CommittedSnapshot {
             entries: entries(repo, commit, false)?,
         })
     }
+    /// Fresh initial proof runs in the existing parser workers, which consume
+    /// those same bytes. Only immutable entries survive this operation.
+    pub fn read_record_files(
+        &self,
+        repo: &Path,
+        clean: bool,
+    ) -> Result<(crate::record_index::RecordFiles, Vec<PathBuf>)> {
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
+        let records = record_paths(repo, &self.entries)?;
+        let relative = records
+            .into_iter()
+            .map(|path| path.strip_prefix(".atelier").map(Path::to_path_buf))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let (files, changed) =
+            crate::record_index::read_record_paths(&repo.join(".atelier"), relative, &|path| {
+                matching_bytes(repo, &Path::new(".atelier").join(path), &self.entries)
+                    .map(|bytes| (bytes.is_some(), bytes))
+            })?;
+        let changed = changed
+            .into_iter()
+            .map(|path| Path::new(".atelier").join(path))
+            .collect::<Vec<_>>();
+        require_records_match(&changed)?;
+        paths.retain(|path| !canonical(path));
+        let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;
+        if clean {
+            require_paths_clean(repo, &paths, hidden)?;
+        } else {
+            paths.extend(hidden);
+        }
+        paths.sort();
+        paths.dedup();
+        Ok((files, paths))
+    }
     pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
         verify_records(repo, &self.entries)?;
@@ -166,10 +195,7 @@ impl CommittedSnapshot {
         verify_records(repo, &self.entries)?;
         paths.retain(|path| !canonical(path));
         let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;
-        if !paths.is_empty() {
-            bail!("merge_checkout_dirty: {} has uncommitted changes: {:?}; commit or stash them before retrying", repo.display(), paths);
-        }
-        require_hidden_clean(hidden)
+        require_paths_clean(repo, &paths, hidden)
     }
 }
 
@@ -181,6 +207,9 @@ pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
     flagged_paths(repo, &entries, |_| false, true).map(|_| ())
 }
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
+    require_records_match(&modified(repo, record_paths(repo, entries)?, entries)?)
+}
+fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
     let root = repo.join(".atelier");
     let mut paths = entries
         .keys()
@@ -196,10 +225,19 @@ fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
             );
         }
     }
-    if let Some(path) = modified(repo, paths, entries)?.first() {
+    Ok(paths)
+}
+fn require_records_match(paths: &[PathBuf]) -> Result<()> {
+    if let Some(path) = paths.first() {
         bail!("canonical_snapshot_uncommitted: {} path, bytes or mode differs from pinned HEAD; commit canonical records before continuing", path.display());
     }
     Ok(())
+}
+fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> Result<()> {
+    if !paths.is_empty() {
+        bail!("merge_checkout_dirty: {} has uncommitted changes: {:?}; commit or stash them before retrying", repo.display(), paths);
+    }
+    require_hidden_clean(hidden)
 }
 
 /// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
@@ -295,6 +333,154 @@ fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fused_initial_proof_checks_union_config_types_and_index_before_parse_errors() {
+        for format in ["sha1", "sha256"] {
+            for mutation in [
+                "unknown",
+                "missing",
+                "config",
+                "directory",
+                "symlink",
+                "mode",
+                "flag",
+                "index",
+            ] {
+                let repo = tempfile::tempdir().unwrap();
+                for args in [
+                    vec!["init", "-q", &format!("--object-format={format}")],
+                    vec!["config", "user.name", "Author"],
+                    vec!["config", "user.email", "author@example.test"],
+                ] {
+                    git_output(repo.path(), &args).unwrap();
+                }
+                fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+                let record = ".atelier/issues/atelier-good.md";
+                let bytes = atelier_records::render_issue_record(
+                    &crate::test_records::issue_record("atelier-good", "task", "todo"),
+                )
+                .unwrap();
+                fs::write(repo.path().join(record), &bytes).unwrap();
+                fs::write(
+                    repo.path().join(".atelier/issues/atelier-bad.md"),
+                    "committed invalid record",
+                )
+                .unwrap();
+                fs::write(
+                    repo.path().join(".atelier/workflow.yaml"),
+                    "committed policy config",
+                )
+                .unwrap();
+                git_output(repo.path(), &["add", "."]).unwrap();
+                git_output(repo.path(), &["commit", "-qm", "initial files"]).unwrap();
+                let head = crate::git_freshness::head_commit(repo.path()).unwrap();
+                let snapshot = CommittedSnapshot::new(repo.path(), &head).unwrap();
+                fs::write(
+                    repo.path().join(".git/info/exclude"),
+                    ".atelier/config.toml\n",
+                )
+                .unwrap();
+                fs::write(
+                    repo.path().join(".atelier/config.toml"),
+                    "uncommitted local config",
+                )
+                .unwrap();
+                let (files, paths) = snapshot.read_record_files(repo.path(), false).unwrap();
+                assert!(paths.is_empty());
+                assert_eq!(files.issues.len(), 1);
+                assert_eq!(files.errors.len(), 1);
+                assert!(files
+                    .into_index()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Invalid record file"));
+                if mutation == "unknown" {
+                    fs::write(
+                        repo.path().join("unfinished-code"),
+                        "unfinished ordinary code",
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        snapshot.read_record_files(repo.path(), false).unwrap().1,
+                        [PathBuf::from("unfinished-code")]
+                    );
+                    assert!(snapshot
+                        .read_record_files(repo.path(), true)
+                        .unwrap_err()
+                        .to_string()
+                        .starts_with("merge_checkout_dirty"));
+                    fs::remove_file(repo.path().join("unfinished-code")).unwrap();
+                }
+                match mutation {
+                    "unknown" => {
+                        fs::write(repo.path().join(".git/info/exclude"), ".atelier/unknown\n")
+                            .unwrap();
+                        fs::write(
+                            repo.path().join(".atelier/unknown"),
+                            "ignored unknown addition",
+                        )
+                        .unwrap();
+                    }
+                    "missing" => fs::remove_file(repo.path().join(record)).unwrap(),
+                    "config" => {
+                        fs::write(repo.path().join(".atelier/workflow.yaml"), "changed policy")
+                            .unwrap()
+                    }
+                    "directory" => {
+                        fs::remove_file(repo.path().join(record)).unwrap();
+                        fs::create_dir(repo.path().join(record)).unwrap();
+                    }
+                    "symlink" => {
+                        #[cfg(unix)]
+                        {
+                            fs::remove_file(repo.path().join(record)).unwrap();
+                            std::os::unix::fs::symlink("atelier-bad.md", repo.path().join(record))
+                                .unwrap();
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            continue;
+                        }
+                    }
+                    "mode" => {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
+                            fs::set_permissions(
+                                repo.path().join(record),
+                                fs::Permissions::from_mode(0o755),
+                            )
+                            .unwrap();
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            continue;
+                        }
+                    }
+                    "flag" => {
+                        git_output(repo.path(), &["update-index", "--assume-unchanged", record])
+                            .unwrap();
+                        fs::write(repo.path().join(record), "hidden changed bytes").unwrap();
+                    }
+                    "index" => {
+                        fs::write(repo.path().join(record), "staged changed bytes").unwrap();
+                        git_output(repo.path(), &["add", record]).unwrap();
+                        fs::write(repo.path().join(record), &bytes).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                let error = snapshot.read_record_files(repo.path(), false).unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .starts_with("canonical_snapshot_uncommitted"),
+                    "{format} {mutation}: {error:#}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn reused_immutable_entries_never_reuse_filesystem_verification() {

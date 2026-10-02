@@ -1,7 +1,7 @@
 //! Gated fast-forward integration. Creates no commits or tracker records.
 use anyhow::{bail, Context, Result};
 use atelier_app::{
-    base_policy, committed_snapshot, git_freshness as git, record_index::RecordIndex, review_gate,
+    base_policy, committed_snapshot, git_freshness as git, review_gate,
     storage_layout::StorageLayout,
 };
 use std::path::{Path, PathBuf};
@@ -51,8 +51,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let index = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        snapshot.require_clean(repo)?;
-        RecordIndex::load_structural(&layout.canonical_dir())?
+        snapshot.read_record_files(repo, true)?.0.into_index()?
     };
     let id = index
         .resolve_issue_ref(issue_ref)?

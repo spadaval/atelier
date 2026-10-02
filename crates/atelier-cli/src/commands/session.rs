@@ -220,13 +220,9 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         let captured = git::CheckoutRefs::capture(repo)?;
         let snapshot =
             atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &captured.head)?;
-        let paths = check_records(repo, &snapshot)?;
-        (
-            captured,
-            snapshot,
-            paths,
-            RecordIndex::load_structural(&layout.canonical_dir())?,
-        )
+        let (files, paths) = snapshot.read_record_files(repo, false)
+            .map_err(|error| anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry."))?;
+        (captured, snapshot, paths, files.into_index()?)
     };
     let head = &captured.head;
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
