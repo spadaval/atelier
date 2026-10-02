@@ -803,7 +803,7 @@ fn retired_review_cluster(
         return Ok(false);
     }
     let issue = read.issue_at(&edge.parent, &record.target)?;
-    let policy = crate::base_policy::from_ref(read.repo, &edge.parent)?.policy;
+    let policy = crate::base_policy::from_captured(read, &edge.parent)?.policy;
     if !policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)? {
         return Ok(false);
     }

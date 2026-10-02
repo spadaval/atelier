@@ -21,7 +21,7 @@ pub struct ReadContext<'a> {
     head: Option<String>,
     clean: Option<bool>,
     ranges: HashMap<(String, String), Arc<Vec<CommitEdge>>>,
-    ancestors: HashSet<(String, String)>,
+    graphs: HashMap<String, Arc<ParentGraph>>,
     objects: Option<ObjectReader>,
     edge_paths: HashMap<(String, String), Vec<PathBuf>>,
     rename: Option<Option<&'static str>>,
@@ -33,7 +33,7 @@ impl<'a> ReadContext<'a> {
             head: None,
             clean: None,
             ranges: HashMap::new(),
-            ancestors: HashSet::new(),
+            graphs: HashMap::new(),
             objects: None,
             edge_paths: HashMap::new(),
             rename: None,
@@ -75,10 +75,6 @@ impl<'a> ReadContext<'a> {
         let key = (pin.clone(), end.clone());
         if !self.ranges.contains_key(&key) {
             let edges = self.load_edges(&pin, &end)?;
-            self.ancestors.insert(key.clone());
-            for edge in &edges {
-                self.ancestors.insert((edge.commit.clone(), end.clone()));
-            }
             self.ranges.insert(key.clone(), Arc::new(edges));
         }
         Ok(Arc::clone(&self.ranges[&key]))
@@ -86,19 +82,48 @@ impl<'a> ReadContext<'a> {
     pub(crate) fn ancestor(&mut self, earlier: &str, later: &str) -> Result<bool> {
         let later = self.pinned(later)?;
         let earlier = self.pinned(earlier)?;
-        let key = (earlier.clone(), later.clone());
-        if self.ancestors.contains(&key) {
+        let Ok(later) = self.commit_id(&later) else {
+            return Ok(false);
+        };
+        let Ok(earlier) = self.commit_id(&earlier) else {
+            return Ok(false);
+        };
+        if earlier == later {
             return Ok(true);
         }
-        let valid = git_output(
-            self.repo,
-            &["merge-base", "--is-ancestor", &earlier, &later],
-        )
-        .is_ok();
-        if valid {
-            self.ancestors.insert(key);
+        Ok(self
+            .parent_graph(&later)?
+            .reachable(&later)
+            .contains(earlier.as_str()))
+    }
+    fn parent_graph(&mut self, end: &str) -> Result<Arc<ParentGraph>> {
+        let head = self.commit_id("HEAD")?;
+        for endpoint in [&head, end] {
+            if !self.graphs.contains_key(endpoint) {
+                let text = String::from_utf8(git_output(
+                    self.repo,
+                    &["rev-list", "--parents", endpoint],
+                )?)?;
+                let mut graph = ParentGraph {
+                    order: Vec::new(),
+                    parents: HashMap::new(),
+                };
+                for line in text.lines() {
+                    let mut parts = line.split_whitespace();
+                    let commit = parts.next().context("invalid Git parent graph")?.to_owned();
+                    graph.order.push(commit.clone());
+                    graph
+                        .parents
+                        .insert(commit, parts.map(str::to_owned).collect());
+                }
+                self.graphs.insert(endpoint.to_owned(), Arc::new(graph));
+            }
+            let graph = &self.graphs[endpoint];
+            if graph.parents.contains_key(end) {
+                return Ok(Arc::clone(graph));
+            }
         }
-        Ok(valid)
+        bail!("Git parent graph is missing its read endpoint")
     }
     fn object_spec(&mut self, spec: &str) -> Result<Option<&GitObject>> {
         if self.objects.is_none() {
@@ -128,7 +153,7 @@ impl<'a> ReadContext<'a> {
         }
         self.object_spec(&spec)
     }
-    fn commit_id(&mut self, commit: &str) -> Result<String> {
+    pub(crate) fn commit_id(&mut self, commit: &str) -> Result<String> {
         let commit = self.pinned(commit)?;
         let (oid, kind, _) = self.object_spec(&commit)?.context("Git commit missing")?;
         if kind != "commit" {
@@ -368,24 +393,58 @@ pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathB
     paths.dedup();
     Ok(paths)
 }
-/// Inspects all introduced commits, including side-branch edit/revert history.
-/// Merge results are compared to a parent containing the tested pin when possible:
-/// older parents must not reintroduce changes already present at the pin.
-pub fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
-    Ok(ReadContext::new(repo).edges(pin, "HEAD")?.as_ref().clone())
+struct ParentGraph {
+    order: Vec<String>,
+    parents: HashMap<String, Vec<String>>,
+}
+impl ParentGraph {
+    fn reachable(&self, end: &str) -> HashSet<&str> {
+        let mut found = HashSet::new();
+        let mut pending = vec![self
+            .parents
+            .get_key_value(end)
+            .expect("graph endpoint")
+            .0
+            .as_str()];
+        while let Some(commit) = pending.pop() {
+            if found.insert(commit) {
+                pending.extend(
+                    self.parents
+                        .get(commit)
+                        .into_iter()
+                        .flatten()
+                        .map(String::as_str),
+                );
+            }
+        }
+        found
+    }
 }
 impl ReadContext<'_> {
+    // All introduced commits include side branches; merges prefer a parent
+    // containing the tested pin, so older parents cannot reintroduce old work.
     fn load_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
-        let range = format!("{pin}..{end}");
-        let commits =
-            String::from_utf8(git_output(self.repo, &["rev-list", "--parents", &range])?)?;
-        let graph = commits
-            .lines()
-            .map(|line| line.split_whitespace().collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        if pin != end && !graph.iter().any(|parts| parts[1..].contains(&pin)) {
+        if pin == end {
+            return Ok(Vec::new());
+        }
+        let parents = self.parent_graph(end)?;
+        let included = parents.reachable(end);
+        if !included.contains(pin) {
             bail!("pin is not an ancestor of the read endpoint");
         }
+        let excluded = parents.reachable(pin);
+        let graph = parents
+            .order
+            .iter()
+            .filter(|commit| {
+                included.contains(commit.as_str()) && !excluded.contains(commit.as_str())
+            })
+            .map(|commit| {
+                std::iter::once(commit.as_str())
+                    .chain(parents.parents[commit].iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
         let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
         for parts in &graph {
             for parent in &parts[1..] {
@@ -565,6 +624,9 @@ pub fn is_record_path(path: &Path) -> bool {
 mod tests {
     use super::*;
     use std::fs;
+    fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
+        Ok(ReadContext::new(repo).edges(pin, "HEAD")?.as_ref().clone())
+    }
 
     fn repo(format: &str) -> tempfile::TempDir {
         let repo = tempfile::tempdir().unwrap();
@@ -890,6 +952,63 @@ mod tests {
             assert!(working_code_paths(repo.path())
                 .unwrap()
                 .contains(&PathBuf::from("code.rs")));
+        }
+    }
+    #[test]
+    fn endpoint_graph_matches_native_ancestry_for_roots_siblings_and_shallow_boundaries() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            let root = commit(repo.path(), "root");
+            let branch = String::from_utf8(
+                git_output(repo.path(), &["symbolic-ref", "--short", "HEAD"]).unwrap(),
+            )
+            .unwrap();
+            let middle = commit(repo.path(), "middle");
+            let head = commit(repo.path(), "head");
+            git_output(repo.path(), &["checkout", "-qb", "outside", &root]).unwrap();
+            let sibling = commit(repo.path(), "sibling");
+            git_output(repo.path(), &["checkout", branch.trim()]).unwrap();
+            let mut read = ReadContext::new(repo.path());
+            assert!(read.edges(&head, &head).unwrap().is_empty());
+            assert!(read.edges(&root, &root).unwrap().is_empty());
+            assert_eq!(read.edges(&root.to_uppercase(), &head).unwrap().len(), 2);
+            assert!(read.ancestor(&root.to_uppercase(), &head).unwrap());
+            assert!(!read.ancestor(&sibling, &head).unwrap());
+            assert!(read.edges(&sibling, &head).is_err());
+            assert!(read.edges(&"0".repeat(root.len()), &head).is_err());
+            assert_eq!(read.graphs.len(), 1);
+            assert_eq!(read.edges(&root, &sibling).unwrap().len(), 1);
+            assert_eq!(read.graphs.len(), 2);
+            for earlier in [&root, &middle, &head, &sibling] {
+                for later in [&root, &middle, &head, &sibling] {
+                    assert_eq!(
+                        read.ancestor(earlier, later).unwrap(),
+                        git_output(
+                            repo.path(),
+                            &["merge-base", "--is-ancestor", earlier, later]
+                        )
+                        .is_ok()
+                    );
+                }
+            }
+            let clone = tempfile::tempdir().unwrap();
+            let url = format!("file://{}", repo.path().display());
+            git_output(clone.path(), &["clone", "-q", "--depth=2", &url, "."]).unwrap();
+            // Keep the excluded root object present: topology must still honor
+            // the native shallow boundary rather than raw parent headers.
+            let bytes = git_output(repo.path(), &["cat-file", "commit", &root]).unwrap();
+            let written = git_input(
+                clone.path(),
+                &["hash-object", "-t", "commit", "-w", "--stdin"],
+                Some(&bytes),
+            )
+            .unwrap();
+            assert_eq!(String::from_utf8(written).unwrap().trim(), root);
+            let mut shallow = ReadContext::new(clone.path());
+            assert!(!shallow.ancestor(&root, &head).unwrap());
+            assert!(shallow.edges(&root, &head).is_err());
+            assert_eq!(shallow.edges(&middle, &head).unwrap().len(), 1);
+            assert!(shallow.parent_graph(&head).unwrap().parents[&middle].is_empty());
         }
     }
     #[test]

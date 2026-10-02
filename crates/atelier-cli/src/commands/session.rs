@@ -249,7 +249,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .transpose()?
         .flatten();
     let source = match &base_pin {
-        Some((_, commit)) => base_policy::from_ref(repo, commit)?,
+        Some((_, commit)) => base_policy::from_captured(&mut read, commit)?,
         None => base_policy::working(repo)?,
     };
     index.validate_policy(&source.policy, repo)?;
