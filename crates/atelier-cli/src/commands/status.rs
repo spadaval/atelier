@@ -21,7 +21,7 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
             } else {
                 view.work.active.len().to_string()
             },
-            view.current_missions.len(),
+            view.current_mission_count,
             view.work.ready.len(),
         );
         return Ok(());
@@ -49,7 +49,7 @@ fn print_status_view(view: &StatusView) {
     let summary_lines = vec![
         format!("Ready work:    {}", view.work.ready.len()),
         format!("Current work:  {current_work}"),
-        format!("Current missions: {}", view.current_missions.len()),
+        format!("Current missions: {}", view.current_mission_count),
     ];
 
     let active_rows = view

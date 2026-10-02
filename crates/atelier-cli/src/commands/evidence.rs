@@ -40,13 +40,6 @@ pub struct TargetMetadata<'a> {
     pub role: &'a str,
 }
 
-#[derive(Debug, Clone)]
-struct EvidenceMetadata<'a> {
-    agent_identity: Option<&'a str>,
-    residual_risks: Vec<String>,
-    follow_up_ids: Vec<String>,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct CaptureAssociation {
     repo_root: PathBuf,
@@ -80,16 +73,6 @@ struct CaptureTargetIdentity {
     record_type: String,
 }
 
-impl<'a> EvidenceMetadata<'a> {
-    fn from_producer(producer: Option<&'a str>) -> Self {
-        Self {
-            agent_identity: producer,
-            residual_risks: Vec::new(),
-            follow_up_ids: Vec::new(),
-        }
-    }
-}
-
 pub fn add_returning_id(
     index: &RecordIndex,
     state_dir: &Path,
@@ -104,7 +87,6 @@ pub fn add_returning_id(
     if let Some(target) = target.as_ref() {
         validate_record_ref(index, target.kind, target.id, target.role)?;
     }
-    let metadata = EvidenceMetadata::from_producer(producer);
     let data = EvidenceRecordData {
         commit: atelier_app::git_freshness::head_commit(
             state_dir
@@ -119,10 +101,10 @@ pub fn add_returning_id(
         uri: uri.map(str::to_string),
         producer: producer.map(str::to_string),
         proof_scope: None,
-        agent_identity: metadata.agent_identity.map(str::to_string),
+        agent_identity: producer.map(str::to_string),
         independence_level: None,
-        residual_risks: metadata.residual_risks,
-        follow_up_ids: metadata.follow_up_ids,
+        residual_risks: Vec::new(),
+        follow_up_ids: Vec::new(),
         exit_code: None,
         exit_status: None,
         success: None,
@@ -234,7 +216,6 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         .summary
         .map(str::to_string)
         .unwrap_or_else(|| command_display.clone());
-    let metadata = EvidenceMetadata::from_producer(options.producer);
     let body = command_capture_body(
         &summary,
         &command_display,
@@ -260,10 +241,10 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         uri: options.uri.map(str::to_string),
         producer: options.producer.map(str::to_string),
         proof_scope: None,
-        agent_identity: metadata.agent_identity.map(str::to_string),
+        agent_identity: options.producer.map(str::to_string),
         independence_level: None,
-        residual_risks: metadata.residual_risks,
-        follow_up_ids: metadata.follow_up_ids,
+        residual_risks: Vec::new(),
+        follow_up_ids: Vec::new(),
         exit_code,
         exit_status: Some(exit_status.clone()),
         success: Some(success),
