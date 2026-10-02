@@ -280,6 +280,14 @@ fn flagged_paths(
     verify_index: bool,
 ) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "--stage", "-v", "-z"])?;
+    let lookup = if verify_index {
+        entries
+            .iter()
+            .map(|(path, value)| (path.as_path(), value))
+            .collect::<std::collections::HashMap<_, _>>()
+    } else {
+        std::collections::HashMap::new()
+    };
     let mut indexed = HashSet::new();
     let mut flagged = BTreeSet::new();
     for entry in output
@@ -293,7 +301,7 @@ fn flagged_paths(
         let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
         let path = Path::new(path);
         if verify_index && canonical(path) {
-            if !entries.get(path).is_some_and(|(mode, hash)| {
+            if !lookup.get(path).is_some_and(|(mode, hash)| {
                 metadata
                     .split_whitespace()
                     .eq([mode.as_str(), hash.as_str(), "0"])
