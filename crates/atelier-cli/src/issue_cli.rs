@@ -130,12 +130,12 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 
         super::IssueCommands::Link { id, target, role } => {
             let (state_dir, index) = load_repository()?;
-            commands::relate::link_issue(&index, &state_dir, &id, &target, &role)
+            commands::relate::change_issue_link(&index, &state_dir, &id, &target, &role, false)
         }
 
         super::IssueCommands::Unlink { id, target, role } => {
             let (state_dir, index) = load_repository()?;
-            commands::relate::unlink_issue(&index, &state_dir, &id, &target, &role)
+            commands::relate::change_issue_link(&index, &state_dir, &id, &target, &role, true)
         }
     }
 }
