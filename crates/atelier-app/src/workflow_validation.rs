@@ -32,6 +32,14 @@ pub(crate) fn evaluate_with_freshness(
     request: ValidatorRequest<'_>,
     fresh: bool,
 ) -> Result<Vec<ValidatorResult>> {
+    let mut read = crate::git_freshness::ReadContext::new(request.repo_root);
+    evaluate_with_context(request, fresh, &mut read)
+}
+pub(crate) fn evaluate_with_context(
+    request: ValidatorRequest<'_>,
+    fresh: bool,
+    read: &mut crate::git_freshness::ReadContext<'_>,
+) -> Result<Vec<ValidatorResult>> {
     request.index.require_issue(request.issue_id)?;
     let mut results = Vec::new();
     for definition in request.validators {
@@ -39,7 +47,7 @@ pub(crate) fn evaluate_with_freshness(
             continue;
         }
         let started = Instant::now();
-        let (passed, reason, help) = evaluate_builtin(&request, definition, fresh)?;
+        let (passed, reason, help) = evaluate_builtin(&request, definition, fresh, read)?;
         results.push(ValidatorResult {
             validator: definition.builtin.clone(),
             passed,
@@ -55,6 +63,7 @@ fn evaluate_builtin(
     request: &ValidatorRequest<'_>,
     definition: &ValidatorDefinition,
     fresh: bool,
+    read: &mut crate::git_freshness::ReadContext<'_>,
 ) -> Result<(bool, String, Option<String>)> {
     let ValidatorRequest {
         index,
@@ -76,13 +85,9 @@ fn evaluate_builtin(
             }
         }
         "blockers.transitive_none_open" => transitive_blockers_none_open(index, policy, issue_id),
-        "evidence.attached" => evidence_attached(
-            index,
-            repo_root,
-            issue_id,
-            definition.params.as_ref(),
-            fresh,
-        ),
+        "evidence.attached" => {
+            evidence_attached(index, read, issue_id, definition.params.as_ref(), fresh)
+        }
         "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
         "shell.check" => {
@@ -94,6 +99,7 @@ fn evaluate_builtin(
                 .arg(command)
                 .current_dir(repo_root)
                 .output()?;
+            *read = crate::git_freshness::ReadContext::new(read.repo);
             let reason = format!(
                 "shell check {}: exit {:?}\n{}{}",
                 command,
@@ -114,7 +120,7 @@ fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Op
 
 fn evidence_attached(
     index: &RecordIndex,
-    repo_root: &Path,
+    read: &mut crate::git_freshness::ReadContext<'_>,
     issue_id: &str,
     params: Option<&ValidatorParams>,
     fresh: bool,
@@ -125,9 +131,7 @@ fn evidence_attached(
         }
         _ => (1, None),
     };
-    let gate = crate::evidence_freshness::issue_evidence_gate_status_with_freshness(
-        index, repo_root, issue_id, min_count, kind, fresh,
-    )?;
+    let gate = read.issue_gate_with_freshness(index, issue_id, min_count, kind, fresh)?;
     Ok((gate.passed, gate.reason, (!gate.passed).then(|| "Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`".to_string())))
 }
 
