@@ -1315,8 +1315,18 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
 
 #[test]
 fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
-    for mutation in ["rewrite", "delete", "edit_revert"] {
+    for (mutation, renames) in [
+        ("rewrite", None),
+        ("delete", None),
+        ("edit_revert", None),
+        ("rename", Some("true")),
+        ("rename", Some("copies")),
+        ("rename", Some("false")),
+    ] {
         let f = Fixture::new();
+        if let Some(value) = renames {
+            git(f.path(), &["config", "diff.renames", value]);
+        }
         git(f.path(), &["switch", "main"]);
         let id = ok(
             f.path(),
@@ -1356,6 +1366,16 @@ fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
         let original = fs::read_to_string(&path).unwrap();
         if mutation == "delete" {
             fs::remove_file(&path).unwrap();
+        } else if mutation == "rename" {
+            let renamed = f.path().join(".atelier/reviews/atelier-z999.md");
+            fs::rename(&path, &renamed).unwrap();
+            fs::write(
+                &renamed,
+                original
+                    .replace(&disposition, "atelier-z999")
+                    .replace("Reviewer", "Author"),
+            )
+            .unwrap();
         } else {
             fs::write(&path, original.replace("Reviewer", "Author")).unwrap();
         }

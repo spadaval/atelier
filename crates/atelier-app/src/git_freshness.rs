@@ -315,18 +315,35 @@ pub fn blob(repo: &Path, commit: &str, path: &Path) -> Result<String> {
     let spec = format!("{commit}:{}", path.display());
     String::from_utf8(git_output(repo, &["show", &spec])?).context("Git record blob is not UTF-8")
 }
-fn paths(bytes: Vec<u8>) -> Result<Vec<PathBuf>> {
-    bytes
-        .split(|byte| *byte == 0)
-        .filter(|part| !part.is_empty())
-        .map(|part| Ok(PathBuf::from(std::str::from_utf8(part)?)))
-        .collect()
+fn status_paths<'a>(
+    status: &[u8],
+    parts: &mut impl Iterator<Item = &'a [u8]>,
+    paths: &mut Vec<PathBuf>,
+) -> Result<()> {
+    let (&kind, score) = status.split_first().context("missing Git diff status")?;
+    if !b"ACDMRTUXB".contains(&kind) || !score.iter().all(u8::is_ascii_digit) {
+        bail!("invalid Git diff status");
+    }
+    // Rename/copy sources are also affected paths: deletions must stay visible.
+    for _ in 0..if matches!(kind, b'R' | b'C') { 2 } else { 1 } {
+        let path = parts
+            .next()
+            .filter(|path| !path.is_empty())
+            .context("missing Git diff path")?;
+        paths.push(PathBuf::from(std::str::from_utf8(path)?));
+    }
+    Ok(())
 }
 pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathBuf>> {
-    paths(git_output(
-        repo,
-        &["diff", "--name-only", "-z", before, after, "--"],
-    )?)
+    let output = git_output(repo, &["diff", "--name-status", "-z", before, after, "--"])?;
+    let mut parts = output.split(|byte| *byte == 0);
+    let mut paths = Vec::new();
+    while let Some(status) = parts.next().filter(|status| !status.is_empty()) {
+        status_paths(status, &mut parts, &mut paths)?;
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
 }
 /// Inspects all introduced commits, including side-branch edit/revert history.
 /// Merge results are compared to a parent containing the tested pin when possible:
@@ -429,7 +446,7 @@ impl ReadContext<'_> {
                 "--stdin",
                 "-r",
                 "-z",
-                "--name-only",
+                "--name-status",
                 "--format=%x00%H",
                 "--always",
             ];
@@ -442,16 +459,19 @@ impl ReadContext<'_> {
                 }
                 let mut first = true;
                 while parts.peek().is_some_and(|part| !part.is_empty()) {
-                    let path = parts.next().expect("peeked path");
-                    let path = if first {
-                        path.strip_prefix(b"\n")
+                    let status = parts.next().expect("peeked status");
+                    let status = if first {
+                        status
+                            .strip_prefix(b"\n")
                             .context("missing history diff separator")?
                     } else {
-                        path
+                        status
                     };
                     first = false;
-                    edge.paths.push(PathBuf::from(std::str::from_utf8(path)?));
+                    status_paths(status, &mut parts, &mut edge.paths)?;
                 }
+                edge.paths.sort();
+                edge.paths.dedup();
             }
             if parts.any(|part| !part.is_empty()) {
                 bail!("Git returned unexpected history diff records");
@@ -598,6 +618,10 @@ mod tests {
                 let edges = commit_edges(repo.path(), &pin).unwrap();
                 assert_eq!(edges.len(), 3);
                 for edge in edges {
+                    if edge.parent == pin {
+                        assert!(edge.paths.contains(&PathBuf::from("source")));
+                        assert!(edge.paths.contains(&PathBuf::from("renamed\n名 file")));
+                    }
                     assert_eq!(
                         edge.paths,
                         changed_paths(repo.path(), &edge.parent, &edge.commit).unwrap(),
