@@ -51,7 +51,7 @@ fn prime_text() -> Result<String> {
     // A failed capture leaves the original queries at their original error points.
     let captured = git::CheckoutRefs::capture(repo).ok();
     let branch = match &captured {
-        Some(captured) => captured.branch.clone(),
+        Some(captured) => captured.branch.as_ref().map(|name| name.trim_end().into()),
         None => git::current_branch(repo)?,
     }
     .unwrap_or_else(|| "detached HEAD".into());
