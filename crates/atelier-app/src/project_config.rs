@@ -17,8 +17,10 @@ pub struct ProjectConfig {
     pub prune: PruneConfig,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields, expecting = "struct RawIssueLinkConfig")]
 pub struct IssueLinkConfig {
+    #[serde(default)]
     pub custom_context_types: Vec<String>,
 }
 
@@ -41,7 +43,7 @@ struct RawProjectConfig {
     project_slug: String,
     paths: RawProjectPaths,
     #[serde(default)]
-    issue_links: Option<RawIssueLinkConfig>,
+    issue_links: Option<IssueLinkConfig>,
     #[serde(default)]
     prune: Option<RawPruneConfig>,
 }
@@ -50,13 +52,6 @@ struct RawProjectConfig {
 #[serde(deny_unknown_fields)]
 struct RawProjectPaths {
     state_root: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawIssueLinkConfig {
-    #[serde(default)]
-    custom_context_types: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,23 +126,16 @@ fn parse_prune_config(raw: Option<RawPruneConfig>, config_path: &Path) -> Result
 }
 
 fn parse_issue_link_config(
-    raw: Option<RawIssueLinkConfig>,
+    raw: Option<IssueLinkConfig>,
     config_path: &Path,
 ) -> Result<IssueLinkConfig> {
-    let Some(raw) = raw else {
-        return Ok(IssueLinkConfig {
-            custom_context_types: Vec::new(),
-        });
-    };
-    let mut custom_context_types = raw.custom_context_types;
-    custom_context_types.sort();
-    custom_context_types.dedup();
-    for relation_type in &custom_context_types {
+    let mut config = raw.unwrap_or_default();
+    config.custom_context_types.sort();
+    config.custom_context_types.dedup();
+    for relation_type in &config.custom_context_types {
         validate_custom_issue_link_type(relation_type, config_path)?;
     }
-    Ok(IssueLinkConfig {
-        custom_context_types,
-    })
+    Ok(config)
 }
 
 fn validate_custom_issue_link_type(relation_type: &str, config_path: &Path) -> Result<()> {
@@ -206,6 +194,38 @@ project_slug = "atelier"
 [paths]
 state_root = ".atelier"
 "#
+    }
+
+    #[test]
+    fn issue_link_defaults_normalize_and_keep_strict_parse_diagnostics() {
+        for suffix in [
+            "",
+            "\n[issue_links]\n",
+            "\n[issue_links]\ncustom_context_types = []\n",
+        ] {
+            let config =
+                parse_project_config(&format!("{}{suffix}", valid_config()), &path()).unwrap();
+            assert!(config.issue_links.custom_context_types.is_empty());
+        }
+        let config = parse_project_config(
+            &format!(
+                "{}\n[issue_links]\ncustom_context_types = [\"zz\", \"aa\", \"zz\"]\n",
+                valid_config()
+            ),
+            &path(),
+        )
+        .unwrap();
+        assert_eq!(config.issue_links.custom_context_types, ["aa", "zz"]);
+        let text = valid_config().replace("[paths]", "issue_links = \"bad\"\n\n[paths]");
+        let error = parse_project_config(&text, &path())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("expected struct RawIssueLinkConfig"));
+        let text = format!("{}\n[issue_links]\nunknown = true\n", valid_config());
+        let error = parse_project_config(&text, &path())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unknown field `unknown`, expected `custom_context_types`"));
     }
 
     #[test]
