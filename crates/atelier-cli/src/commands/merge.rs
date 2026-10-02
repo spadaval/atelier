@@ -41,17 +41,16 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
 pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    clean(repo)?;
     let head = git::head_commit(repo)?;
     let source_ref = text(repo, &["symbolic-ref", "--quiet", "HEAD"])?;
     let branch = source_ref
         .strip_prefix("refs/heads/")
         .context("merge requires a local work branch")?;
+    let snapshot = committed_snapshot::CommittedSnapshot::new(repo, &head)?;
     let index = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        committed_snapshot::require_committed(repo, &head)?;
-        committed_snapshot::require_flagged_clean(repo, &head)?;
+        snapshot.require_clean(repo)?;
         RecordIndex::load_structural(&layout.canonical_dir())?
     };
     let id = index
@@ -95,10 +94,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     review_gate::append_only(&mut read, &base_head)?;
     let base_tree = base_checkout(repo, base)?;
+    let base_snapshot = base_tree
+        .as_ref()
+        .map(|path| committed_snapshot::CommittedSnapshot::new(path, &base_head))
+        .transpose()?;
     if let Some(path) = &base_tree {
-        clean(path)?;
-        committed_snapshot::require_committed(path, &base_head)?;
-        committed_snapshot::require_flagged_clean(path, &base_head)?;
+        base_snapshot
+            .as_ref()
+            .expect("base snapshot")
+            .require_clean(path)?;
     }
     let nodes = review_gate::evaluate(&index, &mut read, &source.policy, owner, &base_head)?;
     if json {
@@ -131,9 +135,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         .map(|path| atelier_records::mutation_lock::CanonicalMutationLock::exclusive(path))
         .collect::<Result<Vec<_>>>()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
-    clean(repo)?;
-    committed_snapshot::require_committed(repo, &head)?;
-    committed_snapshot::require_flagged_clean(repo, &head)?;
+    snapshot.require_clean(repo)?;
     if git::head_commit(repo)? != head
         || text(repo, &["symbolic-ref", "--quiet", "HEAD"])? != source_ref
         || text(repo, &["rev-parse", &format!("refs/heads/{branch}")])? != head
@@ -145,9 +147,10 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         bail!("base checkout ownership changed while checks ran");
     }
     if let Some(path) = &base_tree {
-        clean(path)?;
-        committed_snapshot::require_committed(path, &base_head)?;
-        committed_snapshot::require_flagged_clean(path, &base_head)?;
+        base_snapshot
+            .as_ref()
+            .expect("base snapshot")
+            .require_clean(path)?;
         if git::head_commit(path)? != base_head
             || text(path, &["symbolic-ref", "--quiet", "HEAD"])? != base_ref
         {

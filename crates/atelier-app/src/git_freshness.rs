@@ -516,6 +516,16 @@ pub(crate) fn working_code_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     working_paths_matching(repo, |path| !is_record_path(path))
 }
 fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Result<Vec<PathBuf>> {
+    let mut changed = working_status_paths(repo)?;
+    changed.retain(|path| include(path));
+    changed.extend(crate::committed_snapshot::flagged_modified_paths_matching(
+        repo, "HEAD", include,
+    )?);
+    changed.sort();
+    changed.dedup();
+    Ok(changed)
+}
+pub(crate) fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     let status = git_output(
         repo,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
@@ -535,12 +545,6 @@ fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Resul
             )?));
         }
     }
-    changed.retain(|path| include(path));
-    changed.extend(crate::committed_snapshot::flagged_modified_paths_matching(
-        repo, "HEAD", include,
-    )?);
-    changed.sort();
-    changed.dedup();
     Ok(changed)
 }
 /// Record-only paths; policy and project config are intentionally excluded.

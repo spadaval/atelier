@@ -35,8 +35,11 @@ fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<O
         ),
     }
 }
-fn check_records(repo: &Path, commit: &str) -> Result<()> {
-    atelier_app::committed_snapshot::require_committed(repo, commit)
+fn check_records(
+    repo: &Path,
+    snapshot: &atelier_app::committed_snapshot::CommittedSnapshot,
+) -> Result<Vec<std::path::PathBuf>> {
+    snapshot.verified_working_paths(repo)
         .map_err(|error| anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry."))
 }
 fn prime_text() -> Result<String> {
@@ -191,14 +194,19 @@ fn prime_text() -> Result<String> {
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let (head, index) = {
+    let (head, snapshot, initial_paths, index) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         let head = git_freshness::head_commit(repo)?;
-        check_records(repo, &head)?;
-        (head, RecordIndex::load_structural(&layout.canonical_dir())?)
+        let snapshot = atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &head)?;
+        let paths = check_records(repo, &snapshot)?;
+        (
+            head,
+            snapshot,
+            paths,
+            RecordIndex::load_structural(&layout.canonical_dir())?,
+        )
     };
-    let initial_paths = git_freshness::working_paths(repo)?;
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
     review_gate::append_only_history(&mut read)?;
     let branch = git::current_branch(repo)?.unwrap_or_default();
@@ -342,7 +350,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     // result against cooperative writers and child commands that changed state.
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&layout.canonical_dir())?;
-    check_records(repo, &head)?;
+    let final_paths = check_records(repo, &snapshot)?;
     if base_pin.as_ref().is_some_and(|(reference, commit)| {
         git::resolve(repo, reference).map_or(true, |current| current != *commit)
     }) {
@@ -350,7 +358,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     }
     if git_freshness::head_commit(repo)? != head
         || git::current_branch(repo)?.unwrap_or_default() != branch
-        || git_freshness::working_paths(repo)? != initial_paths
+        || final_paths != initial_paths
     {
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");
     }
