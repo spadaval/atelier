@@ -25,6 +25,7 @@ pub struct ReadContext<'a> {
     objects: Option<ObjectReader>,
     edge_paths: HashMap<(String, String), Vec<PathBuf>>,
     rename: Option<Option<&'static str>>,
+    authors: HashMap<String, Vec<u8>>,
 }
 impl<'a> ReadContext<'a> {
     pub fn new(repo: &'a Path) -> Self {
@@ -37,6 +38,7 @@ impl<'a> ReadContext<'a> {
             objects: None,
             edge_paths: HashMap::new(),
             rename: None,
+            authors: HashMap::new(),
         }
     }
     pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[PathBuf]) -> Self {
@@ -95,6 +97,40 @@ impl<'a> ReadContext<'a> {
             .parent_graph(&later)?
             .reachable(&later)
             .contains(earlier.as_str()))
+    }
+    pub(crate) fn first_parent(&mut self, commit: &str) -> Result<Option<String>> {
+        let commit = self.commit_id(commit)?;
+        Ok(self.parent_graph(&commit)?.parents[&commit]
+            .first()
+            .cloned())
+    }
+    pub(crate) fn author_names(&mut self, commit: &str) -> Result<String> {
+        let commit = self.commit_id(commit)?;
+        if !self.authors.contains_key(&commit) {
+            let names = git_output(self.repo, &["show", "-s", "--format=%an%n%ae", &commit])?;
+            self.authors.insert(commit.clone(), names);
+        }
+        Ok(String::from_utf8(self.authors[&commit].clone())?)
+    }
+    /// Warm only explicitly requested ranges; unavailable optional proof pins
+    /// remain for their consumer to classify. Consumers retain required queries
+    /// after a failed prefetch. All mutable fences remain separate.
+    pub fn prefetch_ranges(
+        &mut self,
+        ranges: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<()> {
+        let mut edges = Vec::new();
+        for (pin, end) in ranges {
+            let selected = (|| {
+                let pin = self.commit_id(&pin)?;
+                let end = self.commit_id(&end)?;
+                self.select_edges(&pin, &end)
+            })();
+            if let Ok(selected) = selected {
+                edges.extend(selected);
+            }
+        }
+        self.populate_edges(&mut edges)
     }
     fn parent_graph(&mut self, end: &str) -> Result<Arc<ParentGraph>> {
         let head = self.commit_id("HEAD")?;
@@ -424,6 +460,11 @@ impl ReadContext<'_> {
     // All introduced commits include side branches; merges prefer a parent
     // containing the tested pin, so older parents cannot reintroduce old work.
     fn load_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
+        let mut edges = self.select_edges(pin, end)?;
+        self.populate_edges(&mut edges)?;
+        Ok(edges)
+    }
+    fn select_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
         if pin == end {
             return Ok(Vec::new());
         }
@@ -474,6 +515,9 @@ impl ReadContext<'_> {
                 });
             }
         }
+        Ok(edges)
+    }
+    fn populate_edges(&mut self, edges: &mut [CommitEdge]) -> Result<()> {
         let mut missing = edges
             .iter()
             .filter(|edge| {
@@ -481,7 +525,9 @@ impl ReadContext<'_> {
                     .edge_paths
                     .contains_key(&(edge.parent.clone(), edge.commit.clone()))
             })
-            .cloned()
+            .map(|edge| ((edge.parent.clone(), edge.commit.clone()), edge.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .into_values()
             .collect::<Vec<_>>();
         if !missing.is_empty() {
             let input = missing
@@ -528,16 +574,19 @@ impl ReadContext<'_> {
                 "-r",
                 "-z",
                 "--name-status",
-                "--format=%x00%H",
+                "--format=%x00%H%x00%an%n%ae",
                 "--always",
             ];
             args.extend(rename);
             let output = git_input(self.repo, &args, Some(input.as_bytes()))?;
+            let mut authors = Vec::new();
             let mut parts = output.split(|byte| *byte == 0).peekable();
             for edge in &mut missing {
                 if parts.next() != Some(&b""[..]) || parts.next() != Some(edge.commit.as_bytes()) {
                     bail!("Git returned an incomplete history diff batch");
                 }
+                let names = parts.next().context("missing history author metadata")?;
+                authors.push((edge.commit.clone(), names.to_vec()));
                 let mut first = true;
                 while parts.peek().is_some_and(|part| !part.is_empty()) {
                     let status = parts.next().expect("peeked status");
@@ -557,15 +606,16 @@ impl ReadContext<'_> {
             if parts.any(|part| !part.is_empty()) {
                 bail!("Git returned unexpected history diff records");
             }
+            self.authors.extend(authors);
         }
         for edge in missing {
             self.edge_paths
                 .insert((edge.parent, edge.commit), edge.paths);
         }
-        for edge in &mut edges {
+        for edge in edges {
             edge.paths = self.edge_paths[&(edge.parent.clone(), edge.commit.clone())].clone();
         }
-        Ok(edges)
+        Ok(())
     }
 }
 pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
@@ -648,6 +698,160 @@ mod tests {
         git_output(repo, &["commit", "--allow-empty", "-qm", message]).unwrap();
         head_commit(repo).unwrap()
     }
+    #[test]
+    fn prefetched_union_keeps_exact_ranges_and_optional_bad_pins_lazy() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            fs::write(repo.path().join("first"), "pin").unwrap();
+            let pin = commit(repo.path(), "pin");
+            fs::write(repo.path().join("first"), "second").unwrap();
+            let middle = commit(repo.path(), "middle");
+            fs::write(repo.path().join("last"), "last").unwrap();
+            let head = commit(repo.path(), "head");
+            git_output(repo.path(), &["checkout", "-qb", "sibling", &pin]).unwrap();
+            let sibling = commit(repo.path(), "outside endpoint");
+            git_output(repo.path(), &["checkout", "-q", "master"]).unwrap();
+            let mut read = ReadContext::new(repo.path());
+            read.prefetch_ranges([
+                (pin.clone(), head.clone()),
+                (middle.clone(), head.clone()),
+                (sibling.clone(), head.clone()),
+                ("0".repeat(pin.len()), head.clone()),
+                ("bad pin".into(), head.clone()),
+                (pin.clone(), middle.clone()),
+            ])
+            .unwrap();
+            let count = read.edge_paths.len();
+            for (start, end) in [(&pin, &head), (&middle, &head), (&pin, &middle)] {
+                let expected = ReadContext::new(repo.path()).edges(start, end).unwrap();
+                let actual = read.edges(start, end).unwrap();
+                assert_eq!(
+                    actual
+                        .iter()
+                        .map(|e| (&e.parent, &e.commit, &e.paths))
+                        .collect::<Vec<_>>(),
+                    expected
+                        .iter()
+                        .map(|e| (&e.parent, &e.commit, &e.paths))
+                        .collect::<Vec<_>>()
+                );
+            }
+            assert_eq!(count, read.edge_paths.len());
+            assert!(read.edges(&sibling, &head).is_err());
+            assert!(read.edges(&"0".repeat(pin.len()), &head).is_err());
+        }
+    }
+
+    #[test]
+    fn native_batch_author_fields_match_show_encoding_and_unusual_identities() {
+        let repo = repo("sha1");
+        let pin = commit(repo.path(), "pin");
+        for (identity, encoding) in [
+            (
+                b"Ren\xc3\xa9 \xe5\x90\x8d <name+tag@example.test>".as_slice(),
+                "UTF-8",
+            ),
+            (b" spaces  <addr@example.test>".as_slice(), "UTF-8"),
+            (b"Ren\xe9 <latin@example.test>".as_slice(), "ISO-8859-1"),
+            (b"line\nname <mail@example.test>".as_slice(), "UTF-8"),
+            (b"null\0name <mail@example.test>".as_slice(), "UTF-8"),
+        ] {
+            let tree = String::from_utf8(
+                git_output(repo.path(), &["rev-parse", &format!("{pin}^{{tree}}")]).unwrap(),
+            )
+            .unwrap();
+            let mut object = format!("tree {}\nparent {pin}\nauthor ", tree.trim()).into_bytes();
+            object.extend_from_slice(identity);
+            object.extend_from_slice(format!(" 1600000000 +0000\ncommitter Author <a@example.test> 1600000000 +0000\nencoding {encoding}\n\nmessage\n").as_bytes());
+            let oid = String::from_utf8(
+                git_input(
+                    repo.path(),
+                    &[
+                        "hash-object",
+                        "--literally",
+                        "-w",
+                        "-t",
+                        "commit",
+                        "--stdin",
+                    ],
+                    Some(&object),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let oid = oid.trim();
+            git_output(repo.path(), &["update-ref", "refs/heads/master", oid]).unwrap();
+            for output_encoding in ["UTF-8", "ISO-8859-1"] {
+                git_output(
+                    repo.path(),
+                    &["config", "i18n.logOutputEncoding", output_encoding],
+                )
+                .unwrap();
+                let expected =
+                    git_output(repo.path(), &["show", "-s", "--format=%an%n%ae", oid]).unwrap();
+                let mut read = ReadContext::new(repo.path());
+                read.prefetch_ranges([(pin.clone(), oid.into())]).unwrap();
+                let cached = &read.authors[oid];
+                assert_eq!(
+                    cached.split(|b| *b == b'\n').collect::<Vec<_>>(),
+                    expected
+                        .strip_suffix(b"\n")
+                        .unwrap()
+                        .split(|b| *b == b'\n')
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    read.author_names(oid).is_ok(),
+                    String::from_utf8(expected).is_ok()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn captured_first_parent_matches_native_roots_merges_shallow_and_grafts() {
+        let repo = repo("sha1");
+        let root = commit(repo.path(), "root");
+        let middle = commit(repo.path(), "middle");
+        git_output(repo.path(), &["checkout", "-qb", "side", &root]).unwrap();
+        commit(repo.path(), "side");
+        git_output(repo.path(), &["checkout", "-q", "master"]).unwrap();
+        git_output(repo.path(), &["merge", "--no-ff", "-qm", "merge", "side"]).unwrap();
+        let head = head_commit(repo.path()).unwrap();
+        let compare = |path: &Path, ids: &[String]| {
+            for oid in ids {
+                let expected = git_output(
+                    path,
+                    &["rev-parse", "--verify", &format!("{oid}^{{commit}}^1")],
+                )
+                .ok()
+                .map(|b| String::from_utf8(b).unwrap().trim().to_owned());
+                assert_eq!(ReadContext::new(path).first_parent(oid).unwrap(), expected);
+            }
+        };
+        compare(repo.path(), &[root.clone(), middle.clone(), head.clone()]);
+        fs::write(repo.path().join(".git/shallow"), format!("{head}\n")).unwrap();
+        assert!(git_output(repo.path(), &["cat-file", "-e", &middle]).is_ok());
+        compare(repo.path(), std::slice::from_ref(&head));
+        let clone = tempfile::tempdir().unwrap();
+        git_output(
+            repo.path(),
+            &[
+                "clone",
+                "-q",
+                "--depth=1",
+                &format!("file://{}", repo.path().display()),
+                clone.path().to_str().unwrap(),
+            ],
+        )
+        .unwrap();
+        assert!(git_output(clone.path(), &["cat-file", "-e", &middle]).is_err());
+        compare(clone.path(), std::slice::from_ref(&head));
+        fs::remove_file(repo.path().join(".git/shallow")).unwrap();
+        fs::write(repo.path().join(".git/info/grafts"), format!("{middle}\n")).unwrap();
+        compare(repo.path(), &[middle, head]);
+    }
+
     #[test]
     fn batched_edges_match_git_diff_for_rename_configuration_and_weird_paths() {
         let repo = repo("sha1");
@@ -754,12 +958,37 @@ mod tests {
         fs::write(repo.path().join("base"), "changed").unwrap();
         commit(repo.path(), "side change");
         fs::write(repo.path().join("base"), "base").unwrap();
-        commit(repo.path(), "side revert");
+        let side_pin = commit(repo.path(), "side revert");
         git_output(repo.path(), &["checkout", "-qb", "tested", &base]).unwrap();
         fs::write(repo.path().join("proof"), "tested").unwrap();
         let pin = commit(repo.path(), "tested pin");
         git_output(repo.path(), &["merge", "--no-ff", "-qm", "merge", "side"]).unwrap();
         let merge = head_commit(repo.path()).unwrap();
+        let mut union = ReadContext::new(repo.path());
+        union
+            .prefetch_ranges([
+                (base.clone(), merge.clone()),
+                (pin.clone(), merge.clone()),
+                (side_pin.clone(), merge.clone()),
+            ])
+            .unwrap();
+        for (start, expected_parent) in [(&pin, &pin), (&side_pin, &side_pin)] {
+            let selected = union.edges(start, &merge).unwrap();
+            assert_eq!(
+                &selected
+                    .iter()
+                    .find(|edge| edge.commit == merge)
+                    .unwrap()
+                    .parent,
+                expected_parent
+            );
+            for edge in selected.iter() {
+                assert_eq!(
+                    edge.paths,
+                    changed_paths(repo.path(), &edge.parent, &edge.commit).unwrap()
+                );
+            }
+        }
         let edges = commit_edges(repo.path(), &pin).unwrap();
         assert_eq!(edges.len(), 3);
         assert_eq!(

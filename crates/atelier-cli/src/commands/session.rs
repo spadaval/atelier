@@ -129,7 +129,7 @@ fn prime_text() -> Result<String> {
         evidence_records.sort_by_key(|record| {
             std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
         });
-        for evidence in evidence_records
+        let evidence_records = evidence_records
             .into_iter()
             .filter(|evidence| {
                 index
@@ -141,7 +141,13 @@ fn prime_text() -> Result<String> {
                     })
             })
             .take(8)
-        {
+            .collect::<Vec<_>>();
+        let _ = proof.prefetch_ranges(
+            evidence_records
+                .iter()
+                .map(|record| (record.data.commit.clone(), head.clone())),
+        );
+        for evidence in evidence_records {
             let targets = index
                 .list_record_links("evidence", &evidence.header.id)?
                 .into_iter()

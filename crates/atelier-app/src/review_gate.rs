@@ -161,13 +161,9 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     let Some(first) = history.lines().next() else {
         return Ok(());
     };
-    let parent = git::git_output(
-        read.repo,
-        &["rev-parse", "--verify", &format!("{first}^{{commit}}^1")],
-    );
-    let pin = match parent {
-        Ok(bytes) => String::from_utf8(bytes)?.trim().to_owned(),
-        Err(_) => {
+    let pin = match read.first_parent(first)? {
+        Some(parent) => parent,
+        None => {
             let tree = git::git_output(
                 read.repo,
                 &["ls-tree", "-rz", first, "--", ".atelier/reviews/"],
@@ -320,6 +316,54 @@ fn evaluate_scope(
         })
         .collect::<BTreeSet<_>>();
     let applicable = if complete { &ids } else { &claimed };
+    let mut approval_targets = BTreeSet::from([owner.to_owned()]);
+    if !complete {
+        approval_targets.extend(claimed.iter().cloned());
+        approval_targets.extend(
+            claimed
+                .iter()
+                .filter_map(|id| index.get_issue(id)?.parent_id),
+        );
+    }
+    if !historical {
+        let mut ranges = Vec::new();
+        if !global {
+            ranges.push((base_commit.to_owned(), "HEAD".into()));
+        }
+        for id in claimed.iter().filter(|id| {
+            index
+                .get_issue(id)
+                .is_some_and(|issue| issue.status != "superseded")
+        }) {
+            for link in index.list_record_links("issue", id)? {
+                if link.relation_type == "validates" {
+                    let evidence_id = if link.source_kind == "evidence" {
+                        &link.source_id
+                    } else {
+                        &link.target_id
+                    };
+                    if let Some(record) = index.evidence(evidence_id) {
+                        if record.data.result == atelier_core::EvidenceResult::Pass {
+                            ranges.push((record.data.commit.clone(), "HEAD".into()));
+                        }
+                    }
+                }
+            }
+        }
+        ranges.extend(
+            index
+                .reviews()
+                .filter(|record| {
+                    approval_targets.contains(&record.target)
+                        && matches!(
+                            record.event,
+                            ReviewEvent::Approval | ReviewEvent::TrivialExemption
+                        )
+                })
+                .map(|record| (record.commit.clone(), "HEAD".into())),
+        );
+        let _ = read.prefetch_ranges(ranges);
+    }
     let authors = if global {
         BTreeSet::new()
     } else {
@@ -399,16 +443,7 @@ fn evaluate_scope(
     }
     let candidates = index
         .reviews()
-        .filter(|record| {
-            record.target == owner
-                || (!complete
-                    && (claimed.contains(&record.target)
-                        || claimed.iter().any(|id| {
-                            index.get_issue(id).is_some_and(|issue| {
-                                issue.parent_id.as_deref() == Some(&record.target)
-                            })
-                        })))
-        })
+        .filter(|record| approval_targets.contains(&record.target))
         .filter(|record| {
             matches!(
                 record.event,
@@ -665,10 +700,7 @@ fn add_author(
     commit: &str,
     authors: &mut BTreeSet<String>,
 ) -> Result<()> {
-    let names = String::from_utf8(git::git_output(
-        read.repo,
-        &["show", "-s", "--format=%an%n%ae", commit],
-    )?)?;
+    let names = read.author_names(commit)?;
     for identity in names.lines() {
         authors.insert(normalize(identity));
     }
@@ -751,13 +783,9 @@ fn original_independent(
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
     });
     let authors = if let Some(origin) = branch_start {
-        let parent = git::git_output(
-            read.repo,
-            &["rev-parse", "--verify", &format!("{origin}^{{commit}}^1")],
-        );
-        match parent {
-            Ok(bytes) => author_identities_to(read, String::from_utf8(bytes)?.trim(), &ids, event)?,
-            Err(_) => {
+        match read.first_parent(origin)? {
+            Some(parent) => author_identities_to(read, &parent, &ids, event)?,
+            None => {
                 let mut authors = author_identities_to(read, origin, &ids, event)?;
                 add_author(read, origin, &mut authors)?;
                 authors
