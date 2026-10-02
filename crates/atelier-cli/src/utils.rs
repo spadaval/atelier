@@ -1,8 +1,3 @@
-/// Format a display ID for output.
-pub fn format_issue_id(id: &str) -> String {
-    id.to_string()
-}
-
 /// Truncate a string to a maximum number of characters, adding "..." if truncated.
 /// Handles Unicode correctly by counting characters, not bytes.
 pub fn truncate(s: &str, max_chars: usize) -> String {

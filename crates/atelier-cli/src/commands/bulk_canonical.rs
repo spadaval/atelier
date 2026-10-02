@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
-use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -17,15 +16,12 @@ pub(crate) fn canonical_tree_fingerprint(state_dir: &Path) -> Result<String> {
     }
     let mut hasher = Sha256::new();
     hash_directory(state_dir, state_dir, &mut hasher)?;
-    Ok(format!("sha256:{}", lower_hex(&hasher.finalize())))
-}
-
-fn lower_hex(bytes: &[u8]) -> String {
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    encoded
+    let digest = hasher.finalize();
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok(format!("sha256:{encoded}"))
 }
 
 fn hash_directory(root: &Path, directory: &Path, hasher: &mut Sha256) -> Result<()> {
@@ -133,6 +129,34 @@ pub(crate) fn test_pause_after_snapshot() -> Result<()> {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn sha256_byte_iterator_preserves_all_bytes_and_leading_zeroes() {
+        use std::fmt::Write as _;
+        for first in (0..=224u8).step_by(32) {
+            let bytes = (first..=first + 31).collect::<Vec<_>>();
+            let encoded = bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let mut previous = String::new();
+            for byte in bytes {
+                write!(&mut previous, "{byte:02x}").unwrap();
+            }
+            assert_eq!(encoded, previous);
+            assert_eq!(encoded.len(), 64);
+            assert!(encoded
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        }
+        let zero = sha2::digest::Output::<Sha256>::default();
+        assert_eq!(
+            zero.iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+            "0".repeat(64)
+        );
+    }
 
     #[test]
     fn canonical_tree_cas_detects_noncooperative_drift_without_modifying_live_bytes() {

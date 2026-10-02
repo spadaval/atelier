@@ -12,7 +12,6 @@ use crate::human_output::{
     render_lines_section, render_metadata, render_text_section, DisplayRole, FooterAction,
     IssueListPanel, IssueListRow, RenderContext,
 };
-use crate::utils::format_issue_id;
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
 use atelier_app::objective_graph::issue_blocks_work;
@@ -210,7 +209,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                 .map(|issue| {
                     format!(
                         "  updated {} [{}] {} - {}",
-                        format_issue_id(&issue.id),
+                        issue.id,
                         issue.classification.label(),
                         issue.priority,
                         issue.title
@@ -238,11 +237,7 @@ fn render_issue_link_section(
         let other = index.require_issue(&relation.id)?;
         rows.push(format!(
             "{} {} [{}] {} - {}",
-            relation.relation_type,
-            format_issue_id(&other.id),
-            other.status,
-            other.priority,
-            other.title
+            relation.relation_type, other.id, other.status, other.priority, other.title
         ));
     }
     rows.sort();
@@ -309,10 +304,7 @@ fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> 
             let parent = index.require_issue(&parent_id)?;
             format!(
                 "Parent: {} [{}] {} - {}",
-                format_issue_id(&parent.id),
-                parent.status,
-                parent.priority,
-                parent.title
+                parent.id, parent.status, parent.priority, parent.title
             )
         }
         None => "Parent: (none)".to_string(),
@@ -400,7 +392,7 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             let (subissue, classified) = &classified_subissues[index];
             IssueListRow {
                 role: DisplayRole::for_work(classified.classification.label()),
-                id: format_issue_id(&subissue.id),
+                id: subissue.id.clone(),
                 status: Some(classified.classification.label().to_string()),
                 priority: subissue.priority.clone(),
                 title: subissue.title.clone(),
@@ -862,7 +854,7 @@ pub fn update_lifecycle(
         println!("Assignee: {assignee}");
     }
     if let Some(parent) = parent_id {
-        println!("Parent:   {}", format_issue_id(&parent));
+        println!("Parent:   {}", parent);
     }
     println!();
     println!("Next Commands");
@@ -891,7 +883,7 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     record.sections.append_note(now.date_naive(), kind, text);
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
-    println!("Added note to issue {}", format_issue_id(issue_id));
+    println!("Added note to issue {}", issue_id);
     Ok(())
 }
 
@@ -1050,7 +1042,7 @@ mod tests {
         let rows = dependency_rows_for_text(&index, index.get_blockers(blocked), true).unwrap();
 
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].contains(&format_issue_id(blocker)));
+        assert!(rows[0].contains(blocker));
         assert!(rows[0].contains("[todo] high - Blocking issue"));
         assert!(rows[0].contains("(open blocker)"));
     }
