@@ -6,7 +6,6 @@ use chrono::{DateTime, Days, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 pub struct TrackerContext {
     pub index: RecordIndex,
@@ -128,8 +127,7 @@ fn prune_git_artifacts(
     retention_days_override: Option<u64>,
     apply: bool,
 ) -> Result<GitPruneSummary> {
-    let git_repository = Command::new("git")
-        .current_dir(&tracker.repo_root)
+    let git_repository = atelier_app::git_freshness::command(&tracker.repo_root)
         .args(["rev-parse", "--is-inside-work-tree"])
         .output()
         .context("failed to inspect Git repository for prune")?;
@@ -471,8 +469,7 @@ fn branch_is_integrated(
     base: &str,
     merge_strategy: MergeStrategy,
 ) -> Result<bool> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args([
             "merge-base",
             "--is-ancestor",
@@ -498,8 +495,7 @@ fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> R
     if branch_diff.is_empty() {
         return Ok(false);
     }
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args([
             "log",
             "-z",
@@ -533,8 +529,7 @@ fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> R
 }
 
 fn git_diff(repo_root: &Path, from: &str, to: &str) -> Result<Vec<u8>> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args(["diff", "--binary", "--full-index", "--no-renames", from, to])
         .output()
         .context("failed to compare Git integration patches for prune candidate")?;
@@ -545,8 +540,7 @@ fn git_diff(repo_root: &Path, from: &str, to: &str) -> Result<Vec<u8>> {
 }
 
 fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<String>> {
-    let upstream = Command::new("git")
-        .current_dir(repo_root)
+    let upstream = atelier_app::git_freshness::command(repo_root)
         .args([
             "for-each-ref",
             "--format=%(upstream)",
@@ -578,8 +572,7 @@ fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<Strin
 }
 
 fn git_stdout_trimmed(repo_root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args(args)
         .output()
         .context("failed to inspect Git state for prune")?;
@@ -593,8 +586,7 @@ fn git_stdout_trimmed(repo_root: &Path, args: &[&str]) -> Result<String> {
 }
 
 fn git_run(repo_root: &Path, args: &[&str]) -> Result<()> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args(args)
         .output()
         .context("failed to remove Git prune candidate")?;
@@ -1118,8 +1110,7 @@ fn apply_git_history_protection(
 
 fn path_exists_in_head(repo_root: &Path, path: &Path) -> Result<bool> {
     let spec = format!("HEAD:{}", display_git_path(path));
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args(["cat-file", "-e", &spec])
         .output()
         .context("failed to inspect Git history for prune candidate")?;
@@ -1127,8 +1118,7 @@ fn path_exists_in_head(repo_root: &Path, path: &Path) -> Result<bool> {
 }
 
 fn canonical_path_is_dirty(repo_root: &Path, path: &Path) -> Result<bool> {
-    let output = Command::new("git")
-        .current_dir(repo_root)
+    let output = atelier_app::git_freshness::command(repo_root)
         .args([
             "status",
             "--porcelain",
@@ -1145,16 +1135,14 @@ fn canonical_path_is_dirty(repo_root: &Path, path: &Path) -> Result<bool> {
 }
 
 fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
-    let tracked = Command::new("git")
-        .current_dir(repo_root)
+    let tracked = atelier_app::git_freshness::command(repo_root)
         .args(["status", "--porcelain", "--untracked-files=no"])
         .output()
         .context("failed to inspect tracked checkout state before canonical prune")?;
     if !tracked.status.success() {
         bail!("git status failed before canonical prune");
     }
-    let canonical = Command::new("git")
-        .current_dir(repo_root)
+    let canonical = atelier_app::git_freshness::command(repo_root)
         .args([
             "status",
             "--porcelain",
@@ -1335,7 +1323,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn git(dir: &Path, args: &[&str]) {
-        let output = Command::new("git")
+        let output = std::process::Command::new("git")
             .current_dir(dir)
             .args(args)
             .output()

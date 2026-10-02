@@ -1,8 +1,6 @@
 use anyhow::Result;
 use atelier_app::record_index::RecordIndex;
 
-use std::process::Command;
-
 use crate::commands;
 use crate::human_output::{
     IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Page, RenderContext,
@@ -120,7 +118,7 @@ struct GitState {
 }
 
 fn git_state() -> Result<GitState> {
-    let output = Command::new("git")
+    let output = atelier_app::git_freshness::command(&std::env::current_dir()?)
         .args(["status", "--short", "--branch", "--untracked-files=all"])
         .output()?;
     if !output.status.success() {

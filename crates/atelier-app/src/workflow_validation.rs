@@ -257,9 +257,8 @@ fn open_blockers(
 }
 
 fn git_worktree_clean(repo_root: &Path) -> Result<(bool, String)> {
-    let output = Command::new("git")
+    let output = crate::git_freshness::command(repo_root)
         .args(["status", "--porcelain", "--untracked-files=all"])
-        .current_dir(repo_root)
         .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

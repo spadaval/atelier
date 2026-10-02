@@ -13,8 +13,7 @@ pub(crate) fn text(repo: &Path, args: &[&str]) -> Result<String> {
         .into())
 }
 pub(crate) fn current_branch(repo: &Path) -> Result<Option<String>> {
-    let output = Command::new("git")
-        .current_dir(repo)
+    let output = atelier_app::git_freshness::command(repo)
         .args(["symbolic-ref", "--quiet", "HEAD"])
         .output()?;
     if output.status.code() == Some(1) {
@@ -77,8 +76,7 @@ impl Snapshot {
             .strip_prefix(repo)
             .context("tracker is outside repository")?;
         let dir = tempfile::tempdir()?;
-        let mut archive = Command::new("git")
-            .current_dir(repo)
+        let mut archive = atelier_app::git_freshness::command(repo)
             .args(["archive", "--format=tar", commit, "--"])
             .arg(relative)
             .stdout(Stdio::piped())

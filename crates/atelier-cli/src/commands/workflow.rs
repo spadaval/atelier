@@ -2,7 +2,6 @@ use anyhow::{anyhow, bail, Result};
 use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::human_output::{self, DecisionState, StylePolicy};
 use atelier_app::use_cases as app_use_cases;
@@ -526,7 +525,7 @@ fn transition_descriptions(transition: &TransitionDefinition) -> Vec<String> {
 }
 
 pub(crate) fn repo_root() -> Result<PathBuf> {
-    let output = Command::new("git")
+    let output = atelier_app::git_freshness::command(&std::env::current_dir()?)
         .args(["rev-parse", "--show-toplevel"])
         .output()?;
     if output.status.success() {
