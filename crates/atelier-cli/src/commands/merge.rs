@@ -51,7 +51,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let index = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        snapshot.read_record_files(repo, true)?.0.into_index()?
+        snapshot.read_record_index(repo, true)?.0?
     };
     let id = index
         .resolve_issue_ref(issue_ref)?

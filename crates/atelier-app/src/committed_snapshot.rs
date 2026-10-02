@@ -150,6 +150,22 @@ impl CommittedSnapshot {
         repo: &Path,
         clean: bool,
     ) -> Result<(crate::record_index::RecordFiles, Vec<PathBuf>)> {
+        self.read_and_finish(repo, clean, |files| files)
+    }
+    /// Pure index construction overlaps the native index check after all raw reads.
+    pub fn read_record_index(
+        &self,
+        repo: &Path,
+        clean: bool,
+    ) -> Result<(Result<crate::record_index::RecordIndex>, Vec<PathBuf>)> {
+        self.read_and_finish(repo, clean, crate::record_index::RecordFiles::into_index)
+    }
+    fn read_and_finish<T: Send>(
+        &self,
+        repo: &Path,
+        clean: bool,
+        finish: impl FnOnce(crate::record_index::RecordFiles) -> T + Send,
+    ) -> Result<(T, Vec<PathBuf>)> {
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
         let records = record_paths(repo, &self.entries)?;
         let relative = records
@@ -167,15 +183,20 @@ impl CommittedSnapshot {
             .collect::<Vec<_>>();
         require_records_match(&changed)?;
         paths.retain(|path| !canonical(path));
-        let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;
-        if clean {
-            require_paths_clean(repo, &paths, hidden)?;
-        } else {
-            paths.extend(hidden);
-        }
-        paths.sort();
-        paths.dedup();
-        Ok((files, paths))
+        std::thread::scope(|scope| {
+            let builder = scope.spawn(move || finish(files));
+            let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true);
+            let finished = builder.join();
+            let hidden = hidden?;
+            if clean {
+                require_paths_clean(repo, &paths, hidden)?;
+            } else {
+                paths.extend(hidden);
+            }
+            paths.sort();
+            paths.dedup();
+            Ok((finished.expect("record index thread panicked"), paths))
+        })
     }
     pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
@@ -421,11 +442,11 @@ mod tests {
                 assert!(paths.is_empty());
                 assert_eq!(files.issues.len(), 1);
                 assert_eq!(files.errors.len(), 1);
-                assert!(files
-                    .into_index()
-                    .unwrap_err()
-                    .to_string()
-                    .contains("Invalid record file"));
+                let parse_error = files.into_index().unwrap_err().to_string();
+                assert!(parse_error.contains("Invalid record file"));
+                let (index, paths) = snapshot.read_record_index(repo.path(), false).unwrap();
+                assert!(paths.is_empty());
+                assert_eq!(index.unwrap_err().to_string(), parse_error);
                 if mutation == "unknown" {
                     fs::write(
                         repo.path().join("unfinished-code"),
@@ -503,6 +524,13 @@ mod tests {
                     _ => unreachable!(),
                 }
                 let error = snapshot.read_record_files(repo.path(), false).unwrap_err();
+                assert_eq!(
+                    snapshot
+                        .read_record_index(repo.path(), false)
+                        .unwrap_err()
+                        .to_string(),
+                    error.to_string()
+                );
                 assert!(
                     error
                         .to_string()
@@ -511,6 +539,61 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn postraw_index_errors_precede_graph_errors_and_cleanup_restores_inner_error() {
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+        ] {
+            git_output(repo.path(), &args).unwrap();
+        }
+        fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+        let record = ".atelier/issues/atelier-good.md";
+        let mut issue = crate::test_records::issue_record("atelier-good", "task", "todo");
+        issue
+            .relationships
+            .blocks
+            .push(atelier_records::issue_relationship_target(
+                "atelier-missing",
+            ));
+        let bytes = atelier_records::render_issue_record(&issue).unwrap();
+        fs::write(repo.path().join(record), &bytes).unwrap();
+        git_output(repo.path(), &["add", "."]).unwrap();
+        git_output(repo.path(), &["commit", "-qm", "committed graph error"]).unwrap();
+        let head = crate::git_freshness::head_commit(repo.path()).unwrap();
+        let snapshot = CommittedSnapshot::new(repo.path(), &head).unwrap();
+        let expected = snapshot
+            .read_record_files(repo.path(), false)
+            .unwrap()
+            .0
+            .into_index()
+            .unwrap_err()
+            .to_string();
+        assert!(expected.contains("atelier-missing"));
+        let inner_error = || {
+            snapshot
+                .read_record_index(repo.path(), false)
+                .unwrap()
+                .0
+                .unwrap_err()
+                .to_string()
+        };
+        assert_eq!(inner_error(), expected);
+        fs::write(repo.path().join(record), "staged different bytes").unwrap();
+        git_output(repo.path(), &["add", record]).unwrap();
+        fs::write(repo.path().join(record), &bytes).unwrap();
+        let error = snapshot.read_record_index(repo.path(), false).unwrap_err();
+        assert!(error.to_string().contains("index path, bytes or mode"));
+        git_output(repo.path(), &["reset", "-q", "HEAD", "--", record]).unwrap();
+        assert_eq!(inner_error(), expected);
+        fs::write(repo.path().join("unfinished"), "unfinished code").unwrap();
+        assert_eq!(inner_error(), expected);
+        let error = snapshot.read_record_index(repo.path(), true).unwrap_err();
+        assert!(error.to_string().starts_with("merge_checkout_dirty"));
     }
 
     #[test]
