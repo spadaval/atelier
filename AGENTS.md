@@ -23,7 +23,8 @@ record owns execution state; strategy acceptance does not mean mission completio
   canonical records and run `target/debug/atelier land`. Active work may remain
   open, with unfinished code handed off honestly.
 - Use `target/debug/atelier setup claude --binary target/debug/atelier` for the
-  supported Claude Code hooks while the installed binary remains old.
+  supported Claude Code hooks during development. After installing the accepted
+  rebuild, `atelier setup claude` configures hooks for the installed CLI.
 
 ## Merge Policy
 
@@ -42,7 +43,7 @@ record owns execution state; strategy acceptance does not mean mission completio
 
 ## Command References
 
-- Installed CLI: `atelier` (old model; not updated until the rebuild is stable)
+- Installed CLI: `atelier` (install the rebuild only after acceptance)
 - Local debug binary: `target/debug/atelier`
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`
