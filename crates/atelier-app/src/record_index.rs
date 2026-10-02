@@ -55,7 +55,7 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
     let mut paths = Vec::new();
     collect_files(state_dir, state_dir, &mut paths)?;
     paths.sort();
-    read_record_paths(state_dir, paths, &|_| Ok((true, None))).map(|(files, _)| files)
+    read_record_paths(state_dir, paths, false, &|_| Ok((true, None))).map(|(files, _)| files)
 }
 
 /// Raw errors and mismatches remain separate from parser errors until the
@@ -63,13 +63,14 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
 pub(crate) fn read_record_paths(
     state_dir: &Path,
     paths: Vec<PathBuf>,
+    initial: bool,
     read: &(impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)> + Sync),
 ) -> Result<(RecordFiles, Vec<PathBuf>)> {
     let mut files = RecordFiles::default();
     let mut changed = Vec::new();
     // Parsing dominates command latency (YAML front matter), and files are
     // independent, so parse them on scoped threads and keep path order.
-    let parsed = ordered_path_map(&paths, &|relative| {
+    let read_and_parse = |relative: &Path| {
         read(relative).map(|(matches, bytes)| {
             (
                 matches,
@@ -80,7 +81,12 @@ pub(crate) fn read_record_paths(
                 },
             )
         })
-    })?;
+    };
+    let parsed = if initial {
+        balanced_path_map(&paths, &read_and_parse)
+    } else {
+        ordered_path_map(&paths, &read_and_parse)
+    }?;
     for (relative, (matches, result)) in paths.into_iter().zip(parsed) {
         if !matches {
             changed.push(relative.clone());
@@ -100,6 +106,47 @@ pub(crate) fn read_record_paths(
         }
     }
     Ok((files, changed))
+}
+
+fn balanced_path_map<T: Send>(
+    paths: &[PathBuf],
+    read: &(impl Fn(&Path) -> Result<T> + Sync),
+) -> Result<Vec<T>> {
+    if paths.len() <= 64 {
+        return ordered_path_map(paths, read);
+    }
+    let available = std::thread::available_parallelism().map_or(1, usize::from);
+    let chunk_size = paths.len().div_ceil(available).max(64);
+    let worker_count = paths.len().div_ceil(chunk_size);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut indexed = std::thread::scope(|scope| {
+        let workers = (0..worker_count)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut results = Vec::new();
+                    loop {
+                        let start = next.fetch_add(16, std::sync::atomic::Ordering::Relaxed);
+                        if start >= paths.len() {
+                            break;
+                        }
+                        results.extend(
+                            paths[start..(start + 16).min(paths.len())]
+                                .iter()
+                                .enumerate()
+                                .map(|(offset, path)| (start + offset, read(path))),
+                        );
+                    }
+                    results
+                })
+            })
+            .collect::<Vec<_>>();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("record parser thread panicked"))
+            .collect::<Vec<_>>()
+    });
+    indexed.sort_unstable_by_key(|(position, _)| *position);
+    indexed.into_iter().map(|(_, result)| result).collect()
 }
 
 pub(crate) fn ordered_path_map<T: Send>(
@@ -1020,84 +1067,99 @@ mod tests {
 
     #[test]
     fn ordered_workers_preserve_supplied_bytes_and_raw_error_priority_across_chunks() {
-        let dir = tempdir().unwrap();
-        let bytes = (0..130)
-            .map(|number| {
-                let id = format!("atelier-{number:04}");
-                (
-                    PathBuf::from(format!("issues/{id}.md")),
-                    atelier_records::render_issue_record(&issue_record(&id, "task", "todo"))
-                        .unwrap()
-                        .into_bytes(),
-                )
+        for initial in [false, true] {
+            let dir = tempdir().unwrap();
+            let bytes = (0..130)
+                .map(|number| {
+                    let id = format!("atelier-{number:04}");
+                    (
+                        PathBuf::from(format!("issues/{id}.md")),
+                        atelier_records::render_issue_record(&issue_record(&id, "task", "todo"))
+                            .unwrap()
+                            .into_bytes(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            let paths = bytes.keys().cloned().collect::<Vec<_>>();
+            let threads = std::sync::Mutex::new(BTreeSet::new());
+            let calls = std::sync::Mutex::new(BTreeMap::new());
+            let (files, changed) = read_record_paths(dir.path(), paths.clone(), initial, &|path| {
+                threads
+                    .lock()
+                    .unwrap()
+                    .insert(format!("{:?}", std::thread::current().id()));
+                *calls.lock().unwrap().entry(path.to_path_buf()).or_insert(0) += 1;
+                Ok((true, Some(bytes[path].clone())))
             })
-            .collect::<BTreeMap<_, _>>();
-        let paths = bytes.keys().cloned().collect::<Vec<_>>();
-        let threads = std::sync::Mutex::new(BTreeSet::new());
-        let (files, changed) = read_record_paths(dir.path(), paths.clone(), &|path| {
-            threads
-                .lock()
-                .unwrap()
-                .insert(format!("{:?}", std::thread::current().id()));
-            Ok((true, Some(bytes[path].clone())))
-        })
-        .unwrap();
-        assert!(changed.is_empty() && files.errors.is_empty());
-        assert_eq!(files.issues.len(), paths.len());
-        assert_eq!(files.issues[0].issue.id, "atelier-0000");
-        assert_eq!(files.issues[129].issue.id, "atelier-0129");
-        assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
-        if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
-            assert!(threads.into_inner().unwrap().len() > 1);
+            .unwrap();
+            assert!(changed.is_empty() && files.errors.is_empty());
+            assert_eq!(files.issues.len(), paths.len());
+            assert_eq!(
+                calls.into_inner().unwrap(),
+                paths.iter().map(|path| (path.clone(), 1)).collect()
+            );
+            assert_eq!(files.issues[0].issue.id, "atelier-0000");
+            assert_eq!(files.issues[129].issue.id, "atelier-0129");
+            assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
+            if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
+                assert!(threads.into_inner().unwrap().len() > 1);
+            }
+            let raw_calls = std::sync::Mutex::new(BTreeSet::new());
+            let error = read_record_paths(dir.path(), paths.clone(), initial, &|path| {
+                raw_calls.lock().unwrap().insert(path.to_path_buf());
+                if path == paths[64] {
+                    bail!("first lexical raw fault");
+                }
+                if path == paths[129] {
+                    bail!("later lexical raw fault");
+                }
+                if path == paths[0] {
+                    return Ok((true, Some(vec![0xff])));
+                }
+                Ok((false, None))
+            })
+            .unwrap_err();
+            assert_eq!(error.to_string(), "first lexical raw fault");
+            assert_eq!(raw_calls.into_inner().unwrap(), paths.into_iter().collect());
         }
-        let error = read_record_paths(dir.path(), paths.clone(), &|path| {
-            if path == paths[64] {
-                bail!("first lexical raw fault");
-            }
-            if path == paths[129] {
-                bail!("later lexical raw fault");
-            }
-            if path == paths[0] {
-                return Ok((true, Some(vec![0xff])));
-            }
-            Ok((false, None))
-        })
-        .unwrap_err();
-        assert_eq!(error.to_string(), "first lexical raw fault");
     }
 
     #[test]
     fn parser_workers_consume_supplied_bytes_without_a_second_read() {
-        let dir = tempdir().unwrap();
-        let relative = PathBuf::from("issues/atelier-byte.md");
-        fs::create_dir(dir.path().join("issues")).unwrap();
-        let bytes =
-            atelier_records::render_issue_record(&issue_record("atelier-byte", "task", "todo"))
-                .unwrap()
-                .into_bytes();
-        fs::write(dir.path().join(&relative), &bytes).unwrap();
-        let (files, changed) = read_record_paths(dir.path(), vec![relative.clone()], &|path| {
-            let bytes = fs::read(dir.path().join(path))?;
-            fs::write(dir.path().join(path), "invalid after the supplied read")?;
-            Ok((true, Some(bytes)))
-        })
-        .unwrap();
-        assert!(changed.is_empty() && files.errors.is_empty());
-        assert_eq!(files.issues[0].issue.id, "atelier-byte");
-        assert_eq!(read_record_files(dir.path()).unwrap().errors.len(), 1);
-        let error = read_record_paths(
-            dir.path(),
-            vec![relative.clone(), PathBuf::from("later")],
-            &|path| {
-                if path == relative {
-                    Ok((false, None))
-                } else {
-                    bail!("raw read failure")
-                }
-            },
-        )
-        .unwrap_err();
-        assert_eq!(error.to_string(), "raw read failure");
+        for initial in [false, true] {
+            let dir = tempdir().unwrap();
+            let relative = PathBuf::from("issues/atelier-byte.md");
+            fs::create_dir(dir.path().join("issues")).unwrap();
+            let bytes =
+                atelier_records::render_issue_record(&issue_record("atelier-byte", "task", "todo"))
+                    .unwrap()
+                    .into_bytes();
+            fs::write(dir.path().join(&relative), &bytes).unwrap();
+            let (files, changed) =
+                read_record_paths(dir.path(), vec![relative.clone()], initial, &|path| {
+                    let bytes = fs::read(dir.path().join(path))?;
+                    fs::write(dir.path().join(path), "invalid after the supplied read")?;
+                    Ok((true, Some(bytes)))
+                })
+                .unwrap();
+            assert!(changed.is_empty() && files.errors.is_empty());
+            assert_eq!(files.issues[0].issue.id, "atelier-byte");
+            assert_eq!(read_record_files(dir.path()).unwrap().errors.len(), 1);
+            let error = read_record_paths(
+                dir.path(),
+                vec![relative.clone(), PathBuf::from("later")],
+                initial,
+                &|path| {
+                    if path == relative {
+                        Ok((false, None))
+                    } else {
+                        bail!("raw read failure")
+                    }
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.to_string(), "raw read failure");
+        }
     }
     #[cfg(unix)]
     #[test]
