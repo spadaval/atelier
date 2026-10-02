@@ -11,8 +11,8 @@ use atelier_core::{
     EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
 };
 pub use atelier_core::{
-    EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueRecord, IssueSectionName,
-    IssueSectionState, IssueSections, IssueStrategy, Record, RecordHeader, WorkflowBranch,
+    EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueSectionName,
+    IssueSectionState, IssueSections, IssueStrategy, RecordHeader, WorkflowBranch,
 };
 
 pub mod document;
@@ -161,29 +161,6 @@ pub fn issue_section_diagnostic(
     )
 }
 
-impl CanonicalIssueRecord {
-    pub fn into_record(self) -> Record {
-        Record::Issue(IssueRecord {
-            header: RecordHeader {
-                kind: ISSUE_KIND.kind.to_string(),
-                id: self.issue.id,
-                title: self.issue.title,
-                status: self.issue.status,
-                labels: self.labels,
-                relationships: self.relationships,
-                created_at: self.issue.created_at,
-                updated_at: self.issue.updated_at,
-            },
-            issue_type: self.issue.issue_type,
-            priority: self.issue.priority,
-            strategy: self.issue.strategy,
-            workflow_branch: self.issue.workflow_branch,
-            closed_at: self.issue.closed_at,
-            sections: self.sections,
-        })
-    }
-}
-
 pub struct RecordStore {
     state_dir: PathBuf,
 }
@@ -229,17 +206,6 @@ impl RecordStore {
         record_id::validate_record_id(id)?;
         let spec = canonical_record_kind(ISSUE_KIND.kind)?;
         self.load_issue(&canonical_record_path(spec, id)?)
-    }
-
-    pub fn load_record_by_id(&self, kind: &str, id: &str) -> Result<Record> {
-        record_id::validate_record_id(id)?;
-        let spec = canonical_record_kind(kind)?;
-        self.load_record_at(&canonical_record_path(spec, id)?, spec)
-    }
-
-    pub fn load_record_at(&self, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
-        let text = self.read_record_file(relative)?;
-        parse_record(&text, relative, spec)
     }
 
     pub fn load_evidence_by_id(&self, id: &str) -> Result<EvidenceRecord> {
@@ -322,17 +288,6 @@ impl RecordStore {
         let spec = canonical_record_kind("evidence")?;
         let relative = canonical_record_path(spec, &record.header.id)?;
         self.write_atomic(&relative, render_evidence_record_file(record)?)
-    }
-
-    pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
-        if record.kind() == "review" {
-            bail!("review records are append-only; create a successor event");
-        }
-        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
-        let header = record.header();
-        let spec = canonical_record_kind(&header.kind)?;
-        let relative = canonical_record_path(spec, &header.id)?;
-        self.write_atomic(&relative, render_record(record)?)
     }
 
     pub fn add_attachment_relationship(
@@ -429,13 +384,40 @@ impl RecordStore {
         source_id: &str,
         mutate: impl FnOnce(&mut Relationships) -> bool,
     ) -> Result<bool> {
-        let mut record = self.load_record_by_id(source_kind, source_id)?;
-        let changed = mutate(&mut record.header_mut().relationships);
-        if changed {
-            record.header_mut().updated_at = Utc::now();
-            self.write_record_atomic(&record)?;
+        record_id::validate_record_id(source_id)?;
+        let spec = canonical_record_kind(source_kind)?;
+        let relative = canonical_record_path(spec, source_id)?;
+        let text = self.read_record_file(&relative)?;
+        match spec.kind {
+            "issue" => {
+                let mut record = parse_issue_record(&text, &relative)?;
+                if !mutate(&mut record.relationships) {
+                    return Ok(false);
+                }
+                record.issue.updated_at = Utc::now();
+                self.write_issue_atomic(&record)?;
+            }
+            "evidence" => {
+                let mut record = parse_evidence_record_file(&text, &relative)?;
+                if !mutate(&mut record.header.relationships) {
+                    return Ok(false);
+                }
+                record.header.updated_at = Utc::now();
+                self.write_evidence_atomic(&record)?;
+            }
+            "review" => {
+                let mut record = review::parse_review_record(&text, &relative)?;
+                if mutate(&mut record.header.relationships) {
+                    bail!("review records are append-only; create a successor event");
+                }
+                return Ok(false);
+            }
+            _ => bail!(
+                "Record kind '{}' is not a first-class record-file type",
+                spec.kind
+            ),
         }
-        Ok(changed)
+        Ok(true)
     }
 
     pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
@@ -676,31 +658,6 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     Ok(output)
 }
 
-fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueRecord> {
-    let Record::Issue(issue) = record else {
-        bail!("Issue record kind must use Record::Issue");
-    };
-    Ok(CanonicalIssueRecord {
-        issue: Issue {
-            id: issue.header.id.clone(),
-            title: issue.header.title.clone(),
-            description: None,
-            status: issue.header.status.clone(),
-            issue_type: issue.issue_type.clone(),
-            priority: issue.priority.clone(),
-            strategy: issue.strategy.clone(),
-            workflow_branch: issue.workflow_branch.clone(),
-            parent_id: None,
-            created_at: issue.header.created_at,
-            updated_at: issue.header.updated_at,
-            closed_at: issue.closed_at,
-        },
-        labels: issue.header.labels.clone(),
-        sections: issue.sections.clone(),
-        relationships: issue.header.relationships.clone(),
-    })
-}
-
 pub fn render_issue_sections(sections: &IssueSections) -> String {
     normalize_body(
         &IssueSections::ALL_NAMES
@@ -717,33 +674,23 @@ pub fn render_issue_sections(sections: &IssueSections) -> String {
     )
 }
 
-pub fn render_record(record: &Record) -> Result<String> {
-    if let Record::Review(review) = record {
-        return review::render_review_record(review);
-    }
-    let spec = canonical_record_kind(&record.header().kind)?;
-    if spec.kind == ISSUE_KIND.kind {
-        return render_issue_record(&canonical_issue_record_from_record(record)?);
-    }
-    validate_record(record, Path::new("<record>"), spec)?;
-    let mut relationships = record.header().relationships.clone();
-    sort_relationships(&mut relationships);
-
-    if spec.kind == "evidence" {
-        let Record::Evidence(record) = record else {
-            bail!("Expected evidence record");
-        };
-        return render_evidence_record(record, &relationships, spec);
-    }
-    bail!(
-        "Unsupported record kind '{}' for typed rendering",
-        spec.kind
-    )
-}
-
 /// Render a concrete evidence record through its record-file codec.
 pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
-    render_record(&Record::Evidence(record.clone()))
+    if record.header.kind != "evidence" {
+        bail!("Evidence record kind must be evidence");
+    }
+    let relative = Path::new("<record>");
+    record_id::validate_record_id(&record.header.id).with_context(|| {
+        format!(
+            "Invalid evidence id '{}' in {}",
+            record.header.id,
+            display_state_path(relative)
+        )
+    })?;
+    validate_evidence_record(record, relative)?;
+    let mut relationships = record.header.relationships.clone();
+    sort_relationships(&mut relationships);
+    render_evidence_record(record, &relationships, &record_kinds::EVIDENCE_KIND)
 }
 
 /// Parse a concrete evidence record without exposing mixed-kind dispatch to
@@ -805,28 +752,6 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         sections,
         relationships,
     })
-}
-
-pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
-    if spec.kind == "review" {
-        return Ok(Record::Review(review::parse_review_record(text, relative)?));
-    }
-    if spec.kind == ISSUE_KIND.kind {
-        return Ok(parse_issue_record(text, relative)?.into_record());
-    }
-
-    let (front_matter, body) = split_front_matter(text, relative)?;
-
-    let id = validate_record_front_matter(&front_matter, relative, spec)?;
-    reject_forbidden_data_front_matter(&front_matter, relative)?;
-    if spec.kind == "evidence" {
-        return parse_evidence_record(front_matter, body, relative, spec, id).map(Record::Evidence);
-    }
-    bail!(
-        "Unsupported record kind '{}' in {}",
-        spec.kind,
-        display_state_path(relative)
-    )
 }
 
 fn validate_record_front_matter(
@@ -943,28 +868,6 @@ pub fn validate_issue_section_text(
             name.title()
         );
     }
-    Ok(())
-}
-
-fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> Result<()> {
-    record_id::validate_record_id(&record.header().id).with_context(|| {
-        format!(
-            "Invalid {} id '{}' in {}",
-            spec.kind,
-            record.header().id,
-            display_state_path(relative)
-        )
-    })?;
-    if spec.kind == "evidence" {
-        let Record::Evidence(record) = record else {
-            bail!(
-                "Expected evidence record in {}",
-                display_state_path(relative)
-            );
-        };
-        return validate_evidence_record(record, relative);
-    }
-    validate_relationships(&record.header().relationships, relative)?;
     Ok(())
 }
 
@@ -2550,25 +2453,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn issue_record_uses_generic_canonical_record_dispatch() {
-        let record = issue_record("atelier-genr").into_record();
-        let text = render_record(&record).unwrap();
-        let spec = canonical_record_kind("issue").unwrap();
-        let parsed = parse_record(
-            &text,
-            &canonical_record_path(spec, "atelier-genr").unwrap(),
-            spec,
-        )
-        .unwrap();
-
-        assert_eq!(parsed, record);
-        assert_eq!(
-            canonical_record_path(spec, "atelier-genr").unwrap(),
-            issue_record_path("atelier-genr")
-        );
-    }
-
-    #[test]
     fn ownership_modules_expose_supported_record_boundaries() {
         let record = issue::CanonicalIssueRecord {
             ..issue_record("atelier-mods")
@@ -2651,6 +2535,126 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
+    fn relationship_mutation_preserves_review_noops_and_append_only_refusal() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path());
+        let record = store
+            .create_review(
+                "atelier-owner",
+                "Reviewer",
+                &"a".repeat(40),
+                atelier_core::ReviewEvent::Review,
+                "Independent review",
+            )
+            .unwrap();
+        let path = dir
+            .path()
+            .join(canonical_record_path(&REVIEW_KIND, &record.header.id).unwrap());
+        let original = fs::read(&path).unwrap();
+        assert!(!store
+            .add_attachment_relationship(
+                "review",
+                &record.header.id,
+                "issue",
+                "atelier-owner",
+                "reviews",
+            )
+            .unwrap());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        let error = store
+            .add_attachment_relationship(
+                "review",
+                &record.header.id,
+                "issue",
+                "atelier-owner",
+                "custom",
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "review records are append-only; create a successor event"
+        );
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        fs::write(&path, "invalid review").unwrap();
+        let error = store
+            .add_attachment_relationship(
+                "review",
+                &record.header.id,
+                "issue",
+                "atelier-owner",
+                "reviews",
+            )
+            .unwrap_err();
+        assert_eq!(error.to_string(), "review needs YAML front matter");
+    }
+
+    #[test]
+    fn relationship_mutation_keeps_source_id_kind_and_read_error_priority() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path());
+        let error = store
+            .add_attachment_relationship("unknown", "../bad", "issue", "atelier-owner", "validates")
+            .unwrap_err();
+        assert_eq!(error.to_string(), "expected <project-slug>-<random-base36>");
+        let error = store
+            .add_attachment_relationship(
+                "unknown",
+                "atelier-ok",
+                "issue",
+                "atelier-owner",
+                "validates",
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Record kind 'unknown' is not a first-class record-file type"
+        );
+        let error = store
+            .add_attachment_relationship(
+                "evidence",
+                "atelier-ok",
+                "issue",
+                "atelier-owner",
+                "validates",
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Missing record file .atelier/evidence/atelier-ok.md"
+        );
+        assert!(!dir.path().join("evidence").exists());
+    }
+
+    #[test]
+    fn typed_evidence_rendering_checks_kind_and_id_before_data() {
+        let mut record = evidence_record("atelier-proof");
+        record.header.kind = "issue".into();
+        record.header.id = "../bad".into();
+        record.data.commit = "short".into();
+        assert_eq!(
+            render_evidence_record_file(&record)
+                .unwrap_err()
+                .to_string(),
+            "Evidence record kind must be evidence"
+        );
+        record.header.kind = "evidence".into();
+        assert_eq!(
+            render_evidence_record_file(&record)
+                .unwrap_err()
+                .to_string(),
+            "Invalid evidence id '../bad' in .atelier/<record>"
+        );
+        record.header.id = "atelier-proof".into();
+        assert_eq!(
+            render_evidence_record_file(&record)
+                .unwrap_err()
+                .to_string(),
+            "evidence commit must be a full Git object ID in .atelier/<record>"
+        );
+    }
+
+    #[test]
     fn evidence_record_renders_and_parses_deterministically_without_data_blob() {
         let record = evidence_record("atelier-evdn");
         let spec = canonical_record_kind("evidence").unwrap();
@@ -2697,7 +2701,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Legacy evidence summary.
 "#;
-        let error = parse_record(text, &path, spec).unwrap_err();
+        let error = parse_evidence_record_file(text, &path).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
