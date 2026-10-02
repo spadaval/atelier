@@ -204,9 +204,6 @@ fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
 
 /// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
 /// are needed only for flagged paths; Unix executable modes are always checked.
-pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
-    flagged_modified_paths_matching(repo, commit, |_| true)
-}
 pub(crate) fn flagged_modified_paths_matching(
     repo: &Path,
     commit: &str,
@@ -288,9 +285,6 @@ fn flagged_paths(
     Ok(dirty)
 }
 
-pub fn require_flagged_clean(repo: &Path, commit: &str) -> Result<()> {
-    require_hidden_clean(flagged_modified_paths(repo, commit)?)
-}
 fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
     if let Some(path) = paths.first() {
         bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags or filemode settings; restore or commit the change before continuing", path.display());

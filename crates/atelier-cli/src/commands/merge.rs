@@ -76,7 +76,8 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let base_ref = format!("refs/heads/{base}");
     let base_head = text(repo, &["rev-parse", "--verify", &base_ref])?;
     git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Update/rebase the work branch, obtain fresh proof and review, then retry."))?;
-    let source = base_policy::from_ref(repo, &base_head)?;
+    let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    let source = base_policy::from_captured(&mut read, &base_head)?;
     for diagnostic in &source.diagnostics {
         eprintln!("{diagnostic}");
     }
@@ -91,7 +92,6 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; fix it before merging")?;
     index.validate_policy(&source.policy, repo)?;
-    let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     review_gate::append_only(&mut read, &base_head)?;
     let base_tree = base_checkout(repo, base)?;
     let base_snapshot = base_tree
