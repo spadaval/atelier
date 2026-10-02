@@ -620,14 +620,18 @@ impl RecordIndex {
     }
 
     fn order(&mut self) {
-        let mut ids = self.issues.keys().cloned().collect::<Vec<_>>();
-        ids.sort_by(|left, right| {
-            self.issues[right]
+        let mut records = self.issues.iter().collect::<Vec<_>>();
+        records.sort_by(|(left, left_record), (right, right_record)| {
+            right_record
                 .issue
                 .updated_at
-                .cmp(&self.issues[left].issue.updated_at)
+                .cmp(&left_record.issue.updated_at)
                 .then_with(|| left.cmp(right))
         });
+        let ids = records
+            .into_iter()
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
         let rank = ids
             .iter()
             .enumerate()
