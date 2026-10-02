@@ -116,6 +116,50 @@ fn prime_and_active_landing_are_fresh_and_read_only() {
     assert!(ok(f.path(), &["prime"]).contains("Fresh handoff marker"));
 }
 #[test]
+fn prime_preserves_native_branch_trimming_for_header_owner_and_orientation() {
+    for whitespace in ['\u{a0}', '\u{2003}'] {
+        for trailing in [true, false] {
+            let f = Fixture::new();
+            let branch = if trailing {
+                format!("name{whitespace}")
+            } else {
+                format!("{whitespace}name")
+            };
+            let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+            record.issue.workflow_branch.as_mut().unwrap().work_branch = branch.clone();
+            f.store().write_issue_atomic(&record).unwrap();
+            commit(f.path(), "Unicode owner branch");
+            git(f.path(), &["branch", &branch]);
+            git(
+                f.path(),
+                &["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")],
+            );
+            let head = git(f.path(), &["rev-parse", "HEAD"]);
+            let native = git(f.path(), &["symbolic-ref", "--quiet", "HEAD"]);
+            let normalized = native.strip_prefix("refs/heads/").unwrap();
+            let stored = f.store().load_issue_by_id(&f.id).unwrap();
+            let prime = ok(f.path(), &["prime"]);
+            assert_eq!(
+                prime.lines().find(|line| line.starts_with("Branch: ")),
+                Some(format!("Branch: {normalized} @ {}", &head[..8]).as_str())
+            );
+            if stored.issue.workflow_branch.unwrap().work_branch == normalized {
+                assert!(prime.contains(&format!("Owner: {}", f.id)), "{prime}");
+            } else {
+                assert!(prime.contains("Owner: none on this checkout"), "{prime}");
+            }
+            if trailing {
+                assert!(prime.contains(&format!("{branch}: unavailable")), "{prime}");
+            } else {
+                assert!(
+                    !prime.contains(&format!("{branch}: unavailable")),
+                    "{prime}"
+                );
+            }
+        }
+    }
+}
+#[test]
 fn canonical_changes_refuse_landing_in_every_git_state() {
     for state in ["unstaged", "staged", "deleted", "untracked", "policy"] {
         let f = Fixture::new();

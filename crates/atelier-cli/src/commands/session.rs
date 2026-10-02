@@ -48,7 +48,13 @@ fn prime_text() -> Result<String> {
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let branch = git::current_branch(repo)?.unwrap_or_else(|| "detached HEAD".into());
+    // A failed capture leaves the original queries at their original error points.
+    let captured = git::CheckoutRefs::capture(repo).ok();
+    let branch = match &captured {
+        Some(captured) => captured.branch.as_ref().map(|name| name.trim_end().into()),
+        None => git::current_branch(repo)?,
+    }
+    .unwrap_or_else(|| "detached HEAD".into());
     let source = base_policy::working(repo)?;
     index.validate_policy(&source.policy, repo)?;
     let owner = owner(&index, &branch, None)?
@@ -62,7 +68,10 @@ fn prime_text() -> Result<String> {
             None => source.policy.status_category(&issue.status) == Some("active"),
         }),
     )?;
-    let head = git_freshness::head_commit(repo)?;
+    let head = match &captured {
+        Some(captured) => captured.head.clone(),
+        None => git_freshness::head_commit(repo)?,
+    };
     let dirty = git_freshness::working_paths(repo)?;
     let mut proof = atelier_app::evidence_freshness::EvidenceReadContext::from_snapshot(
         repo,
@@ -184,12 +193,13 @@ fn prime_text() -> Result<String> {
         }
     }
     lines.extend(
-        git::branch_lines_for(
+        git::branch_lines_captured(
             repo,
             &layout.canonical_dir(),
             &index,
             &branch,
             &source.policy.branch_policy.base_branch,
+            captured.as_ref(),
         )?
         .into_iter()
         .take(8),

@@ -45,6 +45,16 @@ impl CheckoutRefs {
             .with_context(|| format!("committed local ref {reference} is missing"))?;
         read.commit_id(&format!("{raw}^{{commit}}"))
     }
+    fn heads_text(&self) -> Result<String> {
+        let mut bytes = Vec::new();
+        for (reference, commit) in &self.refs {
+            bytes.extend(reference);
+            bytes.push(b' ');
+            bytes.extend(commit.as_bytes());
+            bytes.push(b'\n');
+        }
+        Ok(String::from_utf8(bytes)?.trim().into())
+    }
 }
 fn decode_refs(bytes: &[u8]) -> Result<(HeadRefs, Option<String>)> {
     let mut refs = HeadRefs::new();
@@ -195,14 +205,27 @@ pub(crate) fn branch_lines_for(
     current: &str,
     base_branch: &str,
 ) -> Result<Vec<String>> {
-    let heads = text(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname) %(objectname)",
-            "refs/heads/",
-        ],
-    )?;
+    branch_lines_captured(repo, state, live, current, base_branch, None)
+}
+pub(crate) fn branch_lines_captured(
+    repo: &Path,
+    state: &Path,
+    live: &RecordIndex,
+    current: &str,
+    base_branch: &str,
+    captured: Option<&CheckoutRefs>,
+) -> Result<Vec<String>> {
+    let heads = match captured {
+        Some(captured) => captured.heads_text()?,
+        None => text(
+            repo,
+            &[
+                "for-each-ref",
+                "--format=%(refname) %(objectname)",
+                "refs/heads/",
+            ],
+        )?,
+    };
     let mut lines = Vec::new();
     let mut snapshots = BTreeMap::new();
     for head in heads.lines() {
@@ -361,6 +384,18 @@ mod capture_tests {
             let captured = CheckoutRefs::capture(path).unwrap();
             assert_eq!(captured.head, git(path, &["rev-parse", "HEAD"]));
             assert_eq!(captured.branch, current_branch(path).unwrap());
+            assert_eq!(
+                captured.heads_text().map_err(|error| error.to_string()),
+                text(
+                    path,
+                    &[
+                        "for-each-ref",
+                        "--format=%(refname) %(objectname)",
+                        "refs/heads/",
+                    ]
+                )
+                .map_err(|error| error.to_string())
+            );
             captured
         };
         let original = check(repo.path());
@@ -370,6 +405,15 @@ mod capture_tests {
         );
         git(repo.path(), &["symbolic-ref", "HEAD", "refs/heads/alias"]);
         check(repo.path());
+        for (key, value) in [
+            ("branch.sort", "-refname"),
+            ("forEachRef.sort", "-refname"),
+            ("core.ignoreCase", "true"),
+        ] {
+            git(repo.path(), &["config", key, value]);
+            check(repo.path());
+            git(repo.path(), &["config", "--unset", key]);
+        }
         // An unrelated missing object is opaque unless that ref is selected.
         fs::write(
             repo.path().join(".git/refs/heads/broken"),
@@ -426,6 +470,14 @@ mod capture_tests {
         fs::write(repo.path().join("code"), "new state").unwrap();
         git(repo.path(), &["commit", "-qam", "fresh ref state"]);
         assert_ne!(check(repo.path()).head, original.head);
+        let tag = git(repo.path(), &["rev-parse", "refs/tags/task/source"]);
+        fs::write(
+            repo.path().join(".git/refs/heads/tagged"),
+            format!("{tag}\n"),
+        )
+        .unwrap();
+        git(repo.path(), &["symbolic-ref", "HEAD", "refs/heads/tagged"]);
+        assert_eq!(check(repo.path()).head, tag);
     }
     #[test]
     fn captured_base_refs_peel_annotated_objects_in_both_hash_formats() {
@@ -464,6 +516,38 @@ mod capture_tests {
                 resolve(repo.path(), "refs/heads/base-alias").unwrap()
             );
         }
+    }
+    #[test]
+    fn captured_orientation_pins_refs_while_other_callers_query_fresh_refs() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init", "-qb", "main"]);
+        git(repo.path(), &["config", "user.name", "Author"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "author@example.test"],
+        );
+        fs::write(repo.path().join("code"), "base").unwrap();
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-qm", "base"]);
+        git(repo.path(), &["branch", "task/old"]);
+        let state = repo.path().join(".atelier");
+        fs::create_dir(&state).unwrap();
+        let index = RecordIndex::load_structural(&state).unwrap();
+        let captured = CheckoutRefs::capture(repo.path()).unwrap();
+        let pinned = || {
+            branch_lines_captured(repo.path(), &state, &index, "main", "main", Some(&captured))
+                .unwrap()
+        };
+        let original = branch_lines_for(repo.path(), &state, &index, "main", "main").unwrap();
+        assert_eq!(pinned(), original);
+        assert_eq!(original.len(), 1);
+        assert!(original[0].starts_with("task/old: unavailable"));
+        git(repo.path(), &["branch", "-D", "task/old"]);
+        git(repo.path(), &["branch", "task/new"]);
+        assert_eq!(pinned(), original);
+        let fresh = branch_lines_for(repo.path(), &state, &index, "main", "main").unwrap();
+        assert_eq!(fresh.len(), 1);
+        assert!(fresh[0].starts_with("task/new: unavailable"));
     }
     #[test]
     fn ref_capture_parser_rejects_truncation_bad_fields_and_duplicate_heads() {
