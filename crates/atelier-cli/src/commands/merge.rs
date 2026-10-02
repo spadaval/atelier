@@ -38,6 +38,33 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
+// Tentative facts never authorize a merge or introduce an earlier error. The
+// global index must later confirm the exact owner and its complete metadata.
+fn warm_exact_owner<'a>(
+    repo: &'a Path,
+    captured: &crate::commands::git::CheckoutRefs,
+    id: &str,
+    branch: &str,
+) -> Option<(atelier_core::WorkflowBranch, git::ReadContext<'a>)> {
+    let mut read = git::ReadContext::from_head(repo, captured.head.clone()).defer_object_stderr();
+    let issue = read.issue_at("HEAD", id).ok()?.issue;
+    if issue.issue_type == "mission" {
+        return None;
+    }
+    let recorded = issue.workflow_branch?;
+    if recorded.work_branch != branch || recorded.branch_base == branch {
+        return None;
+    }
+    let base = captured
+        .resolve(&mut read, &format!("refs/heads/{}", recorded.branch_base))
+        .ok()?;
+    read.prefetch_ranges([(base, captured.head.clone())]).ok()?;
+    // Optional selection failures may be ignored by prefetch. Never retain a
+    // poisoned object reader: ordinary guards must obtain their own error.
+    read.commit_id("HEAD").ok()?;
+    Some((recorded, read))
+}
+
 pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
@@ -48,10 +75,20 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         .as_deref()
         .context("merge requires a local work branch")?;
     let snapshot = committed_snapshot::CommittedSnapshot::new(repo, head)?;
-    let index = {
+    let (index, warmed) = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        snapshot.read_record_index(repo, true)?.0?
+        let paths = git::working_status_paths(repo)?;
+        let exact = issue_ref.trim();
+        let eligible = atelier_records::validate_record_id(exact).is_ok();
+        let (records, warmed) = std::thread::scope(|scope| {
+            let worker =
+                eligible.then(|| scope.spawn(|| warm_exact_owner(repo, &captured, exact, branch)));
+            let records = snapshot.read_record_index_after_status(repo, true, paths);
+            let warmed = worker.and_then(|worker| worker.join().ok()).flatten();
+            (records, warmed)
+        });
+        (records?.0?, warmed)
     };
     let id = index
         .resolve_issue_ref(issue_ref)?
@@ -74,7 +111,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     let base = &recorded.branch_base;
     let base_ref = format!("refs/heads/{base}");
-    let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    let mut read = match warmed {
+        Some((metadata, read))
+            if owner == id && id == issue_ref.trim() && metadata == *recorded =>
+        {
+            read.with_working_paths(&[])
+        }
+        _ => git::ReadContext::from_snapshot(repo, head.clone(), &[]),
+    };
+    read.publish_object_stderr();
     let base_head = captured.resolve(&mut read, &base_ref)?;
     git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Update/rebase the work branch, obtain fresh proof and review, then retry."))?;
     let source = base_policy::from_captured(&mut read, &base_head)?;
