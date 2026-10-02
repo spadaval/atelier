@@ -137,15 +137,57 @@ fn blob_hash(bytes: &[u8], expected: &str) -> Result<String> {
     }
 }
 
-/// Every canonical file must match the pinned commit's path, bytes and mode.
-/// Machine-local runtime, identity, config, lock and temporary files are excluded
-/// by the same classifier used by the record loader. Hashes bypass Git filters.
+fn canonical(path: &Path) -> bool {
+    path.strip_prefix(".atelier")
+        .is_ok_and(|path| !is_local_atelier_path(path))
+}
+
+/// Immutable entries from one full captured OID. Filesystem checks remain fresh.
+pub struct CommittedSnapshot {
+    entries: Entries,
+}
+impl CommittedSnapshot {
+    pub fn new(repo: &Path, commit: &str) -> Result<Self> {
+        if !matches!(commit.len(), 40 | 64) || !commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            bail!("snapshot requires a full captured Git object ID");
+        }
+        Ok(Self {
+            entries: entries(repo, commit, false)?,
+        })
+    }
+    pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
+        verify_records(repo, &self.entries)?;
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
+        paths.extend(flagged_paths(repo, &self.entries, |path| !canonical(path))?);
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+    pub fn require_clean(&self, repo: &Path) -> Result<()> {
+        verify_records(repo, &self.entries)?;
+        let paths = crate::git_freshness::working_status_paths(repo)?;
+        if !paths.is_empty() {
+            bail!("merge_checkout_dirty: {} has uncommitted changes: {:?}; commit or stash them before retrying", repo.display(), paths);
+        }
+        require_hidden_clean(flagged_paths(repo, &self.entries, |path| !canonical(path))?)
+    }
+}
+
+/// Canonical inventory, bytes, types and modes are freshly compared each call.
+/// Machine-local files are excluded by the record loader's shared classifier.
 pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
-    let entries = entries(repo, commit, true)?;
+    verify_records(repo, &entries(repo, commit, true)?)
+}
+fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
     let root = repo.join(".atelier");
-    let mut paths = entries.keys().cloned().collect::<BTreeSet<_>>();
+    let mut paths = entries
+        .keys()
+        .filter(|path| canonical(path))
+        .cloned()
+        .collect::<BTreeSet<_>>();
     collect(&root, &root, &mut paths)?;
-    for (path, (mode, _)) in &entries {
+    for (path, (mode, _)) in entries.iter().filter(|(path, _)| canonical(path)) {
         if !matches!(mode.as_str(), "100644" | "100755") {
             bail!(
                 "canonical_snapshot_uncommitted: {} is not a regular committed file",
@@ -153,7 +195,7 @@ pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
             );
         }
     }
-    if let Some(path) = modified(repo, paths, &entries)?.first() {
+    if let Some(path) = modified(repo, paths, entries)?.first() {
         bail!("canonical_snapshot_uncommitted: {} path, bytes or mode differs from pinned HEAD; commit canonical records before continuing", path.display());
     }
     Ok(())
@@ -167,6 +209,13 @@ pub fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>>
 pub(crate) fn flagged_modified_paths_matching(
     repo: &Path,
     commit: &str,
+    include: impl Fn(&Path) -> bool,
+) -> Result<Vec<PathBuf>> {
+    flagged_paths(repo, &entries(repo, commit, false)?, include)
+}
+fn flagged_paths(
+    repo: &Path,
+    entries: &Entries,
     include: impl Fn(&Path) -> bool,
 ) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "-v", "-z"])?;
@@ -188,12 +237,11 @@ pub(crate) fn flagged_modified_paths_matching(
     if flagged.is_empty() && !cfg!(unix) {
         return Ok(Vec::new());
     }
-    let entries = entries(repo, commit, false)?;
-    let mut dirty = modified(repo, flagged, &entries)?;
+    let mut dirty = modified(repo, flagged, entries)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        for (path, (mode, _)) in &entries {
+        for (path, (mode, _)) in entries {
             if !include(path) || !matches!(mode.as_str(), "100644" | "100755") {
                 continue;
             }
@@ -215,7 +263,10 @@ pub(crate) fn flagged_modified_paths_matching(
 }
 
 pub fn require_flagged_clean(repo: &Path, commit: &str) -> Result<()> {
-    if let Some(path) = flagged_modified_paths(repo, commit)?.first() {
+    require_hidden_clean(flagged_modified_paths(repo, commit)?)
+}
+fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
+    if let Some(path) = paths.first() {
         bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags or filemode settings; restore or commit the change before continuing", path.display());
     }
     Ok(())
@@ -224,6 +275,82 @@ pub fn require_flagged_clean(repo: &Path, commit: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reused_immutable_entries_never_reuse_filesystem_verification() {
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+        ] {
+            git_output(repo.path(), &args).unwrap();
+        }
+        fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+        let record = ".atelier/issues/record.md";
+        fs::write(repo.path().join(record), "committed record").unwrap();
+        fs::write(repo.path().join("code"), "committed code").unwrap();
+        git_output(repo.path(), &["add", "."]).unwrap();
+        git_output(repo.path(), &["commit", "-qm", "original files"]).unwrap();
+        let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
+        let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
+        assert!(snapshot
+            .verified_working_paths(repo.path())
+            .unwrap()
+            .is_empty());
+        assert!(CommittedSnapshot::new(repo.path(), "HEAD").is_err());
+        fs::write(repo.path().join(".git/info/exclude"), ".atelier/reviews/\n").unwrap();
+        fs::create_dir(repo.path().join(".atelier/reviews")).unwrap();
+        let ignored = repo.path().join(".atelier/reviews/hidden.md");
+        fs::write(&ignored, "uncommitted ignored event").unwrap();
+        assert!(snapshot.verified_working_paths(repo.path()).is_err());
+        fs::remove_file(ignored).unwrap();
+        git_output(
+            repo.path(),
+            &["update-index", "--assume-unchanged", "--", record, "code"],
+        )
+        .unwrap();
+        fs::write(repo.path().join(record), "hidden record mutation").unwrap();
+        assert!(snapshot.require_clean(repo.path()).is_err());
+        fs::write(repo.path().join(record), "committed record").unwrap();
+        fs::write(repo.path().join("code"), "hidden code mutation").unwrap();
+        assert_eq!(
+            snapshot.verified_working_paths(repo.path()).unwrap(),
+            [PathBuf::from("code")]
+        );
+        assert!(snapshot.require_clean(repo.path()).is_err());
+        fs::write(repo.path().join("code"), "committed code").unwrap();
+        git_output(
+            repo.path(),
+            &[
+                "update-index",
+                "--no-assume-unchanged",
+                "--",
+                record,
+                "code",
+            ],
+        )
+        .unwrap();
+        fs::write(repo.path().join("code"), "staged code").unwrap();
+        git_output(repo.path(), &["add", "code"]).unwrap();
+        fs::write(repo.path().join("code"), "committed code").unwrap();
+        assert!(snapshot.require_clean(repo.path()).is_err());
+        git_output(repo.path(), &["reset", "-q", "HEAD", "--", "code"]).unwrap();
+        snapshot.require_clean(repo.path()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
+            for path in [record, "code"] {
+                fs::set_permissions(repo.path().join(path), fs::Permissions::from_mode(0o755))
+                    .unwrap();
+                assert!(snapshot.require_clean(repo.path()).is_err());
+                fs::set_permissions(repo.path().join(path), fs::Permissions::from_mode(0o644))
+                    .unwrap();
+                snapshot.require_clean(repo.path()).unwrap();
+            }
+        }
+    }
 
     #[test]
     fn raw_blob_hashes_match_git_for_both_formats_without_filters() {
