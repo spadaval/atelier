@@ -69,35 +69,17 @@ pub(crate) fn read_record_paths(
     let mut changed = Vec::new();
     // Parsing dominates command latency (YAML front matter), and files are
     // independent, so parse them on scoped threads and keep path order.
-    let threads = std::thread::available_parallelism().map_or(1, usize::from);
-    let chunk_size = paths.len().div_ceil(threads).max(64);
-    let parsed = std::thread::scope(|scope| {
-        let workers = paths
-            .chunks(chunk_size)
-            .map(|chunk| {
-                scope.spawn(move || {
-                    chunk
-                        .iter()
-                        .map(|relative| {
-                            read(relative).map(|(matches, bytes)| {
-                                (
-                                    matches,
-                                    if matches {
-                                        read_record_file(state_dir, relative, bytes)
-                                    } else {
-                                        Ok(None)
-                                    },
-                                )
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect::<Vec<_>>();
-        workers
-            .into_iter()
-            .flat_map(|worker| worker.join().expect("record parser thread panicked"))
-            .collect::<Result<Vec<_>>>()
+    let parsed = ordered_path_map(&paths, &|relative| {
+        read(relative).map(|(matches, bytes)| {
+            (
+                matches,
+                if matches {
+                    read_record_file(state_dir, relative, bytes)
+                } else {
+                    Ok(None)
+                },
+            )
+        })
     })?;
     for (relative, (matches, result)) in paths.into_iter().zip(parsed) {
         if !matches {
@@ -118,6 +100,29 @@ pub(crate) fn read_record_paths(
         }
     }
     Ok((files, changed))
+}
+
+pub(crate) fn ordered_path_map<T: Send>(
+    paths: &[PathBuf],
+    read: &(impl Fn(&Path) -> Result<T> + Sync),
+) -> Result<Vec<T>> {
+    if paths.len() <= 64 {
+        return paths.iter().map(|path| read(path)).collect();
+    }
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    let chunk_size = paths.len().div_ceil(threads).max(64);
+    std::thread::scope(|scope| {
+        let workers = paths
+            .chunks(chunk_size)
+            .map(|chunk| {
+                scope.spawn(move || chunk.iter().map(|path| read(path)).collect::<Vec<_>>())
+            })
+            .collect::<Vec<_>>();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("record parser thread panicked"))
+            .collect::<Result<Vec<_>>>()
+    })
 }
 
 enum ParsedRecord {
@@ -1008,6 +1013,54 @@ mod tests {
     use super::*;
     use crate::test_records::{issue_record, link, Records};
     use tempfile::tempdir;
+
+    #[test]
+    fn ordered_workers_preserve_supplied_bytes_and_raw_error_priority_across_chunks() {
+        let dir = tempdir().unwrap();
+        let bytes = (0..130)
+            .map(|number| {
+                let id = format!("atelier-{number:04}");
+                (
+                    PathBuf::from(format!("issues/{id}.md")),
+                    atelier_records::render_issue_record(&issue_record(&id, "task", "todo"))
+                        .unwrap()
+                        .into_bytes(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let paths = bytes.keys().cloned().collect::<Vec<_>>();
+        let threads = std::sync::Mutex::new(BTreeSet::new());
+        let (files, changed) = read_record_paths(dir.path(), paths.clone(), &|path| {
+            threads
+                .lock()
+                .unwrap()
+                .insert(format!("{:?}", std::thread::current().id()));
+            Ok((true, Some(bytes[path].clone())))
+        })
+        .unwrap();
+        assert!(changed.is_empty() && files.errors.is_empty());
+        assert_eq!(files.issues.len(), paths.len());
+        assert_eq!(files.issues[0].issue.id, "atelier-0000");
+        assert_eq!(files.issues[129].issue.id, "atelier-0129");
+        assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
+        if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
+            assert!(threads.into_inner().unwrap().len() > 1);
+        }
+        let error = read_record_paths(dir.path(), paths.clone(), &|path| {
+            if path == paths[64] {
+                bail!("first lexical raw fault");
+            }
+            if path == paths[129] {
+                bail!("later lexical raw fault");
+            }
+            if path == paths[0] {
+                return Ok((true, Some(vec![0xff])));
+            }
+            Ok((false, None))
+        })
+        .unwrap_err();
+        assert_eq!(error.to_string(), "first lexical raw fault");
+    }
 
     #[test]
     fn parser_workers_consume_supplied_bytes_without_a_second_read() {
