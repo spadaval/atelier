@@ -107,8 +107,26 @@ impl<'a> ReadContext<'a> {
         self.objects.as_mut().expect("object reader").get(spec)
     }
     fn object(&mut self, commit: &str, path: &Path) -> Result<Option<&GitObject>> {
-        let commit = self.pinned(commit)?;
-        self.object_spec(&format!("{commit}:{}", path.display()))
+        let commit = self.commit_id(commit)?;
+        let mut spec = format!("{commit}^{{tree}}");
+        for component in path.components() {
+            let Some((_, kind, bytes)) = self.object_spec(&spec)? else {
+                return Ok(None);
+            };
+            if kind != "tree" {
+                bail!("expected Git directory tree");
+            }
+            let Some((_, oid)) = tree_entry(
+                bytes,
+                component.as_os_str().as_encoded_bytes(),
+                commit.len() / 2,
+            )?
+            else {
+                return Ok(None);
+            };
+            spec = oid;
+        }
+        self.object_spec(&spec)
     }
     fn commit_id(&mut self, commit: &str) -> Result<String> {
         let commit = self.pinned(commit)?;
@@ -139,41 +157,50 @@ impl<'a> ReadContext<'a> {
         if kind != "tree" {
             bail!("expected Git record directory tree");
         }
-        let name = path
-            .file_name()
-            .context("record has no filename")?
-            .as_encoded_bytes();
-        let mut rest = bytes.as_slice();
-        while !rest.is_empty() {
-            let space = rest
-                .iter()
-                .position(|byte| *byte == b' ')
-                .context("invalid Git tree mode")?;
-            let nul = rest
-                .iter()
-                .position(|byte| *byte == 0)
-                .context("invalid Git tree filename")?;
-            if space >= nul {
-                bail!("invalid Git tree entry");
-            }
-            let oid = rest
-                .get(nul + 1..nul + 1 + oid_bytes)
-                .context("truncated Git tree object ID")?;
-            if &rest[space + 1..nul] == name {
-                let mode = std::str::from_utf8(&rest[..space])?;
-                if matches!(mode, "40000" | "160000") {
-                    bail!("expected blob entry for {}", path.display());
-                }
-                return Ok(Some((
-                    mode.into(),
-                    oid.iter().map(|byte| format!("{byte:02x}")).collect(),
-                )));
-            }
-            rest = &rest[nul + 1 + oid_bytes..];
+        let entry = tree_entry(
+            bytes,
+            path.file_name()
+                .context("record has no filename")?
+                .as_encoded_bytes(),
+            oid_bytes,
+        )?;
+        if entry
+            .as_ref()
+            .is_some_and(|(mode, _)| matches!(mode.as_str(), "40000" | "160000"))
+        {
+            bail!("expected blob entry for {}", path.display());
         }
-        Ok(None)
+        Ok(entry)
     }
 }
+fn tree_entry(bytes: &[u8], name: &[u8], oid_bytes: usize) -> Result<Option<(String, String)>> {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let space = rest
+            .iter()
+            .position(|byte| *byte == b' ')
+            .context("invalid Git tree mode")?;
+        let nul = rest
+            .iter()
+            .position(|byte| *byte == 0)
+            .context("invalid Git tree filename")?;
+        if space >= nul {
+            bail!("invalid Git tree entry");
+        }
+        let oid = rest
+            .get(nul + 1..nul + 1 + oid_bytes)
+            .context("truncated Git tree object ID")?;
+        if &rest[space + 1..nul] == name {
+            return Ok(Some((
+                std::str::from_utf8(&rest[..space])?.into(),
+                oid.iter().map(|byte| format!("{byte:02x}")).collect(),
+            )));
+        }
+        rest = &rest[nul + 1 + oid_bytes..];
+    }
+    Ok(None)
+}
+
 type GitObject = (String, String, Vec<u8>);
 struct ObjectReader {
     child: Child,
@@ -186,7 +213,7 @@ impl ObjectReader {
     fn new(repo: &Path) -> Result<Self> {
         let mut child = Command::new("git")
             .current_dir(repo)
-            .args(["cat-file", "--batch", "-z"])
+            .args(["cat-file", "--batch"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -221,27 +248,19 @@ impl ObjectReader {
         Ok(self.objects[spec].as_ref())
     }
     fn receive(&mut self, spec: &str) -> Result<Option<GitObject>> {
-        if spec.contains('\0') {
+        if spec.contains(['\0', '\n']) {
             bail!("invalid Git object query");
         }
         self.input.write_all(spec.as_bytes())?;
-        self.input.write_all(&[0])?;
+        self.input.write_all(b"\n")?;
         self.input.flush()?;
         let mut header = Vec::new();
         self.output.read_until(b'\n', &mut header)?;
-        let missing = format!("{spec} missing\n");
-        if !header.is_empty() && missing.as_bytes().starts_with(&header) {
-            // Missing-object output echoes the query, which can contain newlines.
-            let mut remainder = vec![0; missing.len() - header.len()];
-            self.output.read_exact(&mut remainder)?;
-            header.extend(remainder);
-            if header != missing.as_bytes() {
-                bail!("invalid Git missing-object response");
-            }
-            return Ok(None);
-        }
         if header.pop() != Some(b'\n') {
             bail!("Git object reader ended before its response");
+        }
+        if header == format!("{spec} missing").as_bytes() {
+            return Ok(None);
         }
         let fields = std::str::from_utf8(&header)?
             .split_whitespace()
@@ -757,29 +776,32 @@ mod tests {
     }
     #[test]
     fn newline_batch_headers_preserve_binary_bodies_and_missing_multiline_paths() {
-        let repo = repo("sha1");
-        let name = "binary\n名";
-        let bytes = b"first\n\0second\nlast";
-        fs::write(repo.path().join(name), bytes).unwrap();
-        let pin = commit(repo.path(), "binary");
-        let mut reader = ObjectReader::new(repo.path()).unwrap();
-        assert!(reader
-            .get(&format!("{pin}:missing\npath"))
-            .unwrap()
-            .is_none());
-        assert_eq!(
-            reader.get(&format!("{pin}:{name}")).unwrap().unwrap().2,
-            bytes
-        );
-        assert_eq!(reader.get(&pin).unwrap().unwrap().1, "commit");
-        assert!(reader
-            .get(&format!("{pin}:other\nmissing"))
-            .unwrap()
-            .is_none());
-        assert_eq!(
-            reader.get(&format!("{pin}:{name}")).unwrap().unwrap().2,
-            bytes
-        );
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            let name = "folder\n名/binary\n名";
+            let bytes = b"first\n\0second\nlast";
+            fs::create_dir(repo.path().join("folder\n名")).unwrap();
+            fs::write(repo.path().join(name), bytes).unwrap();
+            let pin = commit(repo.path(), "binary");
+            let mut read = ReadContext::new(repo.path());
+            assert!(read
+                .object(&pin, Path::new("folder\n名/missing\npath"))
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                read.object(&pin, Path::new(name)).unwrap().unwrap().2,
+                bytes
+            );
+            assert_eq!(read.object_spec(&pin).unwrap().unwrap().1, "commit");
+            assert!(read
+                .object(&pin, Path::new("other\nmissing"))
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                read.object(&pin, Path::new(name)).unwrap().unwrap().2,
+                bytes
+            );
+        }
     }
     #[test]
     fn range_boundaries_reject_wrong_missing_and_nonancestor_pins() {
