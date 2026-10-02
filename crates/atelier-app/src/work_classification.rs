@@ -64,16 +64,9 @@ pub struct WorkBuckets {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MissionSummary {
-    pub id: String,
-    pub title: String,
-    pub status: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StatusView {
     pub work: WorkBuckets,
-    pub current_missions: Vec<MissionSummary>,
+    pub current_mission_count: usize,
 }
 
 pub fn status_view(
@@ -82,7 +75,7 @@ pub fn status_view(
 ) -> Result<StatusView> {
     Ok(StatusView {
         work: work_buckets(index, workflow_policy)?,
-        current_missions: current_missions(index, workflow_policy),
+        current_mission_count: current_mission_count(index, workflow_policy),
     })
 }
 
@@ -229,24 +222,14 @@ fn open_blockers(
     Ok(index.get_blockers(issue_id))
 }
 
-fn current_missions(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-) -> Vec<MissionSummary> {
-    let mut missions = index
+fn current_mission_count(index: &RecordIndex, workflow_policy: Option<&WorkflowPolicy>) -> usize {
+    index
         .issues()
         .filter(|issue| issue.issue_type == "mission")
         .filter(|issue| {
             workflow_policy.and_then(|policy| policy.status_category(&issue.status)) != Some("done")
         })
-        .map(|issue| MissionSummary {
-            id: issue.id.clone(),
-            title: issue.title.clone(),
-            status: issue.status.clone(),
-        })
-        .collect::<Vec<_>>();
-    missions.sort_by(|left, right| left.id.cmp(&right.id));
-    missions
+        .count()
 }
 
 fn sort_work_rows(rows: &mut [WorkRow]) {
@@ -373,6 +356,27 @@ mod tests {
         assert_eq!(buckets.active[0].id, "atelier-active");
         assert_eq!(buckets.blocked[0].id, "atelier-blocked");
         assert_eq!(buckets.done[0].id, "atelier-done");
+    }
+
+    #[test]
+    fn current_mission_count_uses_custom_terminal_categories_and_complete_scope() {
+        let mut records = records_with_rows();
+        records.issue("atelier-live-mission", "mission", "in_progress");
+        records.issue("atelier-retired-mission", "mission", "retired");
+        let index = records.index();
+        let mut policy = test_policy();
+        policy.statuses.insert(
+            "retired".into(),
+            crate::workflow_policy::StatusDefinition {
+                category: "done".into(),
+            },
+        );
+        let view = status_view(&index, Some(&policy)).unwrap();
+        assert_eq!(view.current_mission_count, 1);
+        assert_eq!(view.work.active.len(), 2);
+        assert_eq!(view.work.done.len(), 2);
+        // Without policy all mission statuses are nonterminal, as before.
+        assert_eq!(status_view(&index, None).unwrap().current_mission_count, 2);
     }
 
     #[test]

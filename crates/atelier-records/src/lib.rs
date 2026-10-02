@@ -126,19 +126,11 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     if relation_type.is_empty() {
         bail!("Link type cannot be empty");
     }
-    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
-        Ok(())
-    } else {
-        validate_relation_type(relation_type)
-    }
+    validate_relation_type(relation_type)
 }
 
 pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
-    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
-        Ok(())
-    } else {
-        validate_relation_type(relation_type)
-    }
+    validate_relation_type(relation_type)
 }
 
 pub fn is_attachment_role(relation_type: &str) -> bool {
@@ -353,24 +345,12 @@ impl RecordStore {
     ) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_link_type(role)?;
-        let mut record = self.load_record_by_id(source_kind, source_id)?;
-        let attachment = attachment_relationship(target_kind, target_id, role);
-        if record
-            .header()
-            .relationships
-            .attachments
-            .contains(&attachment)
-        {
-            return Ok(false);
-        }
-        record
-            .header_mut()
-            .relationships
-            .attachments
-            .push(attachment);
-        record.header_mut().updated_at = Utc::now();
-        self.write_record_atomic(&record)?;
-        Ok(true)
+        self.mutate_relationships(source_kind, source_id, |relationships| {
+            insert_unique(
+                &mut relationships.attachments,
+                attachment_relationship(target_kind, target_id, role),
+            )
+        })
     }
 
     pub fn add_relates_relationship(
@@ -383,15 +363,12 @@ impl RecordStore {
     ) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_relationship_type(relation_type)?;
-        let mut record = self.load_record_by_id(source_kind, source_id)?;
-        let relation = relates_relationship(target_kind, target_id, relation_type);
-        if record.header().relationships.relates.contains(&relation) {
-            return Ok(false);
-        }
-        record.header_mut().relationships.relates.push(relation);
-        record.header_mut().updated_at = Utc::now();
-        self.write_record_atomic(&record)?;
-        Ok(true)
+        self.mutate_relationships(source_kind, source_id, |relationships| {
+            insert_unique(
+                &mut relationships.relates,
+                relates_relationship(target_kind, target_id, relation_type),
+            )
+        })
     }
 
     pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
@@ -402,10 +379,9 @@ impl RecordStore {
         self.load_issue_by_id(child_id)?;
         let target = issue_relationship_target(child_id);
         let mut parent = self.load_issue_by_id(parent_id)?;
-        if parent.relationships.children.contains(&target) {
+        if !insert_unique(&mut parent.relationships.children, target) {
             return Ok(false);
         }
-        parent.relationships.children.push(target);
         parent.issue.updated_at = Utc::now();
         self.write_issue_atomic(&parent)?;
         Ok(true)
@@ -459,13 +435,20 @@ impl RecordStore {
             validate_relationship_type(relation_type)?;
         }
 
+        self.mutate_relationships(source_kind, source_id, |relationships| {
+            add_relationship_to_bucket(relationships, target_kind, target_id, relation_type)
+        })
+    }
+
+    // Each caller holds the exclusive transaction before validating/loading.
+    fn mutate_relationships(
+        &self,
+        source_kind: &str,
+        source_id: &str,
+        mutate: impl FnOnce(&mut Relationships) -> bool,
+    ) -> Result<bool> {
         let mut record = self.load_record_by_id(source_kind, source_id)?;
-        let changed = add_relationship_to_bucket(
-            &mut record.header_mut().relationships,
-            target_kind,
-            target_id,
-            relation_type,
-        );
+        let changed = mutate(&mut record.header_mut().relationships);
         if changed {
             record.header_mut().updated_at = Utc::now();
             self.write_record_atomic(&record)?;
@@ -485,10 +468,9 @@ impl RecordStore {
 
         let target = issue_relationship_target(blocked_id);
         let mut blocker = self.load_issue_by_id(blocker_id)?;
-        if blocker.relationships.blocks.contains(&target) {
+        if !insert_unique(&mut blocker.relationships.blocks, target) {
             return Ok(false);
         }
-        blocker.relationships.blocks.push(target);
         self.write_issue_atomic(&blocker)?;
         Ok(true)
     }
@@ -1172,18 +1154,23 @@ fn add_relationship_to_bucket(
     relation_type: &str,
 ) -> bool {
     if is_attachment_role(relation_type) {
-        let attachment = attachment_relationship(target_kind, target_id, relation_type);
-        if relationships.attachments.contains(&attachment) {
-            return false;
-        }
-        relationships.attachments.push(attachment);
+        insert_unique(
+            &mut relationships.attachments,
+            attachment_relationship(target_kind, target_id, relation_type),
+        )
     } else {
-        let relation = relates_relationship(target_kind, target_id, relation_type);
-        if relationships.relates.contains(&relation) {
-            return false;
-        }
-        relationships.relates.push(relation);
+        insert_unique(
+            &mut relationships.relates,
+            relates_relationship(target_kind, target_id, relation_type),
+        )
     }
+}
+
+fn insert_unique<T: PartialEq>(values: &mut Vec<T>, value: T) -> bool {
+    if values.contains(&value) {
+        return false;
+    }
+    values.push(value);
     true
 }
 

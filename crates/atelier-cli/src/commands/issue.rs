@@ -4,20 +4,22 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
+    format_status_with_category, issue_status_category, issue_status_label,
     load_issue_workflow_policy,
 };
 use crate::human_output::{
-    render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction, FooterPanel,
-    IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext, TextPanel,
+    plural_suffix, render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction,
+    FooterPanel, IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext,
+    TextPanel,
 };
 use crate::utils::format_issue_id;
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
+use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
-use atelier_records::validate_issue_type;
+use atelier_core::{Issue, ISSUE_NOTE_KINDS};
+use atelier_records::{validate_issue_type, validate_priority};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
@@ -554,14 +556,6 @@ pub fn list_inventory(
     Ok(())
 }
 
-fn plural_suffix(count: usize) -> &'static str {
-    if count == 1 {
-        ""
-    } else {
-        "s"
-    }
-}
-
 fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
     timestamp
         .with_timezone(&Local)
@@ -920,12 +914,6 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
     } else {
         bail!("Lint failed with {} finding(s)", view.findings.len())
     }
-}
-
-pub fn validate_priority(priority: &str) -> Result<()> {
-    IssuePriority::from_cli_input(priority)
-        .map(|_| ())
-        .map_err(Into::into)
 }
 
 #[cfg(test)]

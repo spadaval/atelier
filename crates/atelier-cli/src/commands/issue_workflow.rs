@@ -35,7 +35,3 @@ pub(crate) fn format_status_with_category(category: Option<&str>, status: &str) 
 pub(crate) fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
     issue_status_category(policy, &issue.status).as_deref() == Some("done")
 }
-
-pub(crate) fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    !issue_is_done(policy, issue)
-}
