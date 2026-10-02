@@ -150,16 +150,9 @@ fn evaluate_issue_gate(
 
 /// A recorded fail newer than every explicit pass blocks successful completion.
 pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Result<Option<String>> {
-    newest_failure_with_freshness(index, repo, issue_id, true)
+    EvidenceReadContext::new(repo).newest_failure(index, issue_id, true)
 }
-pub(crate) fn newest_failure_with_freshness(
-    index: &RecordIndex,
-    repo: &Path,
-    issue_id: &str,
-    fresh: bool,
-) -> Result<Option<String>> {
-    EvidenceReadContext::new(repo).newest_failure(index, issue_id, fresh)
-}
+
 impl EvidenceReadContext<'_> {
     pub(crate) fn newest_failure(
         &mut self,

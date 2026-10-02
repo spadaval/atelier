@@ -26,14 +26,8 @@ pub struct ValidatorResult {
 
 /// Runs a transition's read-only validators against one issue.
 pub fn evaluate_policy_transition(request: ValidatorRequest<'_>) -> Result<Vec<ValidatorResult>> {
-    evaluate_with_freshness(request, true)
-}
-pub(crate) fn evaluate_with_freshness(
-    request: ValidatorRequest<'_>,
-    fresh: bool,
-) -> Result<Vec<ValidatorResult>> {
     let mut read = crate::git_freshness::ReadContext::new(request.repo_root);
-    evaluate_with_context(request, fresh, &mut read)
+    evaluate_with_context(request, true, &mut read)
 }
 pub(crate) fn evaluate_with_context(
     request: ValidatorRequest<'_>,

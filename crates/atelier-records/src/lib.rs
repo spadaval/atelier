@@ -668,35 +668,6 @@ pub fn render_issue_sections(sections: &IssueSections) -> String {
     )
 }
 
-/// Render a concrete evidence record through its record-file codec.
-pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
-    if record.header.kind != "evidence" {
-        bail!("Evidence record kind must be evidence");
-    }
-    let relative = Path::new("<record>");
-    record_id::validate_record_id(&record.header.id).with_context(|| {
-        format!(
-            "Invalid evidence id '{}' in {}",
-            record.header.id,
-            display_state_path(relative)
-        )
-    })?;
-    validate_evidence_record(record, relative)?;
-    let mut relationships = record.header.relationships.clone();
-    sort_relationships(&mut relationships);
-    render_evidence_record(record, &relationships, &record_kinds::EVIDENCE_KIND)
-}
-
-/// Parse a concrete evidence record without exposing mixed-kind dispatch to
-/// callers that already know the domain type.
-pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<EvidenceRecord> {
-    let spec = canonical_record_kind("evidence")?;
-    let (front_matter, body) = split_front_matter(text, relative)?;
-    let id = validate_record_front_matter(&front_matter, relative, spec)?;
-    reject_forbidden_data_front_matter(&front_matter, relative)?;
-    parse_evidence_record(front_matter, body, relative, spec, id)
-}
-
 pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueRecord> {
     let (front_matter, body) = split_front_matter(text, relative)?;
 
@@ -865,11 +836,23 @@ pub fn validate_issue_section_text(
     Ok(())
 }
 
-fn render_evidence_record(
-    record: &EvidenceRecord,
-    relationships: &Relationships,
-    spec: &RecordKindSpec,
-) -> Result<String> {
+/// Render a concrete evidence record through its record-file codec.
+pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
+    if record.header.kind != "evidence" {
+        bail!("Evidence record kind must be evidence");
+    }
+    let relative = Path::new("<record>");
+    record_id::validate_record_id(&record.header.id).with_context(|| {
+        format!(
+            "Invalid evidence id '{}' in {}",
+            record.header.id,
+            display_state_path(relative)
+        )
+    })?;
+    validate_evidence_record(record, relative)?;
+    let mut relationships = record.header.relationships.clone();
+    sort_relationships(&mut relationships);
+    let spec = &record_kinds::EVIDENCE_KIND;
     let data = &record.data;
     let body = render_evidence_body(Some(&record.summary), data);
 
@@ -907,7 +890,7 @@ fn render_evidence_record(
     write_evidence_target(&mut output, data.target.as_ref())?;
     write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
-    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_relationships(&mut output, &relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
     write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
@@ -923,13 +906,13 @@ fn render_evidence_record(
     Ok(output)
 }
 
-fn parse_evidence_record(
-    front_matter: BTreeMap<String, Value>,
-    body: &str,
-    relative: &Path,
-    spec: &RecordKindSpec,
-    id: String,
-) -> Result<EvidenceRecord> {
+/// Parse a concrete evidence record without exposing mixed-kind dispatch to
+/// callers that already know the domain type.
+pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<EvidenceRecord> {
+    let spec = canonical_record_kind("evidence")?;
+    let (front_matter, body) = split_front_matter(text, relative)?;
+    let id = validate_record_front_matter(&front_matter, relative, spec)?;
+    reject_forbidden_data_front_matter(&front_matter, relative)?;
     let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;

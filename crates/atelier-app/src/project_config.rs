@@ -31,7 +31,11 @@ pub struct PruneConfig {
 
 impl ProjectConfig {
     pub fn load(repo_root: &Path) -> Result<Self> {
-        load(repo_root)
+        let layout = StorageLayout::new(repo_root);
+        let config_path = layout.config_path();
+        let text = fs::read_to_string(&config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?;
+        parse_project_config(&text, &config_path)
     }
 }
 
@@ -58,14 +62,6 @@ struct RawProjectPaths {
 #[serde(deny_unknown_fields)]
 struct RawPruneConfig {
     canonical_retention_days: Option<u64>,
-}
-
-pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
-    let layout = StorageLayout::new(repo_root);
-    let config_path = layout.config_path();
-    let text = fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    parse_project_config(&text, &config_path)
 }
 
 pub fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
