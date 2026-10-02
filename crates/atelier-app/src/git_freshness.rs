@@ -384,28 +384,28 @@ impl ReadContext<'_> {
             if self.rename.is_none() {
                 let config = Command::new("git")
                     .current_dir(self.repo)
-                    .args(["config", "--get", "diff.renames"])
+                    .args([
+                        "config",
+                        "--null",
+                        "--type=bool-or-str",
+                        "--get",
+                        "diff.renames",
+                    ])
                     .output()?;
                 self.rename = Some(if config.status.code() == Some(1) {
                     Some("-M")
                 } else if config.status.success() {
-                    let value = String::from_utf8(config.stdout)?
-                        .trim()
-                        .to_ascii_lowercase();
-                    match value.as_str() {
-                        "copies" => Some("-C"),
-                        "" | "true" | "yes" | "on" => Some("-M"),
-                        "false" | "no" | "off" => None,
-                        _ => {
-                            if value
-                                .parse::<i64>()
-                                .context("invalid diff.renames configuration")?
-                                == 0
-                            {
-                                None
-                            } else {
-                                Some("-M")
-                            }
+                    let value = String::from_utf8(config.stdout)?;
+                    let value = value
+                        .strip_suffix('\0')
+                        .context("missing Git config delimiter")?;
+                    if value.eq_ignore_ascii_case("copies") {
+                        Some("-C")
+                    } else {
+                        match value {
+                            "true" => Some("-M"),
+                            "false" => None,
+                            _ => bail!("invalid diff.renames configuration"),
                         }
                     }
                 } else {
@@ -570,6 +570,15 @@ mod tests {
             Some("off"),
             Some("0"),
             Some("2"),
+            Some("0x0"),
+            Some("0x1"),
+            Some("0k"),
+            Some("1k"),
+            Some(""),
+            Some("COPIES"),
+            Some("cOpIeS"),
+            Some("TRUE"),
+            Some("No"),
         ] {
             if let Some(value) = value {
                 git_output(repo.path(), &["config", "diff.renames", value]).unwrap();
@@ -589,6 +598,32 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn rename_configuration_preserves_git_string_errors_and_valueless_true() {
+        let repo = repo("sha1");
+        fs::write(repo.path().join("source"), "same content").unwrap();
+        let pin = commit(repo.path(), "pin");
+        fs::rename(repo.path().join("source"), repo.path().join("renamed")).unwrap();
+        let end = commit(repo.path(), "rename");
+        for value in [" true ", "true\n", " copies ", "bad", "1junk"] {
+            git_output(repo.path(), &["config", "diff.renames", value]).unwrap();
+            assert!(
+                changed_paths(repo.path(), &pin, &end).is_err(),
+                "Git accepted {value:?}"
+            );
+            assert!(
+                commit_edges(repo.path(), &pin).is_err(),
+                "batch accepted {value:?}"
+            );
+        }
+        let _ = git_output(repo.path(), &["config", "--unset", "diff.renames"]);
+        let config = repo.path().join(".git/config");
+        let mut text = fs::read_to_string(&config).unwrap();
+        text.push_str("\n[diff]\n\trenames\n");
+        fs::write(config, text).unwrap();
+        let edge = commit_edges(repo.path(), &pin).unwrap().remove(0);
+        assert_eq!(edge.paths, changed_paths(repo.path(), &pin, &end).unwrap());
     }
     #[test]
     fn batched_edges_preserve_tested_merge_parent_and_side_branch_reverts() {
