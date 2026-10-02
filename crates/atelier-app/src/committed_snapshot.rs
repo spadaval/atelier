@@ -143,15 +143,6 @@ impl CommittedSnapshot {
             entries: entries(repo, commit, false)?,
         })
     }
-    /// Fresh initial proof runs in the existing parser workers, which consume
-    /// those same bytes. Only immutable entries survive this operation.
-    pub fn read_record_files(
-        &self,
-        repo: &Path,
-        clean: bool,
-    ) -> Result<(crate::record_index::RecordFiles, Vec<PathBuf>)> {
-        self.read_and_finish(repo, clean, |files| files)
-    }
     /// Pure index construction overlaps the native index check after all raw reads.
     pub fn read_record_index(
         &self,
@@ -221,13 +212,6 @@ impl CommittedSnapshot {
     }
 }
 
-/// Canonical inventory, bytes, types and modes are freshly compared each call.
-/// Machine-local files are excluded by the record loader's shared classifier.
-pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
-    let entries = entries(repo, commit, true)?;
-    verify_records(repo, &entries)?;
-    flagged_paths(repo, &entries, |_| false, true).map(|_| ())
-}
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
     require_records_match(&modified(repo, record_paths(repo, entries)?, entries)?)
 }
@@ -438,8 +422,8 @@ mod tests {
                     "uncommitted local config",
                 )
                 .unwrap();
-                let (files, paths) = snapshot.read_record_files(repo.path(), false).unwrap();
-                assert!(paths.is_empty());
+                let files =
+                    crate::record_index::read_record_files(&repo.path().join(".atelier")).unwrap();
                 assert_eq!(files.issues.len(), 1);
                 assert_eq!(files.errors.len(), 1);
                 let parse_error = files.into_index().unwrap_err().to_string();
@@ -454,11 +438,11 @@ mod tests {
                     )
                     .unwrap();
                     assert_eq!(
-                        snapshot.read_record_files(repo.path(), false).unwrap().1,
+                        snapshot.read_record_index(repo.path(), false).unwrap().1,
                         [PathBuf::from("unfinished-code")]
                     );
                     assert!(snapshot
-                        .read_record_files(repo.path(), true)
+                        .read_record_index(repo.path(), true)
                         .unwrap_err()
                         .to_string()
                         .starts_with("merge_checkout_dirty"));
@@ -523,7 +507,7 @@ mod tests {
                     }
                     _ => unreachable!(),
                 }
-                let error = snapshot.read_record_files(repo.path(), false).unwrap_err();
+                let error = snapshot.verified_working_paths(repo.path()).unwrap_err();
                 assert_eq!(
                     snapshot
                         .read_record_index(repo.path(), false)
@@ -566,13 +550,10 @@ mod tests {
         git_output(repo.path(), &["commit", "-qm", "committed graph error"]).unwrap();
         let head = crate::git_freshness::head_commit(repo.path()).unwrap();
         let snapshot = CommittedSnapshot::new(repo.path(), &head).unwrap();
-        let expected = snapshot
-            .read_record_files(repo.path(), false)
-            .unwrap()
-            .0
-            .into_index()
-            .unwrap_err()
-            .to_string();
+        let expected =
+            crate::record_index::RecordIndex::load_structural(&repo.path().join(".atelier"))
+                .unwrap_err()
+                .to_string();
         assert!(expected.contains("atelier-missing"));
         let inner_error = || {
             snapshot
@@ -661,7 +642,10 @@ mod tests {
         git_output(repo.path(), &["add", record]).unwrap();
         fs::write(repo.path().join(record), "committed record").unwrap();
         assert!(snapshot.verified_working_paths(repo.path()).is_err());
-        assert!(require_committed(repo.path(), &pin).is_err());
+        assert!(CommittedSnapshot::new(repo.path(), &pin)
+            .unwrap()
+            .verified_working_paths(repo.path())
+            .is_err());
         git_output(repo.path(), &["reset", "-q", "HEAD", "--", record]).unwrap();
         snapshot.require_clean(repo.path()).unwrap();
         #[cfg(unix)]
@@ -745,7 +729,13 @@ mod tests {
                 snapshot.verified_working_paths(repo.path()).is_err(),
                 "{state}"
             );
-            assert!(require_committed(repo.path(), &pin).is_err(), "{state}");
+            assert!(
+                CommittedSnapshot::new(repo.path(), &pin)
+                    .unwrap()
+                    .verified_working_paths(repo.path())
+                    .is_err(),
+                "{state}"
+            );
         }
     }
 
@@ -780,14 +770,21 @@ mod tests {
             }
             git_output(repo.path(), &["add", "."]).unwrap();
             git_output(repo.path(), &["commit", "-qm", "raw blobs"]).unwrap();
+            let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
+            let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
             fs::write(
                 repo.path().join(".gitattributes"),
                 "*.data text eol=lf filter=uppercase\n",
             )
             .unwrap();
+            let marker = repo.path().join("filter-ran");
             git_output(
                 repo.path(),
-                &["config", "filter.uppercase.clean", "tr a-z A-Z"],
+                &[
+                    "config",
+                    "filter.uppercase.clean",
+                    &format!("touch {}; tr a-z A-Z", marker.display()),
+                ],
             )
             .unwrap();
             git_output(repo.path(), &["config", "core.autocrlf", "true"]).unwrap();
@@ -799,7 +796,12 @@ mod tests {
                 .unwrap();
                 assert_eq!(blob_hash(bytes, git.trim()).unwrap(), git.trim());
             }
-            require_committed(repo.path(), "HEAD").unwrap();
+            // These live raw verification helpers must bypass clean filters.
+            // Native Git status, exercised below, may independently run them.
+            verify_records(repo.path(), &snapshot.entries).unwrap();
+            flagged_paths(repo.path(), &snapshot.entries, |_| false, true).unwrap();
+            assert!(!marker.exists());
+            snapshot.verified_working_paths(repo.path()).unwrap();
             let path = ".atelier/issues/case-1 \n\t名.data";
             git_output(
                 repo.path(),
@@ -807,16 +809,16 @@ mod tests {
             )
             .unwrap();
             fs::write(repo.path().join(path), "hidden changed bytes").unwrap();
-            assert!(require_committed(repo.path(), "HEAD").is_err());
+            assert!(snapshot.verified_working_paths(repo.path()).is_err());
             fs::write(repo.path().join(path), &data[1]).unwrap();
-            require_committed(repo.path(), "HEAD").unwrap();
+            snapshot.verified_working_paths(repo.path()).unwrap();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
                 git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
                 fs::set_permissions(repo.path().join(path), fs::Permissions::from_mode(0o755))
                     .unwrap();
-                assert!(require_committed(repo.path(), "HEAD").is_err());
+                assert!(snapshot.verified_working_paths(repo.path()).is_err());
             }
         }
         for invalid in ["", "abcd", &"0".repeat(41), &"g".repeat(40)] {
@@ -845,11 +847,13 @@ mod tests {
         }
         git_output(repo.path(), &["add", "."]).unwrap();
         git_output(repo.path(), &["commit", "-qm", "canonical snapshot"]).unwrap();
+        let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
+        let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
         let started = std::time::Instant::now();
-        require_committed(repo.path(), "HEAD").unwrap();
+        snapshot.verified_working_paths(repo.path()).unwrap();
         println!("1000 canonical files verified in {:?}", started.elapsed());
         fs::write(issues.join("issue-0999.md"), "changed last file").unwrap();
-        let error = require_committed(repo.path(), "HEAD").unwrap_err();
+        let error = snapshot.verified_working_paths(repo.path()).unwrap_err();
         assert!(error.to_string().contains("issue-0999.md"), "{error}");
     }
 }

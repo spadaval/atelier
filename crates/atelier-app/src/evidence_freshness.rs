@@ -63,13 +63,6 @@ impl EvidenceReadContext<'_> {
         })
     }
 }
-pub fn evidence_is_fresh(
-    repo: &Path,
-    issue: &CanonicalIssueRecord,
-    record: &EvidenceRecord,
-) -> Result<bool> {
-    EvidenceReadContext::new(repo).evidence_is_fresh(issue, record)
-}
 fn evidence_matches_edges(
     read: &mut EvidenceReadContext<'_>,
     issue: &CanonicalIssueRecord,
@@ -95,16 +88,6 @@ fn evidence_matches_edges(
         }
     }
     Ok(true)
-}
-
-pub fn issue_evidence_gate_status(
-    index: &RecordIndex,
-    repo: &Path,
-    issue_id: &str,
-    min_count: usize,
-    kind: Option<&str>,
-) -> Result<EvidenceGateStatus> {
-    EvidenceReadContext::new(repo).issue_gate(index, issue_id, min_count, kind)
 }
 
 fn evaluate_issue_gate(
@@ -305,7 +288,9 @@ mod tests {
         let mut reads = EvidenceReadContext::new(repo.path());
         for issue in &issues {
             assert!(reads.evidence_is_fresh(issue, &evidence).unwrap());
-            assert!(evidence_is_fresh(repo.path(), issue, &evidence).unwrap());
+            assert!(EvidenceReadContext::new(repo.path())
+                .evidence_is_fresh(issue, &evidence)
+                .unwrap());
         }
         let index =
             RecordIndex::from_records(issues.to_vec(), vec![evidence.clone()], Vec::new()).unwrap();
@@ -313,9 +298,9 @@ mod tests {
             let shared = reads
                 .issue_gate(&index, "atelier-a001", min_count, kind)
                 .unwrap();
-            let separate =
-                issue_evidence_gate_status(&index, repo.path(), "atelier-a001", min_count, kind)
-                    .unwrap();
+            let separate = EvidenceReadContext::new(repo.path())
+                .issue_gate(&index, "atelier-a001", min_count, kind)
+                .unwrap();
             assert_eq!(
                 (shared.passed, shared.reason),
                 (separate.passed, separate.reason)
@@ -336,7 +321,9 @@ mod tests {
                 .passed
         );
         fs::write(repo.path().join("code.rs"), "changed code").unwrap();
-        assert!(!evidence_is_fresh(repo.path(), &issues[0], &evidence).unwrap());
+        assert!(!EvidenceReadContext::new(repo.path())
+            .evidence_is_fresh(&issues[0], &evidence)
+            .unwrap());
         let dirty = git::working_paths(repo.path()).unwrap();
         let mut snapshot_read = EvidenceReadContext::from_snapshot(
             repo.path(),

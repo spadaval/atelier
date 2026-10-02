@@ -15,13 +15,8 @@ pub use atelier_core::{
     IssueSectionState, IssueSections, IssueStrategy, RecordHeader, WorkflowBranch,
 };
 
-pub mod document;
-pub mod evidence;
-pub mod issue;
 pub mod mutation_lock;
 pub mod review;
-pub mod store;
-pub mod validation;
 
 mod record_id;
 mod record_kinds;
@@ -2453,16 +2448,16 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn ownership_modules_expose_supported_record_boundaries() {
-        let record = issue::CanonicalIssueRecord {
+    fn root_exports_expose_supported_record_boundaries() {
+        let record = CanonicalIssueRecord {
             ..issue_record("atelier-mods")
         };
-        let text = issue::render_issue_record(&record).unwrap();
-        assert!(document::split_document(&text).is_some());
-        assert_eq!(issue::IssueSectionName::Context.title(), "Context");
-        let _store = store::RecordStore::new(tempdir().unwrap().path());
-        validation::validate_priority("high").unwrap();
-        let _: Option<evidence::EvidenceOutputSummary> = None;
+        let text = render_issue_record(&record).unwrap();
+        assert!(split_document(&text).is_some());
+        assert_eq!(IssueSectionName::Context.title(), "Context");
+        let _store = RecordStore::new(tempdir().unwrap().path());
+        validate_priority("high").unwrap();
+        let _: Option<EvidenceOutputSummary> = None;
     }
 
     #[test]
