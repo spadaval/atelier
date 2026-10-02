@@ -30,6 +30,14 @@ pub struct RecordFiles {
     /// order. Each error names the file.
     pub errors: Vec<RecordFileError>,
 }
+impl RecordFiles {
+    pub fn into_index(self) -> Result<RecordIndex> {
+        if let Some(error) = self.errors.into_iter().next() {
+            return Err(error.error);
+        }
+        RecordIndex::from_records(self.issues, self.evidence, self.reviews)
+    }
+}
 
 #[derive(Debug)]
 pub struct RecordFileError {
@@ -41,13 +49,24 @@ pub struct RecordFileError {
 /// Reads and parses every record file under `state_dir` without stopping at
 /// the first bad file.
 pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
-    let mut files = RecordFiles::default();
     if !state_dir.is_dir() {
-        return Ok(files);
+        return Ok(RecordFiles::default());
     }
     let mut paths = Vec::new();
     collect_files(state_dir, state_dir, &mut paths)?;
     paths.sort();
+    read_record_paths(state_dir, paths, &|_| Ok((true, None))).map(|(files, _)| files)
+}
+
+/// Raw errors and mismatches remain separate from parser errors until the
+/// caller has completed its index checks. Bytes are consumed only in workers.
+pub(crate) fn read_record_paths(
+    state_dir: &Path,
+    paths: Vec<PathBuf>,
+    read: &(impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)> + Sync),
+) -> Result<(RecordFiles, Vec<PathBuf>)> {
+    let mut files = RecordFiles::default();
+    let mut changed = Vec::new();
     // Parsing dominates command latency (YAML front matter), and files are
     // independent, so parse them on scoped threads and keep path order.
     let threads = std::thread::available_parallelism().map_or(1, usize::from);
@@ -59,7 +78,18 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
                 scope.spawn(move || {
                     chunk
                         .iter()
-                        .map(|relative| read_record_file(state_dir, relative))
+                        .map(|relative| {
+                            read(relative).map(|(matches, bytes)| {
+                                (
+                                    matches,
+                                    if matches {
+                                        read_record_file(state_dir, relative, bytes)
+                                    } else {
+                                        Ok(None)
+                                    },
+                                )
+                            })
+                        })
                         .collect::<Vec<_>>()
                 })
             })
@@ -67,9 +97,12 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
         workers
             .into_iter()
             .flat_map(|worker| worker.join().expect("record parser thread panicked"))
-            .collect::<Vec<_>>()
-    });
-    for (relative, result) in paths.into_iter().zip(parsed) {
+            .collect::<Result<Vec<_>>>()
+    })?;
+    for (relative, (matches, result)) in paths.into_iter().zip(parsed) {
+        if !matches {
+            changed.push(relative.clone());
+        }
         match result {
             Ok(Some(ParsedRecord::Issue(record))) => files.issues.push(*record),
             Ok(Some(ParsedRecord::Evidence(record))) => files.evidence.push(*record),
@@ -84,7 +117,7 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
             }),
         }
     }
-    Ok(files)
+    Ok((files, changed))
 }
 
 enum ParsedRecord {
@@ -93,7 +126,11 @@ enum ParsedRecord {
     Review(Box<ReviewRecord>),
 }
 
-fn read_record_file(state_dir: &Path, relative: &Path) -> Result<Option<ParsedRecord>> {
+fn read_record_file(
+    state_dir: &Path,
+    relative: &Path,
+    bytes: Option<Vec<u8>>,
+) -> Result<Option<ParsedRecord>> {
     let top = relative
         .components()
         .next()
@@ -121,8 +158,11 @@ fn read_record_file(state_dir: &Path, relative: &Path) -> Result<Option<ParsedRe
             display_state_path(relative)
         );
     }
-    let bytes = fs::read(state_dir.join(relative))
-        .with_context(|| format!("Failed to read {}", display_state_path(relative)))?;
+    let bytes = match bytes {
+        Some(bytes) => bytes,
+        None => fs::read(state_dir.join(relative))
+            .with_context(|| format!("Failed to read {}", display_state_path(relative)))?,
+    };
     let text = String::from_utf8(bytes)
         .with_context(|| format!("Record file {} is not UTF-8", display_state_path(relative)))?;
     Ok(Some(if top == "issues" {
@@ -256,11 +296,7 @@ impl RecordIndex {
 
     /// Structural load for guards which resolve trusted policy before validation.
     pub fn load_structural(state_dir: &Path) -> Result<Self> {
-        let files = read_record_files(state_dir)?;
-        if let Some(error) = files.errors.into_iter().next() {
-            return Err(error.error);
-        }
-        Self::from_records(files.issues, files.evidence, files.reviews)
+        read_record_files(state_dir)?.into_index()
     }
     pub fn validate_policy(&self, policy: &WorkflowPolicy, repo: &Path) -> Result<()> {
         self.validate_link_types(repo, &repo.join(".atelier"))?;
@@ -972,6 +1008,51 @@ mod tests {
     use super::*;
     use crate::test_records::{issue_record, link, Records};
     use tempfile::tempdir;
+
+    #[test]
+    fn parser_workers_consume_supplied_bytes_without_a_second_read() {
+        let dir = tempdir().unwrap();
+        let relative = PathBuf::from("issues/atelier-byte.md");
+        fs::create_dir(dir.path().join("issues")).unwrap();
+        let bytes =
+            atelier_records::render_issue_record(&issue_record("atelier-byte", "task", "todo"))
+                .unwrap()
+                .into_bytes();
+        fs::write(dir.path().join(&relative), &bytes).unwrap();
+        let (files, changed) = read_record_paths(dir.path(), vec![relative.clone()], &|path| {
+            let bytes = fs::read(dir.path().join(path))?;
+            fs::write(dir.path().join(path), "invalid after the supplied read")?;
+            Ok((true, Some(bytes)))
+        })
+        .unwrap();
+        assert!(changed.is_empty() && files.errors.is_empty());
+        assert_eq!(files.issues[0].issue.id, "atelier-byte");
+        assert_eq!(read_record_files(dir.path()).unwrap().errors.len(), 1);
+        let error = read_record_paths(
+            dir.path(),
+            vec![relative.clone(), PathBuf::from("later")],
+            &|path| {
+                if path == relative {
+                    Ok((false, None))
+                } else {
+                    bail!("raw read failure")
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "raw read failure");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn default_reader_still_skips_config_before_reading_its_bytes() {
+        let dir = tempdir().unwrap();
+        std::os::unix::fs::symlink("missing", dir.path().join("workflow.yaml")).unwrap();
+        std::os::unix::fs::symlink("missing", dir.path().join("manifest.json")).unwrap();
+        fs::write(dir.path().join("config.toml"), "local data").unwrap();
+        let files = read_record_files(dir.path()).unwrap();
+        assert!(files.errors.is_empty() && files.issues.is_empty());
+        assert!(files.into_index().unwrap().issues().next().is_none());
+    }
 
     #[cfg(unix)]
     #[test]
