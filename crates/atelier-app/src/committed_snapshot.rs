@@ -122,16 +122,7 @@ fn blob_hash(bytes: &[u8], expected: &str) -> Result<String> {
                 .chain_update(header.as_bytes())
                 .chain_update(bytes)
                 .finalize();
-            const HEX: &[u8] = b"0123456789abcdef";
-            Ok(digest
-                .iter()
-                .flat_map(|byte| {
-                    [
-                        HEX[(byte >> 4) as usize] as char,
-                        HEX[(byte & 15) as usize] as char,
-                    ]
-                })
-                .collect())
+            Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
         }
         _ => bail!("invalid Git object ID length"),
     }
@@ -157,27 +148,37 @@ impl CommittedSnapshot {
         })
     }
     pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
-        verify_records(repo, &self.entries)?;
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
-        paths.extend(flagged_paths(repo, &self.entries, |path| !canonical(path))?);
+        verify_records(repo, &self.entries)?;
+        paths.retain(|path| !canonical(path));
+        paths.extend(flagged_paths(
+            repo,
+            &self.entries,
+            |path| !canonical(path),
+            true,
+        )?);
         paths.sort();
         paths.dedup();
         Ok(paths)
     }
     pub fn require_clean(&self, repo: &Path) -> Result<()> {
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         verify_records(repo, &self.entries)?;
-        let paths = crate::git_freshness::working_status_paths(repo)?;
+        paths.retain(|path| !canonical(path));
+        let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;
         if !paths.is_empty() {
             bail!("merge_checkout_dirty: {} has uncommitted changes: {:?}; commit or stash them before retrying", repo.display(), paths);
         }
-        require_hidden_clean(flagged_paths(repo, &self.entries, |path| !canonical(path))?)
+        require_hidden_clean(hidden)
     }
 }
 
 /// Canonical inventory, bytes, types and modes are freshly compared each call.
 /// Machine-local files are excluded by the record loader's shared classifier.
 pub fn require_committed(repo: &Path, commit: &str) -> Result<()> {
-    verify_records(repo, &entries(repo, commit, true)?)
+    let entries = entries(repo, commit, true)?;
+    verify_records(repo, &entries)?;
+    flagged_paths(repo, &entries, |_| false, true).map(|_| ())
 }
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
     let root = repo.join(".atelier");
@@ -211,14 +212,16 @@ pub(crate) fn flagged_modified_paths_matching(
     commit: &str,
     include: impl Fn(&Path) -> bool,
 ) -> Result<Vec<PathBuf>> {
-    flagged_paths(repo, &entries(repo, commit, false)?, include)
+    flagged_paths(repo, &entries(repo, commit, false)?, include, false)
 }
 fn flagged_paths(
     repo: &Path,
     entries: &Entries,
     include: impl Fn(&Path) -> bool,
+    verify_index: bool,
 ) -> Result<Vec<PathBuf>> {
-    let output = git_output(repo, &["ls-files", "-v", "-z"])?;
+    let output = git_output(repo, &["ls-files", "--stage", "-v", "-z"])?;
+    let mut indexed = BTreeSet::new();
     let mut flagged = BTreeSet::new();
     for entry in output
         .split(|byte| *byte == 0)
@@ -227,11 +230,34 @@ fn flagged_paths(
         if entry.len() < 3 || entry[1] != b' ' {
             bail!("invalid Git index flag entry");
         }
-        if entry[0].is_ascii_lowercase() || entry[0] == b'S' {
-            let path = PathBuf::from(std::str::from_utf8(&entry[2..])?);
-            if include(&path) {
-                flagged.insert(path);
+        let text = std::str::from_utf8(&entry[2..])?;
+        let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
+        let path = PathBuf::from(path);
+        if verify_index && canonical(&path) {
+            let fields = metadata.split_whitespace().collect::<Vec<_>>();
+            if fields.len() != 3
+                || fields[2] != "0"
+                || !entries
+                    .get(&path)
+                    .is_some_and(|(mode, hash)| fields[0] == mode && fields[1] == hash)
+            {
+                bail!("canonical_snapshot_uncommitted: {} index path, bytes or mode differs from pinned HEAD", path.display());
             }
+            indexed.insert(path.clone());
+        }
+        if (entry[0].is_ascii_lowercase() || entry[0] == b'S') && include(&path) {
+            flagged.insert(path);
+        }
+    }
+    if verify_index {
+        if let Some(path) = entries
+            .keys()
+            .find(|path| canonical(path) && !indexed.contains(*path))
+        {
+            bail!(
+                "canonical_snapshot_uncommitted: {} is absent from the Git index",
+                path.display()
+            );
         }
     }
     if flagged.is_empty() && !cfg!(unix) {
@@ -337,6 +363,13 @@ mod tests {
         assert!(snapshot.require_clean(repo.path()).is_err());
         git_output(repo.path(), &["reset", "-q", "HEAD", "--", "code"]).unwrap();
         snapshot.require_clean(repo.path()).unwrap();
+        fs::write(repo.path().join(record), "staged record").unwrap();
+        git_output(repo.path(), &["add", record]).unwrap();
+        fs::write(repo.path().join(record), "committed record").unwrap();
+        assert!(snapshot.verified_working_paths(repo.path()).is_err());
+        assert!(require_committed(repo.path(), &pin).is_err());
+        git_output(repo.path(), &["reset", "-q", "HEAD", "--", record]).unwrap();
+        snapshot.require_clean(repo.path()).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -349,6 +382,76 @@ mod tests {
                     .unwrap();
                 snapshot.require_clean(repo.path()).unwrap();
             }
+        }
+    }
+
+    #[test]
+    fn canonical_index_fence_checks_stages_modes_and_lossless_paths() {
+        for state in ["flag", "delete", "rename", "extra", "conflict", "mode"] {
+            let repo = tempfile::tempdir().unwrap();
+            for args in [
+                vec!["init", "-q"],
+                vec!["config", "user.name", "Author"],
+                vec!["config", "user.email", "author@example.test"],
+            ] {
+                git_output(repo.path(), &args).unwrap();
+            }
+            fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+            let path = ".atelier/issues/tab\tline\n雪.md";
+            fs::write(repo.path().join(path), "original").unwrap();
+            git_output(repo.path(), &["add", "."]).unwrap();
+            git_output(repo.path(), &["commit", "-qm", "original"]).unwrap();
+            let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
+            let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
+            let hash = &snapshot.entries[Path::new(path)].1;
+            match state {
+                "flag" => {
+                    fs::write(repo.path().join(path), "staged").unwrap();
+                    git_output(repo.path(), &["add", path]).unwrap();
+                    git_output(repo.path(), &["update-index", "--assume-unchanged", path]).unwrap();
+                }
+                "delete" => {
+                    git_output(repo.path(), &["rm", "--cached", path]).unwrap();
+                }
+                "rename" => {
+                    git_output(repo.path(), &["mv", path, "ordinary-draft"]).unwrap();
+                    fs::remove_file(repo.path().join("ordinary-draft")).unwrap();
+                }
+                "extra" => {
+                    let extra = ".atelier/issues/extra.md";
+                    fs::write(repo.path().join(extra), "extra").unwrap();
+                    git_output(repo.path(), &["add", extra]).unwrap();
+                    fs::remove_file(repo.path().join(extra)).unwrap();
+                }
+                "conflict" => {
+                    git_output(repo.path(), &["rm", "--cached", path]).unwrap();
+                    use std::io::Write;
+                    use std::process::Stdio;
+                    let mut child = crate::git_freshness::command(repo.path())
+                        .args(["update-index", "-z", "--index-info"])
+                        .stdin(Stdio::piped())
+                        .spawn()
+                        .unwrap();
+                    child
+                        .stdin
+                        .take()
+                        .unwrap()
+                        .write_all(format!("100644 {hash} 1\t{path}\0").as_bytes())
+                        .unwrap();
+                    assert!(child.wait().unwrap().success());
+                }
+                "mode" => {
+                    git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
+                    git_output(repo.path(), &["update-index", "--chmod=+x", path]).unwrap();
+                }
+                _ => unreachable!(),
+            }
+            fs::write(repo.path().join(path), "original").unwrap();
+            assert!(
+                snapshot.verified_working_paths(repo.path()).is_err(),
+                "{state}"
+            );
+            assert!(require_committed(repo.path(), &pin).is_err(), "{state}");
         }
     }
 

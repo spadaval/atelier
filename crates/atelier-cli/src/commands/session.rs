@@ -191,6 +191,26 @@ fn prime_text() -> Result<String> {
     lines.push("Before handing off: record findings and honest proof, commit records with the code, then run atelier land. In-progress work may remain open.".into());
     Ok(lines.join("\n"))
 }
+fn check_traceability(
+    repo: &Path,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+) -> Result<()> {
+    let active = index
+        .issues()
+        .filter(|issue| {
+            policy.status_category(&issue.status) == Some("active") && issue.issue_type != "mission"
+        })
+        .collect::<Vec<_>>();
+    for issue in active {
+        let work = workflow_policy::resolve_work_branch(policy, index, &issue.id)?;
+        let owner = index.require_issue(&work.owner_id)?;
+        if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
+            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
+        }
+    }
+    Ok(())
+}
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
@@ -234,20 +254,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     };
     index.validate_policy(&source.policy, repo)?;
     let mut lines = source.diagnostics;
-    let active = index
-        .issues()
-        .filter(|issue| {
-            source.policy.status_category(&issue.status) == Some("active")
-                && issue.issue_type != "mission"
-        })
-        .collect::<Vec<_>>();
-    for issue in active {
-        let work = workflow_policy::resolve_work_branch(&source.policy, &index, &issue.id)?;
-        let owner = index.require_issue(&work.owner_id)?;
-        if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
-            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
-        }
-    }
+    check_traceability(repo, &index, &source.policy)?;
     let owned = id
         .as_ref()
         .map(|id| review_gate::scope(&index, id))
@@ -351,6 +358,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&layout.canonical_dir())?;
     let final_paths = check_records(repo, &snapshot)?;
+    check_traceability(repo, &index, &source.policy)?;
     if base_pin.as_ref().is_some_and(|(reference, commit)| {
         git::resolve(repo, reference).map_or(true, |current| current != *commit)
     }) {

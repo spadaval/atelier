@@ -168,18 +168,15 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     let pin = match parent {
         Ok(bytes) => String::from_utf8(bytes)?.trim().to_owned(),
         Err(_) => {
-            let modes = String::from_utf8(git::git_output(
+            let tree = git::git_output(
                 read.repo,
-                &[
-                    "ls-tree",
-                    "-r",
-                    "--format=%(objectmode)",
-                    first,
-                    "--",
-                    ".atelier/reviews/",
-                ],
-            )?)?;
-            if modes.lines().any(|mode| mode != "100644") {
+                &["ls-tree", "-rz", first, "--", ".atelier/reviews/"],
+            )?;
+            if tree
+                .split(|byte| *byte == 0)
+                .filter(|entry| !entry.is_empty())
+                .any(|entry| !entry.starts_with(b"100644 "))
+            {
                 bail!("review_append_only: initial review events must be regular non-executable files");
             }
             first.to_owned()
