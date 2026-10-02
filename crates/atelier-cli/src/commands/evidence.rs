@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
 
 use crate::human_output;
 use atelier_app::record_index::RecordIndex;
@@ -138,20 +138,31 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     // This transaction is deliberately released before the arbitrary child.
     let binding = capture_preflight(&options)?;
     let command_display = format_command(options.command);
-    let captured_at = chrono::Utc::now().to_rfc3339();
+    let captured_at = chrono::Utc::now();
     let command_output = Command::new(&options.command[0])
         .args(&options.command[1..])
         .output();
 
     let (exit_code, exit_status, success, stdout_summary, stderr_summary, spawn_error) =
         match command_output {
-            Ok(output) => command_result_metadata(&output),
+            Ok(output) => (
+                output.status.code(),
+                output
+                    .status
+                    .code()
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| output.status.to_string()),
+                output.status.success(),
+                bounded_stream(&output.stdout),
+                bounded_stream(&output.stderr),
+                None,
+            ),
             Err(error) => (
                 None,
                 "not-started".to_string(),
                 false,
-                BoundedText::empty(),
-                BoundedText::from_text(&error.to_string(), OUTPUT_SUMMARY_LIMIT_BYTES),
+                bounded_stream(&[]),
+                bounded_stream(error.to_string().as_bytes()),
                 Some(error.to_string()),
             ),
         };
@@ -216,14 +227,6 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         .summary
         .map(str::to_string)
         .unwrap_or_else(|| command_display.clone());
-    let body = command_capture_body(
-        &summary,
-        &command_display,
-        &exit_status,
-        &stdout_summary,
-        &stderr_summary,
-        spawn_error.as_deref(),
-    );
     let data = EvidenceRecordData {
         commit: binding.commit.clone(),
         result: if spawn_error.is_some() {
@@ -234,8 +237,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             EvidenceResult::Fail
         },
         evidence_type: options.evidence_kind.to_string(),
-        captured_at: chrono::DateTime::parse_from_rfc3339(&captured_at)?
-            .with_timezone(&chrono::Utc),
+        captured_at,
         command: Some(command_display.clone()),
         path: options.path.map(str::to_string),
         uri: options.uri.map(str::to_string),
@@ -251,8 +253,8 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
         spawn_error,
         output: Some(EvidenceOutputSummary {
             limit_bytes_per_stream: OUTPUT_SUMMARY_LIMIT_BYTES,
-            stdout: stdout_summary.to_stream_summary(),
-            stderr: stderr_summary.to_stream_summary(),
+            stdout: stdout_summary,
+            stderr: stderr_summary,
         }),
         target: target.as_ref().map(|target| EvidenceTarget {
             kind: target.display_kind.to_string(),
@@ -260,6 +262,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             role: target.role.to_string(),
         }),
     };
+    let body = atelier_records::render_evidence_transcript(&summary, &data);
 
     let created =
         RecordStore::new(&state_dir).create_evidence(&summary, "recorded", &body, data)?;
@@ -732,70 +735,12 @@ fn print_heading(title: &str) {
     human_output::print_section_heading(title);
 }
 
-fn command_result_metadata(
-    output: &Output,
-) -> (
-    Option<i32>,
-    String,
-    bool,
-    BoundedText,
-    BoundedText,
-    Option<String>,
-) {
-    (
-        output.status.code(),
-        exit_status_text(output),
-        output.status.success(),
-        BoundedText::from_bytes(&output.stdout, OUTPUT_SUMMARY_LIMIT_BYTES),
-        BoundedText::from_bytes(&output.stderr, OUTPUT_SUMMARY_LIMIT_BYTES),
-        None,
-    )
-}
-
-fn exit_status_text(output: &Output) -> String {
-    match output.status.code() {
-        Some(code) => code.to_string(),
-        None => output.status.to_string(),
-    }
-}
-
-#[derive(Debug)]
-struct BoundedText {
-    text: String,
-    original_bytes: usize,
-    truncated: bool,
-}
-
-impl BoundedText {
-    fn empty() -> Self {
-        Self {
-            text: String::new(),
-            original_bytes: 0,
-            truncated: false,
-        }
-    }
-
-    fn from_text(text: &str, limit: usize) -> Self {
-        Self::from_bytes(text.as_bytes(), limit)
-    }
-
-    fn from_bytes(bytes: &[u8], limit: usize) -> Self {
-        let original_bytes = bytes.len();
-        let truncated = original_bytes > limit;
-        let bounded = if truncated { &bytes[..limit] } else { bytes };
-        Self {
-            text: String::from_utf8_lossy(bounded).to_string(),
-            original_bytes,
-            truncated,
-        }
-    }
-
-    fn to_stream_summary(&self) -> EvidenceStreamSummary {
-        EvidenceStreamSummary {
-            summary: self.text.clone(),
-            bytes: self.original_bytes,
-            truncated: self.truncated,
-        }
+fn bounded_stream(bytes: &[u8]) -> EvidenceStreamSummary {
+    EvidenceStreamSummary {
+        summary: String::from_utf8_lossy(&bytes[..bytes.len().min(OUTPUT_SUMMARY_LIMIT_BYTES)])
+            .to_string(),
+        bytes: bytes.len(),
+        truncated: bytes.len() > OUTPUT_SUMMARY_LIMIT_BYTES,
     }
 }
 
@@ -805,47 +750,6 @@ struct TargetRef<'a> {
     canonical_kind: &'a str,
     id: &'a str,
     role: &'a str,
-}
-
-fn command_capture_body(
-    summary: &str,
-    command: &str,
-    exit_status: &str,
-    stdout: &BoundedText,
-    stderr: &BoundedText,
-    spawn_error: Option<&str>,
-) -> String {
-    let mut body = String::new();
-    body.push_str("## Summary\n\n");
-    body.push_str(summary);
-    body.push_str("\n\n## Command\n\n```console\n");
-    body.push_str(command);
-    body.push_str("\n```\n\nExit status: ");
-    body.push_str(exit_status);
-    if let Some(error) = spawn_error {
-        body.push_str("\nSpawn error: ");
-        body.push_str(error);
-    }
-    body.push_str("\n\n## Stdout\n\n");
-    push_output_block(&mut body, stdout);
-    body.push_str("\n## Stderr\n\n");
-    push_output_block(&mut body, stderr);
-    body
-}
-
-fn push_output_block(body: &mut String, text: &BoundedText) {
-    body.push_str(&format!("Bytes: {}\n", text.original_bytes));
-    body.push_str(&format!(
-        "Truncated: {}\n\n",
-        if text.truncated { "yes" } else { "no" }
-    ));
-    body.push_str("```text\n");
-    if text.text.is_empty() {
-        body.push_str("```\n");
-    } else {
-        body.push_str(text.text.trim_end());
-        body.push_str("\n```\n");
-    }
 }
 
 fn print_output_summary(data: &EvidenceRecordData) -> Result<()> {
@@ -945,5 +849,32 @@ fn quote_command_arg(arg: &str) -> String {
         arg.to_string()
     } else {
         format!("'{}'", arg.replace('\'', "'\"'\"'"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_bounds_raw_bytes_before_lossy_utf8_conversion() {
+        for size in [
+            0,
+            OUTPUT_SUMMARY_LIMIT_BYTES,
+            OUTPUT_SUMMARY_LIMIT_BYTES + 1,
+        ] {
+            let stream = bounded_stream(&vec![b'x'; size]);
+            assert_eq!(stream.bytes, size);
+            assert_eq!(stream.truncated, size > OUTPUT_SUMMARY_LIMIT_BYTES);
+            assert_eq!(stream.summary.len(), size.min(OUTPUT_SUMMARY_LIMIT_BYTES));
+        }
+        let mut bytes = vec![b'x'; OUTPUT_SUMMARY_LIMIT_BYTES - 1];
+        bytes.extend_from_slice("🐈".as_bytes());
+        let stream = bounded_stream(&bytes);
+        assert_eq!(stream.bytes, OUTPUT_SUMMARY_LIMIT_BYTES + 3);
+        assert!(stream.truncated);
+        assert!(stream.summary.ends_with('\u{fffd}'));
+        assert_eq!(stream.summary.len(), OUTPUT_SUMMARY_LIMIT_BYTES + 2);
+        assert_eq!(bounded_stream(b"\xff\n ").summary, "\u{fffd}\n ");
     }
 }
