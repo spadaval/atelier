@@ -56,14 +56,15 @@ fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()>
 }
 
 fn modified(repo: &Path, paths: BTreeSet<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
-    let mut dirty = Vec::new();
-    for path in paths {
-        if matching_bytes(repo, &path, entries)?.is_none() {
-            dirty.push(path);
-        }
-    }
-    dirty.sort();
-    Ok(dirty)
+    let paths = paths.into_iter().collect::<Vec<_>>();
+    let changed = crate::record_index::ordered_path_map(&paths, &|path| {
+        matching_bytes(repo, path, entries).map(|bytes| bytes.is_none())
+    })?;
+    Ok(paths
+        .into_iter()
+        .zip(changed)
+        .filter_map(|(path, changed)| changed.then_some(path))
+        .collect())
 }
 fn matching_bytes(repo: &Path, path: &Path, entries: &Entries) -> Result<Option<Vec<u8>>> {
     let Some((mode, hash)) = entries.get(path) else {
@@ -331,6 +332,38 @@ fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordered_raw_workers_report_hash_errors_before_earlier_mismatches() {
+        for length in [40, 64] {
+            let repo = tempfile::tempdir().unwrap();
+            let paths = (0..130)
+                .map(|number| PathBuf::from(format!("file-{number:04}")))
+                .collect::<BTreeSet<_>>();
+            let hash = blob_hash(b"committed bytes", &"0".repeat(length)).unwrap();
+            let mut entries = paths
+                .iter()
+                .map(|path| {
+                    fs::write(repo.path().join(path), b"committed bytes").unwrap();
+                    (path.clone(), ("100644".to_string(), hash.clone()))
+                })
+                .collect::<Entries>();
+            fs::write(repo.path().join("file-0000"), b"earlier mismatch").unwrap();
+            entries.get_mut(Path::new("file-0064")).unwrap().1 = "invalid".to_string();
+            entries.get_mut(Path::new("file-0129")).unwrap().1 = "000".to_string();
+            let error = modified(repo.path(), paths.clone(), &entries).unwrap_err();
+            assert_eq!(error.to_string(), "invalid Git object ID");
+            entries.get_mut(Path::new("file-0064")).unwrap().1 = hash.clone();
+            let error = modified(repo.path(), paths.clone(), &entries).unwrap_err();
+            assert_eq!(error.to_string(), "invalid Git object ID length");
+            entries.get_mut(Path::new("file-0129")).unwrap().1 = hash;
+            fs::write(repo.path().join("file-0065"), b"later mismatch").unwrap();
+            assert_eq!(
+                modified(repo.path(), paths, &entries).unwrap(),
+                [PathBuf::from("file-0000"), PathBuf::from("file-0065")]
+            );
+        }
+    }
 
     #[test]
     fn fused_initial_proof_checks_union_config_types_and_index_before_parse_errors() {
