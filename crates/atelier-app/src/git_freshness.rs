@@ -186,7 +186,7 @@ impl ObjectReader {
     fn new(repo: &Path) -> Result<Self> {
         let mut child = Command::new("git")
             .current_dir(repo)
-            .args(["cat-file", "--batch", "-Z"])
+            .args(["cat-file", "--batch", "-z"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -228,12 +228,20 @@ impl ObjectReader {
         self.input.write_all(&[0])?;
         self.input.flush()?;
         let mut header = Vec::new();
-        self.output.read_until(0, &mut header)?;
-        if header.pop() != Some(0) {
-            bail!("Git object reader ended before its response");
-        }
-        if header == format!("{spec} missing").as_bytes() {
+        self.output.read_until(b'\n', &mut header)?;
+        let missing = format!("{spec} missing\n");
+        if !header.is_empty() && missing.as_bytes().starts_with(&header) {
+            // Missing-object output echoes the query, which can contain newlines.
+            let mut remainder = vec![0; missing.len() - header.len()];
+            self.output.read_exact(&mut remainder)?;
+            header.extend(remainder);
+            if header != missing.as_bytes() {
+                bail!("invalid Git missing-object response");
+            }
             return Ok(None);
+        }
+        if header.pop() != Some(b'\n') {
+            bail!("Git object reader ended before its response");
         }
         let fields = std::str::from_utf8(&header)?
             .split_whitespace()
@@ -249,7 +257,7 @@ impl ObjectReader {
         self.output.read_exact(&mut bytes)?;
         let mut delimiter = [1];
         self.output.read_exact(&mut delimiter)?;
-        if delimiter != [0] {
+        if delimiter != [b'\n'] {
             bail!("invalid Git object framing");
         }
         Ok(Some((fields[0].to_owned(), fields[1].to_owned(), bytes)))
@@ -722,6 +730,32 @@ mod tests {
                 assert!(modes.entry("HEAD", Path::new(".atelier/reviews")).is_err());
             }
         }
+    }
+    #[test]
+    fn newline_batch_headers_preserve_binary_bodies_and_missing_multiline_paths() {
+        let repo = repo("sha1");
+        let name = "binary\n名";
+        let bytes = b"first\n\0second\nlast";
+        fs::write(repo.path().join(name), bytes).unwrap();
+        let pin = commit(repo.path(), "binary");
+        let mut reader = ObjectReader::new(repo.path()).unwrap();
+        assert!(reader
+            .get(&format!("{pin}:missing\npath"))
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            reader.get(&format!("{pin}:{name}")).unwrap().unwrap().2,
+            bytes
+        );
+        assert_eq!(reader.get(&pin).unwrap().unwrap().1, "commit");
+        assert!(reader
+            .get(&format!("{pin}:other\nmissing"))
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            reader.get(&format!("{pin}:{name}")).unwrap().unwrap().2,
+            bytes
+        );
     }
     #[test]
     fn range_boundaries_reject_wrong_missing_and_nonancestor_pins() {
