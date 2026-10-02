@@ -743,7 +743,8 @@ fn run() -> Result<()> {
                             &role,
                         )?;
                     }
-                    let evidence = use_cases::load_canonical_evidence(&state_dir, &evidence_id)?;
+                    let evidence = atelier_records::RecordStore::new(&state_dir)
+                        .load_evidence_by_id(&evidence_id)?;
                     commands::evidence::print_new_record(&evidence, quiet)
                 } else {
                     if result.is_some() {

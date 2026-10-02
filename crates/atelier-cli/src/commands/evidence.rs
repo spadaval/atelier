@@ -12,7 +12,7 @@ use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceResult,
     EvidenceStreamSummary, EvidenceTarget, RecordLink,
 };
-use atelier_records::validate_record_kind;
+use atelier_records::{validate_record_kind, RecordStore};
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
@@ -135,7 +135,7 @@ pub fn add_returning_id(
         }),
     };
     let created =
-        app_use_cases::create_evidence_record(state_dir, summary, "recorded", summary, data)?;
+        RecordStore::new(state_dir).create_evidence(summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
     Ok(id)
 }
@@ -281,7 +281,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     };
 
     let created =
-        app_use_cases::create_evidence_record(&state_dir, &summary, "recorded", &body, data)?;
+        RecordStore::new(&state_dir).create_evidence(&summary, "recorded", &body, data)?;
     if let Some(target) = target {
         attach_silently(
             &index,
@@ -492,10 +492,9 @@ fn attach_impl(
     quiet: Option<bool>,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
-    app_use_cases::load_canonical_evidence(state_dir, id)?;
+    RecordStore::new(state_dir).load_evidence_by_id(id)?;
     let target = validate_record_ref(index, target_kind, target_id, role)?;
-    let inserted = app_use_cases::add_attachment_relationship(
-        state_dir,
+    let inserted = RecordStore::new(state_dir).add_attachment_relationship(
         KIND,
         id,
         &target.canonical_kind,

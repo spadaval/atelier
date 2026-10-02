@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, Result};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -39,32 +39,20 @@ impl StorageLayout {
     }
 }
 
-pub fn find_atelier_dir() -> Result<PathBuf> {
-    Ok(StorageLayout::discover()?.atelier_dir())
-}
-
 pub fn find_repo_root() -> Result<PathBuf> {
-    let mut current = env::current_dir()?;
-    loop {
-        if current.join(ATELIER_DIR).is_dir() {
-            return Ok(current);
-        }
-        if !current.pop() {
-            bail!("Not an Atelier repository (or any parent). Run 'atelier init' first.");
-        }
-    }
+    find_canonical_dir_from_cwd()?
+        .and_then(|directory| directory.parent().map(Path::to_path_buf))
+        .ok_or_else(|| {
+            anyhow!("Not an Atelier repository (or any parent). Run 'atelier init' first.")
+        })
 }
 
 pub fn find_canonical_dir_from_cwd() -> Result<Option<PathBuf>> {
     let mut current = env::current_dir()?;
     loop {
-        let layout = StorageLayout::new(&current);
-        let canonical_dir = layout.canonical_dir();
+        let canonical_dir = current.join(ATELIER_DIR);
         if canonical_dir.is_dir() {
             return Ok(Some(canonical_dir));
-        }
-        if current.join(ATELIER_DIR).is_dir() {
-            return Ok(None);
         }
         if !current.pop() {
             return Ok(None);

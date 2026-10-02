@@ -2,28 +2,20 @@ use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
-use atelier_app::work_classification::WorkClassification;
-use atelier_core::IssuePriority;
+use atelier_app::work_classification::{ClassifiedWork, WorkClassification};
+use atelier_core::{Issue, IssuePriority};
 
-#[derive(Debug, Clone)]
-pub(crate) struct WorkOrderRow {
-    pub id: String,
-    pub classification: WorkClassification,
-    pub priority: String,
-    pub updated_at: DateTime<Utc>,
-    pub open_blockers: Vec<String>,
-}
-
-pub(crate) fn ordered_work_indices(rows: &[WorkOrderRow]) -> Vec<usize> {
+pub(crate) fn ordered_work_indices(rows: &[(Issue, ClassifiedWork)]) -> Vec<usize> {
     let by_id = rows
         .iter()
         .enumerate()
-        .map(|(index, row)| (row.id.as_str(), index))
+        .map(|(index, row)| (row.0.id.as_str(), index))
         .collect::<BTreeMap<_, _>>();
     let mut indegree = vec![0usize; rows.len()];
     let mut dependents = vec![Vec::new(); rows.len()];
     for (blocked, row) in rows.iter().enumerate() {
         let blockers = row
+            .1
             .open_blockers
             .iter()
             .filter_map(|id| by_id.get(id.as_str()).copied())
@@ -56,12 +48,12 @@ pub(crate) fn ordered_work_indices(rows: &[WorkOrderRow]) -> Vec<usize> {
     ordered
 }
 
-fn display_key(row: &WorkOrderRow) -> (u8, u8, Reverse<DateTime<Utc>>, &str) {
+fn display_key(row: &(Issue, ClassifiedWork)) -> (u8, u8, Reverse<DateTime<Utc>>, &str) {
     (
-        state_rank(row.classification),
-        priority_rank(&row.priority),
-        Reverse(row.updated_at),
-        row.id.as_str(),
+        state_rank(row.1.classification),
+        priority_rank(&row.0.priority),
+        Reverse(row.0.updated_at),
+        row.0.id.as_str(),
     )
 }
 
@@ -86,26 +78,41 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
 
-    fn row(id: &str, category: &str, priority: &str, blockers: &[&str]) -> WorkOrderRow {
-        WorkOrderRow {
-            id: id.to_string(),
-            classification: match category {
-                "done" => WorkClassification::Done,
-                _ if !blockers.is_empty() => WorkClassification::Blocked,
-                "todo" => WorkClassification::Ready,
-                "active" => WorkClassification::Active,
-                _ => WorkClassification::Backlog,
+    fn row(id: &str, category: &str, priority: &str, blockers: &[&str]) -> (Issue, ClassifiedWork) {
+        let now = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        (
+            Issue {
+                id: id.to_string(),
+                title: id.to_string(),
+                description: None,
+                status: category.to_string(),
+                issue_type: "task".to_string(),
+                priority: priority.to_string(),
+                strategy: None,
+                workflow_branch: None,
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
             },
-            priority: priority.to_string(),
-            updated_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
-            open_blockers: blockers.iter().map(|id| id.to_string()).collect(),
-        }
+            ClassifiedWork {
+                status_category: Some(category.to_string()),
+                classification: match category {
+                    "done" => WorkClassification::Done,
+                    _ if !blockers.is_empty() => WorkClassification::Blocked,
+                    "todo" => WorkClassification::Ready,
+                    "active" => WorkClassification::Active,
+                    _ => WorkClassification::Backlog,
+                },
+                open_blockers: blockers.iter().map(|id| id.to_string()).collect(),
+            },
+        )
     }
 
-    fn ordered_ids(rows: &[WorkOrderRow]) -> Vec<String> {
+    fn ordered_ids(rows: &[(Issue, ClassifiedWork)]) -> Vec<String> {
         ordered_work_indices(rows)
             .into_iter()
-            .map(|index| rows[index].id.clone())
+            .map(|index| rows[index].0.id.clone())
             .collect()
     }
 
@@ -146,7 +153,7 @@ mod tests {
         ];
 
         assert_eq!(ordered_ids(&rows), vec!["atelier-a", "atelier-b"]);
-        assert_eq!(rows[0].classification, WorkClassification::Blocked);
+        assert_eq!(rows[0].1.classification, WorkClassification::Blocked);
     }
 
     #[test]
@@ -162,9 +169,9 @@ mod tests {
     #[test]
     fn ties_use_priority_update_time_and_id() {
         let mut low = row("atelier-c", "todo", "low", &[]);
-        low.updated_at = Utc.with_ymd_and_hms(2026, 1, 3, 0, 0, 0).unwrap();
+        low.0.updated_at = Utc.with_ymd_and_hms(2026, 1, 3, 0, 0, 0).unwrap();
         let mut newer = row("atelier-b", "todo", "high", &[]);
-        newer.updated_at = Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap();
+        newer.0.updated_at = Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap();
         let older = row("atelier-a", "todo", "high", &[]);
 
         assert_eq!(

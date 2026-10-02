@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::human_output::{self, DecisionState, StylePolicy};
-use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{TransitionDefinition, WorkflowPolicy};
 use atelier_core::Issue;
-use atelier_records::CanonicalIssueRecord;
+use atelier_records::{CanonicalIssueRecord, RecordStore};
 
 pub use atelier_app::workflow_validation::ValidatorResult;
 
@@ -61,7 +60,7 @@ pub fn transition_issue(
         close_reason,
     )?;
 
-    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let mut record = RecordStore::new(state_dir).load_issue_by_id(&before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
     print_heading("Next Commands");
@@ -257,7 +256,7 @@ fn apply_transition_record(
     close_reason: Option<&str>,
 ) -> Result<()> {
     apply_transition(policy, record, transition, close_reason);
-    app_use_cases::write_canonical_issue(state_dir, record)
+    RecordStore::new(state_dir).write_issue_atomic(record)
 }
 
 /// Applies a transition to an in-memory record without writing it.
@@ -668,7 +667,9 @@ state_root = ".atelier"
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "supersede").unwrap();
 
-        let mut record = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let mut record = RecordStore::new(&state_dir)
+            .load_issue_by_id("atelier-epic1")
+            .unwrap();
         apply_transition_record(
             &policy,
             &state_dir,
@@ -678,7 +679,9 @@ state_root = ".atelier"
         )
         .unwrap();
 
-        let stored = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let stored = RecordStore::new(&state_dir)
+            .load_issue_by_id("atelier-epic1")
+            .unwrap();
         assert_eq!(stored.issue.status, "superseded");
         assert!(stored.issue.closed_at.is_some());
         assert_eq!(
@@ -697,7 +700,9 @@ state_root = ".atelier"
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "block").unwrap();
 
-        let mut record = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let mut record = RecordStore::new(&state_dir)
+            .load_issue_by_id("atelier-epic1")
+            .unwrap();
         apply_transition_record(
             &policy,
             &state_dir,
@@ -707,7 +712,9 @@ state_root = ".atelier"
         )
         .unwrap();
 
-        let stored = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let stored = RecordStore::new(&state_dir)
+            .load_issue_by_id("atelier-epic1")
+            .unwrap();
         assert_eq!(stored.issue.status, "blocked");
         assert!(stored.issue.closed_at.is_none());
         assert_eq!(stored.sections.close_reason, None);
