@@ -149,6 +149,7 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
         read.repo,
         &[
             "log",
+            "--root",
             "--reverse",
             "--diff-filter=A",
             "--format=%H",
@@ -693,6 +694,7 @@ fn original_independent(
         read.repo,
         &[
             "log",
+            "--root",
             "--reverse",
             "--diff-filter=A",
             "--format=%H",
@@ -718,6 +720,7 @@ fn original_independent(
         .collect::<Vec<_>>();
     let args = [
         "log",
+        "--root",
         "--reverse",
         "--diff-filter=A",
         "--format=%H",
@@ -738,6 +741,7 @@ fn original_independent(
         read.repo,
         &[
             "log",
+            "--root",
             "--reverse",
             "--format=%H",
             event,

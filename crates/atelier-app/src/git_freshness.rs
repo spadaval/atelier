@@ -107,8 +107,26 @@ impl<'a> ReadContext<'a> {
         self.objects.as_mut().expect("object reader").get(spec)
     }
     fn object(&mut self, commit: &str, path: &Path) -> Result<Option<&GitObject>> {
-        let commit = self.pinned(commit)?;
-        self.object_spec(&format!("{commit}:{}", path.display()))
+        let commit = self.commit_id(commit)?;
+        let mut spec = format!("{commit}^{{tree}}");
+        for component in path.components() {
+            let Some((_, kind, bytes)) = self.object_spec(&spec)? else {
+                return Ok(None);
+            };
+            if kind != "tree" {
+                bail!("expected Git directory tree");
+            }
+            let Some((_, oid)) = tree_entry(
+                bytes,
+                component.as_os_str().as_encoded_bytes(),
+                commit.len() / 2,
+            )?
+            else {
+                return Ok(None);
+            };
+            spec = oid;
+        }
+        self.object_spec(&spec)
     }
     fn commit_id(&mut self, commit: &str) -> Result<String> {
         let commit = self.pinned(commit)?;
@@ -139,41 +157,50 @@ impl<'a> ReadContext<'a> {
         if kind != "tree" {
             bail!("expected Git record directory tree");
         }
-        let name = path
-            .file_name()
-            .context("record has no filename")?
-            .as_encoded_bytes();
-        let mut rest = bytes.as_slice();
-        while !rest.is_empty() {
-            let space = rest
-                .iter()
-                .position(|byte| *byte == b' ')
-                .context("invalid Git tree mode")?;
-            let nul = rest
-                .iter()
-                .position(|byte| *byte == 0)
-                .context("invalid Git tree filename")?;
-            if space >= nul {
-                bail!("invalid Git tree entry");
-            }
-            let oid = rest
-                .get(nul + 1..nul + 1 + oid_bytes)
-                .context("truncated Git tree object ID")?;
-            if &rest[space + 1..nul] == name {
-                let mode = std::str::from_utf8(&rest[..space])?;
-                if matches!(mode, "40000" | "160000") {
-                    bail!("expected blob entry for {}", path.display());
-                }
-                return Ok(Some((
-                    mode.into(),
-                    oid.iter().map(|byte| format!("{byte:02x}")).collect(),
-                )));
-            }
-            rest = &rest[nul + 1 + oid_bytes..];
+        let entry = tree_entry(
+            bytes,
+            path.file_name()
+                .context("record has no filename")?
+                .as_encoded_bytes(),
+            oid_bytes,
+        )?;
+        if entry
+            .as_ref()
+            .is_some_and(|(mode, _)| matches!(mode.as_str(), "40000" | "160000"))
+        {
+            bail!("expected blob entry for {}", path.display());
         }
-        Ok(None)
+        Ok(entry)
     }
 }
+fn tree_entry(bytes: &[u8], name: &[u8], oid_bytes: usize) -> Result<Option<(String, String)>> {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let space = rest
+            .iter()
+            .position(|byte| *byte == b' ')
+            .context("invalid Git tree mode")?;
+        let nul = rest
+            .iter()
+            .position(|byte| *byte == 0)
+            .context("invalid Git tree filename")?;
+        if space >= nul {
+            bail!("invalid Git tree entry");
+        }
+        let oid = rest
+            .get(nul + 1..nul + 1 + oid_bytes)
+            .context("truncated Git tree object ID")?;
+        if &rest[space + 1..nul] == name {
+            return Ok(Some((
+                std::str::from_utf8(&rest[..space])?.into(),
+                oid.iter().map(|byte| format!("{byte:02x}")).collect(),
+            )));
+        }
+        rest = &rest[nul + 1 + oid_bytes..];
+    }
+    Ok(None)
+}
+
 type GitObject = (String, String, Vec<u8>);
 struct ObjectReader {
     child: Child,
@@ -186,7 +213,7 @@ impl ObjectReader {
     fn new(repo: &Path) -> Result<Self> {
         let mut child = Command::new("git")
             .current_dir(repo)
-            .args(["cat-file", "--batch", "-Z"])
+            .args(["cat-file", "--batch"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -221,15 +248,15 @@ impl ObjectReader {
         Ok(self.objects[spec].as_ref())
     }
     fn receive(&mut self, spec: &str) -> Result<Option<GitObject>> {
-        if spec.contains('\0') {
+        if spec.contains(['\0', '\n']) {
             bail!("invalid Git object query");
         }
         self.input.write_all(spec.as_bytes())?;
-        self.input.write_all(&[0])?;
+        self.input.write_all(b"\n")?;
         self.input.flush()?;
         let mut header = Vec::new();
-        self.output.read_until(0, &mut header)?;
-        if header.pop() != Some(0) {
+        self.output.read_until(b'\n', &mut header)?;
+        if header.pop() != Some(b'\n') {
             bail!("Git object reader ended before its response");
         }
         if header == format!("{spec} missing").as_bytes() {
@@ -249,7 +276,7 @@ impl ObjectReader {
         self.output.read_exact(&mut bytes)?;
         let mut delimiter = [1];
         self.output.read_exact(&mut delimiter)?;
-        if delimiter != [0] {
+        if delimiter != [b'\n'] {
             bail!("invalid Git object framing");
         }
         Ok(Some((fields[0].to_owned(), fields[1].to_owned(), bytes)))
@@ -307,18 +334,35 @@ pub fn blob(repo: &Path, commit: &str, path: &Path) -> Result<String> {
     let spec = format!("{commit}:{}", path.display());
     String::from_utf8(git_output(repo, &["show", &spec])?).context("Git record blob is not UTF-8")
 }
-fn paths(bytes: Vec<u8>) -> Result<Vec<PathBuf>> {
-    bytes
-        .split(|byte| *byte == 0)
-        .filter(|part| !part.is_empty())
-        .map(|part| Ok(PathBuf::from(std::str::from_utf8(part)?)))
-        .collect()
+fn status_paths<'a>(
+    status: &[u8],
+    parts: &mut impl Iterator<Item = &'a [u8]>,
+    paths: &mut Vec<PathBuf>,
+) -> Result<()> {
+    let (&kind, score) = status.split_first().context("missing Git diff status")?;
+    if !b"ACDMRTUXB".contains(&kind) || !score.iter().all(u8::is_ascii_digit) {
+        bail!("invalid Git diff status");
+    }
+    // Rename/copy sources are also affected paths: deletions must stay visible.
+    for _ in 0..if matches!(kind, b'R' | b'C') { 2 } else { 1 } {
+        let path = parts
+            .next()
+            .filter(|path| !path.is_empty())
+            .context("missing Git diff path")?;
+        paths.push(PathBuf::from(std::str::from_utf8(path)?));
+    }
+    Ok(())
 }
 pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathBuf>> {
-    paths(git_output(
-        repo,
-        &["diff", "--name-only", "-z", before, after, "--"],
-    )?)
+    let output = git_output(repo, &["diff", "--name-status", "-z", before, after, "--"])?;
+    let mut parts = output.split(|byte| *byte == 0);
+    let mut paths = Vec::new();
+    while let Some(status) = parts.next().filter(|status| !status.is_empty()) {
+        status_paths(status, &mut parts, &mut paths)?;
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
 }
 /// Inspects all introduced commits, including side-branch edit/revert history.
 /// Merge results are compared to a parent containing the tested pin when possible:
@@ -384,28 +428,28 @@ impl ReadContext<'_> {
             if self.rename.is_none() {
                 let config = Command::new("git")
                     .current_dir(self.repo)
-                    .args(["config", "--get", "diff.renames"])
+                    .args([
+                        "config",
+                        "--null",
+                        "--type=bool-or-str",
+                        "--get",
+                        "diff.renames",
+                    ])
                     .output()?;
                 self.rename = Some(if config.status.code() == Some(1) {
                     Some("-M")
                 } else if config.status.success() {
-                    let value = String::from_utf8(config.stdout)?
-                        .trim()
-                        .to_ascii_lowercase();
-                    match value.as_str() {
-                        "copies" => Some("-C"),
-                        "" | "true" | "yes" | "on" => Some("-M"),
-                        "false" | "no" | "off" => None,
-                        _ => {
-                            if value
-                                .parse::<i64>()
-                                .context("invalid diff.renames configuration")?
-                                == 0
-                            {
-                                None
-                            } else {
-                                Some("-M")
-                            }
+                    let value = String::from_utf8(config.stdout)?;
+                    let value = value
+                        .strip_suffix('\0')
+                        .context("missing Git config delimiter")?;
+                    if value.eq_ignore_ascii_case("copies") {
+                        Some("-C")
+                    } else {
+                        match value {
+                            "true" => Some("-M"),
+                            "false" => None,
+                            _ => bail!("invalid diff.renames configuration"),
                         }
                     }
                 } else {
@@ -421,7 +465,7 @@ impl ReadContext<'_> {
                 "--stdin",
                 "-r",
                 "-z",
-                "--name-only",
+                "--name-status",
                 "--format=%x00%H",
                 "--always",
             ];
@@ -434,16 +478,19 @@ impl ReadContext<'_> {
                 }
                 let mut first = true;
                 while parts.peek().is_some_and(|part| !part.is_empty()) {
-                    let path = parts.next().expect("peeked path");
-                    let path = if first {
-                        path.strip_prefix(b"\n")
+                    let status = parts.next().expect("peeked status");
+                    let status = if first {
+                        status
+                            .strip_prefix(b"\n")
                             .context("missing history diff separator")?
                     } else {
-                        path
+                        status
                     };
                     first = false;
-                    edge.paths.push(PathBuf::from(std::str::from_utf8(path)?));
+                    status_paths(status, &mut parts, &mut edge.paths)?;
                 }
+                edge.paths.sort();
+                edge.paths.dedup();
             }
             if parts.any(|part| !part.is_empty()) {
                 bail!("Git returned unexpected history diff records");
@@ -570,6 +617,15 @@ mod tests {
             Some("off"),
             Some("0"),
             Some("2"),
+            Some("0x0"),
+            Some("0x1"),
+            Some("0k"),
+            Some("1k"),
+            Some(""),
+            Some("COPIES"),
+            Some("cOpIeS"),
+            Some("TRUE"),
+            Some("No"),
         ] {
             if let Some(value) = value {
                 git_output(repo.path(), &["config", "diff.renames", value]).unwrap();
@@ -581,6 +637,10 @@ mod tests {
                 let edges = commit_edges(repo.path(), &pin).unwrap();
                 assert_eq!(edges.len(), 3);
                 for edge in edges {
+                    if edge.parent == pin {
+                        assert!(edge.paths.contains(&PathBuf::from("source")));
+                        assert!(edge.paths.contains(&PathBuf::from("renamed\n名 file")));
+                    }
                     assert_eq!(
                         edge.paths,
                         changed_paths(repo.path(), &edge.parent, &edge.commit).unwrap(),
@@ -589,6 +649,32 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn rename_configuration_preserves_git_string_errors_and_valueless_true() {
+        let repo = repo("sha1");
+        fs::write(repo.path().join("source"), "same content").unwrap();
+        let pin = commit(repo.path(), "pin");
+        fs::rename(repo.path().join("source"), repo.path().join("renamed")).unwrap();
+        let end = commit(repo.path(), "rename");
+        for value in [" true ", "true\n", " copies ", "bad", "1junk"] {
+            git_output(repo.path(), &["config", "diff.renames", value]).unwrap();
+            assert!(
+                changed_paths(repo.path(), &pin, &end).is_err(),
+                "Git accepted {value:?}"
+            );
+            assert!(
+                commit_edges(repo.path(), &pin).is_err(),
+                "batch accepted {value:?}"
+            );
+        }
+        let _ = git_output(repo.path(), &["config", "--unset", "diff.renames"]);
+        let config = repo.path().join(".git/config");
+        let mut text = fs::read_to_string(&config).unwrap();
+        text.push_str("\n[diff]\n\trenames\n");
+        fs::write(config, text).unwrap();
+        let edge = commit_edges(repo.path(), &pin).unwrap().remove(0);
+        assert_eq!(edge.paths, changed_paths(repo.path(), &pin, &end).unwrap());
     }
     #[test]
     fn batched_edges_preserve_tested_merge_parent_and_side_branch_reverts() {
@@ -686,6 +772,35 @@ mod tests {
                 );
                 assert!(modes.entry("HEAD", Path::new(".atelier/reviews")).is_err());
             }
+        }
+    }
+    #[test]
+    fn newline_batch_headers_preserve_binary_bodies_and_missing_multiline_paths() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            let name = "folder\n名/binary\n名";
+            let bytes = b"first\n\0second\nlast";
+            fs::create_dir(repo.path().join("folder\n名")).unwrap();
+            fs::write(repo.path().join(name), bytes).unwrap();
+            let pin = commit(repo.path(), "binary");
+            let mut read = ReadContext::new(repo.path());
+            assert!(read
+                .object(&pin, Path::new("folder\n名/missing\npath"))
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                read.object(&pin, Path::new(name)).unwrap().unwrap().2,
+                bytes
+            );
+            assert_eq!(read.object_spec(&pin).unwrap().unwrap().1, "commit");
+            assert!(read
+                .object(&pin, Path::new("other\nmissing"))
+                .unwrap()
+                .is_none());
+            assert_eq!(
+                read.object(&pin, Path::new(name)).unwrap().unwrap().2,
+                bytes
+            );
         }
     }
     #[test]

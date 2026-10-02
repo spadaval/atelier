@@ -245,7 +245,7 @@ impl EvidenceReadContext<'_> {
         let head = self.pinned("HEAD")?;
         let changes = String::from_utf8(git::git_output(
             self.repo,
-            &["log", "--format=%H", &head, "--", &path],
+            &["log", "--root", "--format=%H", &head, "--", &path],
         )?)?;
         let mut claim = None;
         for commit in changes.lines() {
