@@ -19,7 +19,7 @@ fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
         vec!["ls-tree", "-rz", commit]
     };
     let tree = git_output(repo, &args)?;
-    let mut entries = BTreeMap::new();
+    let mut entries: Vec<(PathBuf, (String, String))> = Vec::new();
     for entry in tree
         .split(|byte| *byte == 0)
         .filter(|entry| !entry.is_empty())
@@ -33,9 +33,18 @@ fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
         if fields.len() != 3 {
             bail!("invalid Git tree metadata");
         }
-        entries.insert(PathBuf::from(path), (fields[0].into(), fields[2].into()));
+        entries.push((PathBuf::from(path), (fields[0].into(), fields[2].into())));
     }
-    Ok(entries)
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    entries.dedup_by(|later, earlier| {
+        if later.0 == earlier.0 {
+            std::mem::swap(&mut earlier.1, &mut later.1);
+            true
+        } else {
+            false
+        }
+    });
+    Ok(entries.into_iter().collect())
 }
 
 fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()> {
