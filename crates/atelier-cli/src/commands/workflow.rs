@@ -430,14 +430,9 @@ fn print_text_list(title: &str, values: &[String]) {
 }
 
 fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
-    let mut lines = vec![human_output::section_heading(title)];
-    if values.is_empty() {
-        lines.push("(none)".to_string());
-        return lines;
-    }
-    for value in values {
-        lines.push(format!("  {value}"));
-    }
+    let mut lines =
+        human_output::render_lines_section("", values.iter().map(|value| format!("  {value}")));
+    lines.insert(0, human_output::section_heading(title));
     lines
 }
 

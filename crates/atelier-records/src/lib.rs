@@ -26,8 +26,7 @@ pub use record_id::validate_record_id;
 
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
-    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
-    ISSUE_KIND, REVIEW_KIND,
+    validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS, ISSUE_KIND, REVIEW_KIND,
 };
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
@@ -2239,7 +2238,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
-            assert!(validate_canonical_record_kind(kind).is_ok());
+            assert!(canonical_record_kind(kind).is_ok());
             let spec = canonical_record_kind(kind).unwrap();
             assert_eq!(
                 canonical_record_path(spec, "atelier-abcd").unwrap(),
@@ -2270,7 +2269,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
                 .to_string()
                 .contains("Invalid record kind 'workflow_validator'")
         );
-        assert!(validate_canonical_record_kind("workflow_validator").is_err());
+        assert!(canonical_record_kind("workflow_validator").is_err());
         assert!(canonical_record_kind("workflow_validator").is_err());
     }
 
@@ -3176,7 +3175,7 @@ Legacy evidence summary.
 
         assert!(!kinds.contains(&"session"));
         assert!(canonical_record_kind("session").is_err());
-        assert!(validate_canonical_record_kind("session").is_err());
+        assert!(canonical_record_kind("session").is_err());
     }
     #[test]
     fn version_two_rejects_old_versions_generic_fields_and_strategy_revisions() {

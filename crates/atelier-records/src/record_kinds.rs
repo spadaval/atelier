@@ -50,10 +50,6 @@ pub fn canonical_record_kind(kind: &str) -> Result<&'static RecordKindSpec> {
     Ok(spec)
 }
 
-pub fn validate_canonical_record_kind(kind: &str) -> Result<()> {
-    canonical_record_kind(kind).map(|_| ())
-}
-
 pub fn validate_record_kind(kind: &str) -> Result<()> {
     if record_kind(kind).is_some() {
         Ok(())
