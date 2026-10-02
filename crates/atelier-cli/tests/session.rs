@@ -1877,3 +1877,62 @@ fn valid_independent_review_survives_merge_after_reviewer_authored_prior_base_wo
     commit(f.path(), "later unrelated base code");
     ok(f.path(), &["land"]);
 }
+
+#[test]
+fn prime_keeps_eight_newest_scoped_proofs_and_fresh_hidden_dirt() {
+    let f = Fixture::new();
+    let mut ids = Vec::new();
+    for n in 0..10 {
+        let id = ok(
+            f.path(),
+            &[
+                "-q",
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{}", f.id),
+                "--kind",
+                "test",
+                "--result",
+                "pass",
+                &format!("Proof {n}"),
+            ],
+        );
+        let id = id.split_whitespace().next().unwrap().to_owned();
+        let mut record = f.store().load_evidence_by_id(&id).unwrap();
+        // Paired times exercise the existing descending ID tie-break.
+        record.data.captured_at =
+            chrono::DateTime::from_timestamp(1_700_000_000 + n / 2, 0).unwrap();
+        f.store().write_evidence_atomic(&record).unwrap();
+        ids.push((record.data.captured_at, id));
+    }
+    commit(f.path(), "ten proofs");
+    ids.sort_by(|a, b| b.cmp(a));
+    let expected = ids
+        .iter()
+        .take(8)
+        .map(|(_, id)| id.as_str())
+        .collect::<Vec<_>>();
+    let prime = ok(f.path(), &["prime"]);
+    let actual = prime
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("Evidence: ")
+                .and_then(|line| line.split_once(" — ").map(|(id, _)| id))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+    assert_eq!(prime.matches("(fresh)").count(), 8);
+    git(f.path(), &["update-index", "--skip-worktree", "code"]);
+    fs::write(f.path().join("code"), "hidden dirty bytes\n").unwrap();
+    let prime = ok(f.path(), &["prime"]);
+    assert!(prime.contains("Checkout: uncommitted changes"));
+    assert_eq!(prime.matches("(stale against current work)").count(), 8);
+    fs::write(f.path().join("code"), "tested code\n").unwrap();
+    let mut record = f.store().load_evidence_by_id(expected[0]).unwrap();
+    record.data.commit = "f".repeat(40);
+    f.store().write_evidence_atomic(&record).unwrap();
+    let prime = ok(f.path(), &["prime"]);
+    assert_eq!(prime.matches("(stale against current work)").count(), 1);
+    assert_eq!(prime.matches("(fresh)").count(), 7);
+}
