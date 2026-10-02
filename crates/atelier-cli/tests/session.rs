@@ -875,6 +875,50 @@ fn review_regression_owned_checkout_checks_all_active_work_traceability() {
     ok(f.path(), &["land"]);
 }
 #[test]
+fn landing_rechecks_unrelated_active_branches_after_arbitrary_checks() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let other = ok(f.path(), &["-q", "issue", "create", "Other active owner"]);
+    let branch = format!("task/{other}");
+    let mut record = f.store().load_issue_by_id(&other).unwrap();
+    record.issue.status = "in_progress".into();
+    record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
+        work_branch: branch.clone(),
+        branch_base: "main".into(),
+    });
+    f.store().write_issue_atomic(&record).unwrap();
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'if test -f .git/delete-unrelated; then git branch -D {branch}; fi' }}\n")).unwrap();
+    commit(f.path(), "trusted check and unrelated active owner");
+    git(f.path(), &["branch", &branch]);
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["rebase", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["land"]);
+    fs::write(f.path().join(".git/delete-unrelated"), "run check").unwrap();
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("land_work_untraceable"),
+        "{output}"
+    );
+    fs::remove_file(f.path().join(".git/delete-unrelated")).unwrap();
+    git(f.path(), &["branch", &branch]);
+    ok(f.path(), &["land"]);
+}
+#[test]
 fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     let f = Fixture::new();
     let other = ok(f.path(), &["-q", "issue", "create", "Other active owner"]);
@@ -1338,6 +1382,46 @@ fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
 }
 
 #[test]
+fn staged_canonical_changes_cannot_hide_behind_restored_worktree_bytes() {
+    for base in [false, true] {
+        let f = Fixture::new();
+        if base {
+            git(f.path(), &["switch", "main"]);
+        }
+        fs::write(f.path().join("unfinished-code"), "ordinary unfinished work").unwrap();
+        ok(f.path(), &["land"]);
+        let relative = format!(".atelier/issues/{}.md", f.id);
+        let path = f.path().join(&relative);
+        let original = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{original}\nStaged canonical change\n")).unwrap();
+        git(f.path(), &["add", &relative]);
+        fs::write(&path, &original).unwrap();
+        assert!(git(f.path(), &["status", "--porcelain"]).contains(&format!("MM {relative}")));
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(
+            !pass && output.contains("canonical_snapshot_uncommitted"),
+            "{output}"
+        );
+        git(f.path(), &["reset", "-q", "HEAD", "--", &relative]);
+        ok(f.path(), &["land"]);
+        fs::write(
+            f.path().join(".gitattributes"),
+            ".atelier/issues/*.md filter=uppercase\n",
+        )
+        .unwrap();
+        git(
+            f.path(),
+            &["config", "filter.uppercase.clean", "tr a-z A-Z"],
+        );
+        fs::write(&path, &original).unwrap();
+        assert!(git(f.path(), &["status", "--porcelain"])
+            .lines()
+            .any(|line| line.trim_start().starts_with("M ") && line.ends_with(&relative)));
+        ok(f.path(), &["land"]); // Raw worktree and index still equal committed HEAD.
+    }
+}
+
+#[test]
 fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
     for (mutation, renames) in [
         ("rewrite", None),
@@ -1471,6 +1555,38 @@ fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
         let (pass, output) = cli(f.path(), &["land"]);
         assert!(!pass && output.contains("review_append_only"), "{output}");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn root_review_mode_must_be_regular_non_executable() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Root finding",
+        ],
+    );
+    fs::remove_dir_all(f.path().join(".git")).unwrap();
+    git(f.path(), &["init", "-qb", "main"]);
+    git(f.path(), &["config", "user.name", "Author"]);
+    git(f.path(), &["config", "user.email", "author@example.test"]);
+    let path = f.path().join(format!(".atelier/reviews/{finding}.md"));
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    commit(f.path(), "root executable review event");
+    git(f.path(), &["config", "log.showRoot", "false"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("review_append_only"), "{output}");
 }
 
 #[test]
