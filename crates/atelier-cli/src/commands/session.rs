@@ -214,22 +214,24 @@ fn check_traceability(
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let (head, snapshot, initial_paths, index) = {
+    let (captured, snapshot, initial_paths, index) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        let head = git_freshness::head_commit(repo)?;
-        let snapshot = atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &head)?;
+        let captured = git::CheckoutRefs::capture(repo)?;
+        let snapshot =
+            atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &captured.head)?;
         let paths = check_records(repo, &snapshot)?;
         (
-            head,
+            captured,
             snapshot,
             paths,
             RecordIndex::load_structural(&layout.canonical_dir())?,
         )
     };
+    let head = &captured.head;
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
     review_gate::append_only_history(&mut read)?;
-    let branch = git::current_branch(repo)?.unwrap_or_default();
+    let branch = captured.branch.clone().unwrap_or_default();
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; repair it before landing")?;
     let id = owner(&index, &branch, requested)?;
@@ -242,7 +244,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
                 .as_ref()
                 .map(|owner| {
                     let reference = format!("refs/heads/{}", owner.branch_base);
-                    Ok((reference.clone(), git::resolve(repo, &reference)?))
+                    Ok((reference.clone(), captured.resolve(&mut read, &reference)?))
                 })
                 .transpose()
         })
@@ -359,13 +361,16 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&layout.canonical_dir())?;
     let final_paths = check_records(repo, &snapshot)?;
     check_traceability(repo, &index, &source.policy)?;
+    let final_refs = git::CheckoutRefs::capture(repo)?;
     if base_pin.as_ref().is_some_and(|(reference, commit)| {
-        git::resolve(repo, reference).map_or(true, |current| current != *commit)
+        final_refs
+            .resolve(&mut read, reference)
+            .map_or(true, |current| current != *commit)
     }) {
         bail!("land_base_changed: the integration base moved during checks; retry with current policy and proof");
     }
-    if git_freshness::head_commit(repo)? != head
-        || git::current_branch(repo)?.unwrap_or_default() != branch
+    if final_refs.head != *head
+        || final_refs.branch.unwrap_or_default() != branch
         || final_paths != initial_paths
     {
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");

@@ -153,7 +153,7 @@ impl<'a> ReadContext<'a> {
         }
         self.object_spec(&spec)
     }
-    pub(crate) fn commit_id(&mut self, commit: &str) -> Result<String> {
+    pub fn commit_id(&mut self, commit: &str) -> Result<String> {
         let commit = self.pinned(commit)?;
         let (oid, kind, _) = self.object_spec(&commit)?.context("Git commit missing")?;
         if kind != "commit" {

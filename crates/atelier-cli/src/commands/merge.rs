@@ -41,12 +41,13 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
 pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let head = git::head_commit(repo)?;
-    let source_ref = text(repo, &["symbolic-ref", "--quiet", "HEAD"])?;
-    let branch = source_ref
-        .strip_prefix("refs/heads/")
+    let captured = crate::commands::git::CheckoutRefs::capture(repo)?;
+    let head = &captured.head;
+    let branch = captured
+        .branch
+        .as_deref()
         .context("merge requires a local work branch")?;
-    let snapshot = committed_snapshot::CommittedSnapshot::new(repo, &head)?;
+    let snapshot = committed_snapshot::CommittedSnapshot::new(repo, head)?;
     let index = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
@@ -74,9 +75,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     let base = &recorded.branch_base;
     let base_ref = format!("refs/heads/{base}");
-    let base_head = text(repo, &["rev-parse", "--verify", &base_ref])?;
-    git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Update/rebase the work branch, obtain fresh proof and review, then retry."))?;
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    let base_head = captured.resolve(&mut read, &base_ref)?;
+    git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Update/rebase the work branch, obtain fresh proof and review, then retry."))?;
     let source = base_policy::from_captured(&mut read, &base_head)?;
     for diagnostic in &source.diagnostics {
         eprintln!("{diagnostic}");
@@ -136,10 +137,12 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
     snapshot.require_clean(repo)?;
-    if git::head_commit(repo)? != head
-        || text(repo, &["symbolic-ref", "--quiet", "HEAD"])? != source_ref
-        || text(repo, &["rev-parse", &format!("refs/heads/{branch}")])? != head
-        || text(repo, &["rev-parse", &base_ref])? != base_head
+    let final_refs = crate::commands::git::CheckoutRefs::capture(repo)?;
+    if final_refs.head != *head
+        || final_refs.branch.as_deref() != Some(branch)
+        || final_refs
+            .resolve(&mut read, &base_ref)
+            .map_or(true, |current| current != base_head)
     {
         bail!("merge_snapshot_changed: Git refs changed while checks ran; retry with fresh proof and review");
     }
@@ -151,9 +154,8 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             .as_ref()
             .expect("base snapshot")
             .require_clean(path)?;
-        if git::head_commit(path)? != base_head
-            || text(path, &["symbolic-ref", "--quiet", "HEAD"])? != base_ref
-        {
+        let base_refs = crate::commands::git::CheckoutRefs::capture(path)?;
+        if base_refs.head != base_head || base_refs.branch.as_deref() != Some(base) {
             bail!("base checkout changed while checks ran");
         }
     }
@@ -172,25 +174,13 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     git::git_output(
         target,
-        &[
-            "-c",
-            "core.hooksPath=/dev/null",
-            "merge",
-            "--ff-only",
-            &head,
-        ],
+        &["-c", "core.hooksPath=/dev/null", "merge", "--ff-only", head],
     )
     .context("fast-forward failed; no tracker state was written")?;
     if base_tree.is_some() {
         git::git_output(
             repo,
-            &[
-                "-c",
-                "core.hooksPath=/dev/null",
-                "switch",
-                "--detach",
-                &head,
-            ],
+            &["-c", "core.hooksPath=/dev/null", "switch", "--detach", head],
         )
         .context(
             "integration succeeded; detach the work checkout and delete its integrated branch",
@@ -199,7 +189,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     // Delete only the reviewed tip, atomically. Git branch -d instead tests
     // an upstream when configured, even when this base contains the full tip.
     let work_ref = format!("refs/heads/{branch}");
-    git::git_output(target, &["update-ref", "--no-deref", "-d", &work_ref, &head]).with_context(|| format!("integration succeeded; cleanup refused because {branch} changed. Inspect the branch before deleting it."))?;
+    git::git_output(target, &["update-ref", "--no-deref", "-d", &work_ref, head]).with_context(|| format!("integration succeeded; cleanup refused because {branch} changed. Inspect the branch before deleting it."))?;
     let metadata = atelier_app::git_freshness::command(target)
         .args([
             "config",
