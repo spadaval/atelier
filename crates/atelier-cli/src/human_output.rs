@@ -191,7 +191,6 @@ impl Panel for TextPanel {
 pub(crate) struct LinesPanel {
     title: String,
     lines: Vec<String>,
-    empty: String,
 }
 
 impl LinesPanel {
@@ -202,14 +201,7 @@ impl LinesPanel {
         Self {
             title: title.into(),
             lines: lines.into_iter().map(Into::into).collect(),
-            empty: "(none)".to_string(),
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn empty(mut self, empty: impl Into<String>) -> Self {
-        self.empty = empty.into();
-        self
     }
 }
 
@@ -221,7 +213,7 @@ impl Panel for LinesPanel {
             vec![section_heading(&self.title)]
         };
         if self.lines.is_empty() {
-            lines.push(self.empty.clone());
+            lines.push("(none)".to_string());
         } else {
             lines.extend(self.lines.iter().cloned());
         }
@@ -405,7 +397,6 @@ fn visible_width(text: &str) -> usize {
 pub(crate) struct IssueListPanel {
     title: String,
     rows: Vec<IssueListRow>,
-    total_count: usize,
     limit: usize,
 }
 
@@ -430,18 +421,11 @@ impl IssueListPanel {
         )
     }
     pub(crate) fn new(title: impl Into<String>, rows: Vec<IssueListRow>) -> Self {
-        let total_count = rows.len();
         Self {
             title: title.into(),
             rows,
-            total_count,
             limit: 20,
         }
-    }
-
-    pub(crate) fn total_count(mut self, total_count: usize) -> Self {
-        self.total_count = total_count;
-        self
     }
 
     pub(crate) fn limit(mut self, limit: usize) -> Self {
@@ -453,7 +437,7 @@ impl IssueListPanel {
 impl Panel for IssueListPanel {
     fn render(&self, context: RenderContext) -> Vec<String> {
         let mut lines = vec![section_heading(&self.title)];
-        if self.total_count == 0 {
+        if self.rows.is_empty() {
             lines.push("(none)".to_string());
             return lines;
         }
@@ -476,7 +460,7 @@ impl Panel for IssueListPanel {
                 row.id, status, row.priority, row.title, blockers
             ));
         }
-        let omitted = self.total_count.saturating_sub(limit);
+        let omitted = self.rows.len().saturating_sub(limit);
         if omitted > 0 {
             lines.push(format!(
                 "  ... {omitted} more {} item{} omitted",
@@ -756,10 +740,6 @@ impl FooterAction {
             command: command.into(),
         }
     }
-
-    fn render(&self) -> String {
-        format!("  {}: {}", self.label, self.command)
-    }
 }
 
 pub(crate) fn heading(title: &str) -> String {
@@ -782,25 +762,19 @@ pub(crate) fn render_footer(
     let mut lines = vec![section_heading(title)];
     for action in actions {
         if seen.insert((action.label.clone(), action.command.clone())) {
-            lines.push(action.render());
+            lines.push(format!("  {}: {}", action.label, action.command));
         }
     }
     lines.join("\n")
-}
-
-pub(crate) fn bounded_items<T: Clone>(items: &[T], limit: usize) -> (Vec<T>, usize) {
-    if items.len() <= limit {
-        (items.to_vec(), 0)
-    } else {
-        (items[..limit].to_vec(), items.len() - limit)
-    }
 }
 
 pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
     if paths.is_empty() {
         return "clean".to_string();
     }
-    let (sample, omitted) = bounded_items(paths, sample_limit);
+    let shown = paths.len().min(sample_limit);
+    let sample = &paths[..shown];
+    let omitted = paths.len() - shown;
     let mut summary = format!("{} path{}", paths.len(), plural_suffix(paths.len()));
     if !sample.is_empty() {
         summary.push_str(": ");
@@ -1032,7 +1006,7 @@ mod tests {
 
     #[test]
     fn issue_list_panel_bounds_rows_and_keeps_colorless_roles() {
-        let rows = vec![
+        let mut rows = vec![
             IssueListRow {
                 role: DisplayRole::Selectable,
                 id: "atelier-a".to_string(),
@@ -1052,9 +1026,10 @@ mod tests {
                 depth: 1,
             },
         ];
-        let panel = IssueListPanel::new("Ready Work", rows)
-            .total_count(3)
-            .limit(1);
+        let mut third = rows[1].clone();
+        third.id = "atelier-c".into();
+        rows.push(third);
+        let panel = IssueListPanel::new("Ready Work", rows).limit(1);
         assert_eq!(
             panel.render(RenderContext::plain()).join("\n"),
             "Ready Work\n----------\n  ready atelier-a [todo] high - A\n  ... 2 more ready work items omitted"

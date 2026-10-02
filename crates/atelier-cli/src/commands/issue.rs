@@ -154,11 +154,11 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                 "Buckets",
                 format!(
                     "active {}, ready {}, blocked {}, done {}, backlog {}",
-                    summary.scope.totals.active,
-                    summary.scope.totals.ready,
-                    summary.scope.totals.blocked,
-                    summary.scope.totals.done,
-                    summary.scope.totals.backlog
+                    summary.scope.work.active.len(),
+                    summary.scope.work.ready.len(),
+                    summary.scope.work.blocked.len(),
+                    summary.scope.work.done.len(),
+                    summary.scope.work.backlog.len()
                 ),
             )
             .row(
@@ -181,34 +181,14 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
             ),
     );
 
-    for (title, rows, total) in [
-        (
-            "Active Work",
-            &summary.scope.work.active,
-            summary.scope.totals.active,
-        ),
-        (
-            "Ready Work",
-            &summary.scope.work.ready,
-            summary.scope.totals.ready,
-        ),
-        (
-            "Blocked Work",
-            &summary.scope.work.blocked,
-            summary.scope.totals.blocked,
-        ),
-        (
-            "Done Work",
-            &summary.scope.work.done,
-            summary.scope.totals.done,
-        ),
+    for (title, rows) in [
+        ("Active Work", &summary.scope.work.active),
+        ("Ready Work", &summary.scope.work.ready),
+        ("Blocked Work", &summary.scope.work.blocked),
+        ("Done Work", &summary.scope.work.done),
     ] {
-        if total > 0 {
-            print_panel(
-                IssueListPanel::from_work_rows(title, rows)
-                    .total_count(total)
-                    .limit(OBJECTIVE_ROLLUP_LIMIT),
-            );
+        if !rows.is_empty() {
+            print_panel(IssueListPanel::from_work_rows(title, rows).limit(OBJECTIVE_ROLLUP_LIMIT));
         }
     }
 

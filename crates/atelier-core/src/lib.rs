@@ -403,27 +403,9 @@ impl IssueSections {
             .filter(|s| !s.is_empty())
             .unwrap_or("Goal was not specified.")
             .to_string();
-        let body = match issue_type {
-            "epic" => IssueBody::Epic {
-                outcome: goal,
-                proof: None,
-                delivers: None,
-                scope: None,
-                unknowns: None,
-                design: None,
-            },
-            "mission" => IssueBody::Mission {
-                outcome: goal,
-                success_criteria: Some("Success criteria were not specified.".to_string()),
-                epics: None,
-            },
-            _ => IssueBody::Issue {
-                goal,
-                done_when: "Done when was not specified.".to_string(),
-                scope: None,
-                context: None,
-            },
-        };
+        let proof =
+            (issue_type == "mission").then(|| "Success criteria were not specified.".to_string());
+        let body = IssueBody::for_type(issue_type, goal, proof, None);
         Self {
             body,
             notes: None,
@@ -455,27 +437,7 @@ impl IssueSections {
                 ..
             } => (outcome.clone(), success_criteria.clone(), None),
         };
-        self.body = match issue_type {
-            "epic" => IssueBody::Epic {
-                outcome: goal,
-                proof,
-                scope,
-                delivers: None,
-                unknowns: None,
-                design: None,
-            },
-            "mission" => IssueBody::Mission {
-                outcome: goal,
-                success_criteria: proof,
-                epics: None,
-            },
-            _ => IssueBody::Issue {
-                goal,
-                done_when: proof.unwrap_or_else(|| "Done when was not specified.".to_string()),
-                scope,
-                context: None,
-            },
-        };
+        self.body = IssueBody::for_type(issue_type, goal, proof, scope);
     }
 
     pub fn matches_type(&self, issue_type: &str) -> bool {
@@ -559,6 +521,37 @@ impl IssueSections {
             .collect()
     }
 }
+impl IssueBody {
+    fn for_type(
+        issue_type: &str,
+        goal: String,
+        proof: Option<String>,
+        scope: Option<String>,
+    ) -> Self {
+        match issue_type {
+            "epic" => IssueBody::Epic {
+                outcome: goal,
+                proof,
+                scope,
+                delivers: None,
+                unknowns: None,
+                design: None,
+            },
+            "mission" => IssueBody::Mission {
+                outcome: goal,
+                success_criteria: proof,
+                epics: None,
+            },
+            _ => IssueBody::Issue {
+                goal,
+                done_when: proof.unwrap_or_else(|| "Done when was not specified.".to_string()),
+                scope,
+                context: None,
+            },
+        }
+    }
+}
+
 impl IssueSectionName {
     pub fn title(self) -> &'static str {
         match self {
@@ -709,6 +702,68 @@ mod tests {
             assert_eq!(IssuePriority::from_label(label).unwrap(), priority);
             assert_eq!(IssuePriority::from_cli_input(label).unwrap(), priority);
         }
+    }
+
+    #[test]
+    fn default_body_shapes_and_type_changes_preserve_acceptance_and_notes() {
+        let epic = IssueSections::for_type("epic", Some("  "));
+        assert_eq!(
+            epic.section(IssueSectionName::Outcome),
+            Some("Goal was not specified.")
+        );
+        assert_eq!(epic.section(IssueSectionName::Proof), None);
+        let mission = IssueSections::for_type("mission", None);
+        assert_eq!(
+            mission.section(IssueSectionName::SuccessCriteria),
+            Some("Success criteria were not specified.")
+        );
+
+        let mut sections = IssueSections::for_type("task", Some("  Keep intent.  "));
+        if let IssueBody::Issue {
+            done_when,
+            scope,
+            context,
+            ..
+        } = &mut sections.body
+        {
+            *done_when = "The result is independently checked.".into();
+            *scope = Some("This repository.".into());
+            *context = Some("Existing useful context.".into());
+        }
+        sections.notes = Some("A preserved note.".into());
+        sections.close_reason = Some("A preserved reason.".into());
+        let same_shape = sections.clone();
+        sections.change_type("bug");
+        assert_eq!(sections, same_shape);
+        sections.change_type("epic");
+        assert_eq!(
+            sections.section(IssueSectionName::Outcome),
+            Some("Keep intent.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::Proof),
+            Some("The result is independently checked.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::Scope),
+            Some("This repository.")
+        );
+        sections.change_type("mission");
+        assert_eq!(
+            sections.section(IssueSectionName::SuccessCriteria),
+            Some("The result is independently checked.")
+        );
+        sections.change_type("task");
+        assert_eq!(
+            sections.section(IssueSectionName::Goal),
+            Some("Keep intent.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::DoneWhen),
+            Some("The result is independently checked.")
+        );
+        assert_eq!(sections.notes, same_shape.notes);
+        assert_eq!(sections.close_reason, same_shape.close_reason);
     }
 
     #[test]

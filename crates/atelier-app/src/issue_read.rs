@@ -20,7 +20,6 @@ pub struct ObjectiveBucketTotals {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ObjectiveScopeSummary {
     pub issue_ids: BTreeSet<String>,
-    pub totals: ObjectiveBucketTotals,
     pub work: WorkBuckets,
 }
 
@@ -30,13 +29,13 @@ impl ObjectiveScopeSummary {
     }
 
     pub fn health(&self, open_objective_blockers: usize) -> &'static str {
-        if open_objective_blockers > 0 || self.totals.blocked > 0 {
+        if open_objective_blockers > 0 || !self.work.blocked.is_empty() {
             "blocked"
-        } else if self.totals.active > 0 {
+        } else if !self.work.active.is_empty() {
             "active"
-        } else if self.totals.ready > 0 {
+        } else if !self.work.ready.is_empty() {
             "ready"
-        } else if self.totals.done > 0 {
+        } else if !self.work.done.is_empty() {
             "terminal"
         } else {
             "steady"
@@ -148,13 +147,6 @@ fn scope_summary(
     }
     Ok(ObjectiveScopeSummary {
         issue_ids: scope_ids.clone(),
-        totals: ObjectiveBucketTotals {
-            active: work.active.len(),
-            ready: work.ready.len(),
-            blocked: work.blocked.len(),
-            done: work.done.len(),
-            backlog: work.backlog.len(),
-        },
         work,
     })
 }
@@ -356,9 +348,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(summary.scope.total(), 4);
-        assert_eq!(summary.scope.totals.ready, 2);
-        assert_eq!(summary.scope.totals.blocked, 1);
-        assert_eq!(summary.scope.totals.done, 1);
+        assert_eq!(summary.scope.work.ready.len(), 2);
+        assert_eq!(summary.scope.work.blocked.len(), 1);
+        assert_eq!(summary.scope.work.done.len(), 1);
         assert_eq!(summary.relationships.open_blockers, vec!["atelier-blocker"]);
         assert_eq!(
             summary
@@ -387,7 +379,7 @@ mod tests {
             BTreeSet::from(["atelier-child".to_string(), "atelier-root".to_string()])
         );
         assert_eq!(summary.relationships.advances_roots, vec!["atelier-root"]);
-        assert_eq!(summary.scope.totals.ready, 2);
+        assert_eq!(summary.scope.work.ready.len(), 2);
     }
 
     #[test]
@@ -428,9 +420,9 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(summary.scope.totals.ready, 7);
         assert_eq!(summary.scope.work.ready.len(), 7);
-        assert_eq!(summary.scope.totals.active, 1);
+        assert_eq!(summary.scope.work.ready.len(), 7);
+        assert_eq!(summary.scope.work.active.len(), 1);
         assert_eq!(summary.recently_updated[0].id, "atelier-active");
         assert_eq!(summary.recently_updated.len(), 8);
     }
