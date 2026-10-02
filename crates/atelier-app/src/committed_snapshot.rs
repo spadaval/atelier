@@ -222,10 +222,7 @@ impl CommittedSnapshot {
         Ok(paths)
     }
     pub fn require_clean(&self, repo: &Path) -> Result<()> {
-        self.require_clean_after_status(repo, crate::git_freshness::working_status_paths(repo)?)
-    }
-    /// Continue a fresh fence after native status and its filters have finished.
-    pub fn require_clean_after_status(&self, repo: &Path, mut paths: Vec<PathBuf>) -> Result<()> {
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         verify_records(repo, &self.entries)?;
         paths.retain(|path| !canonical(path));
         let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;

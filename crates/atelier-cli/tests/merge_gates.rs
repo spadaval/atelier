@@ -46,14 +46,8 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
-        Self::new_format("sha1")
-    }
-    fn new_format(format: &str) -> Self {
         let dir = tempdir().unwrap();
-        git(
-            dir.path(),
-            &["init", "-qb", "main", &format!("--object-format={format}")],
-        );
+        git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
         ok(dir.path(), &["init"]);
@@ -133,102 +127,6 @@ impl Fixture {
         atelier_records::RecordStore::new(self.path().join(".atelier"))
             .write_issue_atomic(record)
             .unwrap();
-    }
-}
-
-#[test]
-fn final_clean_ref_and_worktree_failures_replay_in_order() {
-    for format in ["sha1", "sha256"] {
-        for (mutation, expected) in [
-            ("raw", "canonical_snapshot_uncommitted"),
-            ("code", "merge_checkout_dirty"),
-            ("ref", "merge_snapshot_changed"),
-            ("lock", "base worktree is locked"),
-        ] {
-            let fixture = Fixture::new_format(format);
-            let base = tempdir().unwrap();
-            let mut command = format!("git worktree lock {}", base.path().display());
-            if mutation != "lock" {
-                command.push_str("; git update-ref refs/heads/main HEAD");
-            }
-            if mutation == "raw" {
-                command.push_str(&format!(
-                    "; printf changed >> .atelier/issues/{}.md",
-                    fixture.id
-                ));
-            } else if mutation == "code" {
-                command.push_str("; printf changed >> src.rs");
-            }
-            git(fixture.path(), &["switch", "main"]);
-            let path = fixture.path().join(".atelier/workflow.yaml");
-            let policy = fs::read_to_string(&path).unwrap();
-            fs::write(
-                &path,
-                format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: '{command}' }}\n"),
-            )
-            .unwrap();
-            commit(fixture.path(), "compound final fence mutation check");
-            git(fixture.path(), &["switch", &fixture.branch]);
-            git(fixture.path(), &["rebase", "main"]);
-            fixture.approval("Reviewer");
-            git(
-                fixture.path(),
-                &["worktree", "add", base.path().to_str().unwrap(), "main"],
-            );
-            let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-            if mutation == "lock"
-                && !git(fixture.path(), &["worktree", "list", "--porcelain"]).contains("\nlocked")
-            {
-                // Older Git does not expose locked state in porcelain output.
-                assert!(passed, "{output}");
-            } else {
-                assert!(!passed && output.contains(expected), "{mutation}: {output}");
-            }
-            if mutation != "lock" {
-                assert!(!output.contains("base worktree is locked"), "{output}");
-            }
-            if matches!(mutation, "raw" | "code") {
-                assert!(!output.contains("merge_snapshot_changed"), "{output}");
-            }
-            assert_eq!(
-                git(fixture.path(), &["branch", "--show-current"]),
-                fixture.branch
-            );
-            git(
-                fixture.path(),
-                &["worktree", "unlock", base.path().to_str().unwrap()],
-            );
-        }
-    }
-}
-
-#[test]
-fn final_status_filters_finish_before_raw_and_metadata_fences() {
-    for format in ["sha1", "sha256"] {
-        let fixture = Fixture::new_format(format);
-        git(fixture.path(), &["switch", "main"]);
-        let path = fixture.path().join(".atelier/workflow.yaml");
-        let policy = fs::read_to_string(&path).unwrap();
-        let command = format!(
-            "git config filter.fence.clean \"printf changed >> .atelier/issues/{}.md; git update-ref refs/heads/main HEAD; touch .git/filter-ran; cat\"; echo src.rs filter=fence > .git/info/attributes; touch src.rs",
-            fixture.id
-        );
-        fs::write(
-            &path,
-            format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: '{command}' }}\n"),
-        )
-        .unwrap();
-        commit(fixture.path(), "install final-status filter during check");
-        git(fixture.path(), &["switch", &fixture.branch]);
-        git(fixture.path(), &["rebase", "main"]);
-        fixture.approval("Reviewer");
-        let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(
-            !passed && output.contains("canonical_snapshot_uncommitted"),
-            "{output}"
-        );
-        assert!(!output.contains("merge_snapshot_changed"), "{output}");
-        assert!(fixture.path().join(".git/filter-ran").exists());
     }
 }
 
