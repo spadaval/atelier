@@ -459,33 +459,18 @@ impl RecordStore {
             validate_relationship_type(relation_type)?;
         }
 
-        if source_kind == ISSUE_KIND.kind {
-            let mut record = self.load_issue_by_id(source_id)?;
-            let changed = add_relationship_to_bucket(
-                &mut record.relationships,
-                target_kind,
-                target_id,
-                relation_type,
-            );
-            if changed {
-                record.issue.updated_at = Utc::now();
-                self.write_issue_atomic(&record)?;
-            }
-            Ok(changed)
-        } else {
-            let mut record = self.load_record_by_id(source_kind, source_id)?;
-            let changed = add_relationship_to_bucket(
-                &mut record.header_mut().relationships,
-                target_kind,
-                target_id,
-                relation_type,
-            );
-            if changed {
-                record.header_mut().updated_at = Utc::now();
-                self.write_record_atomic(&record)?;
-            }
-            Ok(changed)
+        let mut record = self.load_record_by_id(source_kind, source_id)?;
+        let changed = add_relationship_to_bucket(
+            &mut record.header_mut().relationships,
+            target_kind,
+            target_id,
+            relation_type,
+        );
+        if changed {
+            record.header_mut().updated_at = Utc::now();
+            self.write_record_atomic(&record)?;
         }
+        Ok(changed)
     }
 
     pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
@@ -801,14 +786,10 @@ pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
 /// callers that already know the domain type.
 pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<EvidenceRecord> {
     let spec = canonical_record_kind("evidence")?;
-    match parse_record(text, relative, spec)? {
-        Record::Evidence(record) => Ok(record),
-        other => bail!(
-            "Expected evidence record in {}, found {}",
-            display_state_path(relative),
-            other.kind()
-        ),
-    }
+    let (front_matter, body) = split_front_matter(text, relative)?;
+    let id = validate_record_front_matter(&front_matter, relative, spec)?;
+    reject_forbidden_data_front_matter(&front_matter, relative)?;
+    parse_evidence_record(front_matter, body, relative, spec, id)
 }
 
 pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueRecord> {
@@ -875,7 +856,7 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
     let id = validate_record_front_matter(&front_matter, relative, spec)?;
     reject_forbidden_data_front_matter(&front_matter, relative)?;
     if spec.kind == "evidence" {
-        return parse_evidence_record(front_matter, body, relative, spec, id);
+        return parse_evidence_record(front_matter, body, relative, spec, id).map(Record::Evidence);
     }
     bail!(
         "Unsupported record kind '{}' in {}",
@@ -1002,14 +983,6 @@ pub fn validate_issue_section_text(
 }
 
 fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> Result<()> {
-    if record.header().kind != spec.kind {
-        bail!(
-            "Record kind '{}' does not match expected kind '{}' in {}",
-            record.header().kind,
-            spec.kind,
-            display_state_path(relative)
-        );
-    }
     record_id::validate_record_id(&record.header().id).with_context(|| {
         format!(
             "Invalid {} id '{}' in {}",
@@ -1070,7 +1043,7 @@ fn render_evidence_record(
         "independence_level",
         data.independence_level.as_deref(),
     )?;
-    write_evidence_target_if_some(&mut output, data.target.as_ref())?;
+    write_evidence_target(&mut output, data.target.as_ref())?;
     write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
     write_yaml_relationships(&mut output, relationships)?;
@@ -1095,7 +1068,7 @@ fn parse_evidence_record(
     relative: &Path,
     spec: &RecordKindSpec,
     id: String,
-) -> Result<Record> {
+) -> Result<EvidenceRecord> {
     let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
@@ -1144,7 +1117,7 @@ fn parse_evidence_record(
         summary: body.to_string(),
     };
     validate_evidence_record(&record, relative)?;
-    Ok(Record::Evidence(record))
+    Ok(record)
 }
 
 fn validate_evidence_record(record: &EvidenceRecord, relative: &Path) -> Result<()> {
@@ -1889,18 +1862,13 @@ fn validate_relationships(relationships: &Relationships, relative: &Path) -> Res
 }
 
 fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Result<()> {
+    output.push_str(key);
+    output.push_str(": ");
     match value {
-        Some(value) => {
-            output.push_str(key);
-            output.push_str(": ");
-            output.push_str(&serde_json::to_string(value)?);
-            output.push('\n');
-        }
-        None => {
-            output.push_str(key);
-            output.push_str(": null\n");
-        }
+        Some(value) => output.push_str(&serde_json::to_string(value)?),
+        None => output.push_str("null"),
     }
+    output.push('\n');
     Ok(())
 }
 
@@ -1913,20 +1881,13 @@ fn write_yaml_scalar_if_some(output: &mut String, key: &str, value: Option<&str>
 
 fn write_yaml_value(output: &mut String, key: &str, value: &Value) -> Result<()> {
     output.push_str(key);
+    output.push_str(":\n");
     let rendered = serde_yaml::to_string(value)?;
-    let rendered = rendered.trim();
-    if value.is_array() || value.is_object() {
-        output.push_str(":\n");
-        for line in rendered.lines() {
-            output.push_str("  ");
-            output.push_str(line);
-            output.push('\n');
-        }
-        return Ok(());
+    for line in rendered.trim().lines() {
+        output.push_str("  ");
+        output.push_str(line);
+        output.push('\n');
     }
-    output.push_str(": ");
-    output.push_str(rendered);
-    output.push('\n');
     Ok(())
 }
 
@@ -1952,26 +1913,17 @@ fn write_yaml_array_if_not_empty(output: &mut String, key: &str, values: &[Strin
     Ok(())
 }
 
-fn write_evidence_target(output: &mut String, target: &EvidenceTarget) -> Result<()> {
-    output.push_str("target:\n");
-    output.push_str("  kind: ");
-    output.push_str(&serde_json::to_string(&target.kind)?);
-    output.push('\n');
-    output.push_str("  id: ");
-    output.push_str(&serde_json::to_string(&target.id)?);
-    output.push('\n');
-    output.push_str("  role: ");
-    output.push_str(&serde_json::to_string(&target.role)?);
-    output.push('\n');
-    Ok(())
-}
-
-fn write_evidence_target_if_some(
-    output: &mut String,
-    target: Option<&EvidenceTarget>,
-) -> Result<()> {
+fn write_evidence_target(output: &mut String, target: Option<&EvidenceTarget>) -> Result<()> {
     if let Some(target) = target {
-        write_evidence_target(output, target)?;
+        output.push_str("target:\n");
+        for (key, value) in [
+            ("kind", &target.kind),
+            ("id", &target.id),
+            ("role", &target.role),
+        ] {
+            output.push_str("  ");
+            write_yaml_scalar(output, key, Some(value))?;
+        }
     }
     Ok(())
 }
@@ -2538,6 +2490,65 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(
             store.discover_record_paths("evidence").unwrap(),
             vec![PathBuf::from("evidence/atelier-evd1.md")]
+        );
+    }
+
+    #[test]
+    fn generic_issue_relationship_mutation_preserves_typed_fields_and_is_idempotent() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        let mut issue = issue_record("atelier-miss");
+        issue.issue.issue_type = "mission".into();
+        issue.issue.status = "draft".into();
+        issue.issue.strategy = Some(IssueStrategy::new("docs/strategies/mission.md").unwrap());
+        issue.issue.workflow_branch = Some(WorkflowBranch {
+            work_branch: "mission/example".into(),
+            branch_base: "master".into(),
+        });
+        issue.labels = vec!["kept".into()];
+        issue.sections = IssueSections::for_type("mission", Some("Keep this outcome."));
+        issue.sections.append_note(
+            chrono::NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            "progress",
+            "Keep this note.",
+        );
+        store.write_issue_atomic(&issue).unwrap();
+        assert!(store
+            .add_record_relationship(
+                "issue",
+                "atelier-miss",
+                "evidence",
+                "atelier-proof",
+                "validates"
+            )
+            .unwrap());
+        let changed = store.load_issue_by_id("atelier-miss").unwrap();
+        assert_eq!(changed.issue.strategy, issue.issue.strategy);
+        assert_eq!(changed.issue.workflow_branch, issue.issue.workflow_branch);
+        assert_eq!(changed.issue.issue_type, issue.issue.issue_type);
+        assert_eq!(changed.sections, issue.sections);
+        assert_eq!(changed.labels, issue.labels);
+        assert_eq!(
+            changed.relationships.attachments,
+            vec![attachment_relationship(
+                "evidence",
+                "atelier-proof",
+                "validates"
+            )]
+        );
+        let once = fs::read(store.state_dir.join(issue_record_path("atelier-miss"))).unwrap();
+        assert!(!store
+            .add_record_relationship(
+                "issue",
+                "atelier-miss",
+                "evidence",
+                "atelier-proof",
+                "validates"
+            )
+            .unwrap());
+        assert_eq!(
+            fs::read(store.state_dir.join(issue_record_path("atelier-miss"))).unwrap(),
+            once
         );
     }
 
