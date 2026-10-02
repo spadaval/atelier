@@ -3,7 +3,7 @@ use crate::{git_freshness as git, record_index::RecordIndex};
 use anyhow::Result;
 use atelier_core::{EvidenceRecord, EvidenceResult};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct EvidenceGateStatus {
@@ -20,70 +20,26 @@ fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> boo
 pub fn completion_claim_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> bool {
     acceptance_matches(a, b) && a.issue.status == b.issue.status
 }
-pub(crate) fn at_commit(repo: &Path, commit: &str, issue_id: &str) -> Result<CanonicalIssueRecord> {
-    let relative = issue_record_path(issue_id);
-    parse_issue_record(
-        &git::blob(repo, commit, &Path::new(".atelier").join(&relative))?,
-        &relative,
-    )
-}
-/// A single immutable read phase. Create a new context after any mutation or
-/// external command; mutable filesystem checks must never cross those fences.
-pub struct EvidenceReadContext<'a> {
-    repo: &'a Path,
-    head: Option<String>,
-    clean: Option<bool>,
-    ranges: HashMap<String, Vec<git::CommitEdge>>,
-}
-impl<'a> EvidenceReadContext<'a> {
-    pub fn new(repo: &'a Path) -> Self {
-        Self {
-            repo,
-            head: None,
-            clean: None,
-            ranges: HashMap::new(),
-        }
-    }
-    /// Reuse HEAD and dirty paths just inspected in this same read phase.
-    pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[std::path::PathBuf]) -> Self {
-        Self {
-            repo,
-            head: Some(head),
-            clean: Some(!dirty.iter().any(|path| !git::is_record_path(path))),
-            ranges: HashMap::new(),
-        }
+/// A single read phase; create a new context after mutations or external checks.
+pub type EvidenceReadContext<'a> = git::ReadContext<'a>;
+impl EvidenceReadContext<'_> {
+    pub fn issue_at(&mut self, commit: &str, issue_id: &str) -> Result<CanonicalIssueRecord> {
+        let relative = issue_record_path(issue_id);
+        parse_issue_record(
+            &self.blob(commit, &Path::new(".atelier").join(&relative))?,
+            &relative,
+        )
     }
     pub fn evidence_is_fresh(
         &mut self,
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<bool> {
-        let pin = &record.data.commit;
-        if !self.ranges.contains_key(pin) {
-            if self.head.is_none() {
-                self.head = Some(git::head_commit(self.repo)?);
-            }
-            self.ranges.insert(
-                pin.clone(),
-                git::commit_edges_to(
-                    self.repo,
-                    pin,
-                    self.head.as_deref().expect("read HEAD pinned"),
-                )?,
-            );
-        }
-        if !evidence_matches_edges(self.repo, issue, record, &self.ranges[pin])? {
+        let edges = self.edges(&record.data.commit, "HEAD")?;
+        if !evidence_matches_edges(self, issue, record, &edges)? {
             return Ok(false);
         }
-        let clean = match self.clean {
-            Some(clean) => clean,
-            None => {
-                let clean = git::working_code_paths(self.repo)?.is_empty();
-                self.clean = Some(clean);
-                clean
-            }
-        };
-        Ok(clean)
+        self.code_clean()
     }
     pub fn issue_gate(
         &mut self,
@@ -92,8 +48,18 @@ impl<'a> EvidenceReadContext<'a> {
         min_count: usize,
         kind: Option<&str>,
     ) -> Result<EvidenceGateStatus> {
-        evaluate_issue_gate(index, issue_id, min_count, kind, true, |issue, record| {
-            self.evidence_is_fresh(issue, record)
+        self.issue_gate_with_freshness(index, issue_id, min_count, kind, true)
+    }
+    pub(crate) fn issue_gate_with_freshness(
+        &mut self,
+        index: &RecordIndex,
+        issue_id: &str,
+        min_count: usize,
+        kind: Option<&str>,
+        fresh: bool,
+    ) -> Result<EvidenceGateStatus> {
+        evaluate_issue_gate(index, issue_id, min_count, kind, fresh, |issue, record| {
+            self.proof_matches(issue, record, fresh)
         })
     }
 }
@@ -104,26 +70,13 @@ pub fn evidence_is_fresh(
 ) -> Result<bool> {
     EvidenceReadContext::new(repo).evidence_is_fresh(issue, record)
 }
-fn evidence_valid_through(
-    repo: &Path,
-    issue: &CanonicalIssueRecord,
-    record: &EvidenceRecord,
-    end: &str,
-) -> Result<bool> {
-    evidence_matches_edges(
-        repo,
-        issue,
-        record,
-        &git::commit_edges_to(repo, &record.data.commit, end)?,
-    )
-}
 fn evidence_matches_edges(
-    repo: &Path,
+    read: &mut EvidenceReadContext<'_>,
     issue: &CanonicalIssueRecord,
     record: &EvidenceRecord,
     edges: &[git::CommitEdge],
 ) -> Result<bool> {
-    let original = at_commit(repo, &record.data.commit, &issue.issue.id)?;
+    let original = read.issue_at(&record.data.commit, &issue.issue.id)?;
     if !acceptance_matches(&original, issue) {
         return Ok(false);
     }
@@ -134,8 +87,8 @@ fn evidence_matches_edges(
         }
         if edge.paths.contains(&target)
             && !acceptance_matches(
-                &at_commit(repo, &edge.parent, &issue.issue.id)?,
-                &at_commit(repo, &edge.commit, &issue.issue.id)?,
+                &read.issue_at(&edge.parent, &issue.issue.id)?,
+                &read.issue_at(&edge.commit, &issue.issue.id)?,
             )
         {
             return Ok(false);
@@ -151,20 +104,9 @@ pub fn issue_evidence_gate_status(
     min_count: usize,
     kind: Option<&str>,
 ) -> Result<EvidenceGateStatus> {
-    issue_evidence_gate_status_with_freshness(index, repo, issue_id, min_count, kind, true)
+    EvidenceReadContext::new(repo).issue_gate(index, issue_id, min_count, kind)
 }
-pub(crate) fn issue_evidence_gate_status_with_freshness(
-    index: &RecordIndex,
-    repo: &Path,
-    issue_id: &str,
-    min_count: usize,
-    kind: Option<&str>,
-    fresh: bool,
-) -> Result<EvidenceGateStatus> {
-    evaluate_issue_gate(index, issue_id, min_count, kind, fresh, |issue, record| {
-        proof_matches(repo, issue, record, fresh)
-    })
-}
+
 fn evaluate_issue_gate(
     index: &RecordIndex,
     issue_id: &str,
@@ -233,81 +175,95 @@ pub(crate) fn newest_failure_with_freshness(
     issue_id: &str,
     fresh: bool,
 ) -> Result<Option<String>> {
-    let issue = index
-        .issue_record(issue_id)
-        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
-    let mut newest_fail = None;
-    let mut newest_pass = None;
-    for link in index.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        let id = if link.source_kind == "evidence" {
-            &link.source_id
-        } else if link.target_kind == "evidence" {
-            &link.target_id
-        } else {
-            continue;
-        };
-        let record = index.require_evidence(id)?;
-        let candidate = (record.data.captured_at, record.header.id.clone());
-        match record.data.result {
-            EvidenceResult::Fail if newest_fail.as_ref().is_none_or(|old| &candidate > old) => {
-                newest_fail = Some(candidate)
-            }
-            EvidenceResult::Pass
-                if newest_pass.as_ref().is_none_or(|old| &candidate > old)
-                    && proof_matches(repo, issue, record, fresh).unwrap_or(false) =>
-            {
-                newest_pass = Some(candidate)
-            }
-            _ => {}
-        }
-    }
-    Ok(newest_fail
-        .filter(|failed| {
-            newest_pass
-                .as_ref()
-                .is_none_or(|passed| passed.0 <= failed.0)
-        })
-        .map(|(_, id)| id))
+    EvidenceReadContext::new(repo).newest_failure(index, issue_id, fresh)
 }
+impl EvidenceReadContext<'_> {
+    pub(crate) fn newest_failure(
+        &mut self,
+        index: &RecordIndex,
+        issue_id: &str,
+        fresh: bool,
+    ) -> Result<Option<String>> {
+        let issue = index
+            .issue_record(issue_id)
+            .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+        let mut newest_fail = None;
+        let mut newest_pass = None;
+        for link in index.list_record_links("issue", issue_id)? {
+            if link.relation_type != "validates" {
+                continue;
+            }
+            let id = if link.source_kind == "evidence" {
+                &link.source_id
+            } else if link.target_kind == "evidence" {
+                &link.target_id
+            } else {
+                continue;
+            };
+            let record = index.require_evidence(id)?;
+            let candidate = (record.data.captured_at, record.header.id.clone());
+            match record.data.result {
+                EvidenceResult::Fail if newest_fail.as_ref().is_none_or(|old| &candidate > old) => {
+                    newest_fail = Some(candidate)
+                }
+                EvidenceResult::Pass
+                    if newest_pass.as_ref().is_none_or(|old| &candidate > old)
+                        && self.proof_matches(issue, record, fresh).unwrap_or(false) =>
+                {
+                    newest_pass = Some(candidate)
+                }
+                _ => {}
+            }
+        }
+        Ok(newest_fail
+            .filter(|failed| {
+                newest_pass
+                    .as_ref()
+                    .is_none_or(|passed| passed.0 <= failed.0)
+            })
+            .map(|(_, id)| id))
+    }
 
-fn proof_matches(
-    repo: &Path,
-    issue: &CanonicalIssueRecord,
-    record: &EvidenceRecord,
-    fresh: bool,
-) -> Result<bool> {
-    if fresh {
-        return evidence_is_fresh(repo, issue, record);
-    }
-    git::git_output(
-        repo,
-        &["merge-base", "--is-ancestor", &record.data.commit, "HEAD"],
-    )?;
-    let end = claim_endpoint(repo, &issue.issue.id, &record.data.commit)?;
-    evidence_valid_through(repo, issue, record, &end)
-}
-pub(crate) fn claim_endpoint(repo: &Path, issue_id: &str, pin: &str) -> Result<String> {
-    let path = format!(".atelier/issues/{issue_id}.md");
-    let changes = String::from_utf8(git::git_output(repo, &["log", "--format=%H", "--", &path])?)?;
-    let mut claim = None;
-    for commit in changes.lines() {
-        let after = at_commit(repo, commit, issue_id)?;
-        let parent = at_commit(repo, &format!("{commit}^"), issue_id);
-        if parent.is_err() || !completion_claim_matches(&after, &parent?) {
-            claim = Some(commit);
-            break;
+    fn proof_matches(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+        fresh: bool,
+    ) -> Result<bool> {
+        if fresh {
+            return self.evidence_is_fresh(issue, record);
         }
+        if !self.ancestor(&record.data.commit, "HEAD")? {
+            return Ok(false);
+        }
+        let end = self.claim_endpoint(&issue.issue.id, &record.data.commit)?;
+        let edges = self.edges(&record.data.commit, &end)?;
+        evidence_matches_edges(self, issue, record, &edges)
     }
-    let claim = claim.ok_or_else(|| anyhow::anyhow!("terminal claim history is missing"))?;
-    let end = if git::git_output(repo, &["merge-base", "--is-ancestor", claim, pin]).is_ok() {
-        pin
-    } else {
-        claim
-    };
-    Ok(end.to_owned())
+    pub(crate) fn claim_endpoint(&mut self, issue_id: &str, pin: &str) -> Result<String> {
+        let path = format!(".atelier/issues/{issue_id}.md");
+        let head = self.pinned("HEAD")?;
+        let changes = String::from_utf8(git::git_output(
+            self.repo,
+            &["log", "--format=%H", &head, "--", &path],
+        )?)?;
+        let mut claim = None;
+        for commit in changes.lines() {
+            let after = self.issue_at(commit, issue_id)?;
+            let parent = self.issue_at(&format!("{commit}^"), issue_id);
+            if parent.is_err() || !completion_claim_matches(&after, &parent?) {
+                claim = Some(commit);
+                break;
+            }
+        }
+        let claim = claim.ok_or_else(|| anyhow::anyhow!("terminal claim history is missing"))?;
+        let end = if self.ancestor(claim, pin)? {
+            pin
+        } else {
+            claim
+        };
+        Ok(end.to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -351,7 +307,6 @@ mod tests {
             assert!(reads.evidence_is_fresh(issue, &evidence).unwrap());
             assert!(evidence_is_fresh(repo.path(), issue, &evidence).unwrap());
         }
-        assert_eq!(reads.ranges.len(), 1);
         let index =
             RecordIndex::from_records(issues.to_vec(), vec![evidence.clone()], Vec::new()).unwrap();
         for (min_count, kind) in [(1, None), (2, None), (1, Some("other"))] {

@@ -95,14 +95,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; fix it before merging")?;
     index.validate_policy(&source.policy, repo)?;
-    review_gate::append_only(repo, &base_head)?;
+    let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    review_gate::append_only(&mut read, &base_head)?;
     let base_tree = base_checkout(repo, base)?;
     if let Some(path) = &base_tree {
         clean(path)?;
         committed_snapshot::require_committed(path, &base_head)?;
         committed_snapshot::require_flagged_clean(path, &base_head)?;
     }
-    let nodes = review_gate::evaluate(&index, repo, &source.policy, owner, &base_head)?;
+    let nodes = review_gate::evaluate(&index, &mut read, &source.policy, owner, &base_head)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
     } else {

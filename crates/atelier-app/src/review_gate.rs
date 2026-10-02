@@ -36,30 +36,6 @@ pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
     Ok(ids)
 }
 
-fn entry(repo: &Path, commit: &str, path: &Path) -> Result<Option<(String, String)>> {
-    let output = git::git_output(
-        repo,
-        &[
-            "ls-tree",
-            "-z",
-            commit,
-            "--",
-            path.to_str().context("record path is not UTF-8")?,
-        ],
-    )?;
-    if output.is_empty() {
-        return Ok(None);
-    }
-    let text = std::str::from_utf8(&output)?;
-    let mut fields = text.split_whitespace();
-    let mode = fields.next().context("missing Git entry mode")?.to_owned();
-    if fields.next() != Some("blob") {
-        bail!("expected blob entry for {}", path.display());
-    }
-    let hash = fields.next().context("missing Git blob ID")?.to_owned();
-    Ok(Some((mode, hash)))
-}
-
 fn issue_status_only(before: &str, after: &str, path: &Path) -> Result<bool> {
     let relative = path.strip_prefix(".atelier")?;
     let mut left = parse_issue_record(before, relative)?;
@@ -85,10 +61,14 @@ fn issue_status_only(before: &str, after: &str, path: &Path) -> Result<bool> {
     Ok(left.sections == right.sections)
 }
 
-fn allowed_edge(repo: &Path, edge: &git::CommitEdge, ids: &BTreeSet<String>) -> Result<bool> {
+fn allowed_edge(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    ids: &BTreeSet<String>,
+) -> Result<bool> {
     for path in &edge.paths {
-        let old = entry(repo, &edge.parent, path)?;
-        let new = entry(repo, &edge.commit, path)?;
+        let old = read.entry(&edge.parent, path)?;
+        let new = read.entry(&edge.commit, path)?;
         let regular = |entry: &Option<(String, String)>| {
             entry.as_ref().is_some_and(|(mode, _)| mode == "100644")
         };
@@ -107,8 +87,8 @@ fn allowed_edge(repo: &Path, edge: &git::CommitEdge, ids: &BTreeSet<String>) -> 
                 .unwrap_or("");
             if ids.contains(id)
                 && issue_status_only(
-                    &git::blob(repo, &edge.parent, path)?,
-                    &git::blob(repo, &edge.commit, path)?,
+                    &read.blob(&edge.parent, path)?,
+                    &read.blob(&edge.commit, path)?,
                     path,
                 )?
             {
@@ -120,17 +100,21 @@ fn allowed_edge(repo: &Path, edge: &git::CommitEdge, ids: &BTreeSet<String>) -> 
     Ok(true)
 }
 
-pub fn approval_is_current(repo: &Path, pin: &str, ids: &BTreeSet<String>) -> Result<bool> {
-    approval_is_current_to(repo, pin, ids, "HEAD")
+pub fn approval_is_current(
+    read: &mut git::ReadContext<'_>,
+    pin: &str,
+    ids: &BTreeSet<String>,
+) -> Result<bool> {
+    approval_is_current_to(read, pin, ids, "HEAD")
 }
 fn approval_is_current_to(
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     pin: &str,
     ids: &BTreeSet<String>,
     end: &str,
 ) -> Result<bool> {
-    for edge in git::commit_edges_to(repo, pin, end)? {
-        if !allowed_edge(repo, &edge, ids)? {
+    for edge in read.edges(pin, end)?.iter() {
+        if !allowed_edge(read, edge, ids)? {
             return Ok(false);
         }
     }
@@ -138,16 +122,16 @@ fn approval_is_current_to(
 }
 
 /// Enforce immutability from branch creation, not merely after approval.
-pub fn append_only(repo: &Path, base_commit: &str) -> Result<()> {
-    for edge in git::commit_edges(repo, base_commit)? {
+pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result<()> {
+    for edge in read.edges(base_commit, "HEAD")?.iter() {
         for path in edge
             .paths
             .iter()
             .filter(|path| path.starts_with(".atelier/reviews"))
         {
-            let before = entry(repo, &edge.parent, path)?;
-            let after = entry(repo, &edge.commit, path)?;
-            if before.is_some() && after.is_none() && retired_review_cluster(repo, &edge, path)? {
+            let before = read.entry(&edge.parent, path)?;
+            let after = read.entry(&edge.commit, path)?;
+            if before.is_some() && after.is_none() && retired_review_cluster(read, edge, path)? {
                 continue;
             }
             if before.is_some() || after.is_none_or(|(mode, _)| mode != "100644") {
@@ -159,14 +143,16 @@ pub fn append_only(repo: &Path, base_commit: &str) -> Result<()> {
 }
 
 /// Historical acceptance is valid only while review events remain append-only.
-pub fn append_only_history(repo: &Path) -> Result<()> {
+pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
+    let head = read.pinned("HEAD")?;
     let history = String::from_utf8(git::git_output(
-        repo,
+        read.repo,
         &[
             "log",
             "--reverse",
             "--diff-filter=A",
             "--format=%H",
+            &head,
             "--",
             ".atelier/reviews/",
         ],
@@ -175,14 +161,14 @@ pub fn append_only_history(repo: &Path) -> Result<()> {
         return Ok(());
     };
     let parent = git::git_output(
-        repo,
+        read.repo,
         &["rev-parse", "--verify", &format!("{first}^{{commit}}^1")],
     );
     let pin = match parent {
         Ok(bytes) => String::from_utf8(bytes)?.trim().to_owned(),
         Err(_) => {
             let modes = String::from_utf8(git::git_output(
-                repo,
+                read.repo,
                 &[
                     "ls-tree",
                     "-r",
@@ -198,27 +184,27 @@ pub fn append_only_history(repo: &Path) -> Result<()> {
             first.to_owned()
         }
     };
-    append_only(repo, &pin)
+    append_only(read, &pin)
 }
 
 pub fn author_identities(
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     base_commit: &str,
     ids: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>> {
-    author_identities_to(repo, base_commit, ids, "HEAD")
+    author_identities_to(read, base_commit, ids, "HEAD")
 }
 fn author_identities_to(
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     base_commit: &str,
     ids: &BTreeSet<String>,
     end: &str,
 ) -> Result<BTreeSet<String>> {
     let mut authors = BTreeSet::new();
     let mut inspected = BTreeSet::new();
-    for edge in git::commit_edges_to(repo, base_commit, end)? {
-        if !allowed_edge(repo, &edge, ids)? && inspected.insert(edge.commit.clone()) {
-            add_author(repo, &edge.commit, &mut authors)?;
+    for edge in read.edges(base_commit, end)?.iter() {
+        if !allowed_edge(read, edge, ids)? && inspected.insert(edge.commit.clone()) {
+            add_author(read, &edge.commit, &mut authors)?;
         }
     }
     Ok(authors)
@@ -229,36 +215,36 @@ fn normalize(identity: &str) -> String {
 fn independent(record: &ReviewRecord, authors: &BTreeSet<String>) -> bool {
     !authors.contains(&normalize(&record.identity))
 }
-fn ancestor(repo: &Path, earlier: &str, later: &str) -> bool {
-    git::git_output(repo, &["merge-base", "--is-ancestor", earlier, later]).is_ok()
+fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool {
+    read.ancestor(earlier, later).unwrap_or(false)
 }
 
 pub fn evaluate(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
 ) -> Result<Vec<GateNode>> {
-    evaluate_inner(index, repo, policy, owner, base_commit, true)
+    evaluate_inner(index, read, policy, owner, base_commit, true)
 }
 
 /// Active handoffs check committed completion claims, not merge readiness.
 pub fn evaluate_session(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
 ) -> Result<Vec<GateNode>> {
     let issue = index.require_issue(owner)?;
     let complete = policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?;
-    evaluate_inner(index, repo, policy, owner, base_commit, complete)
+    evaluate_inner(index, read, policy, owner, base_commit, complete)
 }
 
 fn evaluate_inner(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
@@ -266,7 +252,7 @@ fn evaluate_inner(
 ) -> Result<Vec<GateNode>> {
     evaluate_scope(
         index,
-        repo,
+        read,
         policy,
         owner,
         base_commit,
@@ -281,7 +267,7 @@ fn evaluate_inner(
 /// Session-wide completion claims; retained claims keep accepted historical proof.
 pub fn evaluate_claims(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     base_commit: &str,
     ids: BTreeSet<String>,
@@ -292,7 +278,7 @@ pub fn evaluate_claims(
     }
     evaluate_scope(
         index,
-        repo,
+        read,
         policy,
         "session",
         base_commit,
@@ -312,7 +298,7 @@ enum EvaluationKind {
 }
 fn evaluate_scope(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
@@ -325,11 +311,6 @@ fn evaluate_scope(
         kind,
         EvaluationKind::CurrentClaims | EvaluationKind::Historical
     );
-    let retained = |record: &ReviewRecord| {
-        let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
-        let old = entry(repo, base_commit, &path).ok().flatten();
-        old.is_some() && old == entry(repo, "HEAD", &path).ok().flatten()
-    };
     let claimed = ids
         .iter()
         .filter_map(|id| {
@@ -341,12 +322,16 @@ fn evaluate_scope(
         })
         .collect::<BTreeSet<_>>();
     let applicable = if complete { &ids } else { &claimed };
-    let authors = author_identities(repo, base_commit, &ids)?;
+    let authors = if global {
+        BTreeSet::new()
+    } else {
+        author_identities(read, base_commit, &ids)?
+    };
     for record in index
         .reviews()
         .filter(|record| ids.contains(&record.target))
     {
-        if !ancestor(repo, &record.commit, "HEAD") {
+        if !ancestor(read, &record.commit, "HEAD") {
             bail!(
                 "review {} pins a commit outside the work branch",
                 record.header.id
@@ -360,8 +345,8 @@ fn evaluate_scope(
         {
             let original = index.require_review(finding)?;
             if resolution == &original.commit
-                || !ancestor(repo, &original.commit, resolution)
-                || !ancestor(repo, resolution, "HEAD")
+                || !ancestor(read, &original.commit, resolution)
+                || !ancestor(read, resolution, "HEAD")
             {
                 bail!(
                     "disposition {} resolution is not a later commit on the work branch",
@@ -435,14 +420,14 @@ fn evaluate_scope(
         .filter(|record| {
             let accepted_identity = matches!(record.event, ReviewEvent::TrivialExemption)
                 || if global {
-                    original_independent(index, repo, record).unwrap_or(false)
+                    original_independent(index, read, record).unwrap_or(false)
                 } else {
                     independent(record, &authors)
                 };
             accepted_identity
-                && ((historical && retained(record))
-                    || ((global || ancestor(repo, base_commit, &record.commit))
-                        && approval_is_current(repo, &record.commit, &ids).unwrap_or(false)))
+                && ((historical && retained(read, base_commit, record))
+                    || ((global || ancestor(read, base_commit, &record.commit))
+                        && approval_is_current(read, &record.commit, &ids).unwrap_or(false)))
         })
         .collect::<Vec<_>>();
     let support = candidates
@@ -493,7 +478,7 @@ fn evaluate_scope(
         };
         let accepted = match decision {
             FindingDecision::FixNow => resolution_commit.as_ref().is_some_and(|resolution| {
-                ancestor(repo, resolution, "HEAD")
+                ancestor(read, resolution, "HEAD")
                     && candidates.iter().any(|approval| {
                         matches!(approval.event, ReviewEvent::Approval)
                             && (approval.target == owner
@@ -501,16 +486,18 @@ fn evaluate_scope(
                                 || index.get_issue(&finding.target).is_some_and(|issue| {
                                     issue.parent_id.as_deref() == Some(&approval.target)
                                 }))
-                            && (!historical || retained(disposition) || !retained(approval))
                             && (!historical
-                                || original_approval_valid(index, repo, approval, &finding.target)
+                                || retained(read, base_commit, disposition)
+                                || !retained(read, base_commit, approval))
+                            && (!historical
+                                || original_approval_valid(index, read, approval, &finding.target)
                                     .unwrap_or(false))
-                            && ancestor(repo, resolution, &approval.commit)
+                            && ancestor(read, resolution, &approval.commit)
                     })
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
                 if global {
-                    original_independent(index, repo, disposition)?
+                    original_independent(index, read, disposition)?
                 } else {
                     independent(disposition, &authors)
                 }
@@ -537,13 +524,13 @@ fn evaluate_scope(
         dispositions,
     ));
     nodes.extend(completion_claims(
-        index, repo, policy, &claimed, historical,
+        index, read, policy, &claimed, historical,
     )?);
     let checks = if complete {
         crate::workflow_validation::evaluate_policy_transition(
             crate::workflow_validation::ValidatorRequest {
                 index,
-                repo_root: repo,
+                repo_root: read.repo,
                 policy,
                 issue_id: owner,
                 validators: &policy.merge_checks,
@@ -581,7 +568,7 @@ fn evaluate_scope(
 /// Validate committed terminal claims without imposing session choreography.
 fn completion_claims(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     ids: &BTreeSet<String>,
     historical: bool,
@@ -608,9 +595,7 @@ fn completion_claims(
         {
             continue;
         }
-        if let Some(failure) =
-            crate::evidence_freshness::newest_failure_with_freshness(index, repo, id, !historical)?
-        {
+        if let Some(failure) = read.newest_failure(index, id, !historical)? {
             nodes.push(gate(
                 id,
                 "evidence.no_newer_failure",
@@ -656,15 +641,16 @@ fn completion_claims(
                     Vec::new(),
                 ));
             }
-            let checks = crate::workflow_validation::evaluate_with_freshness(
+            let checks = crate::workflow_validation::evaluate_with_context(
                 crate::workflow_validation::ValidatorRequest {
                     index,
-                    repo_root: repo,
+                    repo_root: read.repo,
                     policy,
                     issue_id: id,
                     validators: &transition.validators,
                 },
                 !historical,
+                read,
             )?;
             nodes.extend(
                 checks.into_iter().map(|check| {
@@ -676,9 +662,13 @@ fn completion_claims(
     Ok(nodes)
 }
 
-fn add_author(repo: &Path, commit: &str, authors: &mut BTreeSet<String>) -> Result<()> {
+fn add_author(
+    read: &mut git::ReadContext<'_>,
+    commit: &str,
+    authors: &mut BTreeSet<String>,
+) -> Result<()> {
     let names = String::from_utf8(git::git_output(
-        repo,
+        read.repo,
         &["show", "-s", "--format=%an%n%ae", commit],
     )?)?;
     for identity in names.lines() {
@@ -690,17 +680,23 @@ fn add_author(repo: &Path, commit: &str, authors: &mut BTreeSet<String>) -> Resu
     }
     Ok(())
 }
-fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord) -> Result<bool> {
+fn original_independent(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    record: &ReviewRecord,
+) -> Result<bool> {
     let issue = index.require_issue(&record.target)?;
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
+    let head = read.pinned("HEAD")?;
     let introduced = String::from_utf8(git::git_output(
-        repo,
+        read.repo,
         &[
             "log",
             "--reverse",
             "--diff-filter=A",
             "--format=%H",
+            &head,
             "--",
             &event_path,
         ],
@@ -710,7 +706,7 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
         .next()
         .context("review event history missing")?;
     let path = Path::new(&event_path);
-    if entry(repo, event, path)? != entry(repo, "HEAD", path)? {
+    if read.entry(event, path)? != read.entry("HEAD", path)? {
         bail!(
             "review_append_only: {} differs from its original event",
             record.header.id
@@ -731,7 +727,7 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
     .into_iter()
     .chain(paths.iter().map(String::as_str))
     .collect::<Vec<_>>();
-    let history = String::from_utf8(git::git_output(repo, &args)?)?;
+    let history = String::from_utf8(git::git_output(read.repo, &args)?)?;
     let start = history
         .lines()
         .next()
@@ -739,7 +735,7 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
     let owner_path = std::path::PathBuf::from(format!(".atelier/issues/{owner}.md"));
     let updates = String::from_utf8(git::git_output(
-        repo,
+        read.repo,
         &[
             "log",
             "--reverse",
@@ -750,58 +746,68 @@ fn original_independent(index: &RecordIndex, repo: &Path, record: &ReviewRecord)
         ],
     )?)?;
     let branch_start = updates.lines().find(|commit| {
-        crate::evidence_freshness::at_commit(repo, commit, owner)
+        read.issue_at(commit, owner)
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
     });
     let authors = if let Some(origin) = branch_start {
         let parent = git::git_output(
-            repo,
+            read.repo,
             &["rev-parse", "--verify", &format!("{origin}^{{commit}}^1")],
         );
         match parent {
-            Ok(bytes) => author_identities_to(repo, String::from_utf8(bytes)?.trim(), &ids, event)?,
+            Ok(bytes) => author_identities_to(read, String::from_utf8(bytes)?.trim(), &ids, event)?,
             Err(_) => {
-                let mut authors = author_identities_to(repo, origin, &ids, event)?;
-                add_author(repo, origin, &mut authors)?;
+                let mut authors = author_identities_to(read, origin, &ids, event)?;
+                add_author(read, origin, &mut authors)?;
                 authors
             }
         }
     } else {
-        let mut authors = author_identities_to(repo, start, &ids, event)?;
-        add_author(repo, start, &mut authors)?;
+        let mut authors = author_identities_to(read, start, &ids, event)?;
+        add_author(read, start, &mut authors)?;
         authors
     };
     Ok(independent(record, &authors))
 }
 
+fn retained(read: &mut git::ReadContext<'_>, base: &str, record: &ReviewRecord) -> bool {
+    let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
+    let old = read.entry(base, &path).ok().flatten();
+    old.is_some() && old == read.entry("HEAD", &path).ok().flatten()
+}
+
 fn original_approval_valid(
     index: &RecordIndex,
-    repo: &Path,
+    read: &mut git::ReadContext<'_>,
     approval: &ReviewRecord,
     target: &str,
 ) -> Result<bool> {
     let issue = index.require_issue(target)?;
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
-    let end = crate::evidence_freshness::claim_endpoint(repo, target, &approval.commit)?;
-    approval_is_current_to(repo, &approval.commit, &ids, &end)
+    let end = read.claim_endpoint(target, &approval.commit)?;
+    approval_is_current_to(read, &approval.commit, &ids, &end)
 }
 
-fn retired_review_cluster(repo: &Path, edge: &git::CommitEdge, path: &Path) -> Result<bool> {
+fn retired_review_cluster(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    path: &Path,
+) -> Result<bool> {
     let record = atelier_records::review::parse_review_record(
-        &git::blob(repo, &edge.parent, path)?,
+        &read.blob(&edge.parent, path)?,
         path.strip_prefix(".atelier")?,
     )?;
     let issue_path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", record.target));
-    if entry(repo, &edge.commit, &issue_path)?.is_some() {
+    if read.entry(&edge.commit, &issue_path)?.is_some() {
         return Ok(false);
     }
-    let issue = crate::evidence_freshness::at_commit(repo, &edge.parent, &record.target)?;
-    let policy = crate::base_policy::from_ref(repo, &edge.parent)?.policy;
+    let issue = read.issue_at(&edge.parent, &record.target)?;
+    let policy = crate::base_policy::from_ref(read.repo, &edge.parent)?.policy;
     if !policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)? {
         return Ok(false);
     }
     let paths = String::from_utf8(git::git_output(
-        repo,
+        read.repo,
         &[
             "ls-tree",
             "-r",
@@ -820,10 +826,10 @@ fn retired_review_cluster(repo: &Path, edge: &git::CommitEdge, path: &Path) -> R
             continue;
         }
         let other = atelier_records::review::parse_review_record(
-            &git::blob(repo, &edge.parent, other_path)?,
+            &read.blob(&edge.parent, other_path)?,
             other_path.strip_prefix(".atelier")?,
         )?;
-        if other.target == record.target && entry(repo, &edge.commit, other_path)?.is_some() {
+        if other.target == record.target && read.entry(&edge.commit, other_path)?.is_some() {
             return Ok(false);
         }
     }

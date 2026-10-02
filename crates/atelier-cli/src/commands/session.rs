@@ -61,6 +61,11 @@ fn prime_text() -> Result<String> {
     )?;
     let head = git_freshness::head_commit(repo)?;
     let dirty = git_freshness::working_paths(repo)?;
+    let mut proof = atelier_app::evidence_freshness::EvidenceReadContext::from_snapshot(
+        repo,
+        head.clone(),
+        &dirty,
+    );
     let mut lines = vec![
         format!("Atelier session: {}", repo.display()),
         format!("Branch: {branch} @ {}", &head[..8]),
@@ -141,10 +146,9 @@ fn prime_text() -> Result<String> {
                 .filter(|id| scope.contains(id))
                 .collect::<Vec<_>>();
             let fresh = targets.iter().all(|id| {
-                index.issue_record(id).is_some_and(|issue| {
-                    atelier_app::evidence_freshness::evidence_is_fresh(repo, issue, evidence)
-                        .unwrap_or(false)
-                })
+                index
+                    .issue_record(id)
+                    .is_some_and(|issue| proof.evidence_is_fresh(issue, evidence).unwrap_or(false))
             });
             lines.push(format!(
                 "Evidence: {} — recorded {:?} @ {} ({})",
@@ -194,9 +198,10 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         check_records(repo, &head)?;
         (head, RecordIndex::load_structural(&layout.canonical_dir())?)
     };
-    review_gate::append_only_history(repo)?;
-    let branch = git::current_branch(repo)?.unwrap_or_default();
     let initial_paths = git_freshness::working_paths(repo)?;
+    let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
+    review_gate::append_only_history(&mut read)?;
+    let branch = git::current_branch(repo)?.unwrap_or_default();
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; repair it before landing")?;
     let id = owner(&index, &branch, requested)?;
@@ -253,12 +258,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         {
             continue;
         }
-        let path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", issue.id));
-        let before = git_freshness::blob(repo, &claim_base, &path)
-            .ok()
-            .and_then(|text| {
-                atelier_records::parse_issue_record(&text, path.strip_prefix(".atelier").ok()?).ok()
-            });
+        let before = read.issue_at(&claim_base, &issue.id).ok();
         if before.as_ref().is_some_and(|before| {
             index.issue_record(&issue.id).is_some_and(|after| {
                 atelier_app::evidence_freshness::completion_claim_matches(before, after)
@@ -269,11 +269,17 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             current.insert(issue.id.clone());
         }
     }
-    let mut nodes =
-        review_gate::evaluate_claims(&index, repo, &source.policy, &claim_base, historical, true)?;
+    let mut nodes = review_gate::evaluate_claims(
+        &index,
+        &mut read,
+        &source.policy,
+        &claim_base,
+        historical,
+        true,
+    )?;
     nodes.extend(review_gate::evaluate_claims(
         &index,
-        repo,
+        &mut read,
         &source.policy,
         &claim_base,
         current,
@@ -309,7 +315,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             .1;
         nodes.extend(review_gate::evaluate_session(
             &index,
-            repo,
+            &mut read,
             &source.policy,
             &id,
             base,
