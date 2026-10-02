@@ -181,11 +181,15 @@ impl CommittedSnapshot {
             .into_iter()
             .map(|path| path.strip_prefix(".atelier").map(Path::to_path_buf))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let (files, changed) =
-            crate::record_index::read_record_paths(&repo.join(".atelier"), relative, &|path| {
+        let (files, changed) = crate::record_index::read_record_paths(
+            &repo.join(".atelier"),
+            relative,
+            &|path| {
                 matching_bytes(repo, &Path::new(".atelier").join(path), &self.entries)
                     .map(|bytes| (bytes.is_some(), bytes))
-            })?;
+            },
+            12,
+        )?;
         let changed = changed
             .into_iter()
             .map(|path| Path::new(".atelier").join(path))

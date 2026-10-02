@@ -55,7 +55,7 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
     let mut paths = Vec::new();
     collect_files(state_dir, state_dir, &mut paths)?;
     paths.sort();
-    read_record_paths(state_dir, paths, &|_| Ok((true, None))).map(|(files, _)| files)
+    read_record_paths(state_dir, paths, &|_| Ok((true, None)), usize::MAX).map(|(files, _)| files)
 }
 
 /// Raw errors and mismatches remain separate from parser errors until the
@@ -64,23 +64,28 @@ pub(crate) fn read_record_paths(
     state_dir: &Path,
     paths: Vec<PathBuf>,
     read: &(impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)> + Sync),
+    max_threads: usize,
 ) -> Result<(RecordFiles, Vec<PathBuf>)> {
     let mut files = RecordFiles::default();
     let mut changed = Vec::new();
     // Parsing dominates command latency (YAML front matter), and files are
     // independent, so parse them on scoped threads and keep path order.
-    let parsed = ordered_path_map(&paths, &|relative| {
-        read(relative).map(|(matches, bytes)| {
-            (
-                matches,
-                if matches {
-                    read_record_file(state_dir, relative, bytes)
-                } else {
-                    Ok(None)
-                },
-            )
-        })
-    })?;
+    let parsed = ordered_path_map_with_limit(
+        &paths,
+        &|relative| {
+            read(relative).map(|(matches, bytes)| {
+                (
+                    matches,
+                    if matches {
+                        read_record_file(state_dir, relative, bytes)
+                    } else {
+                        Ok(None)
+                    },
+                )
+            })
+        },
+        max_threads,
+    )?;
     for (relative, (matches, result)) in paths.into_iter().zip(parsed) {
         if !matches {
             changed.push(relative.clone());
@@ -106,10 +111,20 @@ pub(crate) fn ordered_path_map<T: Send>(
     paths: &[PathBuf],
     read: &(impl Fn(&Path) -> Result<T> + Sync),
 ) -> Result<Vec<T>> {
+    ordered_path_map_with_limit(paths, read, usize::MAX)
+}
+
+fn ordered_path_map_with_limit<T: Send>(
+    paths: &[PathBuf],
+    read: &(impl Fn(&Path) -> Result<T> + Sync),
+    max_threads: usize,
+) -> Result<Vec<T>> {
     if paths.len() <= 64 {
         return paths.iter().map(|path| read(path)).collect();
     }
-    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    let threads = std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(max_threads);
     let chunk_size = paths.len().div_ceil(threads).max(64);
     std::thread::scope(|scope| {
         let workers = paths
@@ -1034,13 +1049,18 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
         let paths = bytes.keys().cloned().collect::<Vec<_>>();
         let threads = std::sync::Mutex::new(BTreeSet::new());
-        let (files, changed) = read_record_paths(dir.path(), paths.clone(), &|path| {
-            threads
-                .lock()
-                .unwrap()
-                .insert(format!("{:?}", std::thread::current().id()));
-            Ok((true, Some(bytes[path].clone())))
-        })
+        let (files, changed) = read_record_paths(
+            dir.path(),
+            paths.clone(),
+            &|path| {
+                threads
+                    .lock()
+                    .unwrap()
+                    .insert(format!("{:?}", std::thread::current().id()));
+                Ok((true, Some(bytes[path].clone())))
+            },
+            usize::MAX,
+        )
         .unwrap();
         assert!(changed.is_empty() && files.errors.is_empty());
         assert_eq!(files.issues.len(), paths.len());
@@ -1050,18 +1070,23 @@ mod tests {
         if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
             assert!(threads.into_inner().unwrap().len() > 1);
         }
-        let error = read_record_paths(dir.path(), paths.clone(), &|path| {
-            if path == paths[64] {
-                bail!("first lexical raw fault");
-            }
-            if path == paths[129] {
-                bail!("later lexical raw fault");
-            }
-            if path == paths[0] {
-                return Ok((true, Some(vec![0xff])));
-            }
-            Ok((false, None))
-        })
+        let error = read_record_paths(
+            dir.path(),
+            paths.clone(),
+            &|path| {
+                if path == paths[64] {
+                    bail!("first lexical raw fault");
+                }
+                if path == paths[129] {
+                    bail!("later lexical raw fault");
+                }
+                if path == paths[0] {
+                    return Ok((true, Some(vec![0xff])));
+                }
+                Ok((false, None))
+            },
+            usize::MAX,
+        )
         .unwrap_err();
         assert_eq!(error.to_string(), "first lexical raw fault");
     }
@@ -1076,11 +1101,16 @@ mod tests {
                 .unwrap()
                 .into_bytes();
         fs::write(dir.path().join(&relative), &bytes).unwrap();
-        let (files, changed) = read_record_paths(dir.path(), vec![relative.clone()], &|path| {
-            let bytes = fs::read(dir.path().join(path))?;
-            fs::write(dir.path().join(path), "invalid after the supplied read")?;
-            Ok((true, Some(bytes)))
-        })
+        let (files, changed) = read_record_paths(
+            dir.path(),
+            vec![relative.clone()],
+            &|path| {
+                let bytes = fs::read(dir.path().join(path))?;
+                fs::write(dir.path().join(path), "invalid after the supplied read")?;
+                Ok((true, Some(bytes)))
+            },
+            usize::MAX,
+        )
         .unwrap();
         assert!(changed.is_empty() && files.errors.is_empty());
         assert_eq!(files.issues[0].issue.id, "atelier-byte");
@@ -1095,9 +1125,118 @@ mod tests {
                     bail!("raw read failure")
                 }
             },
+            usize::MAX,
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "raw read failure");
+    }
+
+    #[test]
+    fn bounded_initial_workers_preserve_order_bytes_and_rechunked_raw_errors() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("issues")).unwrap();
+        let bytes = (0..1203)
+            .map(|number| {
+                let id = format!("atelier-{number:04}");
+                (
+                    PathBuf::from(format!("issues/{id}.md")),
+                    atelier_records::render_issue_record(&issue_record(&id, "task", "todo"))
+                        .unwrap()
+                        .into_bytes(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let paths = bytes.keys().cloned().collect::<Vec<_>>();
+        let threads = std::sync::Mutex::new(BTreeSet::new());
+        let (files, changed) = read_record_paths(
+            dir.path(),
+            paths.clone(),
+            &|path| {
+                threads
+                    .lock()
+                    .unwrap()
+                    .insert(format!("{:?}", std::thread::current().id()));
+                // Simulate a path changing after its fresh bytes were captured.
+                let absolute = dir.path().join(path);
+                fs::write(&absolute, &bytes[path])?;
+                let captured = fs::read(&absolute)?;
+                fs::write(&absolute, "invalid later bytes")?;
+                Ok((true, Some(captured)))
+            },
+            12,
+        )
+        .unwrap();
+        let available = std::thread::available_parallelism().map_or(1, usize::from);
+        let expected = paths
+            .len()
+            .div_ceil(paths.len().div_ceil(available.min(12)).max(64));
+        assert_eq!(threads.into_inner().unwrap().len(), expected);
+        assert!(changed.is_empty() && files.errors.is_empty());
+        assert_eq!(
+            files
+                .issues
+                .iter()
+                .map(|record| record.issue.id.clone())
+                .collect::<Vec<_>>(),
+            (0..1203)
+                .map(|number| format!("atelier-{number:04}"))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
+        assert_eq!(
+            read_record_files(dir.path()).unwrap().errors.len(),
+            paths.len()
+        );
+        let default_threads = std::sync::Mutex::new(BTreeSet::new());
+        ordered_path_map(&paths, &|_| {
+            default_threads
+                .lock()
+                .unwrap()
+                .insert(format!("{:?}", std::thread::current().id()));
+            Ok(())
+        })
+        .unwrap();
+        let default_expected = paths
+            .len()
+            .div_ceil(paths.len().div_ceil(available).max(64));
+        assert_eq!(
+            default_threads.into_inner().unwrap().len(),
+            default_expected
+        );
+
+        let error = read_record_paths(
+            dir.path(),
+            paths.clone(),
+            &|path| {
+                if path == paths[100] {
+                    bail!("first raw fault before capped chunk boundary");
+                }
+                if path == paths[202] {
+                    bail!("later raw fault after capped chunk boundary");
+                }
+                if path == paths[0] {
+                    return Ok((true, Some(vec![0xff])));
+                }
+                Ok((false, None))
+            },
+            12,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "first raw fault before capped chunk boundary"
+        );
+
+        let current = std::thread::current().id();
+        ordered_path_map_with_limit(
+            &paths[..64],
+            &|_| {
+                assert_eq!(std::thread::current().id(), current);
+                Ok(())
+            },
+            12,
+        )
+        .unwrap();
     }
     #[cfg(unix)]
     #[test]
