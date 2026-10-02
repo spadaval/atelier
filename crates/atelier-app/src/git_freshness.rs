@@ -706,7 +706,17 @@ pub(crate) fn working_code_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     working_paths_matching(repo, |path| !is_record_path(path))
 }
 fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Result<Vec<PathBuf>> {
-    let mut changed = working_status_paths(repo)?;
+    working_paths_after_status_matching(repo, working_status_paths(repo)?, include)
+}
+/// Complete fresh hidden-path checks after a successful full native status read.
+pub fn working_paths_after_status(repo: &Path, status: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    working_paths_after_status_matching(repo, status, |_| true)
+}
+fn working_paths_after_status_matching(
+    repo: &Path,
+    mut changed: Vec<PathBuf>,
+    include: impl Fn(&Path) -> bool,
+) -> Result<Vec<PathBuf>> {
     changed.retain(|path| include(path));
     changed.extend(crate::committed_snapshot::flagged_modified_paths_matching(
         repo, "HEAD", include,
@@ -1319,6 +1329,68 @@ mod tests {
             assert!(shallow.edges(&root, &head).is_err());
             assert_eq!(shallow.edges(&middle, &head).unwrap().len(), 1);
             assert!(shallow.parent_graph(&head).unwrap().parents[&middle].is_empty());
+        }
+    }
+    #[test]
+    fn post_status_paths_read_fresh_hidden_bytes_and_modes() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            fs::write(repo.path().join("hidden-code"), "original").unwrap();
+            fs::create_dir_all(repo.path().join(".atelier/issues")).unwrap();
+            fs::write(repo.path().join(".atelier/issues/hidden.md"), "original").unwrap();
+            commit(repo.path(), "tracked bytes");
+            git_output(
+                repo.path(),
+                &["update-index", "--skip-worktree", "hidden-code"],
+            )
+            .unwrap();
+            git_output(
+                repo.path(),
+                &[
+                    "update-index",
+                    "--assume-unchanged",
+                    ".atelier/issues/hidden.md",
+                ],
+            )
+            .unwrap();
+            let status = working_status_paths(repo.path()).unwrap();
+            assert!(status.is_empty());
+            fs::write(repo.path().join("hidden-code"), "changed after status").unwrap();
+            fs::write(
+                repo.path().join(".atelier/issues/hidden.md"),
+                "changed after status",
+            )
+            .unwrap();
+            let expected = vec![
+                PathBuf::from(".atelier/issues/hidden.md"),
+                PathBuf::from("hidden-code"),
+            ];
+            assert_eq!(
+                working_paths_after_status(repo.path(), status).unwrap(),
+                expected
+            );
+            assert_eq!(working_paths(repo.path()).unwrap(), expected);
+            assert_eq!(
+                working_code_paths(repo.path()).unwrap(),
+                vec![PathBuf::from("hidden-code")]
+            );
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::write(repo.path().join("hidden-code"), "original").unwrap();
+                fs::write(repo.path().join(".atelier/issues/hidden.md"), "original").unwrap();
+                git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
+                let status = working_status_paths(repo.path()).unwrap();
+                fs::set_permissions(
+                    repo.path().join("hidden-code"),
+                    fs::Permissions::from_mode(0o755),
+                )
+                .unwrap();
+                assert_eq!(
+                    working_paths_after_status(repo.path(), status).unwrap(),
+                    vec![PathBuf::from("hidden-code")]
+                );
+            }
         }
     }
     #[test]

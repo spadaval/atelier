@@ -72,12 +72,53 @@ fn prime_text() -> Result<String> {
         Some(captured) => captured.head.clone(),
         None => git_freshness::head_commit(repo)?,
     };
-    let dirty = git_freshness::working_paths(repo)?;
-    let mut proof = atelier_app::evidence_freshness::EvidenceReadContext::from_snapshot(
-        repo,
-        head.clone(),
-        &dirty,
-    );
+    let evidence_records = if let Some((_, scope)) = &owner {
+        let mut evidence_records = index.evidence_records();
+        evidence_records.sort_by_key(|record| {
+            std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
+        });
+        evidence_records
+            .into_iter()
+            .filter(|evidence| {
+                index
+                    .list_record_links("evidence", &evidence.header.id)
+                    .is_ok_and(|links| {
+                        links.iter().any(|link| {
+                            scope.contains(&link.source_id) || scope.contains(&link.target_id)
+                        })
+                    })
+            })
+            .take(8)
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let (dirty, mut proof) = if evidence_records.is_empty() {
+        let dirty = git_freshness::working_paths(repo)?;
+        let proof = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &dirty);
+        (dirty, proof)
+    } else {
+        let status = git_freshness::working_status_paths(repo)?;
+        let (dirty, proof) = std::thread::scope(|scope| {
+            let proof = scope.spawn(|| {
+                let mut proof =
+                    git_freshness::ReadContext::from_head(repo, head.clone()).defer_object_stderr();
+                let _ = proof.prefetch_ranges(
+                    evidence_records
+                        .iter()
+                        .map(|record| (record.data.commit.clone(), head.clone())),
+                );
+                proof
+            });
+            let dirty = git_freshness::working_paths_after_status(repo, status);
+            (dirty, proof.join())
+        });
+        let dirty = dirty?;
+        let proof = proof
+            .expect("prime proof thread panicked")
+            .with_working_paths(&dirty);
+        (dirty, proof)
+    };
     let mut lines = vec![
         format!("Atelier session: {}", repo.display()),
         format!("Branch: {branch} @ {}", &head[..8]),
@@ -134,28 +175,7 @@ fn prime_text() -> Result<String> {
                 review.header.id, review.target, review.event, review.summary
             ));
         }
-        let mut evidence_records = index.evidence_records();
-        evidence_records.sort_by_key(|record| {
-            std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
-        });
-        let evidence_records = evidence_records
-            .into_iter()
-            .filter(|evidence| {
-                index
-                    .list_record_links("evidence", &evidence.header.id)
-                    .is_ok_and(|links| {
-                        links.iter().any(|link| {
-                            scope.contains(&link.source_id) || scope.contains(&link.target_id)
-                        })
-                    })
-            })
-            .take(8)
-            .collect::<Vec<_>>();
-        let _ = proof.prefetch_ranges(
-            evidence_records
-                .iter()
-                .map(|record| (record.data.commit.clone(), head.clone())),
-        );
+        proof.publish_object_stderr();
         for evidence in evidence_records {
             let targets = index
                 .list_record_links("evidence", &evidence.header.id)?
