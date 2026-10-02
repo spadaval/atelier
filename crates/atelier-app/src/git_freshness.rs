@@ -5,7 +5,8 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-    sync::Arc,
+    sync::{Arc, Mutex},
+    thread::JoinHandle,
 };
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct ReadContext<'a> {
     ranges: HashMap<(String, String), Arc<Vec<CommitEdge>>>,
     graphs: HashMap<String, Arc<ParentGraph>>,
     objects: Option<ObjectReader>,
+    defer_stderr: bool,
     edge_paths: HashMap<(String, String), Vec<PathBuf>>,
     rename: Option<Option<&'static str>>,
     authors: HashMap<String, Vec<u8>>,
@@ -36,16 +38,41 @@ impl<'a> ReadContext<'a> {
             ranges: HashMap::new(),
             graphs: HashMap::new(),
             objects: None,
+            defer_stderr: false,
             edge_paths: HashMap::new(),
             rename: None,
             authors: HashMap::new(),
         }
     }
     pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[PathBuf]) -> Self {
+        Self::from_head(repo, head).with_working_paths(dirty)
+    }
+    /// Capture immutable HEAD; working-path facts remain unobserved.
+    pub fn from_head(repo: &'a Path, head: String) -> Self {
         let mut context = Self::new(repo);
         context.head = Some(head);
-        context.clean = Some(!dirty.iter().any(|path| !is_record_path(path)));
         context
+    }
+    /// Attach fresh working-path proof without replacing captured Git facts.
+    pub fn with_working_paths(mut self, dirty: &[PathBuf]) -> Self {
+        self.clean = Some(!dirty.iter().any(|path| !is_record_path(path)));
+        self
+    }
+    /// Buffer native object diagnostics until earlier read guards succeed.
+    pub fn defer_object_stderr(mut self) -> Self {
+        self.defer_stderr = true;
+        self
+    }
+    /// Publish buffered diagnostics before consuming the deferred history result.
+    pub fn publish_object_stderr(&mut self) {
+        self.defer_stderr = false;
+        if let Some(stderr) = self
+            .objects
+            .as_mut()
+            .and_then(|reader| reader.stderr.as_mut())
+        {
+            stderr.publish();
+        }
     }
     pub(crate) fn pinned(&mut self, commit: &str) -> Result<String> {
         let expression = if let Some(suffix) = commit.strip_prefix("HEAD") {
@@ -163,7 +190,7 @@ impl<'a> ReadContext<'a> {
     }
     fn object_spec(&mut self, spec: &str) -> Result<Option<&GitObject>> {
         if self.objects.is_none() {
-            self.objects = Some(ObjectReader::new(self.repo)?);
+            self.objects = Some(ObjectReader::new(self.repo, self.defer_stderr)?);
         }
         self.objects.as_mut().expect("object reader").get(spec)
     }
@@ -269,23 +296,30 @@ struct ObjectReader {
     output: BufReader<ChildStdout>,
     objects: HashMap<String, Option<GitObject>>,
     failed: bool,
+    stderr: Option<DeferredStderr>,
 }
 impl ObjectReader {
-    fn new(repo: &Path) -> Result<Self> {
+    fn new(repo: &Path, defer_stderr: bool) -> Result<Self> {
         let mut child = command(repo)
             .args(["cat-file", "--batch"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(if defer_stderr {
+                Stdio::piped()
+            } else {
+                Stdio::inherit()
+            })
             .spawn()?;
         let input = child.stdin.take().context("Git object stdin missing")?;
         let output = BufReader::new(child.stdout.take().context("Git object stdout missing")?);
+        let stderr = child.stderr.take().map(DeferredStderr::new);
         Ok(Self {
             child,
             input,
             output,
             objects: HashMap::new(),
             failed: false,
+            stderr,
         })
     }
     fn get(&mut self, spec: &str) -> Result<Option<&GitObject>> {
@@ -299,13 +333,19 @@ impl ObjectReader {
                 }
                 Err(error) => {
                     self.failed = true;
-                    let _ = self.child.kill();
-                    let _ = self.child.wait();
+                    self.stop();
                     return Err(error);
                 }
             }
         }
         Ok(self.objects[spec].as_ref())
+    }
+    fn stop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        if let Some(stderr) = &mut self.stderr {
+            stderr.join();
+        }
     }
     fn receive(&mut self, spec: &str) -> Result<Option<GitObject>> {
         if spec.contains(['\0', '\n']) {
@@ -344,8 +384,49 @@ impl ObjectReader {
 }
 impl Drop for ObjectReader {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.stop();
+    }
+}
+
+// Drain throughout the persistent child's lifetime, even while diagnostics are
+// deferred. The same lock orders buffered publication and subsequent live writes.
+struct DeferredStderr {
+    buffered: Arc<Mutex<Option<Vec<u8>>>>,
+    drain: Option<JoinHandle<()>>,
+}
+impl DeferredStderr {
+    fn new(mut pipe: impl Read + Send + 'static) -> Self {
+        let buffered = Arc::new(Mutex::new(Some(Vec::new())));
+        let destination = Arc::clone(&buffered);
+        let drain = std::thread::spawn(move || {
+            let mut bytes = [0; 8192];
+            while let Ok(size) = pipe.read(&mut bytes) {
+                if size == 0 {
+                    break;
+                }
+                let mut destination = destination.lock().expect("object stderr lock");
+                if let Some(buffer) = destination.as_mut() {
+                    buffer.extend_from_slice(&bytes[..size]);
+                } else {
+                    let _ = std::io::stderr().write_all(&bytes[..size]);
+                }
+            }
+        });
+        Self {
+            buffered,
+            drain: Some(drain),
+        }
+    }
+    fn publish(&mut self) {
+        let mut buffered = self.buffered.lock().expect("object stderr lock");
+        if let Some(bytes) = buffered.take() {
+            let _ = std::io::stderr().write_all(&bytes);
+        }
+    }
+    fn join(&mut self) {
+        if let Some(drain) = self.drain.take() {
+            let _ = drain.join();
+        }
     }
 }
 
@@ -634,7 +715,7 @@ fn working_paths_matching(repo: &Path, include: impl Fn(&Path) -> bool) -> Resul
     changed.dedup();
     Ok(changed)
 }
-pub(crate) fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+pub fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     let status = git_output(
         repo,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
@@ -1241,9 +1322,57 @@ mod tests {
         }
     }
     #[test]
+    fn attached_working_paths_preserve_warmed_head_and_objects() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            let head = commit(repo.path(), "captured");
+            let mut read = ReadContext::from_head(repo.path(), head.clone()).defer_object_stderr();
+            assert_eq!(read.clean, None);
+            assert_eq!(read.commit_id("HEAD").unwrap(), head);
+            let cached = read.objects.as_ref().unwrap().objects.len();
+            commit(repo.path(), "later checkout");
+            let mut read = read.with_working_paths(&[PathBuf::from("unfinished-code")]);
+            read.publish_object_stderr();
+            assert!(!read.code_clean().unwrap());
+            assert_eq!(read.commit_id("HEAD").unwrap(), head);
+            assert_eq!(read.objects.as_ref().unwrap().objects.len(), cached);
+            assert!(!read.defer_stderr);
+        }
+    }
+    #[test]
+    fn deferred_large_stderr_drains_before_poison_and_is_discardable() {
+        let mut child = Command::new("python3")
+            .args(["-c", "import sys; sys.stdin.readline(); sys.stderr.buffer.write(b'x' * 1048576); sys.stderr.flush(); print('invalid object header', flush=True)"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut reader = ObjectReader {
+            input: child.stdin.take().unwrap(),
+            output: BufReader::new(child.stdout.take().unwrap()),
+            stderr: Some(DeferredStderr::new(child.stderr.take().unwrap())),
+            child,
+            objects: HashMap::new(),
+            failed: false,
+        };
+        assert!(reader.get("HEAD").is_err());
+        assert!(reader.failed);
+        let stderr = reader.stderr.as_ref().unwrap();
+        assert!(stderr.drain.is_none());
+        assert_eq!(
+            stderr.buffered.lock().unwrap().as_ref().unwrap(),
+            &vec![b'x'; 1048576]
+        );
+        assert!(reader.child.try_wait().unwrap().is_some());
+        assert!(reader.get("HEAD").is_err());
+        // Drop joins an already reaped child without publishing discarded bytes.
+        drop(reader);
+    }
+    #[test]
     fn failed_object_reader_is_poisoned_and_reaped() {
         let repo = repo("sha1");
-        let mut reader = ObjectReader::new(repo.path()).unwrap();
+        let mut reader = ObjectReader::new(repo.path(), false).unwrap();
         reader.child.kill().unwrap();
         reader.child.wait().unwrap();
         assert!(reader.get("HEAD").is_err());

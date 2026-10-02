@@ -149,15 +149,33 @@ impl CommittedSnapshot {
         repo: &Path,
         clean: bool,
     ) -> Result<(Result<crate::record_index::RecordIndex>, Vec<PathBuf>)> {
-        self.read_and_finish(repo, clean, crate::record_index::RecordFiles::into_index)
+        self.read_record_index_after_status(
+            repo,
+            clean,
+            crate::git_freshness::working_status_paths(repo)?,
+        )
+    }
+    /// Continue initial proof after full native status and its filters complete.
+    pub fn read_record_index_after_status(
+        &self,
+        repo: &Path,
+        clean: bool,
+        paths: Vec<PathBuf>,
+    ) -> Result<(Result<crate::record_index::RecordIndex>, Vec<PathBuf>)> {
+        self.read_and_finish(
+            repo,
+            clean,
+            paths,
+            crate::record_index::RecordFiles::into_index,
+        )
     }
     fn read_and_finish<T: Send>(
         &self,
         repo: &Path,
         clean: bool,
+        mut paths: Vec<PathBuf>,
         finish: impl FnOnce(crate::record_index::RecordFiles) -> T + Send,
     ) -> Result<(T, Vec<PathBuf>)> {
-        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         let records = record_paths(repo, &self.entries)?;
         let relative = records
             .into_iter()
