@@ -5,7 +5,7 @@ use atelier_records::is_local_atelier_path;
 use sha1_checked::{Digest as Sha1Digest, Sha1};
 use sha2::{Digest as Sha2Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -257,7 +257,7 @@ fn flagged_paths(
     verify_index: bool,
 ) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "--stage", "-v", "-z"])?;
-    let mut indexed = BTreeSet::new();
+    let mut indexed = HashSet::new();
     let mut flagged = BTreeSet::new();
     for entry in output
         .split(|byte| *byte == 0)
