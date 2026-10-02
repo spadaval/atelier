@@ -38,7 +38,7 @@ fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
     Ok(entries)
 }
 
-fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()> {
+fn collect(root: &Path, dir: &Path, paths: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -49,14 +49,13 @@ fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()>
         if entry.file_type()?.is_dir() {
             collect(root, &path, paths)?;
         } else {
-            paths.insert(Path::new(".atelier").join(relative));
+            paths.push(Path::new(".atelier").join(relative));
         }
     }
     Ok(())
 }
 
-fn modified(repo: &Path, paths: BTreeSet<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
-    let paths = paths.into_iter().collect::<Vec<_>>();
+fn modified(repo: &Path, paths: Vec<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
     let changed = crate::record_index::ordered_path_map(&paths, &|path| {
         matching_bytes(repo, path, entries).map(|bytes| bytes.is_none())
     })?;
@@ -233,13 +232,13 @@ impl CommittedSnapshot {
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
     require_records_match(&modified(repo, record_paths(repo, entries)?, entries)?)
 }
-fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
+fn record_paths(repo: &Path, entries: &Entries) -> Result<Vec<PathBuf>> {
     let root = repo.join(".atelier");
     let mut paths = entries
         .keys()
         .filter(|path| canonical(path))
         .cloned()
-        .collect::<BTreeSet<_>>();
+        .collect::<Vec<_>>();
     collect(&root, &root, &mut paths)?;
     for (path, (mode, _)) in entries.iter().filter(|(path, _)| canonical(path)) {
         if !matches!(mode.as_str(), "100644" | "100755") {
@@ -249,6 +248,8 @@ fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
             );
         }
     }
+    paths.sort();
+    paths.dedup();
     Ok(paths)
 }
 fn require_records_match(paths: &[PathBuf]) -> Result<()> {
@@ -328,7 +329,7 @@ fn flagged_paths(
     if flagged.is_empty() && !cfg!(unix) {
         return Ok(Vec::new());
     }
-    let mut dirty = modified(repo, flagged, entries)?;
+    let mut dirty = modified(repo, flagged.into_iter().collect(), entries)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -370,7 +371,7 @@ mod tests {
             let repo = tempfile::tempdir().unwrap();
             let paths = (0..130)
                 .map(|number| PathBuf::from(format!("file-{number:04}")))
-                .collect::<BTreeSet<_>>();
+                .collect::<Vec<_>>();
             let hash = blob_hash(b"committed bytes", &"0".repeat(length)).unwrap();
             let mut entries = paths
                 .iter()
