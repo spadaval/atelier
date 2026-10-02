@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_app::record_index::RecordIndex;
-use atelier_core::{EvidenceRecordData, Issue, Record};
+use atelier_core::{EvidenceRecordData, Issue};
 use atelier_records::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status,
 };
@@ -194,41 +194,33 @@ impl<'a> BundleGraphPlan<'a> {
             if let Some(parent) = &issue.parent {
                 insert_planned_relationship(
                     &mut relationships,
-                    PlannedRelationship {
-                        source: planned_bundle_ref(index, bundle, parent)?,
-                        target: issue_ref.clone(),
-                        role: "parent".to_string(),
-                    },
+                    planned_bundle_ref(index, bundle, parent)?,
+                    issue_ref.clone(),
+                    "parent",
                 )?;
             }
             for blocker in &issue.depends_on {
                 insert_planned_relationship(
                     &mut relationships,
-                    PlannedRelationship {
-                        source: planned_bundle_ref(index, bundle, blocker)?,
-                        target: issue_ref.clone(),
-                        role: "blocks".to_string(),
-                    },
+                    planned_bundle_ref(index, bundle, blocker)?,
+                    issue_ref.clone(),
+                    "blocks",
                 )?;
             }
             for blocked in &issue.blocks {
                 insert_planned_relationship(
                     &mut relationships,
-                    PlannedRelationship {
-                        source: issue_ref.clone(),
-                        target: planned_bundle_ref(index, bundle, blocked)?,
-                        role: "blocks".to_string(),
-                    },
+                    issue_ref.clone(),
+                    planned_bundle_ref(index, bundle, blocked)?,
+                    "blocks",
                 )?;
             }
             for target in &issue.advances {
                 insert_planned_relationship(
                     &mut relationships,
-                    PlannedRelationship {
-                        source: issue_ref.clone(),
-                        target: planned_bundle_ref(index, bundle, target)?,
-                        role: "advances".to_string(),
-                    },
+                    issue_ref.clone(),
+                    planned_bundle_ref(index, bundle, target)?,
+                    "advances",
                 )?;
             }
         }
@@ -237,11 +229,9 @@ impl<'a> BundleGraphPlan<'a> {
             for target in &record.validates {
                 insert_planned_relationship(
                     &mut relationships,
-                    PlannedRelationship {
-                        source: source.clone(),
-                        target: planned_bundle_ref(index, bundle, target)?,
-                        role: "validates".to_string(),
-                    },
+                    source.clone(),
+                    planned_bundle_ref(index, bundle, target)?,
+                    "validates",
                 )?;
             }
         }
@@ -257,8 +247,15 @@ impl<'a> BundleGraphPlan<'a> {
 
 fn insert_planned_relationship(
     relationships: &mut BTreeSet<PlannedRelationship>,
-    relationship: PlannedRelationship,
+    source: PlannedRef,
+    target: PlannedRef,
+    role: &str,
 ) -> Result<()> {
+    let relationship = PlannedRelationship {
+        source,
+        target,
+        role: role.to_string(),
+    };
     if !relationships.insert(relationship.clone()) {
         bail!(
             "Duplicate bundle relationship after normalization: {} -> {} ({})",
@@ -512,7 +509,7 @@ fn apply_bundle_file(
         .parent()
         .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
     ensure_no_bundle_recovery_artifacts(state_dir)?;
-    let stage = create_bundle_stage_dir(stage_parent)?;
+    let stage = create_bundle_dir(stage_parent, "stage", "staging")?;
     let result = (|| {
         let source_fingerprint =
             crate::commands::bulk_canonical::canonical_tree_fingerprint(state_dir)?;
@@ -606,33 +603,6 @@ fn collect_bundle_recovery_artifacts(
     Ok(())
 }
 
-fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
-    let base = format!(
-        ".atelier-bundle-stage-{}-{}",
-        std::process::id(),
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    );
-    for suffix in 0..=99 {
-        let candidate = if suffix == 0 {
-            parent.join(&base)
-        } else {
-            parent.join(format!("{base}-{suffix:02}"))
-        };
-        match fs::create_dir(&candidate) {
-            Ok(()) => return Ok(candidate),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("Failed to create {}", candidate.display()))
-            }
-        }
-    }
-    bail!(
-        "Failed to allocate bundle staging directory in {}",
-        parent.display()
-    )
-}
-
 fn apply_bundle_to_state(
     state_dir: &Path,
     bundle: &BundleFile,
@@ -716,17 +686,22 @@ fn apply_bundle_to_state(
             output: None,
             target: None,
         };
-        create_bulk_record(
-            &store,
-            &mut resolved,
-            &mut created,
-            &evidence.client_ref,
-            "evidence",
-            &evidence.title,
-            Some(&evidence.body),
-            serde_json::to_value(data)?,
-            Vec::new(),
-        )?;
+        let record = store.create_evidence(&evidence.title, "recorded", &evidence.body, data)?;
+        let id = record.header.id;
+        resolved.insert(
+            evidence.client_ref.clone(),
+            ResolvedRef {
+                kind: "evidence".to_string(),
+                id: id.clone(),
+            },
+        );
+        created
+            .entry("evidence".to_string())
+            .or_default()
+            .push(json!({
+                "client_ref": evidence.client_ref,
+                "id": id,
+            }));
     }
 
     for note in &plan.notes {
@@ -769,51 +744,22 @@ fn apply_bundle_to_state(
 }
 
 fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
-    fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
-    for entry in
-        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
-    {
-        let entry = entry?;
-        let name = entry.file_name();
-        if name == "runtime" {
-            continue;
-        }
-        let source_path = entry.path();
-        let dest_path = dest.join(&name);
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("Failed to inspect {}", source_path.display()))?;
-        if file_type.is_symlink() {
-            bail!(
-                "Canonical bulk mutation refuses symbolic link {}",
-                source_path.display()
-            );
-        } else if file_type.is_dir() {
-            copy_dir_recursive(&source_path, &dest_path)?;
-        } else if file_type.is_file() {
-            fs::copy(&source_path, &dest_path).with_context(|| {
-                format!(
-                    "Failed to copy {} to {}",
-                    source_path.display(),
-                    dest_path.display()
-                )
-            })?;
-        } else {
-            bail!(
-                "Canonical bulk mutation refuses special filesystem entry {}",
-                source_path.display()
-            );
-        }
-    }
-    Ok(())
+    copy_tree(source, dest, true)
 }
 
 pub(crate) fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
+    copy_tree(source, dest, false)
+}
+
+fn copy_tree(source: &Path, dest: &Path, exclude_runtime: bool) -> Result<()> {
     fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
     for entry in
         fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
     {
         let entry = entry?;
+        if exclude_runtime && entry.file_name() == "runtime" {
+            continue;
+        }
         let source_path = entry.path();
         let dest_path = dest.join(entry.file_name());
         let file_type = entry
@@ -870,7 +816,7 @@ pub(crate) fn install_directories(
     let backup_parent = state_dir.join("runtime");
     fs::create_dir_all(&backup_parent)
         .with_context(|| format!("Failed to create {}", backup_parent.display()))?;
-    let backup = create_bundle_backup_dir(&backup_parent)?;
+    let backup = create_bundle_dir(&backup_parent, "backup", "backup")?;
     let result = (|| {
         for name in names {
             crate::commands::bulk_canonical::validate_directory_path(&stage.join(name), true)?;
@@ -946,19 +892,19 @@ fn cleanup_bundle_backup(backup: &Path) -> Result<()> {
     fs::remove_dir_all(backup).with_context(|| format!("Failed to remove {}", backup.display()))
 }
 
-fn create_bundle_backup_dir(parent: &Path) -> Result<PathBuf> {
+fn create_bundle_dir(parent: &Path, kind: &str, label: &str) -> Result<PathBuf> {
     let base = format!(
-        ".atelier-bundle-backup-{}-{}",
+        ".atelier-bundle-{kind}-{}-{}",
         std::process::id(),
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
     );
-    create_bundle_backup_dir_with_base(parent, &base)
+    allocate_bundle_dir(parent, &base, label)
 }
 
-fn create_bundle_backup_dir_with_base(parent: &Path, base: &str) -> Result<PathBuf> {
+fn allocate_bundle_dir(parent: &Path, base: &str, label: &str) -> Result<PathBuf> {
     for suffix in 0..=99 {
         let candidate = if suffix == 0 {
-            parent.join(&base)
+            parent.join(base)
         } else {
             parent.join(format!("{base}-{suffix:02}"))
         };
@@ -972,7 +918,7 @@ fn create_bundle_backup_dir_with_base(parent: &Path, base: &str) -> Result<PathB
         }
     }
     bail!(
-        "Failed to allocate bundle backup directory in {}",
+        "Failed to allocate bundle {label} directory in {}",
         parent.display()
     )
 }
@@ -1157,45 +1103,6 @@ fn apply_planned_relationship(
         }
         relation_type => add_relationship(store, source, target, relation_type)?,
     }
-    Ok(())
-}
-
-fn create_bulk_record(
-    store: &RecordStore,
-    resolved: &mut BTreeMap<String, ResolvedRef>,
-    created: &mut BTreeMap<String, Vec<Value>>,
-    client_ref: &str,
-    kind: &str,
-    title: &str,
-    body: Option<&str>,
-    data: Value,
-    labels: Vec<String>,
-) -> Result<()> {
-    let mut record = match kind {
-        "evidence" => Record::Evidence(store.create_evidence(
-            title,
-            "recorded",
-            body.unwrap_or(title),
-            serde_json::from_value::<EvidenceRecordData>(data)?,
-        )?),
-        other => bail!("Unsupported bundle record kind '{other}'"),
-    };
-    if !labels.is_empty() {
-        record.header_mut().labels = labels;
-        store.write_record_atomic(&record)?;
-    }
-    let id = record.header().id.clone();
-    resolved.insert(
-        client_ref.to_string(),
-        ResolvedRef {
-            kind: kind.to_string(),
-            id: id.clone(),
-        },
-    );
-    created
-        .entry(created_key(kind).to_string())
-        .or_default()
-        .push(json!({ "client_ref": client_ref, "id": id }));
     Ok(())
 }
 
@@ -1393,6 +1300,164 @@ mod tests {
     }
 
     #[test]
+    fn canonical_copy_excludes_only_top_level_runtime() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("source");
+        fs::create_dir_all(source.join("runtime")).unwrap();
+        fs::write(source.join("runtime/derived"), "derived").unwrap();
+        fs::create_dir_all(source.join("unknown/runtime/empty")).unwrap();
+        fs::write(source.join("unknown/runtime/raw"), [0, 255, 10]).unwrap();
+
+        let canonical = dir.path().join("canonical");
+        copy_state_tree(&source, &canonical).unwrap();
+        assert!(!canonical.join("runtime").exists());
+        assert!(canonical.join("unknown/runtime/empty").is_dir());
+        assert_eq!(
+            fs::read(canonical.join("unknown/runtime/raw")).unwrap(),
+            [0, 255, 10]
+        );
+
+        let recursive = dir.path().join("recursive");
+        copy_dir_recursive(&source, &recursive).unwrap();
+        assert_eq!(
+            fs::read_to_string(recursive.join("runtime/derived")).unwrap(),
+            "derived"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_copy_preserves_file_modes_and_rejects_unsafe_entries() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("source");
+        fs::create_dir_all(&source).unwrap();
+        let file = source.join("executable");
+        fs::write(&file, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o751)).unwrap();
+        let copied = dir.path().join("copied");
+        copy_state_tree(&source, &copied).unwrap();
+        assert_eq!(
+            fs::metadata(copied.join("executable"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o751
+        );
+
+        let outside = dir.path().join("outside");
+        fs::write(&outside, "untouched").unwrap();
+        let unsafe_path = source.join("unsafe");
+        symlink(&outside, &unsafe_path).unwrap();
+        for copy in [copy_state_tree, copy_dir_recursive] {
+            let error = copy(&source, &copied).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Canonical bulk mutation refuses symbolic link {}",
+                    unsafe_path.display()
+                )
+            );
+        }
+        fs::remove_file(&unsafe_path).unwrap();
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&unsafe_path)
+            .status()
+            .unwrap()
+            .success());
+        for copy in [copy_state_tree, copy_dir_recursive] {
+            let error = copy(&source, &copied).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Canonical bulk mutation refuses special filesystem entry {}",
+                    unsafe_path.display()
+                )
+            );
+        }
+        assert_eq!(fs::read_to_string(outside).unwrap(), "untouched");
+    }
+
+    #[test]
+    fn bundle_allocator_exhaustion_preserves_every_collision_and_error_label() {
+        let dir = tempdir().unwrap();
+        for suffix in 0..=99 {
+            let name = if suffix == 0 {
+                "occupied".to_string()
+            } else {
+                format!("occupied-{suffix:02}")
+            };
+            fs::write(dir.path().join(name), "untouched").unwrap();
+        }
+        for label in ["backup", "staging"] {
+            let error = allocate_bundle_dir(dir.path(), "occupied", label).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Failed to allocate bundle {label} directory in {}",
+                    dir.path().display()
+                )
+            );
+        }
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 100);
+        for entry in fs::read_dir(dir.path()).unwrap() {
+            assert_eq!(
+                fs::read_to_string(entry.unwrap().path()).unwrap(),
+                "untouched"
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_allocator_preserves_names_and_reports_noncollision_errors() {
+        let dir = tempdir().unwrap();
+        for (kind, label) in [("stage", "staging"), ("backup", "backup")] {
+            let allocated = create_bundle_dir(dir.path(), kind, label).unwrap();
+            assert!(allocated.is_dir());
+            assert!(allocated
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with(&format!(".atelier-bundle-{kind}-{}-", std::process::id())));
+        }
+        let parent = dir.path().join("file");
+        fs::write(&parent, "untouched").unwrap();
+        let error = allocate_bundle_dir(&parent, "candidate", "staging").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("Failed to create {}", parent.join("candidate").display())
+        );
+        assert_eq!(fs::read_to_string(parent).unwrap(), "untouched");
+    }
+
+    #[test]
+    fn canonical_copy_preserves_create_and_read_error_contexts() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("missing");
+        let dest = dir.path().join("dest");
+        for copy in [copy_state_tree, copy_dir_recursive] {
+            assert_eq!(
+                copy(&missing, &dest).unwrap_err().to_string(),
+                format!("Failed to read {}", missing.display())
+            );
+        }
+        let file = dir.path().join("file");
+        fs::write(&file, "untouched").unwrap();
+        for copy in [copy_state_tree, copy_dir_recursive] {
+            assert_eq!(
+                copy(&dir.path().join("source"), &file)
+                    .unwrap_err()
+                    .to_string(),
+                format!("Failed to create {}", file.display())
+            );
+        }
+        assert_eq!(fs::read_to_string(file).unwrap(), "untouched");
+    }
+
+    #[test]
     fn bundle_issue_uses_typed_markdown_body() {
         let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.epic", "title": "Future outcome", "issue_type": "epic", "body": "## Outcome\n\nA meaningful draft outcome." })).unwrap();
         let sections = atelier_records::parse_issue_sections_for_type(
@@ -1502,7 +1567,7 @@ mod tests {
         symlink(&outside, dir.path().join("backup-test")).unwrap();
         fs::write(dir.path().join("backup-test-01"), "special collision").unwrap();
 
-        let allocated = create_bundle_backup_dir_with_base(dir.path(), "backup-test").unwrap();
+        let allocated = allocate_bundle_dir(dir.path(), "backup-test", "backup").unwrap();
 
         assert_eq!(allocated, dir.path().join("backup-test-02"));
         assert!(allocated.is_dir());
