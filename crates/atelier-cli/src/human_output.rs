@@ -69,156 +69,64 @@ fn stdout_width() -> usize {
         .unwrap_or(usize::MAX)
 }
 
-pub(crate) trait Panel {
-    fn render(&self, context: RenderContext) -> Vec<String>;
-}
-
-pub(crate) struct Page {
-    title: String,
-    panels: Vec<Box<dyn Panel>>,
-}
-
-impl Page {
-    pub(crate) fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            panels: Vec::new(),
-        }
-    }
-
-    pub(crate) fn panel(mut self, panel: impl Panel + 'static) -> Self {
-        self.panels.push(Box::new(panel));
-        self
-    }
-
-    pub(crate) fn render(&self, context: RenderContext) -> String {
-        let mut lines = vec![context.paint(TextStyle::Heading, &self.title)];
-        lines.push("=".repeat(self.title.len()));
-        for panel in &self.panels {
-            let rendered = panel.render(context);
-            if rendered.is_empty() {
-                continue;
-            }
+pub(crate) fn render_page(
+    title: &str,
+    panels: impl IntoIterator<Item = Vec<String>>,
+    context: RenderContext,
+) -> String {
+    let mut lines = vec![
+        context.paint(TextStyle::Heading, title),
+        "=".repeat(title.len()),
+    ];
+    for panel in panels {
+        if !panel.is_empty() {
             lines.push(String::new());
-            lines.extend(rendered);
-        }
-        lines.join("\n")
-    }
-
-    pub(crate) fn print(&self, context: RenderContext) {
-        println!("{}", self.render(context));
-    }
-}
-
-pub(crate) struct MetadataPanel {
-    title: Option<String>,
-    rows: Vec<(String, String)>,
-}
-
-impl MetadataPanel {
-    pub(crate) fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: Some(title.into()),
-            rows: Vec::new(),
+            lines.extend(panel);
         }
     }
-
-    pub(crate) fn untitled() -> Self {
-        Self {
-            title: None,
-            rows: Vec::new(),
-        }
-    }
-
-    pub(crate) fn row(mut self, label: impl Into<String>, value: impl Into<String>) -> Self {
-        self.rows.push((label.into(), value.into()));
-        self
-    }
+    lines.join("\n")
 }
 
-impl Panel for MetadataPanel {
-    fn render(&self, _context: RenderContext) -> Vec<String> {
-        if self.rows.is_empty() {
-            return Vec::new();
-        }
-        let width = self
-            .rows
-            .iter()
-            .map(|(label, _)| label.len())
-            .max()
-            .unwrap_or(0);
-        let mut lines = Vec::new();
-        if let Some(title) = &self.title {
-            lines.push(section_heading(title));
-        }
-        lines.extend(
-            self.rows
-                .iter()
-                .map(|(label, value)| format!("{label:<width$}: {value}", width = width)),
-        );
-        lines
+pub(crate) fn print_page(
+    title: &str,
+    panels: impl IntoIterator<Item = Vec<String>>,
+    context: RenderContext,
+) {
+    println!("{}", render_page(title, panels, context));
+}
+
+pub(crate) fn render_metadata(title: Option<&str>, rows: &[(&str, String)]) -> Vec<String> {
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    let width = rows.iter().map(|(label, _)| label.len()).max().unwrap_or(0);
+    let mut lines = title.map(section_heading).into_iter().collect::<Vec<_>>();
+    lines.extend(
+        rows.iter()
+            .map(|(label, value)| format!("{label:<width$}: {value}")),
+    );
+    lines
+}
+
+pub(crate) fn render_text_section(title: &str, body: Option<&str>) -> Vec<String> {
+    match body.map(str::trim).filter(|body| !body.is_empty()) {
+        Some(body) => vec![section_heading(title), body.to_string()],
+        None => Vec::new(),
     }
 }
 
-pub(crate) struct TextPanel {
-    title: String,
-    body: Option<String>,
-}
-
-impl TextPanel {
-    pub(crate) fn new(title: impl Into<String>, body: Option<impl Into<String>>) -> Self {
-        Self {
-            title: title.into(),
-            body: body.map(Into::into),
-        }
+pub(crate) fn render_lines_section(
+    title: &str,
+    lines: impl IntoIterator<Item = impl Into<String>>,
+) -> Vec<String> {
+    let mut lines = lines.into_iter().map(Into::into).collect::<Vec<_>>();
+    if lines.is_empty() {
+        lines.push("(none)".to_string());
     }
-}
-
-impl Panel for TextPanel {
-    fn render(&self, _context: RenderContext) -> Vec<String> {
-        let Some(body) = self
-            .body
-            .as_deref()
-            .map(str::trim)
-            .filter(|body| !body.is_empty())
-        else {
-            return Vec::new();
-        };
-        vec![section_heading(&self.title), body.to_string()]
+    if !title.is_empty() {
+        lines.insert(0, section_heading(title));
     }
-}
-
-pub(crate) struct LinesPanel {
-    title: String,
-    lines: Vec<String>,
-}
-
-impl LinesPanel {
-    pub(crate) fn new(
-        title: impl Into<String>,
-        lines: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Self {
-        Self {
-            title: title.into(),
-            lines: lines.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl Panel for LinesPanel {
-    fn render(&self, _context: RenderContext) -> Vec<String> {
-        let mut lines = if self.title.is_empty() {
-            Vec::new()
-        } else {
-            vec![section_heading(&self.title)]
-        };
-        if self.lines.is_empty() {
-            lines.push("(none)".to_string());
-        } else {
-            lines.extend(self.lines.iter().cloned());
-        }
-        lines
-    }
+    lines
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -434,8 +342,8 @@ impl IssueListPanel {
     }
 }
 
-impl Panel for IssueListPanel {
-    fn render(&self, context: RenderContext) -> Vec<String> {
+impl IssueListPanel {
+    pub(crate) fn render(&self, context: RenderContext) -> Vec<String> {
         let mut lines = vec![section_heading(&self.title)];
         if self.rows.is_empty() {
             lines.push("(none)".to_string());
@@ -527,16 +435,20 @@ pub(crate) fn render_issue_inventory(
             lines.push("Narrow the metadata filters or raise --limit.".to_string());
         }
     }
-    Page::new("Issue Inventory")
-        .panel(LinesPanel::new("", lines))
-        .panel(FooterPanel::new(
-            "Drill Down",
-            [FooterAction::new(
-                "Inspect a record",
-                "atelier issue show <issue-id>",
-            )],
-        ))
-        .render(context)
+    render_page(
+        "Issue Inventory",
+        [
+            render_lines_section("", lines),
+            render_footer_section(
+                "Drill Down",
+                [FooterAction::new(
+                    "Inspect a record",
+                    "atelier issue show <issue-id>",
+                )],
+            ),
+        ],
+        context,
+    )
 }
 
 pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView<'_>) -> String {
@@ -547,30 +459,14 @@ pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView<'_>) -> Str
         .join("\n")
 }
 
-pub(crate) struct FooterPanel {
-    title: String,
-    actions: Vec<FooterAction>,
-}
-
-impl FooterPanel {
-    pub(crate) fn new(
-        title: impl Into<String>,
-        actions: impl IntoIterator<Item = FooterAction>,
-    ) -> Self {
-        Self {
-            title: title.into(),
-            actions: actions.into_iter().collect(),
-        }
-    }
-}
-
-impl Panel for FooterPanel {
-    fn render(&self, _context: RenderContext) -> Vec<String> {
-        render_footer(&self.title, self.actions.clone())
-            .lines()
-            .map(str::to_string)
-            .collect()
-    }
+pub(crate) fn render_footer_section(
+    title: &str,
+    actions: impl IntoIterator<Item = FooterAction>,
+) -> Vec<String> {
+    render_footer(title, actions)
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 #[allow(dead_code)]
@@ -933,12 +829,71 @@ mod tests {
 
     #[test]
     fn page_skips_empty_panels_and_renders_metadata() {
-        let page = Page::new("Example")
-            .panel(MetadataPanel::untitled().row("Status", "ready"))
-            .panel(TextPanel::new("Notes", None::<String>));
         assert_eq!(
-            page.render(RenderContext::plain()),
+            render_page(
+                "Example",
+                [
+                    render_metadata(None, &[("Status", "ready".to_string())]),
+                    render_text_section("Notes", None)
+                ],
+                RenderContext::plain(),
+            ),
             "Example\n=======\n\nStatus: ready"
+        );
+    }
+
+    #[test]
+    fn sections_preserve_distinct_empty_and_multiline_contracts() {
+        assert!(render_metadata(Some("Metadata"), &[]).is_empty());
+        assert!(render_text_section("Text", Some(" \n\t")).is_empty());
+        assert_eq!(
+            render_lines_section("Lines", Vec::<String>::new()),
+            ["Lines\n-----", "(none)"]
+        );
+        assert_eq!(render_footer_section("Footer", []), ["Footer", "------"]);
+        assert_eq!(
+            render_text_section("Text", Some(" \nfirst\nsecond\n ")),
+            ["Text\n----", "first\nsecond"]
+        );
+        assert_eq!(
+            render_metadata(
+                Some("Metadata"),
+                &[
+                    ("É", "héllo\ncontinued".to_string()),
+                    ("Long", "value".to_string())
+                ]
+            ),
+            [
+                "Metadata\n--------",
+                "É   : héllo\ncontinued",
+                "Long: value"
+            ]
+        );
+        assert_eq!(
+            render_footer_section(
+                "Footer",
+                [
+                    FooterAction::new("Inspect", "first\nsecond"),
+                    FooterAction::new("Inspect", "first\nsecond"),
+                    FooterAction::new("Other", "first\nsecond")
+                ]
+            ),
+            [
+                "Footer",
+                "------",
+                "  Inspect: first",
+                "second",
+                "  Other: first",
+                "second"
+            ]
+        );
+        assert_eq!(
+            render_page(
+                "É",
+                [render_text_section("Text", None)],
+                RenderContext::from_parts(ColorChoice::Always, true, false)
+            ),
+            "\x1b[1mÉ\x1b[0m\n=="
         );
     }
 

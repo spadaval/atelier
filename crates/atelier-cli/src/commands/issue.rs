@@ -8,9 +8,9 @@ use crate::commands::issue_workflow::{
     load_issue_workflow_policy,
 };
 use crate::human_output::{
-    plural_suffix, render_issue_inventory, render_issue_inventory_quiet, DisplayRole, FooterAction,
-    FooterPanel, IssueListPanel, IssueListRow, LinesPanel, MetadataPanel, Panel, RenderContext,
-    TextPanel,
+    plural_suffix, render_footer_section, render_issue_inventory, render_issue_inventory_quiet,
+    render_lines_section, render_metadata, render_text_section, DisplayRole, FooterAction,
+    IssueListPanel, IssueListRow, RenderContext,
 };
 use crate::utils::format_issue_id;
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
@@ -141,18 +141,19 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     let health = summary
         .scope
         .health(summary.relationships.open_blockers.len());
-    print_panel(
-        MetadataPanel::new("Objective Rollup")
-            .row("Health", health.to_string())
-            .row(
+    print_panel(render_metadata(
+        Some("Objective Rollup"),
+        &[
+            ("Health", health.to_string()),
+            (
                 "Scope",
                 format!(
                     "{} scoped issue{}",
                     summary.scope.total(),
                     plural_suffix(summary.scope.total())
                 ),
-            )
-            .row(
+            ),
+            (
                 "Buckets",
                 format!(
                     "active {}, ready {}, blocked {}, done {}, backlog {}",
@@ -162,8 +163,8 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                     summary.scope.work.done.len(),
                     summary.scope.work.backlog.len()
                 ),
-            )
-            .row(
+            ),
+            (
                 "Relationships",
                 format!(
                     "advances {}, open blockers {}, validating evidence {}, other {}",
@@ -172,8 +173,8 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                     summary.evidence.linked_validating_evidence,
                     summary.relationships.other_links
                 ),
-            )
-            .row(
+            ),
+            (
                 "Evidence Gates",
                 format!(
                     "linked validating evidence {}; scoped issues without evidence {}",
@@ -181,7 +182,8 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                     summary.evidence.scoped_issues_without_evidence
                 ),
             ),
-    );
+        ],
+    ));
 
     for (title, rows) in [
         ("Active Work", &summary.scope.work.active),
@@ -190,12 +192,16 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
         ("Done Work", &summary.scope.work.done),
     ] {
         if !rows.is_empty() {
-            print_panel(IssueListPanel::from_work_rows(title, rows).limit(OBJECTIVE_ROLLUP_LIMIT));
+            print_panel(
+                IssueListPanel::from_work_rows(title, rows)
+                    .limit(OBJECTIVE_ROLLUP_LIMIT)
+                    .render(RenderContext::for_stdout()),
+            );
         }
     }
 
     if !summary.recently_updated.is_empty() {
-        print_panel(LinesPanel::new(
+        print_panel(render_lines_section(
             "Recent Activity Facts",
             summary
                 .recently_updated
@@ -240,7 +246,7 @@ fn render_issue_link_section(
         ));
     }
     rows.sort();
-    print_panel(LinesPanel::new(
+    print_panel(render_lines_section(
         "Linked Issues",
         rows.into_iter().map(|row| format!("  {row}")),
     ));
@@ -292,7 +298,7 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
     lines.push(format!(
         "  options: atelier issue transition {canonical_id}"
     ));
-    print_panel(LinesPanel::new("Transition Readiness", lines));
+    print_panel(render_lines_section("Transition Readiness", lines));
     Ok(())
 }
 
@@ -311,12 +317,12 @@ fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> 
         }
         None => "Parent: (none)".to_string(),
     };
-    print_panel(LinesPanel::new("Hierarchy", [line]));
+    print_panel(render_lines_section("Hierarchy", [line]));
     Ok(())
 }
 
 fn print_text_section(title: &str, body: Option<&str>) {
-    print_panel(TextPanel::new(title, body.map(str::to_string)));
+    print_panel(render_text_section(title, body));
 }
 
 fn render_dependency_section(
@@ -326,7 +332,7 @@ fn render_dependency_section(
     blockers: bool,
 ) -> Result<()> {
     let rows = dependency_rows_for_text(index, ids, blockers)?;
-    print_panel(LinesPanel::new(
+    print_panel(render_lines_section(
         title,
         rows.into_iter().map(|row| format!("  {row}")),
     ));
@@ -363,7 +369,7 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
     let subissues = index.get_subissues(canonical_id);
     let workflow_policy = load_issue_workflow_policy()?;
     if subissues.is_empty() {
-        print_panel(LinesPanel::new("Subissues", Vec::<String>::new()));
+        print_panel(render_lines_section("Subissues", Vec::<String>::new()));
         return Ok(());
     }
 
@@ -410,14 +416,14 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             .into_iter()
             .skip(1),
     );
-    print_panel(LinesPanel::new("Subissues", lines));
+    print_panel(render_lines_section("Subissues", lines));
     Ok(())
 }
 
 fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> {
     let affected = index.downstream_impact(canonical_id);
     if affected.is_empty() {
-        print_panel(LinesPanel::new(
+        print_panel(render_lines_section(
             "Impact",
             ["No downstream issues found.".to_string()],
         ));
@@ -448,7 +454,7 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
     if affected.len() > 8 {
         lines.push(format!("  ... and {} more", affected.len() - 8));
     }
-    print_panel(LinesPanel::new("Impact", lines));
+    print_panel(render_lines_section("Impact", lines));
     Ok(())
 }
 
@@ -504,12 +510,11 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
             format!("atelier issue transition {} <transition>", canonical_id),
         ),
     ]);
-    print_panel(FooterPanel::new("Next Commands", actions));
+    print_panel(render_footer_section("Next Commands", actions));
     Ok(())
 }
 
-fn print_panel(panel: impl Panel) {
-    let lines = panel.render(RenderContext::for_stdout());
+fn print_panel(lines: Vec<String>) {
     if lines.is_empty() {
         return;
     }
@@ -657,7 +662,7 @@ pub fn create_lifecycle(
     }
     let file_path = canonical_issue_path_from_state(state_dir, &id);
     println!("File: {}", file_path.display());
-    print_panel(FooterPanel::new(
+    print_panel(render_footer_section(
         "Next Commands",
         [
             FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
