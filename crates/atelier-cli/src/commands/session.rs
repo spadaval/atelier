@@ -230,19 +230,35 @@ fn check_traceability(
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let (captured, snapshot, initial_paths, index) = {
+    let (captured, snapshot, initial_paths, index, history) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         let captured = git::CheckoutRefs::capture(repo)?;
         let snapshot =
             atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &captured.head)?;
-        let (index, paths) = snapshot.read_record_index(repo, false)
-            .map_err(|error| anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry."))?;
-        (captured, snapshot, paths, index?)
+        let uncommitted = |error| {
+            anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry.")
+        };
+        let paths = git_freshness::working_status_paths(repo).map_err(uncommitted)?;
+        // History consumes pinned objects after filters; its errors remain last.
+        let (records, history) = std::thread::scope(|scope| {
+            let history = scope.spawn(|| {
+                let mut read = git_freshness::ReadContext::from_head(repo, captured.head.clone())
+                    .defer_object_stderr();
+                let checked = review_gate::append_only_history(&mut read);
+                (read, checked)
+            });
+            let records = snapshot.read_record_index_after_status(repo, false, paths);
+            (records, history.join())
+        });
+        let (index, paths) = records.map_err(uncommitted)?;
+        (captured, snapshot, paths, index?, history)
     };
     let head = &captured.head;
-    let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
-    review_gate::append_only_history(&mut read)?;
+    let (read, history) = history.expect("review history thread panicked");
+    let mut read = read.with_working_paths(&initial_paths);
+    read.publish_object_stderr();
+    history?;
     let branch = captured.branch.clone().unwrap_or_default();
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; repair it before landing")?;
