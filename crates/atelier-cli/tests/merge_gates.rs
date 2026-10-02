@@ -131,6 +131,62 @@ impl Fixture {
 }
 
 #[test]
+fn captured_checkout_refs_preserve_head_tags_aliases_and_base_worktrees() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let base = git(fixture.path(), &["rev-parse", "refs/heads/main"]);
+    git(fixture.path(), &["tag", "HEAD", &base]);
+    git(
+        fixture.path(),
+        &["tag", "-am", "shadow", &fixture.branch, &base],
+    );
+    git(
+        fixture.path(),
+        &[
+            "symbolic-ref",
+            "refs/heads/alias",
+            &format!("refs/heads/{}", fixture.branch),
+        ],
+    );
+    git(
+        fixture.path(),
+        &["symbolic-ref", "HEAD", "refs/heads/alias"],
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        let name = std::ffi::OsString::from_vec(vec![0xff]);
+        fs::write(
+            fixture.path().join(".git/refs/heads").join(name),
+            format!("{base}\n"),
+        )
+        .unwrap();
+    }
+    let separate = tempdir().unwrap();
+    let base_tree = separate.path().join("base");
+    git(
+        fixture.path(),
+        &["worktree", "add", "-q", base_tree.to_str().unwrap(), "main"],
+    );
+    ok(fixture.path(), &["land", &fixture.id]);
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&base_tree, &["rev-parse", "HEAD"]), base);
+    // A non-head symbolic HEAD is never a valid owner checkout.
+    git(
+        fixture.path(),
+        &[
+            "symbolic-ref",
+            "HEAD",
+            &format!("refs/tags/{}", fixture.branch),
+        ],
+    );
+    assert!(!cli(fixture.path(), &["land", &fixture.id]).0);
+    assert!(!cli(fixture.path(), &["merge", &fixture.id, "--check"]).0);
+}
+
+#[test]
 fn missing_self_approval_and_git_email_aliases_are_refused() {
     for identity in [
         None,
