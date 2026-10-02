@@ -1395,6 +1395,61 @@ fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
 }
 
 #[test]
+fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
+    for (original_identity, rewritten_identity) in [("Reviewer", "Author"), ("Author", "Reviewer")]
+    {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Root finding",
+            ],
+        );
+        let disposition = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "disposition",
+                &finding,
+                "--identity",
+                original_identity,
+                "--decision",
+                "no_action",
+                "Root disposition",
+            ],
+        );
+        // Make the existing canonical tree the first commit of an independent repo.
+        fs::remove_dir_all(f.path().join(".git")).unwrap();
+        git(f.path(), &["init", "-qb", "main"]);
+        git(f.path(), &["config", "user.name", "Author"]);
+        git(f.path(), &["config", "user.email", "author@example.test"]);
+        commit(f.path(), "root canonical records and review events");
+        git(f.path(), &["config", "log.showRoot", "false"]);
+        ok(f.path(), &["land"]);
+        let path = f.path().join(format!(".atelier/reviews/{disposition}.md"));
+        let original = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            original.replace(original_identity, rewritten_identity),
+        )
+        .unwrap();
+        commit(f.path(), "rewrite root event identity");
+        let (pass, output) = cli(f.path(), &["land"]);
+        assert!(!pass && output.contains("review_append_only"), "{output}");
+    }
+}
+
+#[test]
 fn terminal_review_cluster_prune_remains_a_valid_handoff() {
     for (days_ago, retired) in [(2000, true), (1, true), (0, false)] {
         let f = Fixture::new();
