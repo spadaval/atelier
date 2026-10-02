@@ -222,52 +222,6 @@ pub struct RecordHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Record {
-    Issue(IssueRecord),
-    Evidence(EvidenceRecord),
-    Review(ReviewRecord),
-}
-
-impl Record {
-    pub fn header(&self) -> &RecordHeader {
-        match self {
-            Record::Issue(record) => &record.header,
-            Record::Evidence(record) => &record.header,
-            Record::Review(record) => &record.header,
-        }
-    }
-
-    pub fn header_mut(&mut self) -> &mut RecordHeader {
-        match self {
-            Record::Issue(record) => &mut record.header,
-            Record::Evidence(record) => &mut record.header,
-            Record::Review(record) => &mut record.header,
-        }
-    }
-
-    pub fn kind(&self) -> &str {
-        &self.header().kind
-    }
-
-    pub fn id(&self) -> &str {
-        &self.header().id
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct IssueRecord {
-    pub header: RecordHeader,
-    pub issue_type: String,
-    pub priority: String,
-    #[serde(default)]
-    pub strategy: Option<IssueStrategy>,
-    #[serde(default)]
-    pub workflow_branch: Option<WorkflowBranch>,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub sections: IssueSections,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
