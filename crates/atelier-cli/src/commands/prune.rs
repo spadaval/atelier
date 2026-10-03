@@ -729,7 +729,7 @@ fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummar
                 }
             }
             if recovery.is_empty() {
-                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun atelier prune.", display_state_path(&candidate.path));
+                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun atelier prune.", display_git_path(&candidate.path));
             }
             let recovery_dir = staged.keep();
             bail!("prune rollback failed: {}. Record backups remain in {}. Next: restore these paths before any tracker command.", recovery.join("; "), recovery_dir.display());
@@ -1320,7 +1320,7 @@ fn print_canonical_candidate(candidate: &CanonicalCandidate, summary: &Canonical
             candidate.id,
             candidate.status,
             candidate.latest_at.date_naive(),
-            display_state_path(&candidate.path),
+            display_git_path(&candidate.path),
             reason
         );
         return;
@@ -1334,7 +1334,7 @@ fn print_canonical_candidate(candidate: &CanonicalCandidate, summary: &Canonical
         candidate.id,
         candidate.status,
         candidate.latest_at.date_naive(),
-        display_state_path(&candidate.path)
+        display_git_path(&candidate.path)
     );
     println!(
         "    recover: git log --all -- {}; git show <commit>:{}",
@@ -1350,10 +1350,6 @@ fn print_deferred_classes() {
     println!("Deferred Cleanup Classes");
     println!("------------------------");
     println!("  none");
-}
-
-fn display_state_path(path: &Path) -> String {
-    display_git_path(path)
 }
 
 fn display_git_path(path: &Path) -> String {

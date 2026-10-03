@@ -533,7 +533,7 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
         statuses,
         workflows,
     };
-    validate_policy(&policy, display_path)?;
+    validate_workflows(&policy, display_path)?;
     Ok(policy)
 }
 
@@ -1295,11 +1295,6 @@ fn validate_required_fields(
             ));
         }
     }
-    Ok(())
-}
-
-fn validate_policy(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
-    validate_workflows(policy, display_path)?;
     Ok(())
 }
 

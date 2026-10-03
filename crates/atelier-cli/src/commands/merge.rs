@@ -1,4 +1,5 @@
 //! Gated fast-forward integration. Creates no commits or tracker records.
+use crate::commands::git::text;
 use anyhow::{bail, Context, Result};
 use atelier_app::{
     base_policy, committed_snapshot, git_freshness as git, review_gate,
@@ -6,11 +7,6 @@ use atelier_app::{
 };
 use std::path::{Path, PathBuf};
 
-fn text(repo: &Path, args: &[&str]) -> Result<String> {
-    Ok(String::from_utf8(git::git_output(repo, args)?)?
-        .trim()
-        .into())
-}
 fn clean(repo: &Path) -> Result<()> {
     let dirty = text(repo, &["status", "--porcelain", "--untracked-files=all"])?;
     if !dirty.is_empty() {
