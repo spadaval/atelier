@@ -109,20 +109,38 @@ pub(crate) fn ordered_path_map<T: Send>(
     if paths.len() <= 64 {
         return paths.iter().map(|path| read(path)).collect();
     }
-    let threads = std::thread::available_parallelism().map_or(1, usize::from);
-    let chunk_size = paths.len().div_ceil(threads).max(64);
-    std::thread::scope(|scope| {
-        let workers = paths
-            .chunks(chunk_size)
-            .map(|chunk| {
-                scope.spawn(move || chunk.iter().map(|path| read(path)).collect::<Vec<_>>())
+    let available = std::thread::available_parallelism().map_or(1, usize::from);
+    let chunk_size = paths.len().div_ceil(available).max(64);
+    let worker_count = paths.len().div_ceil(chunk_size);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut indexed = std::thread::scope(|scope| {
+        let workers = (0..worker_count)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut results = Vec::new();
+                    loop {
+                        let start = next.fetch_add(16, std::sync::atomic::Ordering::Relaxed);
+                        if start >= paths.len() {
+                            break;
+                        }
+                        results.extend(
+                            paths[start..(start + 16).min(paths.len())]
+                                .iter()
+                                .enumerate()
+                                .map(|(offset, path)| (start + offset, read(path))),
+                        );
+                    }
+                    results
+                })
             })
             .collect::<Vec<_>>();
         workers
             .into_iter()
             .flat_map(|worker| worker.join().expect("record parser thread panicked"))
-            .collect::<Result<Vec<_>>>()
-    })
+            .collect::<Vec<_>>()
+    });
+    indexed.sort_unstable_by_key(|(position, _)| *position);
+    indexed.into_iter().map(|(_, result)| result).collect()
 }
 
 enum ParsedRecord {
@@ -1033,24 +1051,38 @@ mod tests {
             })
             .collect::<BTreeMap<_, _>>();
         let paths = bytes.keys().cloned().collect::<Vec<_>>();
-        let threads = std::sync::Mutex::new(BTreeSet::new());
+        let caller = std::thread::current().id();
+        let calls = std::sync::Mutex::new(BTreeMap::new());
         let (files, changed) = read_record_paths(dir.path(), paths.clone(), &|path| {
-            threads
-                .lock()
-                .unwrap()
-                .insert(format!("{:?}", std::thread::current().id()));
+            assert_ne!(std::thread::current().id(), caller);
+            *calls.lock().unwrap().entry(path.to_path_buf()).or_insert(0) += 1;
             Ok((true, Some(bytes[path].clone())))
         })
         .unwrap();
         assert!(changed.is_empty() && files.errors.is_empty());
         assert_eq!(files.issues.len(), paths.len());
-        assert_eq!(files.issues[0].issue.id, "atelier-0000");
-        assert_eq!(files.issues[129].issue.id, "atelier-0129");
+        assert_eq!(
+            files
+                .issues
+                .iter()
+                .map(|record| &record.issue.id)
+                .collect::<Vec<_>>(),
+            bytes
+                .keys()
+                .map(|path| path.file_stem().unwrap().to_str().unwrap())
+                .collect::<Vec<_>>()
+        );
+        let expected_calls = paths
+            .iter()
+            .cloned()
+            .map(|path| (path, 1))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(calls.into_inner().unwrap(), expected_calls);
         assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
-        if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
-            assert!(threads.into_inner().unwrap().len() > 1);
-        }
+        let calls = std::sync::Mutex::new(BTreeMap::new());
         let error = read_record_paths(dir.path(), paths.clone(), &|path| {
+            assert_ne!(std::thread::current().id(), caller);
+            *calls.lock().unwrap().entry(path.to_path_buf()).or_insert(0) += 1;
             if path == paths[64] {
                 bail!("first lexical raw fault");
             }
@@ -1064,6 +1096,8 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(error.to_string(), "first lexical raw fault");
+        // Returning an error still completes every scoped callback exactly once.
+        assert_eq!(calls.into_inner().unwrap(), expected_calls);
     }
 
     #[test]
