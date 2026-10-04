@@ -336,7 +336,10 @@ mod tests {
         assert_eq!(current_branch(&linked).unwrap().as_deref(), Some("linked"));
         assert_eq!(git_freshness::head_commit(&linked).unwrap(), base);
         let whitespace_branch = "task/unicode\u{3000}";
-        git(repo.path(), &["branch", whitespace_branch]);
+        git(
+            repo.path(),
+            &["branch", whitespace_branch, "refs/heads/task/source"],
+        );
         git(
             repo.path(),
             &[
