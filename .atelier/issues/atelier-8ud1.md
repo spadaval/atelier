@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-04T11:51:04.611509407+00:00"
+status: "done"
 title: "Remove the fixed latency budget and simplify performance scaffolding"
-updated_at: "2026-10-04T11:17:28.411036477+00:00"
+updated_at: "2026-10-04T11:51:04.611509407+00:00"
 ---
 
 ## Goal
@@ -80,3 +81,8 @@ The human withdrew the fixed performance target on 2026-10-04 and requested remo
   The subsequent source-only duplicate RecordIndex hypothesis is NO-GO: LAND and MERGE each build one working index, and the separate base and final fences do not build another. Report /tmp/atelier-typed-record-duplicate-feasibility/report.json (SHA256 1d1ebb7e38cfcdf45f12b865e294f9096d98c71530e06fb698676f88f9ddbe8a) and eight accepted-source objects were checked by root. Selected historical issue parsing may repeat, but no material current cost or useful whole-command gain was established; there is no prototype or runtime claim.
 
   Retained code remains crates tree 494c9dba at 19,917 physical non-test Rust lines. S4 and finding 95bu remain open, validation xz11 remains blocked, and strict FAIL evidence bdy0 is preserved. Final acceptance, master merge and stable CLI installation remain pending. Master and installed CLI are unchanged; no remote push.
+- 2026-10-04 [result] Completed the human-directed cleanup at0f18637c; receipt atelier-hyuv pins the final code and aggregate proof. Removed the fixed latency gate, speculative caches, background history work, parser/raw-check workers, batched ref capture and conditional prune planning. Kept correctness fences and simple bulk prune reads. Production Rust decreased by784 lines to19133. All580 default,584 failure-hook and219 Git2.30 focused tests pass; independent policy, Git and guard reviews pass. The release report preserves44 command shapes and132 samples without a time limit. LAND/MERGE checks measure roughly0.8s on the1000-issue fixture; this tradeoff remains visible. Whole rebuild acceptance stays open.
+
+## Close Reason
+
+Budget removal and simplification complete under revised S4; fresh functional proof atelier-hyuv and independent reviews pass.
