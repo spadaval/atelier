@@ -59,29 +59,21 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
 }
 
 /// Raw errors and mismatches remain separate from parser errors until the
-/// caller has completed its index checks. Bytes are consumed only in workers.
+/// caller has completed its index checks. Parsing consumes those same bytes.
 pub(crate) fn read_record_paths(
     state_dir: &Path,
     paths: Vec<PathBuf>,
-    read: &(impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)> + Sync),
+    read: &impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)>,
 ) -> Result<(RecordFiles, Vec<PathBuf>)> {
     let mut files = RecordFiles::default();
     let mut changed = Vec::new();
-    // Parsing dominates command latency (YAML front matter), and files are
-    // independent, so parse them on scoped threads and keep path order.
-    let parsed = ordered_path_map(&paths, &|relative| {
-        read(relative).map(|(matches, bytes)| {
-            (
-                matches,
-                if matches {
-                    read_record_file(state_dir, relative, bytes)
-                } else {
-                    Ok(None)
-                },
-            )
-        })
-    })?;
-    for (relative, (matches, result)) in paths.into_iter().zip(parsed) {
+    for relative in paths {
+        let (matches, bytes) = read(&relative)?;
+        let result = if matches {
+            read_record_file(state_dir, &relative, bytes)
+        } else {
+            Ok(None)
+        };
         if !matches {
             changed.push(relative.clone());
         }
@@ -100,29 +92,6 @@ pub(crate) fn read_record_paths(
         }
     }
     Ok((files, changed))
-}
-
-pub(crate) fn ordered_path_map<T: Send>(
-    paths: &[PathBuf],
-    read: &(impl Fn(&Path) -> Result<T> + Sync),
-) -> Result<Vec<T>> {
-    if paths.len() <= 64 {
-        return paths.iter().map(|path| read(path)).collect();
-    }
-    let threads = std::thread::available_parallelism().map_or(1, usize::from);
-    let chunk_size = paths.len().div_ceil(threads).max(64);
-    std::thread::scope(|scope| {
-        let workers = paths
-            .chunks(chunk_size)
-            .map(|chunk| {
-                scope.spawn(move || chunk.iter().map(|path| read(path)).collect::<Vec<_>>())
-            })
-            .collect::<Vec<_>>();
-        workers
-            .into_iter()
-            .flat_map(|worker| worker.join().expect("record parser thread panicked"))
-            .collect::<Result<Vec<_>>>()
-    })
 }
 
 enum ParsedRecord {
@@ -620,18 +589,14 @@ impl RecordIndex {
     }
 
     fn order(&mut self) {
-        let mut records = self.issues.iter().collect::<Vec<_>>();
-        records.sort_by(|(left, left_record), (right, right_record)| {
-            right_record
+        let mut ids = self.issues.keys().cloned().collect::<Vec<_>>();
+        ids.sort_by(|left, right| {
+            self.issues[right]
                 .issue
                 .updated_at
-                .cmp(&left_record.issue.updated_at)
+                .cmp(&self.issues[left].issue.updated_at)
                 .then_with(|| left.cmp(right))
         });
-        let ids = records
-            .into_iter()
-            .map(|(id, _)| id.clone())
-            .collect::<Vec<_>>();
         let rank = ids
             .iter()
             .enumerate()
@@ -1019,7 +984,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn ordered_workers_preserve_supplied_bytes_and_raw_error_priority_across_chunks() {
+    fn sequential_reads_preserve_supplied_bytes_and_raw_error_priority() {
         let dir = tempdir().unwrap();
         let bytes = (0..130)
             .map(|number| {
@@ -1033,12 +998,7 @@ mod tests {
             })
             .collect::<BTreeMap<_, _>>();
         let paths = bytes.keys().cloned().collect::<Vec<_>>();
-        let threads = std::sync::Mutex::new(BTreeSet::new());
         let (files, changed) = read_record_paths(dir.path(), paths.clone(), &|path| {
-            threads
-                .lock()
-                .unwrap()
-                .insert(format!("{:?}", std::thread::current().id()));
             Ok((true, Some(bytes[path].clone())))
         })
         .unwrap();
@@ -1047,9 +1007,6 @@ mod tests {
         assert_eq!(files.issues[0].issue.id, "atelier-0000");
         assert_eq!(files.issues[129].issue.id, "atelier-0129");
         assert_eq!(files.into_index().unwrap().issues().count(), paths.len());
-        if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
-            assert!(threads.into_inner().unwrap().len() > 1);
-        }
         let error = read_record_paths(dir.path(), paths.clone(), &|path| {
             if path == paths[64] {
                 bail!("first lexical raw fault");
@@ -1067,7 +1024,7 @@ mod tests {
     }
 
     #[test]
-    fn parser_workers_consume_supplied_bytes_without_a_second_read() {
+    fn parsing_consumes_supplied_bytes_without_a_second_read() {
         let dir = tempdir().unwrap();
         let relative = PathBuf::from("issues/atelier-byte.md");
         fs::create_dir(dir.path().join("issues")).unwrap();

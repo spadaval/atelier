@@ -325,45 +325,6 @@ fn evaluate_scope(
                 .filter_map(|id| index.get_issue(id)?.parent_id),
         );
     }
-    if !historical {
-        let mut ranges = Vec::new();
-        if !global {
-            ranges.push((base_commit.to_owned(), "HEAD".into()));
-        }
-        for id in claimed.iter().filter(|id| {
-            index
-                .get_issue(id)
-                .is_some_and(|issue| issue.status != "superseded")
-        }) {
-            for link in index.list_record_links("issue", id)? {
-                if link.relation_type == "validates" {
-                    let evidence_id = if link.source_kind == "evidence" {
-                        &link.source_id
-                    } else {
-                        &link.target_id
-                    };
-                    if let Some(record) = index.evidence(evidence_id) {
-                        if record.data.result == atelier_core::EvidenceResult::Pass {
-                            ranges.push((record.data.commit.clone(), "HEAD".into()));
-                        }
-                    }
-                }
-            }
-        }
-        ranges.extend(
-            index
-                .reviews()
-                .filter(|record| {
-                    approval_targets.contains(&record.target)
-                        && matches!(
-                            record.event,
-                            ReviewEvent::Approval | ReviewEvent::TrivialExemption
-                        )
-                })
-                .map(|record| (record.commit.clone(), "HEAD".into())),
-        );
-        let _ = read.prefetch_ranges(ranges);
-    }
     let authors = if global {
         BTreeSet::new()
     } else {

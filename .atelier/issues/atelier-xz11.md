@@ -22,7 +22,7 @@ Independently check the strategy's S1–S8 acceptance claims against the final i
 
 ## Done when
 
-Each criterion has an explicit result and concrete evidence: gate and clean merge scenarios, freshness tests, a release benchmark, the command list and Rust source count, a dogfooded session, typed record lint and fixtures, and this tail tracker. Any failure or blocker is reported before a done claim.
+Each criterion has an explicit result and concrete evidence: gate and clean merge scenarios, freshness tests, release timing observations without a fixed latency budget, the command list and Rust source count, a dogfooded session, typed record lint and fixtures, and this tail tracker. Any failure or blocker is reported before a done claim.
 
 ## Scope
 

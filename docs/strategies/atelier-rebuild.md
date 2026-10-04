@@ -1,7 +1,7 @@
 ---
 status: accepted
 mission: atelier-kgcr
-last_changed: "2026-10-01: execution state moved to native records"
+last_changed: "2026-10-04: performance target removed by human direction"
 ---
 
 # Why
@@ -38,8 +38,10 @@ most of the operational cost even before the new guards land.
 - S3: Evidence records the commit it ran against and an explicit result.
   Evidence older than the item's last relevant change does not satisfy a
   check, and a newer `fail` blocks closing. Shown by tests.
-- S4: No SQLite cache. Read commands complete in under 100 ms (release build)
-  on a 1,000-record fixture. Shown by a benchmark.
+- S4: No SQLite cache; records are parsed on every command. Keep read-command
+  timings visible through a benchmark. Address observed performance issues
+  and regressions according to practical impact while preserving
+  implementation simplicity.
 - S5: Forgejo, review rooms, transition actions, the SQLite cache, activity
   files, Beads import, export, telemetry, `doctor`, `man`, and the hidden
   `branch` commands are gone. Non-test Rust is under 20k lines. Shown by

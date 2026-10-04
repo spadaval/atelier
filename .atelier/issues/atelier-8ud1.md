@@ -14,25 +14,25 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
-title: "Meet the expanded rebuild read latency contract"
-updated_at: "2026-10-03T22:04:44.059740765+00:00"
+title: "Remove the fixed latency budget and simplify performance scaffolding"
+updated_at: "2026-10-04T11:17:28.411036477+00:00"
 ---
 
 ## Goal
 
-Make every ordinary read and supported guard/audit read meet the rebuild S4 latency budget without weakening correctness guards.
+Remove the fixed command latency budget and micro-optimization scaffolding added to pursue it. Prefer straightforward code while continuing to measure commands and investigate practical performance issues and regressions.
 
 ## Done when
 
-A quiet production benchmark on the independent 1000-issue/200-evidence mixed fixture and successful owner/review fixture shows each read under 100 ms, including epic dashboard, prime, landing, merge checks and prune dry run. Fresh full suites retain evidence freshness, hidden Git byte/mode checks, append-only review, policy and atomic prune behavior. All fixes are independently reviewed; physical non-test Rust remains below 20000 lines.
+The strategy and benchmark have no concrete time budget or slow-sample acceptance failure. The timing report still covers ordinary queries and guard commands, and functional command failures remain visible. Retained threshold-driven caches, speculative prefetch and concurrency are removed; correctness repairs and genuine simplifications remain. Fresh regression checks and independent review cover the final simplified implementation.
 
 ## Scope
 
-Command-local Git query reuse and batching, scoped session projections, and prune read planning. No persistent cache or weaker mutation/freshness fences.
+Current performance acceptance policy, command timing tools, and retained performance scaffolding in the rebuild. Preserve evidence freshness, hidden Git bytes/modes/index checks, original-object history, append-only reviews, policy trust, final state fences and atomic prune behavior. Preserve historical failed measurements as observations under the superseded criterion.
 
 ## Context
 
-Independent acceptance V1 at b7aee82cb18837533ebc8ab2c1ff15041e2f5f66: /tmp/atelier-independent-acceptance.md and expanded benchmark logs. Existing six-read benchmark omitted slow dashboards and guards. Keep all earlier failed evidence.
+The human withdrew the fixed performance target on 2026-10-04 and requested removal of micro-optimizations added to hit it. The strategy owns the revised S4 criterion. Earlier notes and receipts below retain their historical results; they do not impose the retired budget on current work.
 
 ## Notes
 

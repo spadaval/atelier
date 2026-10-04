@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """Time Atelier read commands on a generated 1,000-issue repository.
 
-Proves strategy criterion S4: read commands finish in under 100 ms with a
-release build and no cache. Build first with `cargo build --release`.
+Reports read-command timings with a release build and no cache. Build first
+with `cargo build --release`. Use observations to investigate issues and
+compare regressions by their practical impact, preserving simplicity.
 
     scripts/bench_read_commands.py [--binary target/release/atelier] [--runs 10]
+                                 [--report timings.json]
 
 The fixture has missions advancing epics, epics with children, blocker
 chains, mixed statuses, labels, and evidence attached to done work. Records
 are written as Markdown directly, then `atelier check` must pass before any
-timing starts. Exits non-zero if any command's median or max exceeds the
-budget.
+timing starts. Prints median and maximum timings; --report also saves raw
+samples as JSON for comparison. Unexpected command exits fail the run;
+elapsed time alone does not.
 """
 
 import argparse
+import json
 import os
 import random
 import re
@@ -26,7 +30,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-BUDGET_MS = 100.0
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -248,6 +251,7 @@ def main():
     parser.add_argument("--issues", type=int, default=1000)
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--keep", action="store_true", help="keep the fixture repo")
+    parser.add_argument("--report", type=Path, help="write timings and raw samples as JSON")
     options = parser.parse_args()
     if options.runs < 1 or options.issues < 220 or (options.issues - 160) % 60:
         parser.error("runs must be positive; issues must be 160 + a positive multiple of 60")
@@ -325,7 +329,7 @@ def main():
         print(f"CPU cores available: {available} of {os.cpu_count()}\n")
         print(f"| Command | median ms | max ms |")
         print(f"| --- | ---: | ---: |")
-        over = []
+        results = []
         for fixture, group, args, expected in (
             [(repo, "query", args, 0) for args in commands]
             + [(guard_repo, "guard", args, 0) for args in guard_commands]
@@ -337,10 +341,27 @@ def main():
             label = " ".join("<epic>" if a == epic else "<mission>" if a == mission else a
                              for a in args)
             print(f"| {group}: `atelier {label}` | {median:.1f} | {max(samples):.1f} |")
-            if max(samples) >= BUDGET_MS:
-                over.append(f"{group}: {label}")
-        if over:
-            sys.exit(f"\nMedian or max over the {BUDGET_MS:.0f} ms budget: {', '.join(over)}")
+            results.append({
+                "group": group,
+                "args": args,
+                "expected_exit": expected,
+                "median_ms": median,
+                "max_ms": max(samples),
+                "samples_ms": samples,
+            })
+        if options.report:
+            options.report.write_text(json.dumps({
+                "binary": str(binary),
+                "issues": count,
+                "evidence": evidence,
+                "guard_evidence": evidence + 1,
+                "runs": options.runs,
+                "warmup_runs": 1,
+                "cpu_cores_available": available,
+                "cpu_cores_total": os.cpu_count(),
+                "results": results,
+            }, indent=2) + "\n")
+            print(f"\nTiming report: {options.report}")
     finally:
         if options.keep:
             print(f"\nKept fixture at {repo}")

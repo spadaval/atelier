@@ -48,13 +48,7 @@ fn prime_text() -> Result<String> {
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    // A failed capture leaves the original queries at their original error points.
-    let captured = git::CheckoutRefs::capture(repo).ok();
-    let branch = match &captured {
-        Some(captured) => captured.branch.as_ref().map(|name| name.trim_end().into()),
-        None => git::current_branch(repo)?,
-    }
-    .unwrap_or_else(|| "detached HEAD".into());
+    let branch = git::current_branch(repo)?.unwrap_or_else(|| "detached HEAD".into());
     let source = base_policy::working(repo)?;
     index.validate_policy(&source.policy, repo)?;
     let owner = owner(&index, &branch, None)?
@@ -68,57 +62,9 @@ fn prime_text() -> Result<String> {
             None => source.policy.status_category(&issue.status) == Some("active"),
         }),
     )?;
-    let head = match &captured {
-        Some(captured) => captured.head.clone(),
-        None => git_freshness::head_commit(repo)?,
-    };
-    let evidence_records = if let Some((_, scope)) = &owner {
-        let mut evidence_records = index.evidence_records();
-        evidence_records.sort_by_key(|record| {
-            std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
-        });
-        evidence_records
-            .into_iter()
-            .filter(|evidence| {
-                index
-                    .list_record_links("evidence", &evidence.header.id)
-                    .is_ok_and(|links| {
-                        links.iter().any(|link| {
-                            scope.contains(&link.source_id) || scope.contains(&link.target_id)
-                        })
-                    })
-            })
-            .take(8)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let (dirty, mut proof) = if evidence_records.is_empty() {
-        let dirty = git_freshness::working_paths(repo)?;
-        let proof = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &dirty);
-        (dirty, proof)
-    } else {
-        let status = git_freshness::working_status_paths(repo)?;
-        let (dirty, proof) = std::thread::scope(|scope| {
-            let proof = scope.spawn(|| {
-                let mut proof =
-                    git_freshness::ReadContext::from_head(repo, head.clone()).defer_object_stderr();
-                let _ = proof.prefetch_ranges(
-                    evidence_records
-                        .iter()
-                        .map(|record| (record.data.commit.clone(), head.clone())),
-                );
-                proof
-            });
-            let dirty = git_freshness::working_paths_after_status(repo, status);
-            (dirty, proof.join())
-        });
-        let dirty = dirty?;
-        let proof = proof
-            .expect("prime proof thread panicked")
-            .with_working_paths(&dirty);
-        (dirty, proof)
-    };
+    let head = git_freshness::head_commit(repo)?;
+    let dirty = git_freshness::working_paths(repo)?;
+    let mut proof = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &dirty);
     let mut lines = vec![
         format!("Atelier session: {}", repo.display()),
         format!("Branch: {branch} @ {}", &head[..8]),
@@ -175,7 +121,23 @@ fn prime_text() -> Result<String> {
                 review.header.id, review.target, review.event, review.summary
             ));
         }
-        proof.publish_object_stderr();
+        let mut evidence_records = index.evidence_records();
+        evidence_records.sort_by_key(|record| {
+            std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
+        });
+        let evidence_records = evidence_records
+            .into_iter()
+            .filter(|evidence| {
+                index
+                    .list_record_links("evidence", &evidence.header.id)
+                    .is_ok_and(|links| {
+                        links.iter().any(|link| {
+                            scope.contains(&link.source_id) || scope.contains(&link.target_id)
+                        })
+                    })
+            })
+            .take(8)
+            .collect::<Vec<_>>();
         for evidence in evidence_records {
             let targets = index
                 .list_record_links("evidence", &evidence.header.id)?
@@ -213,13 +175,12 @@ fn prime_text() -> Result<String> {
         }
     }
     lines.extend(
-        git::branch_lines_captured(
+        git::branch_lines_for(
             repo,
             &layout.canonical_dir(),
             &index,
             &branch,
             &source.policy.branch_policy.base_branch,
-            captured.as_ref(),
         )?
         .into_iter()
         .take(8),
@@ -250,36 +211,19 @@ fn check_traceability(
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let (captured, snapshot, initial_paths, index, history) = {
+    let (head, branch, snapshot, initial_paths, index) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        let captured = git::CheckoutRefs::capture(repo)?;
-        let snapshot =
-            atelier_app::committed_snapshot::CommittedSnapshot::new(repo, &captured.head)?;
-        let uncommitted = |error| {
+        let head = git_freshness::head_commit(repo)?;
+        let branch = git::checkout_branch(repo)?.unwrap_or_default();
+        let snapshot = atelier_app::committed_snapshot::CommittedSnapshot::new(&head)?;
+        let (files, paths) = snapshot.read_record_files(repo, false).map_err(|error| {
             anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry.")
-        };
-        let paths = git_freshness::working_status_paths(repo).map_err(uncommitted)?;
-        // History consumes pinned objects after filters; its errors remain last.
-        let (records, history) = std::thread::scope(|scope| {
-            let history = scope.spawn(|| {
-                let mut read = git_freshness::ReadContext::from_head(repo, captured.head.clone())
-                    .defer_object_stderr();
-                let checked = review_gate::append_only_history(&mut read);
-                (read, checked)
-            });
-            let records = snapshot.read_record_index_after_status(repo, false, paths);
-            (records, history.join())
-        });
-        let (index, paths) = records.map_err(uncommitted)?;
-        (captured, snapshot, paths, index?, history)
+        })?;
+        (head, branch, snapshot, paths, files.into_index()?)
     };
-    let head = &captured.head;
-    let (read, history) = history.expect("review history thread panicked");
-    let mut read = read.with_working_paths(&initial_paths);
-    read.publish_object_stderr();
-    history?;
-    let branch = captured.branch.clone().unwrap_or_default();
+    let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
+    review_gate::append_only_history(&mut read)?;
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; repair it before landing")?;
     let id = owner(&index, &branch, requested)?;
@@ -292,7 +236,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
                 .as_ref()
                 .map(|owner| {
                     let reference = format!("refs/heads/{}", owner.branch_base);
-                    Ok((reference.clone(), captured.resolve(&mut read, &reference)?))
+                    Ok((reference.clone(), git::resolve(repo, &reference)?))
                 })
                 .transpose()
         })
@@ -409,16 +353,13 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&layout.canonical_dir())?;
     let final_paths = check_records(repo, &snapshot)?;
     check_traceability(repo, &index, &source.policy)?;
-    let final_refs = git::CheckoutRefs::capture(repo)?;
     if base_pin.as_ref().is_some_and(|(reference, commit)| {
-        final_refs
-            .resolve(&mut read, reference)
-            .map_or(true, |current| current != *commit)
+        git::resolve(repo, reference).map_or(true, |current| current != *commit)
     }) {
         bail!("land_base_changed: the integration base moved during checks; retry with current policy and proof");
     }
-    if final_refs.head != *head
-        || final_refs.branch.unwrap_or_default() != branch
+    if git_freshness::head_commit(repo)? != head
+        || git::checkout_branch(repo)?.unwrap_or_default() != branch
         || final_paths != initial_paths
     {
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");

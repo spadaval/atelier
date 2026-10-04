@@ -32,45 +32,44 @@ pub fn from_captured(read: &mut git::ReadContext<'_>, commit: &str) -> Result<Po
 }
 fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Result<PolicySource> {
     let tip = read.commit_id(&format!("{tip}^{{commit}}"))?;
-    let mut commits = vec![tip.clone()];
-    let mut history_loaded = false;
     let mut diagnostics = Vec::new();
-    while let Some(commit) = commits.pop() {
+    match read
+        .blob(&tip, Path::new(WORKFLOW_POLICY_PATH))
+        .and_then(|text| atelier_workflow::parse_policy_text(&text, WORKFLOW_POLICY_PATH))
+    {
+        Ok(policy) => {
+            return Ok(PolicySource {
+                policy,
+                commit: tip,
+                diagnostics,
+            })
+        }
+        Err(error) => diagnostics.push(format!("Invalid policy at {tip}: {error:#}")),
+    }
+    let history = String::from_utf8(git::git_output(
+        read.repo,
+        &[
+            "rev-list",
+            "--first-parent",
+            &tip,
+            "--",
+            WORKFLOW_POLICY_PATH,
+        ],
+    )?)?;
+    for commit in history.lines().filter(|commit| *commit != tip) {
         let loaded = read
-            .blob(&commit, Path::new(WORKFLOW_POLICY_PATH))
+            .blob(commit, Path::new(WORKFLOW_POLICY_PATH))
             .and_then(|text| atelier_workflow::parse_policy_text(&text, WORKFLOW_POLICY_PATH));
         match loaded {
             Ok(policy) => {
-                if !diagnostics.is_empty() {
-                    diagnostics.push(format!("Using last valid policy from {commit}; fix .atelier/workflow.yaml before merging."));
-                }
+                diagnostics.push(format!("Using last valid policy from {commit}; fix .atelier/workflow.yaml before merging."));
                 return Ok(PolicySource {
                     policy,
-                    commit,
+                    commit: commit.to_owned(),
                     diagnostics,
                 });
             }
             Err(error) => diagnostics.push(format!("Invalid policy at {commit}: {error:#}")),
-        }
-        if !history_loaded {
-            history_loaded = true;
-            let history = String::from_utf8(git::git_output(
-                read.repo,
-                &[
-                    "rev-list",
-                    "--first-parent",
-                    &tip,
-                    "--",
-                    WORKFLOW_POLICY_PATH,
-                ],
-            )?)?;
-            commits.extend(
-                history
-                    .lines()
-                    .filter(|commit| *commit != tip)
-                    .rev()
-                    .map(str::to_owned),
-            );
         }
     }
     bail!("No valid policy on {reference}: {}", diagnostics.join("\n"))
@@ -116,6 +115,43 @@ mod tests {
         git::git_output(repo, &["add", "."]).unwrap();
         git::git_output(repo, &["commit", "-qm", message]).unwrap();
         git::head_commit(repo).unwrap()
+    }
+    #[test]
+    fn valid_tip_policy_does_not_require_available_older_ancestry() {
+        for format in ["sha1", "sha256"] {
+            let repo = tempfile::tempdir().unwrap();
+            for args in [
+                vec!["init", "-qb", "main", &format!("--object-format={format}")],
+                vec!["config", "user.name", "Author"],
+                vec!["config", "user.email", "author@example.test"],
+            ] {
+                git::git_output(repo.path(), &args).unwrap();
+            }
+            let valid = atelier_workflow::STARTER_POLICY_YAML;
+            let root = commit(repo.path(), valid, "valid root");
+            let tip = commit(repo.path(), &format!("{valid}\n"), "valid tip");
+            fs::remove_file(
+                repo.path()
+                    .join(".git/objects")
+                    .join(&root[..2])
+                    .join(&root[2..]),
+            )
+            .unwrap();
+            assert!(git::git_output(
+                repo.path(),
+                &[
+                    "rev-list",
+                    "--first-parent",
+                    &tip,
+                    "--",
+                    WORKFLOW_POLICY_PATH
+                ]
+            )
+            .is_err());
+            let source = from_captured(&mut git::ReadContext::new(repo.path()), &tip).unwrap();
+            assert_eq!(source.commit, tip);
+            assert!(source.diagnostics.is_empty());
+        }
     }
     #[test]
     fn captured_policy_preserves_first_parent_fallback_peeling_and_object_kind() {

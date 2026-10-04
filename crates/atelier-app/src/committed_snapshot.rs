@@ -5,20 +5,15 @@ use atelier_records::is_local_atelier_path;
 use sha1_checked::{Digest as Sha1Digest, Sha1};
 use sha2::{Digest as Sha2Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
 
 type Entries = BTreeMap<PathBuf, (String, String)>;
 
-fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
-    let args = if canonical {
-        vec!["ls-tree", "-rz", commit, "--", ".atelier"]
-    } else {
-        vec!["ls-tree", "-rz", commit]
-    };
-    let tree = git_output(repo, &args)?;
+fn entries(repo: &Path, commit: &str) -> Result<Entries> {
+    let tree = git_output(repo, &["ls-tree", "-rz", commit])?;
     let mut entries = BTreeMap::new();
     for entry in tree
         .split(|byte| *byte == 0)
@@ -26,9 +21,6 @@ fn entries(repo: &Path, commit: &str, canonical: bool) -> Result<Entries> {
     {
         let text = std::str::from_utf8(entry)?;
         let (metadata, path) = text.split_once('\t').context("invalid Git tree entry")?;
-        if canonical && is_local_atelier_path(Path::new(path).strip_prefix(".atelier")?) {
-            continue;
-        }
         let fields = metadata.split_whitespace().collect::<Vec<_>>();
         if fields.len() != 3 {
             bail!("invalid Git tree metadata");
@@ -56,15 +48,13 @@ fn collect(root: &Path, dir: &Path, paths: &mut BTreeSet<PathBuf>) -> Result<()>
 }
 
 fn modified(repo: &Path, paths: BTreeSet<PathBuf>, entries: &Entries) -> Result<Vec<PathBuf>> {
-    let paths = paths.into_iter().collect::<Vec<_>>();
-    let changed = crate::record_index::ordered_path_map(&paths, &|path| {
-        matching_bytes(repo, path, entries).map(|bytes| bytes.is_none())
-    })?;
-    Ok(paths
-        .into_iter()
-        .zip(changed)
-        .filter_map(|(path, changed)| changed.then_some(path))
-        .collect())
+    let mut changed = Vec::new();
+    for path in paths {
+        if matching_bytes(repo, &path, entries)?.is_none() {
+            changed.push(path);
+        }
+    }
+    Ok(changed)
 }
 fn matching_bytes(repo: &Path, path: &Path, entries: &Entries) -> Result<Option<Vec<u8>>> {
     let Some((mode, hash)) = entries.get(path) else {
@@ -129,61 +119,36 @@ fn canonical(path: &Path) -> bool {
         .is_ok_and(|path| !is_local_atelier_path(path))
 }
 
-/// Immutable entries from one full captured OID. Filesystem checks remain fresh.
+/// A full pinned Git object ID. Each fence reads its tree and working state afresh.
 pub struct CommittedSnapshot {
-    entries: Entries,
+    commit: String,
 }
 impl CommittedSnapshot {
-    pub fn new(repo: &Path, commit: &str) -> Result<Self> {
+    pub fn new(commit: &str) -> Result<Self> {
         if !matches!(commit.len(), 40 | 64) || !commit.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
             bail!("snapshot requires a full captured Git object ID");
         }
         Ok(Self {
-            entries: entries(repo, commit, false)?,
+            commit: commit.into(),
         })
     }
-    /// Pure index construction overlaps the native index check after all raw reads.
-    pub fn read_record_index(
+    /// Verify fresh canonical bytes and index state before consuming parser errors.
+    pub fn read_record_files(
         &self,
         repo: &Path,
         clean: bool,
-    ) -> Result<(Result<crate::record_index::RecordIndex>, Vec<PathBuf>)> {
-        self.read_record_index_after_status(
-            repo,
-            clean,
-            crate::git_freshness::working_status_paths(repo)?,
-        )
-    }
-    /// Continue initial proof after full native status and its filters complete.
-    pub fn read_record_index_after_status(
-        &self,
-        repo: &Path,
-        clean: bool,
-        paths: Vec<PathBuf>,
-    ) -> Result<(Result<crate::record_index::RecordIndex>, Vec<PathBuf>)> {
-        self.read_and_finish(
-            repo,
-            clean,
-            paths,
-            crate::record_index::RecordFiles::into_index,
-        )
-    }
-    fn read_and_finish<T: Send>(
-        &self,
-        repo: &Path,
-        clean: bool,
-        mut paths: Vec<PathBuf>,
-        finish: impl FnOnce(crate::record_index::RecordFiles) -> T + Send,
-    ) -> Result<(T, Vec<PathBuf>)> {
-        let records = record_paths(repo, &self.entries)?;
+    ) -> Result<(crate::record_index::RecordFiles, Vec<PathBuf>)> {
+        let entries = entries(repo, &self.commit)?;
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
+        let records = record_paths(repo, &entries)?;
         let relative = records
             .into_iter()
             .map(|path| path.strip_prefix(".atelier").map(Path::to_path_buf))
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let (files, changed) =
             crate::record_index::read_record_paths(&repo.join(".atelier"), relative, &|path| {
-                matching_bytes(repo, &Path::new(".atelier").join(path), &self.entries)
+                matching_bytes(repo, &Path::new(".atelier").join(path), &entries)
                     .map(|bytes| (bytes.is_some(), bytes))
             })?;
         let changed = changed
@@ -192,28 +157,24 @@ impl CommittedSnapshot {
             .collect::<Vec<_>>();
         require_records_match(&changed)?;
         paths.retain(|path| !canonical(path));
-        std::thread::scope(|scope| {
-            let builder = scope.spawn(move || finish(files));
-            let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true);
-            let finished = builder.join();
-            let hidden = hidden?;
-            if clean {
-                require_paths_clean(repo, &paths, hidden)?;
-            } else {
-                paths.extend(hidden);
-            }
-            paths.sort();
-            paths.dedup();
-            Ok((finished.expect("record index thread panicked"), paths))
-        })
+        let hidden = flagged_paths(repo, &entries, |path| !canonical(path), true)?;
+        if clean {
+            require_paths_clean(repo, &paths, hidden)?;
+        } else {
+            paths.extend(hidden);
+        }
+        paths.sort();
+        paths.dedup();
+        Ok((files, paths))
     }
     pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
+        let entries = entries(repo, &self.commit)?;
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
-        verify_records(repo, &self.entries)?;
+        verify_records(repo, &entries)?;
         paths.retain(|path| !canonical(path));
         paths.extend(flagged_paths(
             repo,
-            &self.entries,
+            &entries,
             |path| !canonical(path),
             true,
         )?);
@@ -222,10 +183,11 @@ impl CommittedSnapshot {
         Ok(paths)
     }
     pub fn require_clean(&self, repo: &Path) -> Result<()> {
+        let entries = entries(repo, &self.commit)?;
         let mut paths = crate::git_freshness::working_status_paths(repo)?;
-        verify_records(repo, &self.entries)?;
+        verify_records(repo, &entries)?;
         paths.retain(|path| !canonical(path));
-        let hidden = flagged_paths(repo, &self.entries, |path| !canonical(path), true)?;
+        let hidden = flagged_paths(repo, &entries, |path| !canonical(path), true)?;
         require_paths_clean(repo, &paths, hidden)
     }
 }
@@ -266,12 +228,8 @@ fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> 
 
 /// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
 /// are needed only for flagged paths; Unix executable modes are always checked.
-pub(crate) fn flagged_modified_paths_matching(
-    repo: &Path,
-    commit: &str,
-    include: impl Fn(&Path) -> bool,
-) -> Result<Vec<PathBuf>> {
-    flagged_paths(repo, &entries(repo, commit, false)?, include, false)
+pub(crate) fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
+    flagged_paths(repo, &entries(repo, commit)?, |_| true, false)
 }
 fn flagged_paths(
     repo: &Path,
@@ -280,15 +238,7 @@ fn flagged_paths(
     verify_index: bool,
 ) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "--stage", "-v", "-z"])?;
-    let lookup = if verify_index {
-        entries
-            .iter()
-            .map(|(path, value)| (path.as_path(), value))
-            .collect::<std::collections::HashMap<_, _>>()
-    } else {
-        std::collections::HashMap::new()
-    };
-    let mut indexed = HashSet::new();
+    let mut indexed = BTreeSet::new();
     let mut flagged = BTreeSet::new();
     for entry in output
         .split(|byte| *byte == 0)
@@ -301,7 +251,7 @@ fn flagged_paths(
         let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
         let path = Path::new(path);
         if verify_index && canonical(path) {
-            if !lookup.get(path).is_some_and(|(mode, hash)| {
+            if !entries.get(path).is_some_and(|(mode, hash)| {
                 metadata
                     .split_whitespace()
                     .eq([mode.as_str(), hash.as_str(), "0"])
@@ -365,7 +315,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ordered_raw_workers_report_hash_errors_before_earlier_mismatches() {
+    fn sequential_raw_reads_report_hash_errors_before_earlier_mismatches() {
         for length in [40, 64] {
             let repo = tempfile::tempdir().unwrap();
             let paths = (0..130)
@@ -397,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn fused_initial_proof_checks_union_config_types_and_index_before_parse_errors() {
+    fn initial_proof_checks_union_config_types_and_index_before_parse_errors() {
         for format in ["sha1", "sha256"] {
             for mutation in [
                 "unknown",
@@ -437,7 +387,7 @@ mod tests {
                 git_output(repo.path(), &["add", "."]).unwrap();
                 git_output(repo.path(), &["commit", "-qm", "initial files"]).unwrap();
                 let head = crate::git_freshness::head_commit(repo.path()).unwrap();
-                let snapshot = CommittedSnapshot::new(repo.path(), &head).unwrap();
+                let snapshot = CommittedSnapshot::new(&head).unwrap();
                 fs::write(
                     repo.path().join(".git/info/exclude"),
                     ".atelier/config.toml\n",
@@ -454,9 +404,9 @@ mod tests {
                 assert_eq!(files.errors.len(), 1);
                 let parse_error = files.into_index().unwrap_err().to_string();
                 assert!(parse_error.contains("Invalid record file"));
-                let (index, paths) = snapshot.read_record_index(repo.path(), false).unwrap();
+                let (index, paths) = snapshot.read_record_files(repo.path(), false).unwrap();
                 assert!(paths.is_empty());
-                assert_eq!(index.unwrap_err().to_string(), parse_error);
+                assert_eq!(index.into_index().unwrap_err().to_string(), parse_error);
                 if mutation == "unknown" {
                     fs::write(
                         repo.path().join("unfinished-code"),
@@ -464,11 +414,11 @@ mod tests {
                     )
                     .unwrap();
                     assert_eq!(
-                        snapshot.read_record_index(repo.path(), false).unwrap().1,
+                        snapshot.read_record_files(repo.path(), false).unwrap().1,
                         [PathBuf::from("unfinished-code")]
                     );
                     assert!(snapshot
-                        .read_record_index(repo.path(), true)
+                        .read_record_files(repo.path(), true)
                         .unwrap_err()
                         .to_string()
                         .starts_with("merge_checkout_dirty"));
@@ -536,7 +486,7 @@ mod tests {
                 let error = snapshot.verified_working_paths(repo.path()).unwrap_err();
                 assert_eq!(
                     snapshot
-                        .read_record_index(repo.path(), false)
+                        .read_record_files(repo.path(), false)
                         .unwrap_err()
                         .to_string(),
                     error.to_string()
@@ -552,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn postraw_index_errors_precede_graph_errors_and_cleanup_restores_inner_error() {
+    fn postraw_index_errors_precede_graph_errors_and_cleanup_restores_graph_error() {
         let repo = tempfile::tempdir().unwrap();
         for args in [
             vec!["init", "-q"],
@@ -575,36 +525,37 @@ mod tests {
         git_output(repo.path(), &["add", "."]).unwrap();
         git_output(repo.path(), &["commit", "-qm", "committed graph error"]).unwrap();
         let head = crate::git_freshness::head_commit(repo.path()).unwrap();
-        let snapshot = CommittedSnapshot::new(repo.path(), &head).unwrap();
+        let snapshot = CommittedSnapshot::new(&head).unwrap();
         let expected =
             crate::record_index::RecordIndex::load_structural(&repo.path().join(".atelier"))
                 .unwrap_err()
                 .to_string();
         assert!(expected.contains("atelier-missing"));
-        let inner_error = || {
+        let graph_error = || {
             snapshot
-                .read_record_index(repo.path(), false)
+                .read_record_files(repo.path(), false)
                 .unwrap()
                 .0
+                .into_index()
                 .unwrap_err()
                 .to_string()
         };
-        assert_eq!(inner_error(), expected);
+        assert_eq!(graph_error(), expected);
         fs::write(repo.path().join(record), "staged different bytes").unwrap();
         git_output(repo.path(), &["add", record]).unwrap();
         fs::write(repo.path().join(record), &bytes).unwrap();
-        let error = snapshot.read_record_index(repo.path(), false).unwrap_err();
+        let error = snapshot.read_record_files(repo.path(), false).unwrap_err();
         assert!(error.to_string().contains("index path, bytes or mode"));
         git_output(repo.path(), &["reset", "-q", "HEAD", "--", record]).unwrap();
-        assert_eq!(inner_error(), expected);
+        assert_eq!(graph_error(), expected);
         fs::write(repo.path().join("unfinished"), "unfinished code").unwrap();
-        assert_eq!(inner_error(), expected);
-        let error = snapshot.read_record_index(repo.path(), true).unwrap_err();
+        assert_eq!(graph_error(), expected);
+        let error = snapshot.read_record_files(repo.path(), true).unwrap_err();
         assert!(error.to_string().starts_with("merge_checkout_dirty"));
     }
 
     #[test]
-    fn reused_immutable_entries_never_reuse_filesystem_verification() {
+    fn pinned_commit_fences_refresh_tree_and_filesystem_verification() {
         let repo = tempfile::tempdir().unwrap();
         for args in [
             vec!["init", "-q"],
@@ -620,12 +571,12 @@ mod tests {
         git_output(repo.path(), &["add", "."]).unwrap();
         git_output(repo.path(), &["commit", "-qm", "original files"]).unwrap();
         let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
-        let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
+        let snapshot = CommittedSnapshot::new(&pin).unwrap();
         assert!(snapshot
             .verified_working_paths(repo.path())
             .unwrap()
             .is_empty());
-        assert!(CommittedSnapshot::new(repo.path(), "HEAD").is_err());
+        assert!(CommittedSnapshot::new("HEAD").is_err());
         fs::write(repo.path().join(".git/info/exclude"), ".atelier/reviews/\n").unwrap();
         fs::create_dir(repo.path().join(".atelier/reviews")).unwrap();
         let ignored = repo.path().join(".atelier/reviews/hidden.md");
@@ -668,7 +619,7 @@ mod tests {
         git_output(repo.path(), &["add", record]).unwrap();
         fs::write(repo.path().join(record), "committed record").unwrap();
         assert!(snapshot.verified_working_paths(repo.path()).is_err());
-        assert!(CommittedSnapshot::new(repo.path(), &pin)
+        assert!(CommittedSnapshot::new(&pin)
             .unwrap()
             .verified_working_paths(repo.path())
             .is_err());
@@ -706,8 +657,9 @@ mod tests {
             git_output(repo.path(), &["add", "."]).unwrap();
             git_output(repo.path(), &["commit", "-qm", "original"]).unwrap();
             let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
-            let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
-            let hash = &snapshot.entries[Path::new(path)].1;
+            let snapshot = CommittedSnapshot::new(&pin).unwrap();
+            let tree = entries(repo.path(), &pin).unwrap();
+            let hash = &tree[Path::new(path)].1;
             match state {
                 "flag" => {
                     fs::write(repo.path().join(path), "staged").unwrap();
@@ -756,7 +708,7 @@ mod tests {
                 "{state}"
             );
             assert!(
-                CommittedSnapshot::new(repo.path(), &pin)
+                CommittedSnapshot::new(&pin)
                     .unwrap()
                     .verified_working_paths(repo.path())
                     .is_err(),
@@ -797,7 +749,7 @@ mod tests {
             git_output(repo.path(), &["add", "."]).unwrap();
             git_output(repo.path(), &["commit", "-qm", "raw blobs"]).unwrap();
             let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
-            let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
+            let snapshot = CommittedSnapshot::new(&pin).unwrap();
             fs::write(
                 repo.path().join(".gitattributes"),
                 "*.data text eol=lf filter=uppercase\n",
@@ -824,8 +776,14 @@ mod tests {
             }
             // These live raw verification helpers must bypass clean filters.
             // Native Git status, exercised below, may independently run them.
-            verify_records(repo.path(), &snapshot.entries).unwrap();
-            flagged_paths(repo.path(), &snapshot.entries, |_| false, true).unwrap();
+            verify_records(repo.path(), &entries(repo.path(), &pin).unwrap()).unwrap();
+            flagged_paths(
+                repo.path(),
+                &entries(repo.path(), &pin).unwrap(),
+                |_| false,
+                true,
+            )
+            .unwrap();
             assert!(!marker.exists());
             snapshot.verified_working_paths(repo.path()).unwrap();
             let path = ".atelier/issues/case-1 \n\t名.data";
@@ -874,7 +832,7 @@ mod tests {
         git_output(repo.path(), &["add", "."]).unwrap();
         git_output(repo.path(), &["commit", "-qm", "canonical snapshot"]).unwrap();
         let pin = crate::git_freshness::head_commit(repo.path()).unwrap();
-        let snapshot = CommittedSnapshot::new(repo.path(), &pin).unwrap();
+        let snapshot = CommittedSnapshot::new(&pin).unwrap();
         let started = std::time::Instant::now();
         snapshot.verified_working_paths(repo.path()).unwrap();
         println!("1000 canonical files verified in {:?}", started.elapsed());

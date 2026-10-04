@@ -2,93 +2,10 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::{git_freshness, record_index::RecordIndex, workflow_policy};
 use std::{
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::BTreeSet,
     path::Path,
     process::{Command, Stdio},
 };
-
-type HeadRefs = BTreeMap<Vec<u8>, String>;
-/// Fresh local refs and this worktree's recursive HEAD, never reused across checks.
-pub(crate) struct CheckoutRefs {
-    pub head: String,
-    pub branch: Option<String>,
-    refs: HeadRefs,
-}
-impl CheckoutRefs {
-    pub fn capture(repo: &Path) -> Result<Self> {
-        let bytes = git_freshness::git_output(
-            repo,
-            &[
-                "for-each-ref",
-                "--format=%(refname)%00%(objectname)%00%(HEAD)",
-                "refs/heads/",
-            ],
-        )?;
-        let (refs, branch) = decode_refs(&bytes)?;
-        let head = match &branch {
-            Some(branch) => refs[format!("refs/heads/{branch}").as_bytes()].clone(),
-            None => {
-                current_branch(repo)?;
-                git_freshness::head_commit(repo)?
-            }
-        };
-        Ok(Self { head, branch, refs })
-    }
-    pub fn resolve(
-        &self,
-        read: &mut git_freshness::ReadContext<'_>,
-        reference: &str,
-    ) -> Result<String> {
-        let raw = self
-            .refs
-            .get(reference.as_bytes())
-            .with_context(|| format!("committed local ref {reference} is missing"))?;
-        read.commit_id(&format!("{raw}^{{commit}}"))
-    }
-    fn heads_text(&self) -> Result<String> {
-        let mut bytes = Vec::new();
-        for (reference, commit) in &self.refs {
-            bytes.extend(reference);
-            bytes.push(b' ');
-            bytes.extend(commit.as_bytes());
-            bytes.push(b'\n');
-        }
-        Ok(String::from_utf8(bytes)?.trim().into())
-    }
-}
-fn decode_refs(bytes: &[u8]) -> Result<(HeadRefs, Option<String>)> {
-    let mut refs = HeadRefs::new();
-    let mut branch = None;
-    if bytes.is_empty() {
-        return Ok((refs, branch));
-    }
-    let records = bytes
-        .strip_suffix(b"\n")
-        .context("truncated Git ref capture")?;
-    for record in records.split(|byte| *byte == b'\n') {
-        let fields = record.split(|byte| *byte == 0).collect::<Vec<_>>();
-        if fields.len() != 3
-            || fields[0].len() <= 11
-            || !fields[0].starts_with(b"refs/heads/")
-            || !matches!(fields[1].len(), 40 | 64)
-            || !fields[1].iter().all(u8::is_ascii_hexdigit)
-            || !matches!(fields[2], b" " | b"*")
-        {
-            bail!("invalid Git ref capture");
-        }
-        let oid = std::str::from_utf8(fields[1])?.to_ascii_lowercase();
-        if refs.insert(fields[0].to_vec(), oid).is_some() {
-            bail!("duplicate Git ref capture");
-        }
-        if fields[2] == b"*" {
-            if branch.is_some() {
-                bail!("multiple checkout HEAD refs");
-            }
-            branch = Some(std::str::from_utf8(&fields[0][11..])?.to_owned());
-        }
-    }
-    Ok((refs, branch))
-}
 
 pub(crate) fn text(repo: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(git_freshness::git_output(repo, args)?)?
@@ -96,6 +13,10 @@ pub(crate) fn text(repo: &Path, args: &[&str]) -> Result<String> {
         .into())
 }
 pub(crate) fn current_branch(repo: &Path) -> Result<Option<String>> {
+    Ok(checkout_branch(repo)?.map(|branch| branch.trim_end().to_owned()))
+}
+/// The recursive checkout branch identity, preserving trailing whitespace.
+pub(crate) fn checkout_branch(repo: &Path) -> Result<Option<String>> {
     let output = atelier_app::git_freshness::command(repo)
         .args(["symbolic-ref", "--quiet", "HEAD"])
         .output()?;
@@ -111,7 +32,8 @@ pub(crate) fn current_branch(repo: &Path) -> Result<Option<String>> {
     let reference = String::from_utf8(output.stdout)?;
     Ok(Some(
         reference
-            .trim()
+            .strip_suffix('\n')
+            .unwrap_or(&reference)
             .strip_prefix("refs/heads/")
             .context("checkout HEAD does not reference a local branch")?
             .to_owned(),
@@ -205,29 +127,15 @@ pub(crate) fn branch_lines_for(
     current: &str,
     base_branch: &str,
 ) -> Result<Vec<String>> {
-    branch_lines_captured(repo, state, live, current, base_branch, None)
-}
-pub(crate) fn branch_lines_captured(
-    repo: &Path,
-    state: &Path,
-    live: &RecordIndex,
-    current: &str,
-    base_branch: &str,
-    captured: Option<&CheckoutRefs>,
-) -> Result<Vec<String>> {
-    let heads = match captured {
-        Some(captured) => captured.heads_text()?,
-        None => text(
-            repo,
-            &[
-                "for-each-ref",
-                "--format=%(refname) %(objectname)",
-                "refs/heads/",
-            ],
-        )?,
-    };
+    let heads = text(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/heads/",
+        ],
+    )?;
     let mut lines = Vec::new();
-    let mut snapshots = BTreeMap::new();
     for head in heads.lines() {
         let Some((reference, commit)) = head.split_once(' ') else {
             continue;
@@ -312,11 +220,7 @@ pub(crate) fn branch_lines_captured(
             if owners.is_empty() {
                 bail!("no compatible started owner record");
             }
-            let tree = text(repo, &["rev-parse", &format!("{commit}:.atelier")])?;
-            let snapshot = match snapshots.entry(tree) {
-                Entry::Occupied(entry) => entry.into_mut(),
-                Entry::Vacant(entry) => entry.insert(Snapshot::at(repo, state, commit)?),
-            };
+            let snapshot = Snapshot::at(repo, state, commit)?;
             snapshot
                 .index
                 .validate_policy(&branch_policy, snapshot.root())?;
@@ -351,14 +255,16 @@ pub(crate) fn branch_lines_captured(
 }
 
 #[cfg(test)]
-mod capture_tests {
+mod tests {
     use super::*;
     use std::fs;
+
     fn git(repo: &Path, args: &[&str]) -> String {
         text(repo, args).unwrap()
     }
+
     #[test]
-    fn captured_refs_match_recursive_head_and_refresh_linked_checkouts() {
+    fn native_checkout_queries_preserve_recursive_heads_and_refresh_linked_checkouts() {
         let repo = tempfile::tempdir().unwrap();
         for args in [
             vec!["init", "-qb", "main"],
@@ -367,76 +273,51 @@ mod capture_tests {
         ] {
             git(repo.path(), &args);
         }
-        assert!(CheckoutRefs::capture(repo.path()).is_err());
+        assert!(git_freshness::head_commit(repo.path()).is_err());
         fs::write(repo.path().join("code"), "base").unwrap();
         git(repo.path(), &["add", "."]);
         git(repo.path(), &["commit", "-qm", "base"]);
-        let base = git(repo.path(), &["rev-parse", "HEAD"]);
+        let base = git_freshness::head_commit(repo.path()).unwrap();
         git(repo.path(), &["checkout", "-qb", "task/source"]);
         fs::write(repo.path().join("code"), "owner").unwrap();
         git(repo.path(), &["commit", "-qam", "owner"]);
+        let original = git_freshness::head_commit(repo.path()).unwrap();
         git(
             repo.path(),
             &["tag", "-am", "shadow source", "task/source", &base],
         );
         git(repo.path(), &["tag", "HEAD", &base]);
-        let check = |path: &Path| {
-            let captured = CheckoutRefs::capture(path).unwrap();
-            assert_eq!(captured.head, git(path, &["rev-parse", "HEAD"]));
-            assert_eq!(captured.branch, current_branch(path).unwrap());
-            assert_eq!(
-                captured.heads_text().map_err(|error| error.to_string()),
-                text(
-                    path,
-                    &[
-                        "for-each-ref",
-                        "--format=%(refname) %(objectname)",
-                        "refs/heads/",
-                    ]
-                )
-                .map_err(|error| error.to_string())
-            );
-            captured
-        };
-        let original = check(repo.path());
         git(
             repo.path(),
             &["symbolic-ref", "refs/heads/alias", "refs/heads/task/source"],
         );
         git(repo.path(), &["symbolic-ref", "HEAD", "refs/heads/alias"]);
-        check(repo.path());
-        for (key, value) in [
-            ("branch.sort", "-refname"),
-            ("forEachRef.sort", "-refname"),
-            ("core.ignoreCase", "true"),
-        ] {
-            git(repo.path(), &["config", key, value]);
-            check(repo.path());
-            git(repo.path(), &["config", "--unset", key]);
-        }
-        // An unrelated missing object is opaque unless that ref is selected.
+        assert_eq!(
+            current_branch(repo.path()).unwrap().as_deref(),
+            Some("task/source")
+        );
+        assert_eq!(git_freshness::head_commit(repo.path()).unwrap(), original);
         fs::write(
             repo.path().join(".git/refs/heads/broken"),
             format!("{}\n", "0".repeat(40)),
         )
         .unwrap();
-        let captured = check(repo.path());
-        assert!(captured
-            .resolve(
-                &mut git_freshness::ReadContext::new(repo.path()),
-                "refs/heads/broken"
-            )
-            .is_err());
+        assert_eq!(git_freshness::head_commit(repo.path()).unwrap(), original);
+        assert!(resolve(repo.path(), "refs/heads/broken").is_err());
         fs::remove_file(repo.path().join(".git/refs/heads/broken")).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStringExt;
-            let path = repo
+            let opaque = repo
                 .path()
                 .join(".git/refs/heads")
                 .join(std::ffi::OsString::from_vec(vec![0xff]));
-            fs::write(path, format!("{base}\n")).unwrap();
-            check(repo.path());
+            fs::write(opaque, format!("{base}\n")).unwrap();
+            assert_eq!(git_freshness::head_commit(repo.path()).unwrap(), original);
+            assert_eq!(
+                current_branch(repo.path()).unwrap().as_deref(),
+                Some("task/source")
+            );
         }
         let worktree = tempfile::tempdir().unwrap();
         let linked = worktree.path().join("linked");
@@ -452,24 +333,45 @@ mod capture_tests {
                 &base,
             ],
         );
-        check(&linked);
+        assert_eq!(current_branch(&linked).unwrap().as_deref(), Some("linked"));
+        assert_eq!(git_freshness::head_commit(&linked).unwrap(), base);
+        let whitespace_branch = "task/unicode\u{3000}";
+        git(repo.path(), &["branch", whitespace_branch]);
+        git(
+            repo.path(),
+            &[
+                "symbolic-ref",
+                "HEAD",
+                &format!("refs/heads/{whitespace_branch}"),
+            ],
+        );
+        assert_eq!(
+            checkout_branch(repo.path()).unwrap().as_deref(),
+            Some(whitespace_branch)
+        );
+        assert_eq!(
+            current_branch(repo.path()).unwrap().as_deref(),
+            Some("task/unicode")
+        );
+        git(
+            repo.path(),
+            &["symbolic-ref", "HEAD", "refs/heads/task/source"],
+        );
         git(repo.path(), &["tag", "-d", "HEAD"]);
-        git(repo.path(), &["checkout", "--detach", &original.head]);
-        let detached = check(repo.path());
-        assert!(detached.branch.is_none());
+        git(repo.path(), &["checkout", "--detach", &original]);
+        assert!(current_branch(repo.path()).unwrap().is_none());
         git(
             repo.path(),
             &["symbolic-ref", "HEAD", "refs/tags/task/source"],
         );
         assert!(current_branch(repo.path()).is_err());
-        assert!(CheckoutRefs::capture(repo.path()).is_err());
         git(
             repo.path(),
             &["symbolic-ref", "HEAD", "refs/heads/task/source"],
         );
         fs::write(repo.path().join("code"), "new state").unwrap();
         git(repo.path(), &["commit", "-qam", "fresh ref state"]);
-        assert_ne!(check(repo.path()).head, original.head);
+        assert_ne!(git_freshness::head_commit(repo.path()).unwrap(), original);
         let tag = git(repo.path(), &["rev-parse", "refs/tags/task/source"]);
         fs::write(
             repo.path().join(".git/refs/heads/tagged"),
@@ -477,10 +379,11 @@ mod capture_tests {
         )
         .unwrap();
         git(repo.path(), &["symbolic-ref", "HEAD", "refs/heads/tagged"]);
-        assert_eq!(check(repo.path()).head, tag);
+        assert_eq!(git_freshness::head_commit(repo.path()).unwrap(), tag);
     }
+
     #[test]
-    fn captured_base_refs_peel_annotated_objects_in_both_hash_formats() {
+    fn native_base_refs_peel_annotated_objects_in_both_hash_formats() {
         for format in ["sha1", "sha256"] {
             let repo = tempfile::tempdir().unwrap();
             git(
@@ -495,6 +398,7 @@ mod capture_tests {
             fs::write(repo.path().join("code"), "base").unwrap();
             git(repo.path(), &["add", "."]);
             git(repo.path(), &["commit", "-qm", "base"]);
+            let head = git_freshness::head_commit(repo.path()).unwrap();
             git(repo.path(), &["tag", "-am", "annotated", "base-tag"]);
             git(
                 repo.path(),
@@ -504,72 +408,8 @@ mod capture_tests {
                     "refs/tags/base-tag",
                 ],
             );
-            let captured = CheckoutRefs::capture(repo.path()).unwrap();
-            assert_eq!(captured.head.len(), if format == "sha1" { 40 } else { 64 });
-            assert_eq!(
-                captured
-                    .resolve(
-                        &mut git_freshness::ReadContext::new(repo.path()),
-                        "refs/heads/base-alias"
-                    )
-                    .unwrap(),
-                resolve(repo.path(), "refs/heads/base-alias").unwrap()
-            );
+            assert_eq!(head.len(), if format == "sha1" { 40 } else { 64 });
+            assert_eq!(resolve(repo.path(), "refs/heads/base-alias").unwrap(), head);
         }
-    }
-    #[test]
-    fn captured_orientation_pins_refs_while_other_callers_query_fresh_refs() {
-        let repo = tempfile::tempdir().unwrap();
-        git(repo.path(), &["init", "-qb", "main"]);
-        git(repo.path(), &["config", "user.name", "Author"]);
-        git(
-            repo.path(),
-            &["config", "user.email", "author@example.test"],
-        );
-        fs::write(repo.path().join("code"), "base").unwrap();
-        git(repo.path(), &["add", "."]);
-        git(repo.path(), &["commit", "-qm", "base"]);
-        git(repo.path(), &["branch", "task/old"]);
-        let state = repo.path().join(".atelier");
-        fs::create_dir(&state).unwrap();
-        let index = RecordIndex::load_structural(&state).unwrap();
-        let captured = CheckoutRefs::capture(repo.path()).unwrap();
-        let pinned = || {
-            branch_lines_captured(repo.path(), &state, &index, "main", "main", Some(&captured))
-                .unwrap()
-        };
-        let original = branch_lines_for(repo.path(), &state, &index, "main", "main").unwrap();
-        assert_eq!(pinned(), original);
-        assert_eq!(original.len(), 1);
-        assert!(original[0].starts_with("task/old: unavailable"));
-        git(repo.path(), &["branch", "-D", "task/old"]);
-        git(repo.path(), &["branch", "task/new"]);
-        assert_eq!(pinned(), original);
-        let fresh = branch_lines_for(repo.path(), &state, &index, "main", "main").unwrap();
-        assert_eq!(fresh.len(), 1);
-        assert!(fresh[0].starts_with("task/new: unavailable"));
-    }
-    #[test]
-    fn ref_capture_parser_rejects_truncation_bad_fields_and_duplicate_heads() {
-        let oid = "a".repeat(40);
-        let row = format!("refs/heads/main\0{oid}\0*\n");
-        let (refs, branch) = decode_refs(row.as_bytes()).unwrap();
-        assert_eq!(branch.as_deref(), Some("main"));
-        assert_eq!(refs[b"refs/heads/main".as_slice()], oid);
-        for bad in [
-            row.trim_end().to_owned(),
-            format!("refs/heads/main\0{oid}\0*\0extra\n"),
-            format!("refs/tags/main\0{oid}\0*\n"),
-            format!("refs/heads/\0{oid}\0*\n"),
-            "refs/heads/main\0bad\0*\n".into(),
-            format!("refs/heads/main\0{oid}\0?\n"),
-            format!("{row}{row}"),
-            format!("{row}refs/heads/other\0{oid}\0*\n"),
-        ] {
-            assert!(decode_refs(bad.as_bytes()).is_err(), "{bad:?}");
-        }
-        let mut bytes = format!("refs/heads/other\0{oid}\0 \n").into_bytes();
-        bytes.splice(11..16, [0xff]);
-        assert!(decode_refs(&bytes).is_ok());
     }
 }
