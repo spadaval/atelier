@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T19:54:34.263632483+00:00"
+status: "done"
 title: "Record Atelier-only Agent Factory decision and sync the vendored skill"
-updated_at: "2026-10-15T19:53:54.975277137+00:00"
+updated_at: "2026-10-15T19:54:34.263632483+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ Record the decision that Agent Factory targets Atelier only (ADR 0020), and repl
 ## Scope
 
 ADR, vendored skill, and docs that describe Agent Factory record templates. No CLI changes.
+
+## Close Reason
+
+ADR 0020 recorded; vendored skill replaced verbatim from upstream; integration-branch gap tracked in atelier-w0su.
