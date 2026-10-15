@@ -112,6 +112,40 @@ fn test_init_slug_comes_from_origin_then_the_main_worktree() {
         "{stdout}"
     );
 
+    // A new project inside a tracked parent keeps its own directory name.
+    let nested = cloned.join("newproj");
+    std::fs::create_dir(&nested).unwrap();
+    let (success, stdout, stderr) = run_atelier(&nested, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: newproj (from the directory name;"),
+        "{stdout}"
+    );
+
+    let bare = root.path().join("toolkit.git");
+    git(
+        root.path(),
+        &["init", "-q", "--bare", "-b", "main", bare.to_str().unwrap()],
+    );
+    git(&main, &["push", "-q", bare.to_str().unwrap(), "HEAD:main"]);
+    let bare_linked = root.path().join("toolkit-feature");
+    git(
+        &bare,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            bare_linked.to_str().unwrap(),
+            "main",
+        ],
+    );
+    let (success, stdout, stderr) = run_atelier(&bare_linked, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: toolkit (from the main worktree's directory;"),
+        "{stdout}"
+    );
+
     let plain = root.path().join("plain-dir");
     std::fs::create_dir(&plain).unwrap();
     let (success, stdout, _) = run_atelier(&plain, &["init", "--slug", "chosen"]);

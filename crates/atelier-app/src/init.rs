@@ -103,7 +103,9 @@ pub fn initialize(input: InitRequest) -> Result<InitView> {
 
 /// The repository's name, normalized to a valid slug: the origin remote's
 /// repository name, else the main worktree's directory, so a linked worktree
-/// such as `project-feature` still mints `project-*` IDs.
+/// such as `project-feature` still mints `project-*` IDs. Git names count
+/// only at a repository's top level; elsewhere, such as a new project inside
+/// a tracked parent, the directory name is used.
 fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
     let path =
         fs::canonicalize(path).with_context(|| format!("failed to resolve {}", path.display()))?;
@@ -114,23 +116,28 @@ fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
             .map(|out| out.trim().to_owned())
             .filter(|out| !out.is_empty())
     };
-    let remote = git(&["remote", "get-url", "origin"]).and_then(|url| {
-        let name = url
-            .trim_end_matches('/')
-            .rsplit(['/', ':'])
-            .next()?
-            .to_owned();
-        Some(name.strip_suffix(".git").unwrap_or(&name).to_owned())
-    });
-    let main_worktree = git(&["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    let top_level = git(&["rev-parse", "--show-toplevel"])
+        .and_then(|top| fs::canonicalize(top).ok())
+        .is_some_and(|top| top == path);
+    let remote = top_level
+        .then(|| git(&["remote", "get-url", "origin"]))
+        .flatten()
+        .and_then(|url| repository_name(&url));
+    let main_worktree = top_level
+        .then(|| git(&["rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        .flatten()
         .and_then(|common| {
             let common = PathBuf::from(common);
-            // A non-bare repository keeps its common dir at <worktree>/.git.
-            (common.file_name()? == ".git").then(|| common.parent().map(Path::to_path_buf))?
-        })
-        .and_then(|root| {
-            root.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
+            // A non-bare repository keeps its common dir at <worktree>/.git;
+            // a bare one is the repository itself, often <name>.git.
+            if common.file_name()? == ".git" {
+                common
+                    .parent()?
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            } else {
+                repository_name(&common.to_string_lossy())
+            }
         });
     let directory = path
         .file_name()
@@ -151,6 +158,23 @@ fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
             path.display()
         )
     })
+}
+
+/// The last component of a remote URL or repository path, without `.git`.
+fn repository_name(location: &str) -> Option<String> {
+    let location = location.trim_end_matches('/');
+    let location = location
+        .strip_suffix("/.git")
+        .unwrap_or(location)
+        .trim_end_matches('/');
+    let name = location.rsplit(['/', ':']).next()?;
+    let name = match name.len().checked_sub(4) {
+        Some(at) if name.is_char_boundary(at) && name[at..].eq_ignore_ascii_case(".git") => {
+            &name[..at]
+        }
+        _ => name,
+    };
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
@@ -187,4 +211,29 @@ pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
         fs::write(&gitignore_path, existing).context("Failed to write .gitignore")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::repository_name;
+
+    #[test]
+    fn repository_names_come_from_any_remote_or_path_form() {
+        for (location, name) in [
+            ("https://github.com/o/elite-tools.git", "elite-tools"),
+            ("https://github.com/o/elite-tools/", "elite-tools"),
+            ("git@github.com:o/elite-tools.git", "elite-tools"),
+            ("ssh://git@host:2222/o/elite-tools.GIT", "elite-tools"),
+            ("file:///srv/elite-tools.git/", "elite-tools"),
+            ("/srv/elite-tools/.git", "elite-tools"),
+            ("/srv/elite-tools", "elite-tools"),
+        ] {
+            assert_eq!(
+                repository_name(location).as_deref(),
+                Some(name),
+                "{location}"
+            );
+        }
+        assert_eq!(repository_name("/.git"), None);
+    }
 }
