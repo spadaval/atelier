@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T23:42:38.804664155+00:00"
+status: "done"
 title: "Make the issue CLI's options say what they do"
-updated_at: "2026-10-15T23:34:57.324558818+00:00"
+updated_at: "2026-10-15T23:42:38.804664155+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Each item is fixed or deliberately removed, with help text matching behaviour: (
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). Item 6 reproduced in a scratch repo: a spike went todo → in_progress → done on the base branch with `issue transition`. Smaller edges already listed in atelier-v44v.
+
+## Close Reason
+
+(1) issue update --status removed; (2) --parent help no longer mentions imported IDs; (3) issue create --description removed in favour of --body; (4) issue update --body works for every type, keeping Notes and Close Reason; (5) blocked_by/blocks in both CLI (new --role blocks) and bundles (depends_on renamed blocked_by); (6) documented: atelier start begins work, issue transition start only changes the record (land refuses active work without an owner branch) — refusing in the transition was not chosen because the bare transition is the supported way to start further children on an existing owner branch; (7) link role help lists readiness, mission-scope and context roles and the relates storage field. Also: -q quiets link, unlink and transition. Test: test_issue_options_do_what_their_help_says.
