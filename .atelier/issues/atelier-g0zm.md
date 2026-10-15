@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make HEAD-tag shadow fixtures portable to git 2.53"
-updated_at: "2026-10-15T18:45:05.788110562+00:00"
+updated_at: "2026-10-15T18:46:02.834750959+00:00"
 ---
 
 ## Goal

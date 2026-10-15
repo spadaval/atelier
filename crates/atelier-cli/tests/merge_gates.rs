@@ -136,7 +136,9 @@ fn captured_checkout_refs_preserve_head_tags_aliases_and_base_worktrees() {
     fixture.approval("Reviewer");
     let head = git(fixture.path(), &["rev-parse", "HEAD"]);
     let base = git(fixture.path(), &["rev-parse", "refs/heads/main"]);
-    git(fixture.path(), &["tag", "HEAD", &base]);
+    // Git 2.53+ refuses `git tag HEAD`; older repositories may still hold
+    // this ref, so write it directly.
+    git(fixture.path(), &["update-ref", "refs/tags/HEAD", &base]);
     git(
         fixture.path(),
         &["tag", "-am", "shadow", &fixture.branch, &base],

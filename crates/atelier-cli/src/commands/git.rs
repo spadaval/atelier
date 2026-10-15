@@ -286,7 +286,9 @@ mod tests {
             repo.path(),
             &["tag", "-am", "shadow source", "task/source", &base],
         );
-        git(repo.path(), &["tag", "HEAD", &base]);
+        // Git 2.53+ refuses `git tag HEAD`; older repositories may still hold
+        // this ref, so write it directly.
+        git(repo.path(), &["update-ref", "refs/tags/HEAD", &base]);
         git(
             repo.path(),
             &["symbolic-ref", "refs/heads/alias", "refs/heads/task/source"],
