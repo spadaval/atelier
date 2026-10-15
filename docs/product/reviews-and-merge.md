@@ -110,8 +110,9 @@ for completed owners that branched from this base and are not already done
 upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
-by the paths that differ from all of its parents. The commit that installs the
-workflow policy predates the gates and is exempt. Without an upstream, `land`
+by the paths that differ from all of its parents. The commits that install the
+workflow policy predate the gates and are exempt, including every commit made
+while the base's upstream has no policy yet. Without an upstream, `land`
 notes that it cannot check base commits.
 
 `atelier start` runs the same check on the local base branch, using the

@@ -4,6 +4,9 @@ id: "atelier-40i6"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-40i6
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Define how the commit that installs Atelier lands"
-updated_at: "2026-10-15T21:00:45.352378891+00:00"
+updated_at: "2026-10-15T23:54:06.103523921+00:00"
 ---
 
 ## Goal

@@ -2263,7 +2263,9 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     commit(dir.path(), "install Atelier");
     let output = ok(dir.path(), &["land"]);
     assert!(
-        output.contains("Base commits: none unpushed outside recorded review"),
+        output.contains(
+            "main@{upstream} has no workflow policy yet, so these commits install Atelier"
+        ),
         "{output}"
     );
 }
@@ -2310,5 +2312,73 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
             "Owner: {fresh} [done on branch task/{fresh}, not merged into main]"
         )),
         "{prime}"
+    );
+}
+#[test]
+fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    git(dir.path(), &["switch", "-q", "-c", "chore/install-atelier"]);
+    ok(dir.path(), &["init", "--slug", "adopter"]);
+    for title in ["One", "Two", "Three", "Four", "Five", "Six"] {
+        ok(dir.path(), &["-q", "issue", "create", title]);
+    }
+    commit(dir.path(), "install Atelier and import the backlog");
+    fs::write(dir.path().join("AGENTS.md"), "Use Atelier.\n").unwrap();
+    commit(dir.path(), "review fixes to the install");
+    let output = ok(dir.path(), &["land"]);
+    assert!(
+        output.contains("Installing Atelier: main has no workflow policy yet")
+            && output.contains("usual review"),
+        "{output}"
+    );
+
+    // Merged by the repository's own review, the install lands on the base.
+    git(dir.path(), &["switch", "-q", "main"]);
+    git(
+        dir.path(),
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "--no-edit",
+            "chore/install-atelier",
+        ],
+    );
+    let output = ok(dir.path(), &["land"]);
+    assert!(
+        output.contains("has no workflow policy yet, so these commits install Atelier"),
+        "{output}"
+    );
+
+    // Once pushed, the gates apply, and an unowned branch's record changes are
+    // listed briefly.
+    git(dir.path(), &["push", "-q"]);
+    fs::write(dir.path().join("direct"), "direct code\n").unwrap();
+    commit(dir.path(), "code straight on the base");
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    git(dir.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    git(dir.path(), &["switch", "-q", "-c", "feature/unowned"]);
+    for title in ["A", "B", "C", "D", "E", "F", "G"] {
+        ok(dir.path(), &["-q", "issue", "create", title]);
+    }
+    commit(dir.path(), "records on an unowned branch");
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(
+        !pass && output.contains(" and 2 more; run atelier start"),
+        "{output}"
     );
 }

@@ -28,7 +28,10 @@ branch. A path counts only if it changed relative to every local and
 remote-tracking copy of the base, so a stale local base does not blame the
 branch for upstream records. If the branch does change tracker files, or
 shares no history with the base, `land` refuses with `land_work_untraceable`,
-names the changed paths, and points to `atelier start`.
+names the changed paths (the first five, then a count), and points to
+`atelier start`. While no copy of the base has a workflow policy, the branch is
+installing Atelier, and `land` passes with a note on how to land it (see
+[installing Atelier](workflow-configuration.md#installing-atelier)).
 
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see

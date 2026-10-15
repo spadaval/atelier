@@ -19,6 +19,25 @@ single hyphens. `init` prints the slug it chose and where it came from; pass
 only new IDs: existing records keep their IDs and stay valid. There is no review-provider
 mode or global provider credential configuration.
 
+## Installing Atelier
+
+The commit that runs `atelier init` and imports the first records comes before
+any policy on the base branch, so `atelier merge` has nothing to gate it with.
+Land it in one of two supported ways:
+
+- **On the base branch.** Run `atelier init` there, review the generated
+  policy, and commit. `land` treats commits made while the base's upstream has
+  no workflow policy as the install, and checks nothing until that is pushed.
+- **On a branch, through the repository's own review.** Run `atelier init`
+  and any bundle import on a branch such as `chore/atelier-tracker`. While no
+  copy of the base has a workflow policy, `land` on that branch passes with a
+  note that names this path instead of `land_work_untraceable`. Merge it with
+  the repository's usual review, such as a pull request, and push.
+
+Once the pushed base has the policy, the gates apply: start work with
+`atelier start`, integrate with `atelier merge`, and commit only records and
+mission strategies on the base directly.
+
 ## Status and transitions
 
 Each issue type selects a workflow with an initial status, terminal statuses,

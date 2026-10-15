@@ -133,6 +133,23 @@ pub(crate) fn check_base_commits(
             "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
         ));
     };
+    // Gates start once the pushed base has the policy; until then the
+    // commits that install Atelier, and any made alongside them, predate them.
+    if git_freshness::git_output(
+        repo,
+        &[
+            "ls-tree",
+            &upstream,
+            "--",
+            workflow_policy::WORKFLOW_POLICY_PATH,
+        ],
+    )?
+    .is_empty()
+    {
+        return Ok(format!(
+            "Base commits unchecked: {base}@{{upstream}} has no workflow policy yet, so these commits install Atelier."
+        ));
+    }
     let mut covered = BTreeSet::new();
     for review in index.reviews().filter(|review| {
         matches!(
