@@ -2176,3 +2176,48 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
         "{output}"
     );
 }
+#[test]
+fn done_claims_on_work_branches_say_they_are_not_merged() {
+    let f = Fixture::new();
+    f.terminal(&f.id);
+    let unmerged = format!("[done on branch {}, not merged into main]", f.branch);
+    let prime = ok(f.path(), &["prime"]);
+    assert!(
+        prime.contains(&format!("Owner: {} {unmerged}", f.id)),
+        "{prime}"
+    );
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains(&unmerged), "{status}");
+
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains(&format!("{} {unmerged}", f.id)), "{status}");
+    git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
+    git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains("[done, merged into main]"), "{status}");
+
+    // An uncommitted close on a fresh branch is not on the base either.
+    git(f.path(), &["switch", "-q", "main"]);
+    let fresh = ok(f.path(), &["-q", "issue", "create", "Fresh owner"]);
+    commit(f.path(), "plan fresh owner");
+    ok(f.path(), &["start", &fresh]);
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &fresh,
+            "close",
+            "--reason",
+            "Claimed",
+        ],
+    );
+    let prime = ok(f.path(), &["prime"]);
+    assert!(
+        prime.contains(&format!(
+            "Owner: {fresh} [done on branch task/{fresh}, not merged into main]"
+        )),
+        "{prime}"
+    );
+}

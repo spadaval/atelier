@@ -11,6 +11,9 @@ pub fn run(path: &Path, force: bool, project_slug: Option<String>) -> Result<()>
         println!("Created {}", created_path.display());
     }
 
+    if let Some((slug, source)) = &view.project_slug {
+        println!("Project slug: {slug} (from {source}; record IDs look like {slug}-xxxx)");
+    }
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
     println!("  atelier check                     # Verify tracker records and workflow setup");

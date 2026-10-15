@@ -234,6 +234,34 @@ pub(crate) fn check_base_commits(
     })
 }
 
+/// A done claim on a work branch is not base completion until the base
+/// branch's own copy of the record carries it.
+pub(crate) fn unmerged_done_label(
+    repo: &Path,
+    id: &str,
+    status: &str,
+    branch: &str,
+    base_branch: &str,
+) -> String {
+    let path = format!(".atelier/issues/{id}.md");
+    let merged = resolve(repo, &format!("refs/heads/{base_branch}"))
+        .and_then(|base| git_freshness::blob(repo, &base, Path::new(&path)))
+        .ok()
+        .and_then(|blob| {
+            atelier_records::parse_issue_record(
+                &blob,
+                Path::new(&path).strip_prefix(".atelier").ok()?,
+            )
+            .ok()
+        })
+        .is_some_and(|record| record.issue.status == status);
+    if merged {
+        format!("{status}, merged into {base_branch}")
+    } else {
+        format!("{status} on branch {branch}, not merged into {base_branch}")
+    }
+}
+
 pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Result<Vec<String>> {
     let current = current_branch(repo)?.unwrap_or_default();
     let policy = workflow_policy::load(repo)?;
@@ -380,11 +408,15 @@ pub(crate) fn branch_lines_for(
                         })
                     })
                     .count();
+                let status = if branch_policy.status_category(&owner.status) == Some("done") {
+                    unmerged_done_label(repo, &id, &owner.status, branch, base_branch)
+                } else {
+                    owner.status.clone()
+                };
                 rows.push(format!(
-                    "{branch} @ {}: {} [{}] {} — {active} active (committed branch records)",
+                    "{branch} @ {}: {} [{status}] {} — {active} active (committed branch records)",
                     &commit[..8],
                     id,
-                    owner.status,
                     owner.title
                 ));
             }

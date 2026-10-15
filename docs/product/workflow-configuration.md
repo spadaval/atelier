@@ -7,8 +7,14 @@ choreography or a way to evade review.
 
 `.atelier/config.toml` contains project identity, the canonical state root,
 prune defaults, and supported project settings. `project_slug` is the prefix of
-every new record ID. `atelier init` derives it from the repository directory
-name (lowercased, other characters replaced by single hyphens); pass
+every new record ID. `atelier init` derives it from the repository's name:
+the origin remote's repository name, else the main worktree's directory (so a
+linked worktree such as `project-feature` still gets `project`), else a bare
+repository's name (`proj.git`, or `proj` for `proj/.bare`), else the
+current directory. The Git sources count only when `init` runs at a
+repository's top level, so a new project inside a tracked parent keeps its own
+directory name. The name is lowercased, with other characters replaced by
+single hyphens. `init` prints the slug it chose and where it came from; pass
 `atelier init --slug <slug>` to choose another. Changing the slug later affects
 only new IDs: existing records keep their IDs and stay valid. There is no review-provider
 mode or global provider credential configuration.
