@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T23:21:11.807082820+00:00"
+status: "done"
 title: "Ship a someday state, and let new work be created in it"
-updated_at: "2026-10-15T23:16:41.822056282+00:00"
+updated_at: "2026-10-15T23:21:11.807082820+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ The default workflow has no state for work that is recorded but not near-term. P
 astromech added `backlog` with `plan` (backlog→todo) and `defer` (todo→backlog) transitions to `.atelier/workflow.yaml`, and documented it in AGENTS.md.
 
 Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with research, references and decisions) into Atelier records. Sumeet's principle: Atelier records should hold the whole backlog; needing a side document means Atelier needs work.
+
+## Close Reason
+
+The starter workflow (and this repository's) has a backlog status (todo category, no start) with defer (todo/blocked -> backlog) and plan (backlog -> todo); supersede accepts backlog. issue create --status files work in any todo-category status its workflow can leave. work ready excludes backlog. Covered by test_someday_work_is_created_in_backlog_and_kept_out_of_ready. Named backlog, not someday, to match astromech's adopted policy.
