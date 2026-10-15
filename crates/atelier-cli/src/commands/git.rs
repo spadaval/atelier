@@ -108,6 +108,157 @@ impl Snapshot {
     }
 }
 
+/// Record-only changes may be committed on the base branch directly; any
+/// other unpushed base commit must be covered by an approval or trivial
+/// exemption of a completed owner that branched from this base, which is what
+/// `atelier merge` integrates. Commits that install the workflow policy
+/// predate the gates and are exempt.
+pub(crate) fn check_base_commits(
+    repo: &Path,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    tip: &str,
+) -> Result<String> {
+    let base = &policy.branch_policy.base_branch;
+    let Ok(upstream) = text(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{base}@{{upstream}}"),
+        ],
+    ) else {
+        return Ok(format!(
+            "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
+        ));
+    };
+    let mut covered = BTreeSet::new();
+    for review in index.reviews().filter(|review| {
+        matches!(
+            review.event,
+            atelier_core::ReviewEvent::Approval | atelier_core::ReviewEvent::TrivialExemption
+        )
+    }) {
+        let Some(owner) = index.get_issue(&review.target) else {
+            continue;
+        };
+        if !owner
+            .workflow_branch
+            .as_ref()
+            .is_some_and(|branch| branch.branch_base == *base)
+            || policy.status_category(&owner.status) != Some("done")
+            || resolve(repo, &review.commit).is_err()
+        {
+            continue;
+        }
+        let path = format!(".atelier/issues/{}.md", owner.id);
+        // An owner already done upstream was integrated before; a review
+        // recorded for it now covers nothing new.
+        let pushed_done = git_freshness::blob(repo, &upstream, Path::new(&path))
+            .ok()
+            .and_then(|blob| {
+                atelier_records::parse_issue_record(
+                    &blob,
+                    Path::new(&path).strip_prefix(".atelier").ok()?,
+                )
+                .ok()
+            })
+            .is_some_and(|record| policy.status_category(&record.issue.status) == Some("done"));
+        if pushed_done {
+            continue;
+        }
+        let range = [
+            "rev-list",
+            review.commit.as_str(),
+            "--not",
+            upstream.as_str(),
+        ];
+        covered.extend(text(repo, &range)?.lines().map(str::to_owned));
+    }
+    let unreviewed = text(repo, &["rev-list", tip, "--not", &upstream])?
+        .lines()
+        .filter(|commit| !covered.contains(*commit))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let normalized = |path: &Path| {
+        path.components()
+            .filter(|part| !matches!(part, std::path::Component::CurDir))
+            .collect::<std::path::PathBuf>()
+    };
+    let strategies = index
+        .issues()
+        .filter(|issue| issue.issue_type == "mission")
+        .filter_map(|issue| issue.strategy.as_ref())
+        .map(|strategy| normalized(Path::new(&strategy.path)))
+        .collect::<BTreeSet<_>>();
+    let mut checked = 0;
+    for commit in &unreviewed {
+        let parent = format!("{commit}^");
+        if resolve(repo, &parent).is_err()
+            || git_freshness::git_output(
+                repo,
+                &[
+                    "ls-tree",
+                    &parent,
+                    "--",
+                    workflow_policy::WORKFLOW_POLICY_PATH,
+                ],
+            )?
+            .is_empty()
+        {
+            continue;
+        }
+        checked += 1;
+        // A merge (such as a non-rebasing pull) introduces only the paths that
+        // differ from every parent.
+        let changed = text(
+            repo,
+            &[
+                "diff-tree",
+                "-r",
+                "-c",
+                "--no-commit-id",
+                "--name-only",
+                "-z",
+                commit,
+            ],
+        )?;
+        let changed = if text(repo, &["rev-list", "--parents", "-n1", commit])?
+            .split(' ')
+            .count()
+            > 2
+        {
+            changed
+                .split('\0')
+                .filter(|path| !path.is_empty())
+                .map(std::path::PathBuf::from)
+                .collect::<Vec<_>>()
+        } else {
+            git_freshness::changed_paths(repo, &parent, commit)?
+        };
+        let other = changed
+            .into_iter()
+            .filter(|path| !git_freshness::is_record_path(path) && !strategies.contains(path))
+            .collect::<Vec<_>>();
+        if let Some(first) = other.first() {
+            bail!(
+                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: git switch -c <issue_type>/<id>, git branch -f {base} {base}@{{upstream}}, then atelier start <id> there; get it reviewed and integrate it with atelier merge.",
+                &commit[..8.min(commit.len())],
+                first.display(),
+                match other.len() {
+                    1 => String::new(),
+                    count => format!(" and {} other path(s)", count - 1),
+                },
+            );
+        }
+    }
+    Ok(match checked {
+        0 => "Base commits: none unpushed outside recorded review.".to_owned(),
+        count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
+    })
+}
+
 /// A done claim on a work branch is not base completion until the base
 /// branch's own copy of the record carries it.
 pub(crate) fn unmerged_done_label(

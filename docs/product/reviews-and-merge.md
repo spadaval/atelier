@@ -93,3 +93,36 @@ its worktree cleanup instruction. Leave that checkout before removing it from
 the base checkout. If cleanup fails after integration, inspect the named Git
 state before retrying cleanup. Use [prune](retention-and-prune.md) for remaining
 eligible artifacts.
+
+## Planning changes on the base
+
+Filing, grooming, re-prioritising, recording decisions, and editing mission
+strategies are commits too. Commits that change only records
+(`.atelier/issues`, `.atelier/evidence`, `.atelier/reviews`) and the strategy
+files linked from missions may be committed on the base branch directly
+(atelier-3mjv, decided by Sumeet 2026-10-15). Any other change goes through a
+work branch, review, and `atelier merge`.
+
+`atelier land` on the base branch checks this before you push. It looks at
+the base commits that are not yet on the base's upstream. A commit counts as
+reviewed when a commit pinned by an approval or trivial exemption contains it,
+for completed owners that branched from this base and are not already done
+upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
+strategies linked from missions, or `land` refuses with
+`land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
+by the paths that differ from all of its parents. The commit that installs the
+workflow policy predates the gates and is exempt. Without an upstream, `land`
+notes that it cannot check base commits.
+
+`atelier start` runs the same check on the local base branch, using the
+base's own records, whether it creates the work branch or switches to an
+existing one. A branch started while the base holds an unreviewed commit
+would carry it in, and a review of `<base>...<branch>` would never show it.
+`start` skips the check when the base has no upstream or no workflow policy
+yet, as when Atelier is being adopted on a branch. To
+recover, move the commit to a work branch (`git switch -c <type>/<id>`, then
+`git branch -f <base> <base>@{upstream}`) and run `atelier start <id>` there.
+This is a handoff check, not an access control. Review identities are
+self-declared, so an exemption recorded on the base for an owner that merged
+but is not yet pushed still covers commits after its branch started, and a
+direct commit pushed without running `land` is caught only by later review.

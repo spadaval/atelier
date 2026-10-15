@@ -2029,6 +2029,245 @@ fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelat
     );
 }
 #[test]
+fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_code() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits unchecked: main has no upstream"),
+        "{output}"
+    );
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Planning on the base",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    let mut record = f.store().load_issue_by_id(&mission).unwrap();
+    record.issue.strategy = Some(atelier_core::IssueStrategy::new("./plans/strategy.md").unwrap());
+    f.store().write_issue_atomic(&record).unwrap();
+    fs::create_dir(f.path().join("plans")).unwrap();
+    fs::write(f.path().join("plans/strategy.md"), "# Strategy\n").unwrap();
+    commit(f.path(), "file a mission and its strategy on the base");
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+
+    fs::write(f.path().join("direct"), "unreviewed code\n").unwrap();
+    commit(f.path(), "code straight on the base");
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!("land_base_unreviewed: commit {}", &head[..8]))
+            && output.contains("changes direct without recorded review"),
+        "{output}"
+    );
+    // An unrelated self-recorded exemption does not cover base code, and a
+    // branch started now would claim the commit in its own review.
+    let unrelated = ok(f.path(), &["-q", "issue", "create", "Never started"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &unrelated,
+            "--identity",
+            "Author",
+            "Self-exempt",
+        ],
+    );
+    commit(f.path(), "self-recorded exemption");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    let (pass, output) = cli(f.path(), &["start", &unrelated]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~2"]);
+
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["rebase", "-q", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["merge", &f.id]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+
+    // Once pushed, a review recorded on the base for the merged owner does
+    // not cover later direct code.
+    git(f.path(), &["push", "-q"]);
+    fs::write(f.path().join("later"), "direct again\n").unwrap();
+    commit(f.path(), "code straight on the base after the merge");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &f.id,
+            "--identity",
+            "Author",
+            "Re-exempt",
+        ],
+    );
+    commit(f.path(), "exemption recorded on the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("changes later without recorded review"),
+        "{output}"
+    );
+}
+#[test]
+fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let owner = ok(f.path(), &["-q", "issue", "create", "Rescue direct code"]);
+    commit(f.path(), "plan the rescue");
+    git(f.path(), &["push", "-q"]);
+    fs::write(f.path().join("direct"), "direct code\n").unwrap();
+    commit(f.path(), "code straight on the base");
+
+    // A branch made with plain Git still carries the direct commit.
+    git(f.path(), &["switch", "-q", "-c", &format!("task/{owner}")]);
+    let (pass, output) = cli(f.path(), &["start", &owner]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+
+    // The advice: keep the commit on the work branch, reset the base, start.
+    git(f.path(), &["branch", "-f", "main", "main@{upstream}"]);
+    ok(f.path(), &["start", &owner]);
+    commit(f.path(), "start the rescue");
+    f.terminal(&owner);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            "Reviewer",
+            "Reviewed the direct code",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["merge", &owner]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+}
+#[test]
+fn base_pull_merge_counts_only_the_paths_it_introduces() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    let remote = upstream.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", remote]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    fs::write(other.path().join("upstream-code"), "reviewed upstream\n").unwrap();
+    commit(other.path(), "code that landed upstream");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+
+    ok(f.path(), &["-q", "issue", "create", "Local planning"]);
+    commit(f.path(), "record-only planning on the base");
+    git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 2 unpushed record-only commit(s)"),
+        "{output}"
+    );
+}
+#[test]
+fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(dir.path(), &["switch", "-q", "-c", "adopt"]);
+    ok(dir.path(), &["init", "--slug", "adopter"]);
+    let id = ok(dir.path(), &["-q", "issue", "create", "First tracked work"]);
+    commit(dir.path(), "install Atelier on a branch");
+    ok(dir.path(), &["start", &id]);
+}
+#[test]
+fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "main"]);
+    ok(dir.path(), &["init", "--slug", "adopter"]);
+    fs::write(dir.path().join("AGENTS.md"), "Use Atelier.\n").unwrap();
+    commit(dir.path(), "install Atelier");
+    let output = ok(dir.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: none unpushed outside recorded review"),
+        "{output}"
+    );
+}
+#[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
     f.terminal(&f.id);

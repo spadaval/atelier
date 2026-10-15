@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-msii
+title: 'Re-reviewed through f2ee48dd. Every earlier finding is resolved and checked by hand: of4r (pull-merge judged with diff-tree -c, repro passes), 3su5 and tk00 (coverage limited to done owners that branched from this base and are not done upstream; self-exemption for an unstarted or already pushed owner after direct code is refused), 5v68 (strategy paths normalized, missions only), ucis and bhme (the recovery advice now passes through merge and land; a plain git switch -c branch started over unpushed direct code is refused by start), and fu0j (start skips the base check without an upstream or base workflow policy; my adoption-branch repro passes, exit 0). f2ee48dd only renames the shadowing variable to policy_base, so start again prints and records the recorded base. Normal start flows show no false refusals: new start with an unpushed reviewed merge, resuming a long-lived branch, base ahead or rebased, base behind, no local base. The a0cfec0d and a90d3538 master merges resolve cleanly. land on this repo''s master passes in a scratch clone with simulated upstreams 0, 30 and 120 commits back, with no measurable added cost. The docs match behavior, including the self-declared-identity limit. Evidence atelier-w410 pins f2ee48dd with exit 0 (599 passed); targeted session tests 16/16 at 00534206.'
+target: atelier-3mjv
+identity: Independent reviewer (Claude subagent)
+commit: aae54f68b9a91acba2faaf7f76332e16fd750e4b
+created_at: 2026-10-15T23:45:20.011992831Z
+event:
+  event: approval
+---
+
+Re-reviewed through f2ee48dd. Every earlier finding is resolved and checked by hand: of4r (pull-merge judged with diff-tree -c, repro passes), 3su5 and tk00 (coverage limited to done owners that branched from this base and are not done upstream; self-exemption for an unstarted or already pushed owner after direct code is refused), 5v68 (strategy paths normalized, missions only), ucis and bhme (the recovery advice now passes through merge and land; a plain git switch -c branch started over unpushed direct code is refused by start), and fu0j (start skips the base check without an upstream or base workflow policy; my adoption-branch repro passes, exit 0). f2ee48dd only renames the shadowing variable to policy_base, so start again prints and records the recorded base. Normal start flows show no false refusals: new start with an unpushed reviewed merge, resuming a long-lived branch, base ahead or rebased, base behind, no local base. The a0cfec0d and a90d3538 master merges resolve cleanly. land on this repo's master passes in a scratch clone with simulated upstreams 0, 30 and 120 commits back, with no measurable added cost. The docs match behavior, including the self-declared-identity limit. Evidence atelier-w410 pins f2ee48dd with exit 0 (599 passed); targeted session tests 16/16 at 00534206.
