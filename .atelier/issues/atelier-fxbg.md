@@ -18,9 +18,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T22:56:03.678387663+00:00"
+status: "done"
 title: "Let land pass on branches that no item owns"
-updated_at: "2026-10-15T22:53:46.207472072+00:00"
+updated_at: "2026-10-15T22:56:03.678387663+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ The Claude Stop hook runs `atelier land` at every stop. On any branch not create
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). Reproduced in a scratch repo: `land` passes on the base branch and fails on any other unowned branch. Related: atelier-40i6 (the install commit itself).
+
+## Close Reason
+
+Unowned branches that change nothing under .atelier/ since their merge base land with a note; unowned branches that change tracker files keep land_work_untraceable with the paths and atelier start guidance. Covered by unowned_branch_lands_unless_it_changes_records, including the Stop hook.
