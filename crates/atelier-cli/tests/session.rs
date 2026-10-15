@@ -2223,6 +2223,27 @@ fn base_pull_merge_counts_only_the_paths_it_introduces() {
     );
 }
 #[test]
+fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(dir.path(), &["switch", "-q", "-c", "adopt"]);
+    ok(dir.path(), &["init", "--slug", "adopter"]);
+    let id = ok(dir.path(), &["-q", "issue", "create", "First tracked work"]);
+    commit(dir.path(), "install Atelier on a branch");
+    ok(dir.path(), &["start", &id]);
+}
+#[test]
 fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

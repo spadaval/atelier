@@ -117,7 +117,9 @@ notes that it cannot check base commits.
 `atelier start` runs the same check on the local base branch, using the
 base's own records, whether it creates the work branch or switches to an
 existing one. A branch started while the base holds an unreviewed commit
-would carry it in, and a review of `<base>...<branch>` would never show it. To
+would carry it in, and a review of `<base>...<branch>` would never show it.
+`start` skips the check when the base has no upstream or no workflow policy
+yet, as when Atelier is being adopted on a branch. To
 recover, move the commit to a work branch (`git switch -c <type>/<id>`, then
 `git branch -f <base> <base>@{upstream}`) and run `atelier start <id>` there.
 This is a handoff check, not an access control. Review identities are

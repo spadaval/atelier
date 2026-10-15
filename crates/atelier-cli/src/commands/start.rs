@@ -170,8 +170,25 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     // Work started while the local base holds unreviewed commits would carry
     // them in, and a review of `base...branch` would never see them. The
     // base's own records say which of its commits came through review.
-    let local_base = format!("refs/heads/{}", view_policy.branch_policy.base_branch);
-    if let Ok(base_commit) = git::resolve(&repo_root, &local_base) {
+    // A base without an upstream has nothing to check, and a base without
+    // the workflow policy predates the gates (Atelier adopted on a branch).
+    let base = &view_policy.branch_policy.base_branch;
+    let checkable = git::resolve(&repo_root, &format!("refs/heads/{base}"))
+        .ok()
+        .filter(|_| git::resolve(&repo_root, &format!("{base}@{{upstream}}")).is_ok())
+        .filter(|commit| {
+            atelier_app::git_freshness::git_output(
+                &repo_root,
+                &[
+                    "ls-tree",
+                    commit,
+                    "--",
+                    atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
+                ],
+            )
+            .is_ok_and(|listed| !listed.is_empty())
+        });
+    if let Some(base_commit) = checkable {
         let base_records = git::Snapshot::at(&repo_root, state_dir, &base_commit)?;
         git::check_base_commits(&repo_root, &base_records.index, &view_policy, &base_commit)?;
     }
