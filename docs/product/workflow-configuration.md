@@ -9,7 +9,8 @@ choreography or a way to evade review.
 prune defaults, and supported project settings. `project_slug` is the prefix of
 every new record ID. `atelier init` derives it from the repository's name:
 the origin remote's repository name, else the main worktree's directory (so a
-linked worktree such as `project-feature` still gets `project`), else the
+linked worktree such as `project-feature` still gets `project`), else a bare
+repository's name (`proj.git`, or `proj` for `proj/.bare`), else the
 current directory. The Git sources count only when `init` runs at a
 repository's top level, so a new project inside a tracked parent keeps its own
 directory name. The name is lowercased, with other characters replaced by

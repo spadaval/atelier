@@ -142,7 +142,54 @@ fn test_init_slug_comes_from_origin_then_the_main_worktree() {
     let (success, stdout, stderr) = run_atelier(&bare_linked, &["init"]);
     assert!(success, "{stderr}");
     assert!(
-        stdout.contains("Project slug: toolkit (from the main worktree's directory;"),
+        stdout.contains("Project slug: toolkit (from the bare repository's name;"),
+        "{stdout}"
+    );
+
+    let hidden = root.path().join("hub/.bare");
+    git(
+        root.path(),
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            hidden.to_str().unwrap(),
+        ],
+    );
+    git(
+        &main,
+        &["push", "-q", hidden.to_str().unwrap(), "HEAD:main"],
+    );
+    let hub_main = root.path().join("hub/main");
+    git(
+        &hidden,
+        &["worktree", "add", "-q", hub_main.to_str().unwrap(), "main"],
+    );
+    let (success, stdout, stderr) = run_atelier(&hub_main, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: hub (from the bare repository's name;"),
+        "{stdout}"
+    );
+
+    // A separate git dir is not a bare repository; the directory name counts.
+    let separate = root.path().join("sepwork");
+    git(
+        root.path(),
+        &[
+            "init",
+            "-q",
+            "--separate-git-dir",
+            root.path().join("sep.gitdir").to_str().unwrap(),
+            separate.to_str().unwrap(),
+        ],
+    );
+    let (success, stdout, stderr) = run_atelier(&separate, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: sepwork (from the directory name;"),
         "{stdout}"
     );
 

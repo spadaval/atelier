@@ -123,21 +123,38 @@ fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
         .then(|| git(&["remote", "get-url", "origin"]))
         .flatten()
         .and_then(|url| repository_name(&url));
-    let main_worktree = top_level
+    let common = top_level
         .then(|| git(&["rev-parse", "--path-format=absolute", "--git-common-dir"]))
         .flatten()
+        .map(PathBuf::from);
+    // A non-bare repository keeps its common dir at <main worktree>/.git.
+    let main_worktree = common
+        .as_ref()
+        .filter(|common| common.file_name().is_some_and(|name| name == ".git"))
+        .and_then(|common| common.parent()?.file_name())
+        .map(|name| name.to_string_lossy().into_owned());
+    // Worktrees of a bare repository are named after it (`proj.git`), or
+    // after its parent for a hidden layout such as `proj/.bare`.
+    let bare = common
+        .as_ref()
+        .filter(|common| {
+            crate::git_freshness::git_output(
+                &path,
+                &[
+                    "--git-dir",
+                    &common.to_string_lossy(),
+                    "rev-parse",
+                    "--is-bare-repository",
+                ],
+            )
+            .is_ok_and(|out| out.trim_ascii() == b"true")
+        })
         .and_then(|common| {
-            let common = PathBuf::from(common);
-            // A non-bare repository keeps its common dir at <worktree>/.git;
-            // a bare one is the repository itself, often <name>.git.
-            if common.file_name()? == ".git" {
-                common
-                    .parent()?
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-            } else {
-                repository_name(&common.to_string_lossy())
-            }
+            let hidden = common
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with('.'));
+            let named = if hidden { common.parent()? } else { common };
+            repository_name(&named.to_string_lossy())
         });
     let directory = path
         .file_name()
@@ -145,6 +162,7 @@ fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
     [
         (remote, "the origin remote"),
         (main_worktree, "the main worktree's directory"),
+        (bare, "the bare repository's name"),
         (directory, "the directory name"),
     ]
     .into_iter()
