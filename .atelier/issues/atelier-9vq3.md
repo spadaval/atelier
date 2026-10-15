@@ -9,7 +9,16 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-28mz"
+    type: "related"
+  - kind: "issue"
+    id: "atelier-e4c5"
+    type: "related"
+  - kind: "issue"
+    id: "atelier-ymmb"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
