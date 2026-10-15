@@ -13,9 +13,9 @@ pub struct MissionReadinessDiagnosis {
 pub fn dependency_diagnosis(
     index: &RecordIndex,
     policy: &WorkflowPolicy,
-    mission_id: &str,
+    issue_id: &str,
 ) -> Result<Option<MissionReadinessDiagnosis>> {
-    let closure = dependency_closure(index, policy, mission_id)?;
+    let closure = dependency_closure(index, policy, issue_id)?;
     let Some(path) = closure
         .open_paths
         .iter()
@@ -27,15 +27,18 @@ pub fn dependency_diagnosis(
     let terminal = path
         .last()
         .cloned()
-        .unwrap_or_else(|| mission_id.to_string());
+        .unwrap_or_else(|| issue_id.to_string());
     let label = if path.len() <= 2 {
         "direct blocker"
     } else {
         "transitive blocker"
     };
+    let record_type = index
+        .get_issue(issue_id)
+        .map_or_else(|| "issue".to_string(), |record| record.issue_type.clone());
     Ok(Some(MissionReadinessDiagnosis {
         summary: format!(
-            "mission {mission_id} has {label} path {}",
+            "{record_type} {issue_id} has {label} path {}",
             path.join(" -> ")
         ),
         next_command: format!("atelier issue show {terminal}"),

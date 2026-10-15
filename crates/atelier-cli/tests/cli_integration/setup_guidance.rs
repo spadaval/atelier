@@ -2425,3 +2425,40 @@ fn test_removed_commands_fail_without_compatibility_guidance() {
         );
     }
 }
+
+#[test]
+fn blocked_start_names_the_record_type_not_mission() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str| {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--body",
+                "## Goal\n\nWork.\n\n## Done when\n\nDone.",
+            ],
+        );
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let task = create("Blocked task");
+    let blocker = create("Open blocker");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &task, &blocker, "--role", "blocked_by"],
+    );
+    assert!(success, "{stderr}");
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &task, "start"]);
+    assert!(!success, "{stdout}");
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        output.contains(&format!("task {task} has direct blocker path {task} -> {blocker}")),
+        "{output}"
+    );
+    assert!(!output.contains("mission"), "{output}");
+}
