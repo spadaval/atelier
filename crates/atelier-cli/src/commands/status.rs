@@ -62,12 +62,11 @@ fn owner_row(
         return Ok(None);
     };
     let status = if policy.status_category(&owner.status) == Some("done") {
-        let head = atelier_app::git_freshness::head_commit(repo)?;
         commands::git::unmerged_done_label(
             repo,
+            &owner.id,
             &owner.status,
             &branch,
-            &head,
             &policy.branch_policy.base_branch,
         )
     } else {

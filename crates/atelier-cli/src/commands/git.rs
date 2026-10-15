@@ -108,25 +108,27 @@ impl Snapshot {
     }
 }
 
-/// A done claim on a work branch is not base completion until it merges.
+/// A done claim on a work branch is not base completion until the base
+/// branch's own copy of the record carries it.
 pub(crate) fn unmerged_done_label(
     repo: &Path,
+    id: &str,
     status: &str,
     branch: &str,
-    commit: &str,
     base_branch: &str,
 ) -> String {
-    let merged = git_freshness::command(repo)
-        .args([
-            "merge-base",
-            "--is-ancestor",
-            commit,
-            &format!("refs/heads/{base_branch}"),
-        ])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
+    let path = format!(".atelier/issues/{id}.md");
+    let merged = resolve(repo, &format!("refs/heads/{base_branch}"))
+        .and_then(|base| git_freshness::blob(repo, &base, Path::new(&path)))
+        .ok()
+        .and_then(|blob| {
+            atelier_records::parse_issue_record(
+                &blob,
+                Path::new(&path).strip_prefix(".atelier").ok()?,
+            )
+            .ok()
+        })
+        .is_some_and(|record| record.issue.status == status);
     if merged {
         format!("{status}, merged into {base_branch}")
     } else {
@@ -281,7 +283,7 @@ pub(crate) fn branch_lines_for(
                     })
                     .count();
                 let status = if branch_policy.status_category(&owner.status) == Some("done") {
-                    unmerged_done_label(repo, &owner.status, branch, commit, base_branch)
+                    unmerged_done_label(repo, &id, &owner.status, branch, base_branch)
                 } else {
                     owner.status.clone()
                 };

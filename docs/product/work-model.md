@@ -54,12 +54,14 @@ no records. The base therefore shows the item done together with its code.
 See [reviews and merge](reviews-and-merge.md) for approval freshness and findings.
 
 The done claim comes before review on purpose (atelier-9k7o, decided by
-Sumeet 2026-10-15): the reviewer sees the claim together with the code, and a
-rejected review moves the item back with the `revise` transition. Until the
+Sumeet 2026-10-15): the reviewer sees the claim together with the code. A
+review that finds problems leaves the claim in place: the author fixes the
+findings on the work branch, and the merge waits for fresh approval. Until the
 merge, though, that branch says done for work the base does not have. So
 `prime`, `status`, and the other-branch rows in `status` show a done owner as
 `done on branch <work-branch>, not merged into <base>`, or as
-`done, merged into <base>` once the base contains the branch.
+`done, merged into <base>` once the base branch's own copy of the record is
+done.
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.

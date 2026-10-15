@@ -80,9 +80,9 @@ fn prime_text() -> Result<String> {
         let status = if source.policy.status_category(&record.issue.status) == Some("done") {
             git::unmerged_done_label(
                 repo,
+                &id,
                 &record.issue.status,
                 &branch,
-                &head,
                 &source.policy.branch_policy.base_branch,
             )
         } else {

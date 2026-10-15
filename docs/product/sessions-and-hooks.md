@@ -66,4 +66,5 @@ overlay another branch's records onto the current graph. Incompatible or
 unavailable snapshots are reported separately. Every compatible owner branch
 remains visible, including branches sharing a tracker tree. A branch's done
 claim is not base completion: a done owner shows as `done on branch <branch>,
-not merged into <base>` until the base contains that branch.
+not merged into <base>` until the base branch's own copy of the record is
+done.
