@@ -148,14 +148,15 @@ fn prime_preserves_native_branch_trimming_for_header_owner_and_orientation() {
             } else {
                 assert!(prime.contains("Owner: none on this checkout"), "{prime}");
             }
-            if trailing {
-                assert!(prime.contains(&format!("{branch}: unavailable")), "{prime}");
-            } else {
-                assert!(
-                    !prime.contains(&format!("{branch}: unavailable")),
-                    "{prime}"
-                );
-            }
+            let unstarted = prime
+                .lines()
+                .find_map(|line| line.strip_prefix("No started work on: "))
+                .unwrap_or_default();
+            assert_eq!(
+                unstarted.split(", ").any(|listed| listed == branch),
+                trailing,
+                "{prime}"
+            );
         }
     }
 }

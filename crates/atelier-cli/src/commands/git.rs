@@ -136,6 +136,8 @@ pub(crate) fn branch_lines_for(
         ],
     )?;
     let mut lines = Vec::new();
+    let mut untracked = Vec::new();
+    let mut unstarted = Vec::new();
     for head in heads.lines() {
         let Some((reference, commit)) = head.split_once(' ') else {
             continue;
@@ -144,7 +146,23 @@ pub(crate) fn branch_lines_for(
         if branch == current || branch == base_branch {
             continue;
         }
-        let view = (|| -> Result<Vec<String>> {
+        // Branches from before Atelier was initialised have no tracker to read.
+        // `ls-tree` prints nothing for an absent path but still fails on
+        // missing objects, which are reported below as real errors.
+        let listed = git_freshness::git_output(
+            repo,
+            &[
+                "ls-tree",
+                commit,
+                "--",
+                workflow_policy::WORKFLOW_POLICY_PATH,
+            ],
+        );
+        if listed.as_ref().is_ok_and(|output| output.is_empty()) {
+            untracked.push(branch.to_string());
+            continue;
+        }
+        let view = (|| -> Result<Option<Vec<String>>> {
             // Legacy branches can contain thousands of obsolete records. Inspect
             // the small compatibility/owner blobs before materializing any tree.
             let yaml = git_freshness::blob(
@@ -218,7 +236,7 @@ pub(crate) fn branch_lines_for(
                     .collect();
             }
             if owners.is_empty() {
-                bail!("no compatible started owner record");
+                return Ok(None);
             }
             let snapshot = Snapshot::at(repo, state, commit)?;
             snapshot
@@ -244,12 +262,19 @@ pub(crate) fn branch_lines_for(
                     owner.title
                 ));
             }
-            Ok(rows)
+            Ok(Some(rows))
         })();
         match view {
-            Ok(rows) => lines.extend(rows),
+            Ok(Some(rows)) => lines.extend(rows),
+            Ok(None) => unstarted.push(branch.to_string()),
             Err(error) => lines.push(format!("{branch}: unavailable — {error:#}")),
         }
+    }
+    if !unstarted.is_empty() {
+        lines.push(format!("No started work on: {}", unstarted.join(", ")));
+    }
+    if !untracked.is_empty() {
+        lines.push(format!("No tracker on: {}", untracked.join(", ")));
     }
     Ok(lines)
 }

@@ -2905,3 +2905,43 @@ fn test_start_refuses_done_issues_without_changes() {
     assert_eq!(git_current_branch(dir.path()), "main");
     assert!(git_status_short(dir.path()).is_empty());
 }
+
+#[test]
+fn branches_without_a_tracker_are_summarised_without_git_errors() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    ensure_initial_git_commit(dir.path());
+    git_ok(dir.path(), &["branch", "route-clipboard"]);
+    git_ok(dir.path(), &["branch", "feature/old"]);
+    init_atelier(dir.path());
+    commit_all(dir.path(), "initialise atelier");
+    git_ok(dir.path(), &["branch", "unstarted"]);
+    // A tracked branch whose policy is broken is still a real error.
+    git_ok(dir.path(), &["checkout", "-qb", "broken"]);
+    fs::write(dir.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
+    commit_all(dir.path(), "break policy");
+    git_ok(dir.path(), &["checkout", "-q", "main"]);
+
+    for command in ["status", "prime"] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &[command]);
+        assert!(success, "{command}: {stderr}");
+        let output = format!("{stdout}{stderr}");
+        assert!(
+            output.contains("No tracker on: feature/old, route-clipboard"),
+            "{command}: {output}"
+        );
+        assert!(
+            output.contains("No started work on: unstarted"),
+            "{command}: {output}"
+        );
+        assert!(
+            output.contains("broken: unavailable"),
+            "{command}: {output}"
+        );
+        assert!(!output.contains("cat-file"), "{command}: {output}");
+        assert!(
+            !output.contains("route-clipboard: unavailable"),
+            "{command}: {output}"
+        );
+    }
+}
