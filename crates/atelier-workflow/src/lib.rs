@@ -1757,14 +1757,14 @@ mod tests {
     }
 
     fn work_close_validators() -> &'static str {
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n"
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
     }
 
     fn with_work_close_validators(validators: &str) -> String {
         valid_policy().replace(
             work_close_validators(),
             &format!(
-                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [todo, blocked, in_progress]\n"
+                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
             ),
         )
     }

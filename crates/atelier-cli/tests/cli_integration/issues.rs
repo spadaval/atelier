@@ -2933,13 +2933,13 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
 
     let workflow_path = dir.path().join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path).unwrap();
-    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n";
+    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n";
     assert!(workflow.contains(task_close));
     std::fs::write(
         &workflow_path,
         workflow.replace(
             task_close,
-            "      close:\n        from: [todo, in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Retire work without re-entering execution.\n      supersede:\n        from: [todo, blocked, in_progress]\n",
+            "      close:\n        from: [todo, in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Retire work without re-entering execution.\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
         ),
     )
     .unwrap();
