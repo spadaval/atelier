@@ -197,6 +197,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
                 indent: "",
                 id: &mission.issue.id,
                 issue_type: None,
+                status: &mission.issue.status,
                 status_category: &mission.status_category,
                 priority: &mission.issue.priority,
                 title: &mission.issue.title,
@@ -205,7 +206,6 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
         );
         let counts = &mission.totals;
         for (label, value) in [
-            ("Status", mission.issue.status.clone()),
             (
                 "Scope",
                 format!(

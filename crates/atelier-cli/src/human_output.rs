@@ -144,6 +144,8 @@ pub(crate) struct IssueHeadingRow<'a> {
     pub indent: &'a str,
     pub id: &'a str,
     pub issue_type: Option<&'a str>,
+    /// The exact stored status; its category selects the colour.
+    pub status: &'a str,
     pub status_category: &'a str,
     pub priority: &'a str,
     pub title: &'a str,
@@ -157,14 +159,14 @@ impl IssueHeadingRow<'_> {
             .unwrap_or_default();
         let wide_text = format!(
             "{}{}{kind}  {}  {}  {}",
-            self.indent, self.id, self.status_category, self.priority, self.title
+            self.indent, self.id, self.status, self.priority, self.title
         );
         if visible_width(&wide_text) <= context.width() {
             return vec![format!(
                 "{}{}{kind}  {}  {}  {}",
                 self.indent,
                 context.paint(TextStyle::Heading, self.id),
-                context.paint(status_style(self.status_category), self.status_category),
+                context.paint(status_style(self.status_category), self.status),
                 context.paint(priority_style(self.priority), self.priority),
                 self.title
             )];
@@ -179,8 +181,8 @@ impl IssueHeadingRow<'_> {
         lines.extend(render_labeled_lines(
             context,
             &detail_indent,
-            "State",
-            self.status_category,
+            "Status",
+            self.status,
             status_style(self.status_category),
         ));
         lines.extend(render_labeled_lines(
@@ -903,6 +905,7 @@ mod tests {
             indent: "  ",
             id: "atelier-4fip",
             issue_type: Some("epic"),
+            status: "in_progress",
             status_category: "active",
             priority: "high",
             title: "Build the formatted Mission Overview",
@@ -910,7 +913,7 @@ mod tests {
 
         assert_eq!(
             row.render(RenderContext::plain()),
-            vec!["  atelier-4fip  epic  active  high  Build the formatted Mission Overview"]
+            vec!["  atelier-4fip  epic  in_progress  high  Build the formatted Mission Overview"]
         );
 
         let narrow = row.render(RenderContext::from_parts_with_width(
@@ -923,7 +926,7 @@ mod tests {
             narrow,
             vec![
                 "  atelier-4fip  epic",
-                "    State: active",
+                "    Status: in_progress",
                 "    Priority: high",
                 "    Title:",
                 "      Build the formatted Mission",

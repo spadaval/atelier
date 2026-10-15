@@ -422,7 +422,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     );
     assert!(
         overview.contains(&format!(
-            "{mission_id}  todo  high  Overview mission\n  Status: draft"
+            "{mission_id}  draft  high  Overview mission\n  Scope:"
         )),
         "{overview}"
     );
@@ -461,7 +461,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     );
     assert!(
         narrow.contains(&format!(
-            "{mission_id}\n  State: todo\n  Priority: high\n  Title: Overview mission"
+            "{mission_id}\n  Status: draft\n  Priority: high\n  Title: Overview mission"
         )),
         "{narrow}"
     );
@@ -584,7 +584,6 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
         )),
         "{all}"
     );
-    assert!(all.contains("Status: done"), "{all}");
     assert!(all.contains("Scope: 1 issues: 0 active, 1 ready"), "{all}");
     assert!(!all.contains("Work linked only to done mission"), "{all}");
     assert!(!all.contains("Outside visible missions"), "{all}");
