@@ -51,6 +51,158 @@ fn test_init_twice_is_idempotent() {
 }
 
 #[test]
+fn test_init_slug_comes_from_origin_then_the_main_worktree() {
+    let root = tempdir().unwrap();
+    let git = |dir: &Path, args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let main = root.path().join("astromech");
+    std::fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q", "-b", "main"]);
+    git(
+        &main,
+        &[
+            "-c",
+            "user.name=A",
+            "-c",
+            "user.email=a@example.test",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "base",
+        ],
+    );
+    let linked = root.path().join("astromech-atelier");
+    git(&main, &["worktree", "add", "-q", linked.to_str().unwrap()]);
+    let (success, stdout, stderr) = run_atelier(&linked, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: astromech (from the main worktree's directory;"),
+        "{stdout}"
+    );
+    let config = std::fs::read_to_string(linked.join(".atelier/config.toml")).unwrap();
+    assert!(config.contains("project_slug = \"astromech\""), "{config}");
+
+    let cloned = root.path().join("local-checkout");
+    std::fs::create_dir(&cloned).unwrap();
+    git(&cloned, &["init", "-q"]);
+    git(
+        &cloned,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:someone/elite-tools.git",
+        ],
+    );
+    let (success, stdout, stderr) = run_atelier(&cloned, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: elite-tools (from the origin remote;"),
+        "{stdout}"
+    );
+
+    // A new project inside a tracked parent keeps its own directory name.
+    let nested = cloned.join("newproj");
+    std::fs::create_dir(&nested).unwrap();
+    let (success, stdout, stderr) = run_atelier(&nested, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: newproj (from the directory name;"),
+        "{stdout}"
+    );
+
+    let bare = root.path().join("toolkit.git");
+    git(
+        root.path(),
+        &["init", "-q", "--bare", "-b", "main", bare.to_str().unwrap()],
+    );
+    git(&main, &["push", "-q", bare.to_str().unwrap(), "HEAD:main"]);
+    let bare_linked = root.path().join("toolkit-feature");
+    git(
+        &bare,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            bare_linked.to_str().unwrap(),
+            "main",
+        ],
+    );
+    let (success, stdout, stderr) = run_atelier(&bare_linked, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: toolkit (from the bare repository's name;"),
+        "{stdout}"
+    );
+
+    let hidden = root.path().join("hub/.bare");
+    git(
+        root.path(),
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            hidden.to_str().unwrap(),
+        ],
+    );
+    git(
+        &main,
+        &["push", "-q", hidden.to_str().unwrap(), "HEAD:main"],
+    );
+    let hub_main = root.path().join("hub/main");
+    git(
+        &hidden,
+        &["worktree", "add", "-q", hub_main.to_str().unwrap(), "main"],
+    );
+    let (success, stdout, stderr) = run_atelier(&hub_main, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: hub (from the bare repository's name;"),
+        "{stdout}"
+    );
+
+    // A separate git dir is not a bare repository; the directory name counts.
+    let separate = root.path().join("sepwork");
+    git(
+        root.path(),
+        &[
+            "init",
+            "-q",
+            "--separate-git-dir",
+            root.path().join("sep.gitdir").to_str().unwrap(),
+            separate.to_str().unwrap(),
+        ],
+    );
+    let (success, stdout, stderr) = run_atelier(&separate, &["init"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains("Project slug: sepwork (from the directory name;"),
+        "{stdout}"
+    );
+
+    let plain = root.path().join("plain-dir");
+    std::fs::create_dir(&plain).unwrap();
+    let (success, stdout, _) = run_atelier(&plain, &["init", "--slug", "chosen"]);
+    assert!(
+        success && stdout.contains("Project slug: chosen (from --slug;"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn test_integrations_command_is_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

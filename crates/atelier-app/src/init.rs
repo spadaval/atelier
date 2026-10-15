@@ -30,19 +30,22 @@ pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
 pub struct InitRequest {
     pub path: PathBuf,
     pub force: bool,
-    /// Overrides the slug derived from the repository directory name.
+    /// Overrides the slug derived from the origin remote or main worktree.
     pub project_slug: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitView {
     pub created_paths: Vec<PathBuf>,
+    /// The slug written to a new config, and where it came from.
+    pub project_slug: Option<(String, &'static str)>,
 }
 
 pub fn initialize(input: InitRequest) -> Result<InitView> {
     let layout = StorageLayout::new(&input.path);
     let atelier_dir = layout.atelier_dir();
     let mut created_paths = Vec::new();
+    let mut project_slug = None;
     let project_config_path = layout.config_path();
     let new_config = if project_config_path.exists() {
         if let Some(requested) = &input.project_slug {
@@ -56,11 +59,12 @@ pub fn initialize(input: InitRequest) -> Result<InitView> {
         }
         None
     } else {
-        let slug = match &input.project_slug {
-            Some(slug) => slug.clone(),
+        let (slug, source) = match &input.project_slug {
+            Some(slug) => (slug.clone(), "--slug"),
             None => default_project_slug(&input.path)?,
         };
         atelier_records::validate_project_slug(&slug)?;
+        project_slug = Some((slug.clone(), source));
         Some(project_config_toml(&slug))
     };
 
@@ -91,21 +95,104 @@ pub fn initialize(input: InitRequest) -> Result<InitView> {
 
     ensure_root_gitignore(&input.path, input.force)?;
 
-    Ok(InitView { created_paths })
+    Ok(InitView {
+        created_paths,
+        project_slug,
+    })
 }
 
-/// The repository directory name, normalized to a valid slug.
-fn default_project_slug(path: &Path) -> Result<String> {
+/// The repository's name, normalized to a valid slug: the origin remote's
+/// repository name, else the main worktree's directory, so a linked worktree
+/// such as `project-feature` still mints `project-*` IDs. Git names count
+/// only at a repository's top level; elsewhere, such as a new project inside
+/// a tracked parent, the directory name is used.
+fn default_project_slug(path: &Path) -> Result<(String, &'static str)> {
     let path =
         fs::canonicalize(path).with_context(|| format!("failed to resolve {}", path.display()))?;
-    path.file_name()
-        .and_then(|name| atelier_records::derive_project_slug(&name.to_string_lossy()))
-        .ok_or_else(|| {
-            anyhow!(
-                "cannot derive a project slug from {}; pass --slug <slug>",
-                path.display()
+    let git = |args: &[&str]| {
+        crate::git_freshness::git_output(&path, args)
+            .ok()
+            .and_then(|out| String::from_utf8(out).ok())
+            .map(|out| out.trim().to_owned())
+            .filter(|out| !out.is_empty())
+    };
+    let top_level = git(&["rev-parse", "--show-toplevel"])
+        .and_then(|top| fs::canonicalize(top).ok())
+        .is_some_and(|top| top == path);
+    let remote = top_level
+        .then(|| git(&["remote", "get-url", "origin"]))
+        .flatten()
+        .and_then(|url| repository_name(&url));
+    let common = top_level
+        .then(|| git(&["rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        .flatten()
+        .map(PathBuf::from);
+    // A non-bare repository keeps its common dir at <main worktree>/.git.
+    let main_worktree = common
+        .as_ref()
+        .filter(|common| common.file_name().is_some_and(|name| name == ".git"))
+        .and_then(|common| common.parent()?.file_name())
+        .map(|name| name.to_string_lossy().into_owned());
+    // Worktrees of a bare repository are named after it (`proj.git`), or
+    // after its parent for a hidden layout such as `proj/.bare`.
+    let bare = common
+        .as_ref()
+        .filter(|common| {
+            crate::git_freshness::git_output(
+                &path,
+                &[
+                    "--git-dir",
+                    &common.to_string_lossy(),
+                    "rev-parse",
+                    "--is-bare-repository",
+                ],
             )
+            .is_ok_and(|out| out.trim_ascii() == b"true")
         })
+        .and_then(|common| {
+            let hidden = common
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with('.'));
+            let named = if hidden { common.parent()? } else { common };
+            repository_name(&named.to_string_lossy())
+        });
+    let directory = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    [
+        (remote, "the origin remote"),
+        (main_worktree, "the main worktree's directory"),
+        (bare, "the bare repository's name"),
+        (directory, "the directory name"),
+    ]
+    .into_iter()
+    .find_map(|(name, source)| {
+        name.and_then(|name| atelier_records::derive_project_slug(&name))
+            .map(|slug| (slug, source))
+    })
+    .ok_or_else(|| {
+        anyhow!(
+            "cannot derive a project slug from {}; pass --slug <slug>",
+            path.display()
+        )
+    })
+}
+
+/// The last component of a remote URL or repository path, without `.git`.
+fn repository_name(location: &str) -> Option<String> {
+    let location = location.trim_end_matches('/');
+    let location = location
+        .strip_suffix("/.git")
+        .unwrap_or(location)
+        .trim_end_matches('/');
+    let name = location.rsplit(['/', ':']).next()?;
+    let name = match name.len().checked_sub(4) {
+        Some(at) if name.is_char_boundary(at) && name[at..].eq_ignore_ascii_case(".git") => {
+            &name[..at]
+        }
+        _ => name,
+    };
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
@@ -142,4 +229,29 @@ pub fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
         fs::write(&gitignore_path, existing).context("Failed to write .gitignore")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::repository_name;
+
+    #[test]
+    fn repository_names_come_from_any_remote_or_path_form() {
+        for (location, name) in [
+            ("https://github.com/o/elite-tools.git", "elite-tools"),
+            ("https://github.com/o/elite-tools/", "elite-tools"),
+            ("git@github.com:o/elite-tools.git", "elite-tools"),
+            ("ssh://git@host:2222/o/elite-tools.GIT", "elite-tools"),
+            ("file:///srv/elite-tools.git/", "elite-tools"),
+            ("/srv/elite-tools/.git", "elite-tools"),
+            ("/srv/elite-tools", "elite-tools"),
+        ] {
+            assert_eq!(
+                repository_name(location).as_deref(),
+                Some(name),
+                "{location}"
+            );
+        }
+        assert_eq!(repository_name("/.git"), None);
+    }
 }
