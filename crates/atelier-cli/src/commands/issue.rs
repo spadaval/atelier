@@ -568,6 +568,7 @@ pub struct LifecycleCreateInput<'a> {
     pub labels: &'a [String],
     pub parent: Option<&'a str>,
     pub status: Option<&'a str>,
+    pub strategy: Option<&'a str>,
     pub quiet: bool,
 }
 
@@ -615,7 +616,10 @@ pub fn create_lifecycle(
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
-            strategy: None,
+            strategy: input
+                .strategy
+                .map(|path| mission_strategy(input.issue_type, path))
+                .transpose()?,
             workflow_branch: None,
             parent_id: None,
             created_at: now,
@@ -783,12 +787,21 @@ fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) ->
     Ok(status.to_string())
 }
 
+/// Only missions link a strategy; its path is the canonical link.
+fn mission_strategy(issue_type: &str, path: &str) -> Result<atelier_core::IssueStrategy> {
+    if issue_type != "mission" {
+        bail!("--strategy applies to missions; {issue_type} records do not link a strategy");
+    }
+    Ok(atelier_core::IssueStrategy::new(path)?)
+}
+
 pub struct UpdateInput<'a> {
     pub issue_ref: &'a str,
     pub title: Option<&'a str>,
     pub priority: Option<&'a str>,
     pub issue_type: Option<&'a str>,
     pub body: Option<&'a str>,
+    pub strategy: Option<&'a str>,
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
@@ -862,6 +875,10 @@ pub fn update_lifecycle(
         record.sections.body = parsed.body;
         changed_fields.push("body");
     }
+    if let Some(path) = input.strategy {
+        record.issue.strategy = Some(mission_strategy(&record.issue.issue_type, path)?);
+        changed_fields.push("strategy");
+    }
     for label in input.labels {
         push_unique(&mut record.labels, label.to_string());
         changed_fields.push("labels");
@@ -874,7 +891,7 @@ pub fn update_lifecycle(
         changed_fields.push("parent");
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;

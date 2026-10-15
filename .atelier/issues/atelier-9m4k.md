@@ -4,6 +4,9 @@ id: "atelier-9m4k"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-9m4k
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Link a mission and its strategy without a circular edit"
-updated_at: "2026-10-15T22:08:58.936198054+00:00"
+updated_at: "2026-10-15T23:45:16.621971488+00:00"
 ---
 
 ## Goal

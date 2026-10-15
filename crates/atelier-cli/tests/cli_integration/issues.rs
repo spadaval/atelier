@@ -3683,3 +3683,108 @@ fn test_issue_options_do_what_their_help_says() {
     let (_, help, _) = run_atelier(dir.path(), &["issue", "transition", "--help"]);
     assert!(help.contains("atelier start <id>"), "{help}");
 }
+
+#[test]
+fn test_mission_strategy_is_set_from_the_cli_and_checked_from_the_mission_side() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    fs::create_dir_all(dir.path().join("docs/strategies")).unwrap();
+    fs::write(
+        dir.path().join("docs/strategies/plan.md"),
+        "---\nstatus: draft\n---\n\n# Plan\n",
+    )
+    .unwrap();
+    let (success, mission, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Ship it",
+            "--issue-type",
+            "mission",
+            "--strategy",
+            "docs/strategies/plan.md",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let mission = mission.trim().to_string();
+    let strategy_path =
+        |dir: &Path| fs::read_to_string(canonical_issue_path(dir, &mission)).unwrap();
+    assert!(
+        strategy_path(dir.path()).contains("strategy:\n  path: docs/strategies/plan.md\n"),
+        "{}",
+        strategy_path(dir.path())
+    );
+    // The strategy need not name its mission.
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    // A strategy that names another mission disagrees with the canonical link.
+    fs::write(
+        dir.path().join("docs/strategies/plan.md"),
+        "---\nmission: atelier-zzzz\n---\n\n# Plan\n",
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "{stdout}");
+    assert!(
+        format!("{stdout}{stderr}").contains("front matter names mission atelier-zzzz"),
+        "{stdout}{stderr}"
+    );
+
+    // Moving the link is one edit on the mission.
+    fs::write(dir.path().join("docs/strategies/next.md"), "# Next\n").unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &mission,
+            "--strategy",
+            "docs/strategies/next.md",
+        ],
+    );
+    assert!(success, "{stderr}");
+    assert!(strategy_path(dir.path()).contains(
+        "path: docs/strategies/next.md
+"
+    ));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &mission,
+            "--strategy",
+            "docs/strategies/missing.md",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        !success
+            && format!("{stdout}{stderr}")
+                .contains("strategy docs/strategies/missing.md does not exist"),
+        "{stdout}{stderr}"
+    );
+
+    let (_, task, _) = run_atelier(dir.path(), &["-q", "issue", "create", "Task"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            task.trim(),
+            "--strategy",
+            "docs/strategies/next.md",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("--strategy applies to missions"),
+        "{stderr}"
+    );
+}

@@ -159,6 +159,15 @@ pub fn issue_findings<'a>(
                 "Mission requires Success criteria or a linked strategy".to_string(),
             ));
         }
+        if let Some(strategy) = issue
+            .strategy
+            .as_ref()
+            .filter(|_| issue.issue_type == "mission")
+        {
+            if let Some(message) = strategy_link_finding(repo_root, &issue.id, &strategy.path) {
+                findings.push(finding(message));
+            }
+        }
         if issue.issue_type == "epic"
             && issue.status != "draft"
             && record.sections.section(IssueSectionName::Proof).is_none()
@@ -188,6 +197,30 @@ pub fn issue_findings<'a>(
         }
     }
     findings
+}
+
+/// The mission's strategy path is the canonical link. A strategy file need
+/// not name its mission, but one that names a different mission disagrees.
+fn strategy_link_finding(repo_root: &Path, mission: &str, path: &str) -> Option<String> {
+    let Ok(text) = std::fs::read_to_string(repo_root.join(path)) else {
+        return Some(format!("Mission strategy {path} does not exist"));
+    };
+    let text = text.replace("\r\n", "\n");
+    let named = atelier_records::split_document(&text)
+        .and_then(|(front_matter, _)| serde_yaml::from_str::<serde_yaml::Value>(front_matter).ok())
+        .and_then(|front_matter| front_matter.get("mission").cloned())?;
+    let named = match named {
+        serde_yaml::Value::String(named) => named,
+        other => serde_yaml::to_string(&other)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    };
+    (named != mission).then(|| {
+        format!(
+            "Strategy {path} front matter names mission {named}, but {mission} links it; the mission's strategy path is canonical, so set `mission: {mission}` in the strategy or remove the key"
+        )
+    })
 }
 
 /// Resolves an issue reference against the record files, including files
