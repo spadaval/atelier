@@ -57,3 +57,17 @@ Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.
 Terminal records eventually leave the active tree through
 [prune](retention-and-prune.md), with their history retained in Git.
+
+## Decided changes
+
+These decisions are accepted but not all built yet. The sections above
+describe current behaviour until the named follow-up merges.
+
+- **Parent issues replace epics** (atelier-9vq3, decided by Sumeet
+  2026-10-15). Elsewhere "epic" usually means a theme, so adopters modelled
+  themes as epics and got branches that never merged. The `epic` type goes
+  away: any non-mission issue may have children, one level deep. The parent
+  owns its children's branch and cannot close until they are terminal.
+  Unknowns and Design become optional sections on any issue. Themes are
+  labels, and missions keep the why. Existing epics are retyped and keep
+  their links. Implementation: atelier-o6h9.
