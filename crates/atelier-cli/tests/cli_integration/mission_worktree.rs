@@ -2989,6 +2989,17 @@ fn check_reports_every_independent_graph_error_in_one_run() {
             &format!("  children:\n  - kind: \"issue\"\n    id: \"{}\"", ids[5]),
         )
     });
+    // The child also has an unconfigured link type: a second, independent
+    // error on a record that the hierarchy error names, checked after cycles.
+    edit_canonical_issue(dir.path(), &ids[5], |markdown| {
+        markdown.replace(
+            "  relates: []",
+            &format!(
+                "  relates:\n  - kind: \"issue\"\n    id: \"{}\"\n    type: \"frobnicates\"",
+                ids[0]
+            ),
+        )
+    });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(!success, "{stdout}");
@@ -2998,7 +3009,11 @@ fn check_reports_every_independent_graph_error_in_one_run() {
         "has blocks reference to missing issue atelier-missb",
         "relationships.blocks contains a cycle",
         &format!("issue {} cannot be child of task {}", ids[5], ids[4]),
-        "Lint found 4 issue(s)",
+        &format!(
+            "issue {} has unconfigured context link type 'frobnicates'",
+            ids[5]
+        ),
+        "Lint found 5 issue(s)",
     ] {
         assert!(transcript.contains(expected), "{expected}: {transcript}");
     }

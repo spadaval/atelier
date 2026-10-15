@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Result};
@@ -85,10 +84,15 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     if findings.is_empty() {
         let integrity_errors = match other_file_errors.into_iter().next() {
             Some(first) => vec![first.message],
-            None => graph_errors(state_dir, &files)
-                .into_iter()
-                .map(|error| format!("Tracker record files are invalid: {error}"))
-                .collect(),
+            None => RecordIndex::validation_errors(
+                state_dir,
+                files.issues.clone(),
+                files.evidence.clone(),
+                files.reviews.clone(),
+            )
+            .into_iter()
+            .map(|error| format!("Tracker record files are invalid: {error:#}"))
+            .collect(),
         };
         findings.extend(integrity_errors.into_iter().map(|message| LintFinding {
             id: "(canonical)".to_string(),
@@ -107,121 +111,6 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     ));
 
     Ok(LintView { findings })
-}
-
-/// Every independent graph error, not just the first. The index fails fast,
-/// so after a failure: records whose edges are locally suspect (a missing
-/// target or a repeated edge) are revalidated on their own, then the rest of
-/// the graph is rebuilt repeatedly, setting aside the records each error
-/// names. Each rebuild is linear, and they run only for an invalid graph.
-fn graph_errors(state_dir: &Path, files: &crate::record_index::RecordFiles) -> Vec<String> {
-    // Build with only the issues at `kept` positions keeping their edges.
-    let build = |kept: &dyn Fn(usize) -> bool| {
-        let issues = files
-            .issues
-            .iter()
-            .enumerate()
-            .map(|(position, record)| {
-                let mut record = record.clone();
-                if !kept(position) {
-                    record.relationships = Default::default();
-                }
-                record
-            })
-            .collect();
-        RecordIndex::from_project_records(
-            state_dir,
-            issues,
-            files.evidence.clone(),
-            files.reviews.clone(),
-        )
-        .err()
-        .map(|error| format!("{error:#}"))
-    };
-    if build(&|_| true).is_none() {
-        return Vec::new();
-    }
-    let ids = files
-        .issues
-        .iter()
-        .map(|record| record.issue.id.as_str())
-        .chain(
-            files
-                .evidence
-                .iter()
-                .map(|record| record.header.id.as_str()),
-        )
-        .chain(files.reviews.iter().map(|record| record.header.id.as_str()))
-        .collect::<BTreeSet<_>>();
-    let mut errors = Vec::new();
-    let mut set_aside = BTreeSet::new();
-    for (position, record) in files.issues.iter().enumerate() {
-        if locally_suspect(record, &ids) {
-            if let Some(error) = build(&|other| other == position) {
-                set_aside.insert(position);
-                if !errors.contains(&error) {
-                    errors.push(error);
-                }
-            }
-        }
-    }
-    for _ in 0..=files.issues.len() {
-        let Some(error) = build(&|position| !set_aside.contains(&position)) else {
-            break;
-        };
-        let named = files
-            .issues
-            .iter()
-            .enumerate()
-            .filter(|(position, record)| {
-                !set_aside.contains(position) && names_id(&error, &record.issue.id)
-            })
-            .map(|(position, _)| position)
-            .collect::<Vec<_>>();
-        if !errors.contains(&error) {
-            errors.push(error);
-        }
-        if named.is_empty() {
-            break;
-        }
-        set_aside.extend(named);
-    }
-    errors
-}
-
-fn locally_suspect(record: &CanonicalIssueRecord, ids: &BTreeSet<&str>) -> bool {
-    let relationships = &record.relationships;
-    let targets = relationships
-        .blocks
-        .iter()
-        .chain(&relationships.children)
-        .map(|target| (target.kind.as_str(), target.id.as_str(), ""))
-        .chain(relationships.attachments.iter().map(|target| {
-            (
-                target.kind.as_str(),
-                target.id.as_str(),
-                target.role.as_str(),
-            )
-        }))
-        .chain(relationships.relates.iter().map(|target| {
-            (
-                target.kind.as_str(),
-                target.id.as_str(),
-                target.relation_type.as_str(),
-            )
-        }))
-        .collect::<Vec<_>>();
-    let distinct = targets.iter().collect::<BTreeSet<_>>();
-    distinct.len() != targets.len() || targets.iter().any(|(_, id, _)| !ids.contains(id))
-}
-
-/// Whether `text` names `id` as a whole record ID.
-fn names_id(text: &str, id: &str) -> bool {
-    text.match_indices(id).any(|(start, _)| {
-        let end = start + id.len();
-        let boundary = |c: Option<char>| c.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '-'));
-        boundary(text[..start].chars().next_back()) && boundary(text[end..].chars().next())
-    })
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and

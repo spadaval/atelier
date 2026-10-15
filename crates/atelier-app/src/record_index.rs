@@ -211,23 +211,49 @@ impl RecordIndex {
     }
 
     /// Builds an index from already-parsed records and applies the
-    /// repository's link-type configuration and workflow policy.
+    /// repository's link-type configuration and workflow policy. Fails with
+    /// the first error; `validation_errors` reports them all.
     pub fn from_project_records(
         state_dir: &Path,
         issues: Vec<CanonicalIssueRecord>,
         evidence: Vec<EvidenceRecord>,
         reviews: Vec<ReviewRecord>,
     ) -> Result<Self> {
-        let index = Self::from_records(issues, evidence, reviews)?;
-        let repo_root = state_dir.parent().ok_or_else(|| {
-            anyhow!(
+        let (index, errors) = Self::validated(state_dir, issues, evidence, reviews);
+        match errors.into_iter().next() {
+            Some(error) => Err(error),
+            None => Ok(index),
+        }
+    }
+
+    /// Every independent validation error, in the order `from_project_records`
+    /// would meet them. Invalid edges are skipped so later checks still run.
+    pub fn validation_errors(
+        state_dir: &Path,
+        issues: Vec<CanonicalIssueRecord>,
+        evidence: Vec<EvidenceRecord>,
+        reviews: Vec<ReviewRecord>,
+    ) -> Vec<anyhow::Error> {
+        Self::validated(state_dir, issues, evidence, reviews).1
+    }
+
+    fn validated(
+        state_dir: &Path,
+        issues: Vec<CanonicalIssueRecord>,
+        evidence: Vec<EvidenceRecord>,
+        reviews: Vec<ReviewRecord>,
+    ) -> (Self, Vec<anyhow::Error>) {
+        let (index, mut errors) = Self::structural(issues, evidence, reviews);
+        let Some(repo_root) = state_dir.parent() else {
+            errors.push(anyhow!(
                 "Cannot determine repository root for {}",
                 state_dir.display()
-            )
-        })?;
-        index.validate_link_types(repo_root, state_dir)?;
-        index.validate_against_policy(repo_root)?;
-        Ok(index)
+            ));
+            return (index, errors);
+        };
+        index.validate_link_types(repo_root, state_dir, &mut errors);
+        index.validate_against_policy(repo_root, &mut errors);
+        (index, errors)
     }
 
     /// Builds an index and validates the record graph's structure.
@@ -236,36 +262,58 @@ impl RecordIndex {
         evidence: Vec<EvidenceRecord>,
         reviews: Vec<ReviewRecord>,
     ) -> Result<Self> {
+        let (index, errors) = Self::structural(issues, evidence, reviews);
+        match errors.into_iter().next() {
+            Some(error) => Err(error),
+            None => Ok(index),
+        }
+    }
+
+    fn structural(
+        issues: Vec<CanonicalIssueRecord>,
+        evidence: Vec<EvidenceRecord>,
+        reviews: Vec<ReviewRecord>,
+    ) -> (Self, Vec<anyhow::Error>) {
         let mut index = Self::default();
+        let mut errors = Vec::new();
         let mut global_ids = BTreeSet::new();
         for record in issues {
             let id = record.issue.id.clone();
             if !global_ids.insert(id.clone()) {
-                bail!("Duplicate issue ID in record files: {id}");
+                errors.push(anyhow!("Duplicate issue ID in record files: {id}"));
+                continue;
             }
             index.issues.insert(id, record);
         }
         for record in evidence {
             let id = record.header.id.clone();
             if !global_ids.insert(id.clone()) {
-                bail!("Duplicate record ID in record files: {id}");
+                errors.push(anyhow!("Duplicate record ID in record files: {id}"));
+                continue;
             }
             index.evidence.insert(id, record);
         }
         for record in reviews {
             if !global_ids.insert(record.header.id.clone()) {
-                bail!("Duplicate record ID in record files: {}", record.header.id);
+                errors.push(anyhow!(
+                    "Duplicate record ID in record files: {}",
+                    record.header.id
+                ));
+                continue;
             }
             index.reviews.insert(record.header.id.clone(), record);
         }
-        index.validate_reviews()?;
-        index.index_issue_graph()?;
-        index.index_record_links()?;
-        index.validate_hierarchy_shapes()?;
-        validate_acyclic(&index.children, "children")?;
-        validate_acyclic(&index.blocking, "blocks")?;
+        index.validate_reviews(&mut errors);
+        index.index_issue_graph(&mut errors);
+        index.index_record_links(&mut errors);
+        index.validate_hierarchy_shapes(&mut errors);
+        for (edges, relation) in [(&index.children, "children"), (&index.blocking, "blocks")] {
+            if let Err(error) = validate_acyclic(edges, relation) {
+                errors.push(error);
+            }
+        }
         index.order();
-        Ok(index)
+        (index, errors)
     }
 
     /// Structural load for guards which resolve trusted policy before validation.
@@ -273,7 +321,11 @@ impl RecordIndex {
         read_record_files(state_dir)?.into_index()
     }
     pub fn validate_policy(&self, policy: &WorkflowPolicy, repo: &Path) -> Result<()> {
-        self.validate_link_types(repo, &repo.join(".atelier"))?;
+        let mut errors = Vec::new();
+        self.validate_link_types(repo, &repo.join(".atelier"), &mut errors);
+        if let Some(error) = errors.into_iter().next() {
+            return Err(error);
+        }
         for record in self.issues.values() {
             crate::workflow_policy::validate_issue_against_policy(
                 policy,
@@ -294,69 +346,91 @@ impl RecordIndex {
     pub fn latest_disposition(&self, finding: &str) -> Option<&ReviewRecord> {
         self.reviews.values().find(|record| matches!(&record.event, ReviewEvent::Disposition { finding: target, .. } if target == finding) && !self.reviews.values().any(|successor| matches!(&successor.event, ReviewEvent::Disposition { supersedes: Some(previous), .. } if previous == &record.header.id)))
     }
-    fn validate_reviews(&self) -> Result<()> {
+    fn validate_reviews(&self, errors: &mut Vec<anyhow::Error>) {
         let mut successors = BTreeMap::new();
         let mut chains = BTreeMap::<String, Vec<String>>::new();
         let mut roots = BTreeSet::new();
         for record in self.reviews.values() {
-            self.ensure_issue(&record.target, "review target", &record.header.id)?;
-            if let ReviewEvent::Disposition {
-                finding,
-                supersedes,
-                follow_up,
-                ..
-            } = &record.event
+            if let Err(error) =
+                self.validate_review(record, &mut successors, &mut chains, &mut roots)
             {
-                let original = self.require_review(finding)?;
-                if !matches!(original.event, ReviewEvent::Finding { .. })
-                    || original.target != record.target
-                {
-                    bail!(
-                        "disposition {} must reference a finding for the same target",
-                        record.header.id
-                    );
-                }
-                if let Some(issue) = follow_up {
-                    self.ensure_issue(issue, "follow-up", &record.header.id)?;
-                }
-                if let Some(previous) = supersedes {
-                    let previous_record = self.require_review(previous)?;
-                    if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
-                    {
-                        bail!("disposition supersedes a decision for another finding");
-                    }
-                    if successors.insert(previous, &record.header.id).is_some() {
-                        bail!("competing disposition successors for {previous}");
-                    }
-                    chains
-                        .entry(record.header.id.clone())
-                        .or_default()
-                        .push(previous.clone());
-                } else if !roots.insert(finding) {
-                    bail!("competing disposition roots for {finding}");
-                }
+                errors.push(error);
             }
         }
-        validate_acyclic(&chains, "disposition supersedes")
+        if let Err(error) = validate_acyclic(&chains, "disposition supersedes") {
+            errors.push(error);
+        }
     }
 
-    fn index_issue_graph(&mut self) -> Result<()> {
+    fn validate_review<'a>(
+        &self,
+        record: &'a ReviewRecord,
+        successors: &mut BTreeMap<&'a String, &'a String>,
+        chains: &mut BTreeMap<String, Vec<String>>,
+        roots: &mut BTreeSet<&'a String>,
+    ) -> Result<()> {
+        self.ensure_issue(&record.target, "review target", &record.header.id)?;
+        if let ReviewEvent::Disposition {
+            finding,
+            supersedes,
+            follow_up,
+            ..
+        } = &record.event
+        {
+            let original = self.require_review(finding)?;
+            if !matches!(original.event, ReviewEvent::Finding { .. })
+                || original.target != record.target
+            {
+                bail!(
+                    "disposition {} must reference a finding for the same target",
+                    record.header.id
+                );
+            }
+            if let Some(issue) = follow_up {
+                self.ensure_issue(issue, "follow-up", &record.header.id)?;
+            }
+            if let Some(previous) = supersedes {
+                let previous_record = self.require_review(previous)?;
+                if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
+                {
+                    bail!("disposition supersedes a decision for another finding");
+                }
+                if successors.insert(previous, &record.header.id).is_some() {
+                    bail!("competing disposition successors for {previous}");
+                }
+                chains
+                    .entry(record.header.id.clone())
+                    .or_default()
+                    .push(previous.clone());
+            } else if !roots.insert(finding) {
+                bail!("competing disposition roots for {finding}");
+            }
+        }
+        Ok(())
+    }
+
+    fn index_issue_graph(&mut self, errors: &mut Vec<anyhow::Error>) {
         let mut parents = BTreeMap::<String, String>::new();
         let mut relation_keys = BTreeSet::new();
         for record in self.issues.values() {
             let id = &record.issue.id;
             for blocked in &record.relationships.blocks {
                 if blocked.kind != "issue" {
-                    bail!(
+                    errors.push(anyhow!(
                         "Issue {id} has blocks target {} {}; blocks must target issue records",
                         blocked.kind,
                         blocked.id
-                    );
+                    ));
+                    continue;
                 }
-                self.ensure_issue(&blocked.id, "blocks", id)?;
+                if let Err(error) = self.ensure_issue(&blocked.id, "blocks", id) {
+                    errors.push(error);
+                    continue;
+                }
                 let blocking = self.blocking.entry(id.clone()).or_default();
                 if blocking.contains(&blocked.id) {
-                    bail!("Duplicate blocks edge {id} blocks {}", blocked.id);
+                    errors.push(anyhow!("Duplicate blocks edge {id} blocks {}", blocked.id));
+                    continue;
                 }
                 blocking.push(blocked.id.clone());
                 self.blockers
@@ -366,27 +440,42 @@ impl RecordIndex {
             }
             for child in &record.relationships.children {
                 if child.kind != "issue" {
-                    bail!(
+                    errors.push(anyhow!(
                         "Issue {id} has children target {} {}; issue hierarchy children must target issue records",
                         child.kind,
                         child.id
-                    );
+                    ));
+                    continue;
                 }
-                self.ensure_issue(&child.id, "children", id)?;
+                if let Err(error) = self.ensure_issue(&child.id, "children", id) {
+                    errors.push(error);
+                    continue;
+                }
                 let children = self.children.entry(id.clone()).or_default();
                 if children.contains(&child.id) {
-                    bail!("Duplicate children edge {id} contains {}", child.id);
+                    errors.push(anyhow!(
+                        "Duplicate children edge {id} contains {}",
+                        child.id
+                    ));
+                    continue;
                 }
-                children.push(child.id.clone());
-                if let Some(existing) = parents.insert(child.id.clone(), id.clone()) {
-                    bail!(
+                if let Some(existing) = parents.get(&child.id) {
+                    errors.push(anyhow!(
                         "Issue {} appears under multiple parents: {existing}, {id}",
                         child.id
-                    );
+                    ));
+                    continue;
                 }
+                children.push(child.id.clone());
+                parents.insert(child.id.clone(), id.clone());
             }
             for relation in &record.relationships.relates {
-                self.ensure_record(&relation.kind, &relation.id, &relation.relation_type, id)?;
+                if let Err(error) =
+                    self.ensure_record(&relation.kind, &relation.id, &relation.relation_type, id)
+                {
+                    errors.push(error);
+                    continue;
+                }
                 if relation.kind != "issue" {
                     continue;
                 }
@@ -396,11 +485,12 @@ impl RecordIndex {
                     relation.relation_type.clone(),
                 );
                 if !relation_keys.insert(key) {
-                    bail!(
+                    errors.push(anyhow!(
                         "Duplicate typed link {id} -> {} ({})",
                         relation.id,
                         relation.relation_type
-                    );
+                    ));
+                    continue;
                 }
                 let relation = Relation {
                     issue_id_1: id.clone(),
@@ -421,10 +511,9 @@ impl RecordIndex {
                 record.issue.parent_id = Some(parent);
             }
         }
-        Ok(())
     }
 
-    fn index_record_links(&mut self) -> Result<()> {
+    fn index_record_links(&mut self, errors: &mut Vec<anyhow::Error>) {
         let mut keys = BTreeSet::new();
         let mut links = Vec::new();
         for record in self.issues.values() {
@@ -435,7 +524,8 @@ impl RecordIndex {
                 record.issue.updated_at,
                 &mut keys,
                 &mut links,
-            )?;
+                errors,
+            );
         }
         for record in self.evidence.values() {
             self.collect_links(
@@ -445,7 +535,8 @@ impl RecordIndex {
                 record.header.created_at,
                 &mut keys,
                 &mut links,
-            )?;
+                errors,
+            );
         }
         for record in self.reviews.values() {
             self.collect_links(
@@ -455,7 +546,8 @@ impl RecordIndex {
                 record.header.created_at,
                 &mut keys,
                 &mut links,
-            )?;
+                errors,
+            );
         }
         links.sort_by(|left, right| link_key(left).cmp(&link_key(right)));
         for (position, link) in links.iter().enumerate() {
@@ -470,11 +562,13 @@ impl RecordIndex {
             }
         }
         self.links = links;
-        Ok(())
     }
 
     /// Validates every relationship target and collects the links that
-    /// queries see: evidence attachments and issue-to-issue relations.
+    /// queries see: evidence attachments and issue-to-issue relations. Issue
+    /// children and relates targets were already checked by
+    /// `index_issue_graph`, so missing ones are skipped here, not reported twice.
+    #[allow(clippy::too_many_arguments)]
     fn collect_links(
         &self,
         source_kind: &str,
@@ -483,7 +577,8 @@ impl RecordIndex {
         created_at: chrono::DateTime<chrono::Utc>,
         keys: &mut BTreeSet<(String, String, String, String, String)>,
         links: &mut Vec<RecordLink>,
-    ) -> Result<()> {
+        errors: &mut Vec<anyhow::Error>,
+    ) {
         let mut push = |target_kind: &str, target_id: &str, relation_type: &str, queried| {
             let key = (
                 source_kind.to_string(),
@@ -509,42 +604,71 @@ impl RecordIndex {
             }
             Ok(())
         };
+        let checked_by_issue_graph = source_kind == "issue";
+        // A missing target is reported once, here or by `index_issue_graph`.
+        let exists =
+            |kind: &str, id: &str, relation: &str, checked: bool, errors: &mut Vec<_>| match self
+                .ensure_record(kind, id, relation, source_id)
+            {
+                Ok(()) => true,
+                Err(error) => {
+                    if !checked {
+                        errors.push(error);
+                    }
+                    false
+                }
+            };
         for child in &relationships.children {
-            self.ensure_record(&child.kind, &child.id, "children", source_id)?;
-            if !(source_kind == "issue" && child.kind == "issue") {
-                push(&child.kind, &child.id, "advances", false)?;
+            if exists(
+                &child.kind,
+                &child.id,
+                "children",
+                checked_by_issue_graph,
+                errors,
+            ) && !(source_kind == "issue" && child.kind == "issue")
+            {
+                if let Err(error) = push(&child.kind, &child.id, "advances", false) {
+                    errors.push(error);
+                }
             }
         }
         for attachment in &relationships.attachments {
-            self.ensure_record(
+            if exists(
                 &attachment.kind,
                 &attachment.id,
                 &attachment.role,
-                source_id,
-            )?;
-            push(
-                &attachment.kind,
-                &attachment.id,
-                &attachment.role,
-                matches!(source_kind, "evidence" | "review"),
-            )?;
+                false,
+                errors,
+            ) {
+                if let Err(error) = push(
+                    &attachment.kind,
+                    &attachment.id,
+                    &attachment.role,
+                    matches!(source_kind, "evidence" | "review"),
+                ) {
+                    errors.push(error);
+                }
+            }
         }
         for relation in &relationships.relates {
-            self.ensure_record(
+            if exists(
                 &relation.kind,
                 &relation.id,
                 &relation.relation_type,
-                source_id,
-            )?;
-            let issue_relation = source_kind == "issue" && relation.kind == "issue";
-            push(
-                &relation.kind,
-                &relation.id,
-                &relation.relation_type,
-                issue_relation,
-            )?;
+                checked_by_issue_graph,
+                errors,
+            ) {
+                let issue_relation = source_kind == "issue" && relation.kind == "issue";
+                if let Err(error) = push(
+                    &relation.kind,
+                    &relation.id,
+                    &relation.relation_type,
+                    issue_relation,
+                ) {
+                    errors.push(error);
+                }
+            }
         }
-        Ok(())
     }
 
     fn ensure_issue(&self, id: &str, relation: &str, source_id: &str) -> Result<()> {
@@ -563,29 +687,26 @@ impl RecordIndex {
         }
     }
 
-    fn validate_hierarchy_shapes(&self) -> Result<()> {
+    fn validate_hierarchy_shapes(&self, errors: &mut Vec<anyhow::Error>) {
         for (parent_id, children) in &self.children {
             let parent_type = &self.issues[parent_id].issue.issue_type;
             for child_id in children {
                 let child_type = &self.issues[child_id].issue.issue_type;
                 if child_type == "mission" {
-                    bail!(
+                    errors.push(anyhow!(
                         "workflow_issue_hierarchy_invalid: mission issue {child_id} cannot have parent {parent_id}; link mission work with advances relationships"
-                    );
-                }
-                if child_type == "epic" {
-                    bail!(
+                    ));
+                } else if child_type == "epic" {
+                    errors.push(anyhow!(
                         "workflow_issue_hierarchy_invalid: epic issue {child_id} cannot have parent {parent_id}; epics are root work packages"
-                    );
-                }
-                if parent_type != "epic" {
-                    bail!(
+                    ));
+                } else if parent_type != "epic" {
+                    errors.push(anyhow!(
                         "workflow_issue_hierarchy_invalid: issue {child_id} cannot be child of {parent_type} {parent_id}; only epics can own child work"
-                    );
+                    ));
                 }
             }
         }
-        Ok(())
     }
 
     fn order(&mut self) {
@@ -627,25 +748,39 @@ impl RecordIndex {
         self.issues_by_recency = ids;
     }
 
-    fn validate_link_types(&self, repo_root: &Path, state_dir: &Path) -> Result<()> {
+    fn validate_link_types(
+        &self,
+        repo_root: &Path,
+        state_dir: &Path,
+        errors: &mut Vec<anyhow::Error>,
+    ) {
         let custom = if state_dir.join("config.toml").exists() {
-            crate::project_config::ProjectConfig::load(repo_root)?
-                .issue_links
-                .custom_context_types
-                .into_iter()
-                .collect()
+            match crate::project_config::ProjectConfig::load(repo_root) {
+                Ok(config) => config
+                    .issue_links
+                    .custom_context_types
+                    .into_iter()
+                    .collect(),
+                Err(error) => {
+                    errors.push(error);
+                    return;
+                }
+            }
         } else {
             BTreeSet::new()
         };
         for record in self.issues.values() {
             for relation in &record.relationships.relates {
-                validate_issue_link_type(&record.issue.id, &relation.relation_type, &custom)?;
+                if let Err(error) =
+                    validate_issue_link_type(&record.issue.id, &relation.relation_type, &custom)
+                {
+                    errors.push(error);
+                }
             }
         }
-        Ok(())
     }
 
-    fn validate_against_policy(&self, repo_root: &Path) -> Result<()> {
+    fn validate_against_policy(&self, repo_root: &Path, errors: &mut Vec<anyhow::Error>) {
         let policy_path = repo_root.join(WORKFLOW_POLICY_PATH);
         let policy_exists = policy_path.exists();
         if !policy_exists
@@ -653,39 +788,58 @@ impl RecordIndex {
                 record.issue.strategy.is_none() && record.issue.workflow_branch.is_none()
             })
         {
-            return Ok(());
+            return;
         }
-        let policy = crate::workflow_policy::load(repo_root)?;
+        let policy = match crate::workflow_policy::load(repo_root) {
+            Ok(policy) => policy,
+            Err(error) => {
+                errors.push(error);
+                return;
+            }
+        };
         for record in self.issues.values() {
-            crate::workflow_policy::validate_issue_against_policy(
+            if let Err(error) = crate::workflow_policy::validate_issue_against_policy(
                 &policy,
                 &record.issue,
                 &policy_path,
-            )?;
+            ) {
+                errors.push(error);
+            }
         }
         if policy_exists {
-            self.validate_mission_dependencies(&policy)?;
+            errors.extend(self.mission_dependency_errors(&policy));
         }
-        Ok(())
     }
 
     fn validate_mission_dependencies(&self, policy: &WorkflowPolicy) -> Result<()> {
+        match self.mission_dependency_errors(policy).into_iter().next() {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
+    fn mission_dependency_errors(&self, policy: &WorkflowPolicy) -> Vec<anyhow::Error> {
+        let mut errors = Vec::new();
         for record in self.issues.values() {
             let issue = &record.issue;
             if issue.issue_type == "mission"
                 && matches!(issue.status.as_str(), "ready" | "in_progress")
             {
-                let closure = crate::objective_graph::dependency_closure(self, policy, &issue.id)?;
-                if let Some(reason) = closure.failure_reason() {
-                    bail!(
-                        "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
-                        issue.id,
-                        issue.status
-                    );
+                match crate::objective_graph::dependency_closure(self, policy, &issue.id) {
+                    Ok(closure) => {
+                        if let Some(reason) = closure.failure_reason() {
+                            errors.push(anyhow!(
+                                "workflow_mission_dependency_bypass: mission {} has executable status '{}' despite {reason}",
+                                issue.id,
+                                issue.status
+                            ));
+                        }
+                    }
+                    Err(error) => errors.push(error),
                 }
             }
         }
-        Ok(())
+        errors
     }
 
     // ----- Issue queries -------------------------------------------------
