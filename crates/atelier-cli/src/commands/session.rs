@@ -255,6 +255,86 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Vec<std::path::PathB
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run atelier start <id> from {base}")
     })
 }
+/// Record-only changes may be committed on the base branch directly; any
+/// other unpushed base commit must be covered by a recorded approval or
+/// trivial exemption, which `atelier merge` requires. Commits that install
+/// the workflow policy predate the gates and are exempt.
+fn check_base_commits(repo: &Path, index: &RecordIndex, base: &str) -> Result<String> {
+    let Ok(upstream) = git::text(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{base}@{{upstream}}"),
+        ],
+    ) else {
+        return Ok(format!(
+            "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
+        ));
+    };
+    let mut args = vec![
+        "rev-list".to_owned(),
+        "HEAD".to_owned(),
+        "--not".to_owned(),
+        upstream,
+    ];
+    for review in index.reviews().filter(|review| {
+        matches!(
+            review.event,
+            atelier_core::ReviewEvent::Approval | atelier_core::ReviewEvent::TrivialExemption
+        )
+    }) {
+        if git::resolve(repo, &review.commit).is_ok() {
+            args.push(review.commit.clone());
+        }
+    }
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let unreviewed = git::text(repo, &args)?;
+    let strategies = index
+        .issues()
+        .filter_map(|issue| issue.strategy.as_ref())
+        .map(|strategy| std::path::PathBuf::from(&strategy.path))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut checked = 0;
+    for commit in unreviewed.lines() {
+        let parent = format!("{commit}^");
+        if git::resolve(repo, &parent).is_err()
+            || git_freshness::git_output(
+                repo,
+                &[
+                    "ls-tree",
+                    &parent,
+                    "--",
+                    workflow_policy::WORKFLOW_POLICY_PATH,
+                ],
+            )?
+            .is_empty()
+        {
+            continue;
+        }
+        checked += 1;
+        let other = git_freshness::changed_paths(repo, &parent, commit)?
+            .into_iter()
+            .filter(|path| !git_freshness::is_record_path(path) && !strategies.contains(path))
+            .collect::<Vec<_>>();
+        if let Some(first) = other.first() {
+            bail!(
+                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move the commit onto a work branch (atelier start <id>), get it reviewed, and integrate it with atelier merge.",
+                &commit[..8.min(commit.len())],
+                first.display(),
+                match other.len() {
+                    1 => String::new(),
+                    count => format!(" and {} other path(s)", count - 1),
+                },
+            );
+        }
+    }
+    Ok(match checked {
+        0 => "Base commits: none unpushed outside recorded review.".to_owned(),
+        count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
+    })
+}
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
@@ -382,6 +462,11 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         }
     } else if branch == source.policy.branch_policy.base_branch {
         lines.push("No work owner on the integration base.".into());
+        lines.push(check_base_commits(
+            repo,
+            &index,
+            &source.policy.branch_policy.base_branch,
+        )?);
     } else {
         let base = &source.policy.branch_policy.base_branch;
         let label = if branch.is_empty() {

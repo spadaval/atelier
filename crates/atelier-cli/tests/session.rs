@@ -2028,3 +2028,102 @@ fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelat
         "{output}"
     );
 }
+#[test]
+fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_code() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits unchecked: main has no upstream"),
+        "{output}"
+    );
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Planning on the base",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    let mut record = f.store().load_issue_by_id(&mission).unwrap();
+    record.issue.strategy = Some(atelier_core::IssueStrategy::new("plans/strategy.md").unwrap());
+    f.store().write_issue_atomic(&record).unwrap();
+    fs::create_dir(f.path().join("plans")).unwrap();
+    fs::write(f.path().join("plans/strategy.md"), "# Strategy\n").unwrap();
+    commit(f.path(), "file a mission and its strategy on the base");
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+
+    fs::write(f.path().join("direct"), "unreviewed code\n").unwrap();
+    commit(f.path(), "code straight on the base");
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!("land_base_unreviewed: commit {}", &head[..8]))
+            && output.contains("changes direct without recorded review"),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["rebase", "-q", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["merge", &f.id]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+}
+#[test]
+fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "main"]);
+    ok(dir.path(), &["init", "--slug", "adopter"]);
+    fs::write(dir.path().join("AGENTS.md"), "Use Atelier.\n").unwrap();
+    commit(dir.path(), "install Atelier");
+    let output = ok(dir.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: none unpushed outside recorded review"),
+        "{output}"
+    );
+}

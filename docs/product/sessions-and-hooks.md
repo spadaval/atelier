@@ -30,6 +30,10 @@ branch for upstream records. If the branch does change tracker files, or
 shares no history with the base, `land` refuses with `land_work_untraceable`,
 names the changed paths, and points to `atelier start`.
 
+On the base branch itself, `land` checks unpushed base commits: only records
+and mission strategies may be committed there without review (see
+[planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
+
 Landing also checks completed claims elsewhere in the checkout. Unchanged
 integrated claims retain proof and independent acceptance that were valid when
 completion was claimed. Historical acceptance preserves the original work's

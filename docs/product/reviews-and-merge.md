@@ -93,3 +93,22 @@ its worktree cleanup instruction. Leave that checkout before removing it from
 the base checkout. If cleanup fails after integration, inspect the named Git
 state before retrying cleanup. Use [prune](retention-and-prune.md) for remaining
 eligible artifacts.
+
+## Planning changes on the base
+
+Filing, grooming, re-prioritising, recording decisions, and editing mission
+strategies are commits too. Commits that change only records
+(`.atelier/issues`, `.atelier/evidence`, `.atelier/reviews`) and the strategy
+files linked from missions may be committed on the base branch directly
+(atelier-3mjv, decided by Sumeet 2026-10-15). Any other change goes through a
+work branch, review, and `atelier merge`.
+
+`atelier land` on the base branch checks this before you push. It looks at
+the base commits that are not yet on the base's upstream. A commit that some
+recorded approval or trivial exemption covers (its pinned commit contains it)
+came through review; every other commit may touch only records and
+strategies, or `land` refuses with `land_base_unreviewed`. The commit that
+installs the workflow policy predates the gates and is exempt. Without an
+upstream, `land` notes that it cannot check base commits. This is a
+handoff check, not an access control: a direct commit that was pushed without
+running `land` is caught only by review of later work.
