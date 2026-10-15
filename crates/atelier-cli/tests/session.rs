@@ -2117,11 +2117,9 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     commit(f.path(), "approval");
     ok(f.path(), &["merge", &f.id]);
     git(f.path(), &["switch", "-q", "main"]);
-    // The unpushed mission commit predates the branch, so it is not credited
-    // to the review; it is record-only and still allowed.
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 2 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
         "{output}"
     );
 
@@ -2145,6 +2143,53 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
         !pass && output.contains("changes later without recorded review"),
+        "{output}"
+    );
+}
+#[test]
+fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let owner = ok(f.path(), &["-q", "issue", "create", "Rescue direct code"]);
+    commit(f.path(), "plan the rescue");
+    git(f.path(), &["push", "-q"]);
+    fs::write(f.path().join("direct"), "direct code\n").unwrap();
+    commit(f.path(), "code straight on the base");
+
+    // A branch made with plain Git still carries the direct commit.
+    git(f.path(), &["switch", "-q", "-c", &format!("task/{owner}")]);
+    let (pass, output) = cli(f.path(), &["start", &owner]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+
+    // The advice: keep the commit on the work branch, reset the base, start.
+    git(f.path(), &["branch", "-f", "main", "main@{upstream}"]);
+    ok(f.path(), &["start", &owner]);
+    commit(f.path(), "start the rescue");
+    f.terminal(&owner);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            "Reviewer",
+            "Reviewed the direct code",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["merge", &owner]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit(s)"),
         "{output}"
     );
 }

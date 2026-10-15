@@ -167,11 +167,13 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         }
         Some((stage, fingerprint))
     };
-    // A branch created from the base inherits the base's unpushed commits,
-    // so their review must not be credited to this branch.
-    if !branch_exists && current.as_deref() == Some(view_policy.branch_policy.base_branch.as_str())
-    {
-        git::check_base_commits(&repo_root, index, &view_policy)?;
+    // Work started while the local base holds unreviewed commits would carry
+    // them in, and a review of `base...branch` would never see them. The
+    // base's own records say which of its commits came through review.
+    let local_base = format!("refs/heads/{}", view_policy.branch_policy.base_branch);
+    if let Ok(base_commit) = git::resolve(&repo_root, &local_base) {
+        let base_records = git::Snapshot::at(&repo_root, state_dir, &base_commit)?;
+        git::check_base_commits(&repo_root, &base_records.index, &view_policy, &base_commit)?;
     }
     drop(snapshot);
     let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;

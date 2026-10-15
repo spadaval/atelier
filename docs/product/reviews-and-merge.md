@@ -105,19 +105,19 @@ work branch, review, and `atelier merge`.
 
 `atelier land` on the base branch checks this before you push. It looks at
 the base commits that are not yet on the base's upstream. A commit counts as
-reviewed when it lies between the start of a completed owner's branch (the
-commit that first recorded its `workflow_branch`) and a commit pinned by that
-owner's approval or trivial exemption, for owners that branched from this base
-and are not already done upstream. That is the range `atelier merge`
-integrates. Every other commit may touch only records and the
+reviewed when a commit pinned by an approval or trivial exemption contains it,
+for completed owners that branched from this base and are not already done
+upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
 by the paths that differ from all of its parents. The commit that installs the
 workflow policy predates the gates and is exempt. Without an upstream, `land`
 notes that it cannot check base commits.
 
-`atelier start` runs the same check before creating a branch from the base,
-so a new branch cannot carry an unreviewed base commit into its own review. To
+`atelier start` runs the same check on the local base branch, using the
+base's own records, whether it creates the work branch or switches to an
+existing one. A branch started while the base holds an unreviewed commit
+would carry it in, and a review of `<base>...<branch>` would never show it. To
 recover, move the commit to a work branch (`git switch -c <type>/<id>`, then
 `git branch -f <base> <base>@{upstream}`) and run `atelier start <id>` there.
 This is a handoff check, not an access control. Review identities are

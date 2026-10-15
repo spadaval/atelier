@@ -117,6 +117,7 @@ pub(crate) fn check_base_commits(
     repo: &Path,
     index: &RecordIndex,
     policy: &atelier_workflow::WorkflowPolicy,
+    tip: &str,
 ) -> Result<String> {
     let base = &policy.branch_policy.base_branch;
     let Ok(upstream) = text(
@@ -167,36 +168,15 @@ pub(crate) fn check_base_commits(
         if pushed_done {
             continue;
         }
-        // A review covers only commits made after its owner's branch started,
-        // which is when `start` first recorded the branch.
-        let started = text(
-            repo,
-            &[
-                "log",
-                "--format=%H",
-                "--reverse",
-                "-G^workflow_branch:",
-                "HEAD",
-                "--",
-                &path,
-            ],
-        )?;
-        let Some(started) = started.lines().next() else {
-            continue;
-        };
-        let mut range = vec![
+        let range = [
             "rev-list",
             review.commit.as_str(),
             "--not",
             upstream.as_str(),
         ];
-        let start_parent = format!("{started}^");
-        if resolve(repo, &start_parent).is_ok() {
-            range.push(&start_parent);
-        }
         covered.extend(text(repo, &range)?.lines().map(str::to_owned));
     }
-    let unreviewed = text(repo, &["rev-list", "HEAD", "--not", &upstream])?
+    let unreviewed = text(repo, &["rev-list", tip, "--not", &upstream])?
         .lines()
         .filter(|commit| !covered.contains(*commit))
         .map(str::to_owned)

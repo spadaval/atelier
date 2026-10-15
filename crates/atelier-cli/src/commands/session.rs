@@ -390,7 +390,12 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         }
     } else if branch == source.policy.branch_policy.base_branch {
         lines.push("No work owner on the integration base.".into());
-        lines.push(git::check_base_commits(repo, &index, &source.policy)?);
+        lines.push(git::check_base_commits(
+            repo,
+            &index,
+            &source.policy,
+            "HEAD",
+        )?);
     } else {
         let base = &source.policy.branch_policy.base_branch;
         let label = if branch.is_empty() {
