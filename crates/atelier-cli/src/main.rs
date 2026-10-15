@@ -220,7 +220,7 @@ enum Commands {
 
     /// Validate tracker records and their graph
     Check {
-        /// Optional issue ID or imported source ID
+        /// Optional issue ID
         id: Option<String>,
     },
 }
@@ -274,8 +274,10 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
-        /// Markdown body with the type's sections (Goal and Done when for
-        /// issues, Outcome for epics and missions); plain text becomes the Goal
+        /// Markdown body with the type's `## ` sections: Goal and Done when
+        /// for work items; Outcome for epics (plus Proof once ready) and
+        /// missions (plus Success criteria without a strategy). Plain text
+        /// becomes the Goal or Outcome
         #[arg(long)]
         body: Option<String>,
         /// Priority (low, medium, high, critical)
@@ -353,9 +355,10 @@ enum IssueCommands {
         /// New issue type from .atelier/workflow.yaml issue_types
         #[arg(long)]
         issue_type: Option<String>,
-        /// Replace the typed body sections (Goal, Done when, ... for the
-        /// record's type); Notes and Close Reason are kept. Change status
-        /// with `atelier issue transition`
+        /// Replace the typed body sections, given as `## ` headings for the
+        /// record's type and checked like `atelier check`; Notes and Close
+        /// Reason are kept, and done records cannot be revised. Change
+        /// status with `atelier issue transition`
         #[arg(long)]
         body: Option<String>,
         /// Add labels to the issue

@@ -838,6 +838,18 @@ pub fn update_lifecycle(
         changed_fields.push("issue_type");
     }
     if let Some(body) = input.body {
+        if body.len() > MAX_ISSUE_DESCRIPTION_LEN {
+            bail!(
+                "Description exceeds maximum length of {} bytes",
+                MAX_ISSUE_DESCRIPTION_LEN
+            );
+        }
+        if load_repo_policy(state_dir)?.status_category(&record.issue.status) == Some("done") {
+            bail!(
+                "issue_body_done: {id} is {}; its done claim and proof were judged against the current acceptance, so its body cannot be revised. File follow-up work instead.",
+                record.issue.status
+            );
+        }
         let parsed = atelier_records::parse_issue_sections_for_type(
             body,
             Path::new("<issue update --body>"),
@@ -866,6 +878,26 @@ pub fn update_lifecycle(
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;
+    if input.body.is_some() {
+        // A revised body must pass the same per-record rules as `atelier check`.
+        let repo_root = state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "cannot determine repository root from {}",
+                state_dir.display()
+            )
+        })?;
+        let findings = atelier_app::lint::issue_findings([&record], repo_root, false);
+        if !findings.is_empty() {
+            bail!(
+                "Invalid --body for {id}: {}",
+                findings
+                    .iter()
+                    .map(|finding| finding.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+        }
+    }
     atelier_app::workflow_policy::validate_issue_hierarchy(
         index,
         &record.issue,

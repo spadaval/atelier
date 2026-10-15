@@ -3620,6 +3620,59 @@ fn test_issue_options_do_what_their_help_says() {
         "blocked"
     );
 
+    // Revised bodies follow the record rules check applies, and done records
+    // keep the acceptance their proof was judged against.
+    create(&["-q", "issue", "transition", &epic, "ready"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &epic,
+            "--body",
+            "## Outcome\n\nNo proof any more.",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("Ready epic requires Proof"),
+        "{stderr}"
+    );
+    let huge = format!("## Goal\n\n{}\n\n## Done when\n\nD.", "x".repeat(70 * 1024));
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "update", &task, "--body", &huge]);
+    assert!(!success && stderr.contains("maximum length"), "{stderr}");
+    let finished = create(&["-q", "issue", "create", "Finished"]);
+    create(&["-q", "issue", "transition", &finished, "start"]);
+    create(&[
+        "-q",
+        "issue",
+        "transition",
+        &finished,
+        "close",
+        "--reason",
+        "Done",
+    ]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &finished,
+            "--body",
+            "## Goal\n\nG.\n\n## Done when\n\nD.",
+        ],
+    );
+    assert!(!success && stderr.contains("issue_body_done"), "{stderr}");
+
+    let bundle = dir.path().join("old.json");
+    fs::write(&bundle, r###"{"schema":"atelier.bundle","schema_version":2,"resources":{"issues":[{"client_ref":"a","title":"A","body":"## Goal\n\nG.\n\n## Done when\n\nD.","depends_on":[]}]}}"###).unwrap();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["bundle", "preview", bundle.to_str().unwrap()]);
+    assert!(
+        !success && stderr.contains("depends_on is now blocked_by"),
+        "{stderr}"
+    );
+
     let (_, help, _) = run_atelier(dir.path(), &["issue", "link", "--help"]);
     assert!(
         help.contains("Readiness: blocked_by") && help.contains("Context only"),

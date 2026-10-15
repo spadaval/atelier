@@ -36,8 +36,14 @@ pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> R
 
 fn load_bundle(input: &str) -> Result<BundleFile> {
     let bytes = fs::read(input).with_context(|| format!("Failed to read bundle file {input}"))?;
-    serde_json::from_slice(&bytes)
-        .with_context(|| format!("Failed to parse bundle {input} as JSON"))
+    serde_json::from_slice(&bytes).map_err(|error| {
+        let renamed = error
+            .to_string()
+            .contains("unknown field `depends_on`")
+            .then_some("; the issue field depends_on is now blocked_by, matching atelier issue link --role blocked_by")
+            .unwrap_or_default();
+        anyhow::anyhow!("Failed to parse bundle {input} as JSON: {error}{renamed}")
+    })
 }
 
 #[derive(Debug, Deserialize)]

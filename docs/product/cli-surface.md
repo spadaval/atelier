@@ -57,7 +57,7 @@ atelier issue note <id> "Handoff detail" --kind handoff
 atelier issue transition <id> close --reason "Acceptance shown"
 ```
 
-Transitions write records after read-only checks. `start` prepares Git context.
+Transitions write records after read-only checks. `atelier start` prepares Git context; the `start` transition only changes the record.
 Commit code and related tracker records yourself. Record focused proof and
 independent review before `merge`; see [evidence](validation.md) and
 [reviews and merge](reviews-and-merge.md). Done claims belong in committed work
