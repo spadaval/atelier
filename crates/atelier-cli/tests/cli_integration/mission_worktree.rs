@@ -2944,3 +2944,59 @@ fn branches_without_a_tracker_are_summarised_without_git_errors() {
         );
     }
 }
+
+#[test]
+fn check_reports_every_independent_graph_error_in_one_run() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str| {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--body",
+                "## Goal\n\nWork.\n\n## Done when\n\nDone.",
+            ],
+        );
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let ids = ["One", "Two", "Three", "Four"].map(create);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    let (success, before, _) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(success);
+
+    let block = |id: &str, target: &str| {
+        edit_canonical_issue(dir.path(), id, |markdown| {
+            markdown.replace(
+                "  blocks: []",
+                &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{target}\""),
+            )
+        });
+    };
+    block(&ids[0], "atelier-missa");
+    block(&ids[1], "atelier-missb");
+    block(&ids[2], &ids[3]);
+    block(&ids[3], &ids[2]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "{stdout}");
+    let transcript = format!("{stdout}\n{stderr}");
+    for expected in [
+        "has blocks reference to missing issue atelier-missa",
+        "has blocks reference to missing issue atelier-missb",
+        "relationships.blocks contains a cycle",
+        "Lint found 3 issue(s)",
+    ] {
+        assert!(transcript.contains(expected), "{expected}: {transcript}");
+    }
+    // Mutations still refuse the invalid graph before writing.
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", &ids[0], "blocked note"]);
+    assert!(!success, "{stderr}");
+    assert!(!read_canonical_record(dir.path(), "issues", &ids[0]).contains("blocked note"));
+    assert!(!before.is_empty());
+}

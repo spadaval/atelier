@@ -82,23 +82,17 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         });
     }
     if findings.is_empty() {
-        let integrity_error = match other_file_errors.into_iter().next() {
-            Some(first) => Some(first.message),
-            None => RecordIndex::from_project_records(
-                state_dir,
-                files.issues.clone(),
-                files.evidence.clone(),
-                files.reviews.clone(),
-            )
-            .err()
-            .map(|error| format!("Tracker record files are invalid: {error:#}")),
+        let integrity_errors = match other_file_errors.into_iter().next() {
+            Some(first) => vec![first.message],
+            None => graph_errors(state_dir, &files)
+                .into_iter()
+                .map(|error| format!("Tracker record files are invalid: {error}"))
+                .collect(),
         };
-        if let Some(message) = integrity_error {
-            findings.push(LintFinding {
-                id: "(canonical)".to_string(),
-                message,
-            });
-        }
+        findings.extend(integrity_errors.into_iter().map(|message| LintFinding {
+            id: "(canonical)".to_string(),
+            message,
+        }));
     }
 
     let scoped_records = files
@@ -112,6 +106,55 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     ));
 
     Ok(LintView { findings })
+}
+
+/// Every independent graph error, not just the first. The index fails fast,
+/// so after a failure each issue's edges are revalidated on their own. Errors
+/// that need several records, such as cycles, come from the remaining graph
+/// once the faulty records' edges are set aside.
+fn graph_errors(state_dir: &Path, files: &crate::record_index::RecordFiles) -> Vec<String> {
+    // Build with only the issues at `kept` positions keeping their edges.
+    let build = |kept: &dyn Fn(usize) -> bool| {
+        let issues = files
+            .issues
+            .iter()
+            .enumerate()
+            .map(|(position, record)| {
+                let mut record = record.clone();
+                if !kept(position) {
+                    record.relationships = Default::default();
+                }
+                record
+            })
+            .collect();
+        RecordIndex::from_project_records(
+            state_dir,
+            issues,
+            files.evidence.clone(),
+            files.reviews.clone(),
+        )
+        .err()
+        .map(|error| format!("{error:#}"))
+    };
+    if build(&|_| true).is_none() {
+        return Vec::new();
+    }
+    let mut errors = Vec::new();
+    let mut faulty = Vec::new();
+    for position in 0..files.issues.len() {
+        if let Some(error) = build(&|other| other == position) {
+            faulty.push(position);
+            if !errors.contains(&error) {
+                errors.push(error);
+            }
+        }
+    }
+    if let Some(error) = build(&|position| !faulty.contains(&position)) {
+        if !errors.contains(&error) {
+            errors.push(error);
+        }
+    }
+    errors
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and
