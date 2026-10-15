@@ -26,11 +26,10 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     }
 
     let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    // Local State already reports an unavailable Git checkout.
     let owner = workflow_policy
         .as_ref()
-        .map(|policy| owner_row(layout.repo_root(), index, policy))
-        .transpose()?
-        .flatten();
+        .and_then(|policy| owner_row(layout.repo_root(), index, policy).ok().flatten());
     print_status_view(&view, owner);
     let lines =
         crate::commands::git::branch_lines(layout.repo_root(), &layout.canonical_dir(), index)
