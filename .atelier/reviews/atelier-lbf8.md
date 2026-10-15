@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-lbf8
+title: 'Re-review of the resolutions in upstream f9f69af and vendored resync 2126d136. diff -r between the vendored copy and the upstream skill shows no differences. j8y1: tracker-records.md now limits the mission body to Outcome, Success criteria, and Epics (plus Notes and Close Reason), which matches the parser''s allowed set, and sends Shape, Scope, and Authority to a linked strategy file. 37kg: the new ''Atelier Limits'' section (anchor #atelier-limits resolves from atelier.md and migrate.md) matches start.rs: the base is recorded from the current branch when start creates the branch, and is never replaced. It also matches merge.rs, where the recorded base must equal the policy base_branch. Re-ran in a scratch repo: a stacked start makes land fail with land_base_mismatch even while the work is active, as the text says. migrate.md and the integration-branch bullet now carry the caveat. 2u71: re-checked that hand-editing an epic record to add Proof passes atelier check and allows the ready transition, and that issue update --body is mission-only. e95b: atelier.md now requires atelier merge, and the naming and closing inventory include <issue_type>/*. No new inaccuracies found. merge --check is blocked only on fresh approval for the four FIX NOW dispositions and on review.current.'
+target: atelier-kr30
+identity: Independent reviewer (Claude subagent)
+commit: 21867c669a55d50be490057affaf18fc896bdd78
+created_at: 2026-10-15T20:00:17.307631069Z
+event:
+  event: review
+---
+
+Re-review of the resolutions in upstream f9f69af and vendored resync 2126d136. diff -r between the vendored copy and the upstream skill shows no differences. j8y1: tracker-records.md now limits the mission body to Outcome, Success criteria, and Epics (plus Notes and Close Reason), which matches the parser's allowed set, and sends Shape, Scope, and Authority to a linked strategy file. 37kg: the new 'Atelier Limits' section (anchor #atelier-limits resolves from atelier.md and migrate.md) matches start.rs: the base is recorded from the current branch when start creates the branch, and is never replaced. It also matches merge.rs, where the recorded base must equal the policy base_branch. Re-ran in a scratch repo: a stacked start makes land fail with land_base_mismatch even while the work is active, as the text says. migrate.md and the integration-branch bullet now carry the caveat. 2u71: re-checked that hand-editing an epic record to add Proof passes atelier check and allows the ready transition, and that issue update --body is mission-only. e95b: atelier.md now requires atelier merge, and the naming and closing inventory include <issue_type>/*. No new inaccuracies found. merge --check is blocked only on fresh approval for the four FIX NOW dispositions and on review.current.
