@@ -37,4 +37,4 @@ Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with resea
 
 ## Close Reason
 
-The starter workflow (and this repository's) has a backlog status (todo category, no start) with defer (todo/blocked -> backlog) and plan (backlog -> todo); supersede accepts backlog. issue create --status files work in any todo-category status its workflow can leave. work ready excludes backlog. Covered by test_someday_work_is_created_in_backlog_and_kept_out_of_ready. Named backlog, not someday, to match astromech's adopted policy.
+The starter workflow (and this repository's) has a backlog status (todo category, no start) with defer (todo/blocked -> backlog) and plan (backlog -> todo); supersede accepts backlog. issue create --status accepts the workflow's initial status or a todo-category status one unchecked transition from it (backlog via defer); an objective's todo behind ready is refused. work ready excludes backlog. Covered by test_someday_work_is_created_in_backlog_and_kept_out_of_ready. Named backlog, not someday, to match astromech's adopted policy.

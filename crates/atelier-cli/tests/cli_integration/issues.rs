@@ -3485,6 +3485,23 @@ fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
     assert!(success, "{stderr}");
     assert!(!ready(dir.path()).lines().any(|line| line == someday));
 
+    // An objective's todo is behind the checked ready transition.
+    for issue_type in ["epic", "mission"] {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "Unready objective",
+                "--issue-type",
+                issue_type,
+                "--status",
+                "todo",
+            ],
+        );
+        assert!(!success, "{issue_type}: {stdout}");
+        assert!(stderr.contains("use one of: draft."), "{stderr}");
+    }
     for refused in ["in_progress", "done", "nonsense"] {
         let (success, stdout, stderr) = run_atelier(
             dir.path(),

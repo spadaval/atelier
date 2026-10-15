@@ -27,8 +27,10 @@ executable work, active `in_progress` and `review`, blocked work, and terminal
 near-term: it shares the todo category but has no `start` transition, so
 `work ready` leaves it out. `defer` parks todo or blocked work in `backlog`,
 `plan` brings it back to `todo`, and `supersede` retires it.
-`atelier issue create --status backlog` files new work there directly; create
-accepts any todo-category status its workflow can leave. Inspect actual policy and `atelier issue transition <id>` before executing a
+`atelier issue create --status backlog` files new work there directly. Create
+accepts the workflow's initial status, or a todo-category status one
+unchecked transition away from it; a status behind checks or required fields,
+such as an objective's `todo` behind `ready`, needs its transition. Inspect actual policy and `atelier issue transition <id>` before executing a
 transition; a todo category alone is not permission to start.
 
 Transitions write the issue record after checks pass. They do not create
