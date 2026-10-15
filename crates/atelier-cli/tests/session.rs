@@ -2117,9 +2117,34 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     commit(f.path(), "approval");
     ok(f.path(), &["merge", &f.id]);
     git(f.path(), &["switch", "-q", "main"]);
+    // The unpushed mission commit predates the branch, so it is not credited
+    // to the review; it is record-only and still allowed.
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 2 unpushed record-only commit(s)"),
+        "{output}"
+    );
+
+    // Once pushed, a review recorded on the base for the merged owner does
+    // not cover later direct code.
+    git(f.path(), &["push", "-q"]);
+    fs::write(f.path().join("later"), "direct again\n").unwrap();
+    commit(f.path(), "code straight on the base after the merge");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &f.id,
+            "--identity",
+            "Author",
+            "Re-exempt",
+        ],
+    );
+    commit(f.path(), "exemption recorded on the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("changes later without recorded review"),
         "{output}"
     );
 }

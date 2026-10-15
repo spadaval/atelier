@@ -105,9 +105,11 @@ work branch, review, and `atelier merge`.
 
 `atelier land` on the base branch checks this before you push. It looks at
 the base commits that are not yet on the base's upstream. A commit counts as
-reviewed when an approval or trivial exemption of a completed owner that
-branched from this base pins a commit containing it; that is what
-`atelier merge` integrates. Every other commit may touch only records and the
+reviewed when it lies between the start of a completed owner's branch (the
+commit that first recorded its `workflow_branch`) and a commit pinned by that
+owner's approval or trivial exemption, for owners that branched from this base
+and are not already done upstream. That is the range `atelier merge`
+integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
 by the paths that differ from all of its parents. The commit that installs the
@@ -118,5 +120,7 @@ notes that it cannot check base commits.
 so a new branch cannot carry an unreviewed base commit into its own review. To
 recover, move the commit to a work branch (`git switch -c <type>/<id>`, then
 `git branch -f <base> <base>@{upstream}`) and run `atelier start <id>` there.
-This is a handoff check, not an access control: a direct commit pushed without
-running `land` is caught only by later review.
+This is a handoff check, not an access control. Review identities are
+self-declared, so an exemption recorded on the base for an owner that merged
+but is not yet pushed still covers commits after its branch started, and a
+direct commit pushed without running `land` is caught only by later review.

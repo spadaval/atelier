@@ -132,30 +132,75 @@ pub(crate) fn check_base_commits(
             "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
         ));
     };
-    let mut args = vec![
-        "rev-list".to_owned(),
-        "HEAD".to_owned(),
-        "--not".to_owned(),
-        upstream,
-    ];
+    let mut covered = BTreeSet::new();
     for review in index.reviews().filter(|review| {
         matches!(
             review.event,
             atelier_core::ReviewEvent::Approval | atelier_core::ReviewEvent::TrivialExemption
-        ) && index.get_issue(&review.target).is_some_and(|owner| {
-            owner
-                .workflow_branch
-                .as_ref()
-                .is_some_and(|branch| branch.branch_base == *base)
-                && policy.status_category(&owner.status) == Some("done")
-        })
+        )
     }) {
-        if resolve(repo, &review.commit).is_ok() {
-            args.push(review.commit.clone());
+        let Some(owner) = index.get_issue(&review.target) else {
+            continue;
+        };
+        if !owner
+            .workflow_branch
+            .as_ref()
+            .is_some_and(|branch| branch.branch_base == *base)
+            || policy.status_category(&owner.status) != Some("done")
+            || resolve(repo, &review.commit).is_err()
+        {
+            continue;
         }
+        let path = format!(".atelier/issues/{}.md", owner.id);
+        // An owner already done upstream was integrated before; a review
+        // recorded for it now covers nothing new.
+        let pushed_done = git_freshness::blob(repo, &upstream, Path::new(&path))
+            .ok()
+            .and_then(|blob| {
+                atelier_records::parse_issue_record(
+                    &blob,
+                    Path::new(&path).strip_prefix(".atelier").ok()?,
+                )
+                .ok()
+            })
+            .is_some_and(|record| policy.status_category(&record.issue.status) == Some("done"));
+        if pushed_done {
+            continue;
+        }
+        // A review covers only commits made after its owner's branch started,
+        // which is when `start` first recorded the branch.
+        let started = text(
+            repo,
+            &[
+                "log",
+                "--format=%H",
+                "--reverse",
+                "-G^workflow_branch:",
+                "HEAD",
+                "--",
+                &path,
+            ],
+        )?;
+        let Some(started) = started.lines().next() else {
+            continue;
+        };
+        let mut range = vec![
+            "rev-list",
+            review.commit.as_str(),
+            "--not",
+            upstream.as_str(),
+        ];
+        let start_parent = format!("{started}^");
+        if resolve(repo, &start_parent).is_ok() {
+            range.push(&start_parent);
+        }
+        covered.extend(text(repo, &range)?.lines().map(str::to_owned));
     }
-    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
-    let unreviewed = text(repo, &args)?;
+    let unreviewed = text(repo, &["rev-list", "HEAD", "--not", &upstream])?
+        .lines()
+        .filter(|commit| !covered.contains(*commit))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
     let normalized = |path: &Path| {
         path.components()
             .filter(|part| !matches!(part, std::path::Component::CurDir))
@@ -168,7 +213,7 @@ pub(crate) fn check_base_commits(
         .map(|strategy| normalized(Path::new(&strategy.path)))
         .collect::<BTreeSet<_>>();
     let mut checked = 0;
-    for commit in unreviewed.lines() {
+    for commit in &unreviewed {
         let parent = format!("{commit}^");
         if resolve(repo, &parent).is_err()
             || git_freshness::git_output(
