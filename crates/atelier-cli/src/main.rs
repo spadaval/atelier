@@ -378,8 +378,11 @@ enum IssueCommands {
         #[arg(long)]
         no_parent: bool,
         /// Set the repository-relative strategy file a mission links
-        #[arg(long)]
+        #[arg(long, conflicts_with = "no_strategy")]
         strategy: Option<String>,
+        /// Clear a mission's strategy link
+        #[arg(long)]
+        no_strategy: bool,
     },
 
     /// Append a dated note to the issue record's Notes section

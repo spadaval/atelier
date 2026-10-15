@@ -3763,14 +3763,71 @@ fn test_mission_strategy_is_set_from_the_cli_and_checked_from_the_mission_side()
             "docs/strategies/missing.md",
         ],
     );
+    assert!(!success && stderr.contains("does not exist"), "{stderr}");
+
+    // A blank key names no mission, as when the strategy is written first.
+    fs::write(
+        dir.path().join("docs/strategies/next.md"),
+        "---\nmission:\n---\n\n# Next\n",
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    // Two missions sharing a strategy can only be satisfied without the key.
+    let (success, other, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Sibling",
+            "--issue-type",
+            "mission",
+            "--strategy",
+            "docs/strategies/next.md",
+        ],
+    );
     assert!(success, "{stderr}");
+    fs::write(
+        dir.path().join("docs/strategies/next.md"),
+        format!("---\nmission: {mission}\n---\n\n# Next\n"),
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        !success && output.contains("remove the `mission:` key"),
+        "{output}"
+    );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", other.trim(), "--no-strategy"],
+    );
+    assert!(success, "{stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    // A strategy deleted later fails check but does not block body edits.
+    fs::remove_file(dir.path().join("docs/strategies/next.md")).unwrap();
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
         !success
             && format!("{stdout}{stderr}")
-                .contains("strategy docs/strategies/missing.md does not exist"),
+                .contains("strategy docs/strategies/next.md does not exist"),
         "{stdout}{stderr}"
     );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &mission,
+            "--body",
+            "## Outcome\n\nRevised outcome.",
+        ],
+    );
+    assert!(success, "{stderr}");
 
     let (_, task, _) = run_atelier(dir.path(), &["-q", "issue", "create", "Task"]);
     let (success, _, stderr) = run_atelier(
