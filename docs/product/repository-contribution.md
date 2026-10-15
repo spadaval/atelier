@@ -8,7 +8,8 @@ Committed Atelier records are this repository's coordination source of truth.
 Commit `.atelier/` changes with the implementation they describe. Keep work on
 reviewable branches. Non-trivial executable changes require independent review
 before local integration into `master`. Agents may integrate reviewed work
-locally under repository policy; pushing any remote requires the human.
+locally and push it, including `master` after a gated merge, under repository
+policy; force-pushing `master` or deleting remote branches requires the human.
 
 Atelier's merge command checks the reviewed base policy and fast-forwards
 committed work. It never commits or pushes. GitHub collaboration surfaces may

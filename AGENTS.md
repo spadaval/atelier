@@ -30,7 +30,9 @@ record owns execution state; strategy acceptance does not mean mission completio
 
 - Agents may merge independently reviewed work into `master` locally without
   asking. Unreviewed non-trivial changes never reach `master`.
-- Pushing to any remote requires the human.
+- Agents may push reviewed work, including `master` after a gated merge,
+  without asking. Never force-push `master` or delete remote branches without
+  the human.
 
 ## Product Sources
 

@@ -40,5 +40,6 @@ Keep dated historical material distinct from current guidance.
 
 Use [Agent Factory](../../../.agents/skills/agent-factory/SKILL.md) for planning,
 review, validation, and handoff. Non-trivial executable changes require
-independent review before local merge. Pushing any remote requires the human,
-as recorded in [AGENTS.md](../../../AGENTS.md).
+independent review before local merge. Agents may push reviewed work, including
+`master` after a gated merge; force-pushing `master` or deleting remote branches
+requires the human, as recorded in [AGENTS.md](../../../AGENTS.md).
