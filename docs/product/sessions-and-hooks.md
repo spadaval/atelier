@@ -21,11 +21,14 @@ child claims still need their applicable completion checks. A terminal owner
 requires a clean checkout and the full merge gates. An explicit child ID
 resolves its owner; otherwise ownership is inferred from the current branch.
 
-A branch that no item owns, such as a feature branch, a PR branch, or a branch
-from before adoption, lands with a note when it changes nothing under
-`.atelier/` since its merge base with the base branch. If it does change
-tracker files, `land` refuses with `land_work_untraceable`, names the changed
-paths, and points to `atelier start`.
+A branch that no item owns, such as a feature branch, a PR branch, a branch
+from before adoption, or a detached HEAD, lands with a note when it changes no
+tracker files (anything under `.atelier/`) since its merge base with the base
+branch. A path counts only if it changed relative to every local and
+remote-tracking copy of the base, so a stale local base does not blame the
+branch for upstream records. If the branch does change tracker files, or
+shares no history with the base, `land` refuses with `land_work_untraceable`,
+names the changed paths, and points to `atelier start`.
 
 Landing also checks completed claims elsewhere in the checkout. Unchanged
 integrated claims retain proof and independent acceptance that were valid when

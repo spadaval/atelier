@@ -1955,7 +1955,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let output = ok(f.path(), &["land"]);
     assert!(
         output
-            .contains("No work owner on feature/unowned; it changes no Atelier records since main"),
+            .contains("No work owner on branch feature/unowned; it changes no Atelier tracker files since main"),
         "{output}"
     );
     let stop =
@@ -1971,11 +1971,60 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
         !pass
-            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier records since main")
+            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker files since main")
             && output.contains(&format!(".atelier/issues/{filed}.md"))
             && output.contains("atelier start <id>"),
         "{output}"
     );
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
     assert_eq!(hook(f.path(), true, stop)["decision"], "block");
+}
+#[test]
+fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelated_history() {
+    let f = Fixture::new();
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    let remote = upstream.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", remote]);
+    git(f.path(), &["push", "-q", "origin", "main"]);
+    // Upstream gains a record that the local base never fetches.
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    ok(other.path(), &["-q", "issue", "create", "Filed upstream"]);
+    commit(other.path(), "upstream record");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+    git(f.path(), &["fetch", "-q", "origin"]);
+    git(
+        f.path(),
+        &["switch", "-q", "-c", "pr/from-origin", "origin/main"],
+    );
+    fs::write(f.path().join("pr"), "code only\n").unwrap();
+    commit(f.path(), "code on a PR branch from origin");
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("No work owner on branch pr/from-origin"),
+        "{output}"
+    );
+
+    git(f.path(), &["switch", "-q", "--detach", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("No work owner on detached HEAD;"),
+        "{output}"
+    );
+
+    git(f.path(), &["checkout", "-q", "--orphan", "unrelated"]);
+    commit(f.path(), "history unrelated to the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output
+                .contains("land_work_untraceable: this unowned branch shares no history with main"),
+        "{output}"
+    );
 }
