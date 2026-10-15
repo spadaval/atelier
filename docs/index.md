@@ -11,7 +11,9 @@ process ownership, review providers, transition actions, and the cache.
   boundaries, invariant checks, and engineering standards.
 - [Bundle input contract](spec/bundle/schema.md): one-shot authored graph input.
 - [Agent Factory](../.agents/skills/agent-factory/SKILL.md): planning,
-  implementation, review, validation, and handoff process.
+  implementation, review, validation, and handoff process. Vendored verbatim
+  from `spadaval/.agents`; change it upstream
+  ([ADR 0020](adr/0020-agent-factory-targets-atelier-only.md)).
 - [Rebuild strategy](strategies/atelier-rebuild.md): governing intent, criteria,
   scope, and authority. [Native mission](../.atelier/issues/atelier-kgcr.md) owns
   current execution state.

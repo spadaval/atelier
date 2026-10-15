@@ -3,6 +3,9 @@ created_at: "2026-10-15T19:53:46.436649795+00:00"
 id: "atelier-kr30"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-kr30
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Record Atelier-only Agent Factory decision and sync the vendored skill"
-updated_at: "2026-10-15T19:53:46.436649795+00:00"
+updated_at: "2026-10-15T19:53:54.975277137+00:00"
 ---
 
 ## Goal

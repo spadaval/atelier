@@ -16,8 +16,9 @@ Keep Design as a link to the owning document.
 An executable issue has Goal and Done when. Done when names a check or scenario
 that could fail if the slice were missing or wrong. Scope and Context give the
 worker enough boundaries and interfaces to act without the author's context.
-A validation item references the claims it checks and records its method and
-results; validation work still follows the executable issue shape.
+A validation item follows the executable issue shape: it references the claims
+it checks in Goal and its method in Context, and records each result as an
+attached evidence receipt.
 
 Keep status in front matter and progress in dated Notes. Put follow-up findings
 in new issues. Use native blockers for sequencing, parent fields for direct epic
