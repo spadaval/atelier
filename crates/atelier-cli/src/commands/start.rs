@@ -167,6 +167,12 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         }
         Some((stage, fingerprint))
     };
+    // A branch created from the base inherits the base's unpushed commits,
+    // so their review must not be credited to this branch.
+    if !branch_exists && current.as_deref() == Some(view_policy.branch_policy.base_branch.as_str())
+    {
+        git::check_base_commits(&repo_root, index, &view_policy)?;
+    }
     drop(snapshot);
     let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;
 

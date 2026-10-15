@@ -2057,7 +2057,7 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
         ],
     );
     let mut record = f.store().load_issue_by_id(&mission).unwrap();
-    record.issue.strategy = Some(atelier_core::IssueStrategy::new("plans/strategy.md").unwrap());
+    record.issue.strategy = Some(atelier_core::IssueStrategy::new("./plans/strategy.md").unwrap());
     f.store().write_issue_atomic(&record).unwrap();
     fs::create_dir(f.path().join("plans")).unwrap();
     fs::write(f.path().join("plans/strategy.md"), "# Strategy\n").unwrap();
@@ -2078,7 +2078,27 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
             && output.contains("changes direct without recorded review"),
         "{output}"
     );
-    git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    // An unrelated self-recorded exemption does not cover base code, and a
+    // branch started now would claim the commit in its own review.
+    let unrelated = ok(f.path(), &["-q", "issue", "create", "Never started"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &unrelated,
+            "--identity",
+            "Author",
+            "Self-exempt",
+        ],
+    );
+    commit(f.path(), "self-recorded exemption");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    let (pass, output) = cli(f.path(), &["start", &unrelated]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~2"]);
 
     git(f.path(), &["switch", "-q", &f.branch]);
     git(f.path(), &["rebase", "-q", "main"]);
@@ -2100,6 +2120,35 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     let output = ok(f.path(), &["land"]);
     assert!(
         output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        "{output}"
+    );
+}
+#[test]
+fn base_pull_merge_counts_only_the_paths_it_introduces() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    let remote = upstream.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", remote]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    fs::write(other.path().join("upstream-code"), "reviewed upstream\n").unwrap();
+    commit(other.path(), "code that landed upstream");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+
+    ok(f.path(), &["-q", "issue", "create", "Local planning"]);
+    commit(f.path(), "record-only planning on the base");
+    git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("Base commits: 2 unpushed record-only commit(s)"),
         "{output}"
     );
 }
