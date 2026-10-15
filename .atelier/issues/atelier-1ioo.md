@@ -11,13 +11,25 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-2oor"
+  - kind: "issue"
+    id: "atelier-4xyr"
+  - kind: "issue"
     id: "atelier-4ykl"
   - kind: "issue"
     id: "atelier-8ud1"
   - kind: "issue"
     id: "atelier-a0h0"
   - kind: "issue"
+    id: "atelier-cmi9"
+  - kind: "issue"
+    id: "atelier-g0zm"
+  - kind: "issue"
+    id: "atelier-ksqc"
+  - kind: "issue"
     id: "atelier-wp90"
+  - kind: "issue"
+    id: "atelier-xe43"
   - kind: "issue"
     id: "atelier-xz11"
   attachments: []
@@ -29,7 +41,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Complete session workflow, docs and mission validation"
-updated_at: "2026-10-01T23:04:17.649510962+00:00"
+updated_at: "2026-10-15T18:45:05.919386740+00:00"
 ---
 
 ## Outcome
