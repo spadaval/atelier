@@ -3443,3 +3443,57 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     let (success, list, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success && !list.contains("Bad epic"), "{list}");
 }
+
+#[test]
+fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
+    assert!(
+        workflow.contains("  backlog:\n    category: todo"),
+        "{workflow}"
+    );
+
+    let (success, someday, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Someday idea",
+            "--status",
+            "backlog",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let someday = someday.trim().to_string();
+    let (success, near, _) = run_atelier(dir.path(), &["-q", "issue", "create", "Near-term"]);
+    assert!(success);
+    let near = near.trim().to_string();
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &someday)).unwrap();
+    assert!(record.contains("status: \"backlog\""), "{record}");
+
+    let ready = |dir: &Path| run_atelier(dir, &["--quiet", "work", "ready"]).1;
+    let listed = ready(dir.path());
+    assert!(listed.lines().any(|line| line == near), "{listed}");
+    assert!(!listed.lines().any(|line| line == someday), "{listed}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &someday, "plan"]);
+    assert!(success, "{stderr}");
+    assert!(ready(dir.path()).lines().any(|line| line == someday));
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &someday, "defer"]);
+    assert!(success, "{stderr}");
+    assert!(!ready(dir.path()).lines().any(|line| line == someday));
+
+    for refused in ["in_progress", "done", "nonsense"] {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", "Bad start", "--status", refused],
+        );
+        assert!(!success, "{refused}: {stdout}");
+        assert!(
+            stderr.contains("issue_create_status_invalid") && stderr.contains("backlog, todo"),
+            "{stderr}"
+        );
+    }
+}

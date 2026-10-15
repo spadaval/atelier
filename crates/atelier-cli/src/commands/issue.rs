@@ -568,6 +568,7 @@ pub struct LifecycleCreateInput<'a> {
     pub issue_type: &'a str,
     pub labels: &'a [String],
     pub parent: Option<&'a str>,
+    pub status: Option<&'a str>,
     pub quiet: bool,
 }
 
@@ -592,7 +593,10 @@ pub fn create_lifecycle(
     let store = atelier_app::project_config::record_store(state_dir)?;
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
-    let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
+    let initial_status = match input.status {
+        Some(status) => requested_initial_status(state_dir, input.issue_type, status)?,
+        None => lifecycle_initial_status(state_dir, input.issue_type)?,
+    };
     let description = input.description.or(input.body).map(str::to_string);
     if description
         .as_ref()
@@ -752,6 +756,44 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
         )
     })
+}
+
+/// New work may start in any todo-category status its workflow can leave,
+/// such as `backlog`; active, blocked, and done statuses need transitions.
+fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) -> Result<String> {
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    if policy.status_category(status) != Some("todo")
+        || !policy.workflow_allows_status(issue_type, status)?
+        || policy
+            .transitions_from_status(issue_type, status)?
+            .is_empty()
+    {
+        let allowed = policy
+            .statuses
+            .keys()
+            .filter(|candidate| {
+                policy.status_category(candidate) == Some("todo")
+                    && policy
+                        .workflow_allows_status(issue_type, candidate)
+                        .unwrap_or(false)
+                    && policy
+                        .transitions_from_status(issue_type, candidate)
+                        .is_ok_and(|transitions| !transitions.is_empty())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        bail!(
+            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with atelier issue transition.",
+            allowed.join(", ")
+        );
+    }
+    Ok(status.to_string())
 }
 
 pub struct UpdateInput<'a> {

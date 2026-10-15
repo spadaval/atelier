@@ -4,6 +4,9 @@ id: "atelier-ha6k"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ha6k
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Ship a someday state, and let new work be created in it"
-updated_at: "2026-10-15T21:00:45.354511214+00:00"
+updated_at: "2026-10-15T23:16:41.822056282+00:00"
 ---
 
 ## Goal

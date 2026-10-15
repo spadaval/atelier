@@ -21,9 +21,14 @@ target status, optional description, required fields such as `close_reason`,
 and read-only checks. Categories support queries; the exact status remains the
 stored lifecycle state.
 
-The current repository has draft objectives, todo executable work, active
-`in_progress` and `review`, blocked work, and terminal `done` or `superseded`.
-Inspect actual policy and `atelier issue transition <id>` before executing a
+The starter policy has draft objectives, someday `backlog` work, todo
+executable work, active `in_progress` and `review`, blocked work, and terminal
+`done` or `superseded`. `backlog` is for work that is recorded but not
+near-term: it shares the todo category but has no `start` transition, so
+`work ready` leaves it out. `defer` parks todo or blocked work in `backlog`,
+`plan` brings it back to `todo`, and `supersede` retires it.
+`atelier issue create --status backlog` files new work there directly; create
+accepts any todo-category status its workflow can leave. Inspect actual policy and `atelier issue transition <id>` before executing a
 transition; a todo category alone is not permission to start.
 
 Transitions write the issue record after checks pass. They do not create

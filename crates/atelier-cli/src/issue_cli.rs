@@ -14,6 +14,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             label,
             issue_type,
             parent,
+            status,
         } => {
             let (state_dir, index) = load_repository()?;
             if description.is_some() && body.is_some() {
@@ -31,6 +32,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     issue_type: issue_type.as_deref().unwrap_or("task"),
                     labels: &label,
                     parent: parent.as_deref(),
+                    status: status.as_deref(),
                     quiet,
                 },
             )
