@@ -474,9 +474,9 @@ fn replace_issue_section(markdown: &str, heading: &str, replacement: &str) -> St
         .map(|offset| body_start + offset)
         .unwrap_or(markdown.len());
     format!(
-        "{}{}\n{}",
+        "{}\n{}\n\n{}",
         &markdown[..body_start],
-        format!("\n{}\n", replacement.trim()),
+        replacement.trim(),
         &markdown[end..]
     )
 }
@@ -608,8 +608,8 @@ fn attach_evidence(
         evidence_out.contains("[evidence] recorded"),
         "{evidence_out}"
     );
-    let evidence_id = record_id_by_title(dir, "evidence", summary);
-    evidence_id
+
+    record_id_by_title(dir, "evidence", summary)
 }
 
 fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {

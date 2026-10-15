@@ -376,21 +376,17 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
 
 fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
     for issue in &bundle.resources.issues {
-        if issue.issue_type == "mission" {
-            if issue.parent.is_some() {
-                bail!(
-                    "Mission issue {} cannot have parent; use advances links for mission work",
-                    issue.client_ref
-                );
-            }
+        if issue.issue_type == "mission" && issue.parent.is_some() {
+            bail!(
+                "Mission issue {} cannot have parent; use advances links for mission work",
+                issue.client_ref
+            );
         }
-        if issue.issue_type == "epic" {
-            if issue.parent.is_some() {
-                bail!(
-                    "Epic issue {} cannot have parent; epics are root work packages",
-                    issue.client_ref
-                );
-            }
+        if issue.issue_type == "epic" && issue.parent.is_some() {
+            bail!(
+                "Epic issue {} cannot have parent; epics are root work packages",
+                issue.client_ref
+            );
         }
         if let Some(parent) = &issue.parent {
             let parent_type =
@@ -1141,7 +1137,7 @@ fn preview_bundle_summary(bundle: &BundleFile, plan: &BundleGraphPlan<'_>) -> Va
     let mut records = BTreeMap::<String, Vec<Value>>::new();
     for (client_ref, kind) in bundle.client_refs() {
         records
-            .entry(created_key(&kind).to_string())
+            .entry(created_key(kind).to_string())
             .or_default()
             .push(json!({ "client_ref": client_ref, "kind": kind }));
     }

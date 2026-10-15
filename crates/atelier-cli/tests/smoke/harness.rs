@@ -135,9 +135,8 @@ impl SmokeHarness {
             &format!("issue/{issue_ref}"),
             &summary,
         ]);
-        let evidence_id = first_record_id(&evidence.stdout)
-            .expect("evidence record did not print an evidence id");
-        evidence_id
+
+        first_record_id(&evidence.stdout).expect("evidence record did not print an evidence id")
     }
 
     /// Close an issue fixture through the current proof-backed closeout path.

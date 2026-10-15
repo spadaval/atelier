@@ -341,7 +341,10 @@ fn render_issue_transition_options(
             ));
             lines.extend(render_text_list("Description", &option.descriptions));
         }
-        lines.extend(render_text_list("Commands", &[option.command.clone()]));
+        lines.extend(render_text_list(
+            "Commands",
+            std::slice::from_ref(&option.command),
+        ));
     }
     lines.join("\n")
 }

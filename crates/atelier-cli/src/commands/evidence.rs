@@ -73,6 +73,7 @@ struct CaptureTargetIdentity {
     record_type: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn add_returning_id(
     index: &RecordIndex,
     state_dir: &Path,
@@ -271,9 +272,9 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             &index,
             &state_dir,
             &created.header.id,
-            &target.display_kind,
-            &target.id,
-            &target.role,
+            target.display_kind,
+            target.id,
+            target.role,
         )?;
     }
     print_new_record(&created, options.quiet)
@@ -481,7 +482,7 @@ fn attach_impl(
     let inserted = RecordStore::new(state_dir).add_attachment_relationship(
         KIND,
         id,
-        &target.canonical_kind,
+        target.canonical_kind,
         target_id,
         role,
     )?;

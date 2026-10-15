@@ -1597,7 +1597,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Current work:  1 issue(s)"));
-    assert!(status_out.contains(&format!("{issue_id}")));
+    assert!(status_out.contains(&issue_id.to_string()));
 }
 
 #[test]
@@ -1654,8 +1654,8 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
         status_out.contains("Current work:  2 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("{active_id}")));
-    assert!(status_out.contains(&format!("{next_id}")));
+    assert!(status_out.contains(&active_id.to_string()));
+    assert!(status_out.contains(&next_id.to_string()));
 }
 
 #[test]
@@ -1727,8 +1727,8 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
         status_out.contains("Current work:  2 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("{first_id}")));
-    assert!(status_out.contains(&format!("{second_id}")));
+    assert!(status_out.contains(&first_id.to_string()));
+    assert!(status_out.contains(&second_id.to_string()));
 }
 
 #[test]
@@ -2016,7 +2016,7 @@ fn test_removed_abandon_preserves_issue_status() {
         status_out.contains("Current work:  1 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("{issue_id}")));
+    assert!(status_out.contains(&issue_id.to_string()));
 }
 
 #[test]

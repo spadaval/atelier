@@ -181,7 +181,7 @@ fn prune_git_artifacts(
         {
             if resolution.owner_id == issue.id {
                 let protection =
-                    if !crate::commands::issue_workflow::issue_is_done(Some(&policy), &issue) {
+                    if !crate::commands::issue_workflow::issue_is_done(Some(&policy), issue) {
                         Some(format!("owner {} has active workflow state", issue.id))
                     } else if let Some(candidate) = owner_candidates.get(&issue.id) {
                         candidate.protection.as_ref().map(|reason| {
