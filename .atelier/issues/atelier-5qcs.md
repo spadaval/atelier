@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T23:15:00.021482559+00:00"
+status: "done"
 title: "Don't take the project slug from the directory name"
-updated_at: "2026-10-15T23:12:42.648968046+00:00"
+updated_at: "2026-10-15T23:15:00.021482559+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-15T23:12:42.648968046+00:00"
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). The slug was fixed by hand in .atelier/config.toml.
+
+## Close Reason
+
+init derives project_slug from the origin remote's repository name, then the main worktree's directory, then the directory name; prints the chosen slug and its source; --slug overrides. Covered by test_init_slug_comes_from_origin_then_the_main_worktree (linked worktree, remote, --slug).
