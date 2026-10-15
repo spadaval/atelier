@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-15T19:31:24.891077795+00:00"
+status: "done"
 title: "Measure non-test Rust lines for S5"
-updated_at: "2026-10-15T18:45:05.916848779+00:00"
+updated_at: "2026-10-15T19:31:24.891077795+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Measurement only; changing S5 needs the human.
 ## Context
 
 A rough count in the external evaluation found about 26k lines outside tests/ dirs, including inline cfg(test) modules. scripts/count_non_test_rust.py exists.
+
+## Close Reason
+
+Independent validation (evidence atelier-ofmq at 8f13d015): 19,433 non-test Rust lines by scripts/count_non_test_rust.py (physical lines from Git objects, excluding tests/ files, test_records.rs and 42 cfg(test) items), cross-checked at 19,438 by an independent count. Under the 20k S5 limit. The external ~26k figure included inline cfg(test) modules (26,324 outside tests/).

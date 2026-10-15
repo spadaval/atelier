@@ -39,9 +39,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T19:31:29.446489250+00:00"
+status: "done"
 title: "Complete session workflow, docs and mission validation"
-updated_at: "2026-10-15T18:45:05.919386740+00:00"
+updated_at: "2026-10-15T19:31:29.446489250+00:00"
 ---
 
 ## Outcome
@@ -59,3 +60,7 @@ S6 and S8; final acceptance of S1–S8.
 ## Design
 
 docs/adr/0019-verified-repo-native-tracker.md
+
+## Close Reason
+
+Session workflow, docs, evaluation fixes (2oor, g0zm, ksqc, 4xyr, xe43), h867, idae and S5 measurement are done. Three independent review rounds; final approval atelier-ej12 with all findings disposed. Independent validation atelier-xz11 passed S1-S8. Follow-ups outside this epic: atelier-28mz, ip9e, 83xi, 749l, v44v.
