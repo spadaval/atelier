@@ -217,13 +217,16 @@ impl<'a> BundleGraphPlan<'a> {
                     "blocks",
                 )?;
             }
+            // Validation ensures exactly one endpoint is a mission. Plan the
+            // edge from the mission so declaring it on both sides is a duplicate.
             for target in &issue.advances {
-                insert_planned_relationship(
-                    &mut relationships,
-                    issue_ref.clone(),
-                    planned_bundle_ref(index, bundle, target)?,
-                    "advances",
-                )?;
+                let target_ref = planned_bundle_ref(index, bundle, target)?;
+                let (source, target) = if issue.issue_type == "mission" {
+                    (issue_ref.clone(), target_ref)
+                } else {
+                    (target_ref, issue_ref.clone())
+                };
+                insert_planned_relationship(&mut relationships, source, target, "advances")?;
             }
         }
         for record in &evidence {

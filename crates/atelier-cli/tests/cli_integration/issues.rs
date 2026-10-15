@@ -3409,6 +3409,21 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
     assert!(success && overview.contains(&epic), "{overview}{stderr}");
 
+    // Bundle: declaring one link from both endpoints is a duplicate edge.
+    fs::write(
+        &bundle,
+        r###"{"schema":"atelier.bundle","schema_version":2,"title":"Both","resources":{"issues":[{"client_ref":"m","title":"Both mission","issue_type":"mission","body":"## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.","advances":[{"client_ref":"e"}]},{"client_ref":"e","title":"Both epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{"client_ref":"m"}]}]}}"###,
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle.to_str().unwrap(), "--yes"],
+    );
+    assert!(
+        !success && stderr.contains("Duplicate bundle relationship"),
+        "{stderr}"
+    );
+
     // Bundle: work-to-work advances is refused before writing.
     fs::write(
         &bundle,

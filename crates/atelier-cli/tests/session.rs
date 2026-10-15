@@ -859,8 +859,13 @@ fn execute_bits_hidden_by_core_filemode_follow_git_status_in_land() {
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
     assert!(!ok(f.path(), &["land"]).contains("uncommitted path"));
     f.terminal(&f.id);
-    let (_, output) = cli(f.path(), &["land", &f.id]);
-    assert!(!output.contains("land_completion_dirty"), "{output}");
+    // The claim is still unreviewed, so land refuses on review, not on a
+    // dirty checkout.
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains("review.current") && !output.contains("land_completion_dirty"),
+        "{output}"
+    );
 
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);

@@ -2964,7 +2964,7 @@ fn check_reports_every_independent_graph_error_in_one_run() {
         assert!(success, "{stderr}");
         stdout.trim().to_string()
     };
-    let ids = ["One", "Two", "Three", "Four"].map(create);
+    let ids = ["One", "Two", "Three", "Four", "Five", "Six"].map(create);
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(success, "{stdout}{stderr}");
     let (success, before, _) = run_atelier(dir.path(), &["issue", "list"]);
@@ -2982,6 +2982,13 @@ fn check_reports_every_independent_graph_error_in_one_run() {
     block(&ids[1], "atelier-missb");
     block(&ids[2], &ids[3]);
     block(&ids[3], &ids[2]);
+    // A task cannot own children: an error that needs both records.
+    edit_canonical_issue(dir.path(), &ids[4], |markdown| {
+        markdown.replace(
+            "  children: []",
+            &format!("  children:\n  - kind: \"issue\"\n    id: \"{}\"", ids[5]),
+        )
+    });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(!success, "{stdout}");
@@ -2990,7 +2997,8 @@ fn check_reports_every_independent_graph_error_in_one_run() {
         "has blocks reference to missing issue atelier-missa",
         "has blocks reference to missing issue atelier-missb",
         "relationships.blocks contains a cycle",
-        "Lint found 3 issue(s)",
+        &format!("issue {} cannot be child of task {}", ids[5], ids[4]),
+        "Lint found 4 issue(s)",
     ] {
         assert!(transcript.contains(expected), "{expected}: {transcript}");
     }

@@ -96,8 +96,9 @@ complete staged graph. Errors name the rejected field, reference, record, or
 Parent references normalize to epic children. Both `depends_on` and `blocks`
 normalize to blocker-to-blocked relationships. `advances` is stored on both
 records, as `atelier issue link` stores it, so a mission listing an epic and the
-epic listing the mission are the same edge. `validates` retains its semantic
-role. Duplicate normalized edges are errors.
+epic listing the mission are the same mission-to-work edge; declaring both is a
+duplicate. `validates` retains its semantic role. Duplicate normalized edges are
+errors.
 
 Preview and apply report the same normalized plan in deterministic order; apply
 replaces client references with allocated IDs. Preview reserves no IDs. Apply
