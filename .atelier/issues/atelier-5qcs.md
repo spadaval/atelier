@@ -4,6 +4,9 @@ id: "atelier-5qcs"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-5qcs
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Don't take the project slug from the directory name"
-updated_at: "2026-10-15T22:08:58.923650405+00:00"
+updated_at: "2026-10-15T23:12:42.648968046+00:00"
 ---
 
 ## Goal
