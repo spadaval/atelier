@@ -24,10 +24,7 @@ pub fn dependency_diagnosis(
     else {
         return Ok(None);
     };
-    let terminal = path
-        .last()
-        .cloned()
-        .unwrap_or_else(|| issue_id.to_string());
+    let terminal = path.last().cloned().unwrap_or_else(|| issue_id.to_string());
     let label = if path.len() <= 2 {
         "direct blocker"
     } else {

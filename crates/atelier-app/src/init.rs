@@ -75,8 +75,7 @@ pub fn initialize(input: InitRequest) -> Result<InitView> {
     }
 
     if let Some(config) = new_config {
-        fs::write(&project_config_path, config)
-            .context("Failed to write .atelier/config.toml")?;
+        fs::write(&project_config_path, config).context("Failed to write .atelier/config.toml")?;
         created_paths.push(project_config_path);
     }
 
@@ -97,8 +96,8 @@ pub fn initialize(input: InitRequest) -> Result<InitView> {
 
 /// The repository directory name, normalized to a valid slug.
 fn default_project_slug(path: &Path) -> Result<String> {
-    let path = fs::canonicalize(path)
-        .with_context(|| format!("failed to resolve {}", path.display()))?;
+    let path =
+        fs::canonicalize(path).with_context(|| format!("failed to resolve {}", path.display()))?;
     path.file_name()
         .and_then(|name| atelier_records::derive_project_slug(&name.to_string_lossy()))
         .ok_or_else(|| {

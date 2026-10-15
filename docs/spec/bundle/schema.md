@@ -53,7 +53,7 @@ Client references never become canonical record IDs.
 | `labels` | Optional string array. |
 | `parent` | Optional epic reference for an ordinary issue. |
 | `depends_on`, `blocks` | Optional reference arrays for sequencing. |
-| `advances` | Optional mission membership reference array. |
+| `advances` | Optional mission membership reference array. On a mission it names work in its scope; on other issues it names the mission they advance. Each link must join exactly one mission. |
 | `notes` | Optional ordered notes with `body`, optional `author`, and optional RFC 3339 `created_at`. |
 | `operation` | Omitted or `create`. |
 
@@ -94,8 +94,10 @@ complete staged graph. Errors name the rejected field, reference, record, or
 `client_ref` where available. No invalid reference or cycle may be installed.
 
 Parent references normalize to epic children. Both `depends_on` and `blocks`
-normalize to blocker-to-blocked relationships. `advances` and `validates` retain
-their semantic roles. Duplicate normalized edges are errors.
+normalize to blocker-to-blocked relationships. `advances` is stored on both
+records, as `atelier issue link` stores it, so a mission listing an epic and the
+epic listing the mission are the same edge. `validates` retains its semantic
+role. Duplicate normalized edges are errors.
 
 Preview and apply report the same normalized plan in deterministic order; apply
 replaces client references with allocated IDs. Preview reserves no IDs. Apply

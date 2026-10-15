@@ -116,10 +116,8 @@ pub fn add_returning_id(
             role: target.role.to_string(),
         }),
     };
-    let created =
-        atelier_app::project_config::record_store(state_dir)?.create_evidence(
-            summary, "recorded", summary, data,
-        )?;
+    let created = atelier_app::project_config::record_store(state_dir)?
+        .create_evidence(summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
     Ok(id)
 }
@@ -266,9 +264,8 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     };
     let body = atelier_records::render_evidence_transcript(&summary, &data);
 
-    let created =
-        RecordStore::for_project(&state_dir, &association.project_slug)
-            .create_evidence(&summary, "recorded", &body, data)?;
+    let created = RecordStore::for_project(&state_dir, &association.project_slug)
+        .create_evidence(&summary, "recorded", &body, data)?;
     if let Some(target) = target {
         attach_silently(
             &index,

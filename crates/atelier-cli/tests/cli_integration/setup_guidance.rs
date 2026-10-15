@@ -2275,7 +2275,7 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "link", objective_id, epic_id, "--role", "advances"],
+        &["issue", "link", objective_id, epic_id, "--role", "related"],
     );
     assert!(success, "issue link failed: {stderr}");
 
@@ -2457,7 +2457,9 @@ fn blocked_start_names_the_record_type_not_mission() {
     assert!(!success, "{stdout}");
     let output = format!("{stdout}{stderr}");
     assert!(
-        output.contains(&format!("task {task} has direct blocker path {task} -> {blocker}")),
+        output.contains(&format!(
+            "task {task} has direct blocker path {task} -> {blocker}"
+        )),
         "{output}"
     );
     assert!(!output.contains("mission"), "{output}");

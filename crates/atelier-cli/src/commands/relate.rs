@@ -26,6 +26,13 @@ pub fn change_issue_link(
     validate_issue_link_role(repo_root, role)?;
     let source = resolve_link_endpoint(index, issue_ref)?;
     let target = resolve_link_endpoint(index, target_ref)?;
+    if role == "advances" && !unlink {
+        atelier_app::workflow_policy::validate_advances_endpoints(
+            &source,
+            &index.require_issue(&source)?.issue_type,
+            &index.require_issue(&target)?.issue_type,
+        )?;
+    }
     let store = RecordStore::new(state_dir);
     let changed = match (unlink, role == BLOCKED_BY_ROLE) {
         (false, true) => store.add_issue_block(&source, &target)?,

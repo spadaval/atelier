@@ -16,7 +16,10 @@ its direct children. `issue show` remains the detailed record view.
 Objective counts use the complete scope. Display limits trim visible rows,
 without changing counts or the underlying scope facts.
 
-Mission membership follows `advances`, not parent hierarchy. A linked epic
+Mission membership follows `advances`, not parent hierarchy. An `advances`
+link joins one mission to one non-mission issue; the bundle and
+`atelier issue link <issue-id> <mission-id> --role advances` record the same
+two-sided link. A linked epic
 includes its descendants in mission execution context. Work outside mission
 scope remains visible through repository-wide work and inventory commands.
 

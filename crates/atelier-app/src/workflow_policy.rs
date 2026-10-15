@@ -11,6 +11,21 @@ pub use atelier_workflow::{
     WORKFLOW_POLICY_PATH,
 };
 
+/// `advances` joins a mission to work in its scope. It is stored on both
+/// records, so either endpoint may declare it; exactly one must be a mission.
+pub fn validate_advances_endpoints(
+    source: &str,
+    source_type: &str,
+    target_type: &str,
+) -> Result<()> {
+    if (source_type == "mission") == (target_type == "mission") {
+        return Err(anyhow!(
+            "workflow_issue_link_type_invalid: {source} ({source_type}) cannot advance a {target_type}; advances links one mission to one non-mission issue, e.g. `atelier issue link <issue-id> <mission-id> --role advances`"
+        ));
+    }
+    Ok(())
+}
+
 pub fn validate_issue_hierarchy(
     index: &RecordIndex,
     issue: &Issue,
@@ -19,7 +34,7 @@ pub fn validate_issue_hierarchy(
     if issue.issue_type == "mission" {
         if let Some(parent_id) = parent_id {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: mission issue {} cannot have parent {}; link mission work with `atelier issue link <mission-id> <issue-id> --role advances`",
+                "workflow_issue_hierarchy_invalid: mission issue {} cannot have parent {}; link mission work with `atelier issue link <issue-id> <mission-id> --role advances`",
                 issue.id,
                 parent_id
             ));

@@ -76,7 +76,10 @@ pub fn derive_project_slug(name: &str) -> Option<String> {
 
 #[cfg(test)]
 pub fn legacy_issue_id(number: i64) -> String {
-    format!("atelier-{}", base36_padded(number as u64, DEFAULT_SUFFIX_LEN))
+    format!(
+        "atelier-{}",
+        base36_padded(number as u64, DEFAULT_SUFFIX_LEN)
+    )
 }
 
 fn random_base36_suffix(len: usize) -> Result<String> {
@@ -144,7 +147,10 @@ mod tests {
 
     #[test]
     fn derives_slugs_from_directory_names() {
-        assert_eq!(derive_project_slug("astromech").as_deref(), Some("astromech"));
+        assert_eq!(
+            derive_project_slug("astromech").as_deref(),
+            Some("astromech")
+        );
         assert_eq!(
             derive_project_slug("Cosplay_Studio.v2").as_deref(),
             Some("cosplay-studio-v2")

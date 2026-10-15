@@ -888,8 +888,17 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     let child_id = issue_id_by_title(dir.path(), "Child key issue");
     assert!(!child_id.is_empty());
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "link", parent_key, related_key]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            parent_key,
+            related_key,
+            "--role",
+            "related",
+        ],
+    );
     assert!(success, "relate by partial keys failed: {stderr}");
     assert!(stdout.contains(&parent_id));
     assert!(stdout.contains(&related_id));
@@ -3310,8 +3319,10 @@ fn new_records_use_the_configured_slug_and_legacy_ids_stay_valid() {
         r###"{"schema":"atelier.bundle","schema_version":2,"title":"Slug","resources":{"issues":[{"client_ref":"one","title":"Bundled","issue_type":"task","body":"## Goal\n\nBundle.\n\n## Done when\n\nSlugged."}]}}"###,
     )
     .unwrap();
-    let (success, _, stderr) =
-        run_atelier(&dir, &["bundle", "apply", bundle.to_str().unwrap(), "--yes"]);
+    let (success, _, stderr) = run_atelier(
+        &dir,
+        &["bundle", "apply", bundle.to_str().unwrap(), "--yes"],
+    );
     assert!(success, "{stderr}");
     let bundled = issue_id_by_title(&dir, "Bundled");
     assert!(bundled.starts_with("astromech-"), "{bundled}");
@@ -3325,4 +3336,95 @@ fn new_records_use_the_configured_slug_and_legacy_ids_stay_valid() {
     assert!(success, "{stdout}{stderr}");
     let (success, shown, stderr) = run_atelier(&dir, &["issue", "show", &renamed]);
     assert!(success && shown.contains("Legacy"), "{shown}{stderr}");
+}
+
+#[test]
+fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str, issue_type: &str, body: &str| {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--issue-type",
+                issue_type,
+                "--body",
+                body,
+            ],
+        );
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let mission = create(
+        "Mission",
+        "mission",
+        "## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.",
+    );
+    let task = create("Task", "task", "## Goal\n\nWork.\n\n## Done when\n\nDone.");
+    let other = create("Other", "task", "## Goal\n\nWork.\n\n## Done when\n\nDone.");
+    let relates_to = |id: &str, target: &str| {
+        read_canonical_record(dir.path(), "issues", id).contains(&format!(
+            "  - kind: \"issue\"\n    id: \"{target}\"\n    type: \"advances\""
+        ))
+    };
+
+    // CLI: work-first order records the link on both records.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &task, &mission, "--role", "advances"],
+    );
+    assert!(success, "{stderr}");
+    assert!(relates_to(&task, &mission) && relates_to(&mission, &task));
+    // CLI: two non-missions cannot advance each other.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &task, &other, "--role", "advances"],
+    );
+    assert!(
+        !success && stderr.contains("advances links one mission"),
+        "{stderr}"
+    );
+    assert!(!relates_to(&task, &other));
+
+    // Bundle: an epic declares the mission it advances, as the CLI allows.
+    let bundle = dir.path().join("advances.json");
+    fs::write(
+        &bundle,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Advances","resources":{{"issues":[{{"client_ref":"epic","title":"Bundled epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{{"id":"{mission}"}}]}}]}}}}"###
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "{stderr}");
+    let epic = issue_id_by_title(dir.path(), "Bundled epic");
+    assert!(relates_to(&epic, &mission) && relates_to(&mission, &epic));
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success && overview.contains(&epic), "{overview}{stderr}");
+
+    // Bundle: work-to-work advances is refused before writing.
+    fs::write(
+        &bundle,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{{"client_ref":"bad","title":"Bad epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{{"id":"{task}"}}]}}]}}}}"###
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle.to_str().unwrap(), "--yes"],
+    );
+    assert!(
+        !success && stderr.contains("advances links one mission"),
+        "{stderr}"
+    );
+    let (success, list, _) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(success && !list.contains("Bad epic"), "{list}");
 }

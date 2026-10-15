@@ -408,12 +408,19 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                 );
             }
         }
-        if !issue.advances.is_empty() && issue.issue_type != "mission" {
-            bail!(
-                "Issue {} has advances links but issue_type is {}; only mission issue resources can declare advances",
-                issue.client_ref,
-                issue.issue_type
-            );
+        for target in &issue.advances {
+            let target_type =
+                bundle_issue_type_for_ref(index, bundle, target)?.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "advances target for {} must resolve to an issue",
+                        issue.client_ref
+                    )
+                })?;
+            atelier_app::workflow_policy::validate_advances_endpoints(
+                &issue.client_ref,
+                &issue.issue_type,
+                &target_type,
+            )?;
         }
     }
     Ok(())
@@ -1104,6 +1111,10 @@ fn apply_planned_relationship(
                 bail!("blocks relationship endpoints must both be issues");
             }
             store.add_issue_block(&target.id, &source.id)?;
+        }
+        // Stored on both records, as `atelier issue link` does.
+        "advances" => {
+            store.add_issue_relation(&source.id, &target.id, "advances")?;
         }
         relation_type => add_relationship(store, source, target, relation_type)?,
     }

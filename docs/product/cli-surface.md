@@ -39,6 +39,9 @@ atelier start <id>
 `issue list` is flat inventory, including objective records; `work` is operational
 context. A mission is created with `issue create --issue-type mission`. Use an
 epic parent for direct implementation children and `advances` for mission scope.
+An `advances` link joins one mission to one non-mission issue and is stored on
+both records, so either argument order records the same link; the examples name
+the work first.
 Creation presets (`--template`) and mission text generation flags
 (`--constraint`, `--risk`, `--validation`) are retired. Author typed Markdown
 with `--body`, and choose `--issue-type`, priority, and labels explicitly; Agent
