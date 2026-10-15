@@ -208,6 +208,17 @@ fn check_traceability(
     }
     Ok(())
 }
+/// Tracker paths a branch changes relative to its merge base with `base`.
+fn tracker_changes_since(repo: &Path, base: &str) -> Result<Vec<std::path::PathBuf>> {
+    let (_, base_commit) = git::work_ref(repo, base)?.with_context(|| {
+        format!("land_work_untraceable: base branch {base} not found, so this unowned branch's record changes cannot be checked; fetch {base} or run atelier start <id>")
+    })?;
+    let fork = git::text(repo, &["merge-base", &base_commit, "HEAD"])?;
+    Ok(git_freshness::changed_paths(repo, &fork, "HEAD")?
+        .into_iter()
+        .filter(|path| path.starts_with(".atelier"))
+        .collect())
+}
 fn land_text(requested: Option<&str>) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
@@ -333,11 +344,18 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         if !initial_paths.is_empty() {
             lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier prime for current findings and proof.", initial_paths.len()));
         }
-    } else {
-        if branch != source.policy.branch_policy.base_branch {
-            bail!("land_work_untraceable: branch {branch} has no owner; run atelier start <id> before claiming work on it");
-        }
+    } else if branch == source.policy.branch_policy.base_branch {
         lines.push("No work owner on the integration base.".into());
+    } else {
+        let base = &source.policy.branch_policy.base_branch;
+        let changed = tracker_changes_since(repo, base)?;
+        if !changed.is_empty() {
+            bail!(
+                "land_work_untraceable: branch {branch} has no owner but changes Atelier records since {base}: {}; run atelier start <id> to give the work an owner branch, or move the record changes onto one",
+                changed.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", ")
+            );
+        }
+        lines.push(format!("No work owner on {branch}; it changes no Atelier records since {base}, so there is nothing to land."));
     }
     let failed = nodes
         .iter()

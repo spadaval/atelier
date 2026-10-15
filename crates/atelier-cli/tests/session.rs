@@ -1946,3 +1946,36 @@ fn prime_keeps_eight_newest_scoped_proofs_and_fresh_hidden_dirt() {
     assert_eq!(prime.matches("(stale against current work)").count(), 1);
     assert_eq!(prime.matches("(fresh)").count(), 7);
 }
+#[test]
+fn unowned_branch_lands_unless_it_changes_records() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "-c", "feature/unowned", "main"]);
+    fs::write(f.path().join("feature"), "code only\n").unwrap();
+    commit(f.path(), "code on a branch no item owns");
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output
+            .contains("No work owner on feature/unowned; it changes no Atelier records since main"),
+        "{output}"
+    );
+    let stop =
+        serde_json::json!({"cwd":f.path(), "hook_event_name":"Stop", "stop_hook_active":false});
+    assert_eq!(hook(f.path(), true, stop.clone()), serde_json::json!({}));
+
+    let filed = ok(
+        f.path(),
+        &["-q", "issue", "create", "Filed off an owner branch"],
+    );
+    commit(f.path(), "record change on a branch no item owns");
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier records since main")
+            && output.contains(&format!(".atelier/issues/{filed}.md"))
+            && output.contains("atelier start <id>"),
+        "{output}"
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
+    assert_eq!(hook(f.path(), true, stop)["decision"], "block");
+}

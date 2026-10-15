@@ -4,6 +4,9 @@ id: "atelier-fxbg"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-fxbg
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let land pass on branches that no item owns"
-updated_at: "2026-10-15T22:08:58.898598939+00:00"
+updated_at: "2026-10-15T22:53:46.207472072+00:00"
 ---
 
 ## Goal
