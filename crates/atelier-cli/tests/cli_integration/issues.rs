@@ -2933,13 +2933,13 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
 
     let workflow_path = dir.path().join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path).unwrap();
-    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n";
+    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n";
     assert!(workflow.contains(task_close));
     std::fs::write(
         &workflow_path,
         workflow.replace(
             task_close,
-            "      close:\n        from: [todo, in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Retire work without re-entering execution.\n      supersede:\n        from: [todo, blocked, in_progress]\n",
+            "      close:\n        from: [todo, in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Retire work without re-entering execution.\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
         ),
     )
     .unwrap();
@@ -3442,4 +3442,75 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     );
     let (success, list, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success && !list.contains("Bad epic"), "{list}");
+}
+
+#[test]
+fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
+    assert!(
+        workflow.contains("  backlog:\n    category: todo"),
+        "{workflow}"
+    );
+
+    let (success, someday, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Someday idea",
+            "--status",
+            "backlog",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let someday = someday.trim().to_string();
+    let (success, near, _) = run_atelier(dir.path(), &["-q", "issue", "create", "Near-term"]);
+    assert!(success);
+    let near = near.trim().to_string();
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &someday)).unwrap();
+    assert!(record.contains("status: \"backlog\""), "{record}");
+
+    let ready = |dir: &Path| run_atelier(dir, &["--quiet", "work", "ready"]).1;
+    let listed = ready(dir.path());
+    assert!(listed.lines().any(|line| line == near), "{listed}");
+    assert!(!listed.lines().any(|line| line == someday), "{listed}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &someday, "plan"]);
+    assert!(success, "{stderr}");
+    assert!(ready(dir.path()).lines().any(|line| line == someday));
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &someday, "defer"]);
+    assert!(success, "{stderr}");
+    assert!(!ready(dir.path()).lines().any(|line| line == someday));
+
+    // An objective's todo is behind the checked ready transition.
+    for issue_type in ["epic", "mission"] {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "Unready objective",
+                "--issue-type",
+                issue_type,
+                "--status",
+                "todo",
+            ],
+        );
+        assert!(!success, "{issue_type}: {stdout}");
+        assert!(stderr.contains("use one of: draft."), "{stderr}");
+    }
+    for refused in ["in_progress", "done", "nonsense"] {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", "Bad start", "--status", refused],
+        );
+        assert!(!success, "{refused}: {stdout}");
+        assert!(
+            stderr.contains("issue_create_status_invalid") && stderr.contains("backlog, todo"),
+            "{stderr}"
+        );
+    }
 }

@@ -1,0 +1,15 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-029b
+title: 'crates/atelier-cli/src/commands/issue.rs:761-797 (requested_initial_status): create --status accepts any todo-category status the type''s workflow can leave, which for mission/epic (objective workflow) includes ''todo''. That skips the ''ready'' transition (draft->todo) and its issue.sections_parseable validator. Repro in a fresh init repo: ''atelier issue create "Epic X" --issue-type epic --status todo'' succeeds with no Outcome/Proof; the epic appears in ''work ready'' and ''issue transition <id> start'' moves it to in_progress; only ''atelier check'' later reports ''Ready epic requires Proof''. The same applies to --issue-type mission --status todo, and to any custom policy whose transition into a todo-category status carries validators or required fields. The new docs sentence (''create accepts any todo-category status its workflow can leave'', docs/product/workflow-configuration.md:30) and the close reason state this rule. Suggested fix: accept a requested status only if it equals the workflow''s initial_status or is reachable from it by one transition with no validators and no required_fields (backlog via defer qualifies, epic todo via ready does not). Build the allowed list in the error from the same predicate, reuse load_repo_policy rather than re-deriving repo_root, add a test that --issue-type epic --status todo is refused, and update the docs sentence.'
+target: atelier-ha6k
+identity: Independent reviewer (Claude subagent)
+commit: 40e0397b21a8f445ae37e346e69e81ef0d7bf292
+created_at: 2026-10-15T23:23:47.287110161Z
+event:
+  event: finding
+  recommendation: fix_now
+---
+
+crates/atelier-cli/src/commands/issue.rs:761-797 (requested_initial_status): create --status accepts any todo-category status the type's workflow can leave, which for mission/epic (objective workflow) includes 'todo'. That skips the 'ready' transition (draft->todo) and its issue.sections_parseable validator. Repro in a fresh init repo: 'atelier issue create "Epic X" --issue-type epic --status todo' succeeds with no Outcome/Proof; the epic appears in 'work ready' and 'issue transition <id> start' moves it to in_progress; only 'atelier check' later reports 'Ready epic requires Proof'. The same applies to --issue-type mission --status todo, and to any custom policy whose transition into a todo-category status carries validators or required fields. The new docs sentence ('create accepts any todo-category status its workflow can leave', docs/product/workflow-configuration.md:30) and the close reason state this rule. Suggested fix: accept a requested status only if it equals the workflow's initial_status or is reachable from it by one transition with no validators and no required_fields (backlog via defer qualifies, epic todo via ready does not). Build the allowed list in the error from the same predicate, reuse load_repo_policy rather than re-deriving repo_root, add a test that --issue-type epic --status todo is refused, and update the docs sentence.

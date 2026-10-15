@@ -2131,7 +2131,9 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
     assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains("allowed statuses: blocked, done, in_progress, review, superseded, todo"),
+        stderr.contains(
+            "allowed statuses: backlog, blocked, done, in_progress, review, superseded, todo"
+        ),
         "stderr: {stderr}"
     );
 }

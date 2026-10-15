@@ -2188,7 +2188,7 @@ fn test_issue_transition_rejects_unknown_transition_name() {
     assert!(!success, "unknown transition should fail");
     assert!(stderr.contains("Unknown transition 'ship_it'"), "{stderr}");
     assert!(
-        stderr.contains("available from 'todo' are: block, start"),
+        stderr.contains("available from 'todo' are: block, defer, start"),
         "{stderr}"
     );
 }

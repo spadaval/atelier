@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "List only startable work in work ready"
-updated_at: "2026-10-15T22:08:58.988204415+00:00"
+updated_at: "2026-10-15T23:25:02.641304293+00:00"
 ---
 
 ## Goal
@@ -31,3 +31,7 @@ updated_at: "2026-10-15T22:08:58.988204415+00:00"
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). Seen in astromech: both missions and several epics appeared in the ready list. May be shaped by atelier-9vq3.
+
+## Notes
+
+- 2026-10-15 [observation] From review finding atelier-imxz on atelier-ha6k: a todo-category status that cannot start (backlog, draft) is classified Blocked when it has open blockers, so parked work shows in work blocked. When reshaping the ready/blocked lists, classify non-startable statuses as backlog even with blockers, keeping the blocker count.

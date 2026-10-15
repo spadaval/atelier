@@ -720,8 +720,8 @@ fn add_close_validator(dir: &Path, validator: &str) {
 /// Starter policy whose work `close` also requires passing evidence.
 fn write_evidence_gated_workflow(dir: &Path) {
     let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n",
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n",
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
     );
     assert_ne!(workflow, atelier_workflow::STARTER_POLICY_YAML);
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();

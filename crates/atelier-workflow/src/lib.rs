@@ -31,6 +31,8 @@ issue_types:
 statuses:
   draft:
     category: todo
+  backlog:
+    category: todo
   todo:
     category: todo
   in_progress:
@@ -101,6 +103,14 @@ workflows:
     - done
     - superseded
     transitions:
+      plan:
+        from: [backlog]
+        to: todo
+        description: Pull someday work into the near-term plan.
+      defer:
+        from: [todo, blocked]
+        to: backlog
+        description: Park work that is recorded but not near-term.
       start:
         from: [todo, blocked]
         to: in_progress
@@ -127,7 +137,7 @@ workflows:
         validators:
         - blockers.none_open
       supersede:
-        from: [todo, blocked, in_progress]
+        from: [backlog, todo, blocked, in_progress]
         to: superseded
         required_fields: [close_reason]
         description: Retire work that is no longer needed.
@@ -1747,14 +1757,14 @@ mod tests {
     }
 
     fn work_close_validators() -> &'static str {
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [todo, blocked, in_progress]\n"
+        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
     }
 
     fn with_work_close_validators(validators: &str) -> String {
         valid_policy().replace(
             work_close_validators(),
             &format!(
-                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [todo, blocked, in_progress]\n"
+                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
             ),
         )
     }

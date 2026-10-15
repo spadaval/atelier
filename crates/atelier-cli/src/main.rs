@@ -292,6 +292,10 @@ enum IssueCommands {
         /// Parent issue ID or imported source ID
         #[arg(long)]
         parent: Option<String>,
+        /// Initial todo-category status, such as backlog for someday work;
+        /// defaults to the workflow's initial status
+        #[arg(long)]
+        status: Option<String>,
     },
 
     /// Show issue details
