@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-15T19:06:43.650775728+00:00"
+status: "done"
 title: "Remove unconditional executable permission scans from merge"
-updated_at: "2026-10-15T19:01:45.712828964+00:00"
+updated_at: "2026-10-15T19:06:43.650775728+00:00"
 ---
 
 ## Goal
@@ -45,3 +46,7 @@ A CSIRT notice for chmod +x /tmp/.tmplWNJ30/base.rs prompted investigation. This
 ## Notes
 
 - 2026-10-15 [observation] Removed the unconditional Unix execute-bit scan from committed_snapshot::flagged_paths, shared by merge, land and evidence capture. Canonical records keep exact committed modes, and assume-unchanged/skip-worktree paths are still byte- and mode-checked. Other paths follow Git status, which honours core.filemode. Five tests were revised to the new rule. Measured with release binaries on a synthetic 20,005-file repo (same checkout, mean of 5 runs, twice): land 382/389 ms -> 314/317 ms, merge --check 397/392 ms -> 318/316 ms. A separate base worktree was not timed. Evidence capture and land had no supported workflow needing the stricter rule.
+
+## Close Reason
+
+Unconditional execute-bit scan removed; see the observation note for semantics and the 20k-file timing (about 70-80 ms saved per land/merge --check). Revised tests: execute_bits_hidden_by_core_filemode_do_not_block_merge_in_either_checkout, evidence_capture_follows_core_filemode_for_execute_bits, execute_bits_hidden_by_core_filemode_follow_git_status_in_land, and the snapshot/evidence_freshness unit tests.

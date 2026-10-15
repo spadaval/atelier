@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-15T19:06:43.576012479+00:00"
+status: "done"
 title: "Report branches without a tracker concisely in prime and status"
-updated_at: "2026-10-15T18:45:05.884861487+00:00"
+updated_at: "2026-10-15T19:06:43.576012479+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Local branch summaries in prime/status.
 ## Context
 
 Evaluation output: "route-clipboard: unavailable — Git record object missing: git cat-file -t <sha>:.atelier/workflow.yaml failed …" for every pre-existing branch.
+
+## Close Reason
+
+prime/status summarise branches without a committed workflow.yaml as 'No tracker on: …' and tracked branches without started work as 'No started work on: …'. Real read and policy errors are still reported. Test branches_without_a_tracker_are_summarised_without_git_errors.

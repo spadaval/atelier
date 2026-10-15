@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T19:06:43.143250852+00:00"
+status: "done"
 title: "Make HEAD-tag shadow fixtures portable to git 2.53"
-updated_at: "2026-10-15T18:46:02.834750959+00:00"
+updated_at: "2026-10-15T19:06:43.143250852+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Test fixtures only.
 ## Context
 
 Git 2.53 rejects `git tag HEAD <sha>` with "'HEAD' is not a valid tag name". Repositories created with older git may still hold refs/tags/HEAD, so the shadow scenario is still wanted.
+
+## Close Reason
+
+Both HEAD-shadow fixtures write refs/tags/HEAD with git update-ref, which git 2.53 accepts, so the shadow-tag coverage is kept. Full suite: cargo test 588/588 default and 592/592 with test-hooks; cargo nextest the same, on git 2.53.0.
