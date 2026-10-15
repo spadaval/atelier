@@ -1491,7 +1491,7 @@ fn unchanged_flagged_files_allow_merge() {
 
 #[cfg(unix)]
 #[test]
-fn normal_index_hidden_modes_refuse_merge_before_and_after_checks_in_both_checkouts() {
+fn execute_bits_hidden_by_core_filemode_do_not_block_merge_in_either_checkout() {
     use std::os::unix::fs::PermissionsExt;
     for base_target in [false, true] {
         for during_check in [false, true] {
@@ -1541,7 +1541,8 @@ fn normal_index_hidden_modes_refuse_merge_before_and_after_checks_in_both_checko
                 assert!(git(target, &["status", "--porcelain"]).is_empty());
             }
             let work_head = git(fixture.path(), &["rev-parse", "HEAD"]);
-            fixture.refusal("tracked_snapshot_uncommitted");
+            // Git ignores the execute bit here, so merge does too.
+            ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert_eq!(
                 git(
                     fixture.path(),
@@ -1554,17 +1555,13 @@ fn normal_index_hidden_modes_refuse_merge_before_and_after_checks_in_both_checko
                 git(target, &["ls-files", "-v", "--", file]),
                 format!("H {file}")
             );
-            fs::set_permissions(target.join(file), fs::Permissions::from_mode(0o644)).unwrap();
-            if !during_check {
-                ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            }
         }
     }
 }
 
 #[cfg(unix)]
 #[test]
-fn evidence_capture_rejects_normal_index_hidden_modes_before_and_during_command() {
+fn evidence_capture_follows_core_filemode_for_execute_bits() {
     use std::os::unix::fs::PermissionsExt;
     for during_command in [false, true] {
         let fixture = Fixture::new();
@@ -1579,7 +1576,7 @@ fn evidence_capture_rejects_normal_index_hidden_modes_before_and_during_command(
         let command = if during_command {
             "chmod +x src.rs"
         } else {
-            "touch capture-child-ran"
+            "true"
         };
         let (passed, output) = cli(
             fixture.path(),
@@ -1596,19 +1593,16 @@ fn evidence_capture_rejects_normal_index_hidden_modes_before_and_during_command(
                 command,
             ],
         );
-        let expected = if during_command {
-            "command changed code or policy"
-        } else {
-            "requires committed code and policy"
-        };
-        assert!(!passed && output.contains(expected), "{output}");
-        assert!(!fixture.path().join("capture-child-ran").exists());
+        assert!(passed, "{output}");
         let evidence = fixture.path().join(".atelier/evidence");
-        assert!(!evidence.exists() || fs::read_dir(evidence).unwrap().next().is_none());
+        assert_eq!(fs::read_dir(evidence).unwrap().count(), 1);
         assert_eq!(
             git(fixture.path(), &["ls-files", "-v", "--", "src.rs"]),
             "H src.rs"
         );
-        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        assert_eq!(
+            git(fixture.path(), &["status", "--porcelain"]),
+            "?? .atelier/evidence/"
+        );
     }
 }

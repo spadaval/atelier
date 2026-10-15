@@ -226,8 +226,8 @@ fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> 
     require_hidden_clean(hidden)
 }
 
-/// Tracked changes hidden by index flags or core.filemode=false. Byte hashes
-/// are needed only for flagged paths; Unix executable modes are always checked.
+/// Tracked changes hidden by assume-unchanged or skip-worktree index flags.
+/// Unflagged paths are left to Git status, which honours core.filemode.
 pub(crate) fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
     flagged_paths(repo, &entries(repo, commit)?, |_| true, false)
 }
@@ -275,37 +275,13 @@ fn flagged_paths(
             );
         }
     }
-    if flagged.is_empty() && !cfg!(unix) {
-        return Ok(Vec::new());
-    }
-    let mut dirty = modified(repo, flagged, entries)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        for (path, (mode, _)) in entries {
-            if !include(path) || !matches!(mode.as_str(), "100644" | "100755") {
-                continue;
-            }
-            let metadata = match fs::symlink_metadata(repo.join(path)) {
-                Ok(metadata) => metadata,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error.into()),
-            };
-            if metadata.is_file()
-                && (metadata.permissions().mode() & 0o111 != 0) != (mode == "100755")
-            {
-                dirty.push(path.clone());
-            }
-        }
-    }
-    dirty.sort();
-    dirty.dedup();
-    Ok(dirty)
+    // Unflagged paths follow Git's own status, including core.filemode.
+    modified(repo, flagged, entries)
 }
 
 fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
     if let Some(path) = paths.first() {
-        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags or filemode settings; restore or commit the change before continuing", path.display());
+        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags; restore or commit the change before continuing", path.display());
     }
     Ok(())
 }
@@ -629,10 +605,16 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             git_output(repo.path(), &["config", "core.filemode", "false"]).unwrap();
-            for path in [record, "code"] {
+            // Canonical records keep their committed modes; other files follow
+            // Git's core.filemode setting.
+            for (path, refused) in [(record, true), ("code", false)] {
                 fs::set_permissions(repo.path().join(path), fs::Permissions::from_mode(0o755))
                     .unwrap();
-                assert!(snapshot.require_clean(repo.path()).is_err());
+                assert_eq!(
+                    snapshot.require_clean(repo.path()).is_err(),
+                    refused,
+                    "{path}"
+                );
                 fs::set_permissions(repo.path().join(path), fs::Permissions::from_mode(0o644))
                     .unwrap();
                 snapshot.require_clean(repo.path()).unwrap();

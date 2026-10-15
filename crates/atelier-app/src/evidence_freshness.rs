@@ -332,7 +332,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn code_clean_filter_keeps_hidden_modes_and_policy_but_skips_record_modes() {
+    fn code_clean_filter_follows_git_filemode_but_keeps_flagged_policy() {
         use std::os::unix::fs::PermissionsExt;
         let repo = tempfile::tempdir().unwrap();
         for args in [
@@ -354,16 +354,11 @@ mod tests {
         git::git_output(repo.path(), &["add", "."]).unwrap();
         git::git_output(repo.path(), &["commit", "-qm", "initial modes"]).unwrap();
         let record = repo.path().join(".atelier/issues/atelier-a001.md");
+        // core.filemode=false: Git ignores execute bits, and so do these paths.
         fs::set_permissions(&record, fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(git::working_code_paths(repo.path()).unwrap().is_empty());
-        assert!(git::working_paths(repo.path())
-            .unwrap()
-            .contains(&PathBuf::from(".atelier/issues/atelier-a001.md")));
         let code = repo.path().join("code.rs");
         fs::set_permissions(&code, fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(git::working_code_paths(repo.path())
-            .unwrap()
-            .contains(&PathBuf::from("code.rs")));
+        assert!(git::working_paths(repo.path()).unwrap().is_empty());
         git::git_output(
             repo.path(),
             &[

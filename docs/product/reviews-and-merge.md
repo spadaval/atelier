@@ -71,7 +71,9 @@ atelier merge <owner-or-child-id>
 Run these from the recorded work branch. Source and any separate base checkout
 must be clean. Canonical record and policy paths, bytes, and modes must match
 committed HEAD, including ignored canonical files; Git index flags such as
-assume-unchanged or skip-worktree cannot hide changed tracked files. Checks
+assume-unchanged or skip-worktree cannot hide changed tracked files. Other files
+follow Git status: with `core.filemode=false`, a local execute-bit change is not
+an uncommitted change. Checks
 cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 

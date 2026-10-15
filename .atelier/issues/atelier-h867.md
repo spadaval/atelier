@@ -13,7 +13,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Remove unconditional executable permission scans from merge"
-updated_at: "2026-10-05T18:50:59.959468442+00:00"
+updated_at: "2026-10-15T19:01:45.712828964+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,7 @@ Relevant sources:
 - Commit 6c6457dbd28cb8315f0185899492f3460a5a0951 added the scan/tests following finding atelier-ye9h.
 
 A CSIRT notice for chmod +x /tmp/.tmplWNJ30/base.rs prompted investigation. This regression test generates that command pattern on dummy text; exact alert attribution remains unconfirmed. Merge semantics and cost motivate this task; avoiding incidental alerts is secondary.
+
+## Notes
+
+- 2026-10-15 [observation] Removed the unconditional Unix execute-bit scan from committed_snapshot::flagged_paths, shared by merge, land and evidence capture. Canonical records keep exact committed modes, and assume-unchanged/skip-worktree paths are still byte- and mode-checked. Other paths follow Git status, which honours core.filemode. Five tests were revised to the new rule. Measured with release binaries on a synthetic 20,005-file repo (same checkout, mean of 5 runs, twice): land 382/389 ms -> 314/317 ms, merge --check 397/392 ms -> 318/316 ms. A separate base worktree was not timed. Evidence capture and land had no supported workflow needing the stricter rule.

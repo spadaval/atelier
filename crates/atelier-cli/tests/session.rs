@@ -850,15 +850,17 @@ fn start_cannot_switch_away_from_hidden_modified_code() {
 
 #[cfg(unix)]
 #[test]
-fn hidden_executable_modes_allow_active_handoff_but_fence_completion() {
+fn execute_bits_hidden_by_core_filemode_follow_git_status_in_land() {
     use std::os::unix::fs::PermissionsExt;
+    // core.filemode=false: a local chmod is not an uncommitted change.
     let f = Fixture::new();
     git(f.path(), &["config", "core.filemode", "false"]);
     fs::set_permissions(f.path().join("code"), fs::Permissions::from_mode(0o755)).unwrap();
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
-    assert!(ok(f.path(), &["land"]).contains("1 uncommitted path"));
+    assert!(!ok(f.path(), &["land"]).contains("uncommitted path"));
     f.terminal(&f.id);
-    f.refusal("land_completion_dirty");
+    let (_, output) = cli(f.path(), &["land", &f.id]);
+    assert!(!output.contains("land_completion_dirty"), "{output}");
 
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);
@@ -887,8 +889,10 @@ fn hidden_executable_modes_allow_active_handoff_but_fence_completion() {
     commit(f.path(), "approval");
     git(f.path(), &["config", "core.filemode", "false"]);
     let head = git(f.path(), &["rev-parse", "HEAD"]);
+    // A trusted check that only flips an execute bit Git ignores is not a
+    // state change.
     let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass && output.contains("land_state_changed"), "{output}");
+    assert!(pass, "{output}");
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
     assert_ne!(
