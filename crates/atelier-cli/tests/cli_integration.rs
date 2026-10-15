@@ -72,7 +72,7 @@ fn init_atelier(dir: &Path) {
 }
 
 fn init_atelier_without_workflow(dir: &Path) {
-    let (success, _, stderr) = run_atelier(dir, &["init"]);
+    let (success, _, stderr) = run_atelier(dir, &["init", "--slug", "atelier"]);
     assert!(success, "Failed to init: {}", stderr);
     let workflow_path = dir.join(".atelier").join("workflow.yaml");
     if workflow_path.exists() {

@@ -31,12 +31,28 @@ pub struct PruneConfig {
 
 impl ProjectConfig {
     pub fn load(repo_root: &Path) -> Result<Self> {
-        let layout = StorageLayout::new(repo_root);
-        let config_path = layout.config_path();
-        let text = fs::read_to_string(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        parse_project_config(&text, &config_path)
+        Self::load_file(&StorageLayout::new(repo_root).config_path())
     }
+
+    /// Load the config stored in a canonical state directory (`.atelier`).
+    pub fn load_from_state_dir(state_dir: &Path) -> Result<Self> {
+        Self::load_file(&state_dir.join(crate::storage_layout::CONFIG_FILE))
+    }
+
+    fn load_file(config_path: &Path) -> Result<Self> {
+        let text = fs::read_to_string(config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?;
+        parse_project_config(&text, config_path)
+    }
+}
+
+/// A record store that mints IDs from the project's configured slug.
+pub fn record_store(state_dir: &Path) -> Result<atelier_records::RecordStore> {
+    let config = ProjectConfig::load_from_state_dir(state_dir)?;
+    Ok(atelier_records::RecordStore::for_project(
+        state_dir,
+        config.project_slug,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +84,8 @@ pub fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectCon
     let raw = parse_raw_project_config(text, config_path)?;
     validate_schema_fields(&raw, config_path)?;
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;
+    atelier_records::validate_project_slug(&raw.project_slug)
+        .with_context(|| format!("invalid project_slug in {}", config_path.display()))?;
     require_non_empty(&raw.paths.state_root, config_path, "paths.state_root")?;
     let issue_links = parse_issue_link_config(raw.issue_links, config_path)?;
     let prune = parse_prune_config(raw.prune, config_path)?;

@@ -2,7 +2,6 @@
 use anyhow::{bail, Result};
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
 use atelier_core::{FindingDecision, ReviewEvent};
-use atelier_records::RecordStore;
 
 pub fn decision(value: &str) -> Result<FindingDecision> {
     match value {
@@ -71,7 +70,7 @@ pub fn append(
             index.require_issue(id)?;
         }
     }
-    let created = RecordStore::new(layout.canonical_dir())
+    let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
         .create_review(&owner, identity, &pin, event, summary)?;
     if quiet {
         println!("{}", created.header.id);

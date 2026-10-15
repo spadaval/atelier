@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn test_init_creates_atelier_directory() {
     let dir = tempdir().unwrap();
-    let (success, stdout, _) = run_atelier(dir.path(), &["init"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["init", "--slug", "atelier"]);
 
     assert!(success);
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
@@ -42,8 +42,8 @@ fn test_init_creates_atelier_directory() {
 fn test_init_twice_is_idempotent() {
     let dir = tempdir().unwrap();
 
-    run_atelier(dir.path(), &["init"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["init"]);
+    run_atelier(dir.path(), &["init", "--slug", "atelier"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["init", "--slug", "atelier"]);
 
     assert!(success);
     assert!(stdout.contains("Atelier initialized successfully"));

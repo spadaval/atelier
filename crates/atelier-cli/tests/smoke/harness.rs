@@ -44,7 +44,7 @@ impl SmokeHarness {
         };
 
         // Run atelier init
-        let result = harness.run(&["init"]);
+        let result = harness.run(&["init", "--slug", "atelier"]);
         assert!(result.success, "atelier init failed: {}", result.stderr);
         harness.init_git_repo();
 

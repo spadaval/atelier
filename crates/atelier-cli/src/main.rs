@@ -134,6 +134,9 @@ enum Commands {
         /// Reconcile core tracker state even if already initialized
         #[arg(short, long)]
         force: bool,
+        /// Project slug for new record IDs [default: repository directory name]
+        #[arg(long)]
+        slug: Option<String>,
     },
 
     /// Show checkout, mission, work, and tracker signposts
@@ -564,9 +567,9 @@ fn run() -> Result<()> {
         }
     }
     match cli.command {
-        Commands::Init { force } => {
+        Commands::Init { force, slug } => {
             let cwd = env::current_dir()?;
-            commands::init::run(&cwd, force)
+            commands::init::run(&cwd, force, slug)
         }
 
         Commands::Prime { hook } => commands::session::run(false, None, hook.is_some(), quiet),

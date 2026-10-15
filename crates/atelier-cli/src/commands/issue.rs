@@ -589,7 +589,7 @@ pub fn create_lifecycle(
         .map(|parent| resolve_id(index, parent))
         .transpose()?;
 
-    let store = RecordStore::new(state_dir);
+    let store = atelier_app::project_config::record_store(state_dir)?;
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;

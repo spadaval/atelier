@@ -50,7 +50,7 @@ impl Fixture {
         git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
-        ok(dir.path(), &["init"]);
+        ok(dir.path(), &["init", "--slug", "atelier"]);
         let id = ok(
             dir.path(),
             &[

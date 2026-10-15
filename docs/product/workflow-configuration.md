@@ -6,7 +6,11 @@ checks. Agent Factory owns process; this file must not become an agent
 choreography or a way to evade review.
 
 `.atelier/config.toml` contains project identity, the canonical state root,
-prune defaults, and supported project settings. There is no review-provider
+prune defaults, and supported project settings. `project_slug` is the prefix of
+every new record ID. `atelier init` derives it from the repository directory
+name (lowercased, other characters replaced by single hyphens); pass
+`atelier init --slug <slug>` to choose another. Changing the slug later affects
+only new IDs: existing records keep their IDs and stay valid. There is no review-provider
 mode or global provider credential configuration.
 
 ## Status and transitions

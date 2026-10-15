@@ -22,7 +22,7 @@ mod record_id;
 mod record_kinds;
 mod relationships;
 
-pub use record_id::validate_record_id;
+pub use record_id::{derive_project_slug, validate_project_slug, validate_record_id};
 
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
@@ -157,12 +157,24 @@ pub fn issue_section_diagnostic(
 
 pub struct RecordStore {
     state_dir: PathBuf,
+    project_slug: Option<String>,
 }
 
 impl RecordStore {
+    /// A store for reading and updating existing records.
     pub fn new(state_dir: impl Into<PathBuf>) -> Self {
         Self {
             state_dir: state_dir.into(),
+            project_slug: None,
+        }
+    }
+
+    /// A store that can also create records, minting IDs from the project's
+    /// configured slug.
+    pub fn for_project(state_dir: impl Into<PathBuf>, project_slug: impl Into<String>) -> Self {
+        Self {
+            state_dir: state_dir.into(),
+            project_slug: Some(project_slug.into()),
         }
     }
 
@@ -225,11 +237,15 @@ impl RecordStore {
     }
 
     pub fn allocate_issue_id(&self) -> Result<String> {
-        record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
+        let slug = self
+            .project_slug
+            .as_deref()
+            .ok_or_else(|| anyhow!("record ID allocation requires the configured project slug"))?;
+        record_id::allocate_issue_id(slug, |candidate| self.canonical_id_exists(candidate))
     }
 
     pub fn allocate_record_id(&self) -> Result<String> {
-        record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
+        self.allocate_issue_id()
     }
 
     pub fn canonical_id_exists(&self, id: &str) -> Result<bool> {
@@ -2307,7 +2323,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn issue_record_write_rejects_section_text_that_opens_another_section() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut record = issue_record("atelier-smug");
         record.sections.close_reason = Some("done\n## Context\nsmuggled".to_string());
 
@@ -2330,7 +2346,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn record_store_concrete_services_round_trip_and_discover_domain_files() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let issue = issue_record("atelier-iss1");
         let evidence = evidence_record("atelier-evd1");
 
@@ -2352,7 +2368,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn generic_issue_relationship_mutation_preserves_typed_fields_and_is_idempotent() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut issue = issue_record("atelier-miss");
         issue.issue.issue_type = "mission".into();
         issue.issue.status = "draft".into();
@@ -2437,7 +2453,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let text = render_issue_record(&record).unwrap();
         assert!(split_document(&text).is_some());
         assert_eq!(IssueSectionName::Context.title(), "Context");
-        let _store = RecordStore::new(tempdir().unwrap().path());
+        let _store = RecordStore::for_project(tempdir().unwrap().path(), "atelier");
         validate_priority("high").unwrap();
         let _: Option<EvidenceOutputSummary> = None;
     }
@@ -2460,7 +2476,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn record_store_mutates_issue_child_relationships_in_canonical_markdown() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path());
+        let store = RecordStore::for_project(dir.path(), "atelier");
         let mut parent = issue_record("atelier-par1");
         parent.relationships = Relationships::default();
         let mut child = issue_record("atelier-chd1");
@@ -2487,7 +2503,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn record_store_mutates_generic_issue_and_domain_relationships() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path());
+        let store = RecordStore::for_project(dir.path(), "atelier");
         let mut issue = issue_record("atelier-iss1");
         issue.relationships = Relationships::default();
         let mut evidence = evidence_record("atelier-evd1");
@@ -2514,7 +2530,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn relationship_mutation_preserves_review_noops_and_append_only_refusal() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path());
+        let store = RecordStore::for_project(dir.path(), "atelier");
         let record = store
             .create_review(
                 "atelier-owner",
@@ -2569,7 +2585,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     #[test]
     fn relationship_mutation_keeps_source_id_kind_and_read_error_priority() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path());
+        let store = RecordStore::for_project(dir.path(), "atelier");
         let error = store
             .add_attachment_relationship("unknown", "../bad", "issue", "atelier-owner", "validates")
             .unwrap_err();
@@ -2906,7 +2922,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_discovers_and_rejects_noncanonical_issue_paths() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let record = issue_record("atelier-abcd");
         store.write_issue_atomic(&record).unwrap();
         let duplicate_path = store
@@ -2926,7 +2942,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_allocates_ids_across_canonical_dirs() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let candidate = "atelier-0001";
         fs::create_dir_all(store.state_dir.join("evidence")).unwrap();
         fs::write(
@@ -2946,7 +2962,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_label_unlabel_mutates_issue_front_matter() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut record = issue_record("atelier-abcd");
         record.labels.clear();
         store.write_issue_atomic(&record).unwrap();
@@ -2969,7 +2985,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_block_unblock_mutates_blocker_relationships() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut blocked = issue_record("atelier-abcd");
         blocked.relationships = Relationships::default();
         let mut blocker = issue_record("atelier-efgh");
@@ -3011,7 +3027,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_block_rejects_cycles_and_self_blocks() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         for id in ["atelier-abcd", "atelier-efgh", "atelier-ijkl"] {
             let mut record = issue_record(id);
             record.relationships = Relationships::default();
@@ -3038,7 +3054,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_relate_unrelate_mutates_both_issue_records() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut first = issue_record("atelier-abcd");
         first.relationships = Relationships::default();
         let mut second = issue_record("atelier-efgh");
@@ -3100,7 +3116,7 @@ Legacy evidence summary.
     #[test]
     fn record_store_rejects_issue_to_issue_validates_relation() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut first = issue_record("atelier-abcd");
         first.relationships = Relationships::default();
         let mut second = issue_record("atelier-efgh");
@@ -3120,7 +3136,7 @@ Legacy evidence summary.
     #[test]
     fn write_issue_atomic_ignores_stale_fixed_temp_artifact() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let record = issue_record("atelier-abcd");
         store.write_issue_atomic(&record).unwrap();
         let path = store.state_dir.join(issue_record_path("atelier-abcd"));
@@ -3139,7 +3155,7 @@ Legacy evidence summary.
     #[test]
     fn write_issue_atomic_rejects_path_traversal_ids_before_writing() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier"));
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let record = issue_record("../escaped");
 
         let error = store.write_issue_atomic(&record).unwrap_err();

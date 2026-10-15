@@ -2051,7 +2051,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
 fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     let dir = tempdir().unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["init"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["init", "--slug", "atelier"]);
     assert!(success, "root init failed: {stderr}");
     assert!(stdout.contains(".atelier/workflow.yaml"));
     assert!(stdout.contains("atelier check"));

@@ -28,7 +28,9 @@ pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> R
     validate_bundle(index, &bundle)?;
     let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
 
-    let summary = apply_bundle_file(state_dir, &bundle, &plan)?;
+    let project_slug =
+        atelier_app::project_config::ProjectConfig::load_from_state_dir(state_dir)?.project_slug;
+    let summary = apply_bundle_file(state_dir, &project_slug, &bundle, &plan)?;
     print_bundle_summary(summary)
 }
 
@@ -502,6 +504,7 @@ fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
 
 fn apply_bundle_file(
     state_dir: &Path,
+    project_slug: &str,
     bundle: &BundleFile,
     plan: &BundleGraphPlan<'_>,
 ) -> Result<Value> {
@@ -518,7 +521,7 @@ fn apply_bundle_file(
         fs::create_dir_all(stage.join("evidence"))?;
         #[cfg(feature = "test-hooks")]
         crate::commands::bulk_canonical::test_pause_after_snapshot()?;
-        let summary = apply_bundle_to_state(&stage, bundle, plan)?;
+        let summary = apply_bundle_to_state(&stage, project_slug, bundle, plan)?;
         RecordIndex::load(&stage).map_err(|error| {
             anyhow::anyhow!(
                 "Bundle apply rejected the staged canonical state: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
@@ -605,12 +608,13 @@ fn collect_bundle_recovery_artifacts(
 
 fn apply_bundle_to_state(
     state_dir: &Path,
+    project_slug: &str,
     bundle: &BundleFile,
     plan: &BundleGraphPlan<'_>,
 ) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
-    let store = RecordStore::new(state_dir);
+    let store = RecordStore::for_project(state_dir, project_slug);
 
     for issue in &plan.issues {
         let description = Some(issue.body.clone());

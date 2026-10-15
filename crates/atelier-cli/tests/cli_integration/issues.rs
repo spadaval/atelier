@@ -3255,3 +3255,74 @@ fn test_status_footer_uses_complete_work_buckets() {
         }
     }
 }
+
+#[test]
+fn new_records_use_the_configured_slug_and_legacy_ids_stay_valid() {
+    let parent = tempdir().unwrap();
+    let dir = parent.path().join("astromech");
+    fs::create_dir(&dir).unwrap();
+    init_git_repo(&dir);
+    let (success, _, stderr) = run_atelier(&dir, &["init"]);
+    assert!(success, "{stderr}");
+    let config = fs::read_to_string(dir.join(".atelier/config.toml")).unwrap();
+    assert!(config.contains("project_slug = \"astromech\""), "{config}");
+
+    // A record minted under the old fixed slug remains valid alongside new IDs.
+    let (success, legacy, stderr) = run_atelier(
+        &dir,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Legacy",
+            "--body",
+            "## Goal\n\nOld.\n\n## Done when\n\nKept.",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let legacy = legacy.trim().to_string();
+    assert!(legacy.starts_with("astromech-"), "{legacy}");
+    let renamed = legacy.replacen("astromech-", "atelier-", 1);
+    let text = fs::read_to_string(canonical_issue_path(&dir, &legacy))
+        .unwrap()
+        .replace(&legacy, &renamed);
+    fs::remove_file(canonical_issue_path(&dir, &legacy)).unwrap();
+    fs::write(canonical_issue_path(&dir, &renamed), text).unwrap();
+
+    let (success, created, stderr) = run_atelier(
+        &dir,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Slugged",
+            "--body",
+            "## Goal\n\nNew.\n\n## Done when\n\nSlugged.",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let created = created.trim().to_string();
+    assert!(created.starts_with("astromech-"), "{created}");
+
+    let bundle = dir.join("bundle.json");
+    fs::write(
+        &bundle,
+        r###"{"schema":"atelier.bundle","schema_version":2,"title":"Slug","resources":{"issues":[{"client_ref":"one","title":"Bundled","issue_type":"task","body":"## Goal\n\nBundle.\n\n## Done when\n\nSlugged."}]}}"###,
+    )
+    .unwrap();
+    let (success, _, stderr) =
+        run_atelier(&dir, &["bundle", "apply", bundle.to_str().unwrap(), "--yes"]);
+    assert!(success, "{stderr}");
+    let bundled = issue_id_by_title(&dir, "Bundled");
+    assert!(bundled.starts_with("astromech-"), "{bundled}");
+
+    let (success, _, stderr) = run_atelier(
+        &dir,
+        &["issue", "link", &created, &renamed, "--role", "blocked_by"],
+    );
+    assert!(success, "{stderr}");
+    let (success, stdout, stderr) = run_atelier(&dir, &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    let (success, shown, stderr) = run_atelier(&dir, &["issue", "show", &renamed]);
+    assert!(success && shown.contains("Legacy"), "{shown}{stderr}");
+}

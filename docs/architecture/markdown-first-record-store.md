@@ -24,7 +24,9 @@ relationship target kinds. `workflow_validator` names mechanical workflow gate
 nodes; it is not a persistent record or link target kind.
 
 Issue kinds include missions, epics, and ordinary work. IDs are project-scoped
-random IDs such as `atelier-z1p8`, independent of record type. YAML front matter
+random IDs such as `atelier-z1p8`, independent of record type: the configured
+`project_slug`, a hyphen, and a random base36 suffix. Any valid slug prefix is
+accepted when reading, so records minted under another slug stay valid. YAML front matter
 holds typed identity, lifecycle state, timestamps, relationships, strategy path,
 and owner branch metadata. The Markdown body is human-readable intent and
 proof. Generic extension maps and historical issue section schemas are not the

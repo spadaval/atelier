@@ -54,7 +54,7 @@ impl Fixture {
         git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
-        ok(dir.path(), &["init"]);
+        ok(dir.path(), &["init", "--slug", "atelier"]);
         let id = ok(
             dir.path(),
             &[
@@ -1796,7 +1796,7 @@ fn valid_independent_review_survives_merge_after_reviewer_authored_prior_base_wo
     git(dir.path(), &["init", "-qb", "main"]);
     git(dir.path(), &["config", "user.name", "Author"]);
     git(dir.path(), &["config", "user.email", "author@example.test"]);
-    ok(dir.path(), &["init"]);
+    ok(dir.path(), &["init", "--slug", "atelier"]);
     let id = ok(
         dir.path(),
         &[

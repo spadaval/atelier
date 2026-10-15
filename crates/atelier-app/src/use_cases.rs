@@ -93,7 +93,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let state_dir = dir.path().join(".atelier");
         let now = Utc::now();
-        let evidence = RecordStore::new(&state_dir)
+        let evidence = RecordStore::for_project(&state_dir, "atelier")
             .create_evidence(
                 "Typed evidence",
                 "recorded",
