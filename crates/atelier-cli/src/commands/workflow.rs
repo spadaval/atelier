@@ -30,6 +30,7 @@ pub fn transition_issue(
     issue_ref: &str,
     transition_name: &str,
     close_reason: Option<&str>,
+    quiet: bool,
 ) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     if let Some(reason) = close_reason {
@@ -61,6 +62,10 @@ pub fn transition_issue(
 
     let mut record = RecordStore::new(state_dir).load_issue_by_id(&before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
+    if quiet {
+        println!("{}", transition.to);
+        return Ok(());
+    }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
     print_heading("Next Commands");
     println!("  atelier issue show {}", before.id);

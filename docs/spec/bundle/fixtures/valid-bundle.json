@@ -24,7 +24,7 @@
     "issues": [
       {
         "client_ref": "issue.define-schema",
-        "depends_on": [],
+        "blocked_by": [],
         "issue_type": "task",
         "labels": [
           "bundle",
@@ -47,7 +47,7 @@
       },
       {
         "client_ref": "issue.validate-fixtures",
-        "depends_on": [
+        "blocked_by": [
           {
             "client_ref": "issue.define-schema"
           }

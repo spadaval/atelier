@@ -562,7 +562,6 @@ fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
 
 pub struct LifecycleCreateInput<'a> {
     pub title: &'a str,
-    pub description: Option<&'a str>,
     pub body: Option<&'a str>,
     pub priority: &'a str,
     pub issue_type: &'a str,
@@ -597,7 +596,7 @@ pub fn create_lifecycle(
         Some(status) => requested_initial_status(state_dir, input.issue_type, status)?,
         None => lifecycle_initial_status(state_dir, input.issue_type)?,
     };
-    let description = input.description.or(input.body).map(str::to_string);
+    let description = input.body.map(str::to_string);
     if description
         .as_ref()
         .is_some_and(|description| description.len() > MAX_ISSUE_DESCRIPTION_LEN)
@@ -674,11 +673,7 @@ pub fn create_lifecycle(
 }
 
 fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {
-    if let Some(body) = input
-        .body
-        .or(input.description)
-        .filter(|body| has_level_two_heading(body))
-    {
+    if let Some(body) = input.body.filter(|body| has_level_two_heading(body)) {
         return atelier_records::parse_issue_sections_for_type(
             body,
             Path::new("<issue create --body>"),
@@ -686,10 +681,7 @@ fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSec
         )
         .context("Invalid sectioned --body");
     }
-    Ok(IssueSections::for_type(
-        input.issue_type,
-        input.description.or(input.body),
-    ))
+    Ok(IssueSections::for_type(input.issue_type, input.body))
 }
 
 fn has_level_two_heading(body: &str) -> bool {
@@ -796,6 +788,7 @@ pub struct UpdateInput<'a> {
     pub title: Option<&'a str>,
     pub priority: Option<&'a str>,
     pub issue_type: Option<&'a str>,
+    pub body: Option<&'a str>,
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
@@ -844,6 +837,19 @@ pub fn update_lifecycle(
         record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
     }
+    if let Some(body) = input.body {
+        let parsed = atelier_records::parse_issue_sections_for_type(
+            body,
+            Path::new("<issue update --body>"),
+            &record.issue.issue_type,
+        )
+        .context("Invalid sectioned --body")?;
+        if parsed.notes.is_some() || parsed.close_reason.is_some() {
+            bail!("--body replaces the typed sections only; add notes with `atelier issue note` and close reasons with `atelier issue transition`");
+        }
+        record.sections.body = parsed.body;
+        changed_fields.push("body");
+    }
     for label in input.labels {
         push_unique(&mut record.labels, label.to_string());
         changed_fields.push("labels");
@@ -856,7 +862,7 @@ pub fn update_lifecycle(
         changed_fields.push("parent");
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;

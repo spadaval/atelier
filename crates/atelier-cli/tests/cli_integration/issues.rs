@@ -76,7 +76,7 @@ fn test_issue_create_help_is_markdown_first() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
     assert!(success, "issue create help failed: {stderr}");
-    assert!(stdout.contains("--description <DESCRIPTION>"), "{stdout}");
+    assert!(!stdout.contains("--description"), "{stdout}");
     assert!(stdout.contains("--body <BODY>"), "{stdout}");
     assert!(stdout.contains("--issue-type <ISSUE_TYPE>"), "{stdout}");
 }
@@ -939,7 +939,7 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
         "title": "Partial key dependent", "body": "\u0023\u0023 Goal\n\nPartial key dependent\n\n## Done when\n\nChecks pass.",
         "issue_type": "task",
         "priority": "medium",
-        "depends_on": [{{ "id": "{issue_key}" }}]
+        "blocked_by": [{{ "id": "{issue_key}" }}]
       }}
     ]
   }}
@@ -1352,7 +1352,7 @@ fn test_bundle_preview_rejects_missing_client_ref() {
         "title": "Missing reference user",
         "issue_type": "task",
         "priority": "high",
-        "depends_on": [
+        "blocked_by": [
           {
             "client_ref": "issue.missing"
           }
@@ -1974,7 +1974,7 @@ fn test_issue_create_is_durable_from_record_files() {
             "issue",
             "create",
             "Create-only durable",
-            "--description",
+            "--body",
             "Created body",
             "--priority",
             "high",
@@ -3513,4 +3513,120 @@ fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
             "{stderr}"
         );
     }
+}
+
+#[test]
+fn test_issue_options_do_what_their_help_says() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let task = create(&["-q", "issue", "create", "Task", "--body", "Plain goal text"]);
+    let epic = create(&["-q", "issue", "create", "Epic", "--issue-type", "epic"]);
+
+    // --body revises the typed sections of any type and keeps notes.
+    create(&["-q", "issue", "note", &task, "Keep this note"]);
+    create(&[
+        "issue",
+        "update",
+        &task,
+        "--body",
+        "## Goal\n\nRevised goal.\n\n## Done when\n\nRevised proof.\n\n## Context\n\nWhy.",
+    ]);
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &task)).unwrap();
+    assert!(
+        record.contains("Revised goal.")
+            && record.contains("## Context")
+            && record.contains("Keep this note"),
+        "{record}"
+    );
+    create(&[
+        "issue",
+        "update",
+        &epic,
+        "--body",
+        "## Outcome\n\nRevised outcome.\n\n## Proof\n\nA scenario.",
+    ]);
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &epic)).unwrap();
+    assert!(
+        record.contains("Revised outcome.") && record.contains("## Proof"),
+        "{record}"
+    );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &task,
+            "--body",
+            "## Outcome\n\nWrong shape.",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("Invalid sectioned --body"),
+        "{stderr}"
+    );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &task,
+            "--body",
+            "## Goal\n\nG.\n\n## Done when\n\nD.\n\n## Notes\n\nSneaky.",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("atelier issue note"),
+        "{stderr}"
+    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "update", &task, "--status", "done"]);
+    assert!(
+        !success && stderr.contains("unexpected argument"),
+        "{stderr}"
+    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "X", "--description", "d"]);
+    assert!(
+        !success && stderr.contains("unexpected argument"),
+        "{stderr}"
+    );
+
+    // blocks is the inverse of blocked_by, and -q prints nothing extra.
+    let waiting = create(&["-q", "issue", "create", "Waits"]);
+    assert_eq!(
+        create(&["-q", "issue", "link", &task, &waiting, "--role", "blocks"]),
+        ""
+    );
+    let ready = run_atelier(dir.path(), &["--quiet", "work", "ready"]).1;
+    assert!(!ready.lines().any(|line| line == waiting), "{ready}");
+    create(&[
+        "-q",
+        "issue",
+        "unlink",
+        &waiting,
+        &task,
+        "--role",
+        "blocked_by",
+    ]);
+    let ready = run_atelier(dir.path(), &["--quiet", "work", "ready"]).1;
+    assert!(ready.lines().any(|line| line == waiting), "{ready}");
+    assert_eq!(
+        create(&["-q", "issue", "transition", &waiting, "block"]),
+        "blocked"
+    );
+
+    let (_, help, _) = run_atelier(dir.path(), &["issue", "link", "--help"]);
+    assert!(
+        help.contains("Readiness: blocked_by") && help.contains("Context only"),
+        "{help}"
+    );
+    let (_, help, _) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(!help.contains("imported source"), "{help}");
+    let (_, help, _) = run_atelier(dir.path(), &["issue", "transition", "--help"]);
+    assert!(help.contains("atelier start <id>"), "{help}");
 }

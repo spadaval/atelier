@@ -36,6 +36,13 @@ Missions coordinate work rather than own a work branch.
 checks out or creates its work branch, records branch metadata, and applies the
 available `start` transition. Commit those record changes with the work.
 
+Begin work with `atelier start`, not `atelier issue transition <id> start`.
+The bare transition only changes the record: it creates no branch and records
+no owner, so work started that way on the base branch or any unowned branch
+fails `atelier land` with `land_work_untraceable`. Use the bare transition
+when the owner branch already exists and is checked out, for example to start
+a further child on its parent's branch.
+
 Statuses and permitted transitions come from `.atelier/workflow.yaml`.
 `atelier issue transition <id>` shows options and blockers. Supplying a
 transition changes the record after read-only checks. Transitions do not branch,

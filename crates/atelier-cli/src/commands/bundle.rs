@@ -86,7 +86,7 @@ struct BundleIssue {
     #[serde(default)]
     parent: Option<BundleRef>,
     #[serde(default)]
-    depends_on: Vec<BundleRef>,
+    blocked_by: Vec<BundleRef>,
     #[serde(default)]
     blocks: Vec<BundleRef>,
     #[serde(default)]
@@ -167,7 +167,7 @@ struct PlannedNote<'a> {
 ///
 /// Relationship direction is canonical rather than dependent on the authored
 /// field: parents point to children and blockers point to blocked issues. This
-/// makes `depends_on` and `blocks` normalize to the same graph edge.
+/// makes `blocked_by` and `blocks` normalize to the same graph edge.
 #[derive(Debug)]
 struct BundleGraphPlan<'a> {
     issues: Vec<&'a BundleIssue>,
@@ -201,7 +201,7 @@ impl<'a> BundleGraphPlan<'a> {
                     "parent",
                 )?;
             }
-            for blocker in &issue.depends_on {
+            for blocker in &issue.blocked_by {
                 insert_planned_relationship(
                     &mut relationships,
                     planned_bundle_ref(index, bundle, blocker)?,
@@ -326,7 +326,7 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
             validate_bundle_issue_status(&issue.issue_type, status)?;
         }
         validate_refs_exist(index, bundle, issue.parent.iter(), &issue.client_ref)?;
-        validate_refs_exist(index, bundle, issue.depends_on.iter(), &issue.client_ref)?;
+        validate_refs_exist(index, bundle, issue.blocked_by.iter(), &issue.client_ref)?;
         validate_refs_exist(index, bundle, issue.blocks.iter(), &issue.client_ref)?;
         validate_refs_exist(index, bundle, issue.advances.iter(), &issue.client_ref)?;
     }

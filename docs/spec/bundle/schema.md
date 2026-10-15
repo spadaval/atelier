@@ -52,7 +52,7 @@ Client references never become canonical record IDs.
 | `strategy` | Optional object with `path`; no revision number. |
 | `labels` | Optional string array. |
 | `parent` | Optional epic reference for an ordinary issue. |
-| `depends_on`, `blocks` | Optional reference arrays for sequencing. |
+| `blocked_by`, `blocks` | Optional reference arrays for sequencing: `blocked_by` names work this issue waits for, `blocks` names work that waits for it. These are the `atelier issue link --role` names. |
 | `advances` | Optional mission membership reference array. On a mission it names work in its scope; on other issues it names the mission they advance. Each link must join exactly one mission. |
 | `notes` | Optional ordered notes with `body`, optional `author`, and optional RFC 3339 `created_at`. |
 | `operation` | Omitted or `create`. |
@@ -93,7 +93,7 @@ reference resolution, body shape, types, statuses, hierarchy, blockers, and the
 complete staged graph. Errors name the rejected field, reference, record, or
 `client_ref` where available. No invalid reference or cycle may be installed.
 
-Parent references normalize to epic children. Both `depends_on` and `blocks`
+Parent references normalize to epic children. Both `blocked_by` and `blocks`
 normalize to blocker-to-blocked relationships. `advances` is stored on both
 records, as `atelier issue link` stores it, so a mission listing an epic and the
 epic listing the mission are the same mission-to-work edge; declaring both is a

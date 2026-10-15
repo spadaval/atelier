@@ -274,10 +274,8 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
-        /// Initial Markdown description/body text
-        #[arg(long)]
-        description: Option<String>,
-        /// Typed Markdown body: Goal/Done when for issues, Outcome/Proof for epics.
+        /// Markdown body with the type's sections (Goal and Done when for
+        /// issues, Outcome for epics and missions); plain text becomes the Goal
         #[arg(long)]
         body: Option<String>,
         /// Priority (low, medium, high, critical)
@@ -289,7 +287,7 @@ enum IssueCommands {
         /// Explicit work type from .atelier/workflow.yaml issue_types, or built-in mission
         #[arg(long)]
         issue_type: Option<String>,
-        /// Parent issue ID or imported source ID
+        /// Parent issue ID
         #[arg(long)]
         parent: Option<String>,
         /// Initial todo-category status, such as backlog for someday work;
@@ -330,7 +328,9 @@ enum IssueCommands {
     Transition {
         /// Issue ID
         id: String,
-        /// Transition name to execute; omit to inspect options and blockers
+        /// Transition name to execute; omit to inspect options and blockers.
+        /// To begin work, use `atelier start <id>`, which also creates and
+        /// records the owner branch; `start` here only changes the record
         transition: Option<String>,
         /// Close reason used by transitions that require it
         #[arg(long = "reason")]
@@ -353,10 +353,9 @@ enum IssueCommands {
         /// New issue type from .atelier/workflow.yaml issue_types
         #[arg(long)]
         issue_type: Option<String>,
-        /// New status for mission objective records
-        #[arg(long)]
-        status: Option<String>,
-        /// Plain mission Markdown centered on Outcome; requires a mission objective record
+        /// Replace the typed body sections (Goal, Done when, ... for the
+        /// record's type); Notes and Close Reason are kept. Change status
+        /// with `atelier issue transition`
         #[arg(long)]
         body: Option<String>,
         /// Add labels to the issue
@@ -365,7 +364,7 @@ enum IssueCommands {
         /// Remove labels from the issue
         #[arg(long = "remove-label")]
         remove_label: Vec<String>,
-        /// Set parent issue ID or imported source ID
+        /// Set the parent issue ID
         #[arg(long)]
         parent: Option<String>,
         /// Clear parent issue
@@ -390,7 +389,13 @@ enum IssueCommands {
         id: String,
         /// Target issue ID
         target: String,
-        /// Relationship role, such as advances or blocked_by
+        /// Relationship role. Readiness: blocked_by (the source waits for the
+        /// target) and blocks (the target waits for the source). Mission scope:
+        /// advances (stored under relates). Context only, no effect on
+        /// readiness: related, part_of, implements, supersedes, duplicates,
+        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// custom roles from .atelier/config.toml; these are stored under the
+        /// record's relates field
         #[arg(long, default_value = "advances")]
         role: String,
     },
@@ -401,7 +406,13 @@ enum IssueCommands {
         id: String,
         /// Target issue ID
         target: String,
-        /// Relationship role, such as advances or blocked_by
+        /// Relationship role. Readiness: blocked_by (the source waits for the
+        /// target) and blocks (the target waits for the source). Mission scope:
+        /// advances (stored under relates). Context only, no effect on
+        /// readiness: related, part_of, implements, supersedes, duplicates,
+        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// custom roles from .atelier/config.toml; these are stored under the
+        /// record's relates field
         #[arg(long, default_value = "advances")]
         role: String,
     },

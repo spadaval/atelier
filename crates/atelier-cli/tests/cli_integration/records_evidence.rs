@@ -641,7 +641,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "feature",
             "--label",
             "agent-factory",
-            "--description",
+            "--body",
             "## Goal\n\nWork item.\n\n## Done when\n\nFactory task remains valid for human command-result checks.\n\n## Context\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
@@ -695,7 +695,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "issue",
             "create",
             "Blocker",
-            "--description",
+            "--body",
             "## Goal\n\nBlocking fixture issue.\n\n## Done when\n\nBlocker issue participates in dependency command-result checks.\n\n## Context\n\n- `atelier check` passes for the command-result fixture.",
         ],
     );
@@ -773,7 +773,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
             "issue",
             "create",
             "Corrective issue",
-            "--description",
+            "--body",
             "## Goal\n\nIssue fixture.\n\n## Done when\n\nWrong-kind command output is corrective.\n\n## Context\n\n- Focused CLI checks pass.",
         ],
     );
@@ -1961,7 +1961,7 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
             "issue",
             "create",
             "Evidence gate proof",
-            "--description",
+            "--body",
             issue_body,
         ],
     );
@@ -2006,7 +2006,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
             "issue",
             "create",
             "Blocked validation proof",
-            "--description",
+            "--body",
             issue_body,
         ],
     );

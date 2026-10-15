@@ -4,6 +4,9 @@ id: "atelier-kaor"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-kaor
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make the issue CLI's options say what they do"
-updated_at: "2026-10-15T22:08:58.911071017+00:00"
+updated_at: "2026-10-15T23:34:57.324558818+00:00"
 ---
 
 ## Goal

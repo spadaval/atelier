@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use atelier_app::use_cases::load_repository;
 use atelier_core::IssuePriority;
 
@@ -8,7 +8,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
     match action {
         super::IssueCommands::Create {
             title,
-            description,
             body,
             priority,
             label,
@@ -17,16 +16,12 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             status,
         } => {
             let (state_dir, index) = load_repository()?;
-            if description.is_some() && body.is_some() {
-                bail!("--description and --body cannot be combined");
-            }
             IssuePriority::from_cli_input(&priority)?;
             commands::issue::create_lifecycle(
                 &index,
                 &state_dir,
                 commands::issue::LifecycleCreateInput {
                     title: &title,
-                    description: description.as_deref(),
                     body: body.as_deref(),
                     priority: &priority,
                     issue_type: issue_type.as_deref().unwrap_or("task"),
@@ -78,6 +73,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     &id,
                     &transition,
                     close_reason.as_deref(),
+                    quiet,
                 )
             } else {
                 commands::issue::transition_options(&index, &id, verbose)
@@ -89,21 +85,12 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             title,
             priority,
             issue_type,
-            status,
             body,
             label,
             remove_label,
             parent,
             no_parent,
         } => {
-            if status.is_some() {
-                bail!(
-                    "issue status changes use `atelier issue transition <issue-id> <transition>`"
-                );
-            }
-            if body.is_some() {
-                bail!("issue body edits use the canonical Markdown record");
-            }
             let (state_dir, index) = load_repository()?;
             commands::issue::update_lifecycle(
                 &index,
@@ -113,6 +100,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     title: title.as_deref(),
                     priority: priority.as_deref(),
                     issue_type: issue_type.as_deref(),
+                    body: body.as_deref(),
                     labels: &label,
                     remove_labels: &remove_label,
                     parent: if no_parent {
@@ -132,12 +120,16 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 
         super::IssueCommands::Link { id, target, role } => {
             let (state_dir, index) = load_repository()?;
-            commands::relate::change_issue_link(&index, &state_dir, &id, &target, &role, false)
+            commands::relate::change_issue_link(
+                &index, &state_dir, &id, &target, &role, false, quiet,
+            )
         }
 
         super::IssueCommands::Unlink { id, target, role } => {
             let (state_dir, index) = load_repository()?;
-            commands::relate::change_issue_link(&index, &state_dir, &id, &target, &role, true)
+            commands::relate::change_issue_link(
+                &index, &state_dir, &id, &target, &role, true, quiet,
+            )
         }
     }
 }

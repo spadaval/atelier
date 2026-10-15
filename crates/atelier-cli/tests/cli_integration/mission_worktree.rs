@@ -749,13 +749,7 @@ fn test_lint_rejects_missing_acceptance_even_when_notes_name_a_command() {
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Vague evidence lint",
-            "--description",
-            body,
-        ],
+        &["issue", "create", "Vague evidence lint", "--body", body],
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
@@ -783,13 +777,7 @@ fn test_lint_accepts_concrete_evidence_without_optional_notes() {
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Concrete evidence lint",
-            "--description",
-            body,
-        ],
+        &["issue", "create", "Concrete evidence lint", "--body", body],
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
@@ -1187,7 +1175,7 @@ fn test_status_works_without_runtime_directory() {
             "issue",
             "create",
             "Runtime directory recovery",
-            "--description",
+            "--body",
             body,
         ],
     );
@@ -1219,7 +1207,7 @@ fn test_focused_lint_validates_missing_relationship_targets() {
             "issue",
             "create",
             "Focused lint missing target",
-            "--description",
+            "--body",
             body,
         ],
     );
@@ -1261,7 +1249,7 @@ fn test_focused_lint_validates_dependency_cycles() {
             "issue",
             "create",
             "Focused lint cycle root",
-            "--description",
+            "--body",
             first_body,
         ],
     );
@@ -1274,7 +1262,7 @@ fn test_focused_lint_validates_dependency_cycles() {
             "issue",
             "create",
             "Focused lint cycle leaf",
-            "--description",
+            "--body",
             second_body,
         ],
     );
@@ -1407,10 +1395,8 @@ fn assert_lint_rejects_canonical_mutation(
         "## Goal\n\n{title} body.\n\n## Done when\n\nCanonical lint rejects the targeted malformed record.\n\n## Context\n\n- `atelier check` reports the targeted malformed canonical record."
     );
 
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", title, "--description", &body],
-    );
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", title, "--body", &body]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
@@ -1488,7 +1474,7 @@ fn test_bundle_apply_records_links() {
         "parent": {
           "client_ref": "issue.epic"
         },
-        "depends_on": [
+        "blocked_by": [
           {
             "client_ref": "issue.blocker"
           }
@@ -1693,7 +1679,7 @@ fn test_bundle_preview_rejects_duplicate_normalized_relationships_without_mutati
       {
         "client_ref": "issue.blocked",
         "title": "Bundle blocked",
-        "depends_on": [
+        "blocked_by": [
           {
             "client_ref": "issue.blocker"
           }
@@ -1838,7 +1824,7 @@ fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserve
         "title": "Unreviewed executable mission", "body": "\u0023\u0023 Outcome\n\nMission result\n\n## Success criteria\n\nChecks pass.",
         "issue_type": "mission",
         "status": {status:?},
-        "depends_on": [{{ "client_ref": "issue.blocker" }}]
+        "blocked_by": [{{ "client_ref": "issue.blocker" }}]
       }}
     ]
   }}
