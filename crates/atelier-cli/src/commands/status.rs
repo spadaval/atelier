@@ -25,8 +25,13 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
         return Ok(());
     }
 
-    print_status_view(&view);
     let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    let owner = workflow_policy
+        .as_ref()
+        .map(|policy| owner_row(layout.repo_root(), index, policy))
+        .transpose()?
+        .flatten();
+    print_status_view(&view, owner);
     let lines =
         crate::commands::git::branch_lines(layout.repo_root(), &layout.canonical_dir(), index)
             .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
@@ -40,7 +45,39 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-fn print_status_view(view: &StatusView) {
+/// The current branch's owner, with done claims marked as not yet merged.
+fn owner_row(
+    repo: &std::path::Path,
+    index: &RecordIndex,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+) -> Result<Option<String>> {
+    let Some(branch) = commands::git::current_branch(repo)? else {
+        return Ok(None);
+    };
+    let Some(owner) = index.issues().find(|issue| {
+        issue
+            .workflow_branch
+            .as_ref()
+            .is_some_and(|owner| owner.work_branch == branch)
+    }) else {
+        return Ok(None);
+    };
+    let status = if policy.status_category(&owner.status) == Some("done") {
+        let head = atelier_app::git_freshness::head_commit(repo)?;
+        commands::git::unmerged_done_label(
+            repo,
+            &owner.status,
+            &branch,
+            &head,
+            &policy.branch_policy.base_branch,
+        )
+    } else {
+        owner.status.clone()
+    };
+    Ok(Some(format!("{} [{status}] {}", owner.id, owner.title)))
+}
+
+fn print_status_view(view: &StatusView, owner: Option<String>) {
     let current_work = if view.work.active.is_empty() {
         "none".to_string()
     } else {
@@ -73,6 +110,9 @@ fn print_status_view(view: &StatusView) {
             let mut rows = Vec::new();
             if let Some(branch) = state.branch {
                 rows.push(("Branch", branch));
+            }
+            if let Some(owner) = owner {
+                rows.push(("Owner", owner));
             }
             if state.dirty_entries.is_empty() {
                 rows.push(("Checkout", "clean".to_string()));

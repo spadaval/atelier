@@ -77,10 +77,18 @@ fn prime_text() -> Result<String> {
     lines.extend(source.diagnostics);
     if let Some((id, scope)) = owner {
         let record = index.issue_record(&id).context("owner missing")?;
-        lines.push(format!(
-            "Owner: {id} [{}] {}",
-            record.issue.status, record.issue.title
-        ));
+        let status = if source.policy.status_category(&record.issue.status) == Some("done") {
+            git::unmerged_done_label(
+                repo,
+                &record.issue.status,
+                &branch,
+                &head,
+                &source.policy.branch_policy.base_branch,
+            )
+        } else {
+            record.issue.status.clone()
+        };
+        lines.push(format!("Owner: {id} [{status}] {}", record.issue.title));
         if let Some(ownership) = &record.issue.workflow_branch {
             lines.push(format!("Integration base: {}", ownership.branch_base));
         }

@@ -2028,3 +2028,24 @@ fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelat
         "{output}"
     );
 }
+#[test]
+fn done_claims_on_work_branches_say_they_are_not_merged() {
+    let f = Fixture::new();
+    f.terminal(&f.id);
+    let unmerged = format!("[done on branch {}, not merged into main]", f.branch);
+    let prime = ok(f.path(), &["prime"]);
+    assert!(
+        prime.contains(&format!("Owner: {} {unmerged}", f.id)),
+        "{prime}"
+    );
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains(&unmerged), "{status}");
+
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains(&format!("{} {unmerged}", f.id)), "{status}");
+    git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
+    git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains("[done, merged into main]"), "{status}");
+}

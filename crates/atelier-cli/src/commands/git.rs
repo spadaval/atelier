@@ -108,6 +108,32 @@ impl Snapshot {
     }
 }
 
+/// A done claim on a work branch is not base completion until it merges.
+pub(crate) fn unmerged_done_label(
+    repo: &Path,
+    status: &str,
+    branch: &str,
+    commit: &str,
+    base_branch: &str,
+) -> String {
+    let merged = git_freshness::command(repo)
+        .args([
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            &format!("refs/heads/{base_branch}"),
+        ])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    if merged {
+        format!("{status}, merged into {base_branch}")
+    } else {
+        format!("{status} on branch {branch}, not merged into {base_branch}")
+    }
+}
+
 pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Result<Vec<String>> {
     let current = current_branch(repo)?.unwrap_or_default();
     let policy = workflow_policy::load(repo)?;
@@ -254,11 +280,15 @@ pub(crate) fn branch_lines_for(
                         })
                     })
                     .count();
+                let status = if branch_policy.status_category(&owner.status) == Some("done") {
+                    unmerged_done_label(repo, &owner.status, branch, commit, base_branch)
+                } else {
+                    owner.status.clone()
+                };
                 rows.push(format!(
-                    "{branch} @ {}: {} [{}] {} — {active} active (committed branch records)",
+                    "{branch} @ {}: {} [{status}] {} — {active} active (committed branch records)",
                     &commit[..8],
                     id,
-                    owner.status,
                     owner.title
                 ));
             }
