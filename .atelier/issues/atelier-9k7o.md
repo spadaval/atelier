@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-15T23:07:59.999889719+00:00"
+status: "done"
 title: "Decide whether the done claim should come after review"
-updated_at: "2026-10-15T23:06:48.990194150+00:00"
+updated_at: "2026-10-15T23:07:59.999889719+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-track
 ## Notes
 
 - 2026-10-15 [human] Sumeet chose to keep the order: the done claim stays on the work branch before review. Status output now marks it: prime, status and other-branch rows show 'done on branch X, not merged into <base>' (or 'done, merged into <base>'). Recorded in docs/product/work-model.md (Completion) and sessions-and-hooks.md.
+
+## Close Reason
+
+Decided by Sumeet 2026-10-15: keep the current order (done claim committed on the work branch before review). Status output now says 'done on branch X, not merged into <base>' in prime, status and other-branch rows. Recorded in docs/product/work-model.md.
