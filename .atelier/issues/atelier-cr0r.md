@@ -3,6 +3,9 @@ created_at: "2026-10-16T20:47:51.689801276+00:00"
 id: "atelier-cr0r"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-cr0r
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-16T20:52:11.606748054+00:00"
+status: "done"
 title: "Use the nearest parseable earlier copy in the base done-claim check"
-updated_at: "2026-10-16T20:47:51.689801276+00:00"
+updated_at: "2026-10-16T20:52:11.606748054+00:00"
 ---
 
 ## Goal
@@ -27,3 +31,7 @@ The check walks back to the nearest parseable unpushed copy before the pushed on
 ## Context
 
 Deferred findings atelier-vfgr and atelier-641q from the atelier-hyew review (approval atelier-6dro). crates/atelier-cli/src/commands/git.rs base_done_claim.
+
+## Close Reason
+
+When an earlier copy does not parse, base_done_claim walks back through unpushed commits touching the record to the nearest parseable copy, then the pushed copy. Test base_done_claim_check_reads_the_nearest_parseable_earlier_copy: restored unchanged lands; set back, broken and restored as done is refused (and passes wrongly when the walk is removed).
