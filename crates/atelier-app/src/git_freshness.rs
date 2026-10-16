@@ -13,6 +13,8 @@ pub struct CommitEdge {
     pub parent: String,
     pub commit: String,
     pub paths: Vec<PathBuf>,
+    /// A merge commit's other parents.
+    pub sides: Vec<String>,
 }
 
 /// One read phase's captured endpoint and fresh checkout proof.
@@ -131,6 +133,7 @@ struct ObjectCache {
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
     commits: HashMap<String, Vec<u8>>,
+    clean_merges: HashMap<String, bool>,
     /// Whether tree diffs matched `git diff` on this read phase's first
     /// edge; `None` until checked, `false` to use `git diff` throughout.
     tree_diff_matches: Option<bool>,
@@ -426,6 +429,26 @@ impl<'a> ReadContext<'a> {
         self.cache.first_parents.insert(commit, parent.clone());
         Ok(parent)
     }
+    /// Memoized [`clean_merge`] for a full commit ID.
+    pub(crate) fn clean_merge(&mut self, commit: &str) -> Result<bool> {
+        let commit = self.commit_id(commit)?;
+        if let Some(clean) = self.cache.clean_merges.get(&commit) {
+            return Ok(*clean);
+        }
+        let clean = clean_merge(self.repo, &commit)?;
+        self.cache.clean_merges.insert(commit, clean);
+        Ok(clean)
+    }
+    /// Commits reachable from `tips` but not from `not`.
+    pub(crate) fn only_in(&mut self, tips: &[String], not: &str) -> Result<HashSet<String>> {
+        let mut args = vec!["rev-list"];
+        args.extend(tips.iter().map(String::as_str));
+        args.extend(["--not", not]);
+        Ok(String::from_utf8(git_output(self.repo, &args)?)?
+            .lines()
+            .map(str::to_owned)
+            .collect())
+    }
     /// Output of a `git log` whose revisions are full commit IDs, so the
     /// same query in this read phase has the same answer.
     pub(crate) fn history(&mut self, args: &[&str]) -> Result<String> {
@@ -673,6 +696,11 @@ impl<'a> ReadContext<'a> {
                     parent: parent.to_string(),
                     commit: commit.to_owned(),
                     paths,
+                    sides: parents
+                        .iter()
+                        .filter(|other| *other != parent)
+                        .map(|other| other.to_string())
+                        .collect(),
                 });
             }
         }
@@ -704,6 +732,31 @@ pub fn head_commit(repo: &Path) -> Result<String> {
             .to_owned(),
     )
 }
+/// Whether `commit` merges two parents into exactly the tree Git's own merge
+/// of them produces: no conflicts and no edits made while merging, so it
+/// introduces nothing that is not on one side or the other (atelier-n7g1).
+pub fn clean_merge(repo: &Path, commit: &str) -> Result<bool> {
+    let line = String::from_utf8(git_output(
+        repo,
+        &["rev-list", "--parents", "-n", "1", commit],
+    )?)?;
+    let parts = line.split_whitespace().collect::<Vec<_>>();
+    let [_, first, second] = parts.as_slice() else {
+        return Ok(false);
+    };
+    let Ok(merged) = git_output(
+        repo,
+        &["merge-tree", "--write-tree", "--no-messages", first, second],
+    ) else {
+        return Ok(false);
+    };
+    let tree = String::from_utf8(git_output(
+        repo,
+        &["rev-parse", &format!("{commit}^{{tree}}")],
+    )?)?;
+    Ok(String::from_utf8(merged)?.lines().next() == Some(tree.trim()))
+}
+
 pub fn blob(repo: &Path, commit: &str, path: &Path) -> Result<String> {
     ReadContext::new(repo).blob(commit, path)
 }

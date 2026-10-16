@@ -4,6 +4,9 @@ id: "atelier-n7g1"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-n7g1
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep an approval current when the base is merged into a reviewed branch"
-updated_at: "2026-10-16T01:35:12.440876380+00:00"
+updated_at: "2026-10-16T18:15:41.159952335+00:00"
 ---
 
 ## Goal

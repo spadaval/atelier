@@ -779,6 +779,58 @@ fn out_of_scope_statuses_relationship_changes_and_existing_proof_edits_stale_app
 }
 
 #[test]
+fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not() {
+    for case in ["clean", "conflict", "edited", "later_code"] {
+        let fixture = Fixture::new();
+        fixture.approval("Reviewer");
+        git(fixture.path(), &["switch", "-q", "main"]);
+        let landed = if case == "conflict" {
+            "src.rs"
+        } else {
+            "other.rs"
+        };
+        fs::write(fixture.path().join(landed), "landed on the base\n").unwrap();
+        commit(fixture.path(), "other work landed on the base");
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        match case {
+            "conflict" => {
+                let merged = Command::new("git")
+                    .current_dir(fixture.path())
+                    .args(["merge", "--no-edit", "main"])
+                    .output()
+                    .unwrap();
+                assert!(!merged.status.success());
+                fs::write(fixture.path().join("src.rs"), "tested code\n").unwrap();
+                git(fixture.path(), &["add", "."]);
+                git(fixture.path(), &["commit", "-q", "--no-edit"]);
+            }
+            "edited" => {
+                git(fixture.path(), &["merge", "-q", "--no-commit", "main"]);
+                fs::write(fixture.path().join("src.rs"), "edited while merging\n").unwrap();
+                git(fixture.path(), &["add", "."]);
+                git(fixture.path(), &["commit", "-q", "--no-edit"]);
+            }
+            _ => {
+                git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+            }
+        }
+        if case == "later_code" {
+            fs::write(fixture.path().join("src.rs"), "changed after merging\n").unwrap();
+            commit(fixture.path(), "code after the base merge");
+        }
+        if case == "clean" {
+            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+            assert!(output.contains("pass review.current"), "{output}");
+            let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+            ok(fixture.path(), &["merge", &fixture.id]);
+            assert_eq!(git(fixture.path(), &["rev-parse", "main"]), head);
+        } else {
+            fixture.refusal("FAIL review.current");
+        }
+    }
+}
+
+#[test]
 fn policy_without_any_valid_history_cannot_authorize_merge() {
     let fixture = Fixture::new();
     // Replace the base ref with an orphan carrying no valid policy.

@@ -5,7 +5,7 @@ use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
 use atelier_records::{parse_issue_record, split_document};
 use serde::Serialize;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::Path,
 };
 
@@ -148,21 +148,49 @@ pub fn approval_is_current(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     ids: &BTreeSet<String>,
+    base: &str,
 ) -> Result<bool> {
-    approval_is_current_to(read, pin, ids, "HEAD")
+    approval_is_current_to(read, pin, ids, "HEAD", base)
 }
 fn approval_is_current_to(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     ids: &BTreeSet<String>,
     end: &str,
+    base: &str,
 ) -> Result<bool> {
-    for edge in read.edges(pin, end)?.iter() {
-        if !allowed_edge(read, edge, ids)? {
+    for edge in work_edges(read, pin, end, base)? {
+        if !allowed_edge(read, &edge, ids)? {
             return Ok(false);
         }
     }
     Ok(true)
+}
+/// The edges from `pin` to `end` that can change approved work. A clean merge
+/// of commits already on `base` brings in work reviewed on its own branch, so
+/// the merge and the base commits it brings in are left out (atelier-n7g1).
+fn work_edges(
+    read: &mut git::ReadContext<'_>,
+    pin: &str,
+    end: &str,
+    base: &str,
+) -> Result<Vec<git::CommitEdge>> {
+    let edges = read.edges(pin, end)?;
+    let mut merged_base = HashSet::new();
+    for edge in edges.iter().filter(|edge| !edge.sides.is_empty()) {
+        if ancestor(read, pin, &edge.parent)
+            && edge.sides.iter().all(|side| ancestor(read, side, base))
+            && read.clean_merge(&edge.commit)?
+        {
+            merged_base.insert(edge.commit.clone());
+            merged_base.extend(read.only_in(&edge.sides, &edge.parent)?);
+        }
+    }
+    Ok(edges
+        .iter()
+        .filter(|edge| !merged_base.contains(&edge.commit))
+        .cloned()
+        .collect())
 }
 
 /// Enforce immutability from branch creation, not merely after approval.
@@ -476,10 +504,15 @@ fn evaluate_scope(
                 } else {
                     independent(record, &authors)
                 };
+            // An approval from before the base was last merged in still
+            // counts; one from before the branch left the base does not.
             accepted_identity
                 && ((historical && retained(read, base_commit, record))
-                    || ((global || ancestor(read, base_commit, &record.commit))
-                        && approval_is_current(read, &record.commit, &ids).unwrap_or(false)))
+                    || ((global
+                        || ancestor(read, base_commit, &record.commit)
+                        || !ancestor(read, &record.commit, base_commit))
+                        && approval_is_current(read, &record.commit, &ids, base_commit)
+                            .unwrap_or(false)))
         })
         .collect::<Vec<_>>();
     let support = candidates
@@ -552,6 +585,7 @@ fn evaluate_scope(
                                             read,
                                             approval,
                                             &finding.target,
+                                            base_commit,
                                         )
                                         .unwrap_or(false)
                                     }))
@@ -883,11 +917,12 @@ fn original_approval_valid(
     read: &mut git::ReadContext<'_>,
     approval: &ReviewRecord,
     target: &str,
+    base: &str,
 ) -> Result<bool> {
     let issue = index.require_issue(target)?;
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
     let end = read.claim_endpoint(target, &approval.commit)?;
-    approval_is_current_to(read, &approval.commit, &ids, &end)
+    approval_is_current_to(read, &approval.commit, &ids, &end, base)
 }
 
 fn retired_review_cluster(
