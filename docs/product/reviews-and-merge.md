@@ -90,7 +90,11 @@ they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and fast-forwards only. If the
 base has moved on, merge it into the work branch, record fresh proof, and renew
-review only if the merge needed resolving (see approval freshness).
+review only if the merge needed resolving (see approval freshness). Rebase only
+before any review is recorded: rebasing rewrites the commits that findings and
+approvals pin, and `merge` then refuses with "pins a commit outside the work
+branch". To recover, reset the branch to its pre-rebase tip (from `git reflog`)
+and merge the base instead (atelier-j48s).
 Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).
@@ -121,8 +125,13 @@ reviewed when a commit pinned by an approval or trivial exemption contains it,
 for completed owners that branched from this base and are not already done
 upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
-`land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
-by the paths that differ from all of its parents. The install predates the gates and is exempt: commits
+`land_base_unreviewed`. Those record-only commits also may not take a work
+item to done: a done claim travels on the work branch with the work, so `land`
+refuses one made on the base with `land_base_done_claim`. Revert the claim (a
+claim no longer done at the tip is withdrawn), then `atelier start` the item
+and make the claim on its work branch (atelier-fj1t). Closing a mission, deciding a `decision` record
+and superseding work stay allowed on the base. A merge commit, such as a
+non-rebasing pull, is judged by the paths that differ from all of its parents. The install predates the gates and is exempt: commits
 made before the policy existed, the first commit on the base's first-parent
 line that adds it, and everything that commit merges in. Without an upstream, `land`
 notes that it cannot check base commits.

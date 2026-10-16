@@ -1,0 +1,15 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-5krb
+title: 'Test gaps in base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions (crates/atelier-cli/tests/session.rs:2150). It does not cover the mission-close exemption (git.rs:332), and nothing covers the merge-commit rule that a status counts only if it differs from every parent (git.rs:338-340), although the close reason claims both. I checked both by hand on the built binary and they behave correctly: a fast-forward atelier merge of a reviewed done claim followed by land passes, and a non-rebasing pull of an upstream done claim with a conflict resolved on the record passes. The rest checks out: the exemptions match resolve_work_branch (mission and decision need no branch) and the literal ''superseded'' carve-out in workflow.rs:175 and review_gate.rs:665. The install commit and pre-policy commits are skipped before the check. A done status renamed in a custom policy is handled through status_category. Done-to-other-done changes (for example superseded to done) are caught, and edits to an existing done record pass by design. Refusing done claims whether or not the item has a branch is the right scope, because a done claim should travel with reviewed work and atelier-ermg says already-built work is superseded, not closed. Running the check in start is acceptable and stops unreviewed base commits from becoming ''covered'' by a later review.'
+target: atelier-fj1t
+identity: Independent reviewer (Claude subagent)
+commit: 2ceeb45048383ed43904476d464e056de03d8e8c
+created_at: 2026-10-16T18:40:05.675963108Z
+event:
+  event: finding
+  recommendation: defer
+---
+
+Test gaps in base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions (crates/atelier-cli/tests/session.rs:2150). It does not cover the mission-close exemption (git.rs:332), and nothing covers the merge-commit rule that a status counts only if it differs from every parent (git.rs:338-340), although the close reason claims both. I checked both by hand on the built binary and they behave correctly: a fast-forward atelier merge of a reviewed done claim followed by land passes, and a non-rebasing pull of an upstream done claim with a conflict resolved on the record passes. The rest checks out: the exemptions match resolve_work_branch (mission and decision need no branch) and the literal 'superseded' carve-out in workflow.rs:175 and review_gate.rs:665. The install commit and pre-policy commits are skipped before the check. A done status renamed in a custom policy is handled through status_category. Done-to-other-done changes (for example superseded to done) are caught, and edits to an existing done record pass by design. Refusing done claims whether or not the item has a branch is the right scope, because a done claim should travel with reviewed work and atelier-ermg says already-built work is superseded, not closed. Running the check in start is acceptable and stops unreviewed base commits from becoming 'covered' by a later review.

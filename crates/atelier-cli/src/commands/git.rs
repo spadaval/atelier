@@ -274,6 +274,13 @@ pub(crate) fn check_base_commits(
         } else {
             git_freshness::changed_paths(repo, &parent, commit)?
         };
+        if let Some(id) = base_done_claim(repo, policy, commit, tip, &changed)? {
+            bail!(
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with git revert {}, or edit {id} back to its earlier status and commit, then run atelier start {id} and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
+                &commit[..8.min(commit.len())],
+                &commit[..8.min(commit.len())],
+            );
+        }
         let other = changed
             .into_iter()
             .filter(|path| !git_freshness::is_record_path(path) && !strategies.contains(path))
@@ -294,6 +301,64 @@ pub(crate) fn check_base_commits(
         0 => "Base commits: none unpushed outside recorded review.".to_owned(),
         count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
     })
+}
+
+/// The first work item `commit` takes to done, compared with every parent,
+/// that is still done at `tip` (a later revert withdraws the claim).
+/// Missions close and decisions are decided on the base as planning, and
+/// superseding retires work without a claim; anything else reaches done
+/// through a reviewed work branch (atelier-fj1t).
+fn base_done_claim(
+    repo: &Path,
+    policy: &atelier_workflow::WorkflowPolicy,
+    commit: &str,
+    tip: &str,
+    changed: &[std::path::PathBuf],
+) -> Result<Option<String>> {
+    let parents = text(repo, &["rev-list", "--parents", "-n1", commit])?
+        .split(' ')
+        .skip(1)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    // `None` when the record is absent; a record that no longer parses
+    // (such as an epic before migration) reports no status.
+    let status_at = |revision: &str, path: &Path| {
+        git_freshness::blob(repo, revision, path).ok().map(|blob| {
+            path.strip_prefix(".atelier")
+                .ok()
+                .and_then(|relative| atelier_records::parse_issue_record(&blob, relative).ok())
+                .map(|record| (record.issue.issue_type, record.issue.status))
+        })
+    };
+    for path in changed {
+        if path.parent() != Some(Path::new(".atelier/issues"))
+            || path.extension().is_none_or(|ext| ext != "md")
+        {
+            continue;
+        }
+        let Some(Some((issue_type, status))) = status_at(commit, path) else {
+            continue;
+        };
+        if matches!(issue_type.as_str(), "mission" | "decision")
+            || status == "superseded"
+            || policy.status_category(&status) != Some("done")
+        {
+            continue;
+        }
+        // Only a record that was absent or had another status is a new claim.
+        if parents.iter().all(|parent| match status_at(parent, path) {
+            None => true,
+            Some(Some((_, before))) => before != status,
+            Some(None) => false,
+        }) && status_at(tip, path).is_some_and(|now| now.is_some_and(|(_, now)| now == status))
+        {
+            return Ok(path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_owned));
+        }
+    }
+    Ok(None)
 }
 
 /// A done claim on a work branch is not base completion until the base
