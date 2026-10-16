@@ -55,7 +55,11 @@ executable work, active `in_progress` and `review`, blocked work, and terminal
 `done` or `superseded`. `backlog` is for work that is recorded but not
 near-term: it shares the todo category but has no `start` transition, so
 `work ready` leaves it out. `defer` parks todo or blocked work in `backlog`,
-`plan` brings it back to `todo`, and `supersede` retires it.
+`plan` brings it back to `todo`, and `supersede` retires it. Its `decision`
+workflow has no start: `decide` closes a decision once the
+`decision.recorded` check finds its Decision section. Repositories initialized
+before the decision type existed can copy its `issue_types` entry and
+`decision` workflow from a fresh `atelier init`.
 `atelier issue create --status backlog` files new work there directly. Create
 accepts the workflow's initial status, or a todo-category status one
 unchecked transition away from it; a status behind checks or required fields,

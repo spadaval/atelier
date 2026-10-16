@@ -1210,7 +1210,7 @@ fn test_unregistered_issue_type_reports_configured_values() {
         "{stderr}"
     );
     assert!(stderr.contains("incident"), "{stderr}");
-    assert!(!stderr.contains("decision"), "{stderr}");
+    assert!(stderr.contains("decision"), "{stderr}");
 }
 
 #[test]
@@ -2544,7 +2544,7 @@ fn test_removed_issue_type_is_rejected() {
     assert!(success, "baseline issue create failed: {stderr}");
     let issue_id = issue_ref(dir.path(), 1);
 
-    for removed_type in ["decision", "closeout"] {
+    for removed_type in ["closeout"] {
         let (success, _, stderr) = run_atelier(
             dir.path(),
             &[
@@ -4582,4 +4582,80 @@ fn test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_contex
     let (_, all, _) = run_atelier(dir.path(), &["work", "all"]);
     let backlog = all.find("Backlog Work").expect(&all);
     assert!(all[backlog..].contains("Parked"), "{all}");
+}
+
+#[test]
+fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let create = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stderr}");
+        stdout.trim().to_string()
+    };
+    let question = "## Question\n\nShould epic become a parent issue?\n\n## Options\n\n- (a) drop epic\n- (b) rename it";
+    let decision = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Decide whether epic should become a parent",
+        "--issue-type",
+        "decision",
+        "--body",
+        question,
+    ]);
+    let work = create(&["-q", "issue", "create", "Ordinary work"]);
+
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert_eq!(ready, work, "decisions are not agent work: {ready}");
+    assert_eq!(create(&["--quiet", "work", "human"]), decision);
+    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &decision]);
+    assert!(
+        show.contains("Question") && show.contains("(a) drop epic"),
+        "{show}"
+    );
+
+    // A decision cannot close until it says what was decided.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &decision,
+            "decide",
+            "--reason",
+            "Chose (a)",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("Decision section is missing"),
+        "{stderr}"
+    );
+    create(&[
+        "issue",
+        "update",
+        &decision,
+        "--body",
+        &format!(
+            "{question}\n\n## Decision\n\n(a): drop epic; any issue can parent, one level deep."
+        ),
+    ]);
+    // Decisions need no branch: they close on the base as a planning change.
+    commit_all(dir.path(), "file the decision");
+    create(&[
+        "issue",
+        "transition",
+        &decision,
+        "decide",
+        "--reason",
+        "Chose (a)",
+    ]);
+    commit_all(dir.path(), "record the decision on the base");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["land"]);
+    assert!(success, "{stdout}{stderr}");
+    let ready = create(&["--quiet", "work", "human"]);
+    assert!(ready.is_empty(), "{ready}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
 }

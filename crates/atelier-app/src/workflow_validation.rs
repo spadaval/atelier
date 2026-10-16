@@ -104,6 +104,7 @@ fn evaluate_builtin(
             Ok((output.status.success(), reason, None))
         }
         "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
+        "decision.recorded" => decision_recorded(index, issue_id),
         other => bail!("unsupported builtin validator: {other}"),
     }
 }
@@ -191,6 +192,31 @@ fn issue_sections_parseable(
 
 /// Passes when every child (recursively) and, for missions, all work linked
 /// by `advances` is in a done-category status.
+/// A decision closes only once its Decision section says what was decided.
+fn decision_recorded(
+    index: &RecordIndex,
+    issue_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    let record = index
+        .issue_record(issue_id)
+        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+    match record
+        .sections
+        .section(atelier_core::IssueSectionName::Decision)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        Some(_) => Ok((true, "Decision section is filled".to_string(), None)),
+        None => Ok((
+            false,
+            "Decision section is missing".to_string(),
+            Some(format!(
+                "Add a ## Decision section saying what was decided and why, for example with `atelier issue update {issue_id} --body`, then decide"
+            )),
+        )),
+    }
+}
+
 fn work_terminal(
     index: &RecordIndex,
     policy: &WorkflowPolicy,

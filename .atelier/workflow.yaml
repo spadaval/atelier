@@ -6,6 +6,8 @@ branch_policy:
 issue_types:
   bug:
     label: Bug
+  decision:
+    label: Decision
   feature:
     label: Feature
   mission:
@@ -129,3 +131,27 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire work that is no longer needed.
+  decision:
+    applies_to:
+    - decision
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      decide:
+        from: [todo, blocked]
+        to: done
+        required_fields: [close_reason]
+        description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
+        validators:
+        - decision.recorded
+      block:
+        from: [todo]
+        to: blocked
+        description: Record a blocker.
+      supersede:
+        from: [todo, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire a question that no longer needs deciding.

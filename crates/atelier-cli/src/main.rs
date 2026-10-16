@@ -302,8 +302,9 @@ enum IssueCommands {
         /// Markdown body with the type's `## ` sections: Goal and Done when
         /// (optionally Scope, Context, Unknowns, Design, Background) for work
         /// items; Outcome for missions, plus Success criteria without a
-        /// strategy, optionally Background. Plain text becomes the Goal or
-        /// Outcome
+        /// strategy, optionally Background; Question (optionally Options,
+        /// Decision, Context, Background) for decisions. Plain text becomes
+        /// the Goal, Outcome, or Question
         #[arg(long)]
         body: Option<String>,
         /// Priority (low, medium, high, critical)

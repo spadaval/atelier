@@ -4,6 +4,9 @@ id: "atelier-ox63"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ox63
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give decisions a record shape"
-updated_at: "2026-10-15T22:08:59.029206534+00:00"
+updated_at: "2026-10-16T01:01:47.720655699+00:00"
 ---
 
 ## Goal

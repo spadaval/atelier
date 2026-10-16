@@ -1429,6 +1429,16 @@ pub fn parse_issue_sections_for_type(
             },
             vec![Outcome, SuccessCriteria, Background],
         ),
+        "decision" => (
+            IssueBody::Decision {
+                question: required(Question)?,
+                options: optional(Options),
+                decision: optional(Decision),
+                context: optional(Context),
+                background: optional(Background),
+            },
+            vec![Question, Options, Decision, Context, Background],
+        ),
         _ => {
             if issue_type == "epic" || sections.contains_key(Outcome.title()) {
                 if !sections.contains_key(Goal.title()) {

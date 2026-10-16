@@ -96,8 +96,8 @@ eligible artifacts.
 
 ## Planning changes on the base
 
-Filing, grooming, re-prioritising, recording decisions, and editing mission
-strategies are commits too. Commits that change only records
+Filing, grooming, re-prioritising, recording decisions (including deciding a
+`decision` record), and editing mission strategies are commits too. Commits that change only records
 (`.atelier/issues`, `.atelier/evidence`, `.atelier/reviews`) and the strategy
 files linked from missions may be committed on the base branch directly
 (atelier-3mjv, decided by Sumeet 2026-10-15). Any other change goes through a

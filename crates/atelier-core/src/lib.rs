@@ -290,6 +290,15 @@ pub enum IssueBody {
         success_criteria: Option<String>,
         background: Option<String>,
     },
+    /// A design question for the human (atelier-ox63): the Decision is
+    /// required to close it.
+    Decision {
+        question: String,
+        options: Option<String>,
+        decision: Option<String>,
+        context: Option<String>,
+        background: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -305,6 +314,9 @@ pub enum IssueSectionName {
     /// Free-form research, references, and motivation shared by a mission or
     /// a parent's children (atelier-by8u).
     Background,
+    Question,
+    Options,
+    Decision,
     Notes,
     CloseReason,
 }
@@ -330,7 +342,7 @@ pub struct IssueSectionState {
 }
 
 impl IssueSections {
-    pub const ALL_NAMES: [IssueSectionName; 11] = [
+    pub const ALL_NAMES: [IssueSectionName; 14] = [
         IssueSectionName::Goal,
         IssueSectionName::DoneWhen,
         IssueSectionName::Scope,
@@ -339,6 +351,9 @@ impl IssueSections {
         IssueSectionName::Design,
         IssueSectionName::Outcome,
         IssueSectionName::SuccessCriteria,
+        IssueSectionName::Question,
+        IssueSectionName::Options,
+        IssueSectionName::Decision,
         IssueSectionName::Background,
         IssueSectionName::Notes,
         IssueSectionName::CloseReason,
@@ -377,6 +392,9 @@ impl IssueSections {
                 success_criteria,
                 ..
             } => (outcome.clone(), success_criteria.clone(), None),
+            IssueBody::Decision {
+                question, decision, ..
+            } => (question.clone(), decision.clone(), None),
         };
         let background = self
             .section(IssueSectionName::Background)
@@ -389,6 +407,9 @@ impl IssueSections {
             }
             | IssueBody::Mission {
                 background: slot, ..
+            }
+            | IssueBody::Decision {
+                background: slot, ..
             } => {
                 *slot = background;
             }
@@ -396,13 +417,18 @@ impl IssueSections {
     }
 
     pub fn matches_type(&self, issue_type: &str) -> bool {
-        matches!(self.body, IssueBody::Mission { .. }) == (issue_type == "mission")
+        match issue_type {
+            "mission" => matches!(self.body, IssueBody::Mission { .. }),
+            "decision" => matches!(self.body, IssueBody::Decision { .. }),
+            _ => matches!(self.body, IssueBody::Issue { .. }),
+        }
     }
 
     pub fn required_names(&self) -> Vec<IssueSectionName> {
         match self.body {
             IssueBody::Issue { .. } => vec![IssueSectionName::Goal, IssueSectionName::DoneWhen],
             IssueBody::Mission { .. } => vec![IssueSectionName::Outcome],
+            IssueBody::Decision { .. } => vec![IssueSectionName::Question],
         }
     }
 
@@ -435,12 +461,19 @@ impl IssueSections {
             (IssueBody::Issue { goal, .. }, Goal) => Some(goal),
             (IssueBody::Issue { done_when, .. }, DoneWhen) => Some(done_when),
             (IssueBody::Issue { scope, .. }, Scope) => scope.as_deref(),
-            (IssueBody::Issue { context, .. }, Context) => context.as_deref(),
+            (IssueBody::Issue { context, .. } | IssueBody::Decision { context, .. }, Context) => {
+                context.as_deref()
+            }
+            (IssueBody::Decision { question, .. }, Question) => Some(question),
+            (IssueBody::Decision { options, .. }, Options) => options.as_deref(),
+            (IssueBody::Decision { decision, .. }, Decision) => decision.as_deref(),
             (IssueBody::Issue { unknowns, .. }, Unknowns) => unknowns.as_deref(),
             (IssueBody::Issue { design, .. }, Design) => design.as_deref(),
             (IssueBody::Mission { outcome, .. }, Outcome) => Some(outcome),
             (
-                IssueBody::Issue { background, .. } | IssueBody::Mission { background, .. },
+                IssueBody::Issue { background, .. }
+                | IssueBody::Mission { background, .. }
+                | IssueBody::Decision { background, .. },
                 Background,
             ) => background.as_deref(),
             (
@@ -482,6 +515,13 @@ impl IssueBody {
                 success_criteria: proof,
                 background: None,
             },
+            "decision" => IssueBody::Decision {
+                question: goal,
+                options: None,
+                decision: proof,
+                context: None,
+                background: None,
+            },
             _ => IssueBody::Issue {
                 goal,
                 done_when: proof.unwrap_or_else(|| "Done when was not specified.".to_string()),
@@ -506,6 +546,9 @@ impl IssueSectionName {
             Self::Unknowns => "Unknowns",
             Self::Design => "Design",
             Self::SuccessCriteria => "Success criteria",
+            Self::Question => "Question",
+            Self::Options => "Options",
+            Self::Decision => "Decision",
             Self::Background => "Background",
             Self::Notes => "Notes",
             Self::CloseReason => "Close Reason",

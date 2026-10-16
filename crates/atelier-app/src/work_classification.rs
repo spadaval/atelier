@@ -195,7 +195,14 @@ pub fn classify_issue(
             _ => WorkClassification::Backlog,
         }
     };
-    let classification = if classification != WorkClassification::Ready {
+    // Decisions are the human's by default: an open, unblocked decision has
+    // no start transition, but it is waiting on the human, not parked.
+    let open_decision = issue.issue_type == "decision"
+        && status_category.as_deref() == Some("todo")
+        && open_blockers.is_empty();
+    let classification = if open_decision {
+        WorkClassification::NeedsHuman
+    } else if classification != WorkClassification::Ready {
         classification
     } else if is_context(index, workflow_policy, issue) {
         WorkClassification::Context

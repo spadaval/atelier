@@ -11,6 +11,7 @@ Use these terms for the verified repo-native tracker defined by
 | Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
 | Parent | Any work item with direct children, one level deep; it owns their branch and closes after them. Replaced the epic type (atelier-9vq3). |
 | Validation item | Work dedicated to independently checking referenced acceptance claims. |
+| Decision | A `decision` record: a Question for the human, with Options, closed by `decide` once its Decision is recorded; it needs no branch. |
 | Blocker | A native dependency that prevents another item becoming executable or done. |
 | Branch owner | A parent for its children, or a standalone work item; recorded branch metadata identifies its work branch and base. |
 | Status | Repository-defined lifecycle state; its category supports work queries. Agent Factory decides the process. |

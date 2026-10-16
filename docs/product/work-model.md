@@ -25,6 +25,14 @@ the why. Missions have no parent or children; work links to missions through
 `advances`. Native blockers represent sequencing, not membership or proof.
 Evidence attachments represent proof; semantic links remain separate.
 
+Design questions are `decision` records (atelier-ox63). A decision states a
+Question, optionally Options, Context, and Background, and closes with the
+`decide` transition once its Decision section says what was decided and why.
+Decisions are the human's by default: an open decision is listed under
+"Needs a Human", never as agent-ready work. They need no branch, so they are
+filed, decided, and closed on the base branch as planning changes (see
+[planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
+
 Repositories with records from before this change run
 `atelier migrate epics --apply` once: it retypes each epic as a feature (or
 `--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,

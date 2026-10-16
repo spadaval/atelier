@@ -16,6 +16,8 @@ branch_policy:
 issue_types:
   bug:
     label: Bug
+  decision:
+    label: Decision
   feature:
     label: Feature
   mission:
@@ -139,6 +141,30 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire work that is no longer needed.
+  decision:
+    applies_to:
+    - decision
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      decide:
+        from: [todo, blocked]
+        to: done
+        required_fields: [close_reason]
+        description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
+        validators:
+        - decision.recorded
+      block:
+        from: [todo]
+        to: blocked
+        description: Record a blocker.
+      supersede:
+        from: [todo, blocked]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire a question that no longer needs deciding.
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -153,6 +179,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "lint.none_blocking",
     "git.worktree_clean",
     "work.terminal",
+    "decision.recorded",
     "shell.check",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
@@ -1837,7 +1864,7 @@ mod tests {
     }
 
     #[test]
-    fn starter_policy_has_objective_and_work_workflows_only() {
+    fn starter_policy_has_objective_work_and_decision_workflows_only() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             policy
@@ -1845,7 +1872,7 @@ mod tests {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            vec!["objective", "work"]
+            vec!["decision", "objective", "work"]
         );
         assert!(!policy.statuses.contains_key("publish_review"));
     }
