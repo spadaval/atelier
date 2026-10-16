@@ -18,9 +18,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T01:01:03.836138476+00:00"
+status: "done"
 title: "List only startable work in work ready"
-updated_at: "2026-10-16T00:56:26.559641076+00:00"
+updated_at: "2026-10-16T01:01:03.836138476+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-track
 ## Notes
 
 - 2026-10-15 [observation] From review finding atelier-imxz on atelier-ha6k: a todo-category status that cannot start (backlog, draft) is classified Blocked when it has open blockers, so parked work shows in work blocked. When reshaping the ready/blocked lists, classify non-startable statuses as backlog even with blockers, keeping the blocker count.
+
+## Close Reason
+
+Missions and parents with open children are a context classification: work ready, mission and parent views show them in a Parents and Missions panel, quiet ready lists and status's ready count leave them out, and a parent whose children are terminal is ready again. Also (finding atelier-imxz from ha6k) parked statuses with blockers stay backlog. Test: test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_context. Documented in work-model.md and work-view-ordering.md.
