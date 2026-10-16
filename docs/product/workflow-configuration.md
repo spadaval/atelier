@@ -30,8 +30,10 @@ Land it in one of two supported ways:
   the install and gates every commit after it.
 - **On a branch, through the repository's own review.** Run `atelier init`
   and any bundle import on a branch such as `chore/atelier-tracker`. While no
-  copy of the base has a workflow policy, `land` on that branch passes with a
-  note that names this path instead of `land_work_untraceable`. Merge it with
+  copy of the base has a workflow policy, `atelier land --install` on that
+  branch passes with a note that names this path; plain `land` refuses with
+  `land_install_unconfirmed` and points to the flag, because an install is
+  stated, not inferred from the branch's own policy (atelier-bibd). Merge it with
   the repository's usual review as one merge commit (merge the pull request on
   the host and pull, or `git merge --no-ff`), and push. On the base, the merge
   that brings the policy in counts as the install, together with the branch
