@@ -3,6 +3,9 @@ created_at: "2026-10-15T19:30:40.395944986+00:00"
 id: "atelier-ip9e"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-ip9e
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Avoid cascade missing-target errors after a duplicate record ID"
-updated_at: "2026-10-15T19:30:40.395944986+00:00"
+updated_at: "2026-10-16T19:11:30.656409862+00:00"
 ---
 
 ## Goal
