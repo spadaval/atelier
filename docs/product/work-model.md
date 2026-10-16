@@ -57,7 +57,9 @@ again, to be started and closed.
 
 Work that is recorded but not near-term sits in `backlog` until it is planned;
 parked statuses such as `backlog` and `draft` stay in backlog views even when
-they have open blockers.
+they have open blockers. A parked parent parks its children too (atelier-28mz,
+decided by Sumeet 2026-10-15): they show as backlog, and `atelier start` and
+the `start` transition refuse them until the parent is planned.
 A todo-category status alone does not establish readiness: ready work must
 expose a direct transition into active work and have no open blockers. A child
 also waits on its parent's blockers, since it works on the parent's branch:

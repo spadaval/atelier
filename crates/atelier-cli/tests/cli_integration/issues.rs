@@ -2374,15 +2374,7 @@ fn test_work_ready_selects_unblocked_child_without_draft_epic_context() {
 
     run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Parent epic",
-            "--issue-type",
-            "feature",
-            "--status",
-            "backlog",
-        ],
+        &["issue", "create", "Parent epic", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -2410,7 +2402,9 @@ fn test_work_ready_selects_unblocked_child_without_draft_epic_context() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "ready"]);
 
     assert!(success, "ready list failed: {stderr}");
-    assert!(!stdout.contains("Parent epic"));
+    // The parent shows only as context, after the ready work.
+    let (ready_part, context) = stdout.split_once("Parents and Missions").expect(&stdout);
+    assert!(!ready_part.contains("Parent epic") && context.contains("Parent epic"));
     assert!(stdout.contains("Ready child"));
     assert!(!stdout.contains("Sequenced child"));
 }
@@ -2422,15 +2416,7 @@ fn test_work_ready_still_shows_ready_children_when_another_issue_is_active() {
 
     run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Parent epic",
-            "--issue-type",
-            "feature",
-            "--status",
-            "backlog",
-        ],
+        &["issue", "create", "Parent epic", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -2470,8 +2456,9 @@ fn test_work_ready_still_shows_ready_children_when_another_issue_is_active() {
 
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success, "ready list failed: {stderr}");
-    // Global ready work excludes the backlog parent and retains its ready child.
-    assert!(!ready_out.contains("Parent epic"), "{ready_out}");
+    // Global ready work shows the parent only as context and keeps its ready child.
+    let ready_part = ready_out.split("Parents and Missions").next().unwrap();
+    assert!(!ready_part.contains("Parent epic"), "{ready_out}");
     assert!(ready_out.contains("Ready child"), "{ready_out}");
     assert!(!ready_out.contains("Sequenced child"), "{ready_out}");
     assert!(!ready_out.contains("Active item"), "{ready_out}");
@@ -2767,16 +2754,21 @@ fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
     );
     assert!(success, "scoped fixture create failed: {stderr}");
     let scoped_id = issue_id_by_title(dir.path(), "Scoped ready");
-    set_issue_status(dir.path(), &epic_id, "backlog");
     set_issue_status(dir.path(), &active_id, "in_progress");
     set_issue_status(dir.path(), &blocked_id, "blocked");
     set_issue_status(dir.path(), &done_id, "done");
 
     let mut ready_ids = vec![ready_id, scoped_id];
     ready_ids.sort();
-    // Rows sort by priority, then status (draft before backlog), then ID.
-    let backlog_ids = vec![mission_id, epic_id];
-    let expected = [vec![active_id], ready_ids, vec![blocked_id], backlog_ids].concat();
+    // The parent with an open child is context; the draft mission is backlog.
+    let expected = [
+        vec![active_id],
+        ready_ids,
+        vec![epic_id],
+        vec![blocked_id],
+        vec![mission_id],
+    ]
+    .concat();
 
     let (success, human, stderr) = run_atelier(dir.path(), &["work", "all"]);
     assert!(success, "human work all failed: {stderr}");
@@ -3210,15 +3202,7 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
     let mission = issue_id_by_title(dir.path(), "Count mission");
     run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Count epic",
-            "--issue-type",
-            "feature",
-            "--status",
-            "backlog",
-        ],
+        &["issue", "create", "Count epic", "--issue-type", "feature"],
     );
     let epic = issue_id_by_title(dir.path(), "Count epic");
     run_atelier(
@@ -3238,7 +3222,7 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", kind, id]);
         assert!(success, "{stderr}");
         assert!(quiet.contains("ready=24"), "{quiet}");
-        assert!(quiet.contains("backlog=1"), "{quiet}");
+        assert!(quiet.contains("context=1"), "{quiet}");
         let (success, human, stderr) = run_atelier(dir.path(), &["work", kind, id]);
         assert!(success, "{stderr}");
         assert!(human.contains("ready 24"), "{human}");
@@ -4749,4 +4733,51 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
     create(&["issue", "update", &task, "--issue-type", "task"]);
     let record = fs::read_to_string(canonical_issue_path(dir.path(), &task)).unwrap();
     assert!(record.contains("Options:\n\n- origin"), "{record}");
+}
+
+#[test]
+fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let create = |args: &[&str]| run_atelier(dir.path(), args).1.trim().to_string();
+    let parent = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Later increment",
+        "--status",
+        "backlog",
+    ]);
+    let child = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Its first slice",
+        "--parent",
+        &parent,
+    ]);
+
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(!ready.lines().any(|line| line == child), "{ready}");
+    let (_, all, _) = run_atelier(dir.path(), &["work", "all"]);
+    let backlog = all.find("Backlog Work").expect(&all);
+    assert!(all[backlog..].contains("Its first slice"), "{all}");
+
+    commit_all(dir.path(), "plan a later increment");
+    for args in [
+        vec!["start", child.as_str()],
+        vec!["issue", "transition", &child, "start"],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(!success, "{args:?} must refuse a parked child");
+        assert!(
+            stderr.contains(&format!("parent {parent} is parked in 'backlog'")),
+            "{stderr}"
+        );
+    }
+
+    create(&["-q", "issue", "transition", &parent, "plan"]);
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(ready.lines().any(|line| line == child), "{ready}");
 }

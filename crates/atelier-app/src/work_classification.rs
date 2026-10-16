@@ -166,7 +166,8 @@ pub fn classify_issue(
         .and_then(|policy| policy.status_category(&issue.status))
         .map(str::to_string);
     let open_blockers = open_blockers(index, workflow_policy, &issue.id)?;
-    let retired = terminal_ancestor(index, workflow_policy, issue)?.is_some();
+    let retired = terminal_ancestor(index, workflow_policy, issue)?.is_some()
+        || parked_parent(index, workflow_policy, issue)?.is_some();
 
     let classification = if status_category.as_deref() == Some("done") {
         WorkClassification::Done
@@ -239,6 +240,23 @@ fn is_context(
                 })
             })
         })
+}
+
+/// The parent, when it is parked in a todo-category status it cannot start
+/// from (such as `backlog`): its children are parked with it (atelier-28mz,
+/// decided by Sumeet 2026-10-15) until the parent is planned.
+pub fn parked_parent(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<Option<String>> {
+    let (Some(policy), Some(parent_id)) = (workflow_policy, issue.parent_id.as_deref()) else {
+        return Ok(None);
+    };
+    let parent = index.require_issue(parent_id)?;
+    let parked = policy.status_category(&parent.status) == Some("todo")
+        && !policy.can_enter_active(&parent.issue_type, &parent.status)?;
+    Ok(parked.then_some(parent.id))
 }
 
 /// Returns the nearest done-category hierarchy ancestor, if one exists.

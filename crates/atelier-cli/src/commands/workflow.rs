@@ -242,6 +242,15 @@ fn active_transition_ancestor_blocker(
     {
         return Ok(None);
     }
+    if let Some(parent_id) =
+        atelier_app::work_classification::parked_parent(index, Some(policy), issue)?
+    {
+        let parent = index.require_issue(&parent_id)?;
+        return Ok(Some(format!(
+            "parent {parent_id} is parked in '{}', so its children are parked too; plan the parent first (see `atelier issue transition {parent_id}`)",
+            parent.status
+        )));
+    }
     Ok(
         atelier_app::work_classification::terminal_ancestor(index, Some(policy), issue)?.map(|ancestor_id| {
             format!(
