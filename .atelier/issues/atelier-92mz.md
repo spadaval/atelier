@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T18:12:04.269169926+00:00"
+status: "done"
 title: "Resync the Agent Factory skill with the adoption changes"
-updated_at: "2026-10-16T18:09:42.540241396+00:00"
+updated_at: "2026-10-16T18:12:04.269169926+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ The upstream skill in spadaval/.agents describes the merged behaviour, `.agents/
 ## Context
 
 Filed 2026-10-15 while implementing the adoption records. The vendored copy must not be edited locally.
+
+## Close Reason
+
+Upstream skill (spadaval/.agents 80bf9b2) renames epics to increments recorded as parent issues, uses the current Goal/Done when/Unknowns/Design/Background and mission Outcome/Success criteria/Background shapes, adds decision records, needs-human, backlog/defer/plan, issue update --body for all types, --strategy, records-only base commits, and a docs/strategies/<mission-slug>.md default. Vendored copy resynced verbatim; diff -r empty.
