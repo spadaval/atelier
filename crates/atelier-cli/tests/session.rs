@@ -2656,6 +2656,92 @@ fn approval_from_before_a_clean_base_merge_lands_on_both_branches() {
     assert!(output.contains("Base commits:"), "{output}");
 }
 #[test]
+fn base_land_retains_claims_a_merge_tip_brings_in_through_its_other_parent() {
+    let f = Fixture::new();
+    let approve = |id: &str| {
+        ok(
+            f.path(),
+            &[
+                "review",
+                "approve",
+                id,
+                "--identity",
+                "Reviewer",
+                "Independent review",
+            ],
+        );
+        commit(f.path(), "approval");
+    };
+    // A second owner branches from the base before the first one merges.
+    git(f.path(), &["switch", "-q", "main"]);
+    let second = ok(f.path(), &["-q", "issue", "create", "Second owner"]);
+    commit(f.path(), "plan the second owner");
+    ok(f.path(), &["start", &second]);
+    fs::write(f.path().join("second"), "second code\n").unwrap();
+    commit(f.path(), "second owner's code");
+    f.terminal(&second);
+    approve(&second);
+
+    // The first owner merges with a fixed FIX NOW finding in its history.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Code needs a fix",
+        ],
+    );
+    commit(f.path(), "finding");
+    fs::write(f.path().join("code"), "fixed code\n").unwrap();
+    commit(f.path(), "fix");
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix,
+            "Fix verified",
+        ],
+    );
+    commit(f.path(), "disposition");
+    f.terminal(&f.id);
+    approve(&f.id);
+    ok(f.path(), &["merge", &f.id]);
+    // Other code lands on the base after the first owner's approval.
+    fs::write(f.path().join("later"), "later base code\n").unwrap();
+    commit(f.path(), "later code on the base");
+
+    // The second owner merges the base in last, so the base's new tip is a
+    // merge whose first parent is the second owner's side.
+    git(f.path(), &["switch", "-q", &format!("task/{second}")]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(f.path(), &["merge", &second]);
+    git(f.path(), &["switch", "-q", "main"]);
+    assert_eq!(
+        git(f.path(), &["rev-list", "--parents", "-n", "1", "HEAD"])
+            .split(' ')
+            .count(),
+        3,
+        "the base tip is a merge commit"
+    );
+    ok(f.path(), &["land"]);
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

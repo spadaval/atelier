@@ -44,7 +44,10 @@ and mission strategies may be committed there without review (see
 Landing also checks completed claims elsewhere in the checkout. Unchanged
 integrated claims retain proof and independent acceptance that were valid when
 completion was claimed. Historical acceptance preserves the original work's
-author scope and requires immutable review history.
+author scope and requires immutable review history. Without an owner, a claim
+counts as unchanged when any parent of HEAD already has it, so a merge tip, such
+as a branch that merged the base in last, keeps the claims it brings in through
+its other parents (atelier-kqt9).
 
 ## Claude Code hooks
 

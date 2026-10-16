@@ -361,8 +361,26 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     let claim_base = branch_base
         .clone()
         .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.clone()));
+    // Without a branch base, a claim is retained when any parent of HEAD
+    // already has it: a merge tip, such as a branch that merged the base in
+    // last, brings claims in through its other parents (atelier-kqt9).
+    let claim_parents = if branch_base.is_some() {
+        vec![claim_base.clone()]
+    } else {
+        let parents = git::text(repo, &["rev-list", "--parents", "-n", "1", &head])?
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if parents.is_empty() {
+            vec![claim_base.clone()]
+        } else {
+            parents
+        }
+    };
     let mut current = std::collections::BTreeSet::new();
-    let mut historical = std::collections::BTreeSet::new();
+    let mut historical =
+        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
     for issue in index.issues().filter(|issue| !owned.contains(&issue.id)) {
         if !source
             .policy
@@ -370,25 +388,36 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         {
             continue;
         }
-        let before = read.issue_at(&claim_base, &issue.id).ok();
-        if before.as_ref().is_some_and(|before| {
-            index.issue_record(&issue.id).is_some_and(|after| {
-                atelier_app::evidence_freshness::completion_claim_matches(before, after)
+        let retained_at = claim_parents.iter().find(|parent| {
+            read.issue_at(parent, &issue.id).ok().is_some_and(|before| {
+                index.issue_record(&issue.id).is_some_and(|after| {
+                    atelier_app::evidence_freshness::completion_claim_matches(&before, after)
+                })
             })
-        }) {
-            historical.insert(issue.id.clone());
-        } else {
-            current.insert(issue.id.clone());
+        });
+        match retained_at {
+            Some(parent) => {
+                historical
+                    .entry(parent.clone())
+                    .or_default()
+                    .insert(issue.id.clone());
+            }
+            None => {
+                current.insert(issue.id.clone());
+            }
         }
     }
-    let mut nodes = review_gate::evaluate_claims(
-        &index,
-        &mut read,
-        &source.policy,
-        &claim_base,
-        historical,
-        true,
-    )?;
+    let mut nodes = Vec::new();
+    for (parent, ids) in historical {
+        nodes.extend(review_gate::evaluate_claims(
+            &index,
+            &mut read,
+            &source.policy,
+            &parent,
+            ids,
+            true,
+        )?);
+    }
     nodes.extend(review_gate::evaluate_claims(
         &index,
         &mut read,

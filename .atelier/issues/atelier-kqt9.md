@@ -3,6 +3,9 @@ created_at: "2026-10-16T19:14:57.806198561+00:00"
 id: "atelier-kqt9"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-kqt9
 priority: "P1"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Land on the base misreads claims when HEAD is a merge commit"
-updated_at: "2026-10-16T19:14:57.806198561+00:00"
+updated_at: "2026-10-16T19:15:24.571957734+00:00"
 ---
 
 ## Goal
