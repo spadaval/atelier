@@ -909,6 +909,7 @@ fn issue_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonica
         let protection = active_descendants
             .get(&issue.id)
             .map(|descendant| format!("terminal record has active descendant {descendant}"))
+            .or_else(|| kept_content(&tracker.index, &issue))
             .or_else(|| {
                 crossing_link_reason(
                     links,
@@ -930,6 +931,21 @@ fn issue_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonica
     }
     candidates.sort_by(|left, right| left.id.cmp(&right.id));
     candidates
+}
+
+/// Decisions and research outlive routine work (atelier-r7cd, decided by
+/// Sumeet 2026-10-15): prune keeps decision records and records with a
+/// Decision or Background section, which Git history alone would bury.
+fn kept_content(index: &RecordIndex, issue: &Issue) -> Option<String> {
+    use atelier_core::IssueSectionName::{Background, Decision};
+    let record = index.issue_record(&issue.id)?;
+    if issue.issue_type == "decision" || record.sections.section(Decision).is_some() {
+        Some("keeps decision content".to_string())
+    } else if record.sections.section(Background).is_some() {
+        Some("keeps research content (Background)".to_string())
+    } else {
+        None
+    }
 }
 
 fn active_descendants_by_ancestor(

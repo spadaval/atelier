@@ -4836,3 +4836,65 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
     let ready = create(&["--quiet", "work", "ready"]);
     assert!(ready.lines().any(|line| line == spike), "{ready}");
 }
+
+#[test]
+fn test_size_labels_are_validated_shown_and_replaced() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, id, stderr) = run_atelier(
+        dir.path(),
+        &["-q", "issue", "create", "Sized work", "-l", "size-m"],
+    );
+    assert!(success, "{stderr}");
+    let id = id.trim().to_string();
+    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &id]);
+    assert!(show.contains("Size:     M"), "{show}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &id, "-l", "size-xl"]);
+    assert!(success, "{stderr}");
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &id)).unwrap();
+    assert!(
+        record.contains("\"size-xl\"") && !record.contains("\"size-m\""),
+        "{record}"
+    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    // Bad sizes are refused when added, and sizes are normalized to lowercase.
+    for args in [
+        vec!["issue", "create", "Badly sized", "-l", "size-huge"],
+        vec![
+            "issue",
+            "create",
+            "Two sizes",
+            "-l",
+            "size-s",
+            "-l",
+            "size-l",
+        ],
+        vec!["issue", "update", id.as_str(), "-l", "size-huge"],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(
+            !success && stderr.contains("size-s, size-m, size-l, size-xl"),
+            "{args:?}: {stderr}"
+        );
+    }
+    let (success, upper, stderr) = run_atelier(
+        dir.path(),
+        &["-q", "issue", "create", "Shouty", "-l", "size-L"],
+    );
+    assert!(success, "{stderr}");
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), upper.trim())).unwrap();
+    assert!(record.contains("\"size-l\""), "{record}");
+
+    // A hand-edited bad size is caught by check.
+    edit_canonical_issue(dir.path(), upper.trim(), |markdown| {
+        markdown.replace("\"size-l\"", "\"size-huge\"")
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        !success && output.contains("size-huge is not one of"),
+        "{output}"
+    );
+}

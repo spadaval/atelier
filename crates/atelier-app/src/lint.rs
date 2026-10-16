@@ -5,6 +5,37 @@ use atelier_records::{issue_record_path, CanonicalIssueRecord, IssueSectionName}
 
 use crate::record_index::{read_record_files, RecordIndex};
 
+/// Reserved size labels (atelier-b7hb): `size-s`, `size-m`, `size-l`,
+/// `size-xl`, the form adopters already use.
+pub const SIZE_LABEL_PREFIX: &str = "size-";
+pub const SIZES: [&str; 4] = ["s", "m", "l", "xl"];
+
+/// Normalizes and checks the size labels a command adds: sizes are
+/// lowercase, one of the four, and a record has at most one.
+pub fn size_labels(labels: &[String]) -> anyhow::Result<Vec<String>> {
+    let mut sizes = 0;
+    let labels = labels
+        .iter()
+        .map(|label| match label.strip_prefix(SIZE_LABEL_PREFIX) {
+            Some(size) => {
+                let size = size.to_ascii_lowercase();
+                if !SIZES.contains(&size.as_str()) {
+                    anyhow::bail!(
+                        "{label} is not a size; use one of size-s, size-m, size-l, size-xl"
+                    );
+                }
+                sizes += 1;
+                Ok(format!("{SIZE_LABEL_PREFIX}{size}"))
+            }
+            None => Ok(label.clone()),
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    if sizes > 1 {
+        anyhow::bail!("a record has one size; give one of size-s, size-m, size-l, size-xl");
+    }
+    Ok(labels)
+}
+
 pub struct LintRequest<'a> {
     pub state_dir: &'a Path,
     pub issue_ref: Option<&'a str>,
@@ -133,6 +164,23 @@ pub fn issue_findings<'a>(
         };
         if issue.title.trim().is_empty() {
             findings.push(finding("Issue title must not be empty".to_string()));
+        }
+        // Size is the reserved label size-s|m|l|xl, at most one per record.
+        let sizes = record
+            .labels
+            .iter()
+            .filter_map(|label| label.strip_prefix(SIZE_LABEL_PREFIX))
+            .collect::<Vec<_>>();
+        if let Some(size) = sizes.iter().find(|size| !SIZES.contains(size)) {
+            findings.push(finding(format!(
+                "Size label size-{size} is not one of size-s, size-m, size-l, size-xl"
+            )));
+        }
+        if sizes.len() > 1 {
+            findings.push(finding(format!(
+                "Issue has {} size labels; keep one of size-s, size-m, size-l, size-xl",
+                sizes.len()
+            )));
         }
         if let Some(policy) = &workflow_policy {
             if let Err(error) =

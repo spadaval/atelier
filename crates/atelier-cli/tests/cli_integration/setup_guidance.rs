@@ -2617,3 +2617,110 @@ fn blocked_start_names_the_record_type_not_mission() {
     );
     assert!(!output.contains("mission"), "{output}");
 }
+
+#[test]
+fn test_prune_keeps_decision_and_research_records_and_check_explains_pruned_links() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let create = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stderr}");
+        stdout.trim().to_string()
+    };
+    let plain = create(&["-q", "issue", "create", "Routine work"]);
+    let research = create(&[
+        "-q", "issue", "create", "Toolbox survey", "--body",
+        "## Goal\n\nSurvey.\n\n## Done when\n\nSurveyed.\n\n## Background\n\nTool-by-tool findings.",
+    ]);
+    let decision = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Pick the signer",
+        "--issue-type",
+        "decision",
+        "--body",
+        "## Question\n\nWhich signer?\n\n## Decision\n\nSigstore.",
+    ]);
+    for id in [&plain, &research, &decision] {
+        make_issue_terminal_before_retention(dir.path(), id, 30);
+    }
+    commit_all(dir.path(), "old terminal records");
+
+    let (success, preview, stderr) = run_atelier(dir.path(), &["prune"]);
+    assert!(success, "{stderr}");
+    for (id, expected) in [
+        (&research, "keeps research content (Background)"),
+        (&decision, "keeps decision content"),
+    ] {
+        let line = preview
+            .lines()
+            .find(|line| line.contains(id.as_str()))
+            .expect(&preview);
+        assert!(
+            line.contains("protected") && line.contains(expected),
+            "{line}"
+        );
+    }
+    let line = preview
+        .lines()
+        .find(|line| line.contains(plain.as_str()))
+        .expect(&preview);
+    assert!(line.contains("eligible"), "{line}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["prune", "--apply"]);
+    assert!(success, "{stderr}");
+    assert!(!canonical_issue_path(dir.path(), &plain).exists());
+    assert!(canonical_issue_path(dir.path(), &research).exists());
+    commit_all(dir.path(), "prune routine work");
+    let pruned_in = git_rev_parse(dir.path(), "HEAD");
+
+    // A record from elsewhere that still links the pruned record gets a
+    // check error naming the prune and the recovery.
+    let late = create(&["-q", "issue", "create", "Late link"]);
+    edit_canonical_issue(dir.path(), &late, |markdown| {
+        markdown.replace(
+            "  relates: []",
+            &format!("  relates:\n  - kind: \"issue\"\n    id: \"{plain}\"\n    type: \"related\""),
+        )
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    let output = format!("{stdout}{stderr}");
+    assert!(!success, "{output}");
+    assert!(
+        output.contains(&format!(
+            "{plain} was deleted in commit {}",
+            &pruned_in[..7]
+        )) && output.contains(&format!(
+            "git restore --source={}^ -- ':/.atelier/issues/{plain}.md'",
+            &pruned_in[..7]
+        )),
+        "{output}"
+    );
+    // The restore command works from a subdirectory too.
+    let subdir = dir.path().join("crates");
+    fs::create_dir_all(&subdir).unwrap();
+    let status = std::process::Command::new("git")
+        .current_dir(&subdir)
+        .args([
+            "restore",
+            &format!("--source={}^", &pruned_in[..7]),
+            "--",
+            &format!(":/.atelier/issues/{plain}.md"),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    // A record still committed but missing from the checkout gets git restore,
+    // and commands that load the records lightly explain it the same way.
+    commit_all(dir.path(), "restore the record and keep the link");
+    fs::remove_file(canonical_issue_path(dir.path(), &plain)).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["review", "list"]);
+    assert!(
+        !success && stderr.contains("is committed at HEAD but missing"),
+        "{stderr}"
+    );
+}
