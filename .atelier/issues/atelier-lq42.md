@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T19:02:04.683087635+00:00"
+status: "done"
 title: "Supersede succeeds on a child of a blocked parent, then land rejects it"
-updated_at: "2026-10-16T19:00:35.670668538+00:00"
+updated_at: "2026-10-16T19:02:04.683087635+00:00"
 ---
 
 ## Goal
@@ -27,3 +28,7 @@ updated_at: "2026-10-16T19:00:35.670668538+00:00"
 ## Done when
 
 A test supersedes a child of a blocked parent, and `land` then passes. If the decision is that land should keep rejecting it, the transition refuses instead, with the same message.
+
+## Close Reason
+
+land no longer applies blockers.transitive_none_open to superseded claims, matching the supersede transition, which checks no blockers; superseded work will not happen, as the evidence gate already assumed. Test: superseding_a_child_of_a_blocked_parent_lands (failed before the fix with the parent's blocker). Documented in work-model.md.
