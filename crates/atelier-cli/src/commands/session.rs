@@ -481,7 +481,32 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .map(|node| format!("{} {}: {}", node.target, node.check, node.reason))
         .collect::<Vec<_>>();
     if !failed.is_empty() {
-        bail!("land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.{}", failed.join("\n"), behind_note.map(|note| format!("\n{note}")).unwrap_or_default());
+        // Uncommitted code makes passing proof stale; name it (atelier-749l).
+        let stale_proof = nodes.iter().any(|node| {
+            !node.passed && node.reason.contains("does not prove the current checkout")
+        });
+        let dirty_note = (stale_proof && !initial_paths.is_empty()).then(|| {
+            const SHOWN: usize = 5;
+            let mut listed = initial_paths
+                .iter()
+                .take(SHOWN)
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if initial_paths.len() > SHOWN {
+                listed.push_str(&format!(" and {} more", initial_paths.len() - SHOWN));
+            }
+            format!("Uncommitted changes make passing proof stale: {listed}. Commit or remove them, or rerun the check after committing.")
+        });
+        bail!(
+            "land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.{}",
+            failed.join("\n"),
+            [dirty_note, behind_note]
+                .into_iter()
+                .flatten()
+                .map(|note| format!("\n{note}"))
+                .collect::<String>()
+        );
     }
     // Arbitrary policy checks run outside the lock, as in merge. Fence their
     // result against cooperative writers and child commands that changed state.

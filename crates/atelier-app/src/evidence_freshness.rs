@@ -171,7 +171,17 @@ fn evaluate_issue_gate(
 
 /// A recorded fail newer than every explicit pass blocks successful completion.
 pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Result<Option<String>> {
-    EvidenceReadContext::new(repo).newest_failure(index, issue_id, true)
+    Ok(EvidenceReadContext::new(repo)
+        .newest_failure(index, issue_id, true)?
+        .map(|failure| failure.id))
+}
+
+/// A failing evidence record that no current pass supersedes.
+pub(crate) struct NewestFailure {
+    pub(crate) id: String,
+    /// A newer pass that does not prove the current checkout or commit,
+    /// such as one made stale by uncommitted changes (atelier-749l).
+    pub(crate) stale_pass: Option<String>,
 }
 
 impl EvidenceReadContext<'_> {
@@ -180,12 +190,13 @@ impl EvidenceReadContext<'_> {
         index: &RecordIndex,
         issue_id: &str,
         fresh: bool,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<NewestFailure>> {
         let issue = index
             .issue_record(issue_id)
             .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
         let mut newest_fail = None;
         let mut newest_pass = None;
+        let mut newest_stale_pass: Option<(_, String)> = None;
         for link in index.list_record_links("issue", issue_id)? {
             if link.relation_type != "validates" {
                 continue;
@@ -203,11 +214,15 @@ impl EvidenceReadContext<'_> {
                 EvidenceResult::Fail if newest_fail.as_ref().is_none_or(|old| &candidate > old) => {
                     newest_fail = Some(candidate)
                 }
-                EvidenceResult::Pass
-                    if newest_pass.as_ref().is_none_or(|old| &candidate > old)
-                        && self.proof_matches(issue, record, fresh).unwrap_or(false) =>
-                {
-                    newest_pass = Some(candidate)
+                EvidenceResult::Pass if newest_pass.as_ref().is_none_or(|old| &candidate > old) => {
+                    if self.proof_matches(issue, record, fresh).unwrap_or(false) {
+                        newest_pass = Some(candidate)
+                    } else if newest_stale_pass
+                        .as_ref()
+                        .is_none_or(|old| &candidate > old)
+                    {
+                        newest_stale_pass = Some(candidate)
+                    }
                 }
                 _ => {}
             }
@@ -218,7 +233,12 @@ impl EvidenceReadContext<'_> {
                     .as_ref()
                     .is_none_or(|passed| passed.0 <= failed.0)
             })
-            .map(|(_, id)| id))
+            .map(|(failed_at, id)| NewestFailure {
+                id,
+                stale_pass: newest_stale_pass
+                    .filter(|(passed_at, _)| *passed_at > failed_at)
+                    .map(|(_, id)| id),
+            }))
     }
 
     fn proof_matches(
