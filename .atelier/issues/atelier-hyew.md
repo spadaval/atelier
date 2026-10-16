@@ -3,6 +3,9 @@ created_at: "2026-10-16T18:49:01.640765109+00:00"
 id: "atelier-hyew"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-hyew
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Harden the base done-claim check"
-updated_at: "2026-10-16T18:49:01.640765109+00:00"
+updated_at: "2026-10-16T20:36:40.006532957+00:00"
 ---
 
 ## Goal
