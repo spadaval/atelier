@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T20:45:39.035725802+00:00"
+status: "done"
 title: "Editing a done record's prose reopens its completion claim"
-updated_at: "2026-10-16T20:45:24.171628907+00:00"
+updated_at: "2026-10-16T20:45:39.035725802+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ Decide which sections are part of a completion claim (Goal and Done when, plus t
 ## Context
 
 Found 2026-10-16. crates/atelier-app/src/evidence_freshness.rs acceptance_matches.
+
+## Close Reason
+
+Chose the documented rule: a done record's body is part of its completion claim; issue update --body and bundle updates already refuse it (issue_body_done, covered by the existing issues.rs tests), and work-model.md now says a hand edit reopens the claim, so corrections, including Design or Background, go in a follow-up record. Narrowing the claim to Goal and Done when would change approval and evidence freshness semantics, which is not needed.
