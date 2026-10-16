@@ -2200,6 +2200,7 @@ fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() 
 
     // Starting and closing work on the base skips its branch and review.
     let work = ok(f.path(), &["-q", "issue", "create", "Branchless work"]);
+    commit(f.path(), "file work on the base");
     ok(f.path(), &["issue", "transition", &work, "start"]);
     ok(
         f.path(),
@@ -2214,7 +2215,112 @@ fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() 
                 "land_base_done_claim: commit {} on main marks {work} done",
                 &head[..8]
             ))
+            && output.contains(&format!("git revert {}", &head[..8]))
             && output.contains(&format!("atelier start {work}")),
+        "{output}"
+    );
+
+    // Following the advice: revert the claim, then start the work.
+    git(f.path(), &["revert", "--no-edit", "HEAD"]);
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["start", &work]);
+    git(f.path(), &["switch", "-q", "main"]);
+
+    // A mission closes on the base.
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Outcome",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShipped.\n\n## Success criteria\n\n- It works.",
+        ],
+    );
+    commit(f.path(), "file a mission");
+    for transition in ["ready", "start"] {
+        ok(f.path(), &["issue", "transition", &mission, transition]);
+    }
+    ok(
+        f.path(),
+        &["issue", "transition", &mission, "close", "--reason", "met"],
+    );
+    commit(f.path(), "close the mission on the base");
+    ok(f.path(), &["land"]);
+
+    // A done claim that reached the upstream through review arrives in a
+    // pull merge; the merge does not claim it.
+    let remote = upstream.path().to_str().unwrap();
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    ok(other.path(), &["issue", "transition", &f.id, "start"]);
+    ok(
+        other.path(),
+        &[
+            "issue",
+            "transition",
+            &f.id,
+            "close",
+            "--reason",
+            "merged elsewhere",
+        ],
+    );
+    commit(other.path(), "done claim that reached the upstream");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+    ok(f.path(), &["-q", "issue", "create", "Local planning"]);
+    commit(f.path(), "record-only planning on the base");
+    git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
+    ok(f.path(), &["land"]);
+}
+#[test]
+fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    // A base from before atelier-9vq3, with a finished epic.
+    let policy_path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&policy_path)
+        .unwrap()
+        .replace(
+            "  bug:\n    label: Bug\n",
+            "  bug:\n    label: Bug\n  epic:\n    label: Epic\n",
+        )
+        .replace(
+            "    applies_to:\n    - mission\n",
+            "    applies_to:\n    - mission\n    - epic\n",
+        );
+    fs::write(&policy_path, policy).unwrap();
+    let epic = "atelier-ep1c";
+    fs::write(
+        f.path().join(format!(".atelier/issues/{epic}.md")),
+        format!(
+            "---\ncreated_at: \"2026-10-01T00:00:00+00:00\"\nid: \"{epic}\"\nissue_type: \"epic\"\nlabels: []\npriority: \"P2\"\nrelationships:\n  blocks: []\n  children: []\n  attachments: []\n  relates: []\nschema: \"atelier.issue\"\nschema_version: 2\nstatus: \"done\"\ntitle: \"Old epic\"\nupdated_at: \"2026-10-01T00:00:00+00:00\"\n---\n\n## Outcome\n\nThe increment works.\n\n## Close Reason\n\nShipped.\n"
+        ),
+    )
+    .unwrap();
+    commit(f.path(), "a base with a finished epic");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    ok(f.path(), &["migrate", "epics", "--apply"]);
+    commit(f.path(), "migrate epics on the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && !output.contains("land_base_done_claim")
+            && output.contains("land_base_unreviewed"),
         "{output}"
     );
 }
