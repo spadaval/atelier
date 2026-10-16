@@ -3,6 +3,9 @@ created_at: "2026-10-15T19:31:01.984457690+00:00"
 id: "atelier-749l"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-749l
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name dirty files when land evidence freshness fails"
-updated_at: "2026-10-15T19:31:01.984457690+00:00"
+updated_at: "2026-10-16T19:03:26.703162487+00:00"
 ---
 
 ## Goal

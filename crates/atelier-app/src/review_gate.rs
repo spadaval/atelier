@@ -701,12 +701,16 @@ fn completion_claims(
             continue;
         }
         if let Some(failure) = read.newest_failure(index, id, !historical)? {
+            let reason = match &failure.stale_pass {
+                Some(pass) => format!("newer failing evidence {}; the later pass {pass} does not prove the current checkout (uncommitted changes or later commits make it stale)", failure.id),
+                None => format!("newer failing evidence {}", failure.id),
+            };
             nodes.push(gate(
                 id,
                 "evidence.no_newer_failure",
                 false,
-                format!("newer failing evidence {failure}"),
-                vec![failure],
+                reason,
+                vec![failure.id],
             ));
         }
     }

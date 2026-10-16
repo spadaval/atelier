@@ -532,6 +532,38 @@ fn active_epic_hands_off_completed_children_without_batch_approval() {
     f.refusal("findings.disposed");
 }
 #[test]
+fn land_names_uncommitted_files_that_make_a_newer_pass_stale() {
+    let f = Fixture::new();
+    let child = epic_child(&f);
+    f.terminal(&child);
+    for result in ["fail", "pass"] {
+        ok(
+            f.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{child}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                "Done claim proof",
+            ],
+        );
+        commit(f.path(), &format!("{result}ing proof"));
+    }
+    ok(f.path(), &["land", &f.id]);
+    fs::write(f.path().join("code"), "uncommitted change\n").unwrap();
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass
+            && output.contains("does not prove the current checkout")
+            && output.contains("Uncommitted changes make passing proof stale: code."),
+        "{output}"
+    );
+}
+#[test]
 fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fields() {
     for violation in ["dependency", "failure", "required_field"] {
         let f = Fixture::new();
