@@ -193,20 +193,52 @@ pub(crate) fn check_base_commits(
         .map(|strategy| normalized(Path::new(&strategy.path)))
         .collect::<BTreeSet<_>>();
     let mut checked = 0;
+    // The install predates the gates: the first commit on the base's
+    // first-parent line that adds the policy, with everything it merges in
+    // (an install branch and its review fixes).
+    let has_policy = |commit: &str| {
+        git_freshness::git_output(
+            repo,
+            &[
+                "ls-tree",
+                commit,
+                "--",
+                workflow_policy::WORKFLOW_POLICY_PATH,
+            ],
+        )
+        .is_ok_and(|listed| !listed.is_empty())
+    };
+    let mut installed = BTreeSet::new();
+    let first_parent = text(
+        repo,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--reverse",
+            tip,
+            "--not",
+            &upstream,
+        ],
+    )?;
+    if let Some(install) = first_parent.lines().find(|commit| {
+        has_policy(commit)
+            && !resolve(repo, &format!("{commit}^")).is_ok_and(|parent| has_policy(&parent))
+    }) {
+        installed.insert(install.to_owned());
+        let parent = format!("{install}^");
+        let mut merged = vec!["rev-list", install, "--not", upstream.as_str()];
+        if resolve(repo, &parent).is_ok() {
+            merged.push(&parent);
+        }
+        installed.extend(text(repo, &merged)?.lines().map(str::to_owned));
+    }
     for commit in &unreviewed {
+        if installed.contains(commit) {
+            continue;
+        }
+        // Commits made before the policy existed predate the gates too.
         let parent = format!("{commit}^");
-        if resolve(repo, &parent).is_err()
-            || git_freshness::git_output(
-                repo,
-                &[
-                    "ls-tree",
-                    &parent,
-                    "--",
-                    workflow_policy::WORKFLOW_POLICY_PATH,
-                ],
-            )?
-            .is_empty()
-        {
+        if !resolve(repo, &parent).is_ok_and(|parent| has_policy(&parent)) {
             continue;
         }
         checked += 1;

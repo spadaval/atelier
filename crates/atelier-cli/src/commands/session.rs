@@ -225,7 +225,8 @@ fn check_traceability(
 /// Tracker files (anything under `.atelier/`) a branch changes relative to
 /// the base. Every local and remote-tracking copy of the base counts, so a
 /// stale local base cannot attribute upstream changes to the branch.
-fn tracker_changes_since(repo: &Path, base: &str) -> Result<Vec<std::path::PathBuf>> {
+/// `None` when the base has no Atelier policy yet, so the branch installs it.
+fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path::PathBuf>>> {
     let refs = git::text(
         repo,
         &[
@@ -248,6 +249,22 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Vec<std::path::PathB
     if refs.is_empty() {
         bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base} or run atelier start <id>");
     }
+    // No copy of the base has a workflow policy yet: this branch installs
+    // Atelier, and there are no gates on the base to land it through.
+    if refs.iter().all(|reference| {
+        git_freshness::git_output(
+            repo,
+            &[
+                "ls-tree",
+                reference,
+                "--",
+                workflow_policy::WORKFLOW_POLICY_PATH,
+            ],
+        )
+        .is_ok_and(|listed| listed.is_empty())
+    }) {
+        return Ok(None);
+    }
     let mut changed: Option<Vec<std::path::PathBuf>> = None;
     for reference in refs {
         let Ok(fork) = git::text(repo, &["merge-base", reference, "HEAD"]) else {
@@ -265,7 +282,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Vec<std::path::PathB
             None => paths,
         });
     }
-    changed.with_context(|| {
+    changed.map(Some).with_context(|| {
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run atelier start <id> from {base}")
     })
 }
@@ -409,14 +426,27 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         } else {
             format!("branch {branch}")
         };
-        let changed = tracker_changes_since(repo, base)?;
-        if !changed.is_empty() {
-            bail!(
-                "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {}; run atelier start <id> to give the work an owner branch, or move the tracker changes onto one",
-                changed.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", ")
-            );
+        match tracker_changes_since(repo, base)? {
+            None => lines.push(format!(
+                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or git merge --no-ff), then start further work with atelier start <id>."
+            )),
+            Some(changed) if !changed.is_empty() => {
+                const SHOWN: usize = 5;
+                let mut listed = changed
+                    .iter()
+                    .take(SHOWN)
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if changed.len() > SHOWN {
+                    listed.push_str(&format!(" and {} more", changed.len() - SHOWN));
+                }
+                bail!(
+                    "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; run atelier start <id> to give the work an owner branch, or move the tracker changes onto one"
+                );
+            }
+            Some(_) => lines.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
         }
-        lines.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land."));
     }
     let failed = nodes
         .iter()
