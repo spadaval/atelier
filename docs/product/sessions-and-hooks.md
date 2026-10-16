@@ -20,6 +20,10 @@ approval or full scope completion; report those changes honestly. Its done
 child claims still need their applicable completion checks. A terminal owner
 requires a clean checkout and the full merge gates. An explicit child ID
 resolves its owner; otherwise ownership is inferred from the current branch.
+When the base has commits the branch does not, `land` checks the work against
+the point where it left the base and adds a note to merge the base in (`git
+merge <base>`) and record fresh proof before `atelier merge`, which refuses
+with `merge_diverged` until then (atelier-qz9x).
 
 A branch that no item owns, such as a feature branch, a PR branch, a branch
 from before adoption, or a detached HEAD, lands with a note when it changes no

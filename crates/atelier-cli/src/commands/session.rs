@@ -324,6 +324,28 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         Some((_, commit)) => base_policy::from_captured(&mut read, commit)?,
         None => base_policy::working(repo)?,
     };
+    // A base that has moved on is not the branch's failure: check the work
+    // against where it left the base, and say to merge the base in before
+    // integrating (atelier-qz9x).
+    let mut behind = None;
+    let branch_base = match &base_pin {
+        Some((reference, tip))
+            if git_freshness::git_output(repo, &["merge-base", "--is-ancestor", tip, &head])
+                .is_err() =>
+        {
+            let fork = git::text(repo, &["merge-base", tip, &head]).with_context(|| {
+                format!("land_base_unrelated: {reference} shares no history with HEAD")
+            })?;
+            let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?;
+            behind = Some((
+                reference.trim_start_matches("refs/heads/").to_owned(),
+                count,
+            ));
+            Some(fork)
+        }
+        Some((_, tip)) => Some(tip.clone()),
+        None => None,
+    };
     index.validate_policy(&source.policy, repo)?;
     let mut lines = source.diagnostics;
     check_traceability(repo, &index, &source.policy)?;
@@ -332,9 +354,8 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .map(|id| review_gate::scope(&index, id))
         .transpose()?
         .unwrap_or_default();
-    let claim_base = base_pin
-        .as_ref()
-        .map(|(_, pin)| pin.clone())
+    let claim_base = branch_base
+        .clone()
         .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.clone()));
     let mut current = std::collections::BTreeSet::new();
     let mut historical = std::collections::BTreeSet::new();
@@ -396,10 +417,14 @@ fn land_text(requested: Option<&str>) -> Result<String> {
                 source.policy.branch_policy.base_branch
             );
         }
-        let base = &base_pin
+        let base = branch_base
             .as_ref()
-            .context("owner integration base missing")?
-            .1;
+            .context("owner integration base missing")?;
+        if let Some((base, count)) = &behind {
+            lines.push(format!(
+                "Base {base} has {count} commit(s) this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval."
+            ));
+        }
         nodes.extend(review_gate::evaluate_session(
             &index,
             &mut read,

@@ -2223,6 +2223,41 @@ fn base_pull_merge_counts_only_the_paths_it_introduces() {
     );
 }
 #[test]
+fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("other"), "landed on the base\n").unwrap();
+    commit(f.path(), "other work landed on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+
+    // Active work hands off; the base moving on is not its failure.
+    let output = ok(f.path(), &["land", &f.id]);
+    assert!(
+        output.contains("Base main has 1 commit(s) this branch does not")
+            && output.contains("git merge main"),
+        "{output}"
+    );
+
+    // Completed work is still checked against where it left the base.
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let output = ok(f.path(), &["land", &f.id]);
+    assert!(output.contains("git merge main"), "{output}");
+    let (pass, output) = cli(f.path(), &["merge", &f.id]);
+    assert!(!pass && output.contains("merge_diverged"), "{output}");
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);
