@@ -629,9 +629,21 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     commit(fixture.path(), "other work landed on the base");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
     git(fixture.path(), &["rebase", "-q", "main"]);
-    // Work continues after the rebase: a fix, then proof and a review note.
+    // Work continues after the rebase: a fix committed with a review note,
+    // then proof.
     fs::write(fixture.path().join("src.rs"), "fixed after the rebase\n").unwrap();
-    commit(fixture.path(), "fix after the rebase");
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "record",
+            &fixture.id,
+            "--identity",
+            "Reviewer",
+            "Note made with the fix",
+        ],
+    );
+    commit(fixture.path(), "fix and a review note after the rebase");
     let fix = git(fixture.path(), &["rev-parse", "HEAD"]);
     proof("Proof after the rebase");
     fixture.refusal("pins a commit outside the work branch");
@@ -640,14 +652,33 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
         output.contains("rebased or reset")
             && output.contains("git reflog")
             && output.contains("cherry-pick any code or planning commits")
+            && output.contains("git cherry-pick -n")
             && output.contains("record proof and review again"),
         "{output}"
     );
 
-    // The advised recovery: restore the reviewed tip, cherry-pick only the
-    // fix, merge the base, then record proof and review again.
+    // The advised recovery: restore the reviewed tip, cherry-pick the fix
+    // without the review record it added, merge the base, then record proof
+    // and review again.
     git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
-    git(fixture.path(), &["cherry-pick", &fix]);
+    git(fixture.path(), &["cherry-pick", "-n", &fix]);
+    let added = git(
+        fixture.path(),
+        &[
+            "diff",
+            "--cached",
+            "--name-only",
+            "--diff-filter=A",
+            "--",
+            ".atelier/reviews",
+            ".atelier/evidence",
+        ],
+    );
+    assert!(!added.is_empty(), "the fix commit added a review record");
+    for path in added.lines() {
+        git(fixture.path(), &["rm", "-q", "-f", path]);
+    }
+    git(fixture.path(), &["commit", "-qm", "fix after recovery"]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     assert_eq!(
         fs::read_to_string(fixture.path().join("src.rs")).unwrap(),

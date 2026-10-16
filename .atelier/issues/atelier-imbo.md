@@ -3,6 +3,9 @@ created_at: "2026-10-16T20:09:18.966628799+00:00"
 id: "atelier-imbo"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-imbo
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Cover mixed code and record commits in the rebase recovery advice"
-updated_at: "2026-10-16T20:09:18.966628799+00:00"
+updated_at: "2026-10-16T20:42:22.957907553+00:00"
 ---
 
 ## Goal
