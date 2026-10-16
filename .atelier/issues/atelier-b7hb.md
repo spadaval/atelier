@@ -40,4 +40,4 @@ Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with resea
 
 ## Close Reason
 
-Decision record atelier-ermg lists the four: size is the reserved size:s|m|l|xl label (check validation, issue show display, update replaces); unverified assumptions use the Unknowns section; won't-do items are decision records (kept by prune); already-built work is prose in the parent's Background or Context. Documented in docs/product/work-model.md. Test: test_size_labels_are_validated_shown_and_replaced.
+Decision record atelier-ermg lists the four: size is the reserved size-s|m|l|xl label (check validation, issue show display, update replaces); unverified assumptions use the Unknowns section; won't-do items are decision records (kept by prune); already-built work is prose in the parent's Background or Context. Documented in docs/product/work-model.md. Test: test_size_labels_are_validated_shown_and_replaced.

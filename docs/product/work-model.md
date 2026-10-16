@@ -35,9 +35,9 @@ filed, decided, and closed on the base branch as planning changes (see
 
 Backlog conventions (decision atelier-ermg, under atelier-b7hb):
 
-- **Size** is the reserved label `size:s`, `size:m`, `size:l`, or `size:xl`.
+- **Size** is the reserved label `size-s`, `size-m`, `size-l`, or `size-xl`.
   `check` rejects other values and more than one size, `issue show` displays
-  it, and `issue update -l size:<x>` replaces the previous size.
+  it, and `issue update -l size-<x>` replaces the previous size.
 - **Unverified assumptions** go in a work item's Unknowns section.
 - **Won't-do** items are `decision` records whose Decision says no and why;
   prune keeps them.

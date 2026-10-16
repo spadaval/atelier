@@ -31,18 +31,18 @@ Backlogs carry four things Atelier had no home for: a size estimate, a marker th
 
 ## Options
 
-- Size: free labels; a reserved `size:` label checked by `check`; or a new front-matter field.
+- Size: free labels; a reserved `size-` label checked by `check`; or a new front-matter field.
 - Unverified assumptions: a new marker or field; or the Unknowns section every issue now has.
 - Won't-do: superseded issues; a won't-do table in a strategy; or decision records.
 - Already built: done records with a done claim and evidence; or prose in the parent.
 
 ## Decision
 
-- **Size** is the reserved label `size:s`, `size:m`, `size:l` or `size:xl`. `check` rejects other values and more than one size per record, `issue show` displays it, and `issue update -l size:<x>` replaces the old size. A label needs no new field, works with `issue list --label`, and is optional.
+- **Size** is the reserved label `size-s`, `size-m`, `size-l` or `size-xl`. `issue create -l` and `issue update -l` refuse other values and a second size (sizes are lowercased), `check` catches hand edits, `issue show` displays it, and `issue update -l size-<x>` replaces the old size. This is the form astromech's 132 size labels already use, so they need no conversion. A label needs no new field, works with `issue list --label`, and is optional.
 - **Unverified assumptions** go in the Unknowns section, which every work item now has (atelier-9vq3). Write each as a statement to verify; no separate marker.
 - **Won't-do** items are decision records: the Question names the idea, the Decision says no and why. Prune keeps decision records (atelier-r7cd), so the list survives, and `issue list --issue-type decision` shows it.
 - **Already-built** work is not recorded as done issues, which would need a done claim and proof for work that never went through Atelier. Describe it in the parent's Background or Context ("Already built: ...") so children can build on it.
 
 ## Close Reason
 
-Size is a checked size: label; assumptions use Unknowns; won't-do items are decision records; already-built work is prose in the parent.
+Size is a checked size- label; assumptions use Unknowns; won't-do items are decision records; already-built work is prose in the parent.
