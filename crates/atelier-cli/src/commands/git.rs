@@ -133,23 +133,6 @@ pub(crate) fn check_base_commits(
             "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
         ));
     };
-    // Gates start once the pushed base has the policy; until then the
-    // commits that install Atelier, and any made alongside them, predate them.
-    if git_freshness::git_output(
-        repo,
-        &[
-            "ls-tree",
-            &upstream,
-            "--",
-            workflow_policy::WORKFLOW_POLICY_PATH,
-        ],
-    )?
-    .is_empty()
-    {
-        return Ok(format!(
-            "Base commits unchecked: {base}@{{upstream}} has no workflow policy yet, so these commits install Atelier."
-        ));
-    }
     let mut covered = BTreeSet::new();
     for review in index.reviews().filter(|review| {
         matches!(
@@ -210,20 +193,52 @@ pub(crate) fn check_base_commits(
         .map(|strategy| normalized(Path::new(&strategy.path)))
         .collect::<BTreeSet<_>>();
     let mut checked = 0;
+    // The install predates the gates: the first commit on the base's
+    // first-parent line that adds the policy, with everything it merges in
+    // (an install branch and its review fixes).
+    let has_policy = |commit: &str| {
+        git_freshness::git_output(
+            repo,
+            &[
+                "ls-tree",
+                commit,
+                "--",
+                workflow_policy::WORKFLOW_POLICY_PATH,
+            ],
+        )
+        .is_ok_and(|listed| !listed.is_empty())
+    };
+    let mut installed = BTreeSet::new();
+    let first_parent = text(
+        repo,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--reverse",
+            tip,
+            "--not",
+            &upstream,
+        ],
+    )?;
+    if let Some(install) = first_parent.lines().find(|commit| {
+        has_policy(commit)
+            && !resolve(repo, &format!("{commit}^")).is_ok_and(|parent| has_policy(&parent))
+    }) {
+        installed.insert(install.to_owned());
+        let parent = format!("{install}^");
+        let mut merged = vec!["rev-list", install, "--not", upstream.as_str()];
+        if resolve(repo, &parent).is_ok() {
+            merged.push(&parent);
+        }
+        installed.extend(text(repo, &merged)?.lines().map(str::to_owned));
+    }
     for commit in &unreviewed {
+        if installed.contains(commit) {
+            continue;
+        }
+        // Commits made before the policy existed predate the gates too.
         let parent = format!("{commit}^");
-        if resolve(repo, &parent).is_err()
-            || git_freshness::git_output(
-                repo,
-                &[
-                    "ls-tree",
-                    &parent,
-                    "--",
-                    workflow_policy::WORKFLOW_POLICY_PATH,
-                ],
-            )?
-            .is_empty()
-        {
+        if !resolve(repo, &parent).is_ok_and(|parent| has_policy(&parent)) {
             continue;
         }
         checked += 1;

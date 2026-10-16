@@ -2263,11 +2263,15 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     commit(dir.path(), "install Atelier");
     let output = ok(dir.path(), &["land"]);
     assert!(
-        output.contains(
-            "main@{upstream} has no workflow policy yet, so these commits install Atelier"
-        ),
+        output.contains("Base commits: none unpushed outside recorded review"),
         "{output}"
     );
+    // Code committed on the base after the install is gated even before the
+    // install is pushed.
+    fs::write(dir.path().join("after"), "unreviewed\n").unwrap();
+    commit(dir.path(), "code after the install");
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
 }
 #[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
@@ -2359,7 +2363,7 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     );
     let output = ok(dir.path(), &["land"]);
     assert!(
-        output.contains("has no workflow policy yet, so these commits install Atelier"),
+        output.contains("Base commits: none unpushed outside recorded review"),
         "{output}"
     );
 
