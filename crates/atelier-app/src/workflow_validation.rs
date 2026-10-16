@@ -190,8 +190,6 @@ fn issue_sections_parseable(
     ))
 }
 
-/// Passes when every child (recursively) and, for missions, all work linked
-/// by `advances` is in a done-category status.
 /// A decision closes only once its Decision section says what was decided.
 fn decision_recorded(
     index: &RecordIndex,
@@ -217,6 +215,8 @@ fn decision_recorded(
     }
 }
 
+/// Passes when every child (recursively) and, for missions, all work linked
+/// by `advances` is in a done-category status.
 fn work_terminal(
     index: &RecordIndex,
     policy: &WorkflowPolicy,

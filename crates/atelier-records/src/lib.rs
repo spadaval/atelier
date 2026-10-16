@@ -1429,6 +1429,14 @@ pub fn parse_issue_sections_for_type(
             },
             vec![Outcome, SuccessCriteria, Background],
         ),
+        "decision"
+            if sections.contains_key(Goal.title()) && !sections.contains_key(Question.title()) =>
+        {
+            bail!(
+                "{} is a decision with the work-item shape (Goal, Done when); decision records use Question, Options and Decision (atelier-ox63). Convert it (Goal to Question, the decided outcome to Decision), or rename a custom decision type in the workflow policy",
+                display_state_path(relative)
+            );
+        }
         "decision" => (
             IssueBody::Decision {
                 question: required(Question)?,
@@ -3253,6 +3261,14 @@ Legacy evidence summary.
             let other_kind = if kind == "mission" { "task" } else { "mission" };
             assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err());
         }
+        let custom = parse_issue_sections_for_type(
+            "## Goal\n\nDecide.\n\n## Done when\n\nDecided.",
+            Path::new("<body>"),
+            "decision",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(custom.contains("decision records use Question"), "{custom}");
         let retired = "## Outcome\n\nOld epic.\n\n## Proof\n\nA scenario.";
         for kind in ["epic", "task"] {
             let error = parse_issue_sections_for_type(retired, Path::new("<body>"), kind)

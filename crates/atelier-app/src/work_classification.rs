@@ -166,11 +166,20 @@ pub fn classify_issue(
         .and_then(|policy| policy.status_category(&issue.status))
         .map(str::to_string);
     let open_blockers = open_blockers(index, workflow_policy, &issue.id)?;
+    let retired = terminal_ancestor(index, workflow_policy, issue)?.is_some();
 
     let classification = if status_category.as_deref() == Some("done") {
         WorkClassification::Done
-    } else if terminal_ancestor(index, workflow_policy, issue)?.is_some() {
+    } else if retired {
         WorkClassification::Backlog
+    } else if issue.issue_type == "decision" && status_category.as_deref() == Some("todo") {
+        // Decisions are the human's by default: an open decision has no start
+        // transition, but it is waiting on the human, not parked.
+        if open_blockers.is_empty() {
+            WorkClassification::NeedsHuman
+        } else {
+            WorkClassification::Blocked
+        }
     } else {
         match status_category.as_deref() {
             Some("active") => WorkClassification::Active,
@@ -195,14 +204,7 @@ pub fn classify_issue(
             _ => WorkClassification::Backlog,
         }
     };
-    // Decisions are the human's by default: an open, unblocked decision has
-    // no start transition, but it is waiting on the human, not parked.
-    let open_decision = issue.issue_type == "decision"
-        && status_category.as_deref() == Some("todo")
-        && open_blockers.is_empty();
-    let classification = if open_decision {
-        WorkClassification::NeedsHuman
-    } else if classification != WorkClassification::Ready {
+    let classification = if classification != WorkClassification::Ready {
         classification
     } else if is_context(index, workflow_policy, issue) {
         WorkClassification::Context

@@ -117,6 +117,13 @@ pub fn resolve_work_branch(
             issue.id
         ));
     }
+    if issue.issue_type == "decision" {
+        return Err(anyhow!(
+            "workflow_branch_decision: {} is a decision; decisions need no branch. Record the Decision and run `atelier issue transition {} decide` on the base branch.",
+            issue.id,
+            issue.id
+        ));
+    }
     // Loaded graphs already guarantee that any parent is a direct, one-level owner.
     let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
     let (branch, recorded_base) = match &owner.workflow_branch {

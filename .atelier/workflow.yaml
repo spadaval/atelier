@@ -146,6 +146,8 @@ workflows:
         description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
         validators:
         - decision.recorded
+        - blockers.none_open
+        - work.terminal
       block:
         from: [todo]
         to: blocked

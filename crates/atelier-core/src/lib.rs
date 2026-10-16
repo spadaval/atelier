@@ -363,7 +363,11 @@ impl IssueSections {
         let goal = text
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .unwrap_or("Goal was not specified.")
+            .unwrap_or(if issue_type == "decision" {
+                "Question was not specified."
+            } else {
+                "Goal was not specified."
+            })
             .to_string();
         let proof =
             (issue_type == "mission").then(|| "Success criteria were not specified.".to_string());
@@ -380,13 +384,20 @@ impl IssueSections {
         if self.matches_type(issue_type) {
             return;
         }
+        let to_decision = issue_type == "decision";
         let (goal, proof, scope) = match &self.body {
+            // Done when is acceptance, not a decision: a retyped task starts
+            // with an empty Decision so `decide` still needs one.
             IssueBody::Issue {
                 goal,
                 done_when,
                 scope,
                 ..
-            } => (goal.clone(), Some(done_when.clone()), scope.clone()),
+            } => (
+                goal.clone(),
+                (!to_decision).then(|| done_when.clone()),
+                scope.clone(),
+            ),
             IssueBody::Mission {
                 outcome,
                 success_criteria,
@@ -399,7 +410,23 @@ impl IssueSections {
         let background = self
             .section(IssueSectionName::Background)
             .map(str::to_string);
+        // Context is shared by work items and decisions; a decision's Options
+        // stay readable as part of it.
+        let context = match (
+            self.section(IssueSectionName::Context),
+            self.section(IssueSectionName::Options),
+        ) {
+            (Some(context), Some(options)) => Some(format!("{context}\n\nOptions:\n\n{options}")),
+            (None, Some(options)) => Some(format!("Options:\n\n{options}")),
+            (context, None) => context.map(str::to_string),
+        };
         self.body = IssueBody::for_type(issue_type, goal, proof, scope);
+        match &mut self.body {
+            IssueBody::Issue { context: slot, .. } | IssueBody::Decision { context: slot, .. } => {
+                *slot = context;
+            }
+            IssueBody::Mission { .. } => {}
+        }
         // Background is the one optional section both shapes share.
         match &mut self.body {
             IssueBody::Issue {

@@ -4658,4 +4658,94 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
     assert!(ready.is_empty(), "{ready}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(success, "{stdout}{stderr}");
+
+    // Decisions own no branch.
+    let open = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Open question",
+        "--issue-type",
+        "decision",
+    ]);
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &open)).unwrap();
+    assert!(
+        record.contains("## Question\n\nQuestion was not specified."),
+        "{record}"
+    );
+    commit_all(dir.path(), "file an open question");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &open]);
+    assert!(
+        !success && stderr.contains("decisions need no branch"),
+        "{stderr}"
+    );
+
+    // A blocked decision is blocked, and decide checks blockers and children.
+    let prerequisite = create(&["-q", "issue", "create", "Prerequisite research"]);
+    create(&[
+        "-q",
+        "issue",
+        "link",
+        &open,
+        &prerequisite,
+        "--role",
+        "blocked_by",
+    ]);
+    let blocked = create(&["--quiet", "work", "blocked"]);
+    assert!(blocked.lines().any(|line| line == open), "{blocked}");
+    assert!(create(&["--quiet", "work", "human"]).is_empty());
+    create(&[
+        "issue",
+        "update",
+        &open,
+        "--body",
+        "## Question\n\nWhich?\n\n## Decision\n\nThis one.",
+    ]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &open,
+            "decide",
+            "--reason",
+            "Too early",
+        ],
+    );
+    assert!(!success && stderr.contains(&prerequisite), "{stderr}");
+
+    // Retyping a "Decide ..." task does not invent a Decision, and retyping
+    // back keeps the Options readable in Context.
+    let task = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Decide the slug rule",
+        "--body",
+        "## Goal\n\nPick a slug rule.\n\n## Done when\n\nThe rule is documented.",
+    ]);
+    create(&["issue", "update", &task, "--issue-type", "decision"]);
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &task)).unwrap();
+    assert!(
+        record.contains("## Question\n\nPick a slug rule.") && !record.contains("## Decision"),
+        "{record}"
+    );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &task, "decide", "--reason", "x"],
+    );
+    assert!(
+        !success && stderr.contains("Decision section is missing"),
+        "{stderr}"
+    );
+    create(&[
+        "issue",
+        "update",
+        &task,
+        "--body",
+        "## Question\n\nPick a slug rule.\n\n## Options\n\n- origin\n- directory",
+    ]);
+    create(&["issue", "update", &task, "--issue-type", "task"]);
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &task)).unwrap();
+    assert!(record.contains("Options:\n\n- origin"), "{record}");
 }
