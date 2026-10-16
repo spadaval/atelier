@@ -4,6 +4,9 @@ id: "atelier-bw0b"
 issue_type: "task"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-bw0b
 priority: "P1"
 relationships:
   blocks:
@@ -18,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Record ADR 0022: status is the orientation view, and output is dense Markdown"
-updated_at: "2026-10-16T23:04:24.267737941+00:00"
+updated_at: "2026-10-16T23:05:22.980263134+00:00"
 ---
 
 ## Goal

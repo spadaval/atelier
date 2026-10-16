@@ -3,16 +3,14 @@
 This file is a map to the repository's durable guidance. Keep process and
 product policy in the linked sources instead of duplicating it here.
 
-## Current Mission
+## Missions
 
-Atelier is being rebuilt as a verified, repo-native tracker. Governing sources:
-
-- Strategy: `docs/strategies/atelier-rebuild.md`
-- Native mission: `.atelier/issues/atelier-kgcr.md`
-- Decision: `docs/adr/0019-verified-repo-native-tracker.md`
-
-Current product and architecture docs describe the rebuilt model. The mission
-record owns execution state; strategy acceptance does not mean mission completion.
+Open missions and their strategies are in `atelier work missions`; this file
+does not track them. The verified repo-native tracker rebuild (mission
+`atelier-kgcr`, `docs/strategies/atelier-rebuild.md`) closed on 2026-10-15.
+[ADR 0019](docs/adr/0019-verified-repo-native-tracker.md) remains the
+governing decision, and current product and architecture docs describe the
+rebuilt model.
 
 ## Process Sources
 
