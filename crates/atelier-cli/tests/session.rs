@@ -2147,6 +2147,78 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     );
 }
 #[test]
+fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    let retired = ok(f.path(), &["-q", "issue", "create", "Not needed"]);
+    let decision = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Pick a format",
+            "--issue-type",
+            "decision",
+            "--body",
+            "## Question\n\nWhich format?\n\n## Decision\n\nTOML.",
+        ],
+    );
+    commit(f.path(), "plan on the base");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &retired,
+            "supersede",
+            "--reason",
+            "obsolete",
+        ],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &decision,
+            "decide",
+            "--reason",
+            "TOML",
+        ],
+    );
+    commit(f.path(), "supersede and decide on the base");
+    ok(f.path(), &["land"]);
+
+    // Starting and closing work on the base skips its branch and review.
+    let work = ok(f.path(), &["-q", "issue", "create", "Branchless work"]);
+    ok(f.path(), &["issue", "transition", &work, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &work, "close", "--reason", "did it"],
+    );
+    commit(f.path(), "branchless done claim on the base");
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!(
+                "land_base_done_claim: commit {} on main marks {work} done",
+                &head[..8]
+            ))
+            && output.contains(&format!("atelier start {work}")),
+        "{output}"
+    );
+}
+#[test]
 fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);

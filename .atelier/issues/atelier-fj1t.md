@@ -4,6 +4,9 @@ id: "atelier-fj1t"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-fj1t
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Refuse done claims for branchless work on the base"
-updated_at: "2026-10-15T23:49:16.351350337+00:00"
+updated_at: "2026-10-16T18:31:17.626533827+00:00"
 ---
 
 ## Goal

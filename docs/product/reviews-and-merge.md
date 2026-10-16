@@ -111,8 +111,12 @@ reviewed when a commit pinned by an approval or trivial exemption contains it,
 for completed owners that branched from this base and are not already done
 upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
-`land_base_unreviewed`. A merge commit, such as a non-rebasing pull, is judged
-by the paths that differ from all of its parents. The install predates the gates and is exempt: commits
+`land_base_unreviewed`. Those record-only commits also may not take a work
+item to done: a done claim travels on the work branch with the work, so `land`
+refuses one made on the base with `land_base_done_claim` and says to move it to
+a work branch (atelier-fj1t). Closing a mission, deciding a `decision` record
+and superseding work stay allowed on the base. A merge commit, such as a
+non-rebasing pull, is judged by the paths that differ from all of its parents. The install predates the gates and is exempt: commits
 made before the policy existed, the first commit on the base's first-parent
 line that adds it, and everything that commit merges in. Without an upstream, `land`
 notes that it cannot check base commits.

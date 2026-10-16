@@ -269,6 +269,12 @@ pub(crate) fn check_base_commits(
         } else {
             git_freshness::changed_paths(repo, &parent, commit)?
         };
+        if let Some(id) = base_done_claim(repo, policy, commit, &changed)? {
+            bail!(
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Move it to a work branch: git switch -c <issue_type>/{id}, git branch -f {base} {base}@{{upstream}}, then atelier start {id} there and integrate it with atelier merge; supersede {id} instead if the work will not be done.",
+                &commit[..8.min(commit.len())],
+            );
+        }
         let other = changed
             .into_iter()
             .filter(|path| !git_freshness::is_record_path(path) && !strategies.contains(path))
@@ -289,6 +295,57 @@ pub(crate) fn check_base_commits(
         0 => "Base commits: none unpushed outside recorded review.".to_owned(),
         count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
     })
+}
+
+/// The first work item `commit` takes to done, compared with every parent.
+/// Missions close and decisions are decided on the base as planning, and
+/// superseding retires work without a claim; anything else reaches done
+/// through a reviewed work branch (atelier-fj1t).
+fn base_done_claim(
+    repo: &Path,
+    policy: &atelier_workflow::WorkflowPolicy,
+    commit: &str,
+    changed: &[std::path::PathBuf],
+) -> Result<Option<String>> {
+    let parents = text(repo, &["rev-list", "--parents", "-n1", commit])?
+        .split(' ')
+        .skip(1)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let status_at = |revision: &str, path: &Path| {
+        git_freshness::blob(repo, revision, path)
+            .ok()
+            .and_then(|blob| {
+                atelier_records::parse_issue_record(&blob, path.strip_prefix(".atelier").ok()?).ok()
+            })
+            .map(|record| (record.issue.issue_type, record.issue.status))
+    };
+    for path in changed {
+        if path.parent() != Some(Path::new(".atelier/issues"))
+            || path.extension().is_none_or(|ext| ext != "md")
+        {
+            continue;
+        }
+        let Some((issue_type, status)) = status_at(commit, path) else {
+            continue;
+        };
+        if matches!(issue_type.as_str(), "mission" | "decision")
+            || status == "superseded"
+            || policy.status_category(&status) != Some("done")
+        {
+            continue;
+        }
+        if parents
+            .iter()
+            .all(|parent| status_at(parent, path).is_none_or(|(_, before)| before != status))
+        {
+            return Ok(path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_owned));
+        }
+    }
+    Ok(None)
 }
 
 /// A done claim on a work branch is not base completion until the base
