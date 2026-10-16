@@ -3896,6 +3896,11 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
     assert_eq!(ready, agent, "{ready}");
     let summary = create(&["--quiet", "work", "mission", &mission]);
     assert!(summary.contains("ready=1 human=1"), "{summary}");
+    let show = create(&["issue", "show", &mission]);
+    assert!(
+        show.contains("needs a human 1") && show.contains("Needs a Human"),
+        "{show}"
+    );
 
     init_git_repo(dir.path());
     ensure_initial_git_commit(dir.path());

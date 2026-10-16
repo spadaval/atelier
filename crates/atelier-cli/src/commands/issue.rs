@@ -155,9 +155,13 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
             (
                 "Buckets",
                 format!(
-                    "active {}, ready {}, blocked {}, done {}, backlog {}",
+                    "active {}, ready {},{} blocked {}, done {}, backlog {}",
                     summary.scope.work.active.len(),
                     summary.scope.work.ready.len(),
+                    match summary.scope.work.human.len() {
+                        0 => String::new(),
+                        human => format!(" needs a human {human},"),
+                    },
                     summary.scope.work.blocked.len(),
                     summary.scope.work.done.len(),
                     summary.scope.work.backlog.len()
@@ -187,6 +191,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     for (title, rows) in [
         ("Active Work", &summary.scope.work.active),
         ("Ready Work", &summary.scope.work.ready),
+        ("Needs a Human", &summary.scope.work.human),
         ("Blocked Work", &summary.scope.work.blocked),
         ("Done Work", &summary.scope.work.done),
     ] {

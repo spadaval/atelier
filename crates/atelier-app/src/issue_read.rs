@@ -36,6 +36,8 @@ impl ObjectiveScopeSummary {
             "active"
         } else if !self.work.ready.is_empty() {
             "ready"
+        } else if !self.work.human.is_empty() {
+            "waiting on the human"
         } else if !self.work.done.is_empty() {
             "terminal"
         } else {
@@ -88,6 +90,7 @@ pub fn objective_read_summary(
         .iter()
         .chain(&scope.work.backlog)
         .chain(&scope.work.ready)
+        .chain(&scope.work.human)
         .chain(&scope.work.blocked)
         .chain(&scope.work.done)
         .cloned()
@@ -126,6 +129,7 @@ fn scope_summary(
     for rows in [
         &mut work.active,
         &mut work.ready,
+        &mut work.human,
         &mut work.blocked,
         &mut work.backlog,
         &mut work.done,
