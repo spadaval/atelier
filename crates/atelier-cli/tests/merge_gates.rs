@@ -589,6 +589,39 @@ fn divergence_and_dirty_candidate_or_base_checkout_are_refused() {
 #[test]
 fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     let fixture = Fixture::new();
+    // The base requires proof for completion, so stale proof matters.
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let policy = fixture.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    fs::write(
+        &policy,
+        text.replace(
+            "        - blockers.none_open\n",
+            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+        ),
+    )
+    .unwrap();
+    commit(fixture.path(), "base requires proof");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    let proof = |summary: &str| {
+        ok(
+            fixture.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{}", fixture.id),
+                "--kind",
+                "test",
+                "--result",
+                "pass",
+                summary,
+            ],
+        );
+        commit(fixture.path(), summary);
+    };
+    proof("Proof before review");
     fixture.approval("Reviewer");
     let reviewed = git(fixture.path(), &["rev-parse", "HEAD"]);
     git(fixture.path(), &["switch", "-q", "main"]);
@@ -596,16 +629,35 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     commit(fixture.path(), "other work landed on the base");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
     git(fixture.path(), &["rebase", "-q", "main"]);
+    // Work continues after the rebase: a fix, then proof and a review note.
+    fs::write(fixture.path().join("src.rs"), "fixed after the rebase\n").unwrap();
+    commit(fixture.path(), "fix after the rebase");
+    let fix = git(fixture.path(), &["rev-parse", "HEAD"]);
+    proof("Proof after the rebase");
     fixture.refusal("pins a commit outside the work branch");
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id]);
     assert!(
-        output.contains("rebased or reset") && output.contains("git reflog"),
+        output.contains("rebased or reset")
+            && output.contains("git reflog")
+            && output.contains("cherry-pick any code or planning commits")
+            && output.contains("record proof and review again"),
         "{output}"
     );
 
-    // The advised recovery: restore the reviewed tip, then merge the base.
+    // The advised recovery: restore the reviewed tip, cherry-pick only the
+    // fix, merge the base, then record proof and review again.
     git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
+    git(fixture.path(), &["cherry-pick", &fix]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("src.rs")).unwrap(),
+        "fixed after the rebase\n"
+    );
+    fixture.refusal("FAIL review.current");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(output.contains("FAIL evidence.attached"), "{output}");
+    proof("Proof after recovery");
+    fixture.approval("Reviewer");
     ok(fixture.path(), &["merge", &fixture.id]);
 }
 
