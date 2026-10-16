@@ -378,7 +378,21 @@ impl IssueSections {
                 ..
             } => (outcome.clone(), success_criteria.clone(), None),
         };
+        let background = self
+            .section(IssueSectionName::Background)
+            .map(str::to_string);
         self.body = IssueBody::for_type(issue_type, goal, proof, scope);
+        // Background is the one optional section both shapes share.
+        match &mut self.body {
+            IssueBody::Issue {
+                background: slot, ..
+            }
+            | IssueBody::Mission {
+                background: slot, ..
+            } => {
+                *slot = background;
+            }
+        }
     }
 
     pub fn matches_type(&self, issue_type: &str) -> bool {
@@ -662,10 +676,17 @@ mod tests {
         let same_shape = sections.clone();
         sections.change_type("bug");
         assert_eq!(sections, same_shape);
+        if let IssueBody::Issue { background, .. } = &mut sections.body {
+            *background = Some("Shared research.".into());
+        }
         sections.change_type("mission");
         assert_eq!(
             sections.section(IssueSectionName::Outcome),
             Some("Keep intent.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::Background),
+            Some("Shared research.")
         );
         assert_eq!(
             sections.section(IssueSectionName::SuccessCriteria),
@@ -679,6 +700,10 @@ mod tests {
         assert_eq!(
             sections.section(IssueSectionName::DoneWhen),
             Some("The result is independently checked.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::Background),
+            Some("Shared research.")
         );
         assert_eq!(sections.notes, same_shape.notes);
         assert_eq!(sections.close_reason, same_shape.close_reason);
