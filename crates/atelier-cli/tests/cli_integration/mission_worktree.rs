@@ -1863,6 +1863,56 @@ fn test_bundle_apply_refuses_statuses_that_need_a_transition_and_preserves_state
 }
 
 #[test]
+fn test_bundle_apply_rejects_open_blockers_on_an_executable_mission_and_preserves_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Executing mission");
+    set_dependency_fixture_status(dir.path(), &mission_id, "in_progress");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "an unblocked executing mission is valid: {stderr}");
+    let bundle_path = dir.path().join("blocks-executing-mission.json");
+    std::fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 2,
+  "title": "Block an executing mission",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.blocker",
+        "title": "Open bundled blocker", "body": "\u0023\u0023 Goal\n\nOpen blocker\n\n## Done when\n\nFocused test passes.",
+        "issue_type": "task",
+        "blocks": [{{ "id": {mission_id:?} }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let canonical_before = canonical_tree_snapshot(&state_dir);
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(
+        !success,
+        "an open blocker on an executing mission must be rejected"
+    );
+    assert!(
+        stderr.contains("workflow_mission_dependency_bypass"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
+}
+
+#[test]
 fn test_bundle_apply_accepts_non_executable_initial_statuses() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1926,8 +1976,8 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
   "resources": {{
     "issues": [
       {{
-        "client_ref": "issue.completed-blocker",
-        "title": "Completed graph addition", "body": "\u0023\u0023 Goal\n\nCompleted graph addition\n\n## Done when\n\nTests pass.",
+        "client_ref": "issue.new-blocker",
+        "title": "Open graph addition", "body": "\u0023\u0023 Goal\n\nCompleted graph addition\n\n## Done when\n\nTests pass.",
         "issue_type": "task",
         "status": "todo",
         "blocks": [{{ "id": {mission_id:?} }}]
