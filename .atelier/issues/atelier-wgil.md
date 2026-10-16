@@ -3,6 +3,9 @@ created_at: "2026-10-16T20:22:22.446783913+00:00"
 id: "atelier-wgil"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-wgil
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Reject entries no side wrote in list resolutions of base merges"
-updated_at: "2026-10-16T20:22:22.446783913+00:00"
+updated_at: "2026-10-16T20:32:32.671362595+00:00"
 ---
 
 ## Goal
