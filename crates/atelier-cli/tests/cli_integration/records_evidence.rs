@@ -599,7 +599,7 @@ fn test_stress_rapid_operations() {
     assert!(stdout.contains("Rapid issue 19"));
 }
 
-/// Test export/import round-trip preserves data
+/// Test that JSON command-result mode is rejected and the human subset works
 #[test]
 fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     let dir = tempdir().unwrap();

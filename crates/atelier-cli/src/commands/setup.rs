@@ -77,6 +77,13 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
         fs::create_dir_all(&directory)?;
         let mut staged = tempfile::NamedTempFile::new_in(&directory)?;
         staged.write_all(&after)?;
+        // Keep the settings file's mode; a temporary file starts at 0600
+        // (atelier-v44v).
+        let permissions = match fs::metadata(&path) {
+            Ok(existing) => existing.permissions(),
+            Err(_) => default_settings_permissions(),
+        };
+        staged.as_file().set_permissions(permissions)?;
         staged.as_file().sync_all()?;
         if fs::read(&path).unwrap_or_default() != before {
             bail!("Claude settings changed during setup; no update installed; retry");
@@ -92,4 +99,20 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// A new settings file is readable by others, like files editors create.
+fn default_settings_permissions() -> fs::Permissions {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::Permissions::from_mode(0o644)
+    }
+    #[cfg(not(unix))]
+    {
+        tempfile::NamedTempFile::new()
+            .and_then(|file| file.as_file().metadata())
+            .map(|metadata| metadata.permissions())
+            .expect("temporary file metadata")
+    }
 }

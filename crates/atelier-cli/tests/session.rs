@@ -296,6 +296,22 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         .contains("unavailable"));
 }
 #[test]
+#[cfg(unix)]
+fn setup_keeps_an_existing_settings_mode_and_creates_new_ones_readable() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let directory = f.path().join(".claude");
+    fs::create_dir(&directory).unwrap();
+    let settings = directory.join("settings.json");
+    let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    ok(f.path(), &["setup", "claude"]);
+    assert_eq!(mode(&settings), 0o644);
+    fs::write(&settings, "{}\n").unwrap();
+    fs::set_permissions(&settings, fs::Permissions::from_mode(0o664)).unwrap();
+    ok(f.path(), &["setup", "claude"]);
+    assert_eq!(mode(&settings), 0o664);
+}
+#[test]
 fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
     let f = Fixture::new();
     let directory = f.path().join(".claude");

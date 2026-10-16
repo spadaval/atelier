@@ -156,7 +156,6 @@ fn test_unicode_in_dependencies() {
     assert!(success);
 }
 
-/// Test export/import preserves Unicode
 /// Test zero-width and special Unicode characters
 #[test]
 fn test_unicode_special_characters() {

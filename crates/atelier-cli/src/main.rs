@@ -87,42 +87,63 @@ struct Cli {
 
 #[derive(clap::Args)]
 struct ReviewArgs {
+    /// Branch owner, parent issue or standalone issue the event is about
     id: String,
+    /// Who records the event; approvals must not match a substantive Git author
     #[arg(long)]
     identity: String,
+    /// Full commit the event pins, an ancestor on the work branch [default: HEAD]
     #[arg(long)]
     commit: Option<String>,
+    /// What was checked, found or decided
     summary: String,
 }
 #[derive(Subcommand)]
 enum ReviewCommands {
+    /// Record a review account: what was checked and its limits
     Record(ReviewArgs),
+    /// Record an independent approval of the work at the pinned commit
     Approve(ReviewArgs),
+    /// Record a finding; every finding needs a disposition before merge
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
+        /// Recommended decision: fix_now, defer or no_action
         #[arg(long)]
         recommendation: String,
     },
+    /// Record an explicit trivial exemption, with why correctness is evident
     Trivial(ReviewArgs),
+    /// Record the decision on a finding
     Disposition {
+        /// The finding's review event ID
         finding: String,
+        /// Who decides; defer and no_action need a non-author identity
         #[arg(long)]
         identity: String,
+        /// fix_now, defer or no_action
         #[arg(long)]
         decision: String,
+        /// For fix_now: the full commit that resolves the finding, later than its pin
         #[arg(long)]
         resolution_commit: Option<String>,
+        /// For defer: the existing follow-up issue
         #[arg(long)]
         follow_up: Option<String>,
+        /// Why the decision was taken
         summary: String,
     },
+    /// List review events, for one owner or all
     List {
+        /// Owner or issue ID; omit to list every event
         id: Option<String>,
+        /// Print JSON
         #[arg(long)]
         json: bool,
     },
+    /// Show one review event
     Show {
+        /// Review event ID
         id: String,
     },
 }
