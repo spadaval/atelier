@@ -119,6 +119,15 @@ fn allowed_edge(
             }
             return Ok(false);
         }
+        let issue_id = (path.parent() == Some(Path::new(".atelier/issues"))
+            && path.extension().is_some_and(|ext| ext == "md"))
+        .then(|| path.file_stem().and_then(|name| name.to_str()))
+        .flatten();
+        // A new issue outside the scope, such as the follow-up a deferred
+        // finding needs, is planning, not reviewed work (atelier-cafy).
+        if issue_id.is_some_and(|id| !ids.contains(id)) && old.is_none() && regular(&new) {
+            continue;
+        }
         if path.starts_with(".atelier/issues") && regular(&old) && regular(&new) {
             let id = path
                 .file_stem()
