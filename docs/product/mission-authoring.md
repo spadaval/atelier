@@ -8,6 +8,17 @@ A mission is a front door to a strategy, not a second strategy or a status table
 Link the strategy by path, state the outcome, and identify success criteria.
 When no separate strategy exists, the mission body carries that intent.
 
+The mission's strategy path is the canonical link. Write the strategy first,
+then set the link with
+`atelier issue create <title> --issue-type mission --strategy <path>`, change it
+with `atelier issue update <mission> --strategy <path>`, or clear it with
+`--no-strategy`. The strategy file does not need to name its mission (a blank
+`mission:` counts as none), so creating or re-importing the mission needs no
+edit to the strategy. If its front matter does name one, `atelier check`
+reports a value that differs from the mission linking it, or any value when
+several missions link the same strategy. `check` also reports a linked
+strategy path that does not exist.
+
 An epic describes an observable Outcome. Draft epics can retain Unknowns;
 before ready, add the Proof route and immediate child work with real dependency
 links. Add Delivers when it helps connect the increment to mission criteria.

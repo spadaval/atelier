@@ -105,10 +105,11 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         .iter()
         .filter(|record| scoped_id.as_ref().is_none_or(|id| &record.issue.id == id));
     findings.extend(issue_findings(
-        scoped_records,
+        scoped_records.clone(),
         repo_root,
         scoped_id.is_some(),
     ));
+    findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
 
     Ok(LintView { findings })
 }
@@ -188,6 +189,90 @@ pub fn issue_findings<'a>(
         }
     }
     findings
+}
+
+/// Mission strategy links: each mission's strategy path is the canonical
+/// link, so the file must exist, and front matter naming a mission must name
+/// the one mission linking it.
+fn strategy_findings<'a>(
+    all: &[CanonicalIssueRecord],
+    scoped: impl IntoIterator<Item = &'a CanonicalIssueRecord>,
+    repo_root: &Path,
+) -> Vec<LintFinding> {
+    let normalized = |path: &str| {
+        Path::new(path)
+            .components()
+            .filter(|part| !matches!(part, std::path::Component::CurDir))
+            .collect::<std::path::PathBuf>()
+    };
+    let linking = |path: &str| {
+        all.iter()
+            .filter(|record| record.issue.issue_type == "mission")
+            .filter(|record| {
+                record
+                    .issue
+                    .strategy
+                    .as_ref()
+                    .is_some_and(|strategy| normalized(&strategy.path) == normalized(path))
+            })
+            .map(|record| record.issue.id.clone())
+            .collect::<Vec<_>>()
+    };
+    let mut findings = Vec::new();
+    for record in scoped {
+        let issue = &record.issue;
+        let Some(strategy) = issue
+            .strategy
+            .as_ref()
+            .filter(|_| issue.issue_type == "mission")
+        else {
+            continue;
+        };
+        let path = &strategy.path;
+        let message = match std::fs::read_to_string(repo_root.join(path)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Some(format!("Mission strategy {path} does not exist"))
+            }
+            Err(error) => Some(format!("Mission strategy {path} cannot be read: {error}")),
+            Ok(text) => strategy_named_mission(&text).and_then(|named| {
+                let missions = linking(path);
+                if missions.len() > 1 {
+                    Some(format!(
+                        "Strategy {path} front matter names mission {named}, but missions {} all link it; remove the `mission:` key, since each mission's strategy path is the canonical link",
+                        missions.join(", ")
+                    ))
+                } else {
+                    (named != issue.id).then(|| format!(
+                        "Strategy {path} front matter names mission {named}, but {} links it; the mission's strategy path is canonical, so set `mission: {}` in the strategy or remove the key",
+                        issue.id, issue.id
+                    ))
+                }
+            }),
+        };
+        if let Some(message) = message {
+            findings.push(LintFinding {
+                id: issue.id.clone(),
+                message,
+            });
+        }
+    }
+    findings
+}
+
+/// The mission a strategy's front matter names; a missing or blank key names none.
+fn strategy_named_mission(text: &str) -> Option<String> {
+    let text = text.replace("\r\n", "\n");
+    let front_matter = atelier_records::split_document(&text).and_then(|(front_matter, _)| {
+        serde_yaml::from_str::<serde_yaml::Value>(front_matter).ok()
+    })?;
+    match front_matter.get("mission")? {
+        serde_yaml::Value::Null => None,
+        serde_yaml::Value::String(named) if named.trim().is_empty() => None,
+        serde_yaml::Value::String(named) => Some(named.trim().to_string()),
+        serde_yaml::Value::Number(number) => Some(number.to_string()),
+        serde_yaml::Value::Bool(value) => Some(value.to_string()),
+        _ => Some("(a non-scalar value)".to_string()),
+    }
 }
 
 /// Resolves an issue reference against the record files, including files

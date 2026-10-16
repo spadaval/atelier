@@ -14,6 +14,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             issue_type,
             parent,
             status,
+            strategy,
         } => {
             let (state_dir, index) = load_repository()?;
             IssuePriority::from_cli_input(&priority)?;
@@ -28,6 +29,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     labels: &label,
                     parent: parent.as_deref(),
                     status: status.as_deref(),
+                    strategy: strategy.as_deref(),
                     quiet,
                 },
             )
@@ -90,6 +92,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             remove_label,
             parent,
             no_parent,
+            strategy,
+            no_strategy,
         } => {
             let (state_dir, index) = load_repository()?;
             commands::issue::update_lifecycle(
@@ -101,6 +105,11 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     priority: priority.as_deref(),
                     issue_type: issue_type.as_deref(),
                     body: body.as_deref(),
+                    strategy: if no_strategy {
+                        Some(None)
+                    } else {
+                        strategy.as_deref().map(Some)
+                    },
                     labels: &label,
                     remove_labels: &remove_label,
                     parent: if no_parent {

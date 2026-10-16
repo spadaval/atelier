@@ -296,6 +296,10 @@ enum IssueCommands {
         /// defaults to the workflow's initial status
         #[arg(long)]
         status: Option<String>,
+        /// Repository-relative strategy file a mission links; the mission's
+        /// path is the canonical link
+        #[arg(long)]
+        strategy: Option<String>,
     },
 
     /// Show issue details
@@ -373,6 +377,12 @@ enum IssueCommands {
         /// Clear parent issue
         #[arg(long)]
         no_parent: bool,
+        /// Set the repository-relative strategy file a mission links
+        #[arg(long, conflicts_with = "no_strategy")]
+        strategy: Option<String>,
+        /// Clear a mission's strategy link
+        #[arg(long)]
+        no_strategy: bool,
     },
 
     /// Append a dated note to the issue record's Notes section
