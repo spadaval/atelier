@@ -3,6 +3,9 @@ created_at: "2026-10-16T18:47:46.535528279+00:00"
 id: "atelier-v9ve"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-v9ve
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-16T19:55:20.936569915+00:00"
+status: "done"
 title: "Warn that rebase recovery drops commits made after the rebase"
-updated_at: "2026-10-16T18:47:46.535528279+00:00"
+updated_at: "2026-10-16T19:55:20.936569915+00:00"
 ---
 
 ## Goal
@@ -27,3 +31,7 @@ The error in crates/atelier-app/src/review_gate.rs and docs/product/reviews-and-
 ## Context
 
 Deferred finding atelier-eix5 from the atelier-j48s review (approval atelier-0c5b).
+
+## Close Reason
+
+The 'pins a commit outside the work branch' error and reviews-and-merge.md say to cherry-pick only code or planning commits made after the rebase back onto the restored tip, leave out review and evidence records (they pin rewritten commits), and record proof and review again. The rebase recovery test gates on evidence, makes a fix and proof after the rebase, follows the advice, shows the stale proof and review, records them again and merges.
