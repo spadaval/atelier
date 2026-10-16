@@ -108,7 +108,7 @@ impl Snapshot {
     }
 }
 
-/// Gates read custom link types and prune retention from the project config,
+/// Gates read custom context link types from the project config,
 /// so a guard refuses one that differs from HEAD, even if Git ignores it
 /// (atelier-v44v).
 pub(crate) fn require_committed_config(repo: &Path, head: &str, command: &str) -> Result<()> {
@@ -117,7 +117,7 @@ pub(crate) fn require_committed_config(repo: &Path, head: &str, command: &str) -
     let working = std::fs::read_to_string(repo.join(path)).ok();
     if committed != working {
         bail!(
-            "{command}_config_uncommitted: .atelier/config.toml differs from HEAD, and gates read its custom link types and prune retention; commit it with the work it describes, or restore it with `git restore .atelier/config.toml`"
+            "{command}_config_uncommitted: .atelier/config.toml differs from HEAD, and gates read its custom context link types; commit it with the work it describes, or restore it with `git restore .atelier/config.toml`"
         );
     }
     Ok(())
