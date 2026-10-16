@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T00:37:13.322777136+00:00"
+status: "done"
 title: "Let bundles revise existing records, and report client_ref to ID"
-updated_at: "2026-10-16T00:34:06.626878139+00:00"
+updated_at: "2026-10-16T00:37:13.322777136+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ A bundle can update bodies, fields and links of existing records by ID with the 
 astromech: three regenerations of a 153-record bundle during review.
 
 Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with research, references and decisions) into Atelier records. Sumeet's principle: Atelier records should hold the whole backlog; needing a side document means Atelier needs work.
+
+## Close Reason
+
+Bundle issue entries with operation update and id revise an existing record (title, body, priority, labels, strategy replace; links and notes add; status and type changes refused), with the same validation and staged-graph checks as create. Preview and apply list every client_ref with its ID and title. Documented in docs/spec/bundle/schema.md (Updating records). Link removal stays with atelier issue unlink. Test: test_bundles_update_existing_records_and_report_client_ref_ids.
