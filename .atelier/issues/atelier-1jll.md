@@ -5,7 +5,7 @@ issue_type: "feature"
 labels:
 - "adoption"
 workflow_branch:
-  branch_base: task/atelier-1jll
+  branch_base: master
   work_branch: feature/atelier-1jll
 priority: "P2"
 relationships:
