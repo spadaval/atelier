@@ -2068,10 +2068,7 @@ fn test_bundle_backup_cleanup_failure_reports_committed_success_and_blocks_retry
         stderr.contains("Bundle apply committed successfully"),
         "{stderr}"
     );
-    assert!(
-        stderr.contains("Do not retry this create-only bundle"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("Do not retry this bundle"), "{stderr}");
     assert_eq!(
         count_markdown_records(dir.path(), "issues"),
         issue_count + 1
@@ -2206,10 +2203,7 @@ fn test_bundle_stage_cleanup_failure_reports_committed_success_and_blocks_retry(
             && stderr.contains("staging cleanup failed"),
         "{stderr}"
     );
-    assert!(
-        stderr.contains("Do not retry this create-only bundle"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("Do not retry this bundle"), "{stderr}");
     assert_eq!(
         (
             count_markdown_records(dir.path(), "issues"),

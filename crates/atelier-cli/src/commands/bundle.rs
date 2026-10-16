@@ -13,7 +13,7 @@ use atelier_records::{
 use atelier_records::{CanonicalIssueRecord, RecordStore, Relationships};
 
 pub fn preview(index: &RecordIndex, input: &str) -> Result<()> {
-    let bundle = load_bundle(input)?;
+    let bundle = load_bundle(index, input)?;
     validate_bundle(index, &bundle)?;
     let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
     print_bundle_summary(preview_bundle_summary(&bundle, &plan))
@@ -24,7 +24,7 @@ pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> R
         bail!("bundle apply requires --yes");
     }
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
-    let bundle = load_bundle(input)?;
+    let bundle = load_bundle(index, input)?;
     validate_bundle(index, &bundle)?;
     let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
 
@@ -34,16 +34,151 @@ pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> R
     print_bundle_summary(summary)
 }
 
-fn load_bundle(input: &str) -> Result<BundleFile> {
+fn load_bundle(index: &RecordIndex, input: &str) -> Result<BundleFile> {
     let bytes = fs::read(input).with_context(|| format!("Failed to read bundle file {input}"))?;
-    serde_json::from_slice(&bytes).map_err(|error| {
+    let parse_error = |error: serde_json::Error| {
         let renamed = error
             .to_string()
             .contains("unknown field `depends_on`")
             .then_some("; the issue field depends_on is now blocked_by, matching atelier issue link --role blocked_by")
             .unwrap_or_default();
         anyhow::anyhow!("Failed to parse bundle {input} as JSON: {error}{renamed}")
-    })
+    };
+    let mut value: Value = serde_json::from_slice(&bytes).map_err(parse_error)?;
+    if let Some(issues) = value
+        .pointer_mut("/resources/issues")
+        .and_then(Value::as_array_mut)
+    {
+        let original = issues.clone();
+        for issue in issues {
+            fill_update_from_record(index, &original, issue)?;
+        }
+    }
+    serde_json::from_value(value).map_err(parse_error)
+}
+
+/// An `update` entry names an existing record by `id` and lists only the
+/// fields it changes. Fill the rest from the record, so an update passes the
+/// same validation, planning, and staged-graph checks as a create.
+/// The existing issue a bundle parent reference names, through an `id` or
+/// the `client_ref` of an update entry.
+fn parent_ref_id(index: &RecordIndex, bundle_issues: &[Value], parent: &Value) -> Option<String> {
+    if let Some(id) = parent.get("id").and_then(Value::as_str) {
+        return index.resolve_issue_ref(id).ok().flatten();
+    }
+    let client_ref = parent.get("client_ref").and_then(Value::as_str)?;
+    let entry = bundle_issues
+        .iter()
+        .find(|entry| entry.get("client_ref").and_then(Value::as_str) == Some(client_ref))?;
+    let id = entry.get("id").and_then(Value::as_str)?;
+    index.resolve_issue_ref(id).ok().flatten()
+}
+
+fn fill_update_from_record(
+    index: &RecordIndex,
+    bundle_issues: &[Value],
+    issue: &mut Value,
+) -> Result<()> {
+    let Some(object) = issue.as_object_mut() else {
+        return Ok(());
+    };
+    if object.get("operation").and_then(Value::as_str) != Some("update") {
+        if object.contains_key("id") {
+            bail!("Bundle issue field `id` names the record to change and needs \"operation\": \"update\"");
+        }
+        return Ok(());
+    }
+    let client_ref = object
+        .get("client_ref")
+        .and_then(Value::as_str)
+        .unwrap_or("(missing client_ref)")
+        .to_string();
+    let id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .with_context(|| format!("Update {client_ref} needs the id of the record it changes"))?;
+    let id = index
+        .resolve_issue_ref(id)?
+        .with_context(|| format!("Update {client_ref} names missing issue {id}"))?;
+    let record = index
+        .issue_record(&id)
+        .with_context(|| format!("Update {client_ref} names missing issue {id}"))?;
+    if object.contains_key("status") {
+        bail!("Update {client_ref} cannot set status; change {id}'s status with atelier issue transition");
+    }
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if object.contains_key("body") && policy.status_category(&record.issue.status) == Some("done") {
+        bail!(
+            "issue_body_done: update {client_ref} would change the body of {id}, which is {}; its done claim and proof were judged against the current acceptance. File follow-up work instead",
+            record.issue.status
+        );
+    }
+    if let Some(parent) = object.get("parent") {
+        if !index.get_subissues(&id).is_empty() {
+            bail!("Update {client_ref} cannot give {id} a parent: it has children of its own, and parents are one level deep");
+        }
+        if let Some(current) = &record.issue.parent_id {
+            let same =
+                parent_ref_id(index, bundle_issues, parent).as_deref() == Some(current.as_str());
+            if !same {
+                bail!("Update {client_ref} cannot move {id} from parent {current}; use atelier issue update --parent");
+            }
+        }
+    }
+    if let Some(issue_type) = object.get("issue_type").and_then(Value::as_str) {
+        if issue_type != record.issue.issue_type {
+            bail!(
+                "Update {client_ref} cannot change {id} from {} to {issue_type}; use atelier issue update --issue-type",
+                record.issue.issue_type
+            );
+        }
+    }
+    if let Some(body) = object.get("body").and_then(Value::as_str) {
+        let parsed = atelier_records::parse_issue_sections_for_type(
+            body,
+            Path::new("<bundle issue body>"),
+            &record.issue.issue_type,
+        )
+        .with_context(|| format!("Invalid body for {client_ref}"))?;
+        if parsed.notes.is_some() || parsed.close_reason.is_some() {
+            bail!(
+                "Update {client_ref} replaces typed sections only; add notes with the notes field"
+            );
+        }
+    } else {
+        let mut sections = record.clone();
+        sections.sections.notes = None;
+        sections.sections.close_reason = None;
+        let rendered = atelier_records::render_issue_record(&sections)?;
+        let (_, body) = atelier_records::split_document(&rendered)
+            .with_context(|| format!("cannot read the body of {id}"))?;
+        object.insert("body".into(), Value::String(body.to_string()));
+    }
+    object.insert("id".into(), Value::String(id.clone()));
+    object
+        .entry("title")
+        .or_insert_with(|| Value::String(record.issue.title.clone()));
+    object.insert(
+        "issue_type".into(),
+        Value::String(record.issue.issue_type.clone()),
+    );
+    object.entry("priority").or_insert_with(|| {
+        Value::String(
+            atelier_core::IssuePriority::from_canonical_token(&record.issue.priority)
+                .map(|priority| priority.label().to_string())
+                .unwrap_or_else(|_| record.issue.priority.clone()),
+        )
+    });
+    object
+        .entry("labels")
+        .or_insert_with(|| json!(record.labels));
+    if let Some(strategy) = &record.issue.strategy {
+        object
+            .entry("strategy")
+            .or_insert_with(|| json!({ "path": strategy.path }));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +213,9 @@ struct BundleIssue {
     title: String,
     #[serde(default)]
     operation: Option<String>,
+    /// The existing record an `update` changes.
+    #[serde(default)]
+    id: Option<String>,
     body: String,
     #[serde(default)]
     strategy: Option<atelier_core::IssueStrategy>,
@@ -309,8 +447,19 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
         validate_record_kind(kind)?;
     }
 
+    let mut updated = BTreeSet::new();
     for issue in &bundle.resources.issues {
-        validate_operation(issue.operation.as_deref(), &issue.client_ref)?;
+        if let Some(id) = &issue.id {
+            if !updated.insert(id.clone()) {
+                bail!(
+                    "Bundle updates {id} more than once (again as {}); merge the changes into one entry",
+                    issue.client_ref
+                );
+            }
+        }
+    }
+    for issue in &bundle.resources.issues {
+        validate_issue_operation(issue)?;
         if issue.title.trim().is_empty() {
             bail!("Issue {} title cannot be empty", issue.client_ref);
         }
@@ -408,13 +557,18 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
             // Parents are one level deep: the parent cannot itself be a child,
             // and this child cannot be a parent in the same bundle.
             let parent_is_child = match (&parent.client_ref, &parent.id) {
-                (Some(client_ref), _) => bundle
-                    .resources
-                    .issues
-                    .iter()
-                    .any(|other| &other.client_ref == client_ref && other.parent.is_some()),
+                (Some(client_ref), _) => bundle.resources.issues.iter().any(|other| {
+                    &other.client_ref == client_ref
+                        && (other.parent.is_some()
+                            || other.id.as_ref().is_some_and(|id| {
+                                index
+                                    .get_issue(id)
+                                    .is_some_and(|record| record.parent_id.is_some())
+                            }))
+                }),
                 (None, Some(id)) => index
-                    .get_issue(id)
+                    .resolve_issue_ref(id)?
+                    .and_then(|id| index.get_issue(&id))
                     .is_some_and(|other| other.parent_id.is_some()),
                 (None, None) => false,
             };
@@ -467,16 +621,35 @@ fn bundle_issue_type_for_ref(
         return Ok(None);
     }
     if let Some(id) = &reference.id {
-        return Ok(index.get_issue(id).map(|issue| issue.issue_type));
+        return Ok(index
+            .resolve_issue_ref(id)?
+            .and_then(|id| index.get_issue(&id))
+            .map(|issue| issue.issue_type));
     }
     Ok(None)
+}
+
+fn validate_issue_operation(issue: &BundleIssue) -> Result<()> {
+    match (issue.operation.as_deref().unwrap_or("create"), &issue.id) {
+        ("create", None) | ("update", Some(_)) => Ok(()),
+        ("update", None) => bail!(
+            "Update {} needs the id of the record it changes",
+            issue.client_ref
+        ),
+        (other, _) => bail!(
+            "Unsupported operation '{other}' for {}; bundle issues support create and update",
+            issue.client_ref
+        ),
+    }
 }
 
 fn validate_operation(operation: Option<&str>, client_ref: &str) -> Result<()> {
     match operation.unwrap_or("create") {
         "create" => Ok(()),
         other => {
-            bail!("Unsupported operation '{other}' for {client_ref}; v1 bundles are create-only")
+            bail!(
+                "Unsupported operation '{other}' for {client_ref}; bundle evidence is create-only"
+            )
         }
     }
 }
@@ -565,7 +738,7 @@ fn apply_bundle_file(
     if let Err(error) = cleanup_bundle_stage(&stage) {
         if result.is_ok() {
             tracing::warn!(
-                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this create-only bundle; verify with `atelier check`, then remove the leftover staging directory.",
+                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this bundle; verify with `atelier check`, then remove the leftover staging directory.",
                 stage.display(),
                 error
             );
@@ -595,7 +768,7 @@ fn ensure_no_bundle_recovery_artifacts(state_dir: &Path) -> Result<()> {
     artifacts.sort();
     if !artifacts.is_empty() {
         bail!(
-            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry the bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
             artifacts
                 .iter()
                 .map(|path| path.display().to_string())
@@ -648,6 +821,39 @@ fn apply_bundle_to_state(
     let store = RecordStore::for_project(state_dir, project_slug);
 
     for issue in &plan.issues {
+        if let Some(id) = &issue.id {
+            let mut record = store.load_issue_by_id(id)?;
+            let sections = atelier_records::parse_issue_sections_for_type(
+                &issue.body,
+                Path::new("<bundle issue body>"),
+                &issue.issue_type,
+            )?;
+            record.issue.title = issue.title.clone();
+            record.issue.priority = issue.priority.clone();
+            record.issue.strategy = issue.strategy.clone();
+            record.issue.description = Some(issue.body.clone());
+            record.issue.updated_at = chrono::Utc::now();
+            record.labels = sorted(issue.labels.clone());
+            record.sections.body = sections.body;
+            check_bundle_record(&record)?;
+            store.write_issue_atomic(&record)?;
+            resolved.insert(
+                issue.client_ref.clone(),
+                ResolvedRef {
+                    kind: "issue".to_string(),
+                    id: id.clone(),
+                },
+            );
+            created
+                .entry("updated".to_string())
+                .or_default()
+                .push(json!({
+                    "client_ref": issue.client_ref,
+                    "id": id,
+                    "title": issue.title,
+                }));
+            continue;
+        }
         let description = Some(issue.body.clone());
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
@@ -679,6 +885,7 @@ fn apply_bundle_to_state(
             sections,
             relationships: Relationships::default(),
         };
+        check_bundle_record(&record)?;
         store.write_issue_atomic(&record)?;
         resolved.insert(
             issue.client_ref.clone(),
@@ -693,6 +900,7 @@ fn apply_bundle_to_state(
             .push(json!({
                 "client_ref": issue.client_ref,
                 "id": id,
+                "title": issue.title,
             }));
     }
 
@@ -736,6 +944,7 @@ fn apply_bundle_to_state(
             .push(json!({
                 "client_ref": evidence.client_ref,
                 "id": id,
+                "title": evidence.title,
             }));
     }
 
@@ -776,6 +985,31 @@ fn apply_bundle_to_state(
         "relationships": applied_relationships,
         "notes": plan.notes.len(),
     }))
+}
+
+/// A record a bundle writes passes the per-record rules `atelier check`
+/// applies, and a mission's strategy names an existing file.
+fn check_bundle_record(record: &CanonicalIssueRecord) -> Result<()> {
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let findings = atelier_app::lint::issue_findings([record], &repo_root, false);
+    if let Some(finding) = findings.first() {
+        bail!(
+            "Bundle record {} ({}) is invalid: {}",
+            record.issue.id,
+            record.issue.title,
+            finding.message
+        );
+    }
+    if let Some(strategy) = &record.issue.strategy {
+        if !repo_root.join(&strategy.path).is_file() {
+            bail!(
+                "Bundle mission {} links strategy {}, which does not exist",
+                record.issue.id,
+                strategy.path
+            );
+        }
+    }
+    Ok(())
 }
 
 fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
@@ -908,7 +1142,7 @@ pub(crate) fn install_directories(
     if result.is_ok() {
         if let Err(error) = cleanup_bundle_backup(&backup) {
             tracing::warn!(
-                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this create-only bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
+                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
                 backup.display(),
                 error
             );
@@ -1163,11 +1397,28 @@ fn add_relationship(
 
 fn preview_bundle_summary(bundle: &BundleFile, plan: &BundleGraphPlan<'_>) -> Value {
     let mut records = BTreeMap::<String, Vec<Value>>::new();
-    for (client_ref, kind) in bundle.client_refs() {
+    for issue in &bundle.resources.issues {
+        let key = if issue.id.is_some() {
+            "updated"
+        } else {
+            "issues"
+        };
+        records.entry(key.to_string()).or_default().push(json!({
+            "client_ref": issue.client_ref,
+            "kind": "issue",
+            "id": issue.id,
+            "title": issue.title,
+        }));
+    }
+    for evidence in &bundle.resources.evidence {
         records
-            .entry(created_key(kind).to_string())
+            .entry("evidence".to_string())
             .or_default()
-            .push(json!({ "client_ref": client_ref, "kind": kind }));
+            .push(json!({
+                "client_ref": evidence.client_ref,
+                "kind": "evidence",
+                "title": evidence.title,
+            }));
     }
     for records in records.values_mut() {
         records.sort_by(|left, right| {
@@ -1237,7 +1488,7 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         println!();
         println!("Records");
         println!("-------");
-        for key in ["issues", "evidence"] {
+        for key in ["issues", "updated", "evidence"] {
             let count = records
                 .get(key)
                 .and_then(|value| value.as_array())
@@ -1258,6 +1509,36 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         .unwrap_or(0);
     println!("  relationships: {relationship_count}");
     println!("  notes: {}", summary["notes"].as_u64().unwrap_or_default());
+
+    if let Some(records) = summary["records"].as_object() {
+        let rows = ["issues", "updated", "evidence"]
+            .into_iter()
+            .flat_map(|key| {
+                records
+                    .get(key)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(move |record| (key, record))
+            })
+            .collect::<Vec<_>>();
+        if !rows.is_empty() {
+            println!();
+            println!("Client References");
+            println!("-----------------");
+            for (key, record) in rows {
+                let client_ref = record["client_ref"].as_str().unwrap_or("unknown");
+                let title = record["title"].as_str().unwrap_or_default();
+                let target = match (record["id"].as_str(), key) {
+                    (Some(id), "updated") => format!("{id} (updated)"),
+                    (Some(id), _) => id.to_string(),
+                    (None, _) if preview => "(new)".to_string(),
+                    (None, _) => "unknown".to_string(),
+                };
+                println!("  {client_ref} -> {target}  {title}");
+            }
+        }
+    }
 
     if let Some(relationships) = summary["relationships"].as_array() {
         if !relationships.is_empty() {
@@ -1308,14 +1589,6 @@ fn sorted(mut values: Vec<String>) -> Vec<String> {
     values.sort();
     values.dedup();
     values
-}
-
-fn created_key(kind: &str) -> &str {
-    match kind {
-        "evidence" => "evidence",
-        "issue" => "issues",
-        _ => kind,
-    }
 }
 
 fn default_issue_type() -> String {

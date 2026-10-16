@@ -4247,3 +4247,211 @@ fn test_children_inherit_their_parents_open_blockers() {
     let ready = create(&["--quiet", "work", "ready"]);
     assert!(ready.lines().any(|line| line == child), "{ready}");
 }
+
+#[test]
+fn test_bundles_update_existing_records_and_report_client_ref_ids() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle = dir.path().join("plan.json");
+    fs::write(
+        &bundle,
+        r###"{"schema":"atelier.bundle","schema_version":2,"title":"Plan","resources":{"issues":[
+          {"client_ref":"a","title":"First slice","body":"## Goal\n\nA.\n\n## Done when\n\nA passes."},
+          {"client_ref":"b","title":"Second slice","body":"## Goal\n\nB.\n\n## Done when\n\nB passes.","blocked_by":[{"client_ref":"a"}]}
+        ]}}"###,
+    )
+    .unwrap();
+    let (success, preview, stderr) =
+        run_atelier(dir.path(), &["bundle", "preview", bundle.to_str().unwrap()]);
+    assert!(success, "{stderr}");
+    assert!(preview.contains("a -> (new)  First slice"), "{preview}");
+    let (success, applied, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "{stderr}");
+    let first = issue_id_by_title(dir.path(), "First slice");
+    let second = issue_id_by_title(dir.path(), "Second slice");
+    assert!(
+        applied.contains(&format!("a -> {first}  First slice"))
+            && applied.contains(&format!("b -> {second}  Second slice")),
+        "{applied}"
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "note", &first, "Kept across updates"],
+    );
+
+    // Revise the graph after review without minting new IDs: change one
+    // body and title, keep the other's body, and add a record and a link.
+    let revision = dir.path().join("revision.json");
+    fs::write(
+        &revision,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Revision","resources":{{"issues":[
+              {{"client_ref":"a","operation":"update","id":"{first}","title":"First slice, revised","body":"## Goal\n\nA, revised.\n\n## Done when\n\nA passes twice.","labels":["reviewed"],"notes":[{{"body":"Revised after review"}}]}},
+              {{"client_ref":"b","operation":"update","id":"{second}","priority":"high","blocked_by":[{{"client_ref":"c"}}]}},
+              {{"client_ref":"c","title":"New groundwork","body":"## Goal\n\nC.\n\n## Done when\n\nC passes."}}
+            ]}}}}"###
+        ),
+    )
+    .unwrap();
+    let (success, applied, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", revision.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "{stderr}");
+    let third = issue_id_by_title(dir.path(), "New groundwork");
+    assert!(
+        applied.contains(&format!("a -> {first} (updated)  First slice, revised"))
+            && applied.contains(&format!("c -> {third}  New groundwork")),
+        "{applied}"
+    );
+    let a = fs::read_to_string(canonical_issue_path(dir.path(), &first)).unwrap();
+    for expected in [
+        "title: \"First slice, revised\"",
+        "A, revised.",
+        "\"reviewed\"",
+        "Kept across updates",
+        "Revised after review",
+    ] {
+        assert!(a.contains(expected), "{expected}: {a}");
+    }
+    let b = fs::read_to_string(canonical_issue_path(dir.path(), &second)).unwrap();
+    assert!(
+        b.contains("priority: \"P1\"") && b.contains("B passes."),
+        "{b}"
+    );
+    let (success, ready, _) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
+    let ready = ready.lines().collect::<Vec<_>>();
+    assert!(
+        success
+            && ready.contains(&first.as_str())
+            && ready.contains(&third.as_str())
+            && !ready.contains(&second.as_str()),
+        "{ready:?}"
+    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+
+    // Updates are validated like creates, and status changes stay transitions.
+    for (body, expected) in [
+        (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","body":"## Outcome\n\nWrong shape."}}"###), "Invalid body for a"),
+        (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","status":"done"}}"###), "cannot set status"),
+        (r###"{"client_ref":"a","operation":"update","id":"atelier-zzzz"}"###.to_string(), "missing issue atelier-zzzz"),
+        (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","issue_type":"bug"}}"###), "cannot change"),
+        (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","labels":["x"]}},{{"client_ref":"a2","operation":"update","id":"{}","labels":["y"]}}"###, &first[first.len() - 4..]), "more than once"),
+        (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip.","strategy":{{"path":"docs/missing.md"}}}}"###), "does not exist"),
+        (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip."}}"###), "Mission requires Success criteria"),
+        (r###"{"client_ref":"a","operation":"update","title":"No id","body":"## Goal\n\nG.\n\n## Done when\n\nD."}"###.to_string(), "needs the id"),
+    ] {
+        fs::write(
+            &revision,
+            format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{body}]}}}}"###),
+        )
+        .unwrap();
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "apply", revision.to_str().unwrap(), "--yes"],
+        );
+        assert!(!success && stderr.contains(expected), "{expected}: {stderr}");
+    }
+
+    // Done records keep the acceptance their proof was judged against, and
+    // moving a record to another parent is an issue update.
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &third,
+            "supersede",
+            "--reason",
+            "Not needed",
+        ],
+    );
+    let parent = issue_id_by_title(dir.path(), "First slice, revised");
+    let (success, child, _) = run_atelier(
+        dir.path(),
+        &["-q", "issue", "create", "Child", "--parent", &second],
+    );
+    assert!(success);
+    let child = child.trim().to_string();
+    for (body, expected) in [
+        (
+            format!(
+                r###"{{"client_ref":"c","operation":"update","id":"{third}","body":"## Goal\n\nC2.\n\n## Done when\n\nC2."}}"###
+            ),
+            "issue_body_done",
+        ),
+        (
+            format!(
+                r###"{{"client_ref":"k","operation":"update","id":"{child}","parent":{{"id":"{parent}"}}}}"###
+            ),
+            "use atelier issue update --parent",
+        ),
+        (
+            format!(
+                r###"{{"client_ref":"s","operation":"update","id":"{second}","parent":{{"id":"{parent}"}}}}"###
+            ),
+            "has children of its own",
+        ),
+    ] {
+        fs::write(
+            &revision,
+            format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{body}]}}}}"###),
+        )
+        .unwrap();
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "preview", revision.to_str().unwrap()],
+        );
+        assert!(
+            !success && stderr.contains(expected),
+            "{expected}: {stderr}"
+        );
+    }
+
+    // Restating the current parent through an update entry's client_ref, and
+    // naming a parent by an ID suffix, are both accepted.
+    fs::write(
+        &revision,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Restate","resources":{{"issues":[
+              {{"client_ref":"p","operation":"update","id":"{second}"}},
+              {{"client_ref":"k","operation":"update","id":"{child}","parent":{{"client_ref":"p"}}}},
+              {{"client_ref":"n","title":"Suffix child","body":"## Goal\n\nN.\n\n## Done when\n\nN.","parent":{{"id":"{}"}}}}
+            ]}}}}"###,
+            &second[second.len() - 4..]
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", revision.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "{stderr}");
+    let suffix_child = issue_id_by_title(dir.path(), "Suffix child");
+    let parent_record = fs::read_to_string(canonical_issue_path(dir.path(), &second)).unwrap();
+    assert!(parent_record.contains(&suffix_child), "{parent_record}");
+    // A parent named through an update entry for a record that is already a
+    // child is refused at preview too.
+    fs::write(
+        &revision,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Nest","resources":{{"issues":[
+              {{"client_ref":"k","operation":"update","id":"{child}"}},
+              {{"client_ref":"g","title":"Grandchild","body":"## Goal\n\nG.\n\n## Done when\n\nG.","parent":{{"client_ref":"k"}}}}
+            ]}}}}"###
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", revision.to_str().unwrap()],
+    );
+    assert!(
+        !success && stderr.contains("parents are one level deep"),
+        "{stderr}"
+    );
+}

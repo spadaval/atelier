@@ -19,7 +19,8 @@ file is not silently consumed, moved, or deleted.
 The top-level object has `schema: "atelier.bundle"`, `schema_version: 2`, a
 non-empty `title`, and `resources`. Optional `description` and `metadata`
 describe the input. Unknown fields and unsupported versions are rejected.
-Version 2 is create-only: resource `operation` is omitted or `create`.
+An issue's `operation` is omitted or `create`, or `update` with the existing
+record's `id`; evidence is create-only. See [updating records](#updating-records).
 Version 1 is rejected because its issue body and evidence contract differ.
 
 `resources.issues` and `resources.evidence` are supported. Missions are issues
@@ -55,7 +56,8 @@ Client references never become canonical record IDs.
 | `blocked_by`, `blocks` | Optional reference arrays for sequencing: `blocked_by` names work this issue waits for, `blocks` names work that waits for it. These are the `atelier issue link --role` names. |
 | `advances` | Optional mission membership reference array. On a mission it names work in its scope; on other issues it names the mission they advance. Each link must join exactly one mission. |
 | `notes` | Optional ordered notes with `body`, optional `author`, and optional RFC 3339 `created_at`. |
-| `operation` | Omitted or `create`. |
+| `operation` | Omitted or `create`, or `update` together with `id`. |
+| `id` | For `update` only: the existing issue the entry changes. |
 
 Work item bodies contain Goal and Done when, optionally Scope, Context,
 Unknowns, and Design. Missions contain Outcome
@@ -106,10 +108,33 @@ holds the canonical mutation lock from snapshot through staged installation,
 rejects live-tree drift, and backs up issue and evidence directories as one
 rollback unit. Invalid paths, symlinks, and special entries are rejected.
 
+Preview and apply list every issue and evidence entry under "Client References"
+as `client_ref -> ID  title`; preview shows `(new)` for records it would create,
+and apply marks updated records `(updated)`.
+
 Cleanup failure after installation reports the retained backup or stage path.
-Do not retry a successful create-only bundle: inspect the created IDs, run
-`atelier check`, and resolve the named retained directory. Reapplication is not
-an idempotent update operation.
+Do not retry a successful bundle: inspect the created IDs, run
+`atelier check`, and resolve the named retained directory. Reapplying a
+bundle's create entries creates new records; revise existing ones with update
+entries instead.
+
+## Updating records
+
+An issue entry with `"operation": "update"` and `"id": "<existing-id>"` revises
+that record instead of creating one, so a reviewed import can be corrected
+without minting new IDs. Its `client_ref` stands for the existing record within
+the bundle, so other entries can link to it. Fields it omits keep their current
+values; `title`, `body` (the typed sections, which keep the record's Notes and
+Close Reason), `priority`, `labels`, and a mission's `strategy` replace the
+current values when given. `blocked_by`, `blocks`, and `advances` add links,
+and `parent` sets one on a record without a parent; remove links with
+`atelier issue unlink` and move a record with `atelier issue update --parent`.
+`notes` append. An update cannot set `status` (use `atelier issue
+transition`), change `issue_type` (use `atelier issue update --issue-type`),
+change the body of a done record, or update the same record twice. Every
+record a bundle writes, created or updated, passes the same body, field,
+reference, per-record (`atelier check`), strategy-file, and staged-graph
+validation.
 
 Fixtures:
 
