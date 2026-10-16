@@ -3967,7 +3967,8 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
             "before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n",
             "before review.\n        validators:\n        - blockers.none_open\n",
         );
-    assert!(!policy.contains("work.terminal"), "{policy}");
+    // Only the decision workflow's decide keeps the check.
+    assert_eq!(policy.matches("- work.terminal").count(), 1, "{policy}");
     fs::write(&policy_path, policy).unwrap();
     let (success, child, stderr) = run_atelier(dir.path(), &["-q", "issue", "create", "Child"]);
     assert!(success, "{stderr}");
@@ -4001,7 +4002,7 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
     assert!(!migrated_policy.contains("epic"), "{migrated_policy}");
     assert_eq!(
         migrated_policy.matches("- work.terminal").count(),
-        1,
+        2,
         "{migrated_policy}"
     );
     let record = fs::read_to_string(canonical_issue_path(dir.path(), epic)).unwrap();

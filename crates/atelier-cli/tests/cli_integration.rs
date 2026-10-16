@@ -700,16 +700,22 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
 fn add_close_validator(dir: &Path, validator: &str) {
     let path = dir.join(".atelier/workflow.yaml");
     let workflow = fs::read_to_string(&path).unwrap();
-    let close_validators = "        - blockers.none_open\n";
-    assert_eq!(workflow.matches(close_validators).count(), 2, "{workflow}");
-    fs::write(
-        &path,
-        workflow.replace(
-            close_validators,
-            &format!("        - blockers.none_open\n        - {validator}\n"),
-        ),
-    )
-    .unwrap();
+    let mut updated = String::new();
+    let mut in_close = false;
+    let mut added = 0;
+    for line in workflow.lines() {
+        updated.push_str(line);
+        updated.push('\n');
+        if line.starts_with("      ") && !line.starts_with("       ") {
+            in_close = line == "      close:";
+        }
+        if in_close && line == "        validators:" {
+            updated.push_str(&format!("        - {validator}\n"));
+            added += 1;
+        }
+    }
+    assert_eq!(added, 2, "{workflow}");
+    fs::write(&path, updated).unwrap();
 }
 
 /// Starter policy whose work `close` also requires passing evidence.
