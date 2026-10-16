@@ -4,6 +4,9 @@ id: "atelier-by8u"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-by8u
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give missions and epics a place for research and references"
-updated_at: "2026-10-15T21:00:45.354133130+00:00"
+updated_at: "2026-10-16T00:49:30.826583903+00:00"
 ---
 
 ## Goal

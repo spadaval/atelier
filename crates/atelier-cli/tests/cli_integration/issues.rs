@@ -4308,3 +4308,43 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
         "{stderr}"
     );
 }
+
+#[test]
+fn test_missions_and_parents_carry_background_research() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stderr}");
+        stdout.trim().to_string()
+    };
+    let mission = create(&[
+        "-q", "issue", "create", "Replace the toolbox", "--issue-type", "mission", "--body",
+        "## Outcome\n\nOne tool.\n\n## Success criteria\n\nS1.\n\n## Background\n\n| Tool | Verdict |\n| --- | --- |\n| EDMC | replace |",
+    ]);
+    let parent = create(&[
+        "-q", "issue", "create", "EDDN sender", "--issue-type", "feature", "--body",
+        "## Goal\n\nSend to EDDN.\n\n## Done when\n\nChildren done.\n\n## Background\n\nSender rules: [EDDN docs](https://example.test/eddn).",
+    ]);
+    create(&[
+        "-q",
+        "issue",
+        "create",
+        "Journal events",
+        "--parent",
+        &parent,
+    ]);
+    for (id, expected) in [(&mission, "| EDMC | replace |"), (&parent, "Sender rules:")] {
+        let show = create(&["issue", "show", id]);
+        let at = show.find("Background").expect(&show);
+        assert!(show[at..].contains(expected), "{show}");
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    // Background is optional and revisable like any other section.
+    create(&[
+        "issue", "update", &parent, "--body",
+        "## Goal\n\nSend to EDDN.\n\n## Done when\n\nChildren done.\n\n## Background\n\nRevised rules.",
+    ]);
+    assert!(create(&["issue", "show", &parent]).contains("Revised rules."));
+}

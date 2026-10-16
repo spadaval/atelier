@@ -12,6 +12,9 @@ Missions and work items are issue records with distinct `issue_type` values. A
 mission links a strategy file and states an Outcome and Success criteria. Work
 items (task, feature, bug, spike, validation, or any type the policy declares)
 state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
+Missions and work items may also carry an optional Background section: the
+research, references, and motivation that a mission or every child of a parent
+shares, so it lives in the record instead of a side document.
 Notes and Close Reason carry dated handoffs and terminal reasons.
 
 Any work item can be a parent: it may own direct children, one level deep, so a

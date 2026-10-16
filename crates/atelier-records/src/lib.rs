@@ -1425,8 +1425,9 @@ pub fn parse_issue_sections_for_type(
             IssueBody::Mission {
                 outcome: required(Outcome)?,
                 success_criteria: optional(SuccessCriteria),
+                background: optional(Background),
             },
-            vec![Outcome, SuccessCriteria],
+            vec![Outcome, SuccessCriteria, Background],
         ),
         _ => {
             if issue_type == "epic" || sections.contains_key(Outcome.title()) {
@@ -1445,8 +1446,9 @@ pub fn parse_issue_sections_for_type(
                     context: optional(Context),
                     unknowns: optional(Unknowns),
                     design: optional(Design),
+                    background: optional(Background),
                 },
-                vec![Goal, DoneWhen, Scope, Context, Unknowns, Design],
+                vec![Goal, DoneWhen, Scope, Context, Unknowns, Design, Background],
             )
         }
     };

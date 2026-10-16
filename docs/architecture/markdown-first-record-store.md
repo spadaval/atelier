@@ -38,9 +38,9 @@ current record model.
 `blocks`, `children`, `attachments`, and `relates`; indexes derive parent and
 reverse-link views from those stored edges.
 
-Work item bodies require Goal and Done when; Scope, Context, Unknowns, and
-Design are optional. Missions carry Outcome and Success criteria or link
-strategy. Shared Notes and Close
+Work item bodies require Goal and Done when; Scope, Context, Unknowns,
+Design, and Background are optional. Missions carry Outcome and Success
+criteria or link strategy, with optional Background. Shared Notes and Close
 Reason preserve handoffs and terminal reasoning. See
 [authoring](../product/mission-authoring.md) for the process-owned templates.
 

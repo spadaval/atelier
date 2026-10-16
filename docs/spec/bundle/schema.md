@@ -60,8 +60,8 @@ Client references never become canonical record IDs.
 | `id` | For `update` only: the existing issue the entry changes. |
 
 Work item bodies contain Goal and Done when, optionally Scope, Context,
-Unknowns, and Design. Missions contain Outcome
-and Success criteria or link a strategy path. Do not author the retired
+Unknowns, Design, and Background. Missions contain Outcome and Success
+criteria or link a strategy path, optionally with Background. Do not author the retired
 Description/Outcome/Evidence issue schema. The old bundle issue fields
 `description`, `outcome`, and `evidence` are rejected; use `body`.
 

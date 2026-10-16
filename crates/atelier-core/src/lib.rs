@@ -283,10 +283,12 @@ pub enum IssueBody {
         context: Option<String>,
         unknowns: Option<String>,
         design: Option<String>,
+        background: Option<String>,
     },
     Mission {
         outcome: String,
         success_criteria: Option<String>,
+        background: Option<String>,
     },
 }
 
@@ -300,6 +302,9 @@ pub enum IssueSectionName {
     Design,
     Outcome,
     SuccessCriteria,
+    /// Free-form research, references, and motivation shared by a mission or
+    /// a parent's children (atelier-by8u).
+    Background,
     Notes,
     CloseReason,
 }
@@ -325,7 +330,7 @@ pub struct IssueSectionState {
 }
 
 impl IssueSections {
-    pub const ALL_NAMES: [IssueSectionName; 10] = [
+    pub const ALL_NAMES: [IssueSectionName; 11] = [
         IssueSectionName::Goal,
         IssueSectionName::DoneWhen,
         IssueSectionName::Scope,
@@ -334,6 +339,7 @@ impl IssueSections {
         IssueSectionName::Design,
         IssueSectionName::Outcome,
         IssueSectionName::SuccessCriteria,
+        IssueSectionName::Background,
         IssueSectionName::Notes,
         IssueSectionName::CloseReason,
     ];
@@ -369,6 +375,7 @@ impl IssueSections {
             IssueBody::Mission {
                 outcome,
                 success_criteria,
+                ..
             } => (outcome.clone(), success_criteria.clone(), None),
         };
         self.body = IssueBody::for_type(issue_type, goal, proof, scope);
@@ -419,6 +426,10 @@ impl IssueSections {
             (IssueBody::Issue { design, .. }, Design) => design.as_deref(),
             (IssueBody::Mission { outcome, .. }, Outcome) => Some(outcome),
             (
+                IssueBody::Issue { background, .. } | IssueBody::Mission { background, .. },
+                Background,
+            ) => background.as_deref(),
+            (
                 IssueBody::Mission {
                     success_criteria, ..
                 },
@@ -455,6 +466,7 @@ impl IssueBody {
             "mission" => IssueBody::Mission {
                 outcome: goal,
                 success_criteria: proof,
+                background: None,
             },
             _ => IssueBody::Issue {
                 goal,
@@ -463,6 +475,7 @@ impl IssueBody {
                 context: None,
                 unknowns: None,
                 design: None,
+                background: None,
             },
         }
     }
@@ -479,6 +492,7 @@ impl IssueSectionName {
             Self::Unknowns => "Unknowns",
             Self::Design => "Design",
             Self::SuccessCriteria => "Success criteria",
+            Self::Background => "Background",
             Self::Notes => "Notes",
             Self::CloseReason => "Close Reason",
         }

@@ -6,7 +6,9 @@ are the authoring reference. Atelier validates the resulting records and graph.
 
 A mission is a front door to a strategy, not a second strategy or a status table.
 Link the strategy by path, state the outcome, and identify success criteria.
-When no separate strategy exists, the mission body carries that intent.
+When no separate strategy exists, the mission body carries that intent. Put
+research, references, and motivation that the mission's work shares in its
+Background section; a strategy still owns intent, boundaries, and tradeoffs.
 
 The mission's strategy path is the canonical link. Write the strategy first,
 then set the link with
