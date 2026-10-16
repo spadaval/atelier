@@ -252,8 +252,11 @@ enum WorkCommands {
     },
     /// Show one epic dashboard
     Epic { id: String },
-    /// Show ready work
+    /// Show ready work an agent can pick up; work labelled needs-human is
+    /// listed separately
     Ready,
+    /// Show ready work only the human can do (labelled needs-human)
+    Human,
     /// Show blocked work
     Blocked,
     /// Show active work
@@ -639,6 +642,7 @@ fn run() -> Result<()> {
                 }
                 Some(WorkCommands::Ready) => commands::work::list(&index, "ready", quiet),
                 Some(WorkCommands::Blocked) => commands::work::list(&index, "blocked", quiet),
+                Some(WorkCommands::Human) => commands::work::list(&index, "human", quiet),
                 Some(WorkCommands::Active) => commands::work::list(&index, "active", quiet),
                 Some(WorkCommands::All) => commands::work::list(&index, "all", quiet),
                 Some(WorkCommands::Missions { all }) => {

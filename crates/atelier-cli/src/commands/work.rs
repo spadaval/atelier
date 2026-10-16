@@ -60,6 +60,7 @@ impl MissionDashboardOptions {
 pub fn dashboards(quiet: bool) -> Result<()> {
     if quiet {
         println!("ready");
+        println!("human");
         println!("blocked");
         println!("active");
         println!("all");
@@ -76,6 +77,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
                 "Dashboards",
                 [
                     "ready    Small top-level executable work picker",
+                    "human    Ready work only the human can do (needs-human)",
                     "blocked  Repo-wide blocker triage",
                     "missions Flat mission summaries with complete scope counts",
                     "mission  Live mission orchestration dashboard",
@@ -108,18 +110,31 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
             apply_ready_execution_gates(index, policy, &mut buckets)?;
         }
     }
+    let (human, agent): (Vec<_>, Vec<_>) = std::mem::take(&mut buckets.ready)
+        .into_iter()
+        .partition(|row| row.needs_human);
+    buckets.ready = agent;
     if quiet {
-        print_quiet(bucket, &buckets);
+        if bucket == "human" {
+            human.iter().for_each(|row| println!("{}", row.id));
+        } else {
+            print_quiet(bucket, &buckets);
+            if bucket == "all" {
+                human.iter().for_each(|row| println!("{}", row.id));
+            }
+        }
         return Ok(());
     }
 
     let groups = match bucket {
-        "ready" => vec![("Ready Work", &buckets.ready)],
+        "ready" => vec![("Ready Work", &buckets.ready), ("Needs a Human", &human)],
+        "human" => vec![("Needs a Human", &human)],
         "blocked" => vec![("Blocked Work", &buckets.blocked)],
         "active" => vec![("Active Work", &buckets.active)],
         "all" => vec![
             ("Active Work", &buckets.active),
             ("Ready Work", &buckets.ready),
+            ("Needs a Human", &human),
             ("Blocked Work", &buckets.blocked),
             ("Backlog Work", &buckets.backlog),
         ],
@@ -137,7 +152,7 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
 }
 
 fn bucket_needs_execution_gates(bucket: &str) -> bool {
-    matches!(bucket, "ready" | "all")
+    matches!(bucket, "ready" | "human" | "all")
 }
 
 fn apply_ready_execution_gates(

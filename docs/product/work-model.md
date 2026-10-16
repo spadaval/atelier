@@ -20,6 +20,13 @@ epic; they cannot own children. Execution work links to missions through
 `advances`. Native blockers represent sequencing, not membership or proof.
 Evidence attachments represent proof; semantic links remain separate.
 
+Work that only the human can do, such as a step at a particular machine, an
+account approval, or a judgement call, carries the reserved `needs-human`
+label. `atelier work ready` lists it in a separate "Needs a Human" panel, and
+`--quiet` output leaves it out, so agents choosing from the ready list do not
+start it. `atelier work human` lists it, and `atelier prime` says how many such
+items are waiting.
+
 A draft epic is planning context. Refine its outcome, immediate children,
 dependencies, and proof before making it ready. A todo-category status alone
 does not establish readiness: ready work must expose a direct transition into

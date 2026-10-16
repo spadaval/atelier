@@ -3845,3 +3845,42 @@ fn test_mission_strategy_is_set_from_the_cli_and_checked_from_the_mission_side()
         "{stderr}"
     );
 }
+
+#[test]
+fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |args: &[&str]| run_atelier(dir.path(), args).1.trim().to_string();
+    let agent = create(&["-q", "issue", "create", "Agent work"]);
+    let human = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Approve the signing account",
+        "-l",
+        "needs-human",
+    ]);
+
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(ready.lines().any(|line| line == agent), "{ready}");
+    assert!(!ready.lines().any(|line| line == human), "{ready}");
+    assert_eq!(create(&["--quiet", "work", "human"]), human);
+    let all = create(&["--quiet", "work", "all"]);
+    assert!(all.lines().any(|line| line == human), "{all}");
+    let (success, page, stderr) = run_atelier(dir.path(), &["work", "ready"]);
+    assert!(success, "{stderr}");
+    let split = page.find("Needs a Human").expect(&page);
+    assert!(
+        page[..split].contains(&agent) && page[split..].contains(&human),
+        "{page}"
+    );
+
+    init_git_repo(dir.path());
+    ensure_initial_git_commit(dir.path());
+    let (success, prime, stderr) = run_atelier(dir.path(), &["prime"]);
+    assert!(success, "{stderr}");
+    assert!(
+        prime.contains("Needs a human: 1 ready item(s) labelled needs-human"),
+        "{prime}"
+    );
+}

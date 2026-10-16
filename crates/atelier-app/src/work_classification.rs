@@ -46,6 +46,17 @@ pub struct WorkRow {
     pub priority: String,
     pub open_blockers: Vec<String>,
     pub classification: WorkClassification,
+    /// Work only the human can do; see [`needs_human`].
+    pub needs_human: bool,
+}
+
+/// The reserved label that marks work only the human can do (being at a
+/// machine, an account approval, a judgement call). Agents should not pick
+/// such work from the ready list.
+pub const NEEDS_HUMAN_LABEL: &str = "needs-human";
+
+pub fn needs_human(labels: &[String]) -> bool {
+    labels.iter().any(|label| label == NEEDS_HUMAN_LABEL)
 }
 
 impl WorkRow {
@@ -116,7 +127,11 @@ fn work_row(
     issue: Issue,
 ) -> Result<WorkRow> {
     let classified = classify_issue(index, workflow_policy, &issue)?;
+    let needs_human = index
+        .issue_record(&issue.id)
+        .is_some_and(|record| needs_human(&record.labels));
     Ok(WorkRow {
+        needs_human,
         id: issue.id.clone(),
         title: issue.title,
         status: issue.status,

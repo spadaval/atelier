@@ -27,6 +27,7 @@ installed binary only after the new model is stable.
 atelier prime
 atelier status
 atelier work ready
+atelier work human
 atelier work blocked
 atelier work missions
 atelier work mission <mission-id>
