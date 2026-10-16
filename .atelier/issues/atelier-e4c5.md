@@ -18,9 +18,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T00:48:25.376757528+00:00"
+status: "done"
 title: "Apply an epic's open blockers to its children in ready and start"
-updated_at: "2026-10-16T00:44:10.920428123+00:00"
+updated_at: "2026-10-16T00:48:25.376757528+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,7 @@ Tests show that a child of an epic with an open blocker is classified as blocked
 astromech: "Find a module near me" was ready while its epic waited on the remote-data epic; the fix duplicated links onto six children. `crates/atelier-app/src/work_classification.rs` (`classify_issue` only reads the issue's own blockers). Related: atelier-28mz (children of draft epics).
 
 Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with research, references and decisions) into Atelier records. Sumeet's principle: Atelier records should hold the whole backlog; needing a side document means Atelier needs work.
+
+## Close Reason
+
+Readiness and the start validator use effective blockers: an issue's own plus its parent's. A child of a parent with an open blocker is blocked (naming that blocker) in work ready, work blocked, mission and parent views, and start refuses it. Test: test_children_inherit_their_parents_open_blockers. Documented in docs/product/work-model.md.
