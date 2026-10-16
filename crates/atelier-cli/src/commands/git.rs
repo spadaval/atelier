@@ -242,6 +242,11 @@ pub(crate) fn check_base_commits(
             continue;
         }
         checked += 1;
+        // A clean merge, such as merging the base into a work branch,
+        // introduces nothing beyond its parents (atelier-n7g1).
+        if git_freshness::clean_merge(repo, commit)? {
+            continue;
+        }
         // A merge (such as a non-rebasing pull) introduces only the paths that
         // differ from every parent.
         let changed = text(

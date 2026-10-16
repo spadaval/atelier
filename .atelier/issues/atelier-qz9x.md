@@ -4,6 +4,9 @@ id: "atelier-qz9x"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-qz9x
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-16T18:29:12.343485207+00:00"
+status: "done"
 title: "land on a work branch behind its base fails with a raw merge-base error"
-updated_at: "2026-10-16T02:55:55.608836824+00:00"
+updated_at: "2026-10-16T18:29:12.343485207+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,11 @@ When the base branch has moved past a work branch's merge base, `atelier land` o
 ## Context
 
 The error comes from `ReadContext::edges` (git_freshness.rs), which requires the pin to be an ancestor of the end commit. Session evaluation uses the base tip as the claim base. This existed before atelier-0349: the old code had the same check, but master's binary failed earlier on the epic parse error.
+
+## Design
+
+Changed from the Done-when above (decided by the orchestrator, 2026-10-16): `land` does not refuse a branch whose base has moved on. Other work landing on the base is not the branch's failure, and refusing would block the Stop hook on every active branch whenever the base moves. `land` instead evaluates the branch against its merge base with the base tip, and adds a note: "Base <base> has N commit(s) this branch does not. Merge them in with `git merge <base>` and record fresh proof before atelier merge". `atelier merge` still refuses with `merge_diverged`, whose advice atelier-j48s changes to merging the base. Policy still comes from the base tip.
+
+## Close Reason
+
+land on a branch whose base has moved on now evaluates the work against its merge base with the base tip and adds a note to merge the base in and record fresh proof, instead of failing with a raw merge-base error; merge still refuses with merge_diverged. The design changed from refusing with land_base_ahead (see Design). Test: land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base. Documented in sessions-and-hooks.md.
