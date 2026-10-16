@@ -41,12 +41,16 @@ On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
-Landing also checks completed claims elsewhere in the checkout that changed
-since a trusted point: the branch base on a work branch, or the merge base with
-the upstream on the base branch. Every change that reaches the base had its own
-claims checked when it landed, so earlier history holds by induction. A claim
-counts as changed when its record changed, a review or evidence record about it
-was added, or the workflow policy changed. Review history is checked for
+Landing also checks completed claims elsewhere in the checkout that a change
+since a trusted point can affect. The trusted point is the branch base on a work
+branch, and otherwise the merge base with the base's upstream (the local base
+can hold commits no land has checked); without an upstream, every claim is
+checked. Every change that reaches the base had its own claims checked when it
+landed, so earlier history holds by induction. A claim is checked when its
+record changed; when a changed issue record links it as blocked, parent, or
+child, before or after the change; when a review or evidence record about it
+was added, removed, or retargeted; or when the workflow policy at HEAD or on
+the base differs from the trusted point. Review history is checked for
 append-only edits from the same point. `atelier doctor` checks every completed
 claim and the whole review history, for history that reached the base without
 the gates, such as a direct push (atelier-37uq).

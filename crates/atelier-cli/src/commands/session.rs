@@ -374,41 +374,47 @@ fn land_text(requested: Option<&str>, deep: bool) -> Result<String> {
     let trusted = match &branch_base {
         _ if deep => None,
         Some(fork) => Some(fork.clone()),
-        None => {
-            let reference = if branch == *base_name {
-                format!("{base_name}@{{upstream}}")
-            } else {
-                format!("refs/heads/{base_name}")
-            };
-            git::resolve(repo, &reference)
-                .ok()
-                .and_then(|tip| git::text(repo, &["merge-base", &tip, &head]).ok())
-        }
+        // The base's upstream, not the local base, which can hold commits that
+        // no land has checked; without an upstream, nothing is trusted.
+        None => git::resolve(repo, &format!("{base_name}@{{upstream}}"))
+            .ok()
+            .and_then(|tip| git::text(repo, &["merge-base", &tip, &head]).ok()),
     };
     match &trusted {
         Some(point) => review_gate::append_only(&mut read, point)?,
         None => review_gate::append_only_history(&mut read)?,
     }
     let touched = match &trusted {
-        Some(point) => touched_claims(repo, &index, point, &head)?,
-        None => std::collections::BTreeSet::new(),
+        Some(point) => touched_claims(repo, &mut read, &index, point, &head)?,
+        None => None,
     };
     // A policy change can invalidate claims that held under the old policy,
-    // so every claim is checked again.
-    let claims_trusted = trusted.as_deref().filter(|point| {
-        git::text(
-            repo,
-            &[
-                "diff",
-                "--name-only",
-                point,
-                &head,
-                "--",
-                workflow_policy::WORKFLOW_POLICY_PATH,
-            ],
-        )
-        .is_ok_and(|changed| changed.trim().is_empty())
-    });
+    // so every claim is checked again. The gates come from the base's policy,
+    // which can have changed since the branch left it.
+    let policy_unchanged = |point: &str| {
+        let at = |commit: &str| {
+            git_freshness::blob(
+                repo,
+                commit,
+                Path::new(workflow_policy::WORKFLOW_POLICY_PATH),
+            )
+            .ok()
+        };
+        let trusted_policy = at(point);
+        std::iter::once(head.clone())
+            .chain(
+                [
+                    format!("refs/heads/{base_name}"),
+                    format!("{base_name}@{{upstream}}"),
+                ]
+                .iter()
+                .filter_map(|reference| git::resolve(repo, reference).ok()),
+            )
+            .all(|commit| at(&commit) == trusted_policy)
+    };
+    let claims_trusted = trusted
+        .as_deref()
+        .filter(|point| touched.is_some() && policy_unchanged(point));
     let mut nodes = claim_nodes(
         repo,
         &mut read,
@@ -418,7 +424,7 @@ fn land_text(requested: Option<&str>, deep: bool) -> Result<String> {
         branch_base.as_deref(),
         &head,
         claims_trusted,
-        &touched,
+        &touched.unwrap_or_default(),
     )?;
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
@@ -656,21 +662,10 @@ fn claim_nodes(
                 })
             })
         });
-        // Unchanged, with no review or evidence record about it added since.
-        let unchanged_since_trusted = |read: &mut git_freshness::ReadContext<'_>| {
-            !touched.contains(&issue.id)
-                && trusted.is_some_and(|point| {
-                    read.issue_at(point, &issue.id).ok().is_some_and(|before| {
-                        index.issue_record(&issue.id).is_some_and(|after| {
-                            atelier_app::evidence_freshness::completion_claim_matches(
-                                &before, after,
-                            )
-                        })
-                    })
-                })
-        };
+        // Nothing that bears on it changed since the trusted point.
+        let unchanged_since_trusted = trusted.is_some() && !touched.contains(&issue.id);
         match retained_at {
-            Some(_) if unchanged_since_trusted(read) => {}
+            Some(_) if unchanged_since_trusted => {}
             Some(parent) => {
                 historical
                     .entry(parent.clone())
@@ -699,15 +694,18 @@ fn claim_nodes(
     Ok(nodes)
 }
 
-/// Issues that a review or evidence record added or changed since `point`
-/// is about, so their claims are checked though their own records did not
-/// change.
+/// Issues whose claims a change since `point` can affect, though their own
+/// records may not have changed: every changed issue record and the issues
+/// it links as blocked, parent or child, and the targets of every changed
+/// review or evidence record, each as it was at `point` and as it is now.
+/// `None` when a record at `point` cannot be read, so every claim is checked.
 fn touched_claims(
     repo: &Path,
+    read: &mut git_freshness::ReadContext<'_>,
     index: &RecordIndex,
     point: &str,
     head: &str,
-) -> Result<std::collections::BTreeSet<String>> {
+) -> Result<Option<std::collections::BTreeSet<String>>> {
     let changed = git::text(
         repo,
         &[
@@ -717,31 +715,103 @@ fn touched_claims(
             point,
             head,
             "--",
+            ".atelier/issues",
             ".atelier/reviews",
             ".atelier/evidence",
         ],
     )?;
+    let existed = git::text(
+        repo,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            point,
+            "--",
+            ".atelier/issues",
+            ".atelier/reviews",
+            ".atelier/evidence",
+        ],
+    )?
+    .lines()
+    .map(str::to_owned)
+    .collect::<std::collections::BTreeSet<_>>();
+    fn linked(
+        record: &atelier_records::CanonicalIssueRecord,
+        touched: &mut std::collections::BTreeSet<String>,
+    ) {
+        touched.insert(record.issue.id.to_string());
+        touched.extend(record.issue.parent_id.iter().map(ToString::to_string));
+        touched.extend(
+            record
+                .relationships
+                .blocks
+                .iter()
+                .chain(&record.relationships.children)
+                .map(|link| link.id.clone()),
+        );
+    }
+    fn attached(
+        evidence: &atelier_records::EvidenceRecord,
+        touched: &mut std::collections::BTreeSet<String>,
+    ) {
+        touched.extend(
+            evidence
+                .header
+                .relationships
+                .attachments
+                .iter()
+                .filter(|link| link.kind == "issue")
+                .map(|link| link.id.clone()),
+        );
+    }
     let mut touched = std::collections::BTreeSet::new();
     for path in changed.lines() {
         let Some(id) = Path::new(path).file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
-        if let Ok(review) = index.require_review(id) {
-            touched.insert(review.target.clone());
-        }
-        if let Some(evidence) = index.evidence(id) {
-            touched.extend(
-                evidence
-                    .header
-                    .relationships
-                    .attachments
-                    .iter()
-                    .filter(|link| link.kind == "issue")
-                    .map(|link| link.id.clone()),
-            );
+        let relative = Path::new(path)
+            .strip_prefix(".atelier")
+            .unwrap_or(Path::new(path));
+        let before = existed.contains(path);
+        if path.starts_with(".atelier/issues/") {
+            touched.insert(id.to_owned());
+            if before {
+                let Ok(record) = read.issue_at(point, id) else {
+                    return Ok(None);
+                };
+                linked(&record, &mut touched);
+            }
+            if let Some(record) = index.issue_record(id) {
+                linked(record, &mut touched);
+            }
+        } else if path.starts_with(".atelier/reviews/") {
+            if before {
+                let Ok(record) = git_freshness::blob(repo, point, Path::new(path))
+                    .and_then(|text| atelier_records::review::parse_review_record(&text, relative))
+                else {
+                    return Ok(None);
+                };
+                touched.insert(record.target);
+            }
+            if let Ok(review) = index.require_review(id) {
+                touched.insert(review.target.clone());
+            }
+        } else {
+            if before {
+                let Ok(record) = git_freshness::blob(repo, point, Path::new(path))
+                    .and_then(|text| atelier_records::parse_evidence_record_file(&text, relative))
+                else {
+                    return Ok(None);
+                };
+                attached(&record, &mut touched);
+            }
+            if let Some(evidence) = index.evidence(id) {
+                attached(evidence, &mut touched);
+            }
         }
     }
-    Ok(touched)
+    Ok(Some(touched))
 }
 
 /// The full verification land skips: every retained claim and the whole

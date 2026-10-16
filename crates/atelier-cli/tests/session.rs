@@ -3237,6 +3237,24 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     let (pass, _) = cli(f.path(), &["doctor"]);
     assert!(!pass);
 
+    // The gates come from the base's policy, which can change after the
+    // branch left it.
+    git(f.path(), &["switch", "-q", "main"]);
+    let base_policy = f.path().join(".atelier/workflow.yaml");
+    let mut base_revised = fs::read_to_string(&base_policy).unwrap();
+    base_revised.push_str("# Revised policy.\n");
+    fs::write(&base_policy, base_revised).unwrap();
+    commit(f.path(), "revise the policy on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+    git(f.path(), &["switch", "-q", "main"]);
+    git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+
     // A branch that adds a record about it, or edits it, checks it again.
     fail("Another failing run");
     commit(f.path(), "more failing proof on the branch");
@@ -3318,6 +3336,108 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
         f.path(),
         &["commit", "-q", "--allow-empty", "-m", "later work"],
     );
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+}
+#[test]
+fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "--parent", &old, "Done child"],
+    );
+    commit(f.path(), "plan it");
+    for id in [&child, &old] {
+        ok(f.path(), &["issue", "transition", id, "start"]);
+        ok(
+            f.path(),
+            &["issue", "transition", id, "close", "--reason", "done"],
+        );
+    }
+    let record = |result: &str, summary: &str| {
+        ok(
+            f.path(),
+            &[
+                "-q",
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{old}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                summary,
+            ],
+        )
+    };
+    record("fail", "Proof that failed");
+    let passed = record("pass", "Proof that passed later");
+    let passed = passed.split_whitespace().next().unwrap();
+    commit(f.path(), "done without the gates");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(f.path(), &["land", &f.id]);
+    let refused = |check: &str| {
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(
+            !pass && output.contains(&format!("{old} {check}")),
+            "{check}: {output}"
+        );
+        git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    };
+
+    // A blocker link is written only to the blocker's record.
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    ok(
+        f.path(),
+        &["issue", "link", &old, &blocker, "--role", "blocked_by"],
+    );
+    commit(f.path(), "block the done claim");
+    refused("blockers.none_open");
+
+    // An open child changes the parent's record only in its children.
+    ok(
+        f.path(),
+        &["-q", "issue", "create", "--parent", &old, "Open child"],
+    );
+    commit(f.path(), "open a child of the done claim");
+    refused("work.terminal");
+
+    // Reopening a child changes only the child's record.
+    let path = f.path().join(format!(".atelier/issues/{child}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("status: \"done\""), "{text}");
+    fs::write(&path, text.replace("status: \"done\"", "status: \"todo\"")).unwrap();
+    commit(f.path(), "reopen the child");
+    refused("work.terminal");
+
+    // Removing proof changes no record that names the claim any more.
+    git(
+        f.path(),
+        &["rm", "-q", &format!(".atelier/evidence/{passed}.md")],
+    );
+    commit(f.path(), "remove the passing proof");
+    refused("evidence.no_newer_failure");
+
+    // Off the base, history is trusted only up to the base's upstream: the
+    // local base can hold commits that no land has checked.
+    git(f.path(), &["switch", "-q", "main"]);
+    record("fail", "A newer failure");
+    commit(f.path(), "unpushed failing proof");
+    git(f.path(), &["switch", "-q", "-c", "feature"]);
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
         !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
