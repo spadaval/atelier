@@ -4,6 +4,9 @@ id: "atelier-cafy"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-cafy
 priority: "P3"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let follow-up records for deferred findings keep an approval current"
-updated_at: "2026-10-15T23:47:13.976529080+00:00"
+updated_at: "2026-10-16T18:13:08.828095361+00:00"
 ---
 
 ## Goal

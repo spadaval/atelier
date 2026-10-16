@@ -49,9 +49,11 @@ remain immutable.
 ## Approval freshness
 
 Code, policy, acceptance, relationship, metadata, or existing proof/review edits
-make approval stale. Later commits may add new review/evidence files or change
-in-scope lifecycle status, timestamps, and Close Reason without changing the
-approved acceptance. Each commit is checked; changing and then restoring code
+make approval stale. Later commits may add new review/evidence files, create
+issues outside the reviewed scope (such as the follow-up a `defer` disposition
+names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
+Close Reason without changing the approved acceptance. Adding a child to the
+owner edits the owner's record, so it does make approval stale. Each commit is checked; changing and then restoring code
 does not recover an old approval. New material edits require renewed review.
 
 ## Integration
