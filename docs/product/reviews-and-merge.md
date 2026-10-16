@@ -49,10 +49,21 @@ remain immutable.
 ## Approval freshness
 
 Code, policy, acceptance, relationship, metadata, or existing proof/review edits
-make approval stale. Later commits may add new review/evidence files or change
-in-scope lifecycle status, timestamps, and Close Reason without changing the
-approved acceptance. Each commit is checked; changing and then restoring code
+make approval stale. Later commits may add new review/evidence files, create
+issues outside the reviewed scope (such as the follow-up a `defer` disposition
+names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
+Close Reason without changing the approved acceptance. Adding a child to the
+owner edits the owner's record, so it does make approval stale. Each commit is checked; changing and then restoring code
 does not recover an old approval. New material edits require renewed review.
+
+Merging the base into a reviewed branch keeps its approval when the merge is
+clean: every other parent is already on the base, and the merge commit is
+exactly the tree `git merge-tree` produces from its parents, with no conflict
+resolution or edits made while merging (atelier-n7g1). The base commits it
+brings in were reviewed on their own branches. A conflicted or hand-edited
+merge, or one that brings in a branch not yet on the base, needs renewed
+review. Proof is different: tests must run again on the merged result, so
+record fresh evidence after merging the base.
 
 ## Integration
 
@@ -78,7 +89,8 @@ cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and fast-forwards only. If the
-base has diverged, reconcile with ordinary Git and renew stale proof or review.
+base has moved on, merge it into the work branch, record fresh proof, and renew
+review only if the merge needed resolving (see approval freshness).
 Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).

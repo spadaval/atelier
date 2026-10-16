@@ -68,7 +68,8 @@ remain valuable and are not available in hosted trackers.
    the base branch shows an item done exactly when its code is merged.
    Merge-time facts are derived from Git. Post-approval commits that only add
    review or evidence records or change in-scope statuses do not make an
-   approval stale; changes to code, policy, or acceptance criteria do.
+   approval stale; changes to code, policy, or acceptance criteria do. A
+   clean merge of the base into the branch does not (atelier-n7g1).
 
 5. **Policy is code.** `.atelier/workflow.yaml` is reviewed like any other
    change. Gates are evaluated from the base branch's policy, so a branch

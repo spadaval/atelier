@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-s7ea
+title: 'I reviewed e01399d0 plus the later merge, claim and evidence, checking whether the gate rule is sound. In atelier merge, base_head must be an ancestor of HEAD and every side must be an ancestor of base_head, so a merge of a non-base branch, or of a base commit not yet on the base ref, still stales the approval (covered by introduced_side_code_edit_then_revert_stales_approval_after_merge). Octopus merges return false. When the base is the first parent, the ancestry-path parent choice still sets parent to the branch side. Conflicted merges and -X or -s ours merges produce a tree different from merge-tree, so they stale. The ancestor(pin, edge.parent) guard limits exclusion to merges after the pin. only_in only takes commits reachable from base sides and not from the branch parent. An approval pinned before the branch left the base is refused (checked by hand). In check_base_commits, skipping the clean merge is sound because its side commits are still checked one by one. Ancestor queries and clean_merge are memoized, so long histories are fine. I ran the three related tests and they pass, and the docs are accurate apart from the merge-driver caveat. Three defer findings: atelier-6hpy (merge drivers and attributes), atelier-9l63 (HEAD^ as base when there is no owner), atelier-1y1z (pin-clause test gap).'
+target: atelier-n7g1
+identity: Independent reviewer (Claude subagent)
+commit: 1f9c88ded59b5f0bcd19473fb6e9e9c7753f45ca
+created_at: 2026-10-16T18:31:59.975078021Z
+event:
+  event: approval
+---
+
+I reviewed e01399d0 plus the later merge, claim and evidence, checking whether the gate rule is sound. In atelier merge, base_head must be an ancestor of HEAD and every side must be an ancestor of base_head, so a merge of a non-base branch, or of a base commit not yet on the base ref, still stales the approval (covered by introduced_side_code_edit_then_revert_stales_approval_after_merge). Octopus merges return false. When the base is the first parent, the ancestry-path parent choice still sets parent to the branch side. Conflicted merges and -X or -s ours merges produce a tree different from merge-tree, so they stale. The ancestor(pin, edge.parent) guard limits exclusion to merges after the pin. only_in only takes commits reachable from base sides and not from the branch parent. An approval pinned before the branch left the base is refused (checked by hand). In check_base_commits, skipping the clean merge is sound because its side commits are still checked one by one. Ancestor queries and clean_merge are memoized, so long histories are fine. I ran the three related tests and they pass, and the docs are accurate apart from the merge-driver caveat. Three defer findings: atelier-6hpy (merge drivers and attributes), atelier-9l63 (HEAD^ as base when there is no owner), atelier-1y1z (pin-clause test gap).
