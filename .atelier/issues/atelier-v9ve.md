@@ -1,0 +1,29 @@
+---
+created_at: "2026-10-16T18:47:46.535528279+00:00"
+id: "atelier-v9ve"
+issue_type: "task"
+labels: []
+priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 2
+status: "todo"
+title: "Warn that rebase recovery drops commits made after the rebase"
+updated_at: "2026-10-16T18:47:46.535528279+00:00"
+---
+
+## Goal
+
+The 'pins a commit outside the work branch' recovery (reset to the pre-rebase tip, then merge the base) loses commits made after the rebase, such as a fix and new proof. Say to cherry-pick them back after the reset.
+
+## Done when
+
+The error in crates/atelier-app/src/review_gate.rs and docs/product/reviews-and-merge.md say to cherry-pick commits made after the rebase onto the restored tip; the rebase recovery test covers a post-rebase commit.
+
+## Context
+
+Deferred finding atelier-eix5 from the atelier-j48s review (approval atelier-0c5b).

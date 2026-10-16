@@ -111,8 +111,9 @@ read working policy and visibly fall back to committed history when it is
 malformed. Fix policy through reviewed work.
 
 The supported gated integration strategy is `fast_forward_only`. Atelier never creates
-commits. If the base has diverged, reconcile the work using ordinary Git and
-renew any proof or approval made stale by the resulting changes.
+commits. If the base has moved on, merge it into the work branch with ordinary
+Git and renew any proof or approval made stale by the merge. Rebase only before
+any review is recorded: rebasing rewrites the commits review records pin.
 
 Consult the workflow parser and command help for exact schema fields. See
 [reviews and merge](reviews-and-merge.md) and

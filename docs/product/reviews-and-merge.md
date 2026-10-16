@@ -90,7 +90,11 @@ they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and fast-forwards only. If the
 base has moved on, merge it into the work branch, record fresh proof, and renew
-review only if the merge needed resolving (see approval freshness).
+review only if the merge needed resolving (see approval freshness). Rebase only
+before any review is recorded: rebasing rewrites the commits that findings and
+approvals pin, and `merge` then refuses with "pins a commit outside the work
+branch". To recover, reset the branch to its pre-rebase tip (from `git reflog`)
+and merge the base instead (atelier-j48s).
 Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).
