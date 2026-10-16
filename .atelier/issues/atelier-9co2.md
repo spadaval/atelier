@@ -4,6 +4,9 @@ id: "atelier-9co2"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-9co2
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-16T18:51:19.518755194+00:00"
+status: "done"
 title: "Stop bundles creating records in statuses that need a transition"
-updated_at: "2026-10-16T00:34:05.289873857+00:00"
+updated_at: "2026-10-16T18:51:19.518755194+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,7 @@ Bundle create accepts the same statuses as `issue create --status` (the initial 
 ## Context
 
 Found 2026-10-15 while implementing atelier-4n7v.
+
+## Close Reason
+
+Bundle create entries accept the same statuses as issue create --status (shared workflow_policy::creatable_statuses): the initial status or a todo-category status one unchecked transition away. In_progress, done and other statuses are refused with a message pointing to atelier issue transition; closed_at is no longer set for a status named closed, since terminal statuses cannot be created. Test: test_bundle_apply_refuses_statuses_that_need_a_transition_and_preserves_state (task in_progress and done, mission in_progress and todo). Documented in docs/spec/bundle/schema.md and workflow-configuration.md.

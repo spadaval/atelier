@@ -779,30 +779,12 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
     })
 }
 
-/// New work starts in the workflow's initial status, or in a todo-category
-/// status one unchecked transition away from it, such as `backlog` via
-/// `defer`. A status guarded by checks or required fields (an objective's
-/// `ready`) or outside the todo category needs its transition.
+/// New work starts in a status [`creatable_statuses`] allows.
+///
+/// [`creatable_statuses`]: atelier_app::workflow_policy::creatable_statuses
 fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) -> Result<String> {
     let policy = load_repo_policy(state_dir)?;
-    let workflow = policy.workflow_for_issue_type(issue_type)?;
-    let allowed = std::iter::once(workflow.initial_status.clone())
-        .chain(
-            workflow
-                .transitions
-                .values()
-                .filter(|transition| {
-                    transition.from.contains(&workflow.initial_status)
-                        && transition.validators.is_empty()
-                        && transition.required_fields.is_empty()
-                        && policy.status_category(&transition.to) == Some("todo")
-                        && policy
-                            .transitions_from_status(issue_type, &transition.to)
-                            .is_ok_and(|exits| !exits.is_empty())
-                })
-                .map(|transition| transition.to.clone()),
-        )
-        .collect::<std::collections::BTreeSet<_>>();
+    let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
     if !allowed.contains(status) {
         bail!(
             "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with atelier issue transition.",

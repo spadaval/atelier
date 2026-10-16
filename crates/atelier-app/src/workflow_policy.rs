@@ -11,6 +11,36 @@ pub use atelier_workflow::{
     WORKFLOW_POLICY_PATH,
 };
 
+/// Statuses new work may be created in: the workflow's initial status, or a
+/// todo-category status one unchecked transition away from it, such as
+/// `backlog` via `defer`. A status guarded by checks or required fields (an
+/// objective's `ready`) or outside the todo category needs its transition.
+/// `issue create --status` and bundles share this rule (atelier-ha6k,
+/// atelier-9co2).
+pub fn creatable_statuses(
+    policy: &WorkflowPolicy,
+    issue_type: &str,
+) -> Result<std::collections::BTreeSet<String>> {
+    let workflow = policy.workflow_for_issue_type(issue_type)?;
+    Ok(std::iter::once(workflow.initial_status.clone())
+        .chain(
+            workflow
+                .transitions
+                .values()
+                .filter(|transition| {
+                    transition.from.contains(&workflow.initial_status)
+                        && transition.validators.is_empty()
+                        && transition.required_fields.is_empty()
+                        && policy.status_category(&transition.to) == Some("todo")
+                        && policy
+                            .transitions_from_status(issue_type, &transition.to)
+                            .is_ok_and(|exits| !exits.is_empty())
+                })
+                .map(|transition| transition.to.clone()),
+        )
+        .collect())
+}
+
 /// `advances` joins a mission to work in its scope. It is stored on both
 /// records, so either endpoint may declare it; exactly one must be a mission.
 pub fn validate_advances_endpoints(

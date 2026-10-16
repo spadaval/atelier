@@ -1440,7 +1440,6 @@ fn test_bundle_apply_records_links() {
         "title": "Complete prerequisite",
         "issue_type": "task",
         "priority": "medium",
-        "status": "done",
         "labels": [
           "bundle"
         ],
@@ -1470,7 +1469,6 @@ fn test_bundle_apply_records_links() {
         "title": "Implement bundle output",
         "issue_type": "feature",
         "priority": "high",
-        "status": "in_progress",
         "parent": {
           "client_ref": "issue.epic"
         },
@@ -1798,33 +1796,46 @@ fn test_bundle_rejects_mission_parent_scope() {
 }
 
 #[test]
-fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserves_state() {
-    {
-        let status = "in_progress";
+fn test_bundle_apply_refuses_statuses_that_need_a_transition_and_preserves_state() {
+    for (issue_type, status, body) in [
+        (
+            "task",
+            "in_progress",
+            "## Goal\\n\\nWork\\n\\n## Done when\\n\\nTests pass.",
+        ),
+        (
+            "task",
+            "done",
+            "## Goal\\n\\nWork\\n\\n## Done when\\n\\nTests pass.",
+        ),
+        (
+            "mission",
+            "in_progress",
+            "## Outcome\\n\\nResult\\n\\n## Success criteria\\n\\nChecks pass.",
+        ),
+        (
+            "mission",
+            "todo",
+            "## Outcome\\n\\nResult\\n\\n## Success criteria\\n\\nChecks pass.",
+        ),
+    ] {
         let dir = tempdir().unwrap();
         init_atelier(dir.path());
-        let bundle_path = dir.path().join(format!("executable-mission-{status}.json"));
+        let bundle_path = dir.path().join(format!("{issue_type}-{status}.json"));
         std::fs::write(
             &bundle_path,
             format!(
                 r#"{{
   "schema": "atelier.bundle",
   "schema_version": 2,
-  "title": "Executable mission without receipts",
+  "title": "Work that skips its transition",
   "resources": {{
     "issues": [
       {{
-        "client_ref": "issue.blocker",
-        "title": "Open bundled blocker", "body": "\u0023\u0023 Goal\n\nOpen blocker\n\n## Done when\n\nFocused test passes.",
-        "issue_type": "task",
-        "status": "todo"
-      }},
-      {{
-        "client_ref": "mission.executable",
-        "title": "Unreviewed executable mission", "body": "\u0023\u0023 Outcome\n\nMission result\n\n## Success criteria\n\nChecks pass.",
-        "issue_type": "mission",
-        "status": {status:?},
-        "blocked_by": [{{ "client_ref": "issue.blocker" }}]
+        "client_ref": "issue.skipping",
+        "title": "Skips a transition", "body": "{body}",
+        "issue_type": "{issue_type}",
+        "status": "{status}"
       }}
     ]
   }}
@@ -1840,14 +1851,65 @@ fn test_bundle_apply_rejects_executable_missions_with_open_blockers_and_preserve
             &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
         );
 
-        assert!(!success, "blocked {status} mission must be rejected");
+        assert!(!success, "{issue_type} in {status} must be refused");
         assert!(
-            stderr.contains("workflow_mission_dependency_bypass"),
+            stderr.contains(&format!(
+                "Invalid bundle issue status '{status}'; {issue_type} work cannot be created in it"
+            )) && stderr.contains("atelier issue transition"),
             "{stderr}"
         );
-        assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
         assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
     }
+}
+
+#[test]
+fn test_bundle_apply_rejects_open_blockers_on_an_executable_mission_and_preserves_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Executing mission");
+    set_dependency_fixture_status(dir.path(), &mission_id, "in_progress");
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "an unblocked executing mission is valid: {stderr}");
+    let bundle_path = dir.path().join("blocks-executing-mission.json");
+    std::fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 2,
+  "title": "Block an executing mission",
+  "resources": {{
+    "issues": [
+      {{
+        "client_ref": "issue.blocker",
+        "title": "Open bundled blocker", "body": "\u0023\u0023 Goal\n\nOpen blocker\n\n## Done when\n\nFocused test passes.",
+        "issue_type": "task",
+        "blocks": [{{ "id": {mission_id:?} }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let state_dir = dir.path().join(".atelier");
+    let canonical_before = canonical_tree_snapshot(&state_dir);
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(
+        !success,
+        "an open blocker on an executing mission must be rejected"
+    );
+    assert!(
+        stderr.contains("workflow_mission_dependency_bypass"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("Next:").count(), 1, "{stderr}");
+    assert_eq!(canonical_tree_snapshot(&state_dir), canonical_before);
 }
 
 #[test]
@@ -1914,10 +1976,10 @@ fn test_bundle_apply_accepts_graph_edit_to_ready_mission() {
   "resources": {{
     "issues": [
       {{
-        "client_ref": "issue.completed-blocker",
-        "title": "Completed graph addition", "body": "\u0023\u0023 Goal\n\nCompleted graph addition\n\n## Done when\n\nTests pass.",
+        "client_ref": "issue.new-blocker",
+        "title": "Open graph addition", "body": "\u0023\u0023 Goal\n\nCompleted graph addition\n\n## Done when\n\nTests pass.",
         "issue_type": "task",
-        "status": "done",
+        "status": "todo",
         "blocks": [{{ "id": {mission_id:?} }}]
       }}
     ]
