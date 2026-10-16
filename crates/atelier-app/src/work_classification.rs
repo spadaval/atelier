@@ -222,8 +222,13 @@ fn is_context(
     issue: &Issue,
 ) -> bool {
     issue.issue_type == "mission"
-        || index.get_subissues(&issue.id).iter().any(|child| {
-            workflow_policy.and_then(|policy| policy.status_category(&child.status)) != Some("done")
+        || index.issue_record(&issue.id).is_some_and(|record| {
+            record.relationships.children.iter().any(|child| {
+                index.issue_record(&child.id).is_some_and(|child| {
+                    workflow_policy.and_then(|policy| policy.status_category(&child.issue.status))
+                        != Some("done")
+                })
+            })
         })
 }
 

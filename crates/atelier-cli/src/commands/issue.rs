@@ -168,10 +168,14 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                     "active {}, ready {},{} blocked {}, done {}, backlog {}",
                     summary.scope.work.active.len(),
                     summary.scope.work.ready.len(),
-                    match summary.scope.work.human.len() {
-                        0 => String::new(),
-                        human => format!(" needs a human {human},"),
-                    },
+                    [
+                        ("needs a human", summary.scope.work.human.len()),
+                        ("context", summary.scope.work.context.len()),
+                    ]
+                    .into_iter()
+                    .filter(|(_, count)| *count > 0)
+                    .map(|(label, count)| format!(" {label} {count},"))
+                    .collect::<String>(),
                     summary.scope.work.blocked.len(),
                     summary.scope.work.done.len(),
                     summary.scope.work.backlog.len()

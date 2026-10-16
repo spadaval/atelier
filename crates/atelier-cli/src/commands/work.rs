@@ -145,13 +145,17 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-/// The needs-human count for summaries, shown only when there is any.
-fn human_count(human: usize) -> String {
-    if human == 0 {
-        String::new()
-    } else {
-        format!(" {human} need a human,")
+/// The needs-human and context counts for summaries, shown only when there
+/// are any, so every summary still adds up to its scope.
+fn human_count(counts: &atelier_app::issue_read::ObjectiveBucketTotals) -> String {
+    let mut extra = String::new();
+    if counts.human > 0 {
+        extra.push_str(&format!(" {} need a human,", counts.human));
     }
+    if counts.context > 0 {
+        extra.push_str(&format!(" {} context,", counts.context));
+    }
+    extra
 }
 
 fn bucket_needs_execution_gates(bucket: &str) -> bool {
@@ -234,7 +238,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
                     mission.scope_ids.len(),
                     counts.active,
                     counts.ready,
-                    human_count(counts.human),
+                    human_count(counts),
                     counts.blocked,
                     counts.done,
                     counts.backlog
@@ -368,10 +372,11 @@ fn scoped_dashboard(
         if filter == DashboardFilter::Summary {
             let counts = &work.totals;
             let mut summary = format!(
-                "{id} active={} ready={} human={} blocked={} done={} backlog={}",
+                "{id} active={} ready={} human={} context={} blocked={} done={} backlog={}",
                 counts.active,
                 counts.ready,
                 counts.human,
+                counts.context,
                 counts.blocked,
                 counts.done,
                 counts.backlog
@@ -401,7 +406,7 @@ fn scoped_dashboard(
                 "active {}, ready {},{} blocked {}, done {}, backlog {}",
                 counts.active,
                 counts.ready,
-                human_count(counts.human),
+                human_count(counts),
                 counts.blocked,
                 counts.done,
                 counts.backlog

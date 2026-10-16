@@ -4543,6 +4543,16 @@ fn test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_contex
     assert_eq!(mission_ready, child, "{mission_ready}");
     let status = create(&["--quiet", "status"]);
     assert!(status.contains("ready=1"), "{status}");
+    // Summaries still add up to the scope.
+    let summary = create(&["--quiet", "work", "mission", &mission]);
+    assert!(summary.contains("ready=1 human=0 context=1"), "{summary}");
+    let (_, missions, _) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(
+        missions.contains("2 issues: 0 active, 1 ready, 1 context,"),
+        "{missions}"
+    );
+    let show = create(&["issue", "show", &mission]);
+    assert!(show.contains("ready 1, context 1,"), "{show}");
 
     // A parent whose children are all done is ready to start and close.
     let mut record = fs::read_to_string(canonical_issue_path(dir.path(), &child)).unwrap();
