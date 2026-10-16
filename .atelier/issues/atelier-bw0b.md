@@ -36,7 +36,7 @@ Settle two linked design questions before the orientation follow-ups build on th
 
 ## Scope
 
-The ADR and AGENTS.md only. Product docs and code change in the follow-up issues the ADR names.
+The ADR, plus the repository guidance it depends on: AGENTS.md, CLAUDE.md (import AGENTS.md), `.claude/settings.json` (Atelier hooks in place of a leftover `bd prime`), and stale rebuild text in `docs/index.md` and `docs/product/development-setup.md`. Product docs and code change in the follow-up issues the ADR names.
 
 ## Context
 

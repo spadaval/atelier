@@ -34,12 +34,14 @@ costs more tokens and buries the point. Scripts have `--quiet`, and two
 commands have `--json` (`review list` and `merge --check`), used today only by
 `scripts/bench_read_commands.py`.
 
-What agents do instead shows where the views fall short. In Bash tool calls
-from Claude Code transcripts on 2026-10-16, agents ran `atelier work`,
-`status`, `prime`, `issue show`, or `issue list` 119 times in this repository
-and piped 26 of those (22%) to `head`, `sed`, `sort`, `grep`, or `tail`. In
-astromech, an adopter on an earlier model, they ran 221 and piped 113 (51%),
-89 of them to `sed`, mostly to cut one section or line out of `issue show`.
+What agents do instead shows where the views fall short. Counting Bash tool
+calls in this repository's Claude Code transcripts up to 2026-10-16 (commands
+that run `atelier work`, `status`, `prime`, `issue show`, or `issue list`,
+excluding scripts that only quote them), agents ran about 60 and piped about
+a third to `head`, `sed`, `grep`, or `tail`. In astromech, an adopter on an
+earlier model, they ran about 220 and piped about half, mostly to `sed` to cut
+one section or line out of `issue show`. The exact shares depend on the
+counting rule; the pattern does not.
 Agents also looped over IDs extracting the Hierarchy section to rebuild a
 tree, and grepped `prime` for "human".
 
@@ -49,7 +51,8 @@ tree, and grepped `prime` for "human".
    checkout and owner (with what `prime` shows for an owner today), missions,
    the ready and needs-a-human counts with the top ready items, and other
    local branches. The SessionStart hook runs `atelier status --hook claude`.
-   `prime` becomes a deprecated alias for one release, then is removed.
+   `prime` becomes a deprecated alias until known adopters' hooks no longer
+   call it, then is removed.
 2. **Static guidance stays out of command output.** Repository instructions
    belong in AGENTS.md, which the harness must load: Claude Code repositories
    either have no `CLAUDE.md` or import `@AGENTS.md` from it. How to use
@@ -61,7 +64,10 @@ tree, and grepped `prime` for "human".
    and no repeated tokens a header already states. Detail views are brief by
    default, with a flag for the full record. Views gain no JSON or YAML mode
    for agents. `--quiet` and the existing `--json` flags on `review list` and
-   `merge --check` remain interfaces for scripts.
+   `merge --check` remain interfaces for scripts. On a terminal, color,
+   emphasis, and width-aware layout may decorate the same content, as
+   `human-cli-output.md` already allows; redirected output, which is what
+   agents read, is the plain Markdown.
 4. **Piping is a missing view.** When agents routinely pipe atelier output
    through `head`, `grep`, `sed`, or loops, treat it as a defect in the
    views and file it, rather than adding a machine format.
@@ -74,9 +80,15 @@ tree, and grepped `prime` for "human".
 - atelier-sdb0 folds `prime` into `status` and updates every current
   reference: `PRODUCT_INTENT.md`, `AGENTS.md`,
   `docs/product/{sessions-and-hooks,cli-surface,work-model,index}.md`, root
-  help, the `setup claude` message, and Agent Factory's
+  help, the `setup claude` message, this repository's `.claude/settings.json`,
+  `scripts/bench_read_commands.py`, and Agent Factory's
   `references/atelier.md` and `procedures/install.md` (upstream per ADR 0020).
-  atelier-jjvc removes the alias in the following release.
+  `setup claude` warns when a `CLAUDE.md` would keep AGENTS.md from loading.
+  atelier-jjvc removes the alias once this repository's and astromech's hooks
+  no longer call it.
+- The draft strategy `docs/strategies/review-and-introspection.md` (mission
+  atelier-r6bt) names `prime` in S6 and its Scope. Accepting this ADR means
+  those read as `status`; editing the strategy needs Sumeet's authority.
 - atelier-deyy writes Decisions 3 and 4 into
   `docs/product/human-cli-output.md` and applies them to the `work` views;
   atelier-7u4o makes `issue show` brief and multi-ID.
