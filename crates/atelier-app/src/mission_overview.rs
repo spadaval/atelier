@@ -177,8 +177,9 @@ mod tests {
             first.scope_ids,
             ["child", "direct", "epic"].map(String::from).into()
         );
-        assert_eq!(first.totals.ready, 2);
-        assert_eq!(first.totals.blocked, 1);
+        // The child inherits its parent's open blocker.
+        assert_eq!(first.totals.ready, 1);
+        assert_eq!(first.totals.blocked, 2);
         assert_eq!(first.open_blockers, ["blocker"].map(String::from).into());
         assert_eq!(
             overview.missions[1].scope_ids,

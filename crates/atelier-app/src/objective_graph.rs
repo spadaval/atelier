@@ -5,6 +5,18 @@ use std::collections::{BTreeSet, HashSet};
 use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
+/// The blockers an issue waits on before it can start: its own, and its
+/// parent's, since children work on the parent's branch (atelier-e4c5).
+pub fn effective_blockers(index: &RecordIndex, issue_id: &str) -> Vec<String> {
+    let mut blockers = index.get_blockers(issue_id);
+    if let Some(parent) = index.get_issue(issue_id).and_then(|issue| issue.parent_id) {
+        blockers.extend(index.get_blockers(&parent));
+    }
+    blockers.sort();
+    blockers.dedup();
+    blockers
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct DependencyClosure {
     pub open_paths: Vec<Vec<String>>,
@@ -38,7 +50,7 @@ pub fn dependency_readiness_batch(
         .collect::<Result<BTreeMap<_, _>>>()?;
     let blockers = terminal
         .keys()
-        .map(|id| (id.clone(), index.get_blockers(id)))
+        .map(|id| (id.clone(), effective_blockers(index, id)))
         .collect::<BTreeMap<_, _>>();
 
     fn visit(
@@ -143,7 +155,7 @@ pub fn dependency_closure(
     index.require_issue(issue_id)?;
     evaluate_dependency_closure(
         issue_id,
-        |id| Ok(index.get_blockers(id)),
+        |id| Ok(effective_blockers(index, id)),
         |id| {
             let issue = index
                 .issue_record(id)

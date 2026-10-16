@@ -4,6 +4,9 @@ id: "atelier-e4c5"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-e4c5
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Apply an epic's open blockers to its children in ready and start"
-updated_at: "2026-10-15T21:00:45.353293225+00:00"
+updated_at: "2026-10-16T00:44:10.920428123+00:00"
 ---
 
 ## Goal

@@ -244,7 +244,7 @@ fn open_blockers(
         );
     }
     // Without a policy no status is terminal, so every blocker is open.
-    Ok(index.get_blockers(issue_id))
+    Ok(crate::objective_graph::effective_blockers(index, issue_id))
 }
 
 fn current_mission_count(index: &RecordIndex, workflow_policy: Option<&WorkflowPolicy>) -> usize {

@@ -40,7 +40,10 @@ someone starts one.
 
 Work that is recorded but not near-term sits in `backlog` until it is planned.
 A todo-category status alone does not establish readiness: ready work must
-expose a direct transition into active work and have no open blockers.
+expose a direct transition into active work and have no open blockers. A child
+also waits on its parent's blockers, since it works on the parent's branch:
+`work ready`, mission and parent views list it as blocked by them, and
+`atelier start` refuses it until they are done.
 
 ## Ownership and transitions
 

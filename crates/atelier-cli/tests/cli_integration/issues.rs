@@ -1538,7 +1538,11 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
-    assert!(stdout.contains("1 total | status: ready=1 | priority: low=1"));
+    // The subissue inherits its parent's open blocker.
+    assert!(
+        stdout.contains("1 total | status: blocked=1 | priority: low=1"),
+        "{stdout}"
+    );
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
     assert!(stdout.contains("Downstream issue"));
@@ -4099,4 +4103,69 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
     let (success, started, stderr) = run_atelier(dir.path(), &["start", &human]);
     assert!(success, "{stderr}");
     assert!(started.contains("is labelled needs-human"), "{started}");
+}
+
+#[test]
+fn test_children_inherit_their_parents_open_blockers() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    let create = |args: &[&str]| run_atelier(dir.path(), args).1.trim().to_string();
+    let remote_data = create(&["-q", "issue", "create", "Remote data parent"]);
+    let parent = create(&["-q", "issue", "create", "Find a module near me"]);
+    let child = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Nearest module query",
+        "--parent",
+        &parent,
+    ]);
+    create(&[
+        "-q",
+        "issue",
+        "link",
+        &parent,
+        &remote_data,
+        "--role",
+        "blocked_by",
+    ]);
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Ship",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nShipped.\n\n## Success criteria\n\nS1.",
+    ]);
+    create(&[
+        "-q", "issue", "link", &parent, &mission, "--role", "advances",
+    ]);
+
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(!ready.lines().any(|line| line == child), "{ready}");
+    let (_, blocked, _) = run_atelier(dir.path(), &["work", "blocked"]);
+    assert!(blocked.contains("Nearest module query"), "{blocked}");
+    let ready = create(&["--quiet", "work", "mission", &mission, "--ready"]);
+    assert!(!ready.lines().any(|line| line == child), "{ready}");
+    let (_, dashboard, _) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(
+        dashboard.contains(&format!("Nearest module query | blockers: {remote_data}")),
+        "{dashboard}"
+    );
+
+    commit_all(dir.path(), "plan");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &child]);
+    assert!(
+        !success,
+        "start must refuse a child whose parent is blocked: {stdout}"
+    );
+    assert!(stderr.contains(&remote_data), "{stderr}");
+
+    // Once the parent's blocker is done, the child is ready.
+    set_issue_status(dir.path(), &remote_data, "done");
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(ready.lines().any(|line| line == child), "{ready}");
 }
