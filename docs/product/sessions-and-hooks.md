@@ -57,8 +57,9 @@ checked. Every change that reaches the base had its own claims checked when it
 landed, so earlier history holds by induction. A claim is checked when its
 record changed; when a changed issue record reaches it through blocked,
 parent, child, or advances links, directly or along a chain, before or after the change; when a review or evidence record about it
-was added, removed, or retargeted; or when the workflow policy at HEAD or on
-the base differs from the trusted point. Review history is checked for
+was added, removed, or retargeted; when the workflow policy at HEAD or on
+the base differs from the trusted point; or, under a policy that gates on
+`lint.none_blocking`, which reads every record, when any record changed. Review history is checked for
 append-only edits from the same point. `atelier doctor` checks every completed
 claim and the whole review history, for history that reached the base without
 the gates, such as a direct push (atelier-37uq).

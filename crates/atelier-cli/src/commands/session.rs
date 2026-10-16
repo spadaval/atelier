@@ -412,9 +412,25 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             )
             .all(|commit| at(&commit) == trusted_policy)
     };
-    let claims_trusted = trusted
-        .as_deref()
-        .filter(|point| touched.is_some() && policy_unchanged(point));
+    // Lint reads every record, so under a policy that gates on it any record
+    // change can affect every claim.
+    let lints = source
+        .policy
+        .workflows
+        .values()
+        .flat_map(|workflow| workflow.transitions.values())
+        .flat_map(|transition| &transition.validators)
+        .any(|validator| validator.builtin == "lint.none_blocking");
+    let records_unchanged = |point: &str| {
+        git::text(
+            repo,
+            &["diff", "--name-only", point, &head, "--", ".atelier"],
+        )
+        .is_ok_and(|changed| changed.trim().is_empty())
+    };
+    let claims_trusted = trusted.as_deref().filter(|point| {
+        touched.is_some() && policy_unchanged(point) && (!lints || records_unchanged(point))
+    });
     let mut nodes = claim_nodes(
         repo,
         &mut read,

@@ -3568,6 +3568,54 @@ fn land_checks_a_mission_whose_advancing_work_reopens() {
     );
 }
 #[test]
+fn land_checks_every_claim_after_a_record_change_under_a_lint_gate() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    // A policy whose work closes only while the whole tracker lints clean.
+    let policy = f.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    let work = text.find("  work:").unwrap();
+    let close = work + text[work..].find("        - blockers.none_open\n").unwrap();
+    let mut revised = text.clone();
+    revised.insert_str(close, "        - lint.none_blocking\n");
+    fs::write(&policy, revised).unwrap();
+    let old = ok(f.path(), &["-q", "issue", "create", "Done before"]);
+    commit(f.path(), "plan it");
+    ok(f.path(), &["issue", "transition", &old, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &old, "close", "--reason", "done"],
+    );
+    commit(f.path(), "done without the gates");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(f.path(), &["land", &f.id]);
+
+    // A lint finding on an unrelated record fails the old claim's gate.
+    let unrelated = ok(f.path(), &["-q", "issue", "create", "Unrelated"]);
+    let path = f.path().join(format!(".atelier/issues/{unrelated}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("labels: []"), "{text}");
+    fs::write(
+        &path,
+        text.replace("labels: []", "labels: [\"size-m\", \"size-s\"]"),
+    )
+    .unwrap();
+    commit(f.path(), "an unrelated record with conflicting labels");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} lint.none_blocking")),
+        "{output}"
+    );
+}
+#[test]
 fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);
