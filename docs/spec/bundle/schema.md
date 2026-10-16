@@ -126,11 +126,15 @@ without minting new IDs. Its `client_ref` stands for the existing record within
 the bundle, so other entries can link to it. Fields it omits keep their current
 values; `title`, `body` (the typed sections, which keep the record's Notes and
 Close Reason), `priority`, `labels`, and a mission's `strategy` replace the
-current values when given. `parent`, `blocked_by`, `blocks`, and `advances` add
-links; remove links with `atelier issue unlink`. `notes` append. An update
-cannot set `status` (use `atelier issue transition`) or change `issue_type`
-(use `atelier issue update --issue-type`). Updates pass the same body, field,
-reference, and staged-graph validation as creates.
+current values when given. `blocked_by`, `blocks`, and `advances` add links,
+and `parent` sets one on a record without a parent; remove links with
+`atelier issue unlink` and move a record with `atelier issue update --parent`.
+`notes` append. An update cannot set `status` (use `atelier issue
+transition`), change `issue_type` (use `atelier issue update --issue-type`),
+change the body of a done record, or update the same record twice. Every
+record a bundle writes, created or updated, passes the same body, field,
+reference, per-record (`atelier check`), strategy-file, and staged-graph
+validation.
 
 Fixtures:
 
