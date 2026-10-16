@@ -661,17 +661,17 @@ fn evaluate_scope(
                         }
                     ) && applicable.contains(&record.target))
             }),
-            // Only claims with proof or findings look up where they were
-            // claimed.
+            // Only retained claims with proof or findings look up where they
+            // were claimed (atelier-nzzz).
             &applicable
                 .iter()
+                .filter(|_| historical)
                 .filter(|id| {
                     index.reviews().any(|record| {
-                        record.target == **id
-                            && matches!(record.event, ReviewEvent::Finding { .. })
-                    }) || index
-                        .list_record_links("issue", id)
-                        .is_ok_and(|links| links.iter().any(|link| link.relation_type == "validates"))
+                        record.target == **id && matches!(record.event, ReviewEvent::Finding { .. })
+                    }) || index.list_record_links("issue", id).is_ok_and(|links| {
+                        links.iter().any(|link| link.relation_type == "validates")
+                    })
                 })
                 .cloned()
                 .collect(),

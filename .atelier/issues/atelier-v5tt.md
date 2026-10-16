@@ -26,7 +26,7 @@ updated_at: "2026-10-16T21:55:56.565750305+00:00"
 
 ## Done when
 
-Land runs fewer serial Git calls with identical answers: the per-claim history walks run in the parallel prefetch, and each commit range costs one rev-list instead of two, with a parity test against `git rev-list --ancestry-path`; land is measured before and after on this repository and the benchmark history fixture. Batching the per-review walks themselves is split into atelier-7b6e (scope narrowed 2026-10-16; the original Done when asked for walk counts that do not grow with review records).
+Land runs fewer serial Git calls with identical answers: the per-claim history walks run in the parallel prefetch, and each commit range costs one rev-list instead of two, with a parity test against `git rev-list --ancestry-path`; land is measured before and after on this repository and the benchmark history fixture. Batching the per-review walks themselves, and attributing the time between Git calls, are split into atelier-7b6e (scope narrowed 2026-10-16; the original Done when asked for walk counts that do not grow with review records).
 
 ## Context
 
@@ -38,7 +38,7 @@ Profile (2026-10-16, release build, this repository at 2,368 commits with 408 re
 
 Changes: the claim walks (`claim_history_query`, shared with `claim_endpoint`) join the first parallel prefetch round, for claims that have proof or findings (others never look up their claim point); `uncached_edges` computes the ancestry path from its `rev-list --parents` output instead of a second `rev-list --ancestry-path` (parity test ancestry_path_matches_git_on_branchy_history).
 
-Result: this repository 7.3 s to 5.1 s; the benchmark history fixture unchanged within noise (2.9-3.7 s for both binaries under load average 9). Separately, Git changed-path Bloom filters (`git commit-graph write --reachable --changed-paths`) cut land here from 5.2 s to 3.3 s with no code change, because the remaining cost is path-limited log walks; whether Atelier sets them up is a product decision.
+Result: Git processes per land on this repository 1,336 to 1,136 (GIT_TRACE2 start events), wall time 7.3 s to 5.1 s on a quiet machine; the benchmark history fixture unchanged within noise (2.9-3.7 s for both binaries under load average 9). Separately, Git changed-path Bloom filters (`git commit-graph write --reachable --changed-paths`) cut land here from 5.2 s to 3.3 s with no code change, because the remaining cost is path-limited log walks; whether Atelier sets them up is a product decision.
 
 ## Unknowns
 
