@@ -3,6 +3,9 @@ created_at: "2026-10-15T23:13:58.925778094+00:00"
 id: "atelier-lwdu"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-lwdu
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show merged done claims as merged after prune"
-updated_at: "2026-10-15T23:13:58.925778094+00:00"
+updated_at: "2026-10-16T19:28:42.237290863+00:00"
 ---
 
 ## Goal

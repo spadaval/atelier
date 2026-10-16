@@ -2742,6 +2742,62 @@ fn base_land_retains_claims_a_merge_tip_brings_in_through_its_other_parent() {
     ok(f.path(), &["land"]);
 }
 #[test]
+fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
+    let f = Fixture::new();
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let tip = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(f.path(), &["merge", &f.id]);
+    git(f.path(), &["switch", "-q", "main"]);
+    // Branch cleanup kept the work branch, and prune later removed the
+    // owner's record from the base.
+    git(f.path(), &["branch", &f.branch, &tip]);
+    git(
+        f.path(),
+        &["rm", "-q", "-r", &format!(".atelier/issues/{}.md", f.id)],
+    );
+    git(f.path(), &["rm", "-q", "-r", ".atelier/reviews"]);
+    commit(f.path(), "prune the merged owner");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    for command in ["prime", "status"] {
+        let output = ok(f.path(), &[command]);
+        assert!(
+            output.contains(&format!("{} [done, merged into main]", f.id)),
+            "{command}: {output}"
+        );
+    }
+    // An uncommitted close on a fresh branch from the base is not merged.
+    git(f.path(), &["switch", "-q", "main"]);
+    let fresh = ok(f.path(), &["-q", "issue", "create", "Fresh work"]);
+    commit(f.path(), "plan fresh work");
+    ok(f.path(), &["start", &fresh]);
+    commit(f.path(), "start fresh work");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &fresh,
+            "close",
+            "--reason",
+            "claimed",
+        ],
+    );
+    let output = ok(f.path(), &["prime"]);
+    assert!(output.contains("not merged into main"), "{output}");
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);
