@@ -3931,6 +3931,54 @@ fn test_mission_strategy_is_set_from_the_cli_and_checked_from_the_mission_side()
 }
 
 #[test]
+fn test_check_rejects_repeated_keys_in_record_front_matter() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str| {
+        let (success, id, stderr) = run_atelier(dir.path(), &["-q", "issue", "create", title]);
+        assert!(success, "{stderr}");
+        id.trim().to_string()
+    };
+    let (source, target, other) = (create("Source"), create("Target"), create("Other"));
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &source, &target, "--role", "related"],
+    );
+    assert!(success, "{stderr}");
+    let path = canonical_issue_path(dir.path(), &source);
+    let original = fs::read_to_string(&path).unwrap();
+    for (case, edited) in [
+        (
+            "nested",
+            original.replacen(
+                &format!("    id: \"{target}\"\n"),
+                &format!("    id: \"{target}\"\n    id: \"{other}\"\n"),
+                1,
+            ),
+        ),
+        (
+            "top-level",
+            original.replacen("priority:", "priority: \"low\"\npriority:", 1),
+        ),
+    ] {
+        assert_ne!(edited, original, "{case}");
+        fs::write(&path, &edited).unwrap();
+        let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+        let output = format!("{stdout}{stderr}");
+        let key = if case == "nested" { "id" } else { "priority" };
+        assert!(
+            !success
+                && output.contains(&format!("duplicate key '{key}'"))
+                && output.contains(&format!("{source}.md")),
+            "{case}: {output}"
+        );
+    }
+    fs::write(&path, &original).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stderr}");
+}
+
+#[test]
 fn test_migrate_epics_retypes_epic_records_and_the_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

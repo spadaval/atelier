@@ -1121,12 +1121,86 @@ fn split_front_matter<'a>(
 }
 
 fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
-    serde_yaml::from_str(front).with_context(|| {
+    let invalid = || {
         format!(
             "Invalid YAML front matter in {}",
             display_state_path(relative)
         )
-    })
+    };
+    serde_yaml::from_str::<UniqueKeys>(front).with_context(invalid)?;
+    serde_yaml::from_str(front).with_context(invalid)
+}
+
+/// Parses YAML only to reject a mapping that repeats a key. Parsing keeps
+/// the last value, so a hand-resolved merge that leaves two `id:` keys in one
+/// relationship entry would otherwise drop one silently (atelier-tqru).
+struct UniqueKeys;
+
+impl<'de> serde::Deserialize<'de> for UniqueKeys {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(UniqueKeysVisitor)
+    }
+}
+
+struct UniqueKeysVisitor;
+
+impl<'de> serde::de::Visitor<'de> for UniqueKeysVisitor {
+    type Value = UniqueKeys;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("YAML without repeated mapping keys")
+    }
+    fn visit_map<M: serde::de::MapAccess<'de>>(self, mut map: M) -> Result<UniqueKeys, M::Error> {
+        let mut seen = Vec::new();
+        while let Some(key) = map.next_key::<Value>()? {
+            if seen.contains(&key) {
+                let name = key
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| format!("{key:?}"));
+                return Err(serde::de::Error::custom(format!("duplicate key '{name}'")));
+            }
+            seen.push(key);
+            map.next_value::<UniqueKeys>()?;
+        }
+        Ok(UniqueKeys)
+    }
+    fn visit_seq<S: serde::de::SeqAccess<'de>>(self, mut seq: S) -> Result<UniqueKeys, S::Error> {
+        while seq.next_element::<UniqueKeys>()?.is_some() {}
+        Ok(UniqueKeys)
+    }
+    fn visit_enum<A: serde::de::EnumAccess<'de>>(self, data: A) -> Result<UniqueKeys, A::Error> {
+        use serde::de::VariantAccess;
+        let (_, variant) = data.variant::<Value>()?;
+        variant.newtype_variant::<UniqueKeys>()
+    }
+    fn visit_bool<E>(self, _: bool) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_i64<E>(self, _: i64) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_u64<E>(self, _: u64) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_f64<E>(self, _: f64) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_str<E>(self, _: &str) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_unit<E>(self) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_none<E>(self) -> Result<UniqueKeys, E> {
+        Ok(UniqueKeys)
+    }
+    fn visit_some<D: serde::Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<UniqueKeys, D::Error> {
+        deserializer.deserialize_any(UniqueKeysVisitor)
+    }
 }
 
 fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {

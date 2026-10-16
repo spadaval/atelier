@@ -4,6 +4,9 @@ id: "atelier-tqru"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-tqru
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "atelier check accepts duplicate YAML keys in records"
-updated_at: "2026-10-16T21:52:40.300016659+00:00"
+updated_at: "2026-10-16T21:58:54.600205214+00:00"
 ---
 
 ## Goal
