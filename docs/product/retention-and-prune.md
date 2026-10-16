@@ -16,7 +16,20 @@ set `[prune] canonical_retention_days`. A command override affects that run.
 
 Canonical issue and evidence cleanup protects non-terminal work, retained graph
 references, required proof, recent terminal records, uncommitted changes, and
-paths with unmerged history. Apply requires a clean tracked checkout and valid
+paths with unmerged history. What pruning keeps follows atelier-r7cd (decided
+by Sumeet 2026-10-15):
+
+- Any record linked from, or linking to, a record that stays, which includes
+  every record an open record links.
+- Records with decision or research content: `decision` records, and any
+  record with a Decision or Background section. These are the records most
+  likely to be needed again, and Git history alone would bury them.
+
+A record on another branch can still link a record that prune removed. When
+it reaches the checkout, `atelier check` (and every command, since the graph
+no longer loads) reports the missing reference, names the commit that pruned
+it, and shows how to restore it with `git show`; alternatively delete the link
+from the linking record by hand. Apply requires a clean tracked checkout and valid
 records. It must not leave missing links or an invalid retained graph.
 
 Branch and worktree cleanup protects the current checkout, base branch, active

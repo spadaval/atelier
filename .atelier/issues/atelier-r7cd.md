@@ -4,6 +4,9 @@ id: "atelier-r7cd"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-r7cd
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Decide what pruning keeps"
-updated_at: "2026-10-15T22:08:59.015438310+00:00"
+updated_at: "2026-10-16T01:30:14.098353267+00:00"
 ---
 
 ## Goal
@@ -31,3 +34,7 @@ Sumeet decides what survives pruning (for example records with a Decision or res
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). Related: atelier-by8u (a place for research and references).
+
+## Notes
+
+- 2026-10-16 [human] Sumeet chose: pruning keeps records linked from an open record (already true: prune keeps any record with a link to or from a retained record) and records with decision or research content (decision records and any record with a Decision or Background section). check names the commit that pruned a missing link target and how to restore it.

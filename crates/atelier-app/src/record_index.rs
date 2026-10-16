@@ -199,6 +199,40 @@ pub struct RecordIndex {
     links_by_record: BTreeMap<(String, String), Vec<usize>>,
 }
 
+/// A reference to a missing record often means prune removed it while a
+/// record on another branch still linked it (atelier-r7cd). Say so, and how to
+/// recover, when Git history shows the record was deleted.
+fn explain_pruned_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::Error {
+    let message = error.to_string();
+    let Some((_, rest)) = message.rsplit_once(" reference to missing ") else {
+        return error;
+    };
+    let Some((kind, id)) = rest.trim().split_once(' ') else {
+        return error;
+    };
+    let dir = match kind {
+        "issue" => "issues",
+        "evidence" => "evidence",
+        "review" => "reviews",
+        _ => return error,
+    };
+    let path = format!(".atelier/{dir}/{id}.md");
+    let deleted = crate::git_freshness::git_output(
+        repo_root,
+        &["log", "-1", "--diff-filter=D", "--format=%h", "--", &path],
+    )
+    .ok()
+    .and_then(|out| String::from_utf8(out).ok())
+    .map(|out| out.trim().to_string())
+    .filter(|commit| !commit.is_empty());
+    match deleted {
+        Some(commit) => anyhow!(
+            "{message}; {id} was pruned in commit {commit}. Restore it with `git show {commit}^:{path} > {path}`, or delete the link from the linking record's relationships by hand (commands cannot load the records until one of these is done)"
+        ),
+        None => error,
+    }
+}
+
 impl RecordIndex {
     /// Loads and validates every record under `state_dir`, failing on the
     /// first invalid record file and naming it.
@@ -244,6 +278,12 @@ impl RecordIndex {
         reviews: Vec<ReviewRecord>,
     ) -> (Self, Vec<anyhow::Error>) {
         let (index, mut errors) = Self::structural(issues, evidence, reviews);
+        if let Some(repo_root) = state_dir.parent() {
+            errors = errors
+                .into_iter()
+                .map(|error| explain_pruned_reference(repo_root, error))
+                .collect();
+        }
         let Some(repo_root) = state_dir.parent() else {
             errors.push(anyhow!(
                 "Cannot determine repository root for {}",
