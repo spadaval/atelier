@@ -859,6 +859,68 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
 }
 
 #[test]
+fn base_merge_with_resolved_record_conflicts_keeps_approval_unless_scope_changes() {
+    for case in ["out_of_scope", "in_scope", "code"] {
+        let fixture = Fixture::new();
+        // An out-of-scope record both sides will edit.
+        git(fixture.path(), &["switch", "-q", "main"]);
+        let shared = ok(
+            fixture.path(),
+            &["-q", "issue", "create", "Shared planning"],
+        );
+        commit(fixture.path(), "shared planning record");
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+        let path = format!(".atelier/issues/{shared}.md");
+        let retitle = |title: &str| {
+            let file = fixture.path().join(&path);
+            let text = fs::read_to_string(&file).unwrap();
+            let text = text.replace("title: \"Shared planning\"", &format!("title: \"{title}\""));
+            fs::write(file, text).unwrap();
+        };
+        retitle("Branch title");
+        commit(fixture.path(), "branch planning edit");
+        fixture.approval("Reviewer");
+
+        git(fixture.path(), &["switch", "-q", "main"]);
+        retitle("Base title");
+        if case == "in_scope" {
+            // The base also edits the owner's acceptance.
+            let owner = fixture
+                .path()
+                .join(format!(".atelier/issues/{}.md", fixture.id));
+            let text = fs::read_to_string(&owner).unwrap();
+            fs::write(
+                owner,
+                text.replace("Scenario passes.", "A different scenario passes."),
+            )
+            .unwrap();
+        }
+        commit(fixture.path(), "base planning edit");
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        let merged = Command::new("git")
+            .current_dir(fixture.path())
+            .args(["merge", "--no-edit", "main"])
+            .output()
+            .unwrap();
+        assert!(!merged.status.success(), "the shared record conflicts");
+        // Resolve the record conflict by taking the base's planning.
+        git(fixture.path(), &["checkout", "--theirs", "--", &path]);
+        if case == "code" {
+            fs::write(fixture.path().join("src.rs"), "edited while merging\n").unwrap();
+        }
+        git(fixture.path(), &["add", "."]);
+        git(fixture.path(), &["commit", "-q", "--no-edit"]);
+        if case == "out_of_scope" {
+            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+            assert!(output.contains("pass review.current"), "{output}");
+        } else {
+            fixture.refusal("FAIL review.current");
+        }
+    }
+}
+
+#[test]
 fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
     let fixture = Fixture::new();
     let finding = fixture.finding();

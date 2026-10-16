@@ -60,7 +60,11 @@ Merging the base into a reviewed branch keeps its approval when the merge is
 clean: every other parent is already on the base, and the merge commit is
 exactly the tree `git merge-tree` produces from its parents, with no conflict
 resolution or edits made while merging (atelier-n7g1). The base commits it
-brings in were reviewed on their own branches. A conflicted or hand-edited
+brings in were reviewed on their own branches. A merge whose conflicts are
+only in records, such as both sides adding to a mission's `advances`, also
+keeps the approval when every other path matches Git's own merge: records
+outside the owner's scope are base planning and may be resolved freely, and an
+in-scope record may change only in status (atelier-1isk). A conflicted or hand-edited
 merge, or one that brings in a branch not yet on the base, needs renewed
 review. Proof is different: tests must run again on the merged result, so
 record fresh evidence after merging the base.
