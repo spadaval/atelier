@@ -579,6 +579,34 @@ fn divergence_and_dirty_candidate_or_base_checkout_are_refused() {
     fs::write(base.path().join("new-base-code"), "diverged").unwrap();
     commit(base.path(), "base divergence");
     fixture.refusal("merge_diverged");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        output.contains("`git merge main`") && output.contains("Do not rebase"),
+        "{output}"
+    );
+}
+
+#[test]
+fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let reviewed = git(fixture.path(), &["rev-parse", "HEAD"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("other.rs"), "landed on the base\n").unwrap();
+    commit(fixture.path(), "other work landed on the base");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["rebase", "-q", "main"]);
+    fixture.refusal("pins a commit outside the work branch");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        output.contains("rebased or reset") && output.contains("git reflog"),
+        "{output}"
+    );
+
+    // The advised recovery: restore the reviewed tip, then merge the base.
+    git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(fixture.path(), &["merge", &fixture.id]);
 }
 
 #[test]

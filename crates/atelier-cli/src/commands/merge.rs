@@ -69,7 +69,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let base_ref = format!("refs/heads/{base}");
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     let base_head = crate::commands::git::resolve(repo, &base_ref)?;
-    git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Update/rebase the work branch, obtain fresh proof and review, then retry."))?;
+    git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin."))?;
     let source = base_policy::from_captured(&mut read, &base_head)?;
     for diagnostic in &source.diagnostics {
         eprintln!("{diagnostic}");
