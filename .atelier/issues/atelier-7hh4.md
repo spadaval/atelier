@@ -38,10 +38,10 @@ Deferred findings from the atelier-n7g1 review (approval atelier-s7ea).
 
 Resolution (2026-10-16):
 
-1. Documented, not isolated (atelier-6hpy). Running merge-tree without the repository's drivers and attributes would also drop the eol and text attributes the real merge used, so ordinary merges would stop matching. reviews-and-merge.md now says custom merge drivers count as Git's own merge and are reviewed as policy.
+1. Documented, not isolated (atelier-6hpy). A merge driver configured for the repository (for example `merge=ours` on a changelog, or `merge=union`) is the merge the repository chose, and the real merge used it too, so a result it reproduces is that repository's own merge. Isolating merge-tree from drivers (`--attr-source` with an empty tree, or dropping the driver config) would leave text and eol attributes intact but turn every driver-resolved file into a conflict, so each such base merge would need renewed review; review finding atelier-09wh corrected an earlier, wrong reason given here. reviews-and-merge.md says custom merge drivers count as Git's own merge and are reviewed as policy.
 2. Accepted (atelier-9l63). With no owner, the clean-merge side check uses `HEAD^`. The alternative, the base's upstream tip, would refuse `land` on the base for a just-merged branch whose base merge brought in unpushed local base commits, before the push that follows. As the finding notes, it is not exploitable: `check_base_commits` still checks every unpushed side commit on its own.
 3. Tested (atelier-1y1z): an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge.
 
 ## Close Reason
 
-(1) merge drivers documented as part of Git's own merge and reviewed as policy, since isolating merge-tree would break ordinary attribute-driven merges; (2) the no-owner HEAD^ side check is accepted, with the reason recorded; (3) an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge tests the pin rule. See Design.
+(1) merge drivers documented as part of Git's own merge and reviewed as policy, since a configured driver is the repository's chosen merge and isolating it would send every driver-resolved base merge to review; (2) the no-owner HEAD^ side check is accepted, with the reason recorded; (3) an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge tests the pin rule. See Design.
