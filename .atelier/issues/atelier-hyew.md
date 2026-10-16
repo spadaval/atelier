@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T20:41:22.395468651+00:00"
+status: "done"
 title: "Harden the base done-claim check"
-updated_at: "2026-10-16T20:36:40.006532957+00:00"
+updated_at: "2026-10-16T20:41:22.395468651+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Close the gaps review found in atelier-fj1t's land_base_done_claim check.
 ## Context
 
 Deferred findings from the atelier-fj1t reviews (approval atelier-oobm). crates/atelier-cli/src/commands/git.rs base_done_claim.
+
+## Close Reason
+
+base_done_claim reads earlier copies of a record directly or through the epic migration; when a copy still does not parse, the pushed upstream copy decides whether the item was already done, so breaking a record and restoring it as done is refused. Test base_done_claims_survive_a_broken_record_and_merges_judge_every_parent covers that and a conflicted pull merge whose resolution differs from both parents (land passes); replacing the upstream fallback or judging only the first parent each fails it. The epic migration test still passes.
