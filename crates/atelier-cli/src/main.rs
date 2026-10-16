@@ -300,9 +300,9 @@ enum IssueCommands {
         /// Issue title
         title: String,
         /// Markdown body with the type's `## ` sections: Goal and Done when
-        /// for work items; Outcome for epics (plus Proof once ready) and
-        /// missions (plus Success criteria without a strategy). Plain text
-        /// becomes the Goal or Outcome
+        /// (optionally Scope, Context, Unknowns, Design) for work items;
+        /// Outcome for missions, plus Success criteria without a strategy.
+        /// Plain text becomes the Goal or Outcome
         #[arg(long)]
         body: Option<String>,
         /// Priority (low, medium, high, critical)
