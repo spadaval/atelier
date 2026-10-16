@@ -296,6 +296,55 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         .contains("unavailable"));
 }
 #[test]
+fn land_and_merge_refuse_a_project_config_that_differs_from_head() {
+    let f = Fixture::new();
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let config = f.path().join(".atelier/config.toml");
+    let committed = fs::read_to_string(&config).unwrap();
+    // A custom link type in an uncommitted config would let records that the
+    // committed config rejects pass the gates.
+    fs::write(
+        &config,
+        format!("{committed}\n[issue_links]\ncustom_context_types = [\"inspired_by\"]\n"),
+    )
+    .unwrap();
+    for ignored in [false, true] {
+        if ignored {
+            fs::write(f.path().join(".git/info/exclude"), ".atelier/config.toml\n").unwrap();
+            git(f.path(), &["rm", "-q", "--cached", ".atelier/config.toml"]);
+            git(f.path(), &["commit", "-qm", "stop tracking the config"]);
+        }
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(
+            !pass && output.contains("land_config_uncommitted"),
+            "{output}"
+        );
+        // merge refuses a modified tracked config as a dirty checkout first.
+        let (pass, output) = cli(f.path(), &["merge", &f.id]);
+        let expected = if ignored {
+            "merge_config_uncommitted"
+        } else {
+            "merge_checkout_dirty"
+        };
+        assert!(!pass && output.contains(expected), "{output}");
+    }
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
+    git(f.path(), &["restore", ".atelier/config.toml"]);
+    ok(f.path(), &["land", &f.id]);
+}
+#[test]
 #[cfg(unix)]
 fn setup_keeps_an_existing_settings_mode_and_creates_new_ones_readable() {
     use std::os::unix::fs::PermissionsExt;

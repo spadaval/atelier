@@ -97,6 +97,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             .expect("base snapshot")
             .require_clean(path)?;
     }
+    crate::commands::git::require_committed_config(repo, &head, "merge")?;
     let nodes = review_gate::evaluate(&index, &mut read, &source.policy, owner, &base_head)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);

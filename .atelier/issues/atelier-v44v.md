@@ -36,12 +36,12 @@ Independent S1-S8 validation 2026-10-15 (atelier-xz11).
 
 Resolution of each item (2026-10-16):
 
-1. Accepted. `land` does not refuse uncommitted `.atelier/config.toml` edits because config.toml is a local Atelier path by design (`is_local_atelier_path`, with runtime files, locks and agent.json), and committed-snapshot tests pin that it is not a merge input. It holds the slug, prune defaults and custom context-only link types, none of which bypass a gate.
+1. Fixed (review finding atelier-9kwv showed the first acceptance was wrong). config.toml stays a local Atelier path for snapshot reads, but gates read its custom context link types and prune retention from disk, so an uncommitted custom link type let records the committed config rejects pass `land` and `check`. `land` and `merge` now refuse a config.toml that differs from HEAD, including an ignored or untracked one, with `land_config_uncommitted` / `merge_config_uncommitted` (merge refuses a modified tracked one as a dirty checkout first). Test: land_and_merge_refuse_a_project_config_that_differs_from_head.
 2. Fixed. `atelier setup` keeps an existing settings file's mode and creates a new one at 0644; the temporary file it writes through started at 0600. Test: setup_keeps_an_existing_settings_mode_and_creates_new_ones_readable.
-3. No longer reproduces. `issue create --issue-type mission` with no strategy or success criteria now passes `check` too, so create and check agree (mission sections and the strategy link were reworked in atelier-9vq3 and atelier-9m4k).
+3. Accepted (review finding atelier-c4ze). Whole-repository `atelier check` passes after `issue create --issue-type mission` with no body, and the strategy link is optional since atelier-9m4k. `atelier check <id>` still reports the missing Outcome and Success criteria, as it reports a bare task's missing Goal and Done when: it lints a draft's sections on request, which is intended, and the mission cannot pass `ready` until they are written.
 4. Fixed. Every `atelier review` subcommand and argument has help text.
 5. Fixed. The two test doc comments no longer mention export/import.
 
 ## Close Reason
 
-Each item is fixed with a test or recorded: (1) uncommitted config.toml is accepted as a local path by design; (2) setup keeps the settings mode, tested; (3) mission create and check now agree, no longer reproduces; (4) review subcommands have help; (5) export/import doc comments fixed. See Design.
+Each item is fixed with a test or recorded: (1) land and merge refuse a config.toml that differs from HEAD; (2) setup keeps the settings mode, tested; (3) check <id> linting a bare mission's sections is accepted as intended; (4) review subcommands have help; (5) export/import doc comments fixed. See Design.

@@ -298,6 +298,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         let (files, paths) = snapshot.read_record_files(repo, false).map_err(|error| {
             anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry.")
         })?;
+        git::require_committed_config(repo, &head, "land")?;
         (head, branch, snapshot, paths, files.into_index()?)
     };
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);

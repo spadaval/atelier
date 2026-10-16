@@ -108,6 +108,21 @@ impl Snapshot {
     }
 }
 
+/// Gates read custom link types and prune retention from the project config,
+/// so a guard refuses one that differs from HEAD, even if Git ignores it
+/// (atelier-v44v).
+pub(crate) fn require_committed_config(repo: &Path, head: &str, command: &str) -> Result<()> {
+    let path = Path::new(".atelier/config.toml");
+    let committed = git_freshness::blob(repo, head, path).ok();
+    let working = std::fs::read_to_string(repo.join(path)).ok();
+    if committed != working {
+        bail!(
+            "{command}_config_uncommitted: .atelier/config.toml differs from HEAD, and gates read its custom link types and prune retention; commit it with the work it describes, or restore it with `git restore .atelier/config.toml`"
+        );
+    }
+    Ok(())
+}
+
 /// Record-only changes may be committed on the base branch directly; any
 /// other unpushed base commit must be covered by an approval or trivial
 /// exemption of a completed owner that branched from this base, which is what
