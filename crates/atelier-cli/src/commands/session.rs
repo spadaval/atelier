@@ -257,8 +257,8 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
     if refs.is_empty() {
         bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base} or run atelier start <id>");
     }
-    // No copy of the base has a workflow policy yet: this branch installs
-    // Atelier, and there are no gates on the base to land it through.
+    // No copy of the base has a workflow policy yet, so there are no gates on
+    // the base to land through; the caller says whether this is an install.
     if refs.iter().all(|reference| {
         git_freshness::git_output(
             repo,
@@ -436,7 +436,7 @@ fn land_text(requested: Option<&str>, install: bool) -> Result<String> {
         false,
     )?);
     if install && (id.is_some() || branch == source.policy.branch_policy.base_branch) {
-        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base");
+        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base; rerun atelier land without --install");
     }
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;

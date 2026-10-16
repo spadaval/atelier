@@ -3206,6 +3206,14 @@ fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
             && !output.contains("Installing Atelier"),
         "{output}"
     );
+    // On an unowned branch of the adopted repository, the flag is refused.
+    git(dir.path(), &["switch", "-q", "-c", "feature", "main"]);
+    ok(dir.path(), &["land"]);
+    let (pass, output) = cli(dir.path(), &["land", "--install"]);
+    assert!(
+        !pass && output.contains("land_install_invalid: main already has"),
+        "{output}"
+    );
     // An owner's branch cannot claim to be an install either.
     git(dir.path(), &["switch", "-q", "main"]);
     let id = ok(dir.path(), &["-q", "issue", "create", "Owned work"]);
@@ -3213,7 +3221,10 @@ fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     ok(dir.path(), &["start", &id]);
     commit(dir.path(), "start owned work");
     let (pass, output) = cli(dir.path(), &["land", "--install"]);
-    assert!(!pass && output.contains("land_install_invalid"), "{output}");
+    assert!(
+        !pass && output.contains("rerun atelier land without --install"),
+        "{output}"
+    );
 }
 #[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {

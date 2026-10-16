@@ -4,6 +4,7 @@
 atelier prime
 atelier land
 atelier land <owner-or-child-id>
+atelier land --install
 atelier setup claude
 atelier setup claude --binary <path-to-atelier>
 ```
@@ -39,7 +40,9 @@ it (see [installing Atelier](workflow-configuration.md#installing-atelier)), and
 plain `land` refuses with `land_install_unconfirmed` and points to the flag.
 `land` does not infer an install from the branch's own policy, which the branch
 can edit (atelier-bibd). `--install` is refused on an owner's branch, on the
-base, and when the base already has a policy.
+base, and when the base already has a policy. The Stop hook runs plain `land`,
+so in a session on an installing branch it blocks once with
+`land_install_unconfirmed` and then warns, until the install merges.
 
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
