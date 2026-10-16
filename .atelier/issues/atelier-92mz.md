@@ -4,6 +4,9 @@ id: "atelier-92mz"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-92mz
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Resync the Agent Factory skill with the adoption changes"
-updated_at: "2026-10-15T23:47:14.113280867+00:00"
+updated_at: "2026-10-16T18:09:42.540241396+00:00"
 ---
 
 ## Goal
