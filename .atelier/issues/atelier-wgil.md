@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T20:33:32.352209145+00:00"
+status: "done"
 title: "Reject entries no side wrote in list resolutions of base merges"
-updated_at: "2026-10-16T20:32:32.671362595+00:00"
+updated_at: "2026-10-16T20:33:32.352209145+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ The list check also requires every resolved entry to be expected (or compares as
 ## Context
 
 Deferred finding atelier-6dwg from the atelier-1isk review (approval atelier-c1ws). The CLI de-duplicates labels and links, so only hand-edited records can trigger it, and in-scope records stay status-only.
+
+## Close Reason
+
+The three-way list merge in review_gate.rs now also requires every resolved entry to be expected. Unit test list_resolutions_keep_both_sides_and_add_nothing_even_with_duplicates covers the [dup, dup] case (correct union accepted, a smuggled entry and a dropped side refused) and fails without the new condition.
