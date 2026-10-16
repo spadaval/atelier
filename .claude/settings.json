@@ -1,25 +1,25 @@
 {
   "hooks": {
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "command": "bd prime",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [
           {
-            "command": "bd prime",
+            "command": "atelier prime --hook claude # atelier-managed:SessionStart",
+            "timeout": 30,
             "type": "command"
           }
-        ],
-        "matcher": ""
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "atelier land --hook claude # atelier-managed:Stop",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
       }
     ]
   }

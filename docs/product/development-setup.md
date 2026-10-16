@@ -25,9 +25,10 @@ failure, and concurrency paths. Normal release builds contain no fault-injection
 environment hooks.
 
 Use `target/debug/atelier` to validate repository CLI changes. The installed
-`atelier` can still contain the old model during the rebuild; update it only
-when the new model is stable. No external service, provider credential, `.env`,
-or devcontainer is required.
+`atelier` (`cargo install --path crates/atelier-cli`) runs this repository's
+Claude Code hooks; it can lag `master`, so reinstall after merging changes to
+session commands. No external service, provider credential, `.env`, or
+devcontainer is required.
 
 Optional `ATELIER_LOG` and `ATELIER_LOG_FORMAT` configure diagnostics. Producer
 identity is self-declared; commands with attribution accept an explicit identity

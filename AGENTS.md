@@ -17,12 +17,13 @@ rebuilt model.
 - Agent Factory skill: `.agents/skills/agent-factory/SKILL.md`
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
-- Start a session with `target/debug/atelier prime`; before handoff commit
-  canonical records and run `target/debug/atelier land`. Active work may remain
-  open, with unfinished code handed off honestly.
-- Use `target/debug/atelier setup claude --binary target/debug/atelier` for the
-  supported Claude Code hooks during development. After installing the accepted
-  rebuild, `atelier setup claude` configures hooks for the installed CLI.
+- Start a session with `atelier prime`; before handoff commit canonical
+  records and run `atelier land`. Active work may remain open, with unfinished
+  code handed off honestly.
+- `.claude/settings.json` runs these through the installed CLI's Claude Code
+  hooks (`atelier setup claude`). To try a local build, use `target/debug/atelier`
+  directly, or `setup claude --binary target/debug/atelier` without committing
+  the result.
 
 ## Merge Policy
 
@@ -43,7 +44,7 @@ rebuilt model.
 
 ## Command References
 
-- Installed CLI: `atelier` (install the rebuild only after acceptance)
+- Installed CLI: `atelier` (`cargo install --path crates/atelier-cli`)
 - Local debug binary: `target/debug/atelier`
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`

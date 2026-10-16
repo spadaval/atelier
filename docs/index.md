@@ -14,9 +14,10 @@ process ownership, review providers, transition actions, and the cache.
   implementation, review, validation, and handoff process. Vendored verbatim
   from `spadaval/.agents`; change it upstream
   ([ADR 0020](adr/0020-agent-factory-targets-atelier-only.md)).
-- [Rebuild strategy](strategies/atelier-rebuild.md): governing intent, criteria,
-  scope, and authority. [Native mission](../.atelier/issues/atelier-kgcr.md) owns
-  current execution state.
+- [Rebuild strategy](strategies/atelier-rebuild.md): intent, criteria, scope,
+  and authority of the rebuild, completed with mission
+  [atelier-kgcr](../.atelier/issues/atelier-kgcr.md) on 2026-10-15. Open
+  missions are listed by `atelier work missions`.
 - [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
   decision's status and ADR 0019's supersession list before applying older rules.
 - [Development setup](product/development-setup.md): local tools and verification.
