@@ -34,4 +34,4 @@ Deferred finding atelier-eix5 from the atelier-j48s review (approval atelier-0c5
 
 ## Close Reason
 
-The 'pins a commit outside the work branch' error and reviews-and-merge.md say to cherry-pick commits made after the rebase back onto the restored tip and to record review events made since the rebase again, since they pin rewritten commits. The rebase recovery test now makes a proof commit after the rebase, follows the advice, merges, and finds that proof on the base.
+The 'pins a commit outside the work branch' error and reviews-and-merge.md say to cherry-pick only code or planning commits made after the rebase back onto the restored tip, leave out review and evidence records (they pin rewritten commits), and record proof and review again. The rebase recovery test gates on evidence, makes a fix and proof after the rebase, follows the advice, shows the stale proof and review, records them again and merges.
