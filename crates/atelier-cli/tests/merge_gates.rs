@@ -1119,7 +1119,14 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
         ],
     );
     commit(fixture.path(), "plan the second owner");
-    // An approval recorded on the base before the work branch exists.
+    // The start is committed on the base, then approved there, before the
+    // work branch takes it over.
+    ok(fixture.path(), &["start", &owner]);
+    let branch = format!("task/{owner}");
+    git(fixture.path(), &["stash", "-q"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    git(fixture.path(), &["stash", "pop", "-q"]);
+    commit(fixture.path(), "start recorded on the base");
     ok(
         fixture.path(),
         &[
@@ -1128,13 +1135,14 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
             &owner,
             "--identity",
             "Reviewer",
-            "Approved before any work",
+            "Approved on the base",
         ],
     );
-    commit(fixture.path(), "early approval on the base");
-    ok(fixture.path(), &["start", &owner]);
-    fs::write(fixture.path().join("second.rs"), "second\n").unwrap();
-    commit(fixture.path(), "second owner's code");
+    commit(fixture.path(), "approval on the base");
+    git(fixture.path(), &["switch", "-q", &branch]);
+    git(fixture.path(), &["merge", "-q", "--ff-only", "main"]);
+    // The branch then changes only what may follow an approval, so the pin
+    // rule alone decides.
     ok(
         fixture.path(),
         &["issue", "transition", &owner, "close", "--reason", "done"],
@@ -1143,7 +1151,7 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
     git(fixture.path(), &["switch", "-q", "main"]);
     fs::write(fixture.path().join("other.rs"), "landed\n").unwrap();
     commit(fixture.path(), "other work landed on the base");
-    git(fixture.path(), &["switch", "-q", &format!("task/{owner}")]);
+    git(fixture.path(), &["switch", "-q", &branch]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     let (_, output) = cli(fixture.path(), &["merge", &owner, "--check"]);
     assert!(output.contains("FAIL review.current"), "{output}");
