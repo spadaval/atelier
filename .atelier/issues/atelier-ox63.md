@@ -21,9 +21,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T01:06:53.726212089+00:00"
+status: "done"
 title: "Give decisions a record shape"
-updated_at: "2026-10-16T01:01:47.720655699+00:00"
+updated_at: "2026-10-16T01:06:53.726212089+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ A decision type (or a typed section on any issue) with Question, Options and Dec
 ## Context
 
 Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-tracker). Sumeet: there should be a way to file issues for design questions. Today they're filed as tasks.
+
+## Close Reason
+
+decision issue type (in atelier init's policy and this repo's) with Question (required), Options, Decision, Context and Background sections; its decide transition requires the Decision (decision.recorded). Open decisions classify as needs a human, so work ready never offers them to agents and work human lists them. They need no branch and close on the base branch as planning changes (atelier-3mjv). Documented in work-model.md, workflow-configuration.md, reviews-and-merge.md and CONTEXT.md. Test: test_decisions_wait_for_the_human_and_close_with_a_recorded_decision.
