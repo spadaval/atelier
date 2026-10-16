@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T18:21:24.533343274+00:00"
+status: "done"
 title: "Let follow-up records for deferred findings keep an approval current"
-updated_at: "2026-10-16T18:13:08.828095361+00:00"
+updated_at: "2026-10-16T18:21:24.533343274+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Either approval freshness ignores newly created issue records that are outside t
 ## Context
 
 Found 2026-10-15 on atelier-9k7o: filing atelier-lwdu after approval atelier-j2r2 blocked review.current until a fresh approval.
+
+## Close Reason
+
+Approval freshness ignores newly created issue records outside the owner's scope, so filing a defer follow-up after approval keeps the approval current; adding a child still stales it because it edits the owner. Test: new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not. Documented in reviews-and-merge.md.
