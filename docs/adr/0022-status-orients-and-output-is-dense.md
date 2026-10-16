@@ -19,10 +19,12 @@ AGENTS.md, and on 2026-10-16 it pointed agents at a finished mission. Guidance
 about how to use Atelier has homes already: `atelier help` and the Agent
 Factory skill's `references/atelier.md`. ADR 0019 removed `atelier man`.
 
-Output was also judged against the wrong reader. A recurring proposal was a
-JSON mode so agents "don't scrape text". Agents are not parsers: they read
-Markdown, labels, and symbols such as ✓ fluently, and JSON costs more tokens
-and buries the point. Scripts already have `--quiet`.
+Output was also judged against the wrong reader. A recurring proposal was
+JSON output for every view so agents "don't scrape text". Agents are not
+parsers: they read Markdown, labels, and symbols such as ✓ fluently, and JSON
+costs more tokens and buries the point. Scripts have `--quiet`, and two
+commands have `--json` (`review list` and `merge --check`), used today only by
+`scripts/bench_read_commands.py`.
 
 What agents do instead shows where the views fall short. Across about 1,600
 orientation commands in this repository's Claude Code transcripts, agents
@@ -46,8 +48,9 @@ Hierarchy section in loops to rebuild a tree, and grepped `prime` for
 3. **Output is dense Markdown for every reader.** One line per item, short
    headers, the status word with a symbol where it speeds scanning (✓, ⚠),
    and no repeated tokens a header already states. Detail views are brief by
-   default, with a flag for the full record. There is no JSON or YAML output
-   mode; `--quiet` stays the script interface.
+   default, with a flag for the full record. Views gain no JSON or YAML
+   mode for agents. `--quiet` and the existing `--json` flags on `review
+   list` and `merge --check` remain interfaces for scripts.
 4. **Piping is a missing view.** When agents routinely pipe atelier output
    through `head`, `grep`, `sed`, or loops, treat it as a defect in the
    views and file it, rather than adding a machine format.
