@@ -7,7 +7,7 @@ invariants. There is no external review backend or review room.
 
 ## Review commands
 
-Record decisions against the branch owner, normally an epic or a standalone
+Record decisions against the branch owner, a parent issue or a standalone
 issue. The commit defaults to current HEAD; `--commit` supplies a full ancestor
 commit on the work branch.
 

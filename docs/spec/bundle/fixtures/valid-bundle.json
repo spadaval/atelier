@@ -39,7 +39,7 @@
         ],
         "operation": "create",
         "parent": {
-          "client_ref": "epic.bundle-contract"
+          "client_ref": "parent.bundle-contract"
         },
         "priority": "medium",
         "title": "Define bundle JSON schema",
@@ -59,17 +59,17 @@
         ],
         "notes": [],
         "parent": {
-          "client_ref": "epic.bundle-contract"
+          "client_ref": "parent.bundle-contract"
         },
         "priority": "low",
         "title": "Validate bundle fixtures",
         "body": "## Goal\n\nProve diagnostics and preview shape with compact JSON examples.\n\n## Done when\n\n- Bundle fixtures cover valid input, invalid input, and preview output."
       },
       {
-        "client_ref": "epic.bundle-contract",
+        "client_ref": "parent.bundle-contract",
         "title": "Bundle contract increment",
-        "issue_type": "epic",
-        "body": "## Outcome\n\nThe authored bundle schema and fixtures describe actual preview and apply behavior.\n\n## Proof\n\nThe positive fixture previews and applies; the negative fixture reports an unsupported resource."
+        "issue_type": "feature",
+        "body": "## Goal\n\nThe authored bundle schema and fixtures describe actual preview and apply behavior.\n\n## Done when\n\nThe positive fixture previews and applies; the negative fixture reports an unsupported resource."
       },
       {
         "client_ref": "mission.bundle-contract",
@@ -78,7 +78,7 @@
         "body": "## Outcome\n\nThe bundle format can express a complete local plan.\n\n## Success criteria\n\nFixtures demonstrate the current authoring contract.",
         "advances": [
           {
-            "client_ref": "epic.bundle-contract"
+            "client_ref": "parent.bundle-contract"
           }
         ]
       }

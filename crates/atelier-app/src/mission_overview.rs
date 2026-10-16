@@ -150,7 +150,7 @@ mod tests {
         for (id, kind, status) in [
             ("mission-a", "mission", "in_progress"),
             ("mission-b", "mission", "draft"),
-            ("epic", "epic", "draft"),
+            ("epic", "feature", "todo"),
             ("child", "task", "todo"),
             ("direct", "task", "todo"),
             ("incoming", "task", "todo"),

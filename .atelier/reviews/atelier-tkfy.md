@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-tkfy
+title: 'Re-reviewed fix commit 136950c2 and merge 58893c2f with a binary rebuilt at HEAD (no crate changes after the fix). R1: in a fresh init repo, ''issue update P --issue-type mission'' on a parent with children is refused, retyping a child to mission is refused, and check stays clean. R2: on a fresh /tmp copy of astromech-atelier, migrate epics (dry run, then --apply) retypes 19 epics, removes epic from the policy and adds exactly one ''- work.terminal'' to the work close; check passes; closing astromech-0474 with 3 open children is now blocked by work.terminal; a rerun is a no-op; a customised close description gets the manual-step note. R3: a mission ''## Epics'' section gets its own guidance with no migration pointer. R4: bundle preview refuses a->b->c nesting and a child of an existing child, and still accepts sibling children of an existing parent. R5: ADR 0021 and work-model.md now say superseding a parent retires its open children; I accept that as intended pending the human''s confirmation. Fresh nextest evidence atelier-n6pt passes at 58893c2f. First-round checks (create/update --parent nesting, unknown types and epic-shaped bodies in check, starter-policy parent close, migration of unquoted front matter and Notes/Close Reason) were not affected by the fix.'
+target: atelier-o6h9
+identity: Independent reviewer (Claude subagent)
+commit: be2bf9667882e343179bb81455b6afbf96d463fc
+created_at: 2026-10-16T00:41:54.811880768Z
+event:
+  event: approval
+---
+
+Re-reviewed fix commit 136950c2 and merge 58893c2f with a binary rebuilt at HEAD (no crate changes after the fix). R1: in a fresh init repo, 'issue update P --issue-type mission' on a parent with children is refused, retyping a child to mission is refused, and check stays clean. R2: on a fresh /tmp copy of astromech-atelier, migrate epics (dry run, then --apply) retypes 19 epics, removes epic from the policy and adds exactly one '- work.terminal' to the work close; check passes; closing astromech-0474 with 3 open children is now blocked by work.terminal; a rerun is a no-op; a customised close description gets the manual-step note. R3: a mission '## Epics' section gets its own guidance with no migration pointer. R4: bundle preview refuses a->b->c nesting and a child of an existing child, and still accepts sibling children of an existing parent. R5: ADR 0021 and work-model.md now say superseding a parent retires its open children; I accept that as intended pending the human's confirmation. Fresh nextest evidence atelier-n6pt passes at 58893c2f. First-round checks (create/update --parent nesting, unknown types and epic-shaped bodies in check, starter-policy parent close, migration of unquoted front matter and Notes/Close Reason) were not affected by the fix.

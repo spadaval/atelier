@@ -17,7 +17,7 @@ fn test_issue_status_with_subissues() {
         "create",
         "Parent lifecycle issue",
         "--issue-type",
-        "epic",
+        "feature",
     ]);
     let parent_id = h.issue_id(1);
     h.run_ok(&[
@@ -37,14 +37,14 @@ fn test_issue_status_with_subissues() {
 fn test_issue_create_rejects_deep_task_nesting() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["issue", "create", "Root issue", "--issue-type", "epic"]);
+    h.run_ok(&["issue", "create", "Root issue", "--issue-type", "feature"]);
     let root_id = h.issue_id(1);
     h.run_ok(&["issue", "create", "Child issue", "--parent", &root_id]);
     let child_id = h.issue_id(2);
     let result = h.run(&["issue", "create", "Grandchild issue", "--parent", &child_id]);
 
     assert!(!result.success);
-    assert!(result.stderr.contains("only epics can own child work"));
+    assert!(result.stderr.contains("parents are one level deep"));
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn test_issue_status_reports_sibling_children() {
         "create",
         "Filterable parent",
         "--issue-type",
-        "epic",
+        "feature",
     ]);
     let parent_id = h.issue_id(1);
     h.run_ok(&["issue", "create", "Todo child", "--parent", &parent_id]);

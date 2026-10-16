@@ -13,6 +13,7 @@ pub(crate) mod work_order;
 pub mod workflow;
 
 pub mod merge;
+pub mod migrate;
 pub mod review;
 
 pub(crate) mod git;

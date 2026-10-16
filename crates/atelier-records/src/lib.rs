@@ -1368,7 +1368,13 @@ pub fn parse_issue_sections_for_type(
                         issue_id.as_deref(),
                         &heading,
                         relative,
-                        &format!("Unknown issue body section '{heading}'")
+                        &if heading == "Epics" {
+                            format!("Unknown issue body section '{heading}'; missions no longer have an Epics section (atelier-9vq3). Move its content into Success criteria or Notes")
+                        } else if matches!(heading.as_str(), "Proof" | "Delivers") {
+                            format!("Unknown issue body section '{heading}'; it belonged to the retired epic type, which is now a parent issue (atelier-9vq3). Run `atelier migrate epics` to convert epic records")
+                        } else {
+                            format!("Unknown issue body section '{heading}'")
+                        }
                     )
                 );
             }
@@ -1415,34 +1421,34 @@ pub fn parse_issue_sections_for_type(
     let required = |name| required_issue_section(&sections, name, relative, issue_id.as_deref());
     let optional = |name: IssueSectionName| sections.get(name.title()).cloned();
     let (body, allowed) = match issue_type {
-        "epic" => (
-            IssueBody::Epic {
-                outcome: required(Outcome)?,
-                proof: optional(Proof),
-                delivers: optional(Delivers),
-                scope: optional(Scope),
-                unknowns: optional(Unknowns),
-                design: optional(Design),
-            },
-            vec![Outcome, Proof, Delivers, Scope, Unknowns, Design],
-        ),
         "mission" => (
             IssueBody::Mission {
                 outcome: required(Outcome)?,
                 success_criteria: optional(SuccessCriteria),
-                epics: optional(Epics),
             },
-            vec![Outcome, SuccessCriteria, Epics],
+            vec![Outcome, SuccessCriteria],
         ),
-        _ => (
-            IssueBody::Issue {
-                goal: required(Goal)?,
-                done_when: required(DoneWhen)?,
-                scope: optional(Scope),
-                context: optional(Context),
-            },
-            vec![Goal, DoneWhen, Scope, Context],
-        ),
+        _ => {
+            if issue_type == "epic" || sections.contains_key(Outcome.title()) {
+                if !sections.contains_key(Goal.title()) {
+                    bail!(
+                        "{} has the retired epic shape (Outcome, Proof, Delivers); epics are now parent issues with Goal and Done when (atelier-9vq3). Run `atelier migrate epics` to convert them",
+                        display_state_path(relative)
+                    );
+                }
+            }
+            (
+                IssueBody::Issue {
+                    goal: required(Goal)?,
+                    done_when: required(DoneWhen)?,
+                    scope: optional(Scope),
+                    context: optional(Context),
+                    unknowns: optional(Unknowns),
+                    design: optional(Design),
+                },
+                vec![Goal, DoneWhen, Scope, Context, Unknowns, Design],
+            )
+        }
     };
     for heading in sections.keys() {
         if !allowed
@@ -3220,10 +3226,10 @@ Legacy evidence summary.
     }
 
     #[test]
-    fn task_epic_and_mission_bodies_round_trip_their_own_shapes() {
+    fn work_and_mission_bodies_round_trip_their_own_shapes() {
         for (kind, body) in [
             ("task", "## Goal\n\nBounded change.\n\n## Done when\n\nFocused test passes.\n\n## Scope\n\nsrc/lib.rs\n\n## Context\n\nADR 0019."),
-            ("epic", "## Outcome\n\nObservable increment.\n\n## Proof\n\nAuthor tests and independent validation.\n\n## Unknowns\n\nOne design question."),
+            ("feature", "## Goal\n\nObservable increment.\n\n## Done when\n\nEvery child is done.\n\n## Unknowns\n\nOne design question.\n\n## Design\n\nADR 0021."),
             ("mission", "## Outcome\n\nMission outcome.\n\n## Success criteria\n\nS1: scenario passes."),
         ] {
             let mut record = issue_record("atelier-body");
@@ -3232,9 +3238,15 @@ Legacy evidence summary.
             let text = render_issue_record(&record).unwrap();
             let parsed = parse_issue_record(&text, &issue_record_path("atelier-body")).unwrap();
             assert_eq!(parsed.sections, record.sections);
-            for other_kind in ["task", "epic", "mission"] {
-                if kind != other_kind { assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err()); }
-            }
+            let other_kind = if kind == "mission" { "task" } else { "mission" };
+            assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err());
+        }
+        let retired = "## Outcome\n\nOld epic.\n\n## Proof\n\nA scenario.";
+        for kind in ["epic", "task"] {
+            let error = parse_issue_sections_for_type(retired, Path::new("<body>"), kind)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("atelier migrate epics"), "{error}");
         }
     }
 }

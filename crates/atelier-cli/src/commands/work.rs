@@ -66,7 +66,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
         println!("all");
         println!("missions");
         println!("mission");
-        println!("epic");
+        println!("parent");
         return Ok(());
     }
 
@@ -81,7 +81,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
                     "blocked  Repo-wide blocker triage",
                     "missions Flat mission summaries with complete scope counts",
                     "mission  Live mission orchestration dashboard",
-                    "epic     Focused epic execution dashboard",
+                    "parent   A parent issue and its children",
                 ],
             ),
             render_footer_section(
@@ -328,8 +328,8 @@ pub fn mission_dashboard(
     scoped_dashboard(index, mission_ref, "mission", options.filter()?, quiet)
 }
 
-pub fn epic_dashboard(index: &RecordIndex, epic_ref: &str, quiet: bool) -> Result<()> {
-    scoped_dashboard(index, epic_ref, "epic", DashboardFilter::Summary, quiet)
+pub fn parent_dashboard(index: &RecordIndex, parent_ref: &str, quiet: bool) -> Result<()> {
+    scoped_dashboard(index, parent_ref, "parent", DashboardFilter::Summary, quiet)
 }
 
 fn scoped_dashboard(
@@ -341,15 +341,22 @@ fn scoped_dashboard(
 ) -> Result<()> {
     let id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let issue = index.require_issue(&id)?;
-    if issue.issue_type != issue_type {
-        bail!(
-            "{} is issue_type '{}'; work {issue_type} requires issue_type '{issue_type}'",
+    match issue_type {
+        "mission" if issue.issue_type != "mission" => bail!(
+            "{} is issue_type '{}'; work mission requires a mission",
             issue.id,
             issue.issue_type
-        );
+        ),
+        "parent" if issue.issue_type == "mission" || index.get_subissues(&id).is_empty() => {
+            bail!(
+                "{} has no children; work parent shows an issue with children (use work mission for missions, issue show for other issues)",
+                issue.id
+            )
+        }
+        _ => {}
     }
     let work = ScopedWork::new(index, &issue)?;
-    let proof_gaps = if issue_type == "epic" {
+    let proof_gaps = if issue_type == "parent" {
         Some(proof_gap_count(index, &work.rows)?)
     } else {
         None
@@ -410,7 +417,7 @@ fn scoped_dashboard(
                 transition_readiness(index, &id, "start")?,
             ),
         ]);
-        format!("Work Epic {id} - {}", issue.title)
+        format!("Work Parent {id} - {}", issue.title)
     } else {
         if let Some(strategy) = issue.strategy()? {
             metadata.push(("Strategy", strategy.path));
@@ -456,7 +463,7 @@ impl ScopedWork {
             .into_iter()
             .map(|id| index.require_issue(&id))
             .collect::<Result<Vec<_>>>()?;
-        if objective.issue_type == "epic" {
+        if objective.issue_type != "mission" {
             issues.insert(0, objective.clone());
         }
         let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;

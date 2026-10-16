@@ -75,7 +75,7 @@ pub fn objective_read_summary(
     let Some(objective) = index.get_issue(objective_id) else {
         return Ok(None);
     };
-    let is_objective = matches!(objective.issue_type.as_str(), "epic" | "mission");
+    let is_objective = objective.issue_type == "mission";
     let scope_ids = crate::objective_graph::issue_descendant_ids(index, &objective.id)?;
     if !is_objective && scope_ids.is_empty() {
         return Ok(None);
@@ -295,7 +295,7 @@ mod tests {
                 category: "done".to_string(),
             },
         );
-        let workflow_by_issue_type = ["mission", "epic", "task"]
+        let workflow_by_issue_type = ["mission", "feature", "task"]
             .into_iter()
             .map(|issue_type| (issue_type.to_string(), "work".to_string()))
             .collect();
@@ -336,7 +336,7 @@ mod tests {
     fn objective_scope_buckets_ready_blocked_and_done_children() {
         let mut records = Records::default();
         let policy = test_policy();
-        records.issue("atelier-obj", "epic", "todo");
+        records.issue("atelier-obj", "feature", "todo");
         for (id, status) in [
             ("atelier-ready", "todo"),
             ("atelier-blocked", "todo"),
@@ -370,7 +370,7 @@ mod tests {
         let mut records = Records::default();
         let policy = test_policy();
         records.issue("atelier-mission", "mission", "todo");
-        records.issue("atelier-root", "epic", "todo");
+        records.issue("atelier-root", "feature", "todo");
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-root");
         records.relate("atelier-mission", "atelier-root", "advances");
@@ -391,7 +391,7 @@ mod tests {
     fn evidence_gate_counts_validating_evidence_without_renderer() {
         let mut records = Records::default();
         let policy = test_policy();
-        records.issue("atelier-obj", "epic", "todo");
+        records.issue("atelier-obj", "feature", "todo");
         records.issue("atelier-ready", "task", "todo");
         records.parent("atelier-ready", "atelier-obj");
         records.evidence(evidence_record(
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn objective_scope_keeps_all_rows_before_rendering_and_recent_activity_includes_active_work() {
         let mut records = Records::default();
-        records.issue("atelier-obj", "epic", "todo");
+        records.issue("atelier-obj", "feature", "todo");
         for number in 0..7 {
             let id = format!("atelier-ready{number}");
             records.issue(&id, "task", "todo");
@@ -434,7 +434,7 @@ mod tests {
     #[test]
     fn objective_rows_keep_priority_update_and_identity_order() {
         let mut records = Records::default();
-        records.issue("atelier-obj", "epic", "todo");
+        records.issue("atelier-obj", "feature", "todo");
         let now = Utc::now();
         for (id, priority, age) in [
             ("atelier-low", "low", 0),

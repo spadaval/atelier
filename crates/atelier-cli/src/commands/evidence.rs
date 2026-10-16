@@ -512,18 +512,6 @@ fn validate_record_ref<'a>(
     role: &'a str,
 ) -> Result<TargetRef<'a>> {
     validate_evidence_relation_role(role)?;
-    if kind == "epic" {
-        let issue = index.require_issue(id)?;
-        if issue.issue_type != "epic" {
-            bail!("{id} is not an epic issue");
-        }
-        return Ok(TargetRef {
-            display_kind: kind,
-            canonical_kind: "issue",
-            id,
-            role,
-        });
-    }
 
     validate_record_kind(kind)?;
     if kind == "issue" {
@@ -824,13 +812,7 @@ fn evidence_link_target<'a>(
     }
 }
 
-fn display_target_kind(index: &RecordIndex, kind: &str, id: &str) -> Result<String> {
-    if kind == "issue" {
-        let issue = index.require_issue(id)?;
-        if issue.issue_type == "epic" {
-            return Ok("epic".to_string());
-        }
-    }
+fn display_target_kind(_index: &RecordIndex, kind: &str, _id: &str) -> Result<String> {
     Ok(kind.to_string())
 }
 

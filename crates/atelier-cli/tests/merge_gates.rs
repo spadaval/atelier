@@ -651,8 +651,8 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
     let fixture = Fixture::new();
     let child = ok(fixture.path(), &["-q", "issue", "create", "Open child"]);
     let mut owner = fixture.issue();
-    owner.issue.issue_type = "epic".into();
-    owner.sections.change_type("epic");
+    owner.issue.issue_type = "feature".into();
+    owner.sections.change_type("feature");
     owner
         .relationships
         .children

@@ -121,7 +121,7 @@ fn test_create_subissue() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent issue", "--issue-type", "epic"],
+        &["issue", "create", "Parent issue", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     let (success, stdout, _) = run_atelier(
@@ -149,12 +149,16 @@ fn test_issue_create_rejects_invalid_hierarchy_shapes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
+    // Any non-mission issue can be a parent.
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Task parent"]);
+    assert!(success, "task parent create failed: {stderr}");
+    let parent_id = issue_id_by_title(dir.path(), "Task parent");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &["issue", "create", "Task child", "--parent", &parent_id],
     );
-    assert!(success, "epic create failed: {stderr}");
-    let epic_id = issue_id_by_title(dir.path(), "Parent epic");
+    assert!(success, "a task can parent work: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Task child");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -165,7 +169,7 @@ fn test_issue_create_rejects_invalid_hierarchy_shapes() {
             "--issue-type",
             "mission",
             "--parent",
-            &epic_id,
+            &parent_id,
         ],
     );
     assert!(!success, "mission child should be rejected");
@@ -176,36 +180,34 @@ fn test_issue_create_rejects_invalid_hierarchy_shapes() {
         "{stderr}"
     );
 
+    // Parents are one level deep.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Grandchild", "--parent", &child_id],
+    );
+    assert!(!success, "grandchild should be rejected");
+    assert!(stderr.contains("parents are one level deep"), "{stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Mission", "--issue-type", "mission"],
+    );
+    assert!(success, "{stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Mission");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
             "create",
-            "Epic child",
-            "--issue-type",
-            "epic",
+            "Under a mission",
             "--parent",
-            &epic_id,
+            &mission_id,
         ],
     );
-    assert!(!success, "epic child should be rejected");
     assert!(
-        stderr.contains("workflow_issue_hierarchy_invalid")
-            && stderr.contains("epic issue")
-            && stderr.contains("cannot have parent"),
+        !success && stderr.contains("cannot be child of mission"),
         "{stderr}"
     );
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Task parent"]);
-    assert!(success, "task parent create failed: {stderr}");
-    let task_id = issue_id_by_title(dir.path(), "Task parent");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Task child", "--parent", &task_id],
-    );
-    assert!(!success, "task parent should be rejected");
-    assert!(stderr.contains("only epics can own child work"), "{stderr}");
 }
 
 #[test]
@@ -215,48 +217,79 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &["issue", "create", "Parent", "--issue-type", "feature"],
     );
-    assert!(success, "epic create failed: {stderr}");
-    let parent_id = issue_id_by_title(dir.path(), "Parent epic");
+    assert!(success, "parent create failed: {stderr}");
+    let parent_id = issue_id_by_title(dir.path(), "Parent");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "create", "Child work", "--parent", &parent_id],
     );
     assert!(success, "child create failed: {stderr}");
-    edit_canonical_issue(dir.path(), &parent_id, |markdown| {
-        replace_front_matter_scalar(&markdown, "status", "blocked")
-    });
+    let child_id = issue_id_by_title(dir.path(), "Child work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Other"]);
+    assert!(success, "{stderr}");
+    let other_id = issue_id_by_title(dir.path(), "Other");
 
+    // A parent stays a parent of any work type, but cannot become a mission
+    // or a child itself.
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "update", &parent_id, "--issue-type", "task"],
     );
-    assert!(!success, "parent with children should not become task");
+    assert!(success, "a parent may be any work type: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &parent_id, "--parent", &other_id],
+    );
+    assert!(!success, "a parent cannot become a child");
+    assert!(stderr.contains("parents are one level deep"), "{stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &other_id, "--parent", &child_id],
+    );
     assert!(
-        stderr.contains("workflow_issue_hierarchy_invalid")
-            && stderr.contains("cannot own child work"),
+        !success && stderr.contains("parents are one level deep"),
         "{stderr}"
     );
-
-    let parent_path = canonical_issue_path(dir.path(), &parent_id);
-    let parent_markdown = std::fs::read_to_string(&parent_path).unwrap();
-    let corrupted = parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\"");
-    std::fs::write(
-        &parent_path,
-        replace_markdown_body(
-            &replace_front_matter_scalar(&corrupted, "status", "todo"),
-            "## Goal\n\nCorrupted hierarchy\n\n## Done when\n\nHierarchy validates.",
-        ),
-    )
-    .unwrap();
-
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &parent_id, "--issue-type", "mission"],
+    );
+    assert!(
+        !success && stderr.contains("missions are not parents"),
+        "a parent cannot become a mission: {stderr}"
+    );
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
-    assert!(!success, "lint should reject corrupted parent type");
+    assert!(
+        success,
+        "the refused retype left the records valid: {stdout}{stderr}"
+    );
+
+    // Bundle preview enforces the same one-level rule as apply.
+    let bundle = dir.path().join("nested.json");
+    for issues in [
+        r###"[{"client_ref":"a","title":"A","body":"## Goal\n\nA.\n\n## Done when\n\nA."},{"client_ref":"b","title":"B","body":"## Goal\n\nB.\n\n## Done when\n\nB.","parent":{"client_ref":"a"}},{"client_ref":"c","title":"C","body":"## Goal\n\nC.\n\n## Done when\n\nC.","parent":{"client_ref":"b"}}]"###.to_string(),
+        format!(r###"[{{"client_ref":"d","title":"D","body":"## Goal\n\nD.\n\n## Done when\n\nD.","parent":{{"id":"{child_id}"}}}}]"###),
+    ] {
+        fs::write(&bundle, format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Nested","resources":{{"issues":{issues}}}}}"###)).unwrap();
+        let (success, _, stderr) = run_atelier(dir.path(), &["bundle", "preview", bundle.to_str().unwrap()]);
+        assert!(!success && stderr.contains("parents are one level deep"), "{stderr}");
+    }
+
+    // A hand-edited record that nests a child under a child fails check.
+    edit_canonical_issue(dir.path(), &child_id, |markdown| {
+        markdown.replace(
+            "  children: []",
+            &format!("  children:\n  - kind: \"issue\"\n    id: \"{other_id}\""),
+        )
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "lint should reject a nested hierarchy");
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
         transcript.contains("workflow_issue_hierarchy_invalid")
-            && transcript.contains("only epics can own child work"),
+            && transcript.contains("one level deep"),
         "{transcript}"
     );
 }
@@ -429,7 +462,7 @@ fn test_list_issues() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Issue 1", "--issue-type", "epic"],
+        &["issue", "create", "Issue 1", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -515,7 +548,13 @@ fn test_issue_show_rollup_counts_all_children_and_bounds_only_visible_rows() {
     init_atelier(dir.path());
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Complete scope", "--issue-type", "epic"],
+        &[
+            "issue",
+            "create",
+            "Complete scope",
+            "--issue-type",
+            "feature",
+        ],
     );
     assert!(success, "{stderr}");
     let owner = issue_id_by_title(dir.path(), "Complete scope");
@@ -611,7 +650,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &["issue", "create", "Parent epic", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -870,7 +909,7 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
             "create",
             "Parent key issue",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     run_atelier(dir.path(), &["issue", "create", "Related key issue"]);
@@ -1082,7 +1121,8 @@ fn test_issue_create_mission_sectioned_body_preserves_outcome_and_evidence() {
 
     let outcome = "Mission authoring preserves the supplied outcome.";
     let evidence = "- `atelier check` accepts the created mission record.";
-    let body = format!("## Outcome\n\nMission result.\n\n## Success criteria\n\n{outcome}\n\n## Epics\n\n{evidence}");
+    let body =
+        format!("## Outcome\n\nMission result.\n\n## Success criteria\n\n{outcome}\n\n{evidence}");
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1105,10 +1145,8 @@ fn test_issue_create_mission_sectioned_body_preserves_outcome_and_evidence() {
         1,
         "{mission}"
     );
-    assert_eq!(mission.matches("## Epics").count(), 1, "{mission}");
     assert!(mission.contains("## Outcome\n\nMission result."));
-    assert!(mission.contains(&format!("## Success criteria\n\n{outcome}")));
-    assert!(mission.contains(&format!("## Epics\n\n{evidence}")));
+    assert!(mission.contains(&format!("## Success criteria\n\n{outcome}\n\n{evidence}")));
 
     let (success, check_out, stderr) = run_atelier(dir.path(), &["check"]);
     assert!(
@@ -1181,10 +1219,16 @@ fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     init_atelier(dir.path());
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Draft epic", "--issue-type", "epic"],
+        &[
+            "issue",
+            "create",
+            "Draft mission",
+            "--issue-type",
+            "mission",
+        ],
     );
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Draft epic");
+    let issue_id = issue_id_by_title(dir.path(), "Draft mission");
 
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
@@ -1198,7 +1242,10 @@ fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     );
 
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
-    assert!(issue_text.contains("issue_type: \"epic\""), "{issue_text}");
+    assert!(
+        issue_text.contains("issue_type: \"mission\""),
+        "{issue_text}"
+    );
     assert!(
         !issue_text.contains("issue_type: \"spike\""),
         "{issue_text}"
@@ -1431,7 +1478,7 @@ fn test_show_issue_rich_human_output() {
             "create",
             "Target issue",
             "--issue-type",
-            "epic",
+            "feature",
             "-p",
             "medium",
         ],
@@ -1487,7 +1534,7 @@ fn test_show_issue_rich_human_output() {
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
-    assert!(stdout.contains("Status:   draft"));
+    assert!(stdout.contains("Status:   todo"));
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
@@ -2323,7 +2370,15 @@ fn test_work_ready_selects_unblocked_child_without_draft_epic_context() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &[
+            "issue",
+            "create",
+            "Parent epic",
+            "--issue-type",
+            "feature",
+            "--status",
+            "backlog",
+        ],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -2363,7 +2418,15 @@ fn test_work_ready_still_shows_ready_children_when_another_issue_is_active() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &[
+            "issue",
+            "create",
+            "Parent epic",
+            "--issue-type",
+            "feature",
+            "--status",
+            "backlog",
+        ],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -2403,7 +2466,7 @@ fn test_work_ready_still_shows_ready_children_when_another_issue_is_active() {
 
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["work", "ready"]);
     assert!(success, "ready list failed: {stderr}");
-    // Global ready work excludes the draft epic and retains its ready child.
+    // Global ready work excludes the backlog parent and retains its ready child.
     assert!(!ready_out.contains("Parent epic"), "{ready_out}");
     assert!(ready_out.contains("Ready child"), "{ready_out}");
     assert!(!ready_out.contains("Sequenced child"), "{ready_out}");
@@ -2417,7 +2480,7 @@ fn test_work_blocked_identifies_child_with_external_blocker() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+        &["issue", "create", "Parent epic", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
@@ -2458,15 +2521,15 @@ fn test_issue_update_issue_type_persists() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "update", &issue_id, "--issue-type", "epic"],
+        &["issue", "update", &issue_id, "--issue-type", "feature"],
     );
     assert!(success, "issue type update failed: {stderr}");
-    assert!(stdout.contains("Type:     epic"));
+    assert!(stdout.contains("Type:     feature"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Container work"));
-    assert!(stdout.contains("Type:     epic"));
+    assert!(stdout.contains("Type:     feature"));
 }
 
 #[test]
@@ -2548,7 +2611,9 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
             "create",
             "Future mission outcome",
             "--issue-type",
-            "epic",
+            "feature",
+            "--status",
+            "backlog",
         ],
     );
     let ready_id = issue_id_by_title(dir.path(), "Ready mission work");
@@ -2616,7 +2681,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(dashboard.contains("Blocked mission work"), "{dashboard}");
     assert!(dashboard.contains("Backlog Work"), "{dashboard}");
     assert!(dashboard.contains("Future mission outcome"), "{dashboard}");
-    assert!(dashboard.contains("[draft]"), "{dashboard}");
+    assert!(dashboard.contains("[backlog]"), "{dashboard}");
     assert!(
         dashboard.contains(&format!("blockers: {blocker_id}")),
         "{dashboard}"
@@ -2674,7 +2739,7 @@ fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
 
     for (title, issue_type) in [
         ("Quiet mission", "mission"),
-        ("Quiet epic", "epic"),
+        ("Quiet epic", "feature"),
         ("Unscoped ready", "task"),
         ("Unscoped active", "task"),
         ("Unscoped blocked", "task"),
@@ -2698,14 +2763,15 @@ fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
     );
     assert!(success, "scoped fixture create failed: {stderr}");
     let scoped_id = issue_id_by_title(dir.path(), "Scoped ready");
+    set_issue_status(dir.path(), &epic_id, "backlog");
     set_issue_status(dir.path(), &active_id, "in_progress");
     set_issue_status(dir.path(), &blocked_id, "blocked");
     set_issue_status(dir.path(), &done_id, "done");
 
     let mut ready_ids = vec![ready_id, scoped_id];
     ready_ids.sort();
-    let mut backlog_ids = vec![mission_id, epic_id];
-    backlog_ids.sort();
+    // Rows sort by priority, then status (draft before backlog), then ID.
+    let backlog_ids = vec![mission_id, epic_id];
     let expected = [vec![active_id], ready_ids, vec![blocked_id], backlog_ids].concat();
 
     let (success, human, stderr) = run_atelier(dir.path(), &["work", "all"]);
@@ -2799,8 +2865,20 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
             "--issue-type",
             "mission",
         ],
-        vec!["issue", "create", "Active outcome", "--issue-type", "epic"],
-        vec!["issue", "create", "Retired outcome", "--issue-type", "epic"],
+        vec![
+            "issue",
+            "create",
+            "Active outcome",
+            "--issue-type",
+            "feature",
+        ],
+        vec![
+            "issue",
+            "create",
+            "Retired outcome",
+            "--issue-type",
+            "feature",
+        ],
     ] {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "objective fixture create failed: {stderr}");
@@ -2902,7 +2980,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(!mission_blocked.lines().any(|id| id == retired_blocked_id));
 
     let (success, active_epic, stderr) =
-        run_atelier(dir.path(), &["work", "epic", &active_epic_id]);
+        run_atelier(dir.path(), &["work", "parent", &active_epic_id]);
     assert!(success, "active epic view failed: {stderr}");
     assert!(active_epic.contains("Blocked Work"), "{active_epic}");
     assert!(active_epic.contains(&blocked_id), "{active_epic}");
@@ -2933,7 +3011,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
 
     let workflow_path = dir.path().join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path).unwrap();
-    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n";
+    let task_close = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n";
     assert!(workflow.contains(task_close));
     std::fs::write(
         &workflow_path,
@@ -2967,7 +3045,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         set_issue_status(dir.path(), issue_id, "done");
     }
     let (success, retired_epic, stderr) =
-        run_atelier(dir.path(), &["work", "epic", &retired_epic_id]);
+        run_atelier(dir.path(), &["work", "parent", &retired_epic_id]);
     assert!(success, "retired epic view failed: {stderr}");
     assert!(retired_epic.contains("Backlog Work"), "{retired_epic}");
     assert!(retired_epic.contains(&retired_blocked_id), "{retired_epic}");
@@ -3034,9 +3112,10 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
     let original = std::fs::read_to_string(&workflow_path).expect("failed to read workflow policy");
     let workflow = original
         .replace("  mission:\n    label: Mission\n", "")
+        .replace("    - feature\n    - spike\n", "    - feature\n")
         .replace(
-            "    applies_to:\n    - mission\n    - epic\n",
-            "    applies_to:\n    - epic\n",
+            "    applies_to:\n    - mission\n",
+            "    applies_to:\n    - spike\n",
         );
     assert!(!workflow.contains("mission"), "{workflow}");
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
@@ -3127,7 +3206,15 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
     let mission = issue_id_by_title(dir.path(), "Count mission");
     run_atelier(
         dir.path(),
-        &["issue", "create", "Count epic", "--issue-type", "epic"],
+        &[
+            "issue",
+            "create",
+            "Count epic",
+            "--issue-type",
+            "feature",
+            "--status",
+            "backlog",
+        ],
     );
     let epic = issue_id_by_title(dir.path(), "Count epic");
     run_atelier(
@@ -3143,7 +3230,7 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         ids.push(issue_id_by_title(dir.path(), &title));
     }
     ids.sort();
-    for (kind, id) in [("mission", &mission), ("epic", &epic)] {
+    for (kind, id) in [("mission", &mission), ("parent", &epic)] {
         let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", kind, id]);
         assert!(success, "{stderr}");
         assert!(quiet.contains("ready=24"), "{quiet}");
@@ -3395,7 +3482,7 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     fs::write(
         &bundle,
         format!(
-            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Advances","resources":{{"issues":[{{"client_ref":"epic","title":"Bundled epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{{"id":"{mission}"}}]}}]}}}}"###
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Advances","resources":{{"issues":[{{"client_ref":"epic","title":"Bundled epic","issue_type":"feature","body":"## Goal\n\nPart.\n\n## Done when\n\nShown.","advances":[{{"id":"{mission}"}}]}}]}}}}"###
         ),
     )
     .unwrap();
@@ -3412,7 +3499,7 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     // Bundle: declaring one link from both endpoints is a duplicate edge.
     fs::write(
         &bundle,
-        r###"{"schema":"atelier.bundle","schema_version":2,"title":"Both","resources":{"issues":[{"client_ref":"m","title":"Both mission","issue_type":"mission","body":"## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.","advances":[{"client_ref":"e"}]},{"client_ref":"e","title":"Both epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{"client_ref":"m"}]}]}}"###,
+        r###"{"schema":"atelier.bundle","schema_version":2,"title":"Both","resources":{"issues":[{"client_ref":"m","title":"Both mission","issue_type":"mission","body":"## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.","advances":[{"client_ref":"e"}]},{"client_ref":"e","title":"Both epic","issue_type":"feature","body":"## Goal\n\nPart.\n\n## Done when\n\nShown.","advances":[{"client_ref":"m"}]}]}}"###,
     )
     .unwrap();
     let (success, _, stderr) = run_atelier(
@@ -3428,7 +3515,7 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     fs::write(
         &bundle,
         format!(
-            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{{"client_ref":"bad","title":"Bad epic","issue_type":"epic","body":"## Outcome\n\nPart.\n\n## Proof\n\nShown.","advances":[{{"id":"{task}"}}]}}]}}}}"###
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{{"client_ref":"bad","title":"Bad epic","issue_type":"feature","body":"## Goal\n\nPart.\n\n## Done when\n\nShown.","advances":[{{"id":"{task}"}}]}}]}}}}"###
         ),
     )
     .unwrap();
@@ -3486,7 +3573,7 @@ fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
     assert!(!ready(dir.path()).lines().any(|line| line == someday));
 
     // An objective's todo is behind the checked ready transition.
-    for issue_type in ["epic", "mission"] {
+    for issue_type in ["mission"] {
         let (success, stdout, stderr) = run_atelier(
             dir.path(),
             &[
@@ -3525,7 +3612,7 @@ fn test_issue_options_do_what_their_help_says() {
         stdout.trim().to_string()
     };
     let task = create(&["-q", "issue", "create", "Task", "--body", "Plain goal text"]);
-    let epic = create(&["-q", "issue", "create", "Epic", "--issue-type", "epic"]);
+    let parent = create(&["-q", "issue", "create", "Parent", "--issue-type", "feature"]);
 
     // --body revises the typed sections of any type and keeps notes.
     create(&["-q", "issue", "note", &task, "Keep this note"]);
@@ -3546,13 +3633,13 @@ fn test_issue_options_do_what_their_help_says() {
     create(&[
         "issue",
         "update",
-        &epic,
+        &parent,
         "--body",
-        "## Outcome\n\nRevised outcome.\n\n## Proof\n\nA scenario.",
+        "## Goal\n\nRevised outcome.\n\n## Done when\n\nA scenario.\n\n## Unknowns\n\nOne question.",
     ]);
-    let record = fs::read_to_string(canonical_issue_path(dir.path(), &epic)).unwrap();
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &parent)).unwrap();
     assert!(
-        record.contains("Revised outcome.") && record.contains("## Proof"),
+        record.contains("Revised outcome.") && record.contains("## Unknowns"),
         "{record}"
     );
     let (success, _, stderr) = run_atelier(
@@ -3622,19 +3709,28 @@ fn test_issue_options_do_what_their_help_says() {
 
     // Revised bodies follow the record rules check applies, and done records
     // keep the acceptance their proof was judged against.
-    create(&["-q", "issue", "transition", &epic, "ready"]);
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Mission",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nShipped.\n\n## Success criteria\n\nS1.",
+    ]);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
             "update",
-            &epic,
+            &mission,
             "--body",
-            "## Outcome\n\nNo proof any more.",
+            "## Outcome\n\nNo criteria any more.",
         ],
     );
     assert!(
-        !success && stderr.contains("Ready epic requires Proof"),
+        !success && stderr.contains("Mission requires Success criteria"),
         "{stderr}"
     );
     let huge = format!("## Goal\n\n{}\n\n## Done when\n\nD.", "x".repeat(70 * 1024));
@@ -3843,6 +3939,95 @@ fn test_mission_strategy_is_set_from_the_cli_and_checked_from_the_mission_side()
     assert!(
         !success && stderr.contains("--strategy applies to missions"),
         "{stderr}"
+    );
+}
+
+#[test]
+fn test_migrate_epics_retypes_epic_records_and_the_policy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    // A repository from before atelier-9vq3: the policy declares epic, and an
+    // epic record has the old Outcome/Proof/Delivers shape.
+    let policy_path = dir.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&policy_path)
+        .unwrap()
+        .replace(
+            "  bug:\n    label: Bug\n",
+            "  bug:\n    label: Bug\n  epic:\n    label: Epic\n",
+        )
+        .replace(
+            "    applies_to:\n    - mission\n",
+            "    applies_to:\n    - mission\n    - epic\n",
+        )
+        .replace(
+            "before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n",
+            "before review.\n        validators:\n        - blockers.none_open\n",
+        );
+    assert!(!policy.contains("work.terminal"), "{policy}");
+    fs::write(&policy_path, policy).unwrap();
+    let (success, child, stderr) = run_atelier(dir.path(), &["-q", "issue", "create", "Child"]);
+    assert!(success, "{stderr}");
+    let child = child.trim().to_string();
+    let epic = "atelier-ep1c";
+    fs::write(
+        canonical_issue_path(dir.path(), epic),
+        format!(
+            "---\ncreated_at: \"2026-10-01T00:00:00+00:00\"\nid: \"{epic}\"\nissue_type: \"epic\"\nlabels: []\npriority: \"P2\"\nrelationships:\n  blocks: []\n  children:\n  - kind: \"issue\"\n    id: \"{child}\"\n  attachments: []\n  relates: []\nschema: \"atelier.issue\"\nschema_version: 2\nstatus: \"draft\"\ntitle: \"Old epic\"\nupdated_at: \"2026-10-01T00:00:00+00:00\"\n---\n\n## Outcome\n\nThe increment works.\n\n## Delivers\n\nS1\n\n## Unknowns\n\nOne question.\n"
+        ),
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        !success && format!("{stdout}{stderr}").contains("atelier migrate epics"),
+        "{stdout}{stderr}"
+    );
+
+    let (success, preview, stderr) = run_atelier(dir.path(), &["migrate", "epics"]);
+    assert!(success, "{stderr}");
+    assert!(
+        preview.contains(&format!("{epic}: epic -> feature, status draft -> backlog"))
+            && preview.contains("Dry run"),
+        "{preview}"
+    );
+    assert!(fs::read_to_string(&policy_path).unwrap().contains("epic"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["migrate", "epics", "--apply"]);
+    assert!(success, "{stderr}");
+    let migrated_policy = fs::read_to_string(&policy_path).unwrap();
+    assert!(!migrated_policy.contains("epic"), "{migrated_policy}");
+    assert_eq!(
+        migrated_policy.matches("- work.terminal").count(),
+        1,
+        "{migrated_policy}"
+    );
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), epic)).unwrap();
+    for expected in [
+        "issue_type: \"feature\"",
+        "status: \"backlog\"",
+        "## Goal\n\nThe increment works.",
+        "## Done when\n\nEvery child issue is done, delivering:\n\nS1",
+        "## Unknowns\n\nOne question.",
+        &format!("id: \"{child}\""),
+    ] {
+        assert!(record.contains(expected), "{expected}: {record}");
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    let (_, again, _) = run_atelier(dir.path(), &["migrate", "epics"]);
+    assert!(again.contains("No epic records"), "{again}");
+
+    // A mission with the removed Epics section gets its own guidance.
+    let mission = "atelier-m1ss";
+    fs::write(
+        canonical_issue_path(dir.path(), mission),
+        format!("---\ncreated_at: \"2026-10-01T00:00:00+00:00\"\nid: \"{mission}\"\nissue_type: \"mission\"\nlabels: []\npriority: \"P2\"\nrelationships:\n  blocks: []\n  children: []\n  attachments: []\n  relates: []\nschema: \"atelier.issue\"\nschema_version: 2\nstatus: \"draft\"\ntitle: \"Old mission\"\nupdated_at: \"2026-10-01T00:00:00+00:00\"\n---\n\n## Outcome\n\nShipped.\n\n## Epics\n\nA list.\n"),
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        !success
+            && format!("{stdout}{stderr}").contains("missions no longer have an Epics section"),
+        "{stdout}{stderr}"
     );
 }
 

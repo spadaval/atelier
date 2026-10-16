@@ -1,7 +1,6 @@
 # Issue Inventory and Mission Views
 
-`atelier issue list` is flat inventory. It includes missions, epics, and ordinary
-issues, with filters for exact status, category, type, label, and priority.
+`atelier issue list` is flat inventory. It includes missions and work items, with filters for exact status, category, type, label, and priority.
 The default limit is 50; output reports omitted matches. Inventory uses neutral
 ID ordering and does not pretend every row is actionable work.
 
@@ -10,8 +9,8 @@ open blockers, and a command to inspect each mission; `--all` includes terminal
 missions. Human output shows at most 20 missions and reports omissions. Quiet
 output includes every matching mission ID in the same status, priority, and ID
 order. `atelier work mission <id>` shows one mission's outcome, scope,
-blockers, and operational work. `atelier work epic <id>` focuses on an epic and
-its direct children. `issue show` remains the detailed record view.
+blockers, and operational work. `atelier work parent <id>` focuses on a parent
+issue and its direct children. `issue show` remains the detailed record view.
 
 Objective counts use the complete scope. Display limits trim visible rows,
 without changing counts or the underlying scope facts.
@@ -19,8 +18,8 @@ without changing counts or the underlying scope facts.
 Mission membership follows `advances`, not parent hierarchy. An `advances`
 link joins one mission to one non-mission issue; the bundle and
 `atelier issue link <issue-id> <mission-id> --role advances` record the same
-two-sided link. A linked epic
-includes its descendants in mission execution context. Work outside mission
+two-sided link. A linked parent
+includes its children in mission execution context. Work outside mission
 scope remains visible through repository-wide work and inventory commands.
 
 `work ready`, `blocked`, `active`, and `all` answer operational questions.

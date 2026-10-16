@@ -40,15 +40,18 @@ pub fn validate_issue_hierarchy(
             ));
         }
     }
-    if issue.issue_type == "epic" {
-        if let Some(parent_id) = parent_id {
+    if issue.issue_type == "mission" {
+        let children = index.get_subissues(&issue.id);
+        if !children.is_empty() {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: epic issue {} cannot have parent {}; epics are root work packages",
+                "workflow_issue_hierarchy_invalid: mission {} cannot have children ({}); missions are not parents, so link the work with advances",
                 issue.id,
-                parent_id
+                children.iter().map(|child| child.id.as_str()).collect::<Vec<_>>().join(", ")
             ));
         }
     }
+    // One level: any non-mission issue may be a parent, and a parent's
+    // children are leaves (atelier-9vq3).
     if let Some(parent_id) = parent_id {
         let parent = index.get_issue(parent_id).ok_or_else(|| {
             anyhow!(
@@ -57,28 +60,34 @@ pub fn validate_issue_hierarchy(
                 parent_id
             )
         })?;
-        if parent.issue_type != "epic" {
+        if parent.issue_type == "mission" {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: issue {} cannot be child of {} {}; only epics can own child work",
+                "workflow_issue_hierarchy_invalid: issue {} cannot be child of mission {}; link mission work with `atelier issue link <issue-id> <mission-id> --role advances`",
                 issue.id,
-                parent.issue_type,
                 parent.id
             ));
         }
-    }
-    let children = index.get_subissues(&issue.id);
-    if !children.is_empty() && issue.issue_type != "epic" {
-        let child_ids = children
-            .iter()
-            .map(|child| child.id.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(anyhow!(
-            "workflow_issue_hierarchy_invalid: {} issue {} cannot own child work {}; only epics can own child work",
-            issue.issue_type,
-            issue.id,
-            child_ids
-        ));
+        if let Some(grandparent) = &parent.parent_id {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} cannot be child of {}, which is itself a child of {}; parents are one level deep",
+                issue.id,
+                parent.id,
+                grandparent
+            ));
+        }
+        let children = index.get_subissues(&issue.id);
+        if !children.is_empty() {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} has children ({}) and cannot also have parent {}; parents are one level deep",
+                issue.id,
+                children
+                    .iter()
+                    .map(|child| child.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                parent_id
+            ));
+        }
     }
     Ok(())
 }
@@ -86,16 +95,15 @@ pub fn validate_issue_hierarchy(
 /// The branch that holds an issue's work, derived from its branch owner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkBranch {
-    /// The epic or standalone issue that owns the branch.
+    /// The parent or standalone issue that owns the branch.
     pub owner_id: String,
     pub branch: String,
     /// The base recorded by `atelier start` on the owner, if it was started.
     pub recorded_base: Option<String>,
 }
 
-/// Resolves the branch owner and branch for an issue: a child issue works on
-/// its nearest parent epic's branch, an epic owns `epic/<id>`, and a
-/// standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
+/// Resolves the branch owner and branch for an issue: a child works on its
+/// parent's branch, and a parent or standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
 /// by `atelier start` wins over the derived name. Missions have no branch.
 pub fn resolve_work_branch(
     policy: &WorkflowPolicy,
@@ -105,11 +113,11 @@ pub fn resolve_work_branch(
     let issue = index.require_issue(issue_id)?;
     if issue.issue_type == "mission" {
         return Err(anyhow!(
-            "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its epics or issues instead.",
+            "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its issues instead.",
             issue.id
         ));
     }
-    // Loaded graphs already guarantee that any parent is a direct epic owner.
+    // Loaded graphs already guarantee that any parent is a direct, one-level owner.
     let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
     let (branch, recorded_base) = match &owner.workflow_branch {
         Some(branch) => (branch.work_branch.clone(), Some(branch.branch_base.clone())),
@@ -161,9 +169,9 @@ mod tests {
     }
 
     #[test]
-    fn child_works_on_parent_epic_branch() {
+    fn child_works_on_its_parent_branch() {
         let mut records = Records::default();
-        records.issue("atelier-epic", "epic", "todo");
+        records.issue("atelier-epic", "feature", "todo");
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-epic");
 
@@ -171,16 +179,16 @@ mod tests {
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.owner_id, "atelier-epic");
-        assert_eq!(work_branch.branch, "epic/atelier-epic");
+        assert_eq!(work_branch.branch, "feature/atelier-epic");
         assert_eq!(work_branch.recorded_base, None);
     }
 
     #[test]
-    fn standalone_issue_and_epic_own_their_branches() {
+    fn standalone_issue_and_parent_own_their_branches() {
         let mut records = Records::default();
         records.issue("atelier-bug1", "bug", "todo");
         records.issue("atelier-task", "task", "todo");
-        records.issue("atelier-epic", "epic", "todo");
+        records.issue("atelier-epic", "feature", "todo");
         let index = records.index();
 
         let bug = resolve_work_branch(&policy(), &index, "atelier-bug1").unwrap();
@@ -195,7 +203,7 @@ mod tests {
         assert_eq!(task.branch, "task/atelier-task");
         assert_eq!(
             (epic.owner_id.as_str(), epic.branch.as_str()),
-            ("atelier-epic", "epic/atelier-epic")
+            ("atelier-epic", "feature/atelier-epic")
         );
     }
 
@@ -203,10 +211,10 @@ mod tests {
     fn recorded_owner_branch_wins_over_derived_name() {
         let mut records = Records::default();
         records
-            .issue("atelier-epic", "epic", "todo")
+            .issue("atelier-epic", "feature", "todo")
             .issue
             .workflow_branch = Some(atelier_core::WorkflowBranch {
-            work_branch: "epic/renamed".to_string(),
+            work_branch: "feature/renamed".to_string(),
             branch_base: "trunk".to_string(),
         });
         records.issue("atelier-child", "task", "todo");
@@ -215,7 +223,7 @@ mod tests {
         let work_branch =
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
-        assert_eq!(work_branch.branch, "epic/renamed");
+        assert_eq!(work_branch.branch, "feature/renamed");
         assert_eq!(work_branch.recorded_base.as_deref(), Some("trunk"));
     }
 
@@ -238,17 +246,15 @@ mod hierarchy_contract_tests {
     use crate::test_records::{issue_record, link};
 
     #[test]
-    fn loaded_graph_rejects_non_epic_and_missing_hierarchy_targets() {
-        for kind in ["task", "mission"] {
-            let mut parent = issue_record("atelier-parent", kind, "todo");
-            parent.relationships.children.push(link("atelier-child"));
-            let child = issue_record("atelier-child", "task", "todo");
-            let error = RecordIndex::from_records(vec![parent, child], Vec::new(), Vec::new())
-                .unwrap_err()
-                .to_string();
-            assert!(error.contains("only epics can own child work"), "{error}");
-        }
-        let mut parent = issue_record("atelier-parent", "epic", "todo");
+    fn loaded_graph_rejects_mission_parents_and_missing_hierarchy_targets() {
+        let mut parent = issue_record("atelier-parent", "mission", "todo");
+        parent.relationships.children.push(link("atelier-child"));
+        let child = issue_record("atelier-child", "task", "todo");
+        let error = RecordIndex::from_records(vec![parent, child], Vec::new(), Vec::new())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("cannot be child of mission"), "{error}");
+        let mut parent = issue_record("atelier-parent", "feature", "todo");
         parent.relationships.children.push(link("atelier-missing"));
         let error = RecordIndex::from_records(vec![parent], Vec::new(), Vec::new())
             .unwrap_err()

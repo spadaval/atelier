@@ -151,9 +151,6 @@ fn issue_sections_parseable(
         .issue_record(issue_id)
         .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
     let mut required = record.sections.required_names();
-    if record.issue.issue_type == "epic" {
-        required.push(atelier_core::IssueSectionName::Proof);
-    }
     if record.issue.issue_type == "mission" && record.issue.strategy.is_none() {
         required.push(atelier_core::IssueSectionName::SuccessCriteria);
     }
@@ -326,7 +323,7 @@ mod tests {
     #[test]
     fn work_terminal_requires_every_child_done() {
         let mut records = Records::default();
-        records.issue("atelier-epic", "epic", "in_progress");
+        records.issue("atelier-epic", "feature", "in_progress");
         records.issue("atelier-done", "task", "done");
         records.issue("atelier-open", "task", "in_progress");
         records.parent("atelier-done", "atelier-epic");
@@ -345,7 +342,7 @@ mod tests {
     fn work_terminal_follows_mission_advances_links() {
         let mut records = Records::default();
         records.issue("atelier-mission", "mission", "in_progress");
-        records.issue("atelier-epic", "epic", "done");
+        records.issue("atelier-epic", "feature", "done");
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-epic");
         records.relate("atelier-mission", "atelier-epic", "advances");

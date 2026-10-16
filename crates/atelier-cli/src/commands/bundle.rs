@@ -520,12 +520,6 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                 issue.client_ref
             );
         }
-        if issue.issue_type == "epic" && issue.parent.is_some() {
-            bail!(
-                "Epic issue {} cannot have parent; epics are root work packages",
-                issue.client_ref
-            );
-        }
         if let Some(parent) = &issue.parent {
             let parent_type =
                 bundle_issue_type_for_ref(index, bundle, parent)?.ok_or_else(|| {
@@ -534,11 +528,36 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                         issue.client_ref
                     )
                 })?;
-            if parent_type != "epic" {
+            if parent_type == "mission" {
                 bail!(
-                    "Issue {} cannot be child of {} parent; only epics can own child work",
-                    issue.client_ref,
-                    parent_type
+                    "Issue {} cannot be child of a mission; use advances links for mission work",
+                    issue.client_ref
+                );
+            }
+            // Parents are one level deep: the parent cannot itself be a child,
+            // and this child cannot be a parent in the same bundle.
+            let parent_is_child = match (&parent.client_ref, &parent.id) {
+                (Some(client_ref), _) => bundle
+                    .resources
+                    .issues
+                    .iter()
+                    .any(|other| &other.client_ref == client_ref && other.parent.is_some()),
+                (None, Some(id)) => index
+                    .get_issue(id)
+                    .is_some_and(|other| other.parent_id.is_some()),
+                (None, None) => false,
+            };
+            let is_parent = bundle.resources.issues.iter().any(|other| {
+                other
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| parent.client_ref.as_ref())
+                    == Some(&issue.client_ref)
+            });
+            if parent_is_child || is_parent {
+                bail!(
+                    "Issue {} would nest a parent under a parent; parents are one level deep",
+                    issue.client_ref
                 );
             }
         }
@@ -1724,7 +1743,7 @@ mod tests {
 
     #[test]
     fn bundle_issue_uses_typed_markdown_body() {
-        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.epic", "title": "Future outcome", "issue_type": "epic", "body": "## Outcome\n\nA meaningful draft outcome." })).unwrap();
+        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.parent", "title": "Future outcome", "issue_type": "feature", "body": "## Goal\n\nA meaningful outcome.\n\n## Done when\n\nEvery child is done.\n\n## Unknowns\n\nOne open question." })).unwrap();
         let sections = atelier_records::parse_issue_sections_for_type(
             &issue.body,
             Path::new("<bundle>"),
@@ -1733,7 +1752,10 @@ mod tests {
         .unwrap();
         assert!(matches!(
             sections.body,
-            atelier_core::IssueBody::Epic { proof: None, .. }
+            atelier_core::IssueBody::Issue {
+                unknowns: Some(_),
+                ..
+            }
         ));
     }
 

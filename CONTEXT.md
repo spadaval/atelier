@@ -8,12 +8,11 @@ Use these terms for the verified repo-native tracker defined by
 | Record | Tracked Markdown with typed YAML front matter and a human-readable body under `.atelier/`. |
 | Mission | An issue of type `mission` that links strategy and success criteria; its execution scope uses `advances` links. |
 | Strategy | Ordinary Markdown owning intent, success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
-| Epic | An outcome-bearing issue, normally the branch owner for its direct child issues. |
-| Draft epic | Planning context whose immediate work and proof route are not yet executable. |
-| Issue | One accountable slice; ordinary work has `Goal` and `Done when` sections. |
+| Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
+| Parent | Any work item with direct children, one level deep; it owns their branch and closes after them. Replaced the epic type (atelier-9vq3). |
 | Validation item | Work dedicated to independently checking referenced acceptance claims. |
 | Blocker | A native dependency that prevents another item becoming executable or done. |
-| Branch owner | An epic for its children, or a standalone non-mission issue; recorded branch metadata identifies its work branch and base. |
+| Branch owner | A parent for its children, or a standalone work item; recorded branch metadata identifies its work branch and base. |
 | Status | Repository-defined lifecycle state; its category supports work queries. Agent Factory decides the process. |
 | Transition | A permitted status change plus read-only checks; it writes records and has no Git or provider actions. |
 | Gate | A derived `workflow_validator` query node for an invariant check; it is not a persisted record. |
@@ -32,8 +31,8 @@ Use these terms for the verified repo-native tracker defined by
 
 The graph stores hierarchy in `children`, dependencies in `blocks`, evidence in
 `attachments`, and semantic links in `relates`. Missions are not hierarchy
-parents. Epics have direct ordinary issue children; standalone issues remain
-valid. Mission membership uses `advances`, not parent fields.
+parents. Any work item may have direct children, one level deep; standalone
+issues remain valid. Mission membership uses `advances`, not parent fields.
 
 Different branches may contain different records and statuses. Cross-branch
 summaries name their branch and never overlay them onto the current checkout.

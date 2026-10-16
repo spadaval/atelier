@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. Partially superseded by
+[ADR 0021](0021-parent-issues-replace-epics.md): epics became parent issues,
+and draft epics became `backlog` work.
 
 ## Context
 

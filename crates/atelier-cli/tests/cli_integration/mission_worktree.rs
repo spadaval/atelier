@@ -362,7 +362,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
             "create",
             "Overview epic",
             "--issue-type",
-            "epic",
+            "feature",
             "--priority",
             "medium",
         ],
@@ -855,7 +855,7 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
             "create",
             "Invalid closeout",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -874,7 +874,7 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
     assert!(success, "request_review failed: {stderr}");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Goal")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -890,7 +890,7 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
     assert!(!success, "transition close should refuse invalid issue");
     assert!(
         stderr.contains(&format!("issue {issue_id}"))
-            && stderr.contains("section Outcome")
+            && stderr.contains("section Goal")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing closeout diagnostic, stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -1461,9 +1461,9 @@ fn test_bundle_apply_records_links() {
       {
         "client_ref": "issue.epic",
         "title": "Bundle epic",
-        "issue_type": "epic",
+        "issue_type": "feature",
         "priority": "high",
-        "body": "\u0023\u0023 Outcome\n\nBundle epic\n\n## Proof\n\nRun the focused regression tests."
+        "body": "\u0023\u0023 Goal\n\nBundle epic\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "issue.work",
@@ -1767,8 +1767,8 @@ fn test_bundle_rejects_mission_parent_scope() {
       {
         "client_ref": "issue.parent",
         "title": "Parent epic",
-        "issue_type": "epic",
-        "body": "\u0023\u0023 Outcome\n\nParent epic\n\n## Proof\n\nRun the focused regression tests."
+        "issue_type": "feature",
+        "body": "\u0023\u0023 Goal\n\nParent epic\n\n## Done when\n\nRun the focused regression tests."
       },
       {
         "client_ref": "mission.child",
@@ -2530,9 +2530,9 @@ fn issue_front_matter(dir: &std::path::Path, issue_id: &str) -> serde_json::Valu
 }
 
 #[test]
-fn test_start_child_checks_out_parent_epic_branch_and_records_it_on_the_epic() {
+fn test_start_child_checks_out_parent_branch_and_records_it_on_the_parent() {
     let dir = start_fixture();
-    let epic_id = create_issue(dir.path(), &["Start epic", "--issue-type", "epic"]);
+    let epic_id = create_issue(dir.path(), &["Start epic", "--issue-type", "feature"]);
     let child_id = create_issue(dir.path(), &["Start child", "--parent", &epic_id]);
     commit_all(dir.path(), "start fixture");
     let head_before = git_rev_parse(dir.path(), "HEAD");
@@ -2541,14 +2541,14 @@ fn test_start_child_checks_out_parent_epic_branch_and_records_it_on_the_epic() {
 
     assert!(success, "start failed: {stderr}");
     assert!(
-        stdout.contains(&format!("git switch -c epic/{epic_id}")),
+        stdout.contains(&format!("git switch -c feature/{epic_id}")),
         "{stdout}"
     );
     assert!(
         stdout.contains(&format!("Applied transition start to {child_id}")),
         "{stdout}"
     );
-    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert_eq!(git_current_branch(dir.path()), format!("feature/{epic_id}"));
     assert_eq!(
         git_rev_parse(dir.path(), "HEAD"),
         head_before,
@@ -2557,11 +2557,11 @@ fn test_start_child_checks_out_parent_epic_branch_and_records_it_on_the_epic() {
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
         epic["workflow_branch"],
-        serde_json::json!({ "work_branch": format!("epic/{epic_id}"), "branch_base": "main" })
+        serde_json::json!({ "work_branch": format!("feature/{epic_id}"), "branch_base": "main" })
     );
     assert_eq!(
-        epic["status"], "draft",
-        "starting a child leaves the epic status"
+        epic["status"], "todo",
+        "starting a child leaves the parent status"
     );
     let child = issue_front_matter(dir.path(), &child_id);
     assert_eq!(child["status"], "in_progress");
@@ -2571,8 +2571,11 @@ fn test_start_child_checks_out_parent_epic_branch_and_records_it_on_the_epic() {
 }
 
 #[test]
-fn test_start_standalone_issue_and_epic_own_their_branches() {
-    for (issue_type, prefix, status) in [("bug", "bug", "in_progress"), ("epic", "epic", "draft")] {
+fn test_start_standalone_issue_and_parent_own_their_branches() {
+    for (issue_type, prefix, status) in [
+        ("bug", "bug", "in_progress"),
+        ("feature", "feature", "in_progress"),
+    ] {
         let dir = start_fixture();
         let issue_id = create_issue(dir.path(), &["Owner", "--issue-type", issue_type]);
         commit_all(dir.path(), "start fixture");
@@ -2589,7 +2592,6 @@ fn test_start_standalone_issue_and_epic_own_their_branches() {
         let record = issue_front_matter(dir.path(), &issue_id);
         assert_eq!(record["workflow_branch"]["work_branch"], branch);
         assert_eq!(record["workflow_branch"]["branch_base"], "main");
-        // A draft epic has no start transition until it is made ready.
         assert_eq!(record["status"], status, "{stdout}");
     }
 }
@@ -2701,7 +2703,7 @@ fn test_start_refuses_missions() {
 #[test]
 fn test_start_refuses_existing_owner_branch_without_the_issue_record() {
     let dir = start_fixture();
-    let epic_id = create_issue(dir.path(), &["Branch owner", "--issue-type", "epic"]);
+    let epic_id = create_issue(dir.path(), &["Branch owner", "--issue-type", "feature"]);
     commit_all(dir.path(), "epic fixture");
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
     assert!(success, "epic start failed: {stderr}");
@@ -2729,7 +2731,7 @@ fn test_start_refuses_existing_owner_branch_without_the_issue_record() {
 #[test]
 fn test_start_reads_the_owner_branch_not_a_same_named_tag() {
     let dir = start_fixture();
-    let epic_id = create_issue(dir.path(), &["Tagged owner", "--issue-type", "epic"]);
+    let epic_id = create_issue(dir.path(), &["Tagged owner", "--issue-type", "feature"]);
     commit_all(dir.path(), "epic fixture");
     git_ok(dir.path(), &["switch", "-c", "develop"]);
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
@@ -2738,7 +2740,7 @@ fn test_start_reads_the_owner_branch_not_a_same_named_tag() {
     git_ok(dir.path(), &["switch", "main"]);
     let child_id = create_issue(dir.path(), &["Tag-only child", "--parent", &epic_id]);
     commit_all(dir.path(), "child created on main only");
-    git_ok(dir.path(), &["tag", &format!("epic/{epic_id}"), "main"]);
+    git_ok(dir.path(), &["tag", &format!("feature/{epic_id}"), "main"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &child_id]);
 
@@ -2767,7 +2769,7 @@ fn git_ok(dir: &std::path::Path, args: &[&str]) {
 #[test]
 fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
     let dir = start_fixture();
-    let epic_id = create_issue(dir.path(), &["Shared owner", "--issue-type", "epic"]);
+    let epic_id = create_issue(dir.path(), &["Shared owner", "--issue-type", "feature"]);
     let first_id = create_issue(dir.path(), &["First child", "--parent", &epic_id]);
     let second_id = create_issue(dir.path(), &["Second child", "--parent", &epic_id]);
     commit_all(dir.path(), "start fixture");
@@ -2781,16 +2783,16 @@ fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
 
     assert!(success, "second start failed: {stderr}");
     assert!(
-        stdout.contains(&format!("git switch epic/{epic_id}")),
+        stdout.contains(&format!("git switch feature/{epic_id}")),
         "{stdout}"
     );
     assert!(!stdout.contains("Recorded workflow_branch"), "{stdout}");
     assert!(stdout.contains("Base:     develop"), "{stdout}");
-    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert_eq!(git_current_branch(dir.path()), format!("feature/{epic_id}"));
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
         epic["workflow_branch"],
-        serde_json::json!({ "work_branch": format!("epic/{epic_id}"), "branch_base": "develop" })
+        serde_json::json!({ "work_branch": format!("feature/{epic_id}"), "branch_base": "develop" })
     );
     assert_eq!(
         issue_front_matter(dir.path(), &first_id)["status"],
@@ -2809,7 +2811,7 @@ fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
 #[test]
 fn test_start_checks_blockers_on_the_target_branch_before_switching() {
     let dir = start_fixture();
-    let epic_id = create_issue(dir.path(), &["Owner epic", "--issue-type", "epic"]);
+    let epic_id = create_issue(dir.path(), &["Owner epic", "--issue-type", "feature"]);
     let first_id = create_issue(dir.path(), &["Started child", "--parent", &epic_id]);
     let gated_id = create_issue(dir.path(), &["Gated child", "--parent", &epic_id]);
     let blocker_id = create_issue(dir.path(), &["Branch blocker", "--issue-type", "task"]);
@@ -2836,7 +2838,7 @@ fn test_start_checks_blockers_on_the_target_branch_before_switching() {
         .current_dir(dir.path())
         .args([
             "show",
-            &format!("epic/{epic_id}:.atelier/issues/{gated_id}.md"),
+            &format!("feature/{epic_id}:.atelier/issues/{gated_id}.md"),
         ])
         .output()
         .unwrap()
@@ -2861,7 +2863,7 @@ fn test_start_checks_blockers_on_the_target_branch_before_switching() {
         .current_dir(dir.path())
         .args([
             "show",
-            &format!("epic/{epic_id}:.atelier/issues/{gated_id}.md"),
+            &format!("feature/{epic_id}:.atelier/issues/{gated_id}.md"),
         ])
         .output()
         .unwrap()
@@ -2962,11 +2964,17 @@ fn check_reports_every_independent_graph_error_in_one_run() {
     block(&ids[1], "atelier-missb");
     block(&ids[2], &ids[3]);
     block(&ids[3], &ids[2]);
-    // A task cannot own children: an error that needs both records.
+    // Parents are one level deep: an error that needs both records.
     edit_canonical_issue(dir.path(), &ids[4], |markdown| {
         markdown.replace(
             "  children: []",
             &format!("  children:\n  - kind: \"issue\"\n    id: \"{}\"", ids[5]),
+        )
+    });
+    edit_canonical_issue(dir.path(), &ids[5], |markdown| {
+        markdown.replace(
+            "  children: []",
+            &format!("  children:\n  - kind: \"issue\"\n    id: \"{}\"", ids[1]),
         )
     });
     // The child also has an unconfigured link type: a second, independent
@@ -2988,7 +2996,10 @@ fn check_reports_every_independent_graph_error_in_one_run() {
         "has blocks reference to missing issue atelier-missa",
         "has blocks reference to missing issue atelier-missb",
         "relationships.blocks contains a cycle",
-        &format!("issue {} cannot be child of task {}", ids[5], ids[4]),
+        &format!(
+            "issue {} is a child of {} and has children of its own",
+            ids[5], ids[4]
+        ),
         &format!(
             "issue {} has unconfigured context link type 'frobnicates'",
             ids[5]

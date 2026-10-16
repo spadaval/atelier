@@ -1,7 +1,7 @@
 # Atelier Product Intent
 
 Atelier is a verified, repo-native work tracker and an orchestrator's durable
-memory. Missions, epics, issues, evidence, and reviews live in Markdown beside
+memory. Missions, issues, evidence, and reviews live in Markdown beside
 the code they describe. Git carries both the implementation and its done claim
 through review and integration.
 
@@ -29,9 +29,9 @@ mechanical guards at the point of action. The governing decision is
 
 ## Work and proof
 
-A mission links its governing strategy and success criteria. An epic is an
-outcome-bearing increment and normally a branch and review boundary. An issue
-is an executable slice, with a goal and observable done condition. Native links
+A mission links its governing strategy and success criteria. An issue is an
+executable slice, with a goal and observable done condition; an issue with
+children is a parent, an increment that is one branch and review boundary. Native links
 represent mission membership, hierarchy, blockers, and proof attachments.
 
 Evidence reports `pass`, `fail`, `blocked`, or `not-applicable`, the commit

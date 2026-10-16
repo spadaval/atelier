@@ -19,10 +19,11 @@ reports a value that differs from the mission linking it, or any value when
 several missions link the same strategy. `check` also reports a linked
 strategy path that does not exist.
 
-An epic describes an observable Outcome. Draft epics can retain Unknowns;
-before ready, add the Proof route and immediate child work with real dependency
-links. Add Delivers when it helps connect the increment to mission criteria.
-Keep Design as a link to the owning document.
+A parent is any work item with children: an observable increment worked on
+one branch and reviewed together. Its Goal is the outcome and its Done when the
+proof route, including how it delivers mission criteria. Unknowns record open
+questions; keep later increments in `backlog` until their predecessor's
+evidence arrives. Keep Design as a link to the owning document.
 
 An executable issue has Goal and Done when. Done when names a check or scenario
 that could fail if the slice were missing or wrong. Scope and Context give the
@@ -32,8 +33,9 @@ it checks in Goal and its method in Context, and records each result as an
 attached evidence receipt.
 
 Keep status in front matter and progress in dated Notes. Put follow-up findings
-in new issues. Use native blockers for sequencing, parent fields for direct epic
-children, and `advances` links for mission scope. Do not put mission membership
+in new issues. Use native blockers for sequencing, parent fields for direct
+children (one level), labels for themes, and `advances` links for mission
+scope. Do not put mission membership
 in parent fields.
 
 Use `atelier issue create` for a single item. For a prepared multi-record graph,

@@ -52,21 +52,21 @@ Client references never become canonical record IDs.
 | `status` | Optional initial status; defaults to the selected workflow's initial status. |
 | `strategy` | Optional object with `path`; no revision number. |
 | `labels` | Optional string array. |
-| `parent` | Optional epic reference for an ordinary issue. |
+| `parent` | Optional parent issue reference; any work item can be a parent, one level deep. |
 | `blocked_by`, `blocks` | Optional reference arrays for sequencing: `blocked_by` names work this issue waits for, `blocks` names work that waits for it. These are the `atelier issue link --role` names. |
 | `advances` | Optional mission membership reference array. On a mission it names work in its scope; on other issues it names the mission they advance. Each link must join exactly one mission. |
 | `notes` | Optional ordered notes with `body`, optional `author`, and optional RFC 3339 `created_at`. |
 | `operation` | Omitted or `create`, or `update` together with `id`. |
 | `id` | For `update` only: the existing issue the entry changes. |
 
-Ordinary bodies contain Goal and Done when, optionally Scope and Context.
-Epics contain Outcome and a Proof route before ready. Missions contain Outcome
+Work item bodies contain Goal and Done when, optionally Scope, Context,
+Unknowns, and Design. Missions contain Outcome
 and Success criteria or link a strategy path. Do not author the retired
 Description/Outcome/Evidence issue schema. The old bundle issue fields
 `description`, `outcome`, and `evidence` are rejected; use `body`.
 
-Missions have no parent or children. Epics have no parent; ordinary issues may
-be direct epic children or standalone and cannot own children. Use `advances`
+Missions have no parent or children. Work items may be standalone, parents, or
+children of a parent; a child cannot have children. Use `advances`
 for mission scope, not `parent`. Initial execution states must satisfy the
 complete staged workflow and dependency rules; draft planning does not bypass
 record integrity.
@@ -95,10 +95,10 @@ reference resolution, body shape, types, statuses, hierarchy, blockers, and the
 complete staged graph. Errors name the rejected field, reference, record, or
 `client_ref` where available. No invalid reference or cycle may be installed.
 
-Parent references normalize to epic children. Both `blocked_by` and `blocks`
+Parent references normalize to parent-to-child relationships. Both `blocked_by` and `blocks`
 normalize to blocker-to-blocked relationships. `advances` is stored on both
-records, as `atelier issue link` stores it, so a mission listing an epic and the
-epic listing the mission are the same mission-to-work edge; declaring both is a
+records, as `atelier issue link` stores it, so a mission listing a parent and the
+parent listing the mission are the same mission-to-work edge; declaring both is a
 duplicate. `validates` retains its semantic role. Duplicate normalized edges are
 errors.
 
@@ -139,8 +139,8 @@ Fixtures:
 - [Preview output](fixtures/dry-run-preview.txt): current human CLI output, not a
   JSON response contract.
 
-The valid input is self-contained: it creates a mission and epic, direct task
-and validation children, a dependency, and an evidence attachment. Run preview
+The valid input is self-contained: it creates a mission and a parent feature, direct
+task and validation children, a dependency, and an evidence attachment. Run preview
 in a fresh Git repository initialized with `atelier init`; it needs no existing
 record IDs. Apply additionally requires `--yes`.
 

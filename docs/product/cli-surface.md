@@ -31,15 +31,16 @@ atelier work human
 atelier work blocked
 atelier work missions
 atelier work mission <mission-id>
-atelier work epic <epic-id>
+atelier work parent <parent-id>
 atelier issue show <id>
 atelier issue transition <id>
 atelier start <id>
 ```
 
 `issue list` is flat inventory, including objective records; `work` is operational
-context. A mission is created with `issue create --issue-type mission`. Use an
-epic parent for direct implementation children and `advances` for mission scope.
+context. A mission is created with `issue create --issue-type mission`. Use a
+parent issue (any work item) for direct implementation children, one level
+deep, and `advances` for mission scope.
 An `advances` link joins one mission to one non-mission issue and is stored on
 both records, so either argument order records the same link; the examples name
 the work first.
@@ -51,8 +52,8 @@ Factory owns process record templates.
 For example:
 
 ```text
-atelier issue create "Implement the slice" --parent <epic-id>
-atelier issue link <epic-id> <mission-id> --role advances
+atelier issue create "Implement the slice" --parent <parent-id>
+atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff
 atelier issue transition <id> close --reason "Acceptance shown"

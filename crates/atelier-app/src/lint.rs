@@ -160,19 +160,10 @@ pub fn issue_findings<'a>(
                 "Mission requires Success criteria or a linked strategy".to_string(),
             ));
         }
-        if issue.issue_type == "epic"
-            && issue.status != "draft"
-            && record.sections.section(IssueSectionName::Proof).is_none()
-        {
-            findings.push(finding("Ready epic requires Proof".to_string()));
-        }
         if !scoped {
             continue;
         }
         let mut required = record.sections.required_names();
-        if issue.issue_type == "epic" && issue.status != "draft" {
-            required.push(IssueSectionName::Proof);
-        }
         if issue.issue_type == "mission" && issue.strategy.is_none() {
             required.push(IssueSectionName::SuccessCriteria);
         }

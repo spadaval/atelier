@@ -373,7 +373,7 @@ fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
             "create",
             "Terminal epic owner",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "epic create failed: {stderr}");
@@ -386,7 +386,7 @@ fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
     let child_id = issue_ref(dir.path(), 2);
     make_issue_terminal_before_retention(dir.path(), &epic_id, 45);
     commit_all(dir.path(), "terminal epic with active descendant fixture");
-    let branch = format!("epic/{epic_id}");
+    let branch = format!("feature/{epic_id}");
     let worktree = dir.path().join("terminal-epic-worktree");
     for args in [
         vec!["init", "--bare", remote.path().to_str().unwrap()],
@@ -1097,7 +1097,7 @@ fn test_prune_keeps_done_child_listed_by_open_epic() {
     init_git_repo(dir.path());
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Open epic", "--issue-type", "epic"],
+        &["issue", "create", "Open epic", "--issue-type", "feature"],
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Open epic");
@@ -1667,7 +1667,7 @@ fn test_issue_transition_options_and_blocked_attempts_do_not_write() {
             "create",
             "Options read-only item",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -1760,7 +1760,7 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Shared epic", "--issue-type", "epic"],
+        &["issue", "create", "Shared epic", "--issue-type", "feature"],
     );
     assert!(success, "epic issue create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Shared epic");
@@ -1783,7 +1783,7 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     assert!(success, "initial start failed: {stderr}");
     assert!(!active_out.contains("Session:"), "{active_out}");
     assert!(
-        active_out.contains(&format!("git switch -c epic/{epic_id}")),
+        active_out.contains(&format!("git switch -c feature/{epic_id}")),
         "{active_out}"
     );
 
@@ -1947,7 +1947,7 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
             "create",
             "Validator blocked item",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -2024,7 +2024,7 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
             "create",
             "Closable workflow item",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -2256,7 +2256,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
             "create",
             "Guided transition item",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     assert!(success, "issue create failed: {stderr}");
@@ -2349,7 +2349,7 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
             "create",
             "Source graph item",
             "--issue-type",
-            "epic",
+            "feature",
         ],
     );
     let source_id = issue_ref(dir.path(), 1);
@@ -2403,7 +2403,7 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
             "create",
             "Relationship Objective",
             "--issue-type",
-            "epic",
+            "mission",
         ],
     );
     assert!(success, "objective create failed: {stderr}");
@@ -2412,7 +2412,7 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Linked Epic", "--issue-type", "epic"],
+        &["issue", "create", "Linked Epic", "--issue-type", "feature"],
     );
     assert!(success, "linked epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Linked Epic");

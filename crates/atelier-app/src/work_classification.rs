@@ -335,7 +335,7 @@ mod tests {
         );
         let mut workflow_by_issue_type = BTreeMap::new();
         workflow_by_issue_type.insert("task".to_string(), "task".to_string());
-        workflow_by_issue_type.insert("epic".to_string(), "task".to_string());
+        workflow_by_issue_type.insert("feature".to_string(), "task".to_string());
         let mut workflows = BTreeMap::new();
         workflows.insert(
             "task".to_string(),
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn terminal_ancestor_retires_open_descendant_but_preserves_done_descendant() {
         let mut records = Records::default();
-        records.issue("atelier-epic", "epic", "superseded");
+        records.issue("atelier-epic", "feature", "superseded");
         records.issue("atelier-open", "task", "todo");
         records.issue("atelier-history", "task", "done");
         records.parent("atelier-open", "atelier-epic");

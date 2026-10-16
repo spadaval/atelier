@@ -12,7 +12,7 @@ Records
 Relationships
 -------------
   evidence/evidence.bundle-contract -> issue/issue.define-schema (validates)
-  issue/epic.bundle-contract -> issue/issue.define-schema (parent)
-  issue/epic.bundle-contract -> issue/issue.validate-fixtures (parent)
   issue/issue.define-schema -> issue/issue.validate-fixtures (blocks)
-  issue/mission.bundle-contract -> issue/epic.bundle-contract (advances)
+  issue/mission.bundle-contract -> issue/parent.bundle-contract (advances)
+  issue/parent.bundle-contract -> issue/issue.define-schema (parent)
+  issue/parent.bundle-contract -> issue/issue.validate-fixtures (parent)

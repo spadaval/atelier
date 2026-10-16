@@ -281,19 +281,12 @@ pub enum IssueBody {
         done_when: String,
         scope: Option<String>,
         context: Option<String>,
-    },
-    Epic {
-        outcome: String,
-        proof: Option<String>,
-        delivers: Option<String>,
-        scope: Option<String>,
         unknowns: Option<String>,
         design: Option<String>,
     },
     Mission {
         outcome: String,
         success_criteria: Option<String>,
-        epics: Option<String>,
     },
 }
 
@@ -303,13 +296,10 @@ pub enum IssueSectionName {
     DoneWhen,
     Scope,
     Context,
-    Outcome,
-    Proof,
-    Delivers,
     Unknowns,
     Design,
+    Outcome,
     SuccessCriteria,
-    Epics,
     Notes,
     CloseReason,
 }
@@ -335,18 +325,15 @@ pub struct IssueSectionState {
 }
 
 impl IssueSections {
-    pub const ALL_NAMES: [IssueSectionName; 13] = [
+    pub const ALL_NAMES: [IssueSectionName; 10] = [
         IssueSectionName::Goal,
         IssueSectionName::DoneWhen,
         IssueSectionName::Scope,
         IssueSectionName::Context,
-        IssueSectionName::Outcome,
-        IssueSectionName::Proof,
-        IssueSectionName::Delivers,
         IssueSectionName::Unknowns,
         IssueSectionName::Design,
+        IssueSectionName::Outcome,
         IssueSectionName::SuccessCriteria,
-        IssueSectionName::Epics,
         IssueSectionName::Notes,
         IssueSectionName::CloseReason,
     ];
@@ -379,33 +366,22 @@ impl IssueSections {
                 scope,
                 ..
             } => (goal.clone(), Some(done_when.clone()), scope.clone()),
-            IssueBody::Epic {
-                outcome,
-                proof,
-                scope,
-                ..
-            } => (outcome.clone(), proof.clone(), scope.clone()),
             IssueBody::Mission {
                 outcome,
                 success_criteria,
-                ..
             } => (outcome.clone(), success_criteria.clone(), None),
         };
         self.body = IssueBody::for_type(issue_type, goal, proof, scope);
     }
 
     pub fn matches_type(&self, issue_type: &str) -> bool {
-        matches!(
-            (&self.body, issue_type),
-            (IssueBody::Epic { .. }, "epic") | (IssueBody::Mission { .. }, "mission")
-        ) || (matches!(self.body, IssueBody::Issue { .. })
-            && !matches!(issue_type, "epic" | "mission"))
+        matches!(self.body, IssueBody::Mission { .. }) == (issue_type == "mission")
     }
 
     pub fn required_names(&self) -> Vec<IssueSectionName> {
         match self.body {
             IssueBody::Issue { .. } => vec![IssueSectionName::Goal, IssueSectionName::DoneWhen],
-            IssueBody::Epic { .. } | IssueBody::Mission { .. } => vec![IssueSectionName::Outcome],
+            IssueBody::Mission { .. } => vec![IssueSectionName::Outcome],
         }
     }
 
@@ -437,24 +413,17 @@ impl IssueSections {
         match (&self.body, name) {
             (IssueBody::Issue { goal, .. }, Goal) => Some(goal),
             (IssueBody::Issue { done_when, .. }, DoneWhen) => Some(done_when),
-            (IssueBody::Issue { scope, .. } | IssueBody::Epic { scope, .. }, Scope) => {
-                scope.as_deref()
-            }
+            (IssueBody::Issue { scope, .. }, Scope) => scope.as_deref(),
             (IssueBody::Issue { context, .. }, Context) => context.as_deref(),
-            (IssueBody::Epic { outcome, .. } | IssueBody::Mission { outcome, .. }, Outcome) => {
-                Some(outcome)
-            }
-            (IssueBody::Epic { proof, .. }, Proof) => proof.as_deref(),
-            (IssueBody::Epic { delivers, .. }, Delivers) => delivers.as_deref(),
-            (IssueBody::Epic { unknowns, .. }, Unknowns) => unknowns.as_deref(),
-            (IssueBody::Epic { design, .. }, Design) => design.as_deref(),
+            (IssueBody::Issue { unknowns, .. }, Unknowns) => unknowns.as_deref(),
+            (IssueBody::Issue { design, .. }, Design) => design.as_deref(),
+            (IssueBody::Mission { outcome, .. }, Outcome) => Some(outcome),
             (
                 IssueBody::Mission {
                     success_criteria, ..
                 },
                 SuccessCriteria,
             ) => success_criteria.as_deref(),
-            (IssueBody::Mission { epics, .. }, Epics) => epics.as_deref(),
             (_, Notes) => self.notes.as_deref(),
             (_, CloseReason) => self.close_reason.as_deref(),
             _ => None,
@@ -483,24 +452,17 @@ impl IssueBody {
         scope: Option<String>,
     ) -> Self {
         match issue_type {
-            "epic" => IssueBody::Epic {
-                outcome: goal,
-                proof,
-                scope,
-                delivers: None,
-                unknowns: None,
-                design: None,
-            },
             "mission" => IssueBody::Mission {
                 outcome: goal,
                 success_criteria: proof,
-                epics: None,
             },
             _ => IssueBody::Issue {
                 goal,
                 done_when: proof.unwrap_or_else(|| "Done when was not specified.".to_string()),
                 scope,
                 context: None,
+                unknowns: None,
+                design: None,
             },
         }
     }
@@ -514,12 +476,9 @@ impl IssueSectionName {
             Self::Scope => "Scope",
             Self::Context => "Context",
             Self::Outcome => "Outcome",
-            Self::Proof => "Proof",
-            Self::Delivers => "Delivers",
             Self::Unknowns => "Unknowns",
             Self::Design => "Design",
             Self::SuccessCriteria => "Success criteria",
-            Self::Epics => "Epics",
             Self::Notes => "Notes",
             Self::CloseReason => "Close Reason",
         }
@@ -660,12 +619,12 @@ mod tests {
 
     #[test]
     fn default_body_shapes_and_type_changes_preserve_acceptance_and_notes() {
-        let epic = IssueSections::for_type("epic", Some("  "));
+        let parent = IssueSections::for_type("feature", Some("  "));
         assert_eq!(
-            epic.section(IssueSectionName::Outcome),
+            parent.section(IssueSectionName::Goal),
             Some("Goal was not specified.")
         );
-        assert_eq!(epic.section(IssueSectionName::Proof), None);
+        assert_eq!(parent.section(IssueSectionName::Unknowns), None);
         let mission = IssueSections::for_type("mission", None);
         assert_eq!(
             mission.section(IssueSectionName::SuccessCriteria),
@@ -689,20 +648,11 @@ mod tests {
         let same_shape = sections.clone();
         sections.change_type("bug");
         assert_eq!(sections, same_shape);
-        sections.change_type("epic");
+        sections.change_type("mission");
         assert_eq!(
             sections.section(IssueSectionName::Outcome),
             Some("Keep intent.")
         );
-        assert_eq!(
-            sections.section(IssueSectionName::Proof),
-            Some("The result is independently checked.")
-        );
-        assert_eq!(
-            sections.section(IssueSectionName::Scope),
-            Some("This repository.")
-        );
-        sections.change_type("mission");
         assert_eq!(
             sections.section(IssueSectionName::SuccessCriteria),
             Some("The result is independently checked.")

@@ -482,8 +482,8 @@ fn ambiguous_remote_branch_refuses_before_switching_or_writing() {
 fn epic_child(f: &Fixture) -> String {
     let child = ok(f.path(), &["-q", "issue", "create", "Completed child"]);
     let mut owner = f.store().load_issue_by_id(&f.id).unwrap();
-    owner.issue.issue_type = "epic".into();
-    owner.sections.change_type("epic");
+    owner.issue.issue_type = "feature".into();
+    owner.sections.change_type("feature");
     owner
         .relationships
         .children
@@ -2394,4 +2394,107 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
         !pass && output.contains(" and 2 more; run atelier start"),
         "{output}"
     );
+}
+#[test]
+fn a_task_parent_owns_its_children_through_start_land_and_merge() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let body = "## Goal\n\nShip the slice.\n\n## Done when\n\nIts children are done.";
+    let parent = ok(
+        path,
+        &["-q", "issue", "create", "Parent task", "--body", body],
+    );
+    let first = ok(
+        path,
+        &["-q", "issue", "create", "First child", "--parent", &parent],
+    );
+    let second = ok(
+        path,
+        &["-q", "issue", "create", "Second child", "--parent", &parent],
+    );
+    commit(path, "plan a parent task");
+
+    ok(path, &["start", &first]);
+    let branch = format!("task/{parent}");
+    assert_eq!(git(path, &["branch", "--show-current"]), branch);
+    fs::write(path.join("code"), "first slice\n").unwrap();
+    commit(path, "first slice");
+    ok(path, &["land"]);
+    ok(
+        path,
+        &[
+            "issue",
+            "transition",
+            &first,
+            "close",
+            "--reason",
+            "First slice done",
+        ],
+    );
+    commit(path, "first child done");
+
+    // The parent closes only after every child is terminal.
+    ok(path, &["start", &parent]);
+    let (pass, output) = cli(
+        path,
+        &[
+            "issue",
+            "transition",
+            &parent,
+            "close",
+            "--reason",
+            "Too early",
+        ],
+    );
+    assert!(!pass && output.contains(&second), "{output}");
+    ok(path, &["start", &second]);
+    assert_eq!(git(path, &["branch", "--show-current"]), branch);
+    ok(
+        path,
+        &[
+            "issue",
+            "transition",
+            &second,
+            "close",
+            "--reason",
+            "Second slice done",
+        ],
+    );
+    ok(
+        path,
+        &[
+            "issue",
+            "transition",
+            &parent,
+            "close",
+            "--reason",
+            "Both slices done",
+        ],
+    );
+    commit(path, "children and parent done");
+    let (pass, output) = cli(path, &["land"]);
+    assert!(!pass && output.contains("review.current"), "{output}");
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &parent,
+            "--identity",
+            "Reviewer",
+            "Reviewed the parent and children",
+        ],
+    );
+    commit(path, "approval");
+    ok(path, &["land"]);
+    ok(path, &["merge", &first]);
+    assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    for id in [&parent, &first, &second] {
+        let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
+        assert!(record.contains("status: \"done\""), "{record}");
+    }
 }

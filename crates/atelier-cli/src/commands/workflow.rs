@@ -551,7 +551,7 @@ mod tests {
             description: None,
             status: "in_progress".to_string(),
             priority: "medium".to_string(),
-            issue_type: "epic".to_string(),
+            issue_type: "mission".to_string(),
             strategy: None,
             workflow_branch: None,
             parent_id: None,
@@ -663,32 +663,32 @@ state_root = ".atelier"
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
-        let mut issue = test_issue("atelier-epic1");
+        let mut issue = test_issue("atelier-obj1");
         issue.status = "draft".to_string();
         insert_canonical_issue(&state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "supersede").unwrap();
 
         let mut record = RecordStore::new(&state_dir)
-            .load_issue_by_id("atelier-epic1")
+            .load_issue_by_id("atelier-obj1")
             .unwrap();
         apply_transition_record(
             &policy,
             &state_dir,
             &mut record,
             transition,
-            Some("  Replaced by a smaller epic.  "),
+            Some("  Replaced by a smaller mission.  "),
         )
         .unwrap();
 
         let stored = RecordStore::new(&state_dir)
-            .load_issue_by_id("atelier-epic1")
+            .load_issue_by_id("atelier-obj1")
             .unwrap();
         assert_eq!(stored.issue.status, "superseded");
         assert!(stored.issue.closed_at.is_some());
         assert_eq!(
             stored.sections.close_reason.as_deref(),
-            Some("Replaced by a smaller epic.")
+            Some("Replaced by a smaller mission.")
         );
     }
 
@@ -697,13 +697,13 @@ state_root = ".atelier"
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
-        let issue = test_issue("atelier-epic1");
+        let issue = test_issue("atelier-obj1");
         insert_canonical_issue(&state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let transition = resolve_issue_transition(&policy, &issue, "block").unwrap();
 
         let mut record = RecordStore::new(&state_dir)
-            .load_issue_by_id("atelier-epic1")
+            .load_issue_by_id("atelier-obj1")
             .unwrap();
         apply_transition_record(
             &policy,
@@ -715,7 +715,7 @@ state_root = ".atelier"
         .unwrap();
 
         let stored = RecordStore::new(&state_dir)
-            .load_issue_by_id("atelier-epic1")
+            .load_issue_by_id("atelier-obj1")
             .unwrap();
         assert_eq!(stored.issue.status, "blocked");
         assert!(stored.issue.closed_at.is_none());
