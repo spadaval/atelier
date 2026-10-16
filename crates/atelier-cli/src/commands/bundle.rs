@@ -405,6 +405,32 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                     issue.client_ref
                 );
             }
+            // Parents are one level deep: the parent cannot itself be a child,
+            // and this child cannot be a parent in the same bundle.
+            let parent_is_child = match (&parent.client_ref, &parent.id) {
+                (Some(client_ref), _) => bundle
+                    .resources
+                    .issues
+                    .iter()
+                    .any(|other| &other.client_ref == client_ref && other.parent.is_some()),
+                (None, Some(id)) => index
+                    .get_issue(id)
+                    .is_some_and(|other| other.parent_id.is_some()),
+                (None, None) => false,
+            };
+            let is_parent = bundle.resources.issues.iter().any(|other| {
+                other
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| parent.client_ref.as_ref())
+                    == Some(&issue.client_ref)
+            });
+            if parent_is_child || is_parent {
+                bail!(
+                    "Issue {} would nest a parent under a parent; parents are one level deep",
+                    issue.client_ref
+                );
+            }
         }
         for target in &issue.advances {
             let target_type =

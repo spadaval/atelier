@@ -1368,7 +1368,9 @@ pub fn parse_issue_sections_for_type(
                         issue_id.as_deref(),
                         &heading,
                         relative,
-                        &if matches!(heading.as_str(), "Proof" | "Delivers" | "Epics") {
+                        &if heading == "Epics" {
+                            format!("Unknown issue body section '{heading}'; missions no longer have an Epics section (atelier-9vq3). Move its content into Success criteria or Notes")
+                        } else if matches!(heading.as_str(), "Proof" | "Delivers") {
                             format!("Unknown issue body section '{heading}'; it belonged to the retired epic type, which is now a parent issue (atelier-9vq3). Run `atelier migrate epics` to convert epic records")
                         } else {
                             format!("Unknown issue body section '{heading}'")

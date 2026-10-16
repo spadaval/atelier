@@ -40,6 +40,16 @@ pub fn validate_issue_hierarchy(
             ));
         }
     }
+    if issue.issue_type == "mission" {
+        let children = index.get_subissues(&issue.id);
+        if !children.is_empty() {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: mission {} cannot have children ({}); missions are not parents, so link the work with advances",
+                issue.id,
+                children.iter().map(|child| child.id.as_str()).collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
     // One level: any non-mission issue may be a parent, and a parent's
     // children are leaves (atelier-9vq3).
     if let Some(parent_id) = parent_id {

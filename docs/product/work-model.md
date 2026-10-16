@@ -25,8 +25,9 @@ Evidence attachments represent proof; semantic links remain separate.
 Repositories with records from before this change run
 `atelier migrate epics --apply` once: it retypes each epic as a feature (or
 `--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,
-moves draft epics to `backlog`, keeps their links, and removes `epic` from the
-policy. Review the Done when sections and commit.
+moves draft epics to `backlog`, keeps their links, removes `epic` from the
+policy, and adds `work.terminal` to the work `close` when it has the starter
+shape (otherwise it says to add it). Review the Done when sections and commit.
 
 Work that only the human can do, such as a step at a particular machine, an
 account approval, or a judgement call, carries the reserved `needs-human`
@@ -45,7 +46,9 @@ expose a direct transition into active work and have no open blockers.
 
 A standalone work item owns its branch, and a parent owns its children's
 branch. A parent closes only after every child is terminal (the starter
-policy's `close` runs the `work.terminal` check). The default branch name is
+policy's `close` runs the `work.terminal` check). Superseding a parent is
+different: it retires the parent with any open children, which then show as
+context only. The default branch name is
 `<issue_type>/<id>`; typed `workflow_branch`
 metadata records an explicit `work_branch` and `branch_base` on the owner.
 Missions coordinate work rather than own a work branch.

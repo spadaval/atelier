@@ -28,6 +28,7 @@ list.
 2. **The parent owns the branch.** Children work on their parent's branch
    (`<issue_type>/<parent-id>`), and the parent closes only after every child
    is terminal. The starter policy's `close` runs `work.terminal` for this.
+   Superseding a parent retires it with any open children.
 3. **One body shape for work.** Work items have Goal and Done when, with
    optional Scope, Context, Unknowns, and Design. Missions keep Outcome and
    Success criteria; the mission `Epics` section is gone.
@@ -35,8 +36,8 @@ list.
    sits in the `backlog` status.
 5. **Migration.** `atelier migrate epics --apply` retypes epic records (as
    `feature` by default), maps Outcome to Goal and Proof and Delivers to Done
-   when, moves draft epics to `backlog`, keeps their links, and removes `epic`
-   from the policy. Records with the old shape fail to parse with a pointer to
+   when, moves draft epics to `backlog`, keeps their links, removes `epic`
+   from the policy, and adds `work.terminal` to a starter-shaped work `close`. Records with the old shape fail to parse with a pointer to
    the command.
 
 ## Consequences

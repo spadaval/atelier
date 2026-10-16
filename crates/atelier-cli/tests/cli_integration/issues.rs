@@ -252,6 +252,30 @@ fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
         !success && stderr.contains("parents are one level deep"),
         "{stderr}"
     );
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &parent_id, "--issue-type", "mission"],
+    );
+    assert!(
+        !success && stderr.contains("missions are not parents"),
+        "a parent cannot become a mission: {stderr}"
+    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        success,
+        "the refused retype left the records valid: {stdout}{stderr}"
+    );
+
+    // Bundle preview enforces the same one-level rule as apply.
+    let bundle = dir.path().join("nested.json");
+    for issues in [
+        r###"[{"client_ref":"a","title":"A","body":"## Goal\n\nA.\n\n## Done when\n\nA."},{"client_ref":"b","title":"B","body":"## Goal\n\nB.\n\n## Done when\n\nB.","parent":{"client_ref":"a"}},{"client_ref":"c","title":"C","body":"## Goal\n\nC.\n\n## Done when\n\nC.","parent":{"client_ref":"b"}}]"###.to_string(),
+        format!(r###"[{{"client_ref":"d","title":"D","body":"## Goal\n\nD.\n\n## Done when\n\nD.","parent":{{"id":"{child_id}"}}}}]"###),
+    ] {
+        fs::write(&bundle, format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Nested","resources":{{"issues":{issues}}}}}"###)).unwrap();
+        let (success, _, stderr) = run_atelier(dir.path(), &["bundle", "preview", bundle.to_str().unwrap()]);
+        assert!(!success && stderr.contains("parents are one level deep"), "{stderr}");
+    }
 
     // A hand-edited record that nests a child under a child fails check.
     edit_canonical_issue(dir.path(), &child_id, |markdown| {
@@ -3934,7 +3958,12 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
         .replace(
             "    applies_to:\n    - mission\n",
             "    applies_to:\n    - mission\n    - epic\n",
+        )
+        .replace(
+            "before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n",
+            "before review.\n        validators:\n        - blockers.none_open\n",
         );
+    assert!(!policy.contains("work.terminal"), "{policy}");
     fs::write(&policy_path, policy).unwrap();
     let (success, child, stderr) = run_atelier(dir.path(), &["-q", "issue", "create", "Child"]);
     assert!(success, "{stderr}");
@@ -3964,7 +3993,13 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["migrate", "epics", "--apply"]);
     assert!(success, "{stderr}");
-    assert!(!fs::read_to_string(&policy_path).unwrap().contains("epic"));
+    let migrated_policy = fs::read_to_string(&policy_path).unwrap();
+    assert!(!migrated_policy.contains("epic"), "{migrated_policy}");
+    assert_eq!(
+        migrated_policy.matches("- work.terminal").count(),
+        1,
+        "{migrated_policy}"
+    );
     let record = fs::read_to_string(canonical_issue_path(dir.path(), epic)).unwrap();
     for expected in [
         "issue_type: \"feature\"",
@@ -3980,6 +4015,20 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
     assert!(success, "{stdout}{stderr}");
     let (_, again, _) = run_atelier(dir.path(), &["migrate", "epics"]);
     assert!(again.contains("No epic records"), "{again}");
+
+    // A mission with the removed Epics section gets its own guidance.
+    let mission = "atelier-m1ss";
+    fs::write(
+        canonical_issue_path(dir.path(), mission),
+        format!("---\ncreated_at: \"2026-10-01T00:00:00+00:00\"\nid: \"{mission}\"\nissue_type: \"mission\"\nlabels: []\npriority: \"P2\"\nrelationships:\n  blocks: []\n  children: []\n  attachments: []\n  relates: []\nschema: \"atelier.issue\"\nschema_version: 2\nstatus: \"draft\"\ntitle: \"Old mission\"\nupdated_at: \"2026-10-01T00:00:00+00:00\"\n---\n\n## Outcome\n\nShipped.\n\n## Epics\n\nA list.\n"),
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        !success
+            && format!("{stdout}{stderr}").contains("missions no longer have an Epics section"),
+        "{stdout}{stderr}"
+    );
 }
 
 #[test]

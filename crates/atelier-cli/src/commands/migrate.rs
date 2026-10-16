@@ -10,6 +10,10 @@ use atelier_app::storage_layout::StorageLayout;
 
 const POLICY_EPIC_TYPE: &str = "  epic:\n    label: Epic\n";
 const POLICY_EPIC_APPLIES: &str = "    - epic\n";
+/// The starter policy's work `close` before parents existed; the migration
+/// adds the check that makes a parent close after its children.
+const POLICY_WORK_CLOSE: &str = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n";
+const POLICY_WORK_CLOSE_WITH_CHILDREN: &str = "      close:\n        from: [in_progress, review]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n";
 
 struct Plan {
     path: std::path::PathBuf,
@@ -24,9 +28,23 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
     let policy_path = repo.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
     let policy_text = fs::read_to_string(&policy_path)
         .with_context(|| format!("cannot read {}", policy_path.display()))?;
-    let new_policy = policy_text
+    let mut new_policy = policy_text
         .replace(POLICY_EPIC_TYPE, "")
         .replace(POLICY_EPIC_APPLIES, "");
+    let close_check_added = match new_policy.find("\n  work:\n") {
+        Some(work) if new_policy[work..].contains(POLICY_WORK_CLOSE) => {
+            let at = work
+                + new_policy[work..]
+                    .find(POLICY_WORK_CLOSE)
+                    .unwrap_or_default();
+            new_policy.replace_range(
+                at..at + POLICY_WORK_CLOSE.len(),
+                POLICY_WORK_CLOSE_WITH_CHILDREN,
+            );
+            true
+        }
+        _ => false,
+    };
     let policy = atelier_workflow::parse_policy_text(
         &new_policy,
         atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
@@ -38,6 +56,16 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
             policy_path.display()
         );
     }
+    let close_has_check = policy
+        .workflow_for_issue_type(to)
+        .ok()
+        .and_then(|workflow| workflow.transitions.get("close"))
+        .is_some_and(|close| {
+            close
+                .validators
+                .iter()
+                .any(|validator| validator.builtin == "work.terminal")
+        });
     if !policy.issue_types.contains_key(to) {
         bail!("issue type '{to}' is not declared in the workflow policy; pass --to with a declared type");
     }
@@ -79,7 +107,18 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
     let policy_changed = new_policy != policy_text;
     if policy_changed {
         println!(
-            "{}: remove the epic issue type",
+            "{}: remove the epic issue type{}",
+            atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
+            if close_check_added {
+                ", and add work.terminal to the work close so a parent closes after its children"
+            } else {
+                ""
+            }
+        );
+    }
+    if !close_has_check {
+        println!(
+            "Note: the {to} workflow's close transition has no work.terminal check, so a parent could close before its children. Add `- work.terminal` to its validators in {}.",
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
         );
     }
