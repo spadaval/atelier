@@ -3224,10 +3224,10 @@ Legacy evidence summary.
     }
 
     #[test]
-    fn task_epic_and_mission_bodies_round_trip_their_own_shapes() {
+    fn work_and_mission_bodies_round_trip_their_own_shapes() {
         for (kind, body) in [
             ("task", "## Goal\n\nBounded change.\n\n## Done when\n\nFocused test passes.\n\n## Scope\n\nsrc/lib.rs\n\n## Context\n\nADR 0019."),
-            ("epic", "## Outcome\n\nObservable increment.\n\n## Proof\n\nAuthor tests and independent validation.\n\n## Unknowns\n\nOne design question."),
+            ("feature", "## Goal\n\nObservable increment.\n\n## Done when\n\nEvery child is done.\n\n## Unknowns\n\nOne design question.\n\n## Design\n\nADR 0021."),
             ("mission", "## Outcome\n\nMission outcome.\n\n## Success criteria\n\nS1: scenario passes."),
         ] {
             let mut record = issue_record("atelier-body");
@@ -3236,9 +3236,15 @@ Legacy evidence summary.
             let text = render_issue_record(&record).unwrap();
             let parsed = parse_issue_record(&text, &issue_record_path("atelier-body")).unwrap();
             assert_eq!(parsed.sections, record.sections);
-            for other_kind in ["task", "epic", "mission"] {
-                if kind != other_kind { assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err()); }
-            }
+            let other_kind = if kind == "mission" { "task" } else { "mission" };
+            assert!(parse_issue_sections_for_type(body, Path::new("<body>"), other_kind).is_err());
+        }
+        let retired = "## Outcome\n\nOld epic.\n\n## Proof\n\nA scenario.";
+        for kind in ["epic", "task"] {
+            let error = parse_issue_sections_for_type(retired, Path::new("<body>"), kind)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("atelier migrate epics"), "{error}");
         }
     }
 }

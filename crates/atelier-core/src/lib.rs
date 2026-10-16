@@ -619,12 +619,12 @@ mod tests {
 
     #[test]
     fn default_body_shapes_and_type_changes_preserve_acceptance_and_notes() {
-        let epic = IssueSections::for_type("epic", Some("  "));
+        let parent = IssueSections::for_type("feature", Some("  "));
         assert_eq!(
-            epic.section(IssueSectionName::Outcome),
+            parent.section(IssueSectionName::Goal),
             Some("Goal was not specified.")
         );
-        assert_eq!(epic.section(IssueSectionName::Proof), None);
+        assert_eq!(parent.section(IssueSectionName::Unknowns), None);
         let mission = IssueSections::for_type("mission", None);
         assert_eq!(
             mission.section(IssueSectionName::SuccessCriteria),
@@ -648,20 +648,11 @@ mod tests {
         let same_shape = sections.clone();
         sections.change_type("bug");
         assert_eq!(sections, same_shape);
-        sections.change_type("epic");
+        sections.change_type("mission");
         assert_eq!(
             sections.section(IssueSectionName::Outcome),
             Some("Keep intent.")
         );
-        assert_eq!(
-            sections.section(IssueSectionName::Proof),
-            Some("The result is independently checked.")
-        );
-        assert_eq!(
-            sections.section(IssueSectionName::Scope),
-            Some("This repository.")
-        );
-        sections.change_type("mission");
         assert_eq!(
             sections.section(IssueSectionName::SuccessCriteria),
             Some("The result is independently checked.")

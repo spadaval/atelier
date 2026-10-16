@@ -111,12 +111,7 @@ fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
 /// or closeout rather than the draft-to-ready validators themselves.
 fn move_epic_directly_to_ready(dir: &Path, epic_id: &str) {
     edit_canonical_issue(dir, epic_id, |markdown| {
-        let markdown = replace_front_matter_scalar(&markdown, "status", "todo");
-        if markdown.contains("## Proof") {
-            markdown
-        } else {
-            format!("{markdown}\n## Proof\n\nFocused tests show the outcome.\n")
-        }
+        replace_front_matter_scalar(&markdown, "status", "todo")
     });
 }
 
@@ -705,13 +700,13 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
 fn add_close_validator(dir: &Path, validator: &str) {
     let path = dir.join(".atelier/workflow.yaml");
     let workflow = fs::read_to_string(&path).unwrap();
-    let close_validators = "        - blockers.none_open\n      supersede:";
+    let close_validators = "        - blockers.none_open\n";
     assert_eq!(workflow.matches(close_validators).count(), 2, "{workflow}");
     fs::write(
         &path,
         workflow.replace(
             close_validators,
-            &format!("        - blockers.none_open\n        - {validator}\n      supersede:"),
+            &format!("        - blockers.none_open\n        - {validator}\n"),
         ),
     )
     .unwrap();
@@ -720,8 +715,8 @@ fn add_close_validator(dir: &Path, validator: &str) {
 /// Starter policy whose work `close` also requires passing evidence.
 fn write_evidence_gated_workflow(dir: &Path) {
     let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
+        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
+        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
     );
     assert_ne!(workflow, atelier_workflow::STARTER_POLICY_YAML);
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();

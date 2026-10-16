@@ -8,36 +8,45 @@ for authoring guidance.
 
 ## Records and relationships
 
-Missions and epics are issue records with distinct `issue_type` values. A mission
-links a strategy file and outcome or success criteria. An epic states an Outcome
-and, before it becomes ready, a Proof route. Ordinary issues state Goal and
-Done when, with optional Scope and Context. Notes and Close Reason carry dated
-handoffs and terminal reasons.
+Missions and work items are issue records with distinct `issue_type` values. A
+mission links a strategy file and states an Outcome and Success criteria. Work
+items (task, feature, bug, spike, validation, or any type the policy declares)
+state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
+Notes and Close Reason carry dated handoffs and terminal reasons.
 
-Missions have no parent or children. An epic has no parent and can own direct
-ordinary issue children. Ordinary issues may be standalone or children of an
-epic; they cannot own children. Execution work links to missions through
+Any work item can be a parent: it may own direct children, one level deep, so a
+child has no children of its own (atelier-9vq3, decided by Sumeet 2026-10-15;
+this replaced the epic type, because elsewhere "epic" usually means a theme and
+adopters got branches that never merged). Themes are labels, and missions keep
+the why. Missions have no parent or children; work links to missions through
 `advances`. Native blockers represent sequencing, not membership or proof.
 Evidence attachments represent proof; semantic links remain separate.
+
+Repositories with records from before this change run
+`atelier migrate epics --apply` once: it retypes each epic as a feature (or
+`--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,
+moves draft epics to `backlog`, keeps their links, and removes `epic` from the
+policy. Review the Done when sections and commit.
 
 Work that only the human can do, such as a step at a particular machine, an
 account approval, or a judgement call, carries the reserved `needs-human`
 label. Ready work with that label is classified "needs a human" instead of
-ready: `atelier work ready`, mission and epic views, and `status` count and
+ready: `atelier work ready`, mission and parent views, and `status` count and
 list it separately, and `--quiet` ready lists leave it out, so agents choosing
 ready work do not start it. `atelier work human` lists it, `atelier prime`
 says how many such items are waiting, and `atelier start` notes the label when
 someone starts one.
 
-A draft epic is planning context. Refine its outcome, immediate children,
-dependencies, and proof before making it ready. A todo-category status alone
-does not establish readiness: ready work must expose a direct transition into
-active work and have no open blockers.
+Work that is recorded but not near-term sits in `backlog` until it is planned.
+A todo-category status alone does not establish readiness: ready work must
+expose a direct transition into active work and have no open blockers.
 
 ## Ownership and transitions
 
-A standalone non-mission issue owns its branch. An epic owns its children's
-branch. The default branch name is `<issue_type>/<id>`; typed `workflow_branch`
+A standalone work item owns its branch, and a parent owns its children's
+branch. A parent closes only after every child is terminal (the starter
+policy's `close` runs the `work.terminal` check). The default branch name is
+`<issue_type>/<id>`; typed `workflow_branch`
 metadata records an explicit `work_branch` and `branch_base` on the owner.
 Missions coordinate work rather than own a work branch.
 
@@ -84,17 +93,3 @@ Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.
 Terminal records eventually leave the active tree through
 [prune](retention-and-prune.md), with their history retained in Git.
-
-## Decided changes
-
-These decisions are accepted but not all built yet. The sections above
-describe current behaviour until the named follow-up merges.
-
-- **Parent issues replace epics** (atelier-9vq3, decided by Sumeet
-  2026-10-15). Elsewhere "epic" usually means a theme, so adopters modelled
-  themes as epics and got branches that never merged. The `epic` type goes
-  away: any non-mission issue may have children, one level deep. The parent
-  owns its children's branch and cannot close until they are terminal.
-  Unknowns and Design become optional sections on any issue. Themes are
-  labels, and missions keep the why. Existing epics are retyped and keep
-  their links. Implementation: atelier-o6h9.

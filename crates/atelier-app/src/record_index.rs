@@ -1268,7 +1268,7 @@ mod tests {
     #[test]
     fn downstream_impact_follows_children_then_relations_transitively() {
         let mut records = Records::default();
-        records.issue("atelier-root", "epic", "todo");
+        records.issue("atelier-root", "feature", "todo");
         records.issue("atelier-why1", "task", "todo");
         records.issue("atelier-why2", "task", "todo");
         records.issue("atelier-derived", "task", "todo");
@@ -1363,7 +1363,7 @@ mod tests {
 
     #[test]
     fn graph_derives_parents_blockers_and_relations() {
-        let mut epic = issue_record("atelier-epic", "epic", "todo");
+        let mut epic = issue_record("atelier-epic", "feature", "todo");
         epic.relationships.children.push(link("atelier-child"));
         let mut blocker = issue_record("atelier-blocker", "task", "todo");
         blocker.relationships.blocks.push(link("atelier-child"));
@@ -1415,14 +1415,25 @@ mod tests {
     }
 
     #[test]
-    fn only_epics_own_children() {
+    fn any_issue_can_parent_one_level_deep() {
         let mut task = issue_record("atelier-task", "task", "todo");
         task.relationships.children.push(link("atelier-child"));
         let child = issue_record("atelier-child", "task", "todo");
+        RecordIndex::from_records(vec![task.clone(), child.clone()], Vec::new(), Vec::new())
+            .unwrap();
 
+        let mut nested = child;
+        nested
+            .relationships
+            .children
+            .push(link("atelier-grandchild"));
+        let grandchild = issue_record("atelier-grandchild", "bug", "todo");
         let error =
-            RecordIndex::from_records(vec![task, child], Vec::new(), Vec::new()).unwrap_err();
-
-        assert!(error.to_string().contains("only epics can own child work"));
+            RecordIndex::from_records(vec![task, nested, grandchild], Vec::new(), Vec::new())
+                .unwrap_err();
+        assert!(
+            error.to_string().contains("parents are one level deep"),
+            "{error}"
+        );
     }
 }

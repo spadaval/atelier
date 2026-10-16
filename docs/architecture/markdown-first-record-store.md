@@ -23,7 +23,7 @@ use `atelier.review` version 1. Only issue, evidence and review are record or
 relationship target kinds. `workflow_validator` names mechanical workflow gate
 nodes; it is not a persistent record or link target kind.
 
-Issue kinds include missions, epics, and ordinary work. IDs are project-scoped
+Issue kinds include missions and work items; any work item can parent others. IDs are project-scoped
 random IDs such as `atelier-z1p8`, independent of record type: the configured
 `project_slug`, a hyphen, and a random base36 suffix. Any valid slug prefix is
 accepted when reading, so records minted under another slug stay valid. Priority is stored as `P0`–`P3`; the CLI, bundles and human output use the
@@ -38,9 +38,9 @@ current record model.
 `blocks`, `children`, `attachments`, and `relates`; indexes derive parent and
 reverse-link views from those stored edges.
 
-Ordinary issue bodies require Goal and Done when; Scope and Context are
-optional. Epics require Outcome, with Proof required for ready work. Missions
-carry Outcome and Success criteria or link strategy. Shared Notes and Close
+Work item bodies require Goal and Done when; Scope, Context, Unknowns, and
+Design are optional. Missions carry Outcome and Success criteria or link
+strategy. Shared Notes and Close
 Reason preserve handoffs and terminal reasoning. See
 [authoring](../product/mission-authoring.md) for the process-owned templates.
 

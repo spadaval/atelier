@@ -120,9 +120,10 @@ workflows:
         from: [in_progress, review]
         to: done
         required_fields: [close_reason]
-        description: Done claim; commit it on the work branch before review.
+        description: Done claim; commit it on the work branch before review. A parent closes after its children.
         validators:
         - blockers.none_open
+        - work.terminal
       supersede:
         from: [backlog, todo, blocked, in_progress]
         to: superseded

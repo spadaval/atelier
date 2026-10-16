@@ -159,9 +159,9 @@ mod tests {
     }
 
     #[test]
-    fn child_works_on_parent_epic_branch() {
+    fn child_works_on_its_parent_branch() {
         let mut records = Records::default();
-        records.issue("atelier-epic", "epic", "todo");
+        records.issue("atelier-epic", "feature", "todo");
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-epic");
 
@@ -169,16 +169,16 @@ mod tests {
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.owner_id, "atelier-epic");
-        assert_eq!(work_branch.branch, "epic/atelier-epic");
+        assert_eq!(work_branch.branch, "feature/atelier-epic");
         assert_eq!(work_branch.recorded_base, None);
     }
 
     #[test]
-    fn standalone_issue_and_epic_own_their_branches() {
+    fn standalone_issue_and_parent_own_their_branches() {
         let mut records = Records::default();
         records.issue("atelier-bug1", "bug", "todo");
         records.issue("atelier-task", "task", "todo");
-        records.issue("atelier-epic", "epic", "todo");
+        records.issue("atelier-epic", "feature", "todo");
         let index = records.index();
 
         let bug = resolve_work_branch(&policy(), &index, "atelier-bug1").unwrap();
@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(task.branch, "task/atelier-task");
         assert_eq!(
             (epic.owner_id.as_str(), epic.branch.as_str()),
-            ("atelier-epic", "epic/atelier-epic")
+            ("atelier-epic", "feature/atelier-epic")
         );
     }
 
@@ -201,10 +201,10 @@ mod tests {
     fn recorded_owner_branch_wins_over_derived_name() {
         let mut records = Records::default();
         records
-            .issue("atelier-epic", "epic", "todo")
+            .issue("atelier-epic", "feature", "todo")
             .issue
             .workflow_branch = Some(atelier_core::WorkflowBranch {
-            work_branch: "epic/renamed".to_string(),
+            work_branch: "feature/renamed".to_string(),
             branch_base: "trunk".to_string(),
         });
         records.issue("atelier-child", "task", "todo");
@@ -213,7 +213,7 @@ mod tests {
         let work_branch =
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
-        assert_eq!(work_branch.branch, "epic/renamed");
+        assert_eq!(work_branch.branch, "feature/renamed");
         assert_eq!(work_branch.recorded_base.as_deref(), Some("trunk"));
     }
 
@@ -236,17 +236,15 @@ mod hierarchy_contract_tests {
     use crate::test_records::{issue_record, link};
 
     #[test]
-    fn loaded_graph_rejects_non_epic_and_missing_hierarchy_targets() {
-        for kind in ["task", "mission"] {
-            let mut parent = issue_record("atelier-parent", kind, "todo");
-            parent.relationships.children.push(link("atelier-child"));
-            let child = issue_record("atelier-child", "task", "todo");
-            let error = RecordIndex::from_records(vec![parent, child], Vec::new(), Vec::new())
-                .unwrap_err()
-                .to_string();
-            assert!(error.contains("only epics can own child work"), "{error}");
-        }
-        let mut parent = issue_record("atelier-parent", "epic", "todo");
+    fn loaded_graph_rejects_mission_parents_and_missing_hierarchy_targets() {
+        let mut parent = issue_record("atelier-parent", "mission", "todo");
+        parent.relationships.children.push(link("atelier-child"));
+        let child = issue_record("atelier-child", "task", "todo");
+        let error = RecordIndex::from_records(vec![parent, child], Vec::new(), Vec::new())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("cannot be child of mission"), "{error}");
+        let mut parent = issue_record("atelier-parent", "feature", "todo");
         parent.relationships.children.push(link("atelier-missing"));
         let error = RecordIndex::from_records(vec![parent], Vec::new(), Vec::new())
             .unwrap_err()

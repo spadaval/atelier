@@ -1472,7 +1472,7 @@ mod tests {
 
     #[test]
     fn bundle_issue_uses_typed_markdown_body() {
-        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.epic", "title": "Future outcome", "issue_type": "epic", "body": "## Outcome\n\nA meaningful draft outcome." })).unwrap();
+        let issue = serde_json::from_value::<BundleIssue>(serde_json::json!({ "client_ref": "future.parent", "title": "Future outcome", "issue_type": "feature", "body": "## Goal\n\nA meaningful outcome.\n\n## Done when\n\nEvery child is done.\n\n## Unknowns\n\nOne open question." })).unwrap();
         let sections = atelier_records::parse_issue_sections_for_type(
             &issue.body,
             Path::new("<bundle>"),
@@ -1481,7 +1481,10 @@ mod tests {
         .unwrap();
         assert!(matches!(
             sections.body,
-            atelier_core::IssueBody::Epic { proof: None, .. }
+            atelier_core::IssueBody::Issue {
+                unknowns: Some(_),
+                ..
+            }
         ));
     }
 

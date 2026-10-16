@@ -379,7 +379,7 @@ fn public_bundle_fixtures_preview_and_apply_current_record_contract() {
 fn objective_readiness_requires_agent_factory_acceptance_content() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    for (kind, heading) in [("epic", "Proof"), ("mission", "Success criteria")] {
+    for (kind, heading) in [("mission", "Success criteria")] {
         let (ok, _, error) = run_atelier_raw(
             dir.path(),
             &[

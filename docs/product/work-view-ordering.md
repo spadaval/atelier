@@ -7,7 +7,7 @@ records.
 This contract applies to issue-like row sets in:
 
 - `atelier work ready` and `atelier work blocked`
-- `atelier work mission <mission-id>` and `atelier work epic <epic-id>`
+- `atelier work mission <mission-id>` and `atelier work parent <parent-id>`
 - `atelier issue show` subissues
 - `atelier issue show <objective-id>`
 - explicit objective browsing views
@@ -62,9 +62,9 @@ Work views use one readable row state label:
   as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;
 - `not-ready`: work that is not startable and does not fit a more specific
-  work-view state. Draft epics are the primary planning example: their status
-  may share the `todo` category, but their next transition refines them to
-  `ready` rather than entering active execution.
+  work-view state. Draft missions and `backlog` work are the planning
+  examples: their status shares the `todo` category, but their next transition
+  refines or plans them rather than entering active execution.
 
 Human queue rows should not print duplicate category/status tokens such as
 `todo/todo` or `active/in_progress`. Exact configured workflow status is the

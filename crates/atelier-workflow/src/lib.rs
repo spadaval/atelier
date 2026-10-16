@@ -1755,14 +1755,14 @@ mod tests {
     }
 
     fn work_close_validators() -> &'static str {
-        "        description: Done claim; commit it on the work branch before review.\n        validators:\n        - blockers.none_open\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
+        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
     }
 
     fn with_work_close_validators(validators: &str) -> String {
         valid_policy().replace(
             work_close_validators(),
             &format!(
-                "        description: Done claim; commit it on the work branch before review.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
+                "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
             ),
         )
     }
@@ -1798,7 +1798,7 @@ mod tests {
         assert_eq!(policy.schema_version, 3);
         for (issue_type, workflow) in [
             ("mission", "objective"),
-            ("epic", "objective"),
+            ("feature", "work"),
             ("task", "work"),
             ("validation", "work"),
         ] {
@@ -1823,7 +1823,7 @@ mod tests {
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             validator_names(&close.validators),
-            vec!["blockers.none_open"]
+            vec!["blockers.none_open", "work.terminal"]
         );
         assert_eq!(
             validator_names(&policy.workflows["objective"].transitions["start"].validators),
@@ -1880,8 +1880,9 @@ mod tests {
     fn starter_policy_distinguishes_draft_objectives_from_execution_ready_objectives() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
 
-        assert!(!policy.can_enter_active("epic", "draft").unwrap());
-        assert!(policy.can_enter_active("epic", "todo").unwrap());
+        assert!(!policy.can_enter_active("mission", "draft").unwrap());
+        assert!(policy.can_enter_active("mission", "todo").unwrap());
+        assert!(!policy.can_enter_active("task", "backlog").unwrap());
         assert!(policy.can_enter_active("task", "todo").unwrap());
     }
 
@@ -1942,7 +1943,8 @@ mod tests {
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
 
-        issue.issue_type = "epic".to_string();
+        issue.issue_type = "feature".to_string();
+        issue.status = "todo".to_string();
         let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
             .unwrap_err()
             .to_string();
@@ -2039,10 +2041,10 @@ mod tests {
             policy.branch_name_for_owner(&issue).unwrap(),
             "task/atelier-abc1"
         );
-        issue.issue_type = "epic".to_string();
+        issue.issue_type = "feature".to_string();
         assert_eq!(
             policy.branch_name_for_owner(&issue).unwrap(),
-            "epic/atelier-abc1"
+            "feature/atelier-abc1"
         );
     }
 
@@ -2172,7 +2174,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_issue_type_coverage() {
         let error = parse_policy_text(
-            &valid_policy().replace("    - epic\n", "    - epic\n    - task\n"),
+            &valid_policy().replace("    - mission\n", "    - mission\n    - task\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()

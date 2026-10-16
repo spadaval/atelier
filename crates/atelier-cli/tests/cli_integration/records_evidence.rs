@@ -426,7 +426,7 @@ fn test_stress_many_epic_children() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Level 0", "--issue-type", "epic"],
+        &["issue", "create", "Level 0", "--issue-type", "feature"],
     );
     let parent_id = issue_ref(dir.path(), 1);
 
@@ -928,7 +928,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "create", "Capture epic", "--issue-type", "epic"],
+        &["issue", "create", "Capture epic", "--issue-type", "feature"],
     );
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Capture epic");
@@ -1090,7 +1090,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "--summary",
             "epic failing command proof",
             "--target",
-            &format!("epic/{epic_id}"),
+            &format!("issue/{epic_id}"),
             "--",
             "sh",
             "-c",
@@ -1104,7 +1104,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(success, "epic evidence show failed: {stderr}");
     assert!(epic_show.contains("Status:      recorded"));
     assert!(epic_show.contains("Exit Status: 7"));
-    assert!(epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+    assert!(epic_show.contains(&format!("Target:      issue/{epic_id} (validates)")));
     assert!(epic_show.contains("failing stdout"));
     assert!(epic_show.contains("failing stderr"));
 
@@ -1130,7 +1130,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "evidence",
             "attach",
             &manual_epic_evidence_id,
-            "epic",
+            "issue",
             epic_id,
         ],
     );
@@ -1138,7 +1138,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, manual_epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &manual_epic_evidence_id]);
     assert!(success, "manual epic evidence show failed: {stderr}");
-    assert!(manual_epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+    assert!(manual_epic_show.contains(&format!("Target:      issue/{epic_id} (validates)")));
 
     let manual_issue_summary = "unified manual issue proof";
     let (success, manual_record_out, stderr) = run_atelier(
@@ -1206,7 +1206,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(evidence_list.contains("command sh -c"));
     assert!(evidence_list.contains(&epic_evidence_id));
     assert!(evidence_list.contains("exit 7"));
-    assert!(evidence_list.contains(&format!("target epic/{epic_id}")));
+    assert!(evidence_list.contains(&format!("target issue/{epic_id}")));
     assert!(evidence_list.contains(&manual_epic_evidence_id));
     assert!(evidence_list.contains(&mission_evidence_id));
     assert!(evidence_list.contains("exit 2"));

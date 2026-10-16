@@ -7,7 +7,7 @@ how agents plan, execute, review, and validate work. See
 
 - [Work model](work-model.md): records, graph relationships, ownership, and
   completion.
-- [Mission authoring](mission-authoring.md): concise missions, epics, and slices.
+- [Mission authoring](mission-authoring.md): concise missions, parents, and slices.
 - [CLI surface](cli-surface.md): command map and ordinary work sequence.
 - [Evidence and validation](validation.md): honest results, commit identity,
   freshness, and proof limits.
