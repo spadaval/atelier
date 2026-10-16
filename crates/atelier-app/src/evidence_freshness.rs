@@ -56,11 +56,17 @@ impl EvidenceReadContext<'_> {
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<bool> {
+        Ok(self.matches_commits_to_head(issue, record)? && self.code_clean()?)
+    }
+    /// Whether no commit since the pin changed what `record` proves; fresh
+    /// proof also needs a clean checkout.
+    fn matches_commits_to_head(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+    ) -> Result<bool> {
         let edges = self.edges(&record.data.commit, "HEAD")?;
-        if !evidence_matches_edges(self, issue, record, &edges)? {
-            return Ok(false);
-        }
-        self.code_clean()
+        evidence_matches_edges(self, issue, record, &edges)
     }
     pub fn issue_gate(
         &mut self,
@@ -224,8 +230,11 @@ impl EvidenceReadContext<'_> {
                         .as_ref()
                         .is_none_or(|old| (&candidate.0, &candidate.1) > (&old.0, &old.1))
                     {
-                        let from_checkout =
-                            fresh && self.proof_matches(issue, record, false).unwrap_or(false);
+                        // Stale only because of the checkout: no commit since
+                        // the pin changed what it proves, but code is dirty.
+                        let from_checkout = fresh
+                            && self.matches_commits_to_head(issue, record).unwrap_or(false)
+                            && !self.code_clean().unwrap_or(true);
                         newest_stale_pass = Some((candidate.0, candidate.1, from_checkout))
                     }
                 }
