@@ -4,6 +4,9 @@ id: "atelier-4n7v"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-4n7v
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let bundles revise existing records, and report client_ref to ID"
-updated_at: "2026-10-15T21:00:45.352896436+00:00"
+updated_at: "2026-10-16T00:34:06.626878139+00:00"
 ---
 
 ## Goal
