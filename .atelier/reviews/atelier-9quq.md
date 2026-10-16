@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-9quq
+title: 'Re-reviewed git diff 0e33d6e3..HEAD (c2ea2848). atelier-x5pe is closed: migrate_epic_text now refuses non-blank text before the first ''## '' section. Its preamble split on ''\n## '' matches how split_sections finds headings (''## '' prefix, ''###'' excluded, CRLF handled). My reproducer (atelier-1ioo at 3f836ef0 with an inserted preamble) now fails with ''has text before its first section; migrate it by hand'', and the unmodified record still migrates. I looked again for other places the rewrite could drop non-blank content and found none. Unknown headings bail. Duplicates, Outcome+Goal and Done when with Proof/Delivers bail. Proof and Delivers are merged. An empty section is replaced by the other heading or by fixed default text, which loses nothing. Text after the last heading belongs to that section. Trimming touches only surrounding whitespace. A ''## '' line inside a fenced block can move content to another section but cannot drop it. Front-matter rewriting touches only the issue_type and draft status lines. The epic_migration unit tests pass (3/3). I relied on the coordinator''s fresh evidence for the workspace runs (618/618 and test-hooks 622/622). The earlier verification (semantic equivalence, regression test failing on master, release land about 4.1-4.5 s on master) still stands.'
+target: atelier-0349
+identity: Independent reviewer (Claude subagent)
+commit: 6e0dbf2ef98abf8e2d0696db6567ece7f7cab007
+created_at: 2026-10-16T02:54:55.158609963Z
+event:
+  event: approval
+---
+
+Re-reviewed git diff 0e33d6e3..HEAD (c2ea2848). atelier-x5pe is closed: migrate_epic_text now refuses non-blank text before the first '## ' section. Its preamble split on '\n## ' matches how split_sections finds headings ('## ' prefix, '###' excluded, CRLF handled). My reproducer (atelier-1ioo at 3f836ef0 with an inserted preamble) now fails with 'has text before its first section; migrate it by hand', and the unmodified record still migrates. I looked again for other places the rewrite could drop non-blank content and found none. Unknown headings bail. Duplicates, Outcome+Goal and Done when with Proof/Delivers bail. Proof and Delivers are merged. An empty section is replaced by the other heading or by fixed default text, which loses nothing. Text after the last heading belongs to that section. Trimming touches only surrounding whitespace. A '## ' line inside a fenced block can move content to another section but cannot drop it. Front-matter rewriting touches only the issue_type and draft status lines. The epic_migration unit tests pass (3/3). I relied on the coordinator's fresh evidence for the workspace runs (618/618 and test-hooks 622/622). The earlier verification (semantic equivalence, regression test failing on master, release land about 4.1-4.5 s on master) still stands.
