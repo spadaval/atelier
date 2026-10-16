@@ -3,6 +3,9 @@ created_at: "2026-10-16T20:07:20.542876901+00:00"
 id: "atelier-jy9t"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-jy9t
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Editing a done record's prose reopens its completion claim"
-updated_at: "2026-10-16T20:07:20.542876901+00:00"
+updated_at: "2026-10-16T20:45:24.171628907+00:00"
 ---
 
 ## Goal
