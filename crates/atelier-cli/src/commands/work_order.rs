@@ -59,7 +59,9 @@ fn display_key(row: &(Issue, ClassifiedWork)) -> (u8, u8, Reverse<DateTime<Utc>>
 
 fn state_rank(state: WorkClassification) -> u8 {
     match state {
-        WorkClassification::Ready | WorkClassification::NeedsHuman => 0,
+        WorkClassification::Ready
+        | WorkClassification::NeedsHuman
+        | WorkClassification::Context => 0,
         WorkClassification::Active => 1,
         WorkClassification::Blocked => 2,
         WorkClassification::Done => 3,

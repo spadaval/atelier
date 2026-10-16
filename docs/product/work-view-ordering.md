@@ -61,6 +61,8 @@ Work views use one readable row state label:
 - `active`: active-category work, including configured workflow statuses such
   as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;
+- `context`: missions, and parents with open children, which are worked
+  through their children;
 - `not-ready`: work that is not startable and does not fit a more specific
   work-view state. Draft missions and `backlog` work are the planning
   examples: their status shares the `todo` category, but their next transition

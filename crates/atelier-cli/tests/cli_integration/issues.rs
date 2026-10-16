@@ -4495,3 +4495,81 @@ fn test_missions_and_parents_carry_background_research() {
     ]);
     assert!(create(&["issue", "show", &parent]).contains("Revised rules."));
 }
+
+#[test]
+fn test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_context() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |args: &[&str]| run_atelier(dir.path(), args).1.trim().to_string();
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Replace the toolbox",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nOne tool.\n\n## Success criteria\n\nS1.",
+    ]);
+    // Missions start as draft; a mission ready to start is still context.
+    create(&["-q", "issue", "transition", &mission, "ready"]);
+    let parent = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Trade parent",
+        "--issue-type",
+        "feature",
+    ]);
+    let child = create(&["-q", "issue", "create", "Trade child", "--parent", &parent]);
+    create(&[
+        "-q", "issue", "link", &parent, &mission, "--role", "advances",
+    ]);
+
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert_eq!(
+        ready.lines().collect::<Vec<_>>(),
+        [child.as_str()],
+        "{ready}"
+    );
+    let (_, page, _) = run_atelier(dir.path(), &["work", "ready"]);
+    let context = page.find("Parents and Missions (context)").expect(&page);
+    assert!(
+        page[context..].contains(&parent) && page[context..].contains(&mission),
+        "{page}"
+    );
+    assert!(!page[..context].contains(&parent), "{page}");
+    let mission_ready = create(&["--quiet", "work", "mission", &mission, "--ready"]);
+    assert_eq!(mission_ready, child, "{mission_ready}");
+    let status = create(&["--quiet", "status"]);
+    assert!(status.contains("ready=1"), "{status}");
+
+    // A parent whose children are all done is ready to start and close.
+    let mut record = fs::read_to_string(canonical_issue_path(dir.path(), &child)).unwrap();
+    record = record.replace("status: \"todo\"", "status: \"done\"");
+    fs::write(canonical_issue_path(dir.path(), &child), record).unwrap();
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert_eq!(
+        ready.lines().collect::<Vec<_>>(),
+        [parent.as_str()],
+        "{ready}"
+    );
+
+    // Parked work stays in backlog even with an open blocker.
+    let parked = create(&["-q", "issue", "create", "Parked", "--status", "backlog"]);
+    let blocker = create(&["-q", "issue", "create", "Blocker"]);
+    create(&[
+        "-q",
+        "issue",
+        "link",
+        &parked,
+        &blocker,
+        "--role",
+        "blocked_by",
+    ]);
+    let blocked = create(&["--quiet", "work", "blocked"]);
+    assert!(!blocked.lines().any(|line| line == parked), "{blocked}");
+    let (_, all, _) = run_atelier(dir.path(), &["work", "all"]);
+    let backlog = all.find("Backlog Work").expect(&all);
+    assert!(all[backlog..].contains("Parked"), "{all}");
+}

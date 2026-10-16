@@ -202,6 +202,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
         ("Active Work", &summary.scope.work.active),
         ("Ready Work", &summary.scope.work.ready),
         ("Needs a Human", &summary.scope.work.human),
+        ("Parents and Missions", &summary.scope.work.context),
         ("Blocked Work", &summary.scope.work.blocked),
         ("Done Work", &summary.scope.work.done),
     ] {

@@ -41,7 +41,15 @@ ready work do not start it. `atelier work human` lists it, `atelier prime`
 says how many such items are waiting, and `atelier start` notes the label when
 someone starts one.
 
-Work that is recorded but not near-term sits in `backlog` until it is planned.
+`atelier work ready` lists only work an agent can start. Missions, and parents
+with open children, are worked through their children, so ready views show
+them in a separate "Parents and Missions" context panel instead, and `--quiet`
+ready lists leave them out. A parent whose children are all terminal is ready
+again, to be started and closed.
+
+Work that is recorded but not near-term sits in `backlog` until it is planned;
+parked statuses such as `backlog` and `draft` stay in backlog views even when
+they have open blockers.
 A todo-category status alone does not establish readiness: ready work must
 expose a direct transition into active work and have no open blockers. A child
 also waits on its parent's blockers, since it works on the parent's branch:

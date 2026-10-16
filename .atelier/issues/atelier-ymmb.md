@@ -4,6 +4,9 @@ id: "atelier-ymmb"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-ymmb
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "List only startable work in work ready"
-updated_at: "2026-10-15T23:25:02.641304293+00:00"
+updated_at: "2026-10-16T00:56:26.559641076+00:00"
 ---
 
 ## Goal

@@ -15,6 +15,9 @@ pub enum WorkClassification {
     Ready,
     /// Ready work only the human can do (labelled `needs-human`).
     NeedsHuman,
+    /// A mission, or a parent with open children: coordination rather than
+    /// something to start, since work happens through its children.
+    Context,
     Blocked,
     Backlog,
     Done,
@@ -26,6 +29,7 @@ impl WorkClassification {
             Self::Active => "active",
             Self::Ready => "ready",
             Self::NeedsHuman => "needs human",
+            Self::Context => "context",
             Self::Blocked => "blocked",
             Self::Backlog => "backlog",
             Self::Done => "done",
@@ -72,6 +76,8 @@ pub struct WorkBuckets {
     pub ready: Vec<WorkRow>,
     /// Ready work only the human can do.
     pub human: Vec<WorkRow>,
+    /// Missions and parents with open children, shown for orientation.
+    pub context: Vec<WorkRow>,
     pub blocked: Vec<WorkRow>,
     pub backlog: Vec<WorkRow>,
     pub done: Vec<WorkRow>,
@@ -112,6 +118,7 @@ pub fn work_buckets_for<'a>(
             "active" => buckets.active.push(row),
             "ready" => buckets.ready.push(row),
             "needs human" => buckets.human.push(row),
+            "context" => buckets.context.push(row),
             "blocked" => buckets.blocked.push(row),
             "done" => buckets.done.push(row),
             _ => buckets.backlog.push(row),
@@ -120,6 +127,7 @@ pub fn work_buckets_for<'a>(
     sort_work_rows(&mut buckets.active);
     sort_work_rows(&mut buckets.ready);
     sort_work_rows(&mut buckets.human);
+    sort_work_rows(&mut buckets.context);
     sort_work_rows(&mut buckets.blocked);
     sort_work_rows(&mut buckets.backlog);
     sort_work_rows(&mut buckets.done);
@@ -168,20 +176,18 @@ pub fn classify_issue(
             Some("active") => WorkClassification::Active,
             Some("blocked") => WorkClassification::Blocked,
             Some("todo") => {
-                if !open_blockers.is_empty() {
+                let can_enter_active = match workflow_policy {
+                    Some(policy) => policy.can_enter_active(&issue.issue_type, &issue.status)?,
+                    None => issue.status == "todo",
+                };
+                // Parked statuses (draft, backlog) stay backlog even when they
+                // have blockers; the blocker count still shows.
+                if !can_enter_active {
+                    WorkClassification::Backlog
+                } else if !open_blockers.is_empty() {
                     WorkClassification::Blocked
                 } else {
-                    let can_enter_active = match workflow_policy {
-                        Some(policy) => {
-                            policy.can_enter_active(&issue.issue_type, &issue.status)?
-                        }
-                        None => issue.status == "todo",
-                    };
-                    if can_enter_active {
-                        WorkClassification::Ready
-                    } else {
-                        WorkClassification::Backlog
-                    }
+                    WorkClassification::Ready
                 }
             }
             _ if !open_blockers.is_empty() => WorkClassification::Blocked,
@@ -189,10 +195,13 @@ pub fn classify_issue(
             _ => WorkClassification::Backlog,
         }
     };
-    let classification = if classification == WorkClassification::Ready
-        && index
-            .issue_record(&issue.id)
-            .is_some_and(|record| needs_human(&record.labels))
+    let classification = if classification != WorkClassification::Ready {
+        classification
+    } else if is_context(index, workflow_policy, issue) {
+        WorkClassification::Context
+    } else if index
+        .issue_record(&issue.id)
+        .is_some_and(|record| needs_human(&record.labels))
     {
         WorkClassification::NeedsHuman
     } else {
@@ -203,6 +212,19 @@ pub fn classify_issue(
         status_category,
         open_blockers,
     })
+}
+
+/// Missions coordinate work and own no branch, and a parent with open children
+/// is worked through them, so neither is something to pick from a ready list.
+fn is_context(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> bool {
+    issue.issue_type == "mission"
+        || index.get_subissues(&issue.id).iter().any(|child| {
+            workflow_policy.and_then(|policy| policy.status_category(&child.status)) != Some("done")
+        })
 }
 
 /// Returns the nearest done-category hierarchy ancestor, if one exists.

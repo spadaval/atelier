@@ -13,6 +13,7 @@ pub struct ObjectiveBucketTotals {
     pub active: usize,
     pub ready: usize,
     pub human: usize,
+    pub context: usize,
     pub blocked: usize,
     pub done: usize,
     pub backlog: usize,
@@ -91,6 +92,7 @@ pub fn objective_read_summary(
         .chain(&scope.work.backlog)
         .chain(&scope.work.ready)
         .chain(&scope.work.human)
+        .chain(&scope.work.context)
         .chain(&scope.work.blocked)
         .chain(&scope.work.done)
         .cloned()
@@ -130,6 +132,7 @@ fn scope_summary(
         &mut work.active,
         &mut work.ready,
         &mut work.human,
+        &mut work.context,
         &mut work.blocked,
         &mut work.backlog,
         &mut work.done,
@@ -384,7 +387,9 @@ mod tests {
             BTreeSet::from(["atelier-child".to_string(), "atelier-root".to_string()])
         );
         assert_eq!(summary.relationships.advances_roots, vec!["atelier-root"]);
-        assert_eq!(summary.scope.work.ready.len(), 2);
+        // The parent with an open child is context; its child is the ready work.
+        assert_eq!(summary.scope.work.ready.len(), 1);
+        assert_eq!(summary.scope.work.context.len(), 1);
     }
 
     #[test]

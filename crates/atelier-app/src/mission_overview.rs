@@ -74,6 +74,7 @@ pub fn mission_overview(
                 WorkClassification::Active => totals.active += 1,
                 WorkClassification::Ready => totals.ready += 1,
                 WorkClassification::NeedsHuman => totals.human += 1,
+                WorkClassification::Context => totals.context += 1,
                 WorkClassification::Blocked => totals.blocked += 1,
                 WorkClassification::Done => totals.done += 1,
                 WorkClassification::Backlog => totals.backlog += 1,
