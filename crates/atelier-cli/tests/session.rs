@@ -2453,6 +2453,94 @@ fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() 
     ok(f.path(), &["land"]);
 }
 #[test]
+fn base_done_claims_survive_a_broken_record_and_merges_judge_every_parent() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let work = ok(f.path(), &["-q", "issue", "create", "Work"]);
+    let shared = ok(f.path(), &["-q", "issue", "create", "Shared"]);
+    commit(f.path(), "plan on the base");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    let remote = upstream.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", remote]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    // Breaking the record in one commit and restoring it as done in the
+    // next is still a done claim made on the base.
+    let path = f.path().join(format!(".atelier/issues/{work}.md"));
+    let original = fs::read_to_string(&path).unwrap();
+    fs::write(&path, "not a record\n").unwrap();
+    commit(f.path(), "break the record");
+    fs::write(&path, &original).unwrap();
+    ok(f.path(), &["issue", "transition", &work, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &work, "close", "--reason", "did it"],
+    );
+    commit(f.path(), "restore it as done");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!("land_base_done_claim: commit"))
+            && output.contains(&work),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "main@{upstream}"]);
+
+    // A done claim reviewed upstream arrives in a conflicted pull merge; the
+    // merge's own parents decide, so it is not a claim made here.
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    ok(other.path(), &["issue", "transition", &shared, "start"]);
+    ok(
+        other.path(),
+        &[
+            "issue",
+            "transition",
+            &shared,
+            "close",
+            "--reason",
+            "merged upstream",
+        ],
+    );
+    commit(other.path(), "done claim that reached the upstream");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+    ok(
+        f.path(),
+        &["issue", "update", &shared, "--title", "Shared, retitled"],
+    );
+    commit(f.path(), "local planning on the same record");
+    git(f.path(), &["fetch", "-q"]);
+    let merged = Command::new("git")
+        .current_dir(f.path())
+        .args(["merge", "--no-edit", "origin/main"])
+        .output()
+        .unwrap();
+    assert!(!merged.status.success(), "the shared record conflicts");
+    git(
+        f.path(),
+        &[
+            "checkout",
+            "--theirs",
+            "--",
+            &format!(".atelier/issues/{shared}.md"),
+        ],
+    );
+    // Keep the local title too, so the resolution differs from both parents.
+    ok(
+        f.path(),
+        &["issue", "update", &shared, "--title", "Shared, retitled"],
+    );
+    git(f.path(), &["add", "."]);
+    git(f.path(), &["commit", "-q", "--no-edit"]);
+    ok(f.path(), &["land"]);
+}
+#[test]
 fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
