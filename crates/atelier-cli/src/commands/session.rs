@@ -715,7 +715,8 @@ fn claim_nodes(
 /// Issues whose claims a change since `point` can affect, though their own
 /// records may not have changed: every changed issue record and the issues
 /// it links as blocked, parent or child, and the targets of every changed
-/// review or evidence record, each as it was at `point` and as it is now.
+/// review or evidence record, each as it was at `point` and as it is now,
+/// then every issue those reach through the same links.
 /// `None` when a record at `point` cannot be read, so every claim is checked.
 fn touched_claims(
     repo: &Path,
@@ -828,6 +829,18 @@ fn touched_claims(
                 attached(evidence, &mut touched);
             }
         }
+    }
+    // The blocker and open-work checks follow whole chains: blockers of
+    // blockers, blockers a parent passes to its children, and children of
+    // children. A claim is checked when anything along its chain changed.
+    let mut queue = touched.iter().cloned().collect::<Vec<_>>();
+    while let Some(id) = queue.pop() {
+        let Some(record) = index.issue_record(&id) else {
+            continue;
+        };
+        let mut next = std::collections::BTreeSet::new();
+        linked(record, &mut next);
+        queue.extend(next.into_iter().filter(|id| touched.insert(id.clone())));
     }
     Ok(Some(touched))
 }

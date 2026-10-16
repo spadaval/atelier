@@ -3376,6 +3376,45 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
             ],
         )
     };
+    // A done child of an open parent, and a done item behind a superseded
+    // blocker.
+    let parent = ok(f.path(), &["-q", "issue", "create", "Open parent"]);
+    let nested = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--parent",
+            &parent,
+            "Done nested child",
+        ],
+    );
+    let retired = ok(f.path(), &["-q", "issue", "create", "Retired blocker"]);
+    let behind = ok(f.path(), &["-q", "issue", "create", "Done behind it"]);
+    ok(
+        f.path(),
+        &["issue", "link", &behind, &retired, "--role", "blocked_by"],
+    );
+    commit(f.path(), "plan the chains");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &retired,
+            "supersede",
+            "--reason",
+            "obsolete",
+        ],
+    );
+    for id in [&nested, &behind] {
+        ok(f.path(), &["issue", "transition", id, "start"]);
+        ok(
+            f.path(),
+            &["issue", "transition", id, "close", "--reason", "done"],
+        );
+    }
     record("fail", "Proof that failed");
     let passed = record("pass", "Proof that passed later");
     let passed = passed.split_whitespace().next().unwrap();
@@ -3407,6 +3446,23 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     );
     commit(f.path(), "block the done claim");
     refused("blockers.none_open");
+
+    // Blockers pass from a parent to its children and through retired
+    // blockers.
+    for (link, claim) in [(&parent, &nested), (&retired, &behind)] {
+        let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+        ok(
+            f.path(),
+            &["issue", "link", link, &blocker, "--role", "blocked_by"],
+        );
+        commit(f.path(), "block the chain");
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(
+            !pass && output.contains(&format!("{claim} blockers.transitive_none_open")),
+            "{output}"
+        );
+        git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    }
 
     // An open child changes the parent's record only in its children.
     ok(
