@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T22:00:38.278365223+00:00"
+status: "done"
 title: "atelier check accepts duplicate YAML keys in records"
-updated_at: "2026-10-16T21:58:54.600205214+00:00"
+updated_at: "2026-10-16T22:00:38.278365223+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ A git merge resolved by hand can leave a relates entry with two `id:` keys under
 ## Context
 
 Found 2026-10-16 in astromech: merging main into a feature branch produced `id: astromech-gtza` and `id: astromech-i4gx` in one entry of astromech-7q0z.md; an independent reviewer caught it, `atelier check` did not. Frequent base merges with several owners in flight make relates-list conflicts common.
+
+## Close Reason
+
+Every record read (and so atelier check) first parses front matter with a visitor that rejects a mapping repeating a key, at any depth, reporting 'Invalid YAML front matter in <path>: duplicate key <key>'. Test test_check_rejects_repeated_keys_in_record_front_matter covers a duplicated id in a relates entry and a repeated top-level key, and fails without the check; this repository's records pass.
