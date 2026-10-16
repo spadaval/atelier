@@ -320,8 +320,13 @@ fn merged(
                         .filter(|entry| !base.contains(entry) && !ours.contains(entry)),
                 )
                 .collect::<Vec<_>>();
+            // The same entries, each as many times, so a duplicate cannot
+            // make room for one nobody wrote (atelier-wgil).
             resolved.len() == expected.len()
-                && expected.iter().all(|entry| resolved.contains(entry))
+                && resolved.iter().all(|entry| {
+                    resolved.iter().filter(|other| *other == entry).count()
+                        == expected.iter().filter(|other| **other == entry).count()
+                })
         }
         _ => false,
     }
@@ -1159,6 +1164,46 @@ fn retired_review_cluster(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_resolutions_keep_both_sides_and_add_nothing_even_with_duplicates() {
+        let list = |items: &[&str]| {
+            serde_yaml::Value::Sequence(items.iter().map(|item| (*item).into()).collect())
+        };
+        let (base, ours, theirs) = (
+            list(&["dup", "dup"]),
+            list(&["dup", "dup", "branch"]),
+            list(&["dup", "dup", "base"]),
+        );
+        assert!(merged(
+            &base,
+            &ours,
+            &theirs,
+            &list(&["dup", "dup", "branch", "base"]),
+            ""
+        ));
+        assert!(!merged(
+            &base,
+            &ours,
+            &theirs,
+            &list(&["dup", "branch", "base", "smuggled"]),
+            ""
+        ));
+        assert!(!merged(
+            &base,
+            &ours,
+            &theirs,
+            &list(&["dup", "dup", "branch"]),
+            ""
+        ));
+        assert!(!merged(
+            &base,
+            &ours,
+            &theirs,
+            &list(&["dup", "branch", "base", "base"]),
+            ""
+        ));
+    }
 
     #[test]
     fn exact_epic_migration_is_status_only_but_content_edits_are_not() {
