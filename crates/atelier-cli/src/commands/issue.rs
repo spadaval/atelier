@@ -124,6 +124,16 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     }
 
     render_dependency_section(index, "Blocked by", index.get_blockers(canonical_id), true)?;
+    if let Some((parent, inherited)) =
+        atelier_app::objective_graph::inherited_blockers(index, canonical_id)
+    {
+        render_dependency_section(
+            index,
+            &format!("Blocked via parent {parent}"),
+            inherited,
+            true,
+        )?;
+    }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
     render_issue_link_section(index, canonical_id, &record.relationships)?;
     render_objective_rollup_section(objective_summary.as_ref());

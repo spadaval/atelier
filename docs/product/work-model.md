@@ -43,7 +43,14 @@ someone starts one.
 
 Work that is recorded but not near-term sits in `backlog` until it is planned.
 A todo-category status alone does not establish readiness: ready work must
-expose a direct transition into active work and have no open blockers.
+expose a direct transition into active work and have no open blockers. A child
+also waits on its parent's blockers, since it works on the parent's branch:
+`work ready` leaves it out, `work blocked`, mission and parent views list it as
+blocked by them, `issue show` lists them under "Blocked via parent", and
+`atelier start` refuses it with the path child -> parent -> blocker. Only the
+child itself inherits: a blocker's own parent does not matter, and a parent
+blocked by one of its own children is sequencing its children, which does not
+block them.
 
 ## Ownership and transitions
 

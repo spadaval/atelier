@@ -427,7 +427,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         "{overview}"
     );
     assert!(
-        overview.contains("Scope: 3 issues: 0 active, 2 ready, 1 blocked, 0 done, 0 backlog"),
+        overview.contains("Scope: 3 issues: 0 active, 1 ready, 2 blocked, 0 done, 0 backlog"),
         "{overview}"
     );
     assert!(overview.contains("Open blockers: 1"), "{overview}");
