@@ -133,7 +133,7 @@ struct ObjectCache {
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
     commits: HashMap<String, Vec<u8>>,
-    clean_merges: HashMap<String, bool>,
+    merge_resolutions: HashMap<String, Option<MergeResolution>>,
     /// Whether tree diffs matched `git diff` on this read phase's first
     /// edge; `None` until checked, `false` to use `git diff` throughout.
     tree_diff_matches: Option<bool>,
@@ -429,15 +429,17 @@ impl<'a> ReadContext<'a> {
         self.cache.first_parents.insert(commit, parent.clone());
         Ok(parent)
     }
-    /// Memoized [`clean_merge`] for a full commit ID.
-    pub(crate) fn clean_merge(&mut self, commit: &str) -> Result<bool> {
+    /// Memoized [`merge_resolution`] for a full commit ID.
+    pub(crate) fn merge_resolution(&mut self, commit: &str) -> Result<Option<MergeResolution>> {
         let commit = self.commit_id(commit)?;
-        if let Some(clean) = self.cache.clean_merges.get(&commit) {
-            return Ok(*clean);
+        if let Some(resolution) = self.cache.merge_resolutions.get(&commit) {
+            return Ok(resolution.clone());
         }
-        let clean = clean_merge(self.repo, &commit)?;
-        self.cache.clean_merges.insert(commit, clean);
-        Ok(clean)
+        let resolution = merge_resolution(self.repo, &commit)?;
+        self.cache
+            .merge_resolutions
+            .insert(commit, resolution.clone());
+        Ok(resolution)
     }
     /// Commits reachable from `tips` but not from `not`.
     pub(crate) fn only_in(&mut self, tips: &[String], not: &str) -> Result<HashSet<String>> {
@@ -736,25 +738,98 @@ pub fn head_commit(repo: &Path) -> Result<String> {
 /// of them produces: no conflicts and no edits made while merging, so it
 /// introduces nothing that is not on one side or the other (atelier-n7g1).
 pub fn clean_merge(repo: &Path, commit: &str) -> Result<bool> {
+    Ok(merge_resolution(repo, commit)?.is_some_and(|merge| merge.conflicted.is_empty()))
+}
+
+/// A two-parent merge that matches Git's own merge of its parents except in
+/// records whose conflicts were resolved by hand (atelier-1isk).
+#[derive(Clone)]
+pub struct MergeResolution {
+    /// The record paths Git could not merge; the merge commit may differ from
+    /// Git's result only here.
+    pub conflicted: Vec<PathBuf>,
+    /// The parents' merge base, set when there are conflicts.
+    pub merge_base: Option<String>,
+}
+
+/// `None` when `commit` is not a two-parent merge, a non-record path
+/// conflicted, or the commit differs from Git's merge outside the conflicts.
+pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolution>> {
     let line = String::from_utf8(git_output(
         repo,
         &["rev-list", "--parents", "-n", "1", commit],
     )?)?;
     let parts = line.split_whitespace().collect::<Vec<_>>();
     let [_, first, second] = parts.as_slice() else {
-        return Ok(false);
+        return Ok(None);
     };
-    let Ok(merged) = git_output(
-        repo,
-        &["merge-tree", "--write-tree", "--no-messages", first, second],
-    ) else {
-        return Ok(false);
+    // Exit status 1 reports conflicts; the tree and conflicted paths still
+    // follow, NUL-terminated.
+    let output = command(repo)
+        .args([
+            "merge-tree",
+            "--write-tree",
+            "--no-messages",
+            "--name-only",
+            "-z",
+            first,
+            second,
+        ])
+        .stderr(Stdio::null())
+        .output()?;
+    if !matches!(output.status.code(), Some(0 | 1)) {
+        return Ok(None);
+    }
+    let paths = |bytes: &[u8]| {
+        bytes
+            .split(|byte| *byte == 0)
+            .filter(|field| !field.is_empty())
+            .map(|path| PathBuf::from(String::from_utf8_lossy(path).into_owned()))
+            .collect::<Vec<_>>()
     };
+    let Some(end) = output.stdout.iter().position(|byte| *byte == 0) else {
+        return Ok(None);
+    };
+    let merged = std::str::from_utf8(&output.stdout[..end])?.to_owned();
+    let mut conflicted = paths(&output.stdout[end..]);
+    conflicted.sort();
+    conflicted.dedup();
+    if conflicted.iter().any(|path| !is_record_path(path)) {
+        return Ok(None);
+    }
     let tree = String::from_utf8(git_output(
         repo,
         &["rev-parse", &format!("{commit}^{{tree}}")],
     )?)?;
-    Ok(String::from_utf8(merged)?.lines().next() == Some(tree.trim()))
+    let differing = paths(&git_output(
+        repo,
+        &[
+            "diff-tree",
+            "-r",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            &merged,
+            tree.trim(),
+        ],
+    )?);
+    if differing.iter().any(|path| !conflicted.contains(path)) {
+        return Ok(None);
+    }
+    let merge_base = if conflicted.is_empty() {
+        None
+    } else {
+        let bases = String::from_utf8(git_output(repo, &["merge-base", "--all", first, second])?)?;
+        let bases = bases.lines().collect::<Vec<_>>();
+        let [base] = bases.as_slice() else {
+            return Ok(None);
+        };
+        Some((*base).to_owned())
+    };
+    Ok(Some(MergeResolution {
+        conflicted,
+        merge_base,
+    }))
 }
 
 pub fn blob(repo: &Path, commit: &str, path: &Path) -> Result<String> {

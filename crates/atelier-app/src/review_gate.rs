@@ -173,37 +173,188 @@ fn approval_is_current_to(
     end: &str,
     base: &str,
 ) -> Result<bool> {
-    for edge in work_edges(read, pin, end, base)? {
-        if !allowed_edge(read, &edge, ids)? {
+    for (edge, merge) in work_edges(read, pin, end, base)? {
+        let allowed = match &merge {
+            Some(merge) => allowed_base_merge(read, &edge, merge, ids)?,
+            None => allowed_edge(read, &edge, ids)?,
+        };
+        if !allowed {
             return Ok(false);
         }
     }
     Ok(true)
 }
-/// The edges from `pin` to `end` that can change approved work. A clean merge
-/// of commits already on `base` brings in work reviewed on its own branch, so
-/// the merge and the base commits it brings in are left out (atelier-n7g1).
+/// A merge of base content into the work branch, checked against the branch
+/// side. Paths Git merged on its own came from the base, except that an
+/// in-scope issue record may still change only in status, so base planning
+/// cannot rewrite the approved scope. A record conflict resolved by hand must
+/// be a three-way merge of its sides, so it cannot drop a blocker or a child
+/// either side added; in-scope ones are status-only too (atelier-n7g1,
+/// atelier-1isk).
+fn allowed_base_merge(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    merge: &git::MergeResolution,
+    ids: &BTreeSet<String>,
+) -> Result<bool> {
+    // A conflict resolved to the branch side's version changes nothing
+    // against it, yet may drop the base's side, so every conflict is checked.
+    let paths = edge
+        .paths
+        .iter()
+        .chain(&merge.conflicted)
+        .collect::<BTreeSet<_>>();
+    for path in paths {
+        let issue = path.parent() == Some(Path::new(".atelier/issues"));
+        let in_scope_issue = issue
+            && path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|id| ids.contains(id));
+        let conflicted = merge.conflicted.contains(path);
+        if !in_scope_issue && !conflicted {
+            continue;
+        }
+        if conflicted && issue {
+            let (Some(base), [side]) = (&merge.merge_base, edge.sides.as_slice()) else {
+                return Ok(false);
+            };
+            if !record_three_way(read, path, base, &edge.parent, side, &edge.commit)? {
+                return Ok(false);
+            }
+            if !in_scope_issue {
+                continue;
+            }
+        }
+        let single = git::CommitEdge {
+            paths: vec![path.clone()],
+            ..edge.clone()
+        };
+        if !allowed_edge(read, &single, ids)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+/// Whether `resolved` is a three-way merge of an issue record's `ours` and
+/// `theirs` from `base`: each front-matter field and the body take the side
+/// that changed them, lists merge as sets of whole entries (each side's
+/// additions kept and removals respected), and a value both sides changed
+/// differently is a real conflict that needs review. Timestamps may take
+/// either side.
+fn record_three_way(
+    read: &mut git::ReadContext<'_>,
+    path: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+    resolved: &str,
+) -> Result<bool> {
+    use serde_yaml::Value;
+    let mut parts = |commit: &str| -> Result<(Value, Value)> {
+        if read.entry(commit, path)?.is_none() {
+            return Ok((Value::Null, Value::Null));
+        }
+        let text = read.blob(commit, path)?;
+        Ok(match split_document(&text) {
+            Some((front, body)) => (
+                serde_yaml::from_str(front).unwrap_or(Value::String(front.to_owned())),
+                Value::String(body.to_owned()),
+            ),
+            None => (Value::Null, Value::String(text)),
+        })
+    };
+    let (base, ours, theirs, resolved) =
+        (parts(base)?, parts(ours)?, parts(theirs)?, parts(resolved)?);
+    Ok(merged(&base.0, &ours.0, &theirs.0, &resolved.0, "")
+        && merged(&base.1, &ours.1, &theirs.1, &resolved.1, ""))
+}
+fn merged(
+    base: &serde_yaml::Value,
+    ours: &serde_yaml::Value,
+    theirs: &serde_yaml::Value,
+    resolved: &serde_yaml::Value,
+    key: &str,
+) -> bool {
+    use serde_yaml::Value;
+    if matches!(key, "updated_at" | "closed_at") {
+        return resolved == ours || resolved == theirs;
+    }
+    if ours == theirs {
+        return resolved == ours;
+    }
+    if ours == base {
+        return resolved == theirs;
+    }
+    if theirs == base {
+        return resolved == ours;
+    }
+    match (ours, theirs, resolved) {
+        (Value::Mapping(ours), Value::Mapping(theirs), Value::Mapping(resolved)) => {
+            let empty = serde_yaml::Mapping::new();
+            let base = base.as_mapping().unwrap_or(&empty);
+            let null = Value::Null;
+            base.keys()
+                .chain(ours.keys())
+                .chain(theirs.keys())
+                .chain(resolved.keys())
+                .all(|field| {
+                    merged(
+                        base.get(field).unwrap_or(&null),
+                        ours.get(field).unwrap_or(&null),
+                        theirs.get(field).unwrap_or(&null),
+                        resolved.get(field).unwrap_or(&null),
+                        field.as_str().unwrap_or(""),
+                    )
+                })
+        }
+        (Value::Sequence(ours), Value::Sequence(theirs), Value::Sequence(resolved)) => {
+            let empty = Vec::new();
+            let base = base.as_sequence().unwrap_or(&empty);
+            let expected = ours
+                .iter()
+                .filter(|entry| !base.contains(entry) || theirs.contains(entry))
+                .chain(
+                    theirs
+                        .iter()
+                        .filter(|entry| !base.contains(entry) && !ours.contains(entry)),
+                )
+                .collect::<Vec<_>>();
+            resolved.len() == expected.len()
+                && expected.iter().all(|entry| resolved.contains(entry))
+        }
+        _ => false,
+    }
+}
+/// The edges from `pin` to `end` that can change approved work, each with
+/// its merge resolution when it merges commits already on `base`. Those base
+/// commits were reviewed on their own branches, so they are left out
+/// (atelier-n7g1); the merge itself is checked with `allowed_base_merge`.
 fn work_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     end: &str,
     base: &str,
-) -> Result<Vec<git::CommitEdge>> {
+) -> Result<Vec<(git::CommitEdge, Option<git::MergeResolution>)>> {
     let edges = read.edges(pin, end)?;
     let mut merged_base = HashSet::new();
+    let mut merges = BTreeMap::new();
     for edge in edges.iter().filter(|edge| !edge.sides.is_empty()) {
-        if ancestor(read, pin, &edge.parent)
-            && edge.sides.iter().all(|side| ancestor(read, side, base))
-            && read.clean_merge(&edge.commit)?
+        if !(ancestor(read, pin, &edge.parent)
+            && edge.sides.iter().all(|side| ancestor(read, side, base)))
         {
-            merged_base.insert(edge.commit.clone());
-            merged_base.extend(read.only_in(&edge.sides, &edge.parent)?);
+            continue;
         }
+        let Some(merge) = read.merge_resolution(&edge.commit)? else {
+            continue;
+        };
+        merged_base.extend(read.only_in(&edge.sides, &edge.parent)?);
+        merges.insert(edge.commit.clone(), merge);
     }
     Ok(edges
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
-        .cloned()
+        .map(|edge| (edge.clone(), merges.get(&edge.commit).cloned()))
         .collect())
 }
 
