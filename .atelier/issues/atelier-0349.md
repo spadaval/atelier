@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T02:41:34.031221256+00:00"
+status: "done"
 title: "Make atelier land fast enough for the Stop hook"
-updated_at: "2026-10-16T01:35:13.864550713+00:00"
+updated_at: "2026-10-16T02:41:34.031221256+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,7 @@ Result on this repository's master: release build 4.2 s (from 60 s), debug build
 Regression found while measuring: since o6h9 merged, `land` on master failed. History still holds atelier-1ioo in the retired epic shape, and its migration commit read as a new completion claim, which made its approvals stale. `claim_endpoint` and the status-only edge check now read a pre-migration epic through the same rewrite `atelier migrate epics` applies (moved to `atelier_app::epic_migration`). So an exact migration is a shape change, not an authored edit, while any content change is still one.
 
 Test: `landing_reads_git_objects_through_one_batch_not_per_record_processes` counts Git calls through a PATH wrapper and fails if per-object queries grow with the number of accepted records. It fails on master and passes here.
+
+## Close Reason
+
+land on master now takes 4.2 s in release (from 60 s). Git object reads go through one cat-file batch with per-phase memoization, history walks are prefetched in parallel, and a spawn-count test guards against per-record calls. Also fixed: land on master failed after the epic migration.
