@@ -1,12 +1,14 @@
 //! Git history primitives shared by evidence and review freshness checks.
 use anyhow::{bail, Context, Result};
 use std::{
-    collections::HashSet,
-    io::Write,
+    collections::{HashMap, HashSet},
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    rc::Rc,
 };
 
+#[derive(Clone)]
 pub struct CommitEdge {
     pub parent: String,
     pub commit: String,
@@ -19,13 +21,131 @@ pub struct ReadContext<'a> {
     pub(crate) repo: &'a Path,
     head: Option<String>,
     clean: Option<bool>,
+    /// Git objects are immutable and every query is pinned to a full commit
+    /// ID, so answers are memoized for the read phase (atelier-0349).
+    cache: ObjectCache,
+    /// One `git cat-file --batch` process serves every object read, instead
+    /// of a Git process per query (atelier-0349).
+    reader: Option<ObjectReader>,
 }
+
+struct ObjectReader {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+}
+
+struct Object {
+    oid: String,
+    kind: String,
+    data: Vec<u8>,
+}
+
+struct TreeEntry {
+    mode: String,
+    name: Vec<u8>,
+    oid: String,
+}
+
+impl ObjectReader {
+    fn spawn(repo: &Path) -> Result<Self> {
+        let mut child = command(repo)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("cannot start git cat-file --batch")?;
+        let stdin = child.stdin.take().context("git cat-file stdin")?;
+        let stdout = BufReader::new(child.stdout.take().context("git cat-file stdout")?);
+        Ok(Self {
+            child,
+            stdin: Some(stdin),
+            stdout,
+        })
+    }
+    /// The object an expression names, or `None` when it names none.
+    fn read(&mut self, expression: &str) -> Result<Option<Object>> {
+        if expression.contains(['\n', '\r']) {
+            bail!("Git object expression contains a line break");
+        }
+        let stdin = self.stdin.as_mut().context("git cat-file is closed")?;
+        stdin.write_all(expression.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+        let mut header = String::new();
+        if self.stdout.read_line(&mut header)? == 0 {
+            bail!("git cat-file --batch exited");
+        }
+        let header = header.strip_suffix('\n').unwrap_or(&header);
+        let fields = header.split(' ').collect::<Vec<_>>();
+        let object = match fields.as_slice() {
+            [oid, kind, size]
+                if matches!(oid.len(), 40 | 64)
+                    && oid.bytes().all(|b| b.is_ascii_hexdigit())
+                    && size.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                let mut data = vec![0; size.parse()?];
+                self.stdout.read_exact(&mut data)?;
+                let mut newline = [0];
+                self.stdout.read_exact(&mut newline)?;
+                if newline != *b"\n" {
+                    bail!("invalid git cat-file --batch output");
+                }
+                Object {
+                    oid: oid.to_ascii_lowercase(),
+                    kind: (*kind).to_owned(),
+                    data,
+                }
+            }
+            _ if header.ends_with(" missing") => return Ok(None),
+            _ => bail!("git cat-file --batch: {header}"),
+        };
+        Ok(Some(object))
+    }
+}
+
+impl Drop for ObjectReader {
+    fn drop(&mut self) {
+        drop(self.stdin.take());
+        let _ = self.child.wait();
+    }
+}
+
+#[derive(Default)]
+struct ObjectCache {
+    commit_ids: HashMap<String, String>,
+    blobs: HashMap<(String, PathBuf), String>,
+    entries: HashMap<(String, PathBuf), Option<(String, String)>>,
+    ancestors: HashMap<(String, String), bool>,
+    /// Ancestry queries per later commit; often-asked commits get their
+    /// whole ancestor set listed once instead of a query per pair.
+    ancestor_queries: HashMap<String, usize>,
+    ancestor_sets: HashMap<String, Rc<HashSet<String>>>,
+    changed: HashMap<(String, String), Vec<PathBuf>>,
+    edges: HashMap<(String, String), Rc<Vec<CommitEdge>>>,
+    status_only: HashMap<(String, String, PathBuf), bool>,
+    first_parents: HashMap<String, Option<String>>,
+    authors: HashMap<String, String>,
+    trees: HashMap<String, Rc<Vec<TreeEntry>>>,
+    commit_trees: HashMap<String, String>,
+    histories: HashMap<Vec<String>, String>,
+    commits: HashMap<String, Vec<u8>>,
+    /// Whether tree diffs matched `git diff` on this read phase's first
+    /// edge; `None` until checked, `false` to use `git diff` throughout.
+    tree_diff_matches: Option<bool>,
+    /// Whether `git show` prints author fields unconverted.
+    utf8_log_output: Option<bool>,
+}
+
 impl<'a> ReadContext<'a> {
     pub fn new(repo: &'a Path) -> Self {
         Self {
             repo,
             head: None,
             clean: None,
+            cache: ObjectCache::default(),
+            reader: None,
         }
     }
     pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[PathBuf]) -> Self {
@@ -36,6 +156,8 @@ impl<'a> ReadContext<'a> {
             repo,
             head: Some(head),
             clean: None,
+            cache: ObjectCache::default(),
+            reader: None,
         }
     }
     /// Attach successful fresh working-path proof for this same read phase.
@@ -69,18 +191,187 @@ impl<'a> ReadContext<'a> {
     }
     pub fn commit_id(&mut self, commit: &str) -> Result<String> {
         let expression = self.pinned(commit)?;
-        let oid = String::from_utf8(object_output(
-            self.repo,
-            &["rev-parse", "--verify", &expression],
-        )?)?
-        .trim()
-        .to_ascii_lowercase();
-        let kind =
-            object_output(self.repo, &["cat-file", "-t", &oid]).context("Git commit missing")?;
-        if kind != b"commit\n" {
+        if let Some(oid) = self.cache.commit_ids.get(&expression) {
+            return Ok(oid.clone());
+        }
+        let object = self
+            .object(&expression)?
+            .with_context(|| format!("Git commit missing: {expression}"))?;
+        if object.kind != "commit" {
             bail!("expected Git commit object");
         }
-        Ok(oid)
+        let tree = object
+            .data
+            .split(|byte| *byte == b'\n')
+            .next()
+            .and_then(|line| line.strip_prefix(b"tree "))
+            .and_then(|tree| std::str::from_utf8(tree).ok())
+            .context("Git commit has no tree")?
+            .to_owned();
+        self.cache.commit_trees.insert(object.oid.clone(), tree);
+        self.cache.commits.insert(object.oid.clone(), object.data);
+        self.cache.commit_ids.insert(expression, object.oid.clone());
+        Ok(object.oid)
+    }
+    fn object(&mut self, expression: &str) -> Result<Option<Object>> {
+        if self.reader.is_none() {
+            self.reader = Some(ObjectReader::spawn(self.repo)?);
+        }
+        let result = self
+            .reader
+            .as_mut()
+            .expect("object reader")
+            .read(expression);
+        if result.is_err() {
+            // The batch stream may be out of step; start a new one next time.
+            self.reader = None;
+        }
+        result
+    }
+    fn commit_tree(&mut self, commit: &str) -> Result<String> {
+        let commit = self.commit_id(commit)?;
+        self.cache
+            .commit_trees
+            .get(&commit)
+            .cloned()
+            .context("Git commit tree missing")
+    }
+    fn tree_entries(&mut self, tree: &str) -> Result<Rc<Vec<TreeEntry>>> {
+        if let Some(entries) = self.cache.trees.get(tree) {
+            return Ok(entries.clone());
+        }
+        let object = self
+            .object(tree)?
+            .with_context(|| format!("Git tree missing: {tree}"))?;
+        if object.kind != "tree" {
+            bail!("expected Git tree object");
+        }
+        let hash_len = tree.len() / 2;
+        let mut entries = Vec::new();
+        let mut rest = object.data.as_slice();
+        while !rest.is_empty() {
+            let space = rest
+                .iter()
+                .position(|byte| *byte == b' ')
+                .context("invalid Git tree entry")?;
+            let nul = rest
+                .iter()
+                .position(|byte| *byte == 0)
+                .context("invalid Git tree entry")?;
+            if nul < space || rest.len() < nul + 1 + hash_len {
+                bail!("invalid Git tree entry");
+            }
+            let mut oid = String::with_capacity(hash_len * 2);
+            for byte in &rest[nul + 1..nul + 1 + hash_len] {
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                oid.push(HEX[usize::from(byte >> 4)] as char);
+                oid.push(HEX[usize::from(byte & 0xf)] as char);
+            }
+            entries.push(TreeEntry {
+                mode: std::str::from_utf8(&rest[..space])?.to_owned(),
+                name: rest[space + 1..nul].to_vec(),
+                oid,
+            });
+            rest = &rest[nul + 1 + hash_len..];
+        }
+        // Sorted by name, not Git's tree order, so lookups and diffs can merge.
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        let entries = Rc::new(entries);
+        self.cache.trees.insert(tree.to_owned(), entries.clone());
+        Ok(entries)
+    }
+    /// Paths that differ between two commits, as `git diff --name-status`
+    /// lists them without rename detection: both sides of a rename appear.
+    fn changed_paths(&mut self, before: &str, after: &str) -> Result<Vec<PathBuf>> {
+        match self.cache.tree_diff_matches {
+            Some(true) => self.tree_changed_paths(before, after),
+            Some(false) => changed_paths(self.repo, before, after),
+            None => {
+                // `git diff` reports configuration errors and is the reference;
+                // check the in-process diff against it once.
+                let native = changed_paths(self.repo, before, after)?;
+                let matches = self.tree_changed_paths(before, after).ok().as_ref() == Some(&native);
+                self.cache.tree_diff_matches = Some(matches);
+                Ok(native)
+            }
+        }
+    }
+    fn tree_changed_paths(&mut self, before: &str, after: &str) -> Result<Vec<PathBuf>> {
+        let before = self.commit_tree(before)?;
+        let after = self.commit_tree(after)?;
+        let mut paths = Vec::new();
+        self.diff_trees(Some(&before), Some(&after), "", &mut paths)?;
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+    fn diff_trees(
+        &mut self,
+        before: Option<&str>,
+        after: Option<&str>,
+        prefix: &str,
+        paths: &mut Vec<PathBuf>,
+    ) -> Result<()> {
+        if before == after {
+            return Ok(());
+        }
+        let left = match before {
+            Some(tree) => self.tree_entries(tree)?,
+            None => Rc::default(),
+        };
+        let right = match after {
+            Some(tree) => self.tree_entries(tree)?,
+            None => Rc::default(),
+        };
+        let (mut l, mut r) = (0, 0);
+        while l < left.len() || r < right.len() {
+            let order = match (left.get(l), right.get(r)) {
+                (Some(old), Some(new)) => old.name.cmp(&new.name),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                _ => std::cmp::Ordering::Greater,
+            };
+            let (old, new) = match order {
+                std::cmp::Ordering::Less => (left.get(l), None),
+                std::cmp::Ordering::Greater => (None, right.get(r)),
+                std::cmp::Ordering::Equal => (left.get(l), right.get(r)),
+            };
+            if old.is_some() {
+                l += 1;
+            }
+            if new.is_some() {
+                r += 1;
+            }
+            let name = old
+                .or(new)
+                .map(|entry| entry.name.as_slice())
+                .unwrap_or_default();
+            if let (Some(old), Some(new)) = (old, new) {
+                if old.mode == new.mode && old.oid == new.oid {
+                    continue;
+                }
+            }
+            let path = format!("{prefix}{}", std::str::from_utf8(name)?);
+            let tree = |entry: Option<&TreeEntry>| {
+                entry
+                    .filter(|entry| entry.mode == "40000")
+                    .map(|entry| entry.oid.clone())
+            };
+            let (old_tree, new_tree) = (tree(old), tree(new));
+            if old_tree.is_some() || new_tree.is_some() {
+                self.diff_trees(
+                    old_tree.as_deref(),
+                    new_tree.as_deref(),
+                    &format!("{path}/"),
+                    paths,
+                )?;
+            }
+            if old.is_some_and(|entry| entry.mode != "40000")
+                || new.is_some_and(|entry| entry.mode != "40000")
+            {
+                paths.push(PathBuf::from(path));
+            }
+        }
+        Ok(())
     }
     pub(crate) fn ancestor(&mut self, earlier: &str, later: &str) -> Result<bool> {
         let later = self.pinned(later)?;
@@ -91,14 +382,38 @@ impl<'a> ReadContext<'a> {
         let Ok(earlier) = self.commit_id(&earlier) else {
             return Ok(false);
         };
-        Ok(git_output(
-            self.repo,
-            &["merge-base", "--is-ancestor", &earlier, &later],
-        )
-        .is_ok())
+        let key = (earlier, later);
+        if let Some(known) = self.cache.ancestors.get(&key) {
+            return Ok(*known);
+        }
+        let asked = self
+            .cache
+            .ancestor_queries
+            .entry(key.1.clone())
+            .or_default();
+        *asked += 1;
+        let ancestor = if *asked > 3 {
+            let set = match self.cache.ancestor_sets.get(&key.1) {
+                Some(set) => set.clone(),
+                None => {
+                    let listed = String::from_utf8(git_output(self.repo, &["rev-list", &key.1])?)?;
+                    let set = Rc::new(listed.lines().map(str::to_owned).collect::<HashSet<_>>());
+                    self.cache.ancestor_sets.insert(key.1.clone(), set.clone());
+                    set
+                }
+            };
+            set.contains(&key.0)
+        } else {
+            git_output(self.repo, &["merge-base", "--is-ancestor", &key.0, &key.1]).is_ok()
+        };
+        self.cache.ancestors.insert(key, ancestor);
+        Ok(ancestor)
     }
     pub(crate) fn first_parent(&mut self, commit: &str) -> Result<Option<String>> {
         let commit = self.commit_id(commit)?;
+        if let Some(parent) = self.cache.first_parents.get(&commit) {
+            return Ok(parent.clone());
+        }
         let parents = String::from_utf8(git_output(
             self.repo,
             &["rev-list", "--parents", "-n", "1", &commit],
@@ -107,63 +422,225 @@ impl<'a> ReadContext<'a> {
         if parts.next() != Some(commit.as_str()) {
             bail!("invalid Git parent query");
         }
-        Ok(parts.next().map(str::to_owned))
+        let parent = parts.next().map(str::to_owned);
+        self.cache.first_parents.insert(commit, parent.clone());
+        Ok(parent)
+    }
+    /// Output of a `git log` whose revisions are full commit IDs, so the
+    /// same query in this read phase has the same answer.
+    pub(crate) fn history(&mut self, args: &[&str]) -> Result<String> {
+        let key = args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+        if let Some(output) = self.cache.histories.get(&key) {
+            return Ok(output.clone());
+        }
+        let output = String::from_utf8(git_output(self.repo, args)?)?;
+        self.cache.histories.insert(key, output.clone());
+        Ok(output)
+    }
+    /// Memoized answer for a pure comparison of two blobs at one path.
+    pub(crate) fn status_only(
+        &mut self,
+        before: &str,
+        after: &str,
+        path: &Path,
+        compare: impl FnOnce(&mut Self) -> Result<bool>,
+    ) -> Result<bool> {
+        let key = (before.to_owned(), after.to_owned(), path.to_path_buf());
+        if let Some(known) = self.cache.status_only.get(&key) {
+            return Ok(*known);
+        }
+        let answer = compare(self)?;
+        self.cache.status_only.insert(key, answer);
+        Ok(answer)
+    }
+    /// Fill the `history` cache for many queries, running them in parallel.
+    /// Failures are left uncached so the later `history` call reports them.
+    pub(crate) fn prefetch_histories(&mut self, queries: Vec<Vec<String>>) {
+        let mut pending = queries
+            .into_iter()
+            .filter(|query| !self.cache.histories.contains_key(query))
+            .collect::<Vec<_>>();
+        pending.sort();
+        pending.dedup();
+        if pending.is_empty() {
+            return;
+        }
+        let workers = std::thread::available_parallelism()
+            .map_or(4, usize::from)
+            .clamp(1, 8);
+        let chunk = pending.len().div_ceil(workers);
+        let repo = self.repo;
+        let results = std::thread::scope(|scope| {
+            let handles = pending
+                .chunks(chunk)
+                .map(|queries| {
+                    scope.spawn(move || {
+                        queries
+                            .iter()
+                            .filter_map(|query| {
+                                let args = query.iter().map(String::as_str).collect::<Vec<_>>();
+                                let output = git_output(repo, &args).ok()?;
+                                Some((query.clone(), String::from_utf8(output).ok()?))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().unwrap_or_default())
+                .collect::<Vec<_>>()
+        });
+        self.cache.histories.extend(results);
     }
     pub(crate) fn author_names(&mut self, commit: &str) -> Result<String> {
         let commit = self.commit_id(commit)?;
-        Ok(String::from_utf8(git_output(
-            self.repo,
-            &["show", "-s", "--format=%an%n%ae", &commit],
-        )?)?)
+        if let Some(names) = self.cache.authors.get(&commit) {
+            return Ok(names.clone());
+        }
+        let names = match self.plain_author(&commit)? {
+            Some(names) => names,
+            None => String::from_utf8(git_output(
+                self.repo,
+                &["show", "-s", "--format=%an%n%ae", &commit],
+            )?)?,
+        };
+        self.cache.authors.insert(commit, names.clone());
+        Ok(names)
+    }
+    /// `%an%n%ae` read from the commit object when `git show` would print it
+    /// unchanged: a UTF-8 commit, UTF-8 log output and an ordinary identity.
+    /// Anything else returns `None` so `git show` decides.
+    fn plain_author(&mut self, commit: &str) -> Result<Option<String>> {
+        if self.cache.utf8_log_output.is_none() {
+            let encoding = command(self.repo)
+                .args(["config", "--get", "i18n.logOutputEncoding"])
+                .stdin(Stdio::null())
+                .output()?;
+            let encoding = String::from_utf8_lossy(&encoding.stdout)
+                .trim()
+                .to_lowercase();
+            self.cache.utf8_log_output = Some(matches!(encoding.as_str(), "" | "utf-8" | "utf8"));
+        }
+        if self.cache.utf8_log_output != Some(true) {
+            return Ok(None);
+        }
+        let Some(data) = self.cache.commits.get(commit) else {
+            return Ok(None);
+        };
+        let Ok(text) = std::str::from_utf8(data) else {
+            return Ok(None);
+        };
+        let headers = text.split("\n\n").next().unwrap_or("");
+        let mut author = None;
+        for line in headers.lines() {
+            if line.starts_with("encoding ") || line.starts_with(' ') {
+                return Ok(None);
+            }
+            if let Some(ident) = line.strip_prefix("author ") {
+                if author.replace(ident).is_some() {
+                    return Ok(None);
+                }
+            }
+        }
+        let Some(ident) = author else {
+            return Ok(None);
+        };
+        let Some((name, rest)) = ident.split_once(" <") else {
+            return Ok(None);
+        };
+        let Some((email, date)) = rest.split_once("> ") else {
+            return Ok(None);
+        };
+        let ordinary = |part: &str| {
+            !part.is_empty()
+                && part.trim() == part
+                && !part.contains(['<', '>'])
+                && !part.chars().any(char::is_control)
+        };
+        let mut date = date.split(' ');
+        let timestamp = date
+            .next()
+            .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()));
+        let zone = date.next().is_some_and(|z| {
+            z.len() == 5 && z.starts_with(['+', '-']) && z[1..].bytes().all(|b| b.is_ascii_digit())
+        });
+        if !(ordinary(name) && ordinary(email) && timestamp && zone && date.next().is_none()) {
+            return Ok(None);
+        }
+        Ok(Some(format!("{name}\n{email}\n")))
     }
     pub(crate) fn blob(&mut self, commit: &str, path: &Path) -> Result<String> {
         let commit = self.commit_id(commit)?;
-        let spec = format!(
-            "{commit}:{}",
-            path.to_str().context("record path is not UTF-8")?
-        );
-        let kind = object_output(self.repo, &["cat-file", "-t", &spec])
-            .context("Git record object missing")?;
-        if kind != b"blob\n" {
+        let key = (commit.clone(), path.to_path_buf());
+        if let Some(text) = self.cache.blobs.get(&key) {
+            return Ok(text.clone());
+        }
+        // Read by the entry's object ID: a path may contain line breaks,
+        // which a batch expression cannot.
+        let (_, oid) = self
+            .entry(&commit, path)?
+            .with_context(|| format!("Git record object missing: {commit}:{}", path.display()))?;
+        let object = self
+            .object(&oid)?
+            .with_context(|| format!("Git record object missing: {oid}"))?;
+        if object.kind != "blob" {
             bail!("expected Git record blob");
         }
-        String::from_utf8(object_output(self.repo, &["cat-file", "blob", &spec])?)
-            .context("Git record blob is not UTF-8")
+        let text = String::from_utf8(object.data).context("Git record blob is not UTF-8")?;
+        self.cache.blobs.insert(key, text.clone());
+        Ok(text)
     }
     pub(crate) fn entry(&mut self, commit: &str, path: &Path) -> Result<Option<(String, String)>> {
         let commit = self.commit_id(commit)?;
+        let key = (commit.clone(), path.to_path_buf());
+        if let Some(entry) = self.cache.entries.get(&key) {
+            return Ok(entry.clone());
+        }
+        let entry = self.uncached_entry(&commit, path)?;
+        self.cache.entries.insert(key, entry.clone());
+        Ok(entry)
+    }
+    fn uncached_entry(&mut self, commit: &str, path: &Path) -> Result<Option<(String, String)>> {
         let name = path.to_str().context("record path is not UTF-8")?;
-        let output = object_output(
-            self.repo,
-            &["--literal-pathspecs", "ls-tree", "-z", &commit, "--", name],
-        )?;
-        for row in output
-            .split(|byte| *byte == 0)
-            .filter(|row| !row.is_empty())
-        {
-            let tab = row
-                .iter()
-                .position(|byte| *byte == b'\t')
-                .context("invalid Git tree entry")?;
-            if &row[tab + 1..] != name.as_bytes() {
-                continue;
+        let mut tree = self.commit_tree(commit)?;
+        let components = name.split('/').collect::<Vec<_>>();
+        for (position, component) in components.iter().enumerate() {
+            let entries = self.tree_entries(&tree)?;
+            let Ok(found) =
+                entries.binary_search_by(|entry| entry.name.as_slice().cmp(component.as_bytes()))
+            else {
+                return Ok(None);
+            };
+            let found = &entries[found];
+            if position + 1 == components.len() {
+                if matches!(found.mode.as_str(), "40000" | "160000") {
+                    bail!("expected blob entry for {}", path.display());
+                }
+                return Ok(Some((found.mode.clone(), found.oid.clone())));
             }
-            let mut fields = std::str::from_utf8(&row[..tab])?.split_whitespace();
-            let mode = fields.next().context("missing Git entry mode")?;
-            if fields.next() != Some("blob") {
-                bail!("expected blob entry for {}", path.display());
+            if found.mode != "40000" {
+                return Ok(None);
             }
-            let oid = fields.next().context("missing Git blob ID")?;
-            return Ok(Some((mode.into(), oid.into())));
+            tree = found.oid.clone();
         }
         Ok(None)
     }
     /// Inspect every introduced commit, including side-branch edit/revert history.
     /// Merges prefer a parent containing the tested pin to avoid reintroducing old work.
-    pub(crate) fn edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
+    pub(crate) fn edges(&mut self, pin: &str, end: &str) -> Result<Rc<Vec<CommitEdge>>> {
         let end = self.commit_id(end)?;
         let pin = self.commit_id(pin)?;
-        git_output(self.repo, &["merge-base", "--is-ancestor", &pin, &end])?;
+        let key = (pin.clone(), end.clone());
+        if let Some(edges) = self.cache.edges.get(&key) {
+            return Ok(edges.clone());
+        }
+        let edges = Rc::new(self.uncached_edges(&pin, &end)?);
+        self.cache.edges.insert(key, edges.clone());
+        Ok(edges)
+    }
+    fn uncached_edges(&mut self, pin: &str, end: &str) -> Result<Vec<CommitEdge>> {
+        git_output(self.repo, &["merge-base", "--is-ancestor", pin, end])?;
         let range = format!("{pin}..{end}");
         let commits =
             String::from_utf8(git_output(self.repo, &["rev-list", "--parents", &range])?)?;
@@ -172,7 +649,7 @@ impl<'a> ReadContext<'a> {
             &["rev-list", "--ancestry-path", &range],
         )?)?;
         let mut tested_context: HashSet<&str> = descendants.lines().collect();
-        tested_context.insert(&pin);
+        tested_context.insert(pin);
         let mut edges = Vec::new();
         for line in commits.lines() {
             let mut parts = line.split_whitespace();
@@ -183,10 +660,19 @@ impl<'a> ReadContext<'a> {
                 .find(|parent| tested_context.contains(**parent))
                 .or_else(|| parents.first())
             {
+                let key = (parent.to_string(), commit.to_owned());
+                let paths = match self.cache.changed.get(&key) {
+                    Some(paths) => paths.clone(),
+                    None => {
+                        let paths = self.changed_paths(parent, commit)?;
+                        self.cache.changed.insert(key, paths.clone());
+                        paths
+                    }
+                };
                 edges.push(CommitEdge {
                     parent: parent.to_string(),
                     commit: commit.to_owned(),
-                    paths: changed_paths(self.repo, parent, commit)?,
+                    paths,
                 });
             }
         }
@@ -209,20 +695,6 @@ pub fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    Ok(output.stdout)
-}
-/// Native object warnings stay visible at this serial read point. Failed query
-/// diagnostics stay in the error so optional missing proof can be classified.
-fn object_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
-    let output = command(repo).args(args).stdin(Stdio::null()).output()?;
-    if !output.status.success() {
-        bail!(
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let _ = std::io::stderr().write_all(&output.stderr);
     Ok(output.stdout)
 }
 pub fn head_commit(repo: &Path) -> Result<String> {
@@ -345,7 +817,9 @@ mod tests {
         Ok(output.stdout)
     }
     fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
-        ReadContext::new(repo).edges(pin, "HEAD")
+        ReadContext::new(repo)
+            .edges(pin, "HEAD")
+            .map(|edges| edges.to_vec())
     }
 
     fn repo(format: &str) -> tempfile::TempDir {
@@ -571,6 +1045,46 @@ mod tests {
                         "configuration {value:?}, limit {limit}"
                     );
                 }
+            }
+        }
+    }
+    #[test]
+    fn tree_diff_matches_git_diff_for_nested_type_and_mode_changes() {
+        for format in ["sha1", "sha256"] {
+            let repo = repo(format);
+            let root = repo.path();
+            fs::create_dir_all(root.join("a/b")).unwrap();
+            fs::write(root.join("a/b/file"), "one").unwrap();
+            fs::write(root.join("a/keep"), "keep").unwrap();
+            fs::write(root.join("swap"), "file").unwrap();
+            let mut commits = vec![commit(root, "base")];
+            fs::write(root.join("a/b/file"), "two").unwrap();
+            fs::create_dir_all(root.join("new/deep")).unwrap();
+            fs::write(root.join("new/deep/x"), "x").unwrap();
+            commits.push(commit(root, "nested edit and add"));
+            fs::remove_dir_all(root.join("a/b")).unwrap();
+            fs::remove_file(root.join("swap")).unwrap();
+            fs::create_dir(root.join("swap")).unwrap();
+            fs::write(root.join("swap/inner"), "dir").unwrap();
+            commits.push(commit(root, "delete dir, file becomes dir"));
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(root.join("a/keep"), fs::Permissions::from_mode(0o755)).unwrap();
+            std::os::unix::fs::symlink("a/keep", root.join("link")).unwrap();
+            commits.push(commit(root, "mode change and symlink"));
+            fs::remove_dir_all(root.join("swap")).unwrap();
+            fs::write(root.join("swap"), "file again").unwrap();
+            commits.push(commit(root, "dir becomes file"));
+            let mut read = ReadContext::new(root);
+            for (before, after) in commits
+                .iter()
+                .zip(&commits[1..])
+                .chain([(&commits[0], &commits[4])])
+            {
+                assert_eq!(
+                    read.tree_changed_paths(before, after).unwrap(),
+                    changed_paths(root, before, after).unwrap(),
+                    "{format} {before}..{after}"
+                );
             }
         }
     }

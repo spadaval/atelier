@@ -38,8 +38,21 @@ pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
 
 fn issue_status_only(before: &str, after: &str, path: &Path) -> Result<bool> {
     let relative = path.strip_prefix(".atelier")?;
-    let mut left = parse_issue_record(before, relative)?;
-    let mut right = parse_issue_record(after, relative)?;
+    if parse_issue_record(before, relative).is_err() {
+        // An exact `atelier migrate epics` rewrite of an approved epic changes
+        // its shape, not its content, so it does not author the record.
+        if let Ok(record) = parse_issue_record(after, relative) {
+            if let Ok(Some(migrated)) = crate::epic_migration::migrate_epic_text(
+                before,
+                &record.issue.issue_type,
+                &record.issue.status,
+            ) {
+                if parse_issue_record(&migrated.text, relative).is_ok() {
+                    return issue_status_only(&migrated.text, after, path);
+                }
+            }
+        }
+    }
     // Preserve unknown front-matter changes too: only this explicit whitelist
     // can be ignored, even when an issue parser has no use for another key.
     let front = |text: &str| -> Result<serde_yaml::Value> {
@@ -56,9 +69,35 @@ fn issue_status_only(before: &str, after: &str, path: &Path) -> Result<bool> {
     if front(before)? != front(after)? {
         return Ok(false);
     }
-    left.sections.close_reason = None;
-    right.sections.close_reason = None;
-    Ok(left.sections == right.sections)
+    match (
+        parse_issue_record(before, relative),
+        parse_issue_record(after, relative),
+    ) {
+        (Ok(mut left), Ok(mut right)) => {
+            left.sections.close_reason = None;
+            right.sections.close_reason = None;
+            Ok(left.sections == right.sections)
+        }
+        // History can hold records in a retired shape, such as pre-migration
+        // epics. Compare their bodies as text, ignoring only Close Reason.
+        _ => Ok(body_without_close_reason(before) == body_without_close_reason(after)),
+    }
+}
+
+fn body_without_close_reason(text: &str) -> Option<String> {
+    let (_, body) = split_document(text)?;
+    let mut kept = String::new();
+    let mut skipping = false;
+    for line in body.lines() {
+        if let Some(heading) = line.strip_prefix("## ") {
+            skipping = heading.trim() == "Close Reason";
+        }
+        if !skipping {
+            kept.push_str(line.trim_end());
+            kept.push('\n');
+        }
+    }
+    Some(kept.trim_end().to_owned())
 }
 
 fn allowed_edge(
@@ -85,12 +124,17 @@ fn allowed_edge(
                 .file_stem()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
+            let (Some((_, before)), Some((_, after))) = (&old, &new) else {
+                unreachable!("regular entries exist")
+            };
             if ids.contains(id)
-                && issue_status_only(
-                    &read.blob(&edge.parent, path)?,
-                    &read.blob(&edge.commit, path)?,
-                    path,
-                )?
+                && read.status_only(before, after, path, |read| {
+                    issue_status_only(
+                        &read.blob(&edge.parent, path)?,
+                        &read.blob(&edge.commit, path)?,
+                        path,
+                    )
+                })?
             {
                 continue;
             }
@@ -145,19 +189,16 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
 /// Historical acceptance is valid only while review events remain append-only.
 pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     let head = read.pinned("HEAD")?;
-    let history = String::from_utf8(git::git_output(
-        read.repo,
-        &[
-            "log",
-            "--root",
-            "--reverse",
-            "--diff-filter=A",
-            "--format=%H",
-            &head,
-            "--",
-            ".atelier/reviews/",
-        ],
-    )?)?;
+    let history = read.history(&[
+        "log",
+        "--root",
+        "--reverse",
+        "--diff-filter=A",
+        "--format=%H",
+        &head,
+        "--",
+        ".atelier/reviews/",
+    ])?;
     let Some(first) = history.lines().next() else {
         return Ok(());
     };
@@ -402,6 +443,23 @@ fn evaluate_scope(
             Vec::new(),
         ));
     }
+    if global {
+        prefetch_original_independent(
+            index,
+            read,
+            index.reviews().filter(|record| {
+                (approval_targets.contains(&record.target)
+                    && matches!(record.event, ReviewEvent::Approval))
+                    || (matches!(
+                        record.event,
+                        ReviewEvent::Disposition {
+                            decision: FindingDecision::Defer | FindingDecision::NoAction,
+                            ..
+                        }
+                    ) && applicable.contains(&record.target))
+            }),
+        )?;
+    }
     let candidates = index
         .reviews()
         .filter(|record| approval_targets.contains(&record.target))
@@ -451,6 +509,7 @@ fn evaluate_scope(
     }
     let mut unresolved = Vec::new();
     let mut dispositions = Vec::new();
+    let mut approval_valid = BTreeMap::new();
     for finding in index.reviews().filter(|record| {
         applicable.contains(&record.target) && matches!(record.event, ReviewEvent::Finding { .. })
     }) {
@@ -480,13 +539,22 @@ fn evaluate_scope(
                                 || index.get_issue(&finding.target).is_some_and(|issue| {
                                     issue.parent_id.as_deref() == Some(&approval.target)
                                 }))
+                            && ancestor(read, resolution, &approval.commit)
                             && (!historical
                                 || retained(read, base_commit, disposition)
                                 || !retained(read, base_commit, approval))
                             && (!historical
-                                || original_approval_valid(index, read, approval, &finding.target)
-                                    .unwrap_or(false))
-                            && ancestor(read, resolution, &approval.commit)
+                                || *approval_valid
+                                    .entry((approval.header.id.clone(), finding.target.clone()))
+                                    .or_insert_with(|| {
+                                        original_approval_valid(
+                                            index,
+                                            read,
+                                            approval,
+                                            &finding.target,
+                                        )
+                                        .unwrap_or(false)
+                                    }))
                     })
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
@@ -671,6 +739,89 @@ fn add_author(
     }
     Ok(())
 }
+/// The `git log` that finds the commit introducing a review event.
+fn introduced_query(head: &str, record: &ReviewRecord) -> Vec<String> {
+    [
+        "log",
+        "--root",
+        "--reverse",
+        "--diff-filter=A",
+        "--format=%H",
+        head,
+        "--",
+        &format!(".atelier/reviews/{}.md", record.header.id),
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+/// The `git log` queries for where a reviewed scope starts and for its
+/// owner's record history, both up to the introducing `event`.
+fn scope_queries(
+    index: &RecordIndex,
+    record: &ReviewRecord,
+    event: &str,
+) -> Result<(Vec<String>, Vec<String>)> {
+    let issue = index.require_issue(&record.target)?;
+    let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
+    let ids = scope(index, owner)?;
+    let history = [
+        "log",
+        "--root",
+        "--reverse",
+        "--diff-filter=A",
+        "--format=%H",
+        event,
+        "--",
+    ]
+    .map(str::to_owned)
+    .into_iter()
+    .chain(ids.iter().map(|id| format!(".atelier/issues/{id}.md")))
+    .collect();
+    let updates = [
+        "log",
+        "--root",
+        "--reverse",
+        "--format=%H",
+        event,
+        "--",
+        &format!(".atelier/issues/{owner}.md"),
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    Ok((history, updates))
+}
+fn as_args(query: &[String]) -> Vec<&str> {
+    query.iter().map(String::as_str).collect()
+}
+/// Run the history queries of `original_independent` for many records at
+/// once; each is an independent `git log` walk (atelier-0349).
+fn prefetch_original_independent<'r>(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    records: impl IntoIterator<Item = &'r ReviewRecord>,
+) -> Result<()> {
+    let head = read.pinned("HEAD")?;
+    let records = records.into_iter().collect::<Vec<_>>();
+    read.prefetch_histories(
+        records
+            .iter()
+            .map(|record| introduced_query(&head, record))
+            .collect(),
+    );
+    let mut queries = Vec::new();
+    for record in records {
+        let Ok(introduced) = read.history(&as_args(&introduced_query(&head, record))) else {
+            continue;
+        };
+        if let Some(event) = introduced.lines().next() {
+            if let Ok((history, updates)) = scope_queries(index, record, event) {
+                queries.extend([history, updates]);
+            }
+        }
+    }
+    read.prefetch_histories(queries);
+    Ok(())
+}
 fn original_independent(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
@@ -680,19 +831,7 @@ fn original_independent(
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
-    let introduced = String::from_utf8(git::git_output(
-        read.repo,
-        &[
-            "log",
-            "--root",
-            "--reverse",
-            "--diff-filter=A",
-            "--format=%H",
-            &head,
-            "--",
-            &event_path,
-        ],
-    )?)?;
+    let introduced = read.history(&as_args(&introduced_query(&head, record)))?;
     let event = introduced
         .lines()
         .next()
@@ -704,41 +843,14 @@ fn original_independent(
             record.header.id
         );
     }
-    let paths = ids
-        .iter()
-        .map(|id| format!(".atelier/issues/{id}.md"))
-        .collect::<Vec<_>>();
-    let args = [
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-filter=A",
-        "--format=%H",
-        event,
-        "--",
-    ]
-    .into_iter()
-    .chain(paths.iter().map(String::as_str))
-    .collect::<Vec<_>>();
-    let history = String::from_utf8(git::git_output(read.repo, &args)?)?;
+    let (history, updates) = scope_queries(index, record, event)?;
+    let history = read.history(&as_args(&history))?;
     let start = history
         .lines()
         .next()
         .context("review predates its issue scope")?;
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
-    let owner_path = std::path::PathBuf::from(format!(".atelier/issues/{owner}.md"));
-    let updates = String::from_utf8(git::git_output(
-        read.repo,
-        &[
-            "log",
-            "--root",
-            "--reverse",
-            "--format=%H",
-            event,
-            "--",
-            owner_path.to_str().context("owner path is not UTF-8")?,
-        ],
-    )?)?;
+    let updates = read.history(&as_args(&updates))?;
     let branch_start = updates.lines().find(|commit| {
         read.issue_at(commit, owner)
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
@@ -824,4 +936,21 @@ fn retired_review_cluster(
         }
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_epic_migration_is_status_only_but_content_edits_are_not() {
+        let (epic, migrated) = crate::evidence_freshness::tests::approved_epic();
+        let path = Path::new(".atelier/issues/atelier-e001.md");
+        assert!(issue_status_only(&epic, &migrated, path).unwrap());
+        let edited = migrated.replace("Checked.", "Checked differently.");
+        assert!(!issue_status_only(&epic, &edited, path).unwrap());
+        // `migrate epics --to` chooses the type, so any declared type counts.
+        let retyped = migrated.replace("issue_type: \"feature\"", "issue_type: \"bug\"");
+        assert!(issue_status_only(&epic, &retyped, path).unwrap());
+    }
 }

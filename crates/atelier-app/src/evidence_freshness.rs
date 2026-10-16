@@ -30,6 +30,27 @@ impl EvidenceReadContext<'_> {
             &relative,
         )
     }
+    /// The record at `commit`, read as `like`'s type when it still has the
+    /// retired epic shape, so an `atelier migrate epics` rewrite does not
+    /// look like a new completion claim.
+    fn issue_at_migrated(
+        &mut self,
+        commit: &str,
+        issue_id: &str,
+        like: &CanonicalIssueRecord,
+    ) -> Result<CanonicalIssueRecord> {
+        let error = match self.issue_at(commit, issue_id) {
+            Ok(record) => return Ok(record),
+            Err(error) => error,
+        };
+        let relative = issue_record_path(issue_id);
+        let text = self.blob(commit, &Path::new(".atelier").join(&relative))?;
+        // Keep a draft status as it was; only the shape changes here.
+        match crate::epic_migration::migrate_epic_text(&text, &like.issue.issue_type, "draft") {
+            Ok(Some(migrated)) => parse_issue_record(&migrated.text, &relative),
+            _ => Err(error),
+        }
+    }
     pub fn evidence_is_fresh(
         &mut self,
         issue: &CanonicalIssueRecord,
@@ -219,14 +240,12 @@ impl EvidenceReadContext<'_> {
     pub(crate) fn claim_endpoint(&mut self, issue_id: &str, pin: &str) -> Result<String> {
         let path = format!(".atelier/issues/{issue_id}.md");
         let head = self.pinned("HEAD")?;
-        let changes = String::from_utf8(git::git_output(
-            self.repo,
-            &["log", "--root", "--format=%H", &head, "--", &path],
-        )?)?;
+        let changes = self.history(&["log", "--root", "--format=%H", &head, "--", &path])?;
+        let current = self.issue_at(&head, issue_id)?;
         let mut claim = None;
         for commit in changes.lines() {
-            let after = self.issue_at(commit, issue_id)?;
-            let parent = self.issue_at(&format!("{commit}^"), issue_id);
+            let after = self.issue_at_migrated(commit, issue_id, &current)?;
+            let parent = self.issue_at_migrated(&format!("{commit}^"), issue_id, &current);
             if parent.is_err() || !completion_claim_matches(&after, &parent?) {
                 claim = Some(commit);
                 break;
@@ -243,7 +262,7 @@ impl EvidenceReadContext<'_> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::test_records::{evidence_record, issue_record};
     use std::{fs, path::PathBuf};
@@ -372,5 +391,63 @@ mod tests {
         assert!(git::working_code_paths(repo.path())
             .unwrap()
             .contains(&PathBuf::from(".atelier/workflow.yaml")));
+    }
+
+    /// A done record in the retired epic shape, and its `migrate epics` form.
+    pub(crate) fn approved_epic() -> (String, String) {
+        let mut record = issue_record("atelier-e001", "feature", "done");
+        record.sections.close_reason = Some("Shipped.".into());
+        let rendered = atelier_records::render_issue_record(&record).unwrap();
+        let (front, _) = atelier_records::split_document(&rendered).unwrap();
+        let epic = format!(
+            "---\n{}\n---\n\n## Outcome\n\nShipped.\n\n## Proof\n\nChecked.\n\n## Close Reason\n\nShipped.\n",
+            front.replace("issue_type: \"feature\"", "issue_type: \"epic\"")
+        );
+        let migrated = crate::epic_migration::migrate_epic_text(&epic, "feature", "backlog")
+            .unwrap()
+            .unwrap()
+            .text;
+        (epic, migrated)
+    }
+
+    #[test]
+    fn epic_migration_is_not_a_new_completion_claim() {
+        let repo = tempfile::tempdir().unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Author"],
+            vec!["config", "user.email", "author@example.test"],
+        ] {
+            git::git_output(repo.path(), &args).unwrap();
+        }
+        let (epic, migrated) = approved_epic();
+        let path = repo.path().join(".atelier/issues/atelier-e001.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut commits = Vec::new();
+        for text in [&epic, &migrated] {
+            fs::write(&path, text).unwrap();
+            git::git_output(repo.path(), &["add", "."]).unwrap();
+            git::git_output(repo.path(), &["commit", "-qm", "record"]).unwrap();
+            commits.push(git::head_commit(repo.path()).unwrap());
+        }
+        let mut read = EvidenceReadContext::new(repo.path());
+        assert_eq!(
+            read.claim_endpoint("atelier-e001", &commits[0]).unwrap(),
+            commits[0],
+            "the claim is the epic's done commit, not its migration"
+        );
+        // A real content change after the migration is a new claim.
+        fs::write(
+            &path,
+            migrated.replace("Shipped.\n\n## Done when", "Changed.\n\n## Done when"),
+        )
+        .unwrap();
+        git::git_output(repo.path(), &["commit", "-qam", "edit"]).unwrap();
+        let edit = git::head_commit(repo.path()).unwrap();
+        let mut read = EvidenceReadContext::new(repo.path());
+        assert_eq!(
+            read.claim_endpoint("atelier-e001", &commits[0]).unwrap(),
+            edit
+        );
     }
 }

@@ -2498,3 +2498,122 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
         assert!(record.contains("status: \"done\""), "{record}");
     }
 }
+
+/// Git invocations made by `atelier land`, recorded by a `git` wrapper on PATH.
+fn land_git_calls(dir: &Path) -> Vec<String> {
+    let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join("git"))
+        .find(|path| path.is_file())
+        .expect("git on PATH");
+    let wrapper = tempdir().unwrap();
+    let log = wrapper.path().join("calls");
+    let script = wrapper.path().join("git");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nexec '{}' \"$@\"\n",
+            log.display(),
+            real.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(
+        std::iter::once(wrapper.path().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir)
+        .env("PATH", path)
+        .arg("land")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    fs::read_to_string(&log)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn landing_reads_git_objects_through_one_batch_not_per_record_processes() {
+    // atelier-0349: per-record object queries made `land` take a minute.
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let accept = |count: usize| {
+        for n in 0..count {
+            let id = ok(
+                f.path(),
+                &[
+                    "-q",
+                    "issue",
+                    "create",
+                    &format!("Accepted work {n}"),
+                    "--body",
+                    "## Goal\n\nAccepted.\n\n## Done when\n\nReviewed.",
+                ],
+            );
+            fs::write(f.path().join(format!("work-{id}")), "code\n").unwrap();
+            commit(f.path(), "work");
+            f.terminal(&id);
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "approve",
+                    &id,
+                    "--identity",
+                    "Reviewer",
+                    "Accepted",
+                ],
+            );
+            commit(f.path(), "approval");
+        }
+        fs::write(f.path().join("later"), format!("{count}\n")).unwrap();
+        commit(f.path(), "later unrelated work");
+        land_git_calls(f.path())
+    };
+    let per_object = |calls: &[String]| {
+        calls
+            .iter()
+            .filter(|call| {
+                let call = call.trim_start_matches("--no-replace-objects ");
+                [
+                    "ls-tree -z",
+                    "--literal-pathspecs ls-tree",
+                    "cat-file -t",
+                    "cat-file blob",
+                    "show",
+                    "diff",
+                    "rev-parse --verify",
+                ]
+                .iter()
+                .any(|query| call.starts_with(query))
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let small = accept(3);
+    let large = accept(6);
+    assert_eq!(
+        per_object(&small).len(),
+        per_object(&large).len(),
+        "object reads grew with records: {:#?}",
+        per_object(&large)
+    );
+    // History walks per review event remain, bounded per accepted record.
+    assert!(
+        large.len() <= small.len() + 6 * 16,
+        "{} Git calls for 9 records, {} for 3",
+        large.len(),
+        small.len()
+    );
+}
