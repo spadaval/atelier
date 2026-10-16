@@ -2913,6 +2913,55 @@ fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
     );
 }
 #[test]
+fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
+    let f = Fixture::new();
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let tip = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(f.path(), &["merge", &f.id]);
+    git(f.path(), &["switch", "-q", "main"]);
+    git(f.path(), &["branch", &f.branch, &tip]);
+    git(
+        f.path(),
+        &["rm", "-q", &format!(".atelier/issues/{}.md", f.id)],
+    );
+    git(f.path(), &["rm", "-q", "-r", ".atelier/reviews"]);
+    commit(f.path(), "prune the merged owner");
+
+    // The kept branch's row on the base reads its committed records.
+    let output = ok(f.path(), &["status"]);
+    assert!(
+        output.contains(&format!("{} [done, merged into main]", f.id)),
+        "{output}"
+    );
+
+    // On the kept branch, an uncommitted status the tip does not have is
+    // not merged, though the tip is in the base and the base has no copy.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.status = "superseded".into();
+    f.store().write_issue_atomic(&record).unwrap();
+    let output = ok(f.path(), &["status"]);
+    assert!(
+        output.contains(&format!(
+            "{} [superseded on branch {}, not merged into main]",
+            f.id, f.branch
+        )),
+        "{output}"
+    );
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

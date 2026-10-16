@@ -3,6 +3,9 @@ created_at: "2026-10-16T19:32:40.068953229+00:00"
 id: "atelier-p2f3"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-p2f3
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Cover the other-branch row and the pruned not-done case in the merged label tests"
-updated_at: "2026-10-16T19:32:40.068953229+00:00"
+updated_at: "2026-10-16T20:19:53.166917955+00:00"
 ---
 
 ## Goal
