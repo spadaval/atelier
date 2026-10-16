@@ -195,6 +195,11 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     let human_work = view_index
         .issue_record(&issue_id)
         .is_some_and(|record| atelier_app::work_classification::needs_human(&record.labels));
+    let human_children = atelier_app::work_classification::open_human_children(
+        &view_index,
+        &view_policy,
+        &work_branch.owner_id,
+    );
     drop(snapshot);
     let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;
 
@@ -267,6 +272,15 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     if human_work {
         println!(
             "Note:     {issue_id} is labelled needs-human; it is work for the human, not an agent."
+        );
+    }
+    if !human_children.is_empty() {
+        println!(
+            "Note:     {}",
+            atelier_app::work_classification::human_children_note(
+                &work_branch.owner_id,
+                &human_children
+            )
         );
     }
     println!("Commit the record changes with the work they describe.");

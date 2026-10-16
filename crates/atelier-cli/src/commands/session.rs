@@ -107,6 +107,14 @@ fn prime_text() -> Result<String> {
                 }
             }
         }
+        let human_children =
+            atelier_app::work_classification::open_human_children(&index, &source.policy, &id);
+        if !human_children.is_empty() {
+            lines.push(format!(
+                "Needs a human: {}",
+                atelier_app::work_classification::human_children_note(&id, &human_children)
+            ));
+        }
         for row in work.active.iter().chain(&work.blocked).take(8) {
             lines.push(format!(
                 "Work: {} [{}] {} — blockers: {}",

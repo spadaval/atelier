@@ -4,6 +4,9 @@ id: "atelier-1jll"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: task/atelier-1jll
+  work_branch: feature/atelier-1jll
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Human-only checks under a parent hold its branch off the base"
-updated_at: "2026-10-16T18:26:41.060859501+00:00"
+updated_at: "2026-10-16T19:39:16.946686025+00:00"
 ---
 
 ## Goal

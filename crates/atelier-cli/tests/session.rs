@@ -2863,6 +2863,51 @@ fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
     assert!(output.contains("not merged into main"), "{output}");
 }
 #[test]
+fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let parent = ok(f.path(), &["-q", "issue", "create", "Feature"]);
+    let check = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Play-test the release build",
+            "--issue-type",
+            "validation",
+            "--parent",
+            &parent,
+            "-l",
+            "needs-human",
+        ],
+    );
+    commit(f.path(), "a feature with its game check as a child");
+    let output = ok(f.path(), &["start", &parent]);
+    assert!(
+        output.contains(&format!(
+            "{check} labelled needs-human is a child of {parent}"
+        )) && output.contains(&format!("atelier issue update {check} --no-parent")),
+        "{output}"
+    );
+    commit(f.path(), "start the feature");
+    let output = ok(f.path(), &["prime"]);
+    assert!(output.contains("Needs a human: "), "{output}");
+
+    // Following the advice detaches the check, which then waits on the merge.
+    ok(f.path(), &["issue", "update", &check, "--no-parent"]);
+    ok(
+        f.path(),
+        &["issue", "link", &check, &parent, "--role", "blocked_by"],
+    );
+    commit(f.path(), "make the check a standalone validation");
+    let output = ok(f.path(), &["prime"]);
+    assert!(
+        !output.contains("labelled needs-human is a child"),
+        "{output}"
+    );
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

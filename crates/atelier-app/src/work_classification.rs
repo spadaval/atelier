@@ -64,6 +64,43 @@ pub fn needs_human(labels: &[String]) -> bool {
     labels.iter().any(|label| label == NEEDS_HUMAN_LABEL)
 }
 
+/// Open children of `owner` labelled needs-human. A parent integrates only
+/// once every child is terminal, so such a child holds the owner's branch off
+/// the base until the human acts (atelier-1jll).
+pub fn open_human_children(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    owner: &str,
+) -> Vec<String> {
+    let Some(record) = index.issue_record(owner) else {
+        return Vec::new();
+    };
+    record
+        .relationships
+        .children
+        .iter()
+        .filter_map(|child| index.issue_record(&child.id))
+        .filter(|child| {
+            needs_human(&child.labels)
+                && !policy
+                    .issue_status_is_terminal(&child.issue.issue_type, &child.issue.status)
+                    .unwrap_or(false)
+        })
+        .map(|child| child.issue.id.clone())
+        .collect()
+}
+
+/// What to do about [`open_human_children`].
+pub fn human_children_note(owner: &str, children: &[String]) -> String {
+    let first = &children[0];
+    format!(
+        "{} labelled needs-human {} a child of {owner}, and atelier merge needs every child terminal, so the branch cannot integrate until the human finishes {}. If the check runs after the merge (a game, device or release check), make it a standalone validation instead: atelier issue update {first} --no-parent, then atelier issue link {first} {owner} --role blocked_by.",
+        children.join(", "),
+        if children.len() == 1 { "is" } else { "are each" },
+        if children.len() == 1 { "it" } else { "them" },
+    )
+}
+
 impl WorkRow {
     pub fn state_label(&self) -> &'static str {
         self.classification.label()
