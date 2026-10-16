@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T20:44:08.051398337+00:00"
+status: "done"
 title: "Cover mixed code and record commits in the rebase recovery advice"
-updated_at: "2026-10-16T20:42:22.957907553+00:00"
+updated_at: "2026-10-16T20:44:08.051398337+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ The error in crates/atelier-app/src/review_gate.rs and docs/product/reviews-and-
 ## Context
 
 Deferred finding atelier-99k3 from the atelier-v9ve re-review (approval atelier-bulv).
+
+## Close Reason
+
+The 'pins a commit outside the work branch' error and reviews-and-merge.md now say, for a commit that mixes code with review or evidence records, to git cherry-pick -n it and git rm the files it adds under .atelier/reviews and .atelier/evidence before committing. The rebase recovery test makes the post-rebase fix such a mixed commit and follows that advice to a successful merge.
