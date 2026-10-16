@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T18:35:17.362482031+00:00"
+status: "done"
 title: "Refuse done claims for branchless work on the base"
-updated_at: "2026-10-16T18:31:17.626533827+00:00"
+updated_at: "2026-10-16T18:35:17.362482031+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-16T18:31:17.626533827+00:00"
 ## Context
 
 Found 2026-10-15 in review finding atelier-e91j on atelier-kaor.
+
+## Close Reason
+
+land (and start) on the base refuse an unpushed commit outside review that takes a work item to done, with land_base_done_claim and guidance to move it to a work branch and atelier start it; closing missions, deciding decision records and superseding work stay allowed. For merges only a status that differs from every parent counts. Test: base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions. Documented in reviews-and-merge.md.
