@@ -60,6 +60,16 @@ ready work do not start it. `atelier work human` lists it, `atelier prime`
 says how many such items are waiting, and `atelier start` notes the label when
 someone starts one.
 
+Do not make a `needs-human` check a child of a branch owner when the check runs
+after the merge, such as a game, headset or Windows check on the released
+build. `atelier merge` needs every child terminal, so the owner's branch could
+not integrate until the human acts. Model the check as a standalone
+validation `blocked_by` the parent instead (and `advances` the mission, if
+any). `atelier start` and `atelier prime` warn when a branch owner has an open
+`needs-human` child and give the two commands that detach it (atelier-1jll).
+A `needs-human` child that must finish before the merge, such as an account
+approval the code depends on, can stay a child.
+
 `atelier work ready` lists only work an agent can start. Missions, and parents
 with open children, are worked through their children, so ready views show
 them in a separate "Parents and Missions" context panel instead, and `--quiet`

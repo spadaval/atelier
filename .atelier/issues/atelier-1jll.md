@@ -4,6 +4,9 @@ id: "atelier-1jll"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-1jll
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-16T19:42:17.760171581+00:00"
+status: "done"
 title: "Human-only checks under a parent hold its branch off the base"
-updated_at: "2026-10-16T18:26:41.060859501+00:00"
+updated_at: "2026-10-16T19:42:17.760171581+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,7 @@ Either a parent can integrate while its `needs-human` validation children are op
 ## Context
 
 Found 2026-10-16 orchestrating the astromech backlog. 15 parents (EDDN sender, Ships page, v1.0 UI refinement, onboarding and others) each had a needs-human game check as a child. Worked around in astromech b361b4a by detaching each check, linking it `blocked_by` its parent and `advances` the parent mission, and rewording the parent Done when to say the check runs after the merge.
+
+## Close Reason
+
+Took the warn-and-document option: atelier start and atelier prime warn when a branch owner has an open needs-human child, explain that atelier merge needs every child terminal, and give the commands to detach it as a standalone validation blocked_by the parent (issue update --no-parent, issue link --role blocked_by). The work-model doc says to model post-merge human checks that way. Test: start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child, which also follows the advice.
