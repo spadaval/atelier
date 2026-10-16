@@ -4,7 +4,9 @@
 
 Accepted (2026-10-15, human-directed).
 
-Builds on [ADR 0019](0019-verified-repo-native-tracker.md).
+Builds on [ADR 0019](0019-verified-repo-native-tracker.md). Decision 3 amended
+by [ADR 0022](0022-status-orients-and-output-is-dense.md): session context
+comes from `status`.
 
 ## Context
 

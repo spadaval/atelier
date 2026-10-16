@@ -37,11 +37,12 @@ commands have `--json` (`review list` and `merge --check`), used today only by
 What agents do instead shows where the views fall short. Counting Bash tool
 calls in this repository's Claude Code transcripts up to 2026-10-16 (commands
 that run `atelier work`, `status`, `prime`, `issue show`, or `issue list`,
-excluding scripts that only quote them), agents ran about 60 and piped about
-a third to `head`, `sed`, `grep`, or `tail`. In astromech, an adopter on an
-earlier model, they ran about 220 and piped about half, mostly to `sed` to cut
-one section or line out of `issue show`. The exact shares depend on the
-counting rule; the pattern does not.
+excluding scripts that only quote them, and counting a pipe directly after the
+command, including after `2>&1`), agents ran about 60 and piped about four in
+five, mostly to `head`, `grep`, or `sed`. In astromech, an adopter on an
+earlier model, they ran about 290 and piped about seven in ten, mostly to
+`sed` to cut one section or line out of `issue show`. Some `| head` is habit
+rather than need; the section-cutting is not.
 Agents also looped over IDs extracting the Hierarchy section to rebuild a
 tree, and grepped `prime` for "human".
 

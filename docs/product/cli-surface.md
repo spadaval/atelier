@@ -1,8 +1,8 @@
 # CLI Surface
 
 The primary interface is the `atelier` CLI and tracked Markdown. Read command
-help for exact flags. During the rebuild use `target/debug/atelier`; update the
-installed binary only after the new model is stable.
+help for exact flags. Use `target/debug/atelier` to try changes; the installed
+binary runs the Claude Code hooks (see [development setup](development-setup.md)).
 
 | Surface | Purpose |
 | --- | --- |

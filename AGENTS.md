@@ -5,8 +5,8 @@ product policy in the linked sources instead of duplicating it here.
 
 ## Missions
 
-Open missions and their strategies are in `atelier work missions`; this file
-does not track them. The verified repo-native tracker rebuild (mission
+Open missions are listed by `atelier work missions`, and `atelier work mission
+<id>` shows each one's strategy; this file does not track them. The verified repo-native tracker rebuild (mission
 `atelier-kgcr`, `docs/strategies/atelier-rebuild.md`) closed on 2026-10-15.
 [ADR 0019](docs/adr/0019-verified-repo-native-tracker.md) remains the
 governing decision, and current product and architecture docs describe the
