@@ -1127,78 +1127,82 @@ fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, V
             display_state_path(relative)
         )
     };
-    serde_yaml::from_str::<UniqueKeys>(front).with_context(invalid)?;
-    serde_yaml::from_str(front).with_context(invalid)
+    match serde_yaml::from_str::<UniqueKeys>(front)
+        .with_context(invalid)?
+        .0
+    {
+        Value::Object(map) => Ok(map.into_iter().collect()),
+        // Not a mapping: the plain parse reports it as before.
+        _ => serde_yaml::from_str(front).with_context(invalid),
+    }
 }
 
-/// Parses YAML only to reject a mapping that repeats a key. Parsing keeps
-/// the last value, so a hand-resolved merge that leaves two `id:` keys in one
-/// relationship entry would otherwise drop one silently (atelier-tqru).
-struct UniqueKeys;
+/// A JSON value parsed from YAML, as `serde_json::Value` would parse it, that
+/// rejects a mapping repeating a key. Keys are read as strings, the way the
+/// parsed value holds them, so `1` and `"1"` are the same key. Plain parsing
+/// keeps the last value, so a hand-resolved merge that leaves two `id:` keys
+/// in one relationship entry would otherwise drop one silently (atelier-tqru).
+struct UniqueKeys(Value);
 
 impl<'de> serde::Deserialize<'de> for UniqueKeys {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(UniqueKeysVisitor)
+        deserializer
+            .deserialize_any(UniqueKeysVisitor)
+            .map(UniqueKeys)
     }
 }
 
 struct UniqueKeysVisitor;
 
 impl<'de> serde::de::Visitor<'de> for UniqueKeysVisitor {
-    type Value = UniqueKeys;
+    type Value = Value;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("YAML without repeated mapping keys")
     }
-    fn visit_map<M: serde::de::MapAccess<'de>>(self, mut map: M) -> Result<UniqueKeys, M::Error> {
-        let mut seen = Vec::new();
-        while let Some(key) = map.next_key::<Value>()? {
-            if seen.contains(&key) {
-                let name = key
-                    .as_str()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| format!("{key:?}"));
-                return Err(serde::de::Error::custom(format!("duplicate key '{name}'")));
+    fn visit_map<M: serde::de::MapAccess<'de>>(self, mut map: M) -> Result<Value, M::Error> {
+        let mut values = serde_json::Map::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if values.contains_key(&key) {
+                return Err(serde::de::Error::custom(format!("duplicate key '{key}'")));
             }
-            seen.push(key);
-            map.next_value::<UniqueKeys>()?;
+            let value = map.next_value::<UniqueKeys>()?.0;
+            values.insert(key, value);
         }
-        Ok(UniqueKeys)
+        Ok(Value::Object(values))
     }
-    fn visit_seq<S: serde::de::SeqAccess<'de>>(self, mut seq: S) -> Result<UniqueKeys, S::Error> {
-        while seq.next_element::<UniqueKeys>()?.is_some() {}
-        Ok(UniqueKeys)
+    fn visit_seq<S: serde::de::SeqAccess<'de>>(self, mut seq: S) -> Result<Value, S::Error> {
+        let mut values = Vec::new();
+        while let Some(value) = seq.next_element::<UniqueKeys>()? {
+            values.push(value.0);
+        }
+        Ok(Value::Array(values))
     }
-    fn visit_enum<A: serde::de::EnumAccess<'de>>(self, data: A) -> Result<UniqueKeys, A::Error> {
-        use serde::de::VariantAccess;
-        let (_, variant) = data.variant::<Value>()?;
-        variant.newtype_variant::<UniqueKeys>()
+    fn visit_bool<E>(self, value: bool) -> Result<Value, E> {
+        Ok(Value::Bool(value))
     }
-    fn visit_bool<E>(self, _: bool) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
+        Ok(Value::Number(value.into()))
     }
-    fn visit_i64<E>(self, _: i64) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
+        Ok(Value::Number(value.into()))
     }
-    fn visit_u64<E>(self, _: u64) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_f64<E>(self, value: f64) -> Result<Value, E> {
+        Ok(serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number))
     }
-    fn visit_f64<E>(self, _: f64) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_str<E>(self, value: &str) -> Result<Value, E> {
+        Ok(Value::String(value.to_owned()))
     }
-    fn visit_str<E>(self, _: &str) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_string<E>(self, value: String) -> Result<Value, E> {
+        Ok(Value::String(value))
     }
-    fn visit_unit<E>(self) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_unit<E>(self) -> Result<Value, E> {
+        Ok(Value::Null)
     }
-    fn visit_none<E>(self) -> Result<UniqueKeys, E> {
-        Ok(UniqueKeys)
+    fn visit_none<E>(self) -> Result<Value, E> {
+        Ok(Value::Null)
     }
-    fn visit_some<D: serde::Deserializer<'de>>(
-        self,
-        deserializer: D,
-    ) -> Result<UniqueKeys, D::Error> {
+    fn visit_some<D: serde::Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
         deserializer.deserialize_any(UniqueKeysVisitor)
     }
 }

@@ -3960,12 +3960,20 @@ fn test_check_rejects_repeated_keys_in_record_front_matter() {
             "top-level",
             original.replacen("priority:", "priority: \"low\"\npriority:", 1),
         ),
+        (
+            "typed",
+            original.replacen("priority:", "1: \"a\"\n\"1\": \"b\"\npriority:", 1),
+        ),
     ] {
         assert_ne!(edited, original, "{case}");
         fs::write(&path, &edited).unwrap();
         let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
         let output = format!("{stdout}{stderr}");
-        let key = if case == "nested" { "id" } else { "priority" };
+        let key = match case {
+            "nested" => "id",
+            "typed" => "1",
+            _ => "priority",
+        };
         assert!(
             !success
                 && output.contains(&format!("duplicate key '{key}'"))
