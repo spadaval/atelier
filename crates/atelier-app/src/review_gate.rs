@@ -320,12 +320,13 @@ fn merged(
                         .filter(|entry| !base.contains(entry) && !ours.contains(entry)),
                 )
                 .collect::<Vec<_>>();
-            // Every expected entry is kept and every kept entry is expected,
-            // so a duplicate cannot make room for one nobody wrote
-            // (atelier-wgil).
+            // The same entries, each as many times, so a duplicate cannot
+            // make room for one nobody wrote (atelier-wgil).
             resolved.len() == expected.len()
-                && expected.iter().all(|entry| resolved.contains(entry))
-                && resolved.iter().all(|entry| expected.contains(&entry))
+                && resolved.iter().all(|entry| {
+                    resolved.iter().filter(|other| *other == entry).count()
+                        == expected.iter().filter(|other| **other == entry).count()
+                })
         }
         _ => false,
     }
@@ -1193,6 +1194,13 @@ mod tests {
             &ours,
             &theirs,
             &list(&["dup", "dup", "branch"]),
+            ""
+        ));
+        assert!(!merged(
+            &base,
+            &ours,
+            &theirs,
+            &list(&["dup", "branch", "base", "base"]),
             ""
         ));
     }
