@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T19:26:55.654093135+00:00"
+status: "done"
 title: "Small CLI rough edges from rebuild validation"
-updated_at: "2026-10-16T19:24:26.403407887+00:00"
+updated_at: "2026-10-16T19:26:55.654093135+00:00"
 ---
 
 ## Goal
@@ -26,6 +27,10 @@ Resolve or consciously accept the minor issues found by independent validation.
 ## Done when
 
 Each item below is fixed with a test or recorded as accepted: (1) land does not refuse uncommitted .atelier/config.toml edits; (2) atelier setup leaves settings.json at mode 0600; (3) issue create accepts a mission with neither a strategy link nor success criteria, which check then flags; (4) review subcommands lack help descriptions; (5) two test doc comments still mention export/import.
+
+## Context
+
+Independent S1-S8 validation 2026-10-15 (atelier-xz11).
 
 ## Design
 
@@ -37,6 +42,6 @@ Resolution of each item (2026-10-16):
 4. Fixed. Every `atelier review` subcommand and argument has help text.
 5. Fixed. The two test doc comments no longer mention export/import.
 
-## Context
+## Close Reason
 
-Independent S1-S8 validation 2026-10-15 (atelier-xz11).
+Each item is fixed with a test or recorded: (1) uncommitted config.toml is accepted as a local path by design; (2) setup keeps the settings mode, tested; (3) mission create and check now agree, no longer reproduces; (4) review subcommands have help; (5) export/import doc comments fixed. See Design.
