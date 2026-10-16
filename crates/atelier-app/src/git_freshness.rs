@@ -669,11 +669,7 @@ impl<'a> ReadContext<'a> {
         let range = format!("{pin}..{end}");
         let commits =
             String::from_utf8(git_output(self.repo, &["rev-list", "--parents", &range])?)?;
-        let descendants = String::from_utf8(git_output(
-            self.repo,
-            &["rev-list", "--ancestry-path", &range],
-        )?)?;
-        let mut tested_context: HashSet<&str> = descendants.lines().collect();
+        let mut tested_context = ancestry_path(&commits, pin)?;
         tested_context.insert(pin);
         let mut edges = Vec::new();
         for line in commits.lines() {
@@ -707,6 +703,39 @@ impl<'a> ReadContext<'a> {
             }
         }
         Ok(edges)
+    }
+}
+
+/// The commits of `rev-list --parents pin..end` output that descend from
+/// `pin`, which is what `rev-list --ancestry-path pin..end` lists, computed
+/// from the same output instead of a second walk (atelier-v5tt). Marking
+/// repeats until nothing changes, as Git's does, so a parent cycle that
+/// grafts can create still ends (atelier-6vfg).
+fn ancestry_path<'a>(commits: &'a str, pin: &str) -> Result<HashSet<&'a str>> {
+    let mut graph = Vec::new();
+    for line in commits.lines() {
+        let mut parts = line.split_whitespace();
+        let commit = parts.next().context("invalid Git parent query")?;
+        graph.push((commit, parts.collect::<Vec<_>>()));
+    }
+    // rev-list lists children before parents, so walking it backwards marks
+    // most of the path in one pass.
+    let mut marked = HashSet::new();
+    loop {
+        let mut changed = false;
+        for (commit, parents) in graph.iter().rev() {
+            if !marked.contains(commit)
+                && parents
+                    .iter()
+                    .any(|parent| *parent == pin || marked.contains(parent))
+            {
+                marked.insert(*commit);
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(marked);
+        }
     }
 }
 
@@ -969,6 +998,131 @@ mod tests {
         git_output(repo, &["add", "."]).unwrap();
         git_output(repo, &["commit", "--allow-empty", "-qm", message]).unwrap();
         head_commit(repo).unwrap()
+    }
+    #[test]
+    fn ancestry_path_matches_git_on_branchy_history() {
+        let repo = repo("sha1");
+        let path = repo.path();
+        let mut commits = vec![commit(path, "root")];
+        // Side branches, merges of merges and a criss-cross, so pins land on
+        // both sides of every merge.
+        for round in 0..3 {
+            let base = commits.last().unwrap().clone();
+            git_output(path, &["checkout", "-qb", &format!("side{round}"), &base]).unwrap();
+            fs::write(path.join(format!("side{round}")), "side").unwrap();
+            commits.push(commit(path, "side work"));
+            commits.push(commit(path, "more side work"));
+            git_output(path, &["checkout", "-q", "--detach", &base]).unwrap();
+            fs::write(path.join(format!("main{round}")), "main").unwrap();
+            commits.push(commit(path, "main work"));
+            git_output(
+                path,
+                &[
+                    "merge",
+                    "-q",
+                    "--no-ff",
+                    "-m",
+                    "merge",
+                    &format!("side{round}"),
+                ],
+            )
+            .unwrap();
+            commits.push(head_commit(path).unwrap());
+            git_output(path, &["checkout", "-q", &format!("side{round}")]).unwrap();
+            git_output(
+                path,
+                &[
+                    "merge",
+                    "-q",
+                    "--no-ff",
+                    "-m",
+                    "criss",
+                    &commits[commits.len() - 2],
+                ],
+            )
+            .unwrap();
+            commits.push(head_commit(path).unwrap());
+            git_output(
+                path,
+                &["checkout", "-q", "--detach", &commits[commits.len() - 2]],
+            )
+            .unwrap();
+            git_output(
+                path,
+                &[
+                    "merge",
+                    "-q",
+                    "--no-ff",
+                    "-m",
+                    "cross",
+                    &format!("side{round}"),
+                ],
+            )
+            .unwrap();
+            commits.push(head_commit(path).unwrap());
+        }
+        let end = commits.last().unwrap().clone();
+        for pin in &commits {
+            if git_output(path, &["merge-base", "--is-ancestor", pin, &end]).is_err() {
+                continue;
+            }
+            let range = format!("{pin}..{end}");
+            let listed =
+                String::from_utf8(git_output(path, &["rev-list", "--parents", &range]).unwrap())
+                    .unwrap();
+            let native = ancestry_path(&listed, pin).unwrap();
+            let git = String::from_utf8(
+                git_output(path, &["rev-list", "--ancestry-path", &range]).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(native, git.lines().collect::<HashSet<_>>(), "pin {pin}");
+        }
+    }
+    #[test]
+    fn ancestry_path_matches_git_for_octopus_merges_and_graft_cycles() {
+        let repo = repo("sha1");
+        let path = repo.path();
+        let compare = |pin: &str, end: &str| {
+            let range = format!("{pin}..{end}");
+            let listed =
+                String::from_utf8(git_output(path, &["rev-list", "--parents", &range]).unwrap())
+                    .unwrap();
+            let git = String::from_utf8(
+                git_output(path, &["rev-list", "--ancestry-path", &range]).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                ancestry_path(&listed, pin).unwrap(),
+                git.lines().collect::<HashSet<_>>(),
+                "{range}"
+            );
+        };
+        let root = commit(path, "root");
+        let mut tips = Vec::new();
+        for leg in 0..3 {
+            git_output(path, &["checkout", "-q", "--detach", &root]).unwrap();
+            fs::write(path.join(format!("leg{leg}")), "leg").unwrap();
+            tips.push(commit(path, "leg"));
+        }
+        git_output(path, &["checkout", "-q", "--detach", &tips[0]]).unwrap();
+        git_output(
+            path,
+            &[
+                "merge", "-q", "--no-ff", "-m", "octopus", &tips[1], &tips[2],
+            ],
+        )
+        .unwrap();
+        let octopus = head_commit(path).unwrap();
+        for pin in [&root, &tips[0], &tips[1], &tips[2]] {
+            compare(pin, &octopus);
+        }
+        // A graft that makes a parent cycle: the walk must still end.
+        let c2 = commit(path, "c2");
+        let c3 = commit(path, "c3");
+        let c4 = commit(path, "c4");
+        fs::write(path.join(".git/info/grafts"), format!("{c3} {c4}\n")).unwrap();
+        compare(&c2, &c4);
+        compare(&octopus, &c4);
     }
     #[test]
     fn native_reads_keep_exact_ranges_and_reject_bad_pins() {

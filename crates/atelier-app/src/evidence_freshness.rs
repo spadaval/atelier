@@ -274,9 +274,9 @@ impl EvidenceReadContext<'_> {
         evidence_matches_edges(self, issue, record, &edges)
     }
     pub(crate) fn claim_endpoint(&mut self, issue_id: &str, pin: &str) -> Result<String> {
-        let path = format!(".atelier/issues/{issue_id}.md");
         let head = self.pinned("HEAD")?;
-        let changes = self.history(&["log", "--root", "--format=%H", &head, "--", &path])?;
+        let query = claim_history_query(&head, issue_id);
+        let changes = self.history(&query.iter().map(String::as_str).collect::<Vec<_>>())?;
         let current = self.issue_at(&head, issue_id)?;
         let mut claim = None;
         for commit in changes.lines() {
@@ -295,6 +295,21 @@ impl EvidenceReadContext<'_> {
         };
         Ok(end.to_owned())
     }
+}
+
+/// The `git log` behind [`EvidenceReadContext::claim_endpoint`]: every commit
+/// that touched the issue record, newest first. Shared so callers can
+/// prefetch it (atelier-v5tt).
+pub(crate) fn claim_history_query(head: &str, issue_id: &str) -> Vec<String> {
+    [
+        "log".to_owned(),
+        "--root".to_owned(),
+        "--format=%H".to_owned(),
+        head.to_owned(),
+        "--".to_owned(),
+        format!(".atelier/issues/{issue_id}.md"),
+    ]
+    .to_vec()
 }
 
 #[cfg(test)]
