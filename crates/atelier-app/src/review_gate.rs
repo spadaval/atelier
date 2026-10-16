@@ -18,6 +18,10 @@ pub struct GateNode {
     pub passed: bool,
     pub reason: String,
     pub supports: Vec<String>,
+    /// A failing proof check whose newer pass is stale only because of
+    /// uncommitted changes in the checkout (atelier-x3bj).
+    #[serde(skip)]
+    pub stale_from_checkout: bool,
 }
 fn gate(owner: &str, check: &str, passed: bool, reason: String, supports: Vec<String>) -> GateNode {
     GateNode {
@@ -28,6 +32,7 @@ fn gate(owner: &str, check: &str, passed: bool, reason: String, supports: Vec<St
         passed,
         reason,
         supports,
+        stale_from_checkout: false,
     }
 }
 pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
@@ -662,6 +667,7 @@ fn evaluate_scope(
     for node in nodes {
         if let Some(existing) = unique.get_mut(&node.id) {
             existing.passed &= node.passed;
+            existing.stale_from_checkout |= node.stale_from_checkout;
             if existing.reason != node.reason {
                 existing.reason.push_str(&format!("; {}", node.reason));
             }
@@ -712,16 +718,19 @@ fn completion_claims(
         }
         if let Some(failure) = read.newest_failure(index, id, !historical)? {
             let reason = match &failure.stale_pass {
-                Some(pass) => format!("newer failing evidence {}; the later pass {pass} does not prove the current checkout (uncommitted changes or later commits make it stale)", failure.id),
+                Some(pass) if failure.stale_from_checkout => format!("newer failing evidence {}; the later pass {pass} was recorded before the uncommitted changes in this checkout", failure.id),
+                Some(pass) => format!("newer failing evidence {}; the later pass {pass} no longer proves the claim (later commits changed what it covers)", failure.id),
                 None => format!("newer failing evidence {}", failure.id),
             };
-            nodes.push(gate(
+            let mut node = gate(
                 id,
                 "evidence.no_newer_failure",
                 false,
                 reason,
                 vec![failure.id],
-            ));
+            );
+            node.stale_from_checkout = failure.stale_from_checkout;
+            nodes.push(node);
         }
     }
     // Terminal records can also be edited directly; retain the trusted

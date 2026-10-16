@@ -3,6 +3,9 @@ created_at: "2026-10-16T19:12:40.883294176+00:00"
 id: "atelier-x3bj"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-x3bj
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Tie the stale-proof note to dirty-checkout staleness, not gate text"
-updated_at: "2026-10-16T19:12:40.883294176+00:00"
+updated_at: "2026-10-16T20:07:49.667065017+00:00"
 ---
 
 ## Goal

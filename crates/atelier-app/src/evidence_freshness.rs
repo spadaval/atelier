@@ -182,6 +182,9 @@ pub(crate) struct NewestFailure {
     /// A newer pass that does not prove the current checkout or commit,
     /// such as one made stale by uncommitted changes (atelier-749l).
     pub(crate) stale_pass: Option<String>,
+    /// Whether that pass would still prove the claim with uncommitted
+    /// changes set aside, so the checkout alone makes it stale (atelier-x3bj).
+    pub(crate) stale_from_checkout: bool,
 }
 
 impl EvidenceReadContext<'_> {
@@ -196,7 +199,7 @@ impl EvidenceReadContext<'_> {
             .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
         let mut newest_fail = None;
         let mut newest_pass = None;
-        let mut newest_stale_pass: Option<(_, String)> = None;
+        let mut newest_stale_pass: Option<(_, String, bool)> = None;
         for link in index.list_record_links("issue", issue_id)? {
             if link.relation_type != "validates" {
                 continue;
@@ -219,9 +222,11 @@ impl EvidenceReadContext<'_> {
                         newest_pass = Some(candidate)
                     } else if newest_stale_pass
                         .as_ref()
-                        .is_none_or(|old| &candidate > old)
+                        .is_none_or(|old| (&candidate.0, &candidate.1) > (&old.0, &old.1))
                     {
-                        newest_stale_pass = Some(candidate)
+                        let from_checkout =
+                            fresh && self.proof_matches(issue, record, false).unwrap_or(false);
+                        newest_stale_pass = Some((candidate.0, candidate.1, from_checkout))
                     }
                 }
                 _ => {}
@@ -233,11 +238,13 @@ impl EvidenceReadContext<'_> {
                     .as_ref()
                     .is_none_or(|passed| passed.0 <= failed.0)
             })
-            .map(|(failed_at, id)| NewestFailure {
-                id,
-                stale_pass: newest_stale_pass
-                    .filter(|(passed_at, _)| *passed_at > failed_at)
-                    .map(|(_, id)| id),
+            .map(|(failed_at, id)| {
+                let stale = newest_stale_pass.filter(|(passed_at, _, _)| *passed_at > failed_at);
+                NewestFailure {
+                    id,
+                    stale_from_checkout: stale.as_ref().is_some_and(|(_, _, checkout)| *checkout),
+                    stale_pass: stale.map(|(_, id, _)| id),
+                }
             }))
     }
 

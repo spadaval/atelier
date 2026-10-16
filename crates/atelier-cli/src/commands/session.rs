@@ -520,9 +520,9 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .collect::<Vec<_>>();
     if !failed.is_empty() {
         // Uncommitted code makes passing proof stale; name it (atelier-749l).
-        let stale_proof = nodes.iter().any(|node| {
-            !node.passed && node.reason.contains("does not prove the current checkout")
-        });
+        let stale_proof = nodes
+            .iter()
+            .any(|node| !node.passed && node.stale_from_checkout);
         let dirty_note = (stale_proof && !initial_paths.is_empty()).then(|| {
             const SHOWN: usize = 5;
             let mut listed = initial_paths
