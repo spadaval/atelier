@@ -10,15 +10,24 @@ use crate::workflow_policy::WorkflowPolicy;
 /// own children sequences its children; that does not block the children.
 pub fn inherited_blockers(index: &RecordIndex, issue_id: &str) -> Option<(String, Vec<String>)> {
     let parent = index.get_issue(issue_id)?.parent_id?;
+    let blockers = index.get_blockers(&parent);
+    if blockers.is_empty() {
+        return None;
+    }
     let siblings = index
-        .get_subissues(&parent)
+        .issue_record(&parent)
+        .map(|record| {
+            record
+                .relationships
+                .children
+                .iter()
+                .map(|child| child.id.as_str())
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let blockers = blockers
         .into_iter()
-        .map(|child| child.id)
-        .collect::<BTreeSet<_>>();
-    let blockers = index
-        .get_blockers(&parent)
-        .into_iter()
-        .filter(|blocker| blocker != issue_id && !siblings.contains(blocker))
+        .filter(|blocker| blocker != issue_id && !siblings.contains(blocker.as_str()))
         .collect::<Vec<_>>();
     (!blockers.is_empty()).then_some((parent, blockers))
 }
