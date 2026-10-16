@@ -168,11 +168,10 @@ fn approval_is_current_to(
     end: &str,
     base: &str,
 ) -> Result<bool> {
-    for (edge, resolution) in work_edges(read, pin, end, base)? {
-        let allowed = if resolution {
-            allowed_resolution(read, &edge, ids)?
-        } else {
-            allowed_edge(read, &edge, ids)?
+    for (edge, merge) in work_edges(read, pin, end, base)? {
+        let allowed = match &merge {
+            Some(merge) => allowed_base_merge(read, &edge, merge, ids)?,
+            None => allowed_edge(read, &edge, ids)?,
         };
         if !allowed {
             return Ok(false);
@@ -180,22 +179,45 @@ fn approval_is_current_to(
     }
     Ok(true)
 }
-/// A base merge's hand-resolved record conflicts. Out-of-scope records hold
-/// base planning, which needs no review on the base (atelier-3mjv); in-scope
-/// records must still change only in status (atelier-1isk).
-fn allowed_resolution(
+/// A merge of base content into the work branch, checked against the branch
+/// side. Paths Git merged on its own came from the base, except that an
+/// in-scope issue record may still change only in status, so base planning
+/// cannot rewrite the approved acceptance. A record conflict resolved by hand
+/// must keep every line either side added and every line both kept, adding
+/// nothing new, so it cannot drop a blocker; in-scope ones are status-only
+/// too (atelier-n7g1, atelier-1isk).
+fn allowed_base_merge(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
+    merge: &git::MergeResolution,
     ids: &BTreeSet<String>,
 ) -> Result<bool> {
-    for path in &edge.paths {
-        let out_of_scope = path.parent() == Some(Path::new(".atelier/issues"))
+    // A conflict resolved to the branch side's version changes nothing
+    // against it, yet may drop the base's side, so every conflict is checked.
+    let paths = edge
+        .paths
+        .iter()
+        .chain(&merge.conflicted)
+        .collect::<BTreeSet<_>>();
+    for path in paths {
+        let in_scope_issue = path.parent() == Some(Path::new(".atelier/issues"))
             && path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
-                .is_some_and(|id| !ids.contains(id));
-        if out_of_scope {
+                .is_some_and(|id| ids.contains(id));
+        let conflicted = merge.conflicted.contains(path);
+        if !in_scope_issue && !conflicted {
             continue;
+        }
+        if conflicted && !in_scope_issue {
+            let (Some(base), [side]) = (&merge.merge_base, edge.sides.as_slice()) else {
+                return Ok(false);
+            };
+            if path.starts_with(".atelier/issues")
+                && union_preserving(read, path, base, &edge.parent, side, &edge.commit)?
+            {
+                continue;
+            }
         }
         let single = git::CommitEdge {
             paths: vec![path.clone()],
@@ -207,50 +229,70 @@ fn allowed_resolution(
     }
     Ok(true)
 }
-/// The edges from `pin` to `end` that can change approved work, each marked
-/// when it is a base merge's record resolution. A merge of commits already on
-/// `base` brings in work reviewed on its own branch, so the base commits are
-/// left out (atelier-n7g1). If Git's own merge of its parents reproduces it,
-/// the merge is left out too; if only record conflicts were resolved by hand,
-/// just those records are checked (atelier-1isk).
+/// Whether `resolved` keeps every line `ours` or `theirs` added to `base` and
+/// every line all three share, and adds no line found on neither side.
+fn union_preserving(
+    read: &mut git::ReadContext<'_>,
+    path: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+    resolved: &str,
+) -> Result<bool> {
+    let mut lines = |commit: &str| -> Result<BTreeSet<String>> {
+        Ok(match read.entry(commit, path)? {
+            Some(_) => read
+                .blob(commit, path)?
+                .lines()
+                .map(str::to_owned)
+                .collect(),
+            None => BTreeSet::new(),
+        })
+    };
+    let (base, ours, theirs, resolved) =
+        (lines(base)?, lines(ours)?, lines(theirs)?, lines(resolved)?);
+    let added = ours
+        .difference(&base)
+        .chain(theirs.difference(&base))
+        .all(|line| resolved.contains(line));
+    let kept = base
+        .iter()
+        .filter(|line| ours.contains(*line) && theirs.contains(*line))
+        .all(|line| resolved.contains(line));
+    let nothing_new = resolved
+        .iter()
+        .all(|line| ours.contains(line) || theirs.contains(line));
+    Ok(added && kept && nothing_new)
+}
+/// The edges from `pin` to `end` that can change approved work, each with
+/// its merge resolution when it merges commits already on `base`. Those base
+/// commits were reviewed on their own branches, so they are left out
+/// (atelier-n7g1); the merge itself is checked with `allowed_base_merge`.
 fn work_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     end: &str,
     base: &str,
-) -> Result<Vec<(git::CommitEdge, bool)>> {
+) -> Result<Vec<(git::CommitEdge, Option<git::MergeResolution>)>> {
     let edges = read.edges(pin, end)?;
     let mut merged_base = HashSet::new();
-    let mut resolutions = BTreeMap::new();
+    let mut merges = BTreeMap::new();
     for edge in edges.iter().filter(|edge| !edge.sides.is_empty()) {
         if !(ancestor(read, pin, &edge.parent)
             && edge.sides.iter().all(|side| ancestor(read, side, base)))
         {
             continue;
         }
-        let Some(resolved) = read.merge_resolution(&edge.commit)? else {
+        let Some(merge) = read.merge_resolution(&edge.commit)? else {
             continue;
         };
         merged_base.extend(read.only_in(&edge.sides, &edge.parent)?);
-        if resolved.is_empty() {
-            merged_base.insert(edge.commit.clone());
-        } else {
-            resolutions.insert(edge.commit.clone(), resolved);
-        }
+        merges.insert(edge.commit.clone(), merge);
     }
     Ok(edges
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
-        .map(|edge| match resolutions.get(&edge.commit) {
-            Some(paths) => (
-                git::CommitEdge {
-                    paths: paths.clone(),
-                    ..edge.clone()
-                },
-                true,
-            ),
-            None => (edge.clone(), false),
-        })
+        .map(|edge| (edge.clone(), merges.get(&edge.commit).cloned()))
         .collect())
 }
 

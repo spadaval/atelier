@@ -859,59 +859,95 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
 }
 
 #[test]
-fn base_merge_with_resolved_record_conflicts_keeps_approval_unless_scope_changes() {
-    for case in ["out_of_scope", "in_scope", "code"] {
+fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
+    for case in [
+        "union",
+        "drop_side",
+        "edit_while_merging",
+        "base_scope_edit",
+    ] {
         let fixture = Fixture::new();
-        // An out-of-scope record both sides will edit.
         git(fixture.path(), &["switch", "-q", "main"]);
-        let shared = ok(
+        let mission = ok(
             fixture.path(),
-            &["-q", "issue", "create", "Shared planning"],
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Mission",
+                "--issue-type",
+                "mission",
+            ],
         );
-        commit(fixture.path(), "shared planning record");
+        let outside = ok(fixture.path(), &["-q", "issue", "create", "Outside"]);
+        commit(fixture.path(), "a mission and an outside issue");
         git(fixture.path(), &["switch", "-q", &fixture.branch]);
         git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
-        let path = format!(".atelier/issues/{shared}.md");
-        let retitle = |title: &str| {
-            let file = fixture.path().join(&path);
-            let text = fs::read_to_string(&file).unwrap();
-            let text = text.replace("title: \"Shared planning\"", &format!("title: \"{title}\""));
-            fs::write(file, text).unwrap();
-        };
-        retitle("Branch title");
-        commit(fixture.path(), "branch planning edit");
+        // Planning on the branch adds work to the mission before approval.
+        let branch_work = ok(fixture.path(), &["-q", "issue", "create", "Branch work"]);
+        ok(fixture.path(), &["issue", "link", &branch_work, &mission]);
+        commit(fixture.path(), "branch planning");
         fixture.approval("Reviewer");
 
+        // Planning on the base adds other work to the same mission.
         git(fixture.path(), &["switch", "-q", "main"]);
-        retitle("Base title");
-        if case == "in_scope" {
-            // The base also edits the owner's acceptance.
+        let base_work = ok(fixture.path(), &["-q", "issue", "create", "Base work"]);
+        ok(fixture.path(), &["issue", "link", &base_work, &mission]);
+        if case == "base_scope_edit" {
+            // The owner's Goal, far from the branch's own edits, so Git
+            // merges it cleanly into the approved work.
             let owner = fixture
                 .path()
                 .join(format!(".atelier/issues/{}.md", fixture.id));
             let text = fs::read_to_string(&owner).unwrap();
             fs::write(
                 owner,
-                text.replace("Scenario passes.", "A different scenario passes."),
+                text.replace("Ship change.", "Ship a different change."),
             )
             .unwrap();
         }
-        commit(fixture.path(), "base planning edit");
+        commit(fixture.path(), "base planning");
         git(fixture.path(), &["switch", "-q", &fixture.branch]);
         let merged = Command::new("git")
             .current_dir(fixture.path())
             .args(["merge", "--no-edit", "main"])
             .output()
             .unwrap();
-        assert!(!merged.status.success(), "the shared record conflicts");
-        // Resolve the record conflict by taking the base's planning.
-        git(fixture.path(), &["checkout", "--theirs", "--", &path]);
-        if case == "code" {
-            fs::write(fixture.path().join("src.rs"), "edited while merging\n").unwrap();
+        assert!(!merged.status.success(), "the mission record conflicts");
+        assert_eq!(
+            git(fixture.path(), &["diff", "--name-only", "--diff-filter=U"]),
+            format!(".atelier/issues/{mission}.md"),
+            "only the mission record conflicts"
+        );
+        let path = format!(".atelier/issues/{mission}.md");
+        if case == "drop_side" {
+            git(fixture.path(), &["checkout", "--ours", "--", &path]);
+        } else {
+            git(
+                fixture.path(),
+                &["checkout", "--conflict=merge", "--", &path],
+            );
+            let stage = |n: u8| git(fixture.path(), &["show", &format!(":{n}:{path}")]) + "\n";
+            let dir = tempdir().unwrap();
+            for (n, name) in [(1, "base"), (2, "ours"), (3, "theirs")] {
+                fs::write(dir.path().join(name), stage(n)).unwrap();
+            }
+            let union = Command::new("git")
+                .args(["merge-file", "--union", "-p"])
+                .args(["ours", "base", "theirs"].map(|name| dir.path().join(name)))
+                .output()
+                .unwrap();
+            fs::write(fixture.path().join(&path), union.stdout).unwrap();
+        }
+        if case == "edit_while_merging" {
+            ok(fixture.path(), &["issue", "transition", &outside, "start"]);
         }
         git(fixture.path(), &["add", "."]);
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
-        if case == "out_of_scope" {
+        if case != "drop_side" {
+            ok(fixture.path(), &["check"]);
+        }
+        if case == "union" {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(output.contains("pass review.current"), "{output}");
         } else {
