@@ -923,21 +923,26 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         if case == "drop_side" {
             git(fixture.path(), &["checkout", "--ours", "--", &path]);
         } else {
-            git(
-                fixture.path(),
-                &["checkout", "--conflict=merge", "--", &path],
-            );
-            let stage = |n: u8| git(fixture.path(), &["show", &format!(":{n}:{path}")]) + "\n";
-            let dir = tempdir().unwrap();
-            for (n, name) in [(1, "base"), (2, "ours"), (3, "theirs")] {
-                fs::write(dir.path().join(name), stage(n)).unwrap();
+            // Resolve as one record holding both sides' links.
+            let side = |stage: u8| {
+                atelier_records::parse_issue_record(
+                    &(git(fixture.path(), &["show", &format!(":{stage}:{path}")]) + "\n"),
+                    std::path::Path::new(&path)
+                        .strip_prefix(".atelier")
+                        .unwrap(),
+                )
+                .unwrap()
+            };
+            let (ours, theirs) = (side(2), side(3));
+            let mut resolved = ours.clone();
+            for link in &theirs.relationships.relates {
+                if !resolved.relationships.relates.contains(link) {
+                    resolved.relationships.relates.push(link.clone());
+                }
             }
-            let union = Command::new("git")
-                .args(["merge-file", "--union", "-p"])
-                .args(["ours", "base", "theirs"].map(|name| dir.path().join(name)))
-                .output()
+            atelier_records::RecordStore::new(fixture.path().join(".atelier"))
+                .write_issue_atomic(&resolved)
                 .unwrap();
-            fs::write(fixture.path().join(&path), union.stdout).unwrap();
         }
         if case == "edit_while_merging" {
             ok(fixture.path(), &["issue", "transition", &outside, "start"]);
@@ -950,6 +955,96 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         if case == "union" {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(output.contains("pass review.current"), "{output}");
+        } else {
+            fixture.refusal("FAIL review.current");
+        }
+    }
+}
+
+#[test]
+fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
+    for case in ["keep_blocker", "drop_blocker", "drop_child"] {
+        let fixture = Fixture::new();
+        git(fixture.path(), &["switch", "-q", "main"]);
+        let other = ok(fixture.path(), &["-q", "issue", "create", "Other"]);
+        let blocker = ok(fixture.path(), &["-q", "issue", "create", "Blocker"]);
+        commit(fixture.path(), "planning records");
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+        let blocker_case = case != "drop_child";
+        if blocker_case {
+            // Both sides label the blocker differently, so its record
+            // conflicts; the branch also relates it to another issue.
+            ok(
+                fixture.path(),
+                &["issue", "update", &blocker, "-l", "branch"],
+            );
+            ok(
+                fixture.path(),
+                &["issue", "link", &blocker, &other, "--role", "related"],
+            );
+            commit(fixture.path(), "branch planning on the blocker");
+        }
+        fixture.approval("Reviewer");
+
+        git(fixture.path(), &["switch", "-q", "main"]);
+        if blocker_case {
+            ok(fixture.path(), &["issue", "update", &blocker, "-l", "base"]);
+            ok(
+                fixture.path(),
+                &["issue", "link", &blocker, &fixture.id, "--role", "blocks"],
+            );
+        } else {
+            ok(
+                fixture.path(),
+                &["issue", "update", &other, "--parent", &fixture.id],
+            );
+        }
+        commit(fixture.path(), "base planning on the same record");
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        let merged = Command::new("git")
+            .current_dir(fixture.path())
+            .args(["merge", "--no-edit", "main"])
+            .output()
+            .unwrap();
+        assert!(!merged.status.success(), "{case}: a record conflicts");
+        let conflicted = git(fixture.path(), &["diff", "--name-only", "--diff-filter=U"]);
+        if blocker_case {
+            assert_eq!(conflicted, format!(".atelier/issues/{blocker}.md"));
+            let side = |stage: u8| {
+                let path = format!(".atelier/issues/{blocker}.md");
+                atelier_records::parse_issue_record(
+                    &(git(fixture.path(), &["show", &format!(":{stage}:{path}")]) + "\n"),
+                    std::path::Path::new(&path)
+                        .strip_prefix(".atelier")
+                        .unwrap(),
+                )
+                .unwrap()
+            };
+            let (ours, theirs) = (side(2), side(3));
+            let mut resolved = ours.clone();
+            resolved.labels = vec!["base".into(), "branch".into()];
+            if case == "keep_blocker" {
+                resolved.relationships.blocks = theirs.relationships.blocks.clone();
+            }
+            atelier_records::RecordStore::new(fixture.path().join(".atelier"))
+                .write_issue_atomic(&resolved)
+                .unwrap();
+        } else {
+            // Take the branch's side of every conflict, dropping the child.
+            for conflict in conflicted.lines() {
+                git(fixture.path(), &["checkout", "--ours", "--", conflict]);
+            }
+        }
+        git(fixture.path(), &["add", "."]);
+        git(fixture.path(), &["commit", "-q", "--no-edit"]);
+        if case == "keep_blocker" {
+            let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+            assert!(
+                output.contains("pass review.current")
+                    && output.contains("FAIL blockers.none_open"),
+                "{output}"
+            );
         } else {
             fixture.refusal("FAIL review.current");
         }

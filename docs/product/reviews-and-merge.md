@@ -63,11 +63,14 @@ resolution or edits made while merging (atelier-n7g1). The base commits it
 brings in were reviewed on their own branches. A merge whose conflicts are
 only in records, such as both sides adding to a mission's `advances`, also
 keeps the approval when it matches Git's own merge everywhere else and each
-conflicted record keeps every line either side added and every line both
-kept, adding none of its own, so a resolution cannot drop the base's blocker
-or edit another record (atelier-1isk). In either kind of merge, a record in the
-owner's scope may still change only in status, so base planning that rewrites
-the approved acceptance needs renewed review. A conflicted or hand-edited
+conflicted record is a three-way merge of its sides: every field takes the
+side that changed it, relationship and label lists keep each side's additions
+and removals, and a field both sides changed differently needs renewed
+review. So a resolution cannot drop a blocker or child the base added
+(atelier-1isk). In either kind of merge, a record in the owner's scope may
+still change only in status: any other base edit to it, such as a new child,
+a `blocked_by` link to the owner (stored in the owner's `blocks`) or new
+acceptance, needs renewed review. A conflicted or hand-edited
 merge, or one that brings in a branch not yet on the base, needs renewed
 review. Proof is different: tests must run again on the merged result, so
 record fresh evidence after merging the base.
