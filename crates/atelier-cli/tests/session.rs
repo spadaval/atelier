@@ -2325,6 +2325,37 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
     );
 }
 #[test]
+fn superseding_a_child_of_a_blocked_parent_lands() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Prerequisite"]);
+    let parent = ok(f.path(), &["-q", "issue", "create", "Parked parent"]);
+    ok(
+        f.path(),
+        &["issue", "link", &parent, &blocker, "--role", "blocked_by"],
+    );
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &parent],
+    );
+    commit(f.path(), "a parent waiting on a prerequisite");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "supersede",
+            "--reason",
+            "not needed",
+        ],
+    );
+    commit(f.path(), "retire the child");
+    // The work will not happen, so blockers inherited from its parent do not
+    // hold its retirement (atelier-lq42).
+    ok(f.path(), &["land"]);
+}
+#[test]
 fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);

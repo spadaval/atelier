@@ -90,7 +90,9 @@ A standalone work item owns its branch, and a parent owns its children's
 branch. A parent closes only after every child is terminal (the starter
 policy's `close` runs the `work.terminal` check). Superseding a parent is
 different: it retires the parent with any open children, which then show as
-context only. The default branch name is
+context only. Superseding needs no open blockers resolved, its own or a
+parent's, and `land` does not hold a superseded item to them: the work will
+not happen (atelier-lq42). The default branch name is
 `<issue_type>/<id>`; typed `workflow_branch`
 metadata records an explicit `work_branch` and `branch_base` on the owner.
 Missions coordinate work rather than own a work branch.

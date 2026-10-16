@@ -4,6 +4,9 @@ id: "atelier-lq42"
 issue_type: "bug"
 labels:
 - "size-s"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-lq42
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Supersede succeeds on a child of a blocked parent, then land rejects it"
-updated_at: "2026-10-16T18:13:26.664844677+00:00"
+updated_at: "2026-10-16T19:00:35.670668538+00:00"
 ---
 
 ## Goal

@@ -681,7 +681,12 @@ fn completion_claims(
     let mut nodes = Vec::new();
     for id in ids {
         let issue = index.require_issue(id)?;
-        if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
+        // Superseded work will not happen, so open blockers, including those
+        // inherited from a parent, do not hold its retirement; the supersede
+        // transition checks none either (atelier-lq42).
+        if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
+            && issue.status != "superseded"
+        {
             let blockers =
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();
             nodes.push(gate(
