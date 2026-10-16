@@ -333,19 +333,23 @@ fn land_text(requested: Option<&str>) -> Result<String> {
             if git_freshness::git_output(repo, &["merge-base", "--is-ancestor", tip, &head])
                 .is_err() =>
         {
-            let fork = git::text(repo, &["merge-base", tip, &head]).with_context(|| {
-                format!("land_base_unrelated: {reference} shares no history with HEAD")
-            })?;
+            let name = reference.trim_start_matches("refs/heads/");
+            let Ok(fork) = git::text(repo, &["merge-base", tip, &head]) else {
+                bail!(
+                    "land_base_unrelated: {name} shares no history with this checkout, so the work cannot be checked against it; switch to the owner's work branch, or start the work again from {name} with atelier start {}",
+                    id.as_deref().unwrap_or("<id>")
+                );
+            };
             let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?;
-            behind = Some((
-                reference.trim_start_matches("refs/heads/").to_owned(),
-                count,
-            ));
+            behind = Some((name.to_owned(), count));
             Some(fork)
         }
         Some((_, tip)) => Some(tip.clone()),
         None => None,
     };
+    let behind_note = behind.map(|(base, count)| format!(
+        "Base {base} has {count} commit(s) this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval."
+    ));
     index.validate_policy(&source.policy, repo)?;
     let mut lines = source.diagnostics;
     check_traceability(repo, &index, &source.policy)?;
@@ -420,10 +424,8 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         let base = branch_base
             .as_ref()
             .context("owner integration base missing")?;
-        if let Some((base, count)) = &behind {
-            lines.push(format!(
-                "Base {base} has {count} commit(s) this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval."
-            ));
+        if let Some(note) = &behind_note {
+            lines.push(note.clone());
         }
         nodes.extend(review_gate::evaluate_session(
             &index,
@@ -479,7 +481,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .map(|node| format!("{} {}: {}", node.target, node.check, node.reason))
         .collect::<Vec<_>>();
     if !failed.is_empty() {
-        bail!("land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.", failed.join("\n"));
+        bail!("land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.{}", failed.join("\n"), behind_note.map(|note| format!("\n{note}")).unwrap_or_default());
     }
     // Arbitrary policy checks run outside the lock, as in merge. Fence their
     // result against cooperative writers and child commands that changed state.

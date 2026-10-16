@@ -2238,8 +2238,16 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
         "{output}"
     );
 
-    // Completed work is still checked against where it left the base.
+    // Completed work is still checked against where it left the base, and
+    // the note survives a failing gate.
     f.terminal(&f.id);
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass
+            && output.contains("review.current: no current independent approval")
+            && output.contains("git merge main"),
+        "{output}"
+    );
     ok(
         f.path(),
         &[
@@ -2256,6 +2264,115 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     assert!(output.contains("git merge main"), "{output}");
     let (pass, output) = cli(f.path(), &["merge", &f.id]);
     assert!(!pass && output.contains("merge_diverged"), "{output}");
+
+    // Following the note: a clean merge of the base keeps the approval.
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let output = ok(f.path(), &["land", &f.id]);
+    assert!(!output.contains("git merge main"), "{output}");
+    ok(f.path(), &["merge", &f.id]);
+}
+#[test]
+fn land_names_a_base_with_no_shared_history() {
+    let f = Fixture::new();
+    git(f.path(), &["checkout", "-q", "--orphan", "unrelated"]);
+    commit(f.path(), "the same tree with no shared history");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass
+            && output.contains("land_base_unrelated: main shares no history with this checkout")
+            && output.contains(&format!("atelier start {}", f.id)),
+        "{output}"
+    );
+}
+#[test]
+fn approval_from_before_a_clean_base_merge_lands_on_both_branches() {
+    let f = Fixture::new();
+    let lines = |first: &str, last: &str| format!("{first}\n2\n3\n4\n5\n6\n7\n8\n{last}\n");
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("shared"), lines("1", "9")).unwrap();
+    commit(f.path(), "shared file before the branch's work");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    let remote = upstream.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", remote]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Code needs a fix",
+        ],
+    );
+    commit(f.path(), "finding");
+    fs::write(f.path().join("code"), "fixed code\n").unwrap();
+    fs::write(f.path().join("shared"), lines("branch", "9")).unwrap();
+    commit(f.path(), "fix");
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix,
+            "Fix verified",
+        ],
+    );
+    commit(f.path(), "disposition");
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+
+    // Other reviewed work lands upstream; the branch merges it in.
+    let other = tempdir().unwrap();
+    git(other.path(), &["clone", "-q", "-b", "main", remote, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(
+        other.path(),
+        &["config", "user.email", "other@example.test"],
+    );
+    // The base edits the far end of a file the branch also edited, so the
+    // merge combines both sides of one file.
+    fs::write(other.path().join("shared"), lines("1", "upstream")).unwrap();
+    commit(other.path(), "code that landed upstream");
+    git(other.path(), &["push", "-q", "origin", "main"]);
+    git(f.path(), &["fetch", "-q"]);
+    git(f.path(), &["branch", "-f", "main", "origin/main"]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    assert_eq!(
+        fs::read_to_string(f.path().join("shared")).unwrap(),
+        lines("branch", "upstream")
+    );
+
+    ok(f.path(), &["land", &f.id]);
+    ok(f.path(), &["merge", &f.id]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let output = ok(f.path(), &["land"]);
+    assert!(output.contains("Base commits:"), "{output}");
 }
 #[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
