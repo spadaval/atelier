@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T20:29:44.671470592+00:00"
+status: "done"
 title: "Harden clean base merge detection"
-updated_at: "2026-10-16T20:27:48.898645305+00:00"
+updated_at: "2026-10-16T20:29:44.671470592+00:00"
 ---
 
 ## Goal
@@ -29,6 +30,10 @@ Close the gaps review found in atelier-n7g1's clean base merge rule.
 2. With no work owner, the clean-merge side check uses the real base branch tip, not `HEAD^` (atelier-9l63).
 3. A test covers an approval pinned before the branch left the base being refused after the base is merged in (atelier-1y1z).
 
+## Context
+
+Deferred findings from the atelier-n7g1 review (approval atelier-s7ea).
+
 ## Design
 
 Resolution (2026-10-16):
@@ -37,6 +42,6 @@ Resolution (2026-10-16):
 2. Accepted (atelier-9l63). With no owner, the clean-merge side check uses `HEAD^`. The alternative, the base's upstream tip, would refuse `land` on the base for a just-merged branch whose base merge brought in unpushed local base commits, before the push that follows. As the finding notes, it is not exploitable: `check_base_commits` still checks every unpushed side commit on its own.
 3. Tested (atelier-1y1z): an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge.
 
-## Context
+## Close Reason
 
-Deferred findings from the atelier-n7g1 review (approval atelier-s7ea).
+(1) merge drivers documented as part of Git's own merge and reviewed as policy, since isolating merge-tree would break ordinary attribute-driven merges; (2) the no-owner HEAD^ side check is accepted, with the reason recorded; (3) an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge tests the pin rule. See Design.
