@@ -328,7 +328,7 @@ impl RecordIndex {
             let id = record.issue.id.clone();
             if !global_ids.insert(id.clone()) {
                 errors.push(anyhow!("Duplicate issue ID in record files: {id}"));
-                dropped.insert(id);
+                dropped.insert(("issue".to_owned(), id));
                 continue;
             }
             index.issues.insert(id, record);
@@ -337,7 +337,7 @@ impl RecordIndex {
             let id = record.header.id.clone();
             if !global_ids.insert(id.clone()) {
                 errors.push(anyhow!("Duplicate record ID in record files: {id}"));
-                dropped.insert(id);
+                dropped.insert(("evidence".to_owned(), id));
                 continue;
             }
             index.evidence.insert(id, record);
@@ -348,7 +348,7 @@ impl RecordIndex {
                     "Duplicate record ID in record files: {}",
                     record.header.id
                 ));
-                dropped.insert(record.header.id.clone());
+                dropped.insert(("review".to_owned(), record.header.id.clone()));
                 continue;
             }
             index.reviews.insert(record.header.id.clone(), record);
@@ -363,14 +363,14 @@ impl RecordIndex {
             }
         }
         index.order();
-        // A duplicate ID drops a record; references to it are not also
-        // reported missing (atelier-ip9e).
+        // A duplicate ID drops a record; references to that kind and ID are
+        // not also reported missing (atelier-ip9e).
         errors.retain(|error| {
             !error
                 .to_string()
                 .rsplit_once(" reference to missing ")
-                .and_then(|(_, target)| target.rsplit_once(' '))
-                .is_some_and(|(_, id)| dropped.contains(id))
+                .and_then(|(_, target)| target.split_once(' '))
+                .is_some_and(|(kind, id)| dropped.contains(&(kind.to_owned(), id.to_owned())))
         });
         (index, errors)
     }
@@ -1497,6 +1497,37 @@ mod tests {
         assert_eq!(
             first.to_string(),
             "Duplicate record ID in record files: atelier-dup"
+        );
+
+        // A reference of another kind to the same ID is still missing.
+        let mut referrer =
+            crate::test_records::evidence_record("atelier-ref", "atelier-real", "validates");
+        referrer
+            .header
+            .relationships
+            .attachments
+            .push(atelier_records::attachment_relationship(
+                "issue",
+                "atelier-twin",
+                "related",
+            ));
+        let twin =
+            crate::test_records::evidence_record("atelier-twin", "atelier-real", "validates");
+        let errors = RecordIndex::validation_errors(
+            &state,
+            vec![issue_record("atelier-real", "task", "todo")],
+            vec![twin.clone(), twin, referrer],
+            Vec::new(),
+        )
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+        assert_eq!(
+            errors,
+            [
+                "Duplicate record ID in record files: atelier-twin",
+                "atelier-ref has related reference to missing issue atelier-twin",
+            ]
         );
     }
 
