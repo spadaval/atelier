@@ -779,6 +779,50 @@ fn out_of_scope_statuses_relationship_changes_and_existing_proof_edits_stale_app
 }
 
 #[test]
+fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
+    let fixture = Fixture::new();
+    let finding = fixture.finding();
+    fixture.approval("Reviewer");
+    let follow_up = ok(
+        fixture.path(),
+        &["-q", "issue", "create", "Follow up the deferred finding"],
+    );
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &follow_up,
+            "Follow-up accepted",
+        ],
+    );
+    commit(fixture.path(), "file follow-up and defer after approval");
+    let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(output.contains("pass review.current"), "{output}");
+
+    ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "New child",
+            "--parent",
+            &fixture.id,
+        ],
+    );
+    // Adding a child edits the owner's children, which is reviewed scope.
+    commit(fixture.path(), "new in-scope child after approval");
+    fixture.refusal("FAIL review.current");
+}
+
+#[test]
 fn policy_without_any_valid_history_cannot_authorize_merge() {
     let fixture = Fixture::new();
     // Replace the base ref with an orphan carrying no valid policy.
