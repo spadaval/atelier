@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T21:55:56.565750305+00:00"
+status: "done"
 title: "Answer review history queries from one walk per land"
-updated_at: "2026-10-16T21:44:25.719695047+00:00"
+updated_at: "2026-10-16T21:55:56.565750305+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ atelier-83xi measured land at 5.5-6.7 s on this repository (2,206 commits, 328 r
 ## Unknowns
 
 Path-limited history simplification depends on the starting commit, so a single walk from HEAD filtered to ancestors of each event is not equivalent in general; the queries in review_gate.rs (introduced_query, scope_queries) need a design that keeps their exact answers.
+
+## Close Reason
+
+Claim history walks run in the parallel prefetch (only for claims with proof or findings), and each commit range needs one rev-list instead of two (parity test ancestry_path_matches_git_on_branchy_history). land on this repository went from 7.3 s to 5.1 s; the benchmark history fixture is unchanged within noise. Profile and the Bloom filter measurement are in Design; batching the per-review walks is split into atelier-7b6e.
