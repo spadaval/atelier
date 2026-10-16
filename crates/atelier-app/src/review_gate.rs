@@ -575,7 +575,7 @@ fn evaluate_scope(
     {
         if !ancestor(read, &record.commit, "HEAD") {
             bail!(
-                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. Reset the branch to the tip it had before (find it with `git reflog`), cherry-pick any code or planning commits made after the rebase back onto it without the review or evidence records they add (for a commit that mixes both, `git cherry-pick -n` it and `git rm` the files it adds under .atelier/reviews and .atelier/evidence before committing): those pin rewritten commits, so record proof and review again, then merge the base in with `git merge` instead",
+                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. To recover: 1. reset the branch to the tip it had before (find it with `git reflog`); 2. cherry-pick the code and planning commits made since, leaving out the review and evidence records they add, which pin rewritten commits (for a commit that mixes both, run `git cherry-pick -n <commit>`, then `git rm -f` each file that `git diff --cached --name-only --diff-filter=A -- .atelier/reviews .atelier/evidence` lists, then commit); 3. merge the base in with `git merge`; 4. record proof and review again",
                 record.header.id
             );
         }

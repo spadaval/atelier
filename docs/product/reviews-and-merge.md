@@ -103,14 +103,13 @@ base has moved on, merge it into the work branch, record fresh proof, and renew
 review only if the merge needed resolving (see approval freshness). Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
 approvals pin, and `merge` then refuses with "pins a commit outside the work
-branch". To recover, reset the branch to its pre-rebase tip (from `git reflog`),
-cherry-pick any code or planning commits made after the rebase back onto it,
-leaving out the review and evidence records they add (they pin rewritten
-commits, so proof and review are recorded again), and merge the base instead
-(atelier-j48s, atelier-v9ve). For a commit that mixes code and such records,
-run `git cherry-pick -n <commit>`, `git rm` the files it adds under
-`.atelier/reviews` and `.atelier/evidence`, and commit the rest
-(atelier-imbo).
+branch". To recover: reset the branch to its pre-rebase tip (from `git
+reflog`); cherry-pick the code and planning commits made since, leaving out the
+review and evidence records they add, which pin rewritten commits; merge the
+base in; then record proof and review again (atelier-j48s, atelier-v9ve). For a
+commit that mixes code and such records, run `git cherry-pick -n <commit>`,
+`git rm -f` each file that `git diff --cached --name-only --diff-filter=A --
+.atelier/reviews .atelier/evidence` lists, and commit the rest (atelier-imbo).
 Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).

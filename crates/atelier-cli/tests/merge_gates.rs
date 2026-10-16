@@ -651,9 +651,10 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     assert!(
         output.contains("rebased or reset")
             && output.contains("git reflog")
-            && output.contains("cherry-pick any code or planning commits")
-            && output.contains("git cherry-pick -n")
-            && output.contains("record proof and review again"),
+            && output.contains("2. cherry-pick the code and planning commits made since")
+            && output.contains("git rm -f")
+            && output.contains("3. merge the base in")
+            && output.contains("4. record proof and review again"),
         "{output}"
     );
 
