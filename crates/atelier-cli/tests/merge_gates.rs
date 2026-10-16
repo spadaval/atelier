@@ -1136,6 +1136,60 @@ fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
 }
 
 #[test]
+fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merge() {
+    let fixture = Fixture::new();
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let owner = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Second owner",
+            "--body",
+            "## Goal\n\nShip it.\n\n## Done when\n\nIt passes.",
+        ],
+    );
+    commit(fixture.path(), "plan the second owner");
+    // The start is committed on the base, then approved there, before the
+    // work branch takes it over.
+    ok(fixture.path(), &["start", &owner]);
+    let branch = format!("task/{owner}");
+    git(fixture.path(), &["stash", "-q"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    git(fixture.path(), &["stash", "pop", "-q"]);
+    commit(fixture.path(), "start recorded on the base");
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            "Reviewer",
+            "Approved on the base",
+        ],
+    );
+    commit(fixture.path(), "approval on the base");
+    git(fixture.path(), &["switch", "-q", &branch]);
+    git(fixture.path(), &["merge", "-q", "--ff-only", "main"]);
+    // The branch then changes only what may follow an approval, so the pin
+    // rule alone decides.
+    ok(
+        fixture.path(),
+        &["issue", "transition", &owner, "close", "--reason", "done"],
+    );
+    commit(fixture.path(), "second owner's claim");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("other.rs"), "landed\n").unwrap();
+    commit(fixture.path(), "other work landed on the base");
+    git(fixture.path(), &["switch", "-q", &branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    let (_, output) = cli(fixture.path(), &["merge", &owner, "--check"]);
+    assert!(output.contains("FAIL review.current"), "{output}");
+}
+
+#[test]
 fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
     let fixture = Fixture::new();
     let finding = fixture.finding();

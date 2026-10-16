@@ -289,7 +289,7 @@ pub(crate) fn check_base_commits(
         } else {
             git_freshness::changed_paths(repo, &parent, commit)?
         };
-        if let Some(id) = base_done_claim(repo, policy, commit, tip, &changed)? {
+        if let Some(id) = base_done_claim(repo, policy, commit, tip, &upstream, &changed)? {
             bail!(
                 "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with git revert {}, or edit {id} back to its earlier status and commit, then run atelier start {id} and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
                 &commit[..8.min(commit.len())],
@@ -328,6 +328,7 @@ fn base_done_claim(
     policy: &atelier_workflow::WorkflowPolicy,
     commit: &str,
     tip: &str,
+    upstream: &str,
     changed: &[std::path::PathBuf],
 ) -> Result<Option<String>> {
     let parents = text(repo, &["rev-list", "--parents", "-n1", commit])?
@@ -335,15 +336,20 @@ fn base_done_claim(
         .skip(1)
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    // `None` when the record is absent; a record that no longer parses
-    // (such as an epic before migration) reports no status.
-    let status_at = |revision: &str, path: &Path| {
-        git_freshness::blob(repo, revision, path).ok().map(|blob| {
-            path.strip_prefix(".atelier")
-                .ok()
-                .and_then(|relative| atelier_records::parse_issue_record(&blob, relative).ok())
-                .map(|record| (record.issue.issue_type, record.issue.status))
-        })
+    // `None` when the record is absent, `Some(None)` when it does not parse.
+    // A record from before the epic migration is read as migrated.
+    let status_at = |revision: &str, path: &Path| -> Option<Option<(String, String)>> {
+        let blob = git_freshness::blob(repo, revision, path).ok()?;
+        let relative = path.strip_prefix(".atelier").ok()?;
+        let parsed = atelier_records::parse_issue_record(&blob, relative)
+            .ok()
+            .or_else(|| {
+                let migrated =
+                    atelier_app::epic_migration::migrate_epic_text(&blob, "feature", "draft")
+                        .ok()??;
+                atelier_records::parse_issue_record(&migrated.text, relative).ok()
+            });
+        Some(parsed.map(|record| (record.issue.issue_type, record.issue.status)))
     };
     for path in changed {
         if path.parent() != Some(Path::new(".atelier/issues"))
@@ -361,11 +367,20 @@ fn base_done_claim(
             continue;
         }
         // Only a record that was absent or had another status is a new claim.
-        if parents.iter().all(|parent| match status_at(parent, path) {
-            None => true,
-            Some(Some((_, before))) => before != status,
-            Some(None) => false,
-        }) && status_at(tip, path).is_some_and(|now| now.is_some_and(|(_, now)| now == status))
+        // An earlier copy that does not parse cannot show the claim was
+        // already made, so the pushed copy decides (atelier-hyew).
+        let had_status = |revision: &str| match status_at(revision, path) {
+            Some(Some((_, before))) => Some(before == status),
+            Some(None) => None,
+            None => Some(false),
+        };
+        let new_claim = parents.iter().all(|parent| {
+            had_status(parent)
+                .or_else(|| had_status(upstream))
+                .is_none_or(|done| !done)
+        });
+        if new_claim
+            && status_at(tip, path).is_some_and(|now| now.is_some_and(|(_, now)| now == status))
         {
             return Ok(path
                 .file_stem()

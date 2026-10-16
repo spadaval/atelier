@@ -75,6 +75,13 @@ merge, or one that brings in a branch not yet on the base, needs renewed
 review. Proof is different: tests must run again on the merged result, so
 record fresh evidence after merging the base.
 
+Git's own merge here is `git merge-tree` with the repository's configuration
+and attributes, so a custom merge driver (for example `merge=ours` on a
+changelog) counts as part of "Git's own merge": a merge it produces is clean
+even if it drops one side's change. Review merge drivers like other policy
+(atelier-7hh4). An approval recorded before the work branch left the base, such
+as one on the base itself, never counts for the branch.
+
 ## Integration
 
 Commit the implementation, proof, branch ownership, and done claim on the work

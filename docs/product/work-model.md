@@ -44,6 +44,14 @@ Backlog conventions (decision atelier-ermg, under atelier-b7hb):
 - **Already-built** work is described in the parent's Background or Context,
   not filed as done records without a done claim.
 
+A done record's body is part of its completion claim: its proof and review
+were judged against that text. `atelier issue update --body` and bundle
+updates refuse to change it (`issue_body_done`), and editing the file by hand
+makes `land` treat the claim as new, so its gates run again as a current
+claim and its approvals must still be current. Record corrections to a done
+item, including its Design or Background, in a follow-up record instead
+(atelier-jy9t).
+
 Repositories with records from before this change run
 `atelier migrate epics --apply` once: it retypes each epic as a feature (or
 `--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,
