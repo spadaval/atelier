@@ -176,6 +176,10 @@ enum Commands {
         /// Consume Claude Code Stop JSON and emit its decision
         #[arg(long, value_parser = ["claude"])]
         hook: Option<String>,
+        /// Confirm that this unowned branch installs Atelier: the base has no
+        /// workflow policy yet, so it lands through the repository's usual review
+        #[arg(long)]
+        install: bool,
     },
     /// Install supported harness session hooks
     Setup {
@@ -648,9 +652,11 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force, slug)
         }
 
-        Commands::Prime { hook } => commands::session::run(false, None, hook.is_some(), quiet),
-        Commands::Land { id, hook } => {
-            commands::session::run(true, id.as_deref(), hook.is_some(), quiet)
+        Commands::Prime { hook } => {
+            commands::session::run(false, None, hook.is_some(), false, quiet)
+        }
+        Commands::Land { id, hook, install } => {
+            commands::session::run(true, id.as_deref(), hook.is_some(), install, quiet)
         }
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
 
