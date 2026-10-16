@@ -2368,7 +2368,7 @@ fn test_quiet_work_ready_outputs_ids_only() {
 }
 
 #[test]
-fn test_work_ready_selects_unblocked_child_without_draft_epic_context() {
+fn test_work_ready_selects_unblocked_child_and_shows_its_parent_as_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -4780,4 +4780,42 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
     create(&["-q", "issue", "transition", &parent, "plan"]);
     let ready = create(&["--quiet", "work", "ready"]);
     assert!(ready.lines().any(|line| line == child), "{ready}");
+
+    // Deferring a parent later does not hide or stall a child in flight.
+    commit_all(dir.path(), "plan the parent");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child]);
+    assert!(success, "{stderr}");
+    commit_all(dir.path(), "start the child");
+    create(&["-q", "issue", "transition", &parent, "defer"]);
+    let active = create(&["--quiet", "work", "active"]);
+    assert!(active.lines().any(|line| line == child), "{active}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &child, "request_review"],
+    );
+    assert!(success, "a child in flight keeps its transitions: {stderr}");
+
+    // A parent that can never start, such as an open decision, parks nothing.
+    let question = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Which store?",
+        "--issue-type",
+        "decision",
+        "--body",
+        "## Question\n\nWhich store?",
+    ]);
+    let spike = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Store spike",
+        "--issue-type",
+        "spike",
+        "--parent",
+        &question,
+    ]);
+    let ready = create(&["--quiet", "work", "ready"]);
+    assert!(ready.lines().any(|line| line == spike), "{ready}");
 }

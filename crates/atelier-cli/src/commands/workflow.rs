@@ -242,13 +242,23 @@ fn active_transition_ancestor_blocker(
     {
         return Ok(None);
     }
-    if let Some(parent_id) =
+    let parked = if policy.status_category(&issue.status) == Some("todo") {
         atelier_app::work_classification::parked_parent(index, Some(policy), issue)?
-    {
+    } else {
+        None
+    };
+    if let Some(parent_id) = parked {
         let parent = index.require_issue(&parent_id)?;
+        let ways_out = policy
+            .transitions_from_status(&parent.issue_type, &parent.status)?
+            .into_iter()
+            .filter(|(_, transition)| policy.status_category(&transition.to) == Some("todo"))
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
         return Ok(Some(format!(
-            "parent {parent_id} is parked in '{}', so its children are parked too; plan the parent first (see `atelier issue transition {parent_id}`)",
-            parent.status
+            "parent {parent_id} is parked in '{}', so its children are parked too; move the parent out first with `atelier issue transition {parent_id} {}`",
+            parent.status,
+            ways_out.join("|")
         )));
     }
     Ok(

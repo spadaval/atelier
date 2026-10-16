@@ -166,8 +166,10 @@ pub fn classify_issue(
         .and_then(|policy| policy.status_category(&issue.status))
         .map(str::to_string);
     let open_blockers = open_blockers(index, workflow_policy, &issue.id)?;
+    // Only unstarted children are parked; work already in flight stays visible.
     let retired = terminal_ancestor(index, workflow_policy, issue)?.is_some()
-        || parked_parent(index, workflow_policy, issue)?.is_some();
+        || status_category.as_deref() == Some("todo")
+            && parked_parent(index, workflow_policy, issue)?.is_some();
 
     let classification = if status_category.as_deref() == Some("done") {
         WorkClassification::Done
@@ -242,9 +244,11 @@ fn is_context(
         })
 }
 
-/// The parent, when it is parked in a todo-category status it cannot start
-/// from (such as `backlog`): its children are parked with it (atelier-28mz,
-/// decided by Sumeet 2026-10-15) until the parent is planned.
+/// The parent, when it is parked: in a todo-category status it cannot start
+/// from but can be planned out of (such as `backlog`, which `plan` moves to
+/// `todo`). Its unstarted children are parked with it (atelier-28mz, decided
+/// by Sumeet 2026-10-15). A parent that can never start, such as an open
+/// decision, does not park its children.
 pub fn parked_parent(
     index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
@@ -254,9 +258,19 @@ pub fn parked_parent(
         return Ok(None);
     };
     let parent = index.require_issue(parent_id)?;
-    let parked = policy.status_category(&parent.status) == Some("todo")
-        && !policy.can_enter_active(&parent.issue_type, &parent.status)?;
-    Ok(parked.then_some(parent.id))
+    if policy.status_category(&parent.status) != Some("todo")
+        || policy.can_enter_active(&parent.issue_type, &parent.status)?
+    {
+        return Ok(None);
+    }
+    for (_, transition) in policy.transitions_from_status(&parent.issue_type, &parent.status)? {
+        if policy.status_category(&transition.to) == Some("todo")
+            && policy.can_enter_active(&parent.issue_type, &transition.to)?
+        {
+            return Ok(Some(parent.id));
+        }
+    }
+    Ok(None)
 }
 
 /// Returns the nearest done-category hierarchy ancestor, if one exists.
