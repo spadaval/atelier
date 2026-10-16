@@ -3,6 +3,9 @@ created_at: "2026-10-16T18:58:32.824355004+00:00"
 id: "atelier-v5tt"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-v5tt
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Answer review history queries from one walk per land"
-updated_at: "2026-10-16T18:58:32.824355004+00:00"
+updated_at: "2026-10-16T21:44:25.719695047+00:00"
 ---
 
 ## Goal

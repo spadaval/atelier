@@ -661,6 +661,20 @@ fn evaluate_scope(
                         }
                     ) && applicable.contains(&record.target))
             }),
+            // Only claims with proof or findings look up where they were
+            // claimed.
+            &applicable
+                .iter()
+                .filter(|id| {
+                    index.reviews().any(|record| {
+                        record.target == **id
+                            && matches!(record.event, ReviewEvent::Finding { .. })
+                    }) || index
+                        .list_record_links("issue", id)
+                        .is_ok_and(|links| links.iter().any(|link| link.relation_type == "validates"))
+                })
+                .cloned()
+                .collect(),
         )?;
     }
     let candidates = index
@@ -1021,13 +1035,21 @@ fn prefetch_original_independent<'r>(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     records: impl IntoIterator<Item = &'r ReviewRecord>,
+    claims: &BTreeSet<String>,
 ) -> Result<()> {
     let head = read.pinned("HEAD")?;
     let records = records.into_iter().collect::<Vec<_>>();
+    // Each claim's history is walked once per land to find where it was
+    // claimed; walk them alongside the review histories (atelier-v5tt).
     read.prefetch_histories(
         records
             .iter()
             .map(|record| introduced_query(&head, record))
+            .chain(
+                claims
+                    .iter()
+                    .map(|id| crate::evidence_freshness::claim_history_query(&head, id)),
+            )
             .collect(),
     );
     let mut queries = Vec::new();
