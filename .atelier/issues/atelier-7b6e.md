@@ -22,7 +22,7 @@ After atelier-v5tt, land on this repository spends about 2.2 s (of 5 s) in rough
 
 ## Done when
 
-The walk count does not grow with review records, answers are identical to the per-path walks (parity tests over merges, criss-cross, deleted and re-added paths, cherry-picked review files, grafts and shallow clones), and land is measured before and after on this repository and the benchmark history fixture. The time between Git calls (in-process record reads and tree diffs, about 1.3 s of proof checks in the atelier-v5tt profile) is attributed and reduced or recorded as accepted.
+The walk count does not grow with review records, answers are identical to the per-path walks (parity tests over merges, criss-cross, deleted and re-added paths, cherry-picked review files, grafts and shallow clones), and land is measured before and after on this repository and the benchmark history fixture. The time between Git calls (in-process record reads and tree diffs, about 1.3 s of proof checks in the atelier-v5tt profile) is attributed and reduced or recorded as accepted. `ancestry_path` in git_freshness.rs walks forward from the pin over a parent-to-children map instead of repeating passes, which are quadratic when a long side branch is dated before its parents (review finding atelier-pew5), with a date-skewed parity case.
 
 ## Context
 
