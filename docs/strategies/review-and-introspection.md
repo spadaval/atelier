@@ -1,7 +1,7 @@
 ---
 status: draft
 mission: atelier-r6bt
-last_changed: "2026-10-16: initial draft for human review"
+last_changed: "2026-10-16: terminal styling allowed for reviews (human direction)"
 ---
 
 # Why
@@ -23,8 +23,8 @@ neither a human nor the next agent can review it.
 # Outcome
 
 Implementers record the decisions they make and a short report when they
-finish. Two read-only commands turn the records into complete Markdown
-reviews of a mission: a brief before work starts and a debrief after it
+finish. Two read-only commands turn the records into complete reviews of a
+mission: a brief before work starts and a debrief after it
 completes. A human can make pre-work and post-mission calls from those
 documents. An agent can answer "why is it like this?" from the same records.
 
@@ -44,14 +44,14 @@ and `debrief`, without `brief`.
   enabling it.
 - S3: A decision record can link the ADR it produced and supersede an earlier
   decision. Views show which decisions are current. Shown by CLI tests.
-- S4: `atelier debrief <mission>` prints Markdown containing: the outcome
+- S4: `atelier debrief <mission>` prints a review containing: the outcome
   against each success criterion with linked proof, each item's report, the
   decision log with one-way decisions first, derived deviations (scope added
   after the mission started, scope dropped, deferred findings, non-pass or
   stale evidence, trivial exemptions, reopened items), and follow-ups.
   Derived facts come from records and Git, not new stored state. Shown by a
   fixture test and by a run against a real completed mission.
-- S5: `atelier brief <mission>` prints Markdown containing the strategy
+- S5: `atelier brief <mission>` prints a review containing the strategy
   outcome, the scope with sizes, blockers, unknowns, open human decisions,
   and risks. A human's plan approval, recorded as an ordinary review event on
   the mission, appears in both the brief and the debrief. Shown by a fixture
@@ -71,13 +71,21 @@ and `debrief`, without `brief`.
   records (sections or typed notes), and big decisions stay `decision`
   records. No new record directory, sidecar, or cache.
 - **Reports are views.** `brief` and `debrief` are deterministic, read-only
-  commands that print Markdown. They write nothing and never present a
-  receipt as passing without checking its result and freshness.
-- **The medium is the CLI plus conversation.** Humans read the Markdown in a
-  terminal, editor, or PR, and give direction through an agent, which writes
-  ordinary records: review events, decision records, notes, and new issues.
-  No GUI, TUI, or server. A static HTML export is considered only if S7 shows
-  the Markdown is hard to read.
+  commands. They write nothing and never present a receipt as passing
+  without checking its result and freshness.
+- **Rich on a terminal, Markdown everywhere else.** On a terminal, reviews use
+  the full styling the existing human output policy allows: color, emphasis,
+  status symbols, width-aware layout, and clickable links. Redirected or
+  with an explicit format flag, they emit plain Markdown with the same
+  content. Color never carries meaning on its own, and `NO_COLOR` and the
+  color flag are honored.
+- **The medium is the CLI plus conversation.** Humans read reviews in a
+  terminal, or as Markdown in an editor or PR, and give direction through an
+  agent, which writes ordinary records: review events, decision records,
+  notes, and new issues.
+  No GUI, interactive TUI, or server; output may be paged. A static HTML
+  export is considered only if S7 shows the terminal and Markdown forms are
+  hard to read.
 - **Approval is a record, not a gate.** Plan approval is a review event. This
   mission adds no mandatory approval gate (ADR 0018 keeps Atelier from
   becoming a plan-approval system).
