@@ -92,12 +92,21 @@ pub fn open_human_children(
 
 /// What to do about [`open_human_children`].
 pub fn human_children_note(owner: &str, children: &[String]) -> String {
-    let first = &children[0];
+    let commands = children
+        .iter()
+        .map(|child| {
+            format!("atelier issue update {child} --no-parent, then atelier issue link {child} {owner} --role blocked_by")
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    let (verb, pronoun, shape) = if children.len() == 1 {
+        ("is", "it", "a standalone validation")
+    } else {
+        ("are each", "them", "standalone validations")
+    };
     format!(
-        "{} labelled needs-human {} a child of {owner}, and atelier merge needs every child terminal, so the branch cannot integrate until the human finishes {}. If the check runs after the merge (a game, device or release check), make it a standalone validation instead: atelier issue update {first} --no-parent, then atelier issue link {first} {owner} --role blocked_by.",
+        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child terminal, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge (a game, device or release check), make {pronoun} {shape} instead: {commands}.",
         children.join(", "),
-        if children.len() == 1 { "is" } else { "are each" },
-        if children.len() == 1 { "it" } else { "them" },
     )
 }
 

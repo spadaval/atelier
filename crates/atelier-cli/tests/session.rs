@@ -2892,7 +2892,12 @@ fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
     );
     commit(f.path(), "start the feature");
     let output = ok(f.path(), &["prime"]);
-    assert!(output.contains("Needs a human: "), "{output}");
+    assert!(
+        output.contains(&format!(
+            "Needs a human: {check} labelled needs-human is a child of {parent}"
+        )),
+        "{output}"
+    );
 
     // Following the advice detaches the check, which then waits on the merge.
     ok(f.path(), &["issue", "update", &check, "--no-parent"]);
