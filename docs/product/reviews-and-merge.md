@@ -94,9 +94,9 @@ review only if the merge needed resolving (see approval freshness). Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
 approvals pin, and `merge` then refuses with "pins a commit outside the work
 branch". To recover, reset the branch to its pre-rebase tip (from `git reflog`),
-cherry-pick any commits made after the rebase (a fix, new proof) back onto it,
-record any review events made since the rebase again (they pin rewritten
-commits), and merge the base instead (atelier-j48s, atelier-v9ve).
+cherry-pick any code or planning commits made after the rebase back onto it,
+leaving out review and evidence records (they pin rewritten commits, so proof
+and review are recorded again), and merge the base instead (atelier-j48s, atelier-v9ve).
 Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).
