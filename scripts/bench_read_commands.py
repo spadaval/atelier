@@ -8,8 +8,11 @@ compare regressions by their practical impact, preserving simplicity.
     scripts/bench_read_commands.py [--binary target/release/atelier] [--runs 10]
                                  [--report timings.json]
 
-The fixture has missions advancing epics, epics with children, blocker
-chains, mixed statuses, labels, and evidence attached to done work. Records
+The fixture has missions advancing parent issues with children, blocker
+chains, mixed statuses, labels, and evidence attached to done work. A third
+history fixture integrates --history-owners approved owners through
+`atelier merge` among --history-commits filler commits, because guard cost
+grows with review records times history length (atelier-83xi). Records
 are written as Markdown directly, then `atelier check` must pass before any
 timing starts. Prints median and maximum timings; --report also saves raw
 samples as JSON for comparison. Unexpected command exits fail the run;
@@ -60,8 +63,6 @@ def issue_markdown(issue):
     proof = "The focused regression test fails without the change and passes after it."
     if issue["type"] == "mission":
         body = f"## Outcome\n\n{goal}\n\n## Success criteria\n\n{proof}\n"
-    elif issue["type"] == "epic":
-        body = f"## Outcome\n\n{goal}\n\n## Proof\n\n{proof}\n"
     else:
         body = f"## Goal\n\n{goal}\n\n## Done when\n\n{proof}\n\n## Scope\n\nBenchmark fixture.\n\n## Context\n\nGenerated record fixture.\n"
     return (
@@ -152,7 +153,7 @@ def generate(repo, total_issues):
         add(mission, "mission", "in_progress", f"Mission {n}", n)
     for n, epic in enumerate(epics):
         status = rng.choice(["todo", "in_progress", "in_progress", "done"])
-        add(epic, "epic", status, f"Epic {n}", 100 + n)
+        add(epic, "feature", status, f"Parent {n}", 100 + n)
         missions_for_epic = missions[n % len(missions)]
         issues[missions_for_epic]["rel"]["advances"].append(epic)
     for n, task in enumerate(tasks):
@@ -245,11 +246,59 @@ def guard_fixture(binary, repo):
     return owner, review
 
 
+def history_fixture(binary, repo, owners, filler):
+    """Integrate `owners` reviewed owners through the gates, spread over
+    `filler` extra commits, so guards walk a long history with many reviews."""
+    def command(args):
+        result = subprocess.run(args, cwd=repo, capture_output=True, text=True)
+        if result.returncode:
+            sys.exit(f"Fixture command {args} failed:\n{result.stdout}\n{result.stderr}")
+        return result.stdout.strip()
+
+    def commit(message):
+        command(["git", "add", "-A"])
+        command(["git", "commit", "-qm", message])
+
+    def empty_commits(count):
+        # Plumbing keeps thousands of commits fast; they change no paths.
+        head = command(["git", "rev-parse", "HEAD"])
+        tree = command(["git", "rev-parse", "HEAD^{tree}"])
+        for n in range(count):
+            head = command(["git", "commit-tree", tree, "-p", head, "-m", f"filler {n}"])
+        command(["git", "update-ref", "refs/heads/master", head])
+
+    created = []
+    for n in range(owners):
+        owner = command([str(binary), "-q", "issue", "create", f"History owner {n}", "--body",
+                         "## Goal\n\nShip one slice.\n\n## Done when\n\nIts test passes."])
+        commit(f"File history owner {n}")
+        empty_commits(filler // owners)
+        command([str(binary), "start", owner])
+        (repo / f"history_{n}.rs").write_text(f"slice {n}\n")
+        commit(f"Implement history owner {n}")
+        command([str(binary), "issue", "transition", owner, "close", "--reason", "Shipped"])
+        commit(f"Done claim for history owner {n}")
+        command([str(binary), "review", "approve", owner, "--identity",
+                 "Independent Benchmark Reviewer", "Reviewed the slice"])
+        commit(f"Approve history owner {n}")
+        command([str(binary), "merge", owner])
+        created.append(owner)
+    owner = command([str(binary), "-q", "issue", "create", "Open history owner"])
+    commit("File an open owner")
+    command([str(binary), "start", owner])
+    (repo / "open.rs").write_text("in progress\n")
+    commit("Active work on a long history")
+    run(binary, repo, ["check"])
+    return owner
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--binary", default=str(ROOT / "target/release/atelier"))
     parser.add_argument("--issues", type=int, default=1000)
     parser.add_argument("--runs", type=int, default=10)
+    parser.add_argument("--history-owners", type=int, default=60)
+    parser.add_argument("--history-commits", type=int, default=1500)
     parser.add_argument("--keep", action="store_true", help="keep the fixture repo")
     parser.add_argument("--report", type=Path, help="write timings and raw samples as JSON")
     options = parser.parse_args()
@@ -261,6 +310,7 @@ def main():
 
     repo = Path(tempfile.mkdtemp(prefix="atelier-bench-"))
     guard_repo = None
+    history_repo = None
     try:
         subprocess.run(["git", "init", "-q", "-b", "master"], cwd=repo, check=True)
         subprocess.run(["git", "config", "user.name", "Benchmark Author"], cwd=repo, check=True)
@@ -284,7 +334,7 @@ def main():
             ["work", "all"],
             ["work", "missions"],
             ["work", "missions", "--all"],
-            ["work", "epic", epic],
+            ["work", "parent", epic],
             ["status"],
             ["issue", "show", epic],
             ["issue", "show", mission],
@@ -320,6 +370,15 @@ def main():
             ["review", "show", review],
         ]
         print(f"Guard fixture: {count} issues, {evidence + 1} evidence, one approval in {guard_repo}")
+        history_repo = Path(tempfile.mkdtemp(prefix="atelier-bench-history-"))
+        shutil.copytree(guard_repo, history_repo, dirs_exist_ok=True)
+        subprocess.run(["git", "switch", "-q", "master"], cwd=history_repo, check=True)
+        history_owner = history_fixture(binary, history_repo, options.history_owners,
+                                        options.history_commits)
+        commits = subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=history_repo,
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        print(f"History fixture: {options.history_owners} integrated owners, {commits} commits"
+              f" in {history_repo}")
         print(f"Binary: {binary}; {options.runs} runs after one warm-up")
         available = (
             len(os.sched_getaffinity(0))
@@ -334,6 +393,7 @@ def main():
             [(repo, "query", args, 0) for args in commands]
             + [(guard_repo, "guard", args, 0) for args in guard_commands]
             + [(repo, "refusal", ["land"], 1)]
+            + [(history_repo, "history", ["land", history_owner], 0)]
         ):
             run(binary, fixture, args, expected)
             samples = [run(binary, fixture, args, expected) for _ in range(options.runs)]
@@ -356,6 +416,8 @@ def main():
                 "evidence": evidence,
                 "guard_evidence": evidence + 1,
                 "runs": options.runs,
+                "history_owners": options.history_owners,
+                "history_commits": options.history_commits,
                 "warmup_runs": 1,
                 "cpu_cores_available": available,
                 "cpu_cores_total": os.cpu_count(),
@@ -367,10 +429,13 @@ def main():
             print(f"\nKept fixture at {repo}")
             if guard_repo:
                 print(f"Kept guard fixture at {guard_repo}")
+            if history_repo:
+                print(f"Kept history fixture at {history_repo}")
         else:
             shutil.rmtree(repo)
-            if guard_repo:
-                shutil.rmtree(guard_repo)
+            for fixture in (guard_repo, history_repo):
+                if fixture:
+                    shutil.rmtree(fixture)
 
 
 if __name__ == "__main__":
