@@ -696,13 +696,13 @@ impl RecordIndex {
                     errors.push(anyhow!(
                         "workflow_issue_hierarchy_invalid: mission issue {child_id} cannot have parent {parent_id}; link mission work with advances relationships"
                     ));
-                } else if child_type == "epic" {
+                } else if parent_type == "mission" {
                     errors.push(anyhow!(
-                        "workflow_issue_hierarchy_invalid: epic issue {child_id} cannot have parent {parent_id}; epics are root work packages"
+                        "workflow_issue_hierarchy_invalid: issue {child_id} cannot be child of mission {parent_id}; link mission work with advances relationships"
                     ));
-                } else if parent_type != "epic" {
+                } else if self.children.contains_key(child_id) {
                     errors.push(anyhow!(
-                        "workflow_issue_hierarchy_invalid: issue {child_id} cannot be child of {parent_type} {parent_id}; only epics can own child work"
+                        "workflow_issue_hierarchy_invalid: issue {child_id} is a child of {parent_id} and has children of its own; parents are one level deep"
                     ));
                 }
             }

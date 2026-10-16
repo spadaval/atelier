@@ -75,7 +75,7 @@ pub fn objective_read_summary(
     let Some(objective) = index.get_issue(objective_id) else {
         return Ok(None);
     };
-    let is_objective = matches!(objective.issue_type.as_str(), "epic" | "mission");
+    let is_objective = objective.issue_type == "mission";
     let scope_ids = crate::objective_graph::issue_descendant_ids(index, &objective.id)?;
     if !is_objective && scope_ids.is_empty() {
         return Ok(None);

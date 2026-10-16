@@ -170,8 +170,8 @@ fn prime_text() -> Result<String> {
                 }
             ));
         }
-        let inspect = if record.issue.issue_type == "epic" {
-            format!("atelier work epic {id}")
+        let inspect = if !index.get_subissues(&id).is_empty() {
+            format!("atelier work parent {id}")
         } else {
             format!("atelier issue show {id}")
         };

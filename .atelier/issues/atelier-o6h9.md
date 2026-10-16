@@ -4,6 +4,9 @@ id: "atelier-o6h9"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-o6h9
 priority: "P1"
 relationships:
   blocks:
@@ -23,9 +26,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Replace the epic type with parent issues"
-updated_at: "2026-10-15T23:04:25.454420356+00:00"
+updated_at: "2026-10-16T00:07:43.315182766+00:00"
 ---
 
 ## Goal

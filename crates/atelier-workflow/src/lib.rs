@@ -16,8 +16,6 @@ branch_policy:
 issue_types:
   bug:
     label: Bug
-  epic:
-    label: Epic
   feature:
     label: Feature
   mission:
@@ -49,7 +47,6 @@ workflows:
   objective:
     applies_to:
     - mission
-    - epic
     initial_status: draft
     done_statuses:
     - done
@@ -133,9 +130,10 @@ workflows:
         from: [in_progress, review]
         to: done
         required_fields: [close_reason]
-        description: Done claim; commit it on the work branch before review.
+        description: Done claim; commit it on the work branch before review. A parent closes after its children.
         validators:
         - blockers.none_open
+        - work.terminal
       supersede:
         from: [backlog, todo, blocked, in_progress]
         to: superseded
@@ -207,7 +205,7 @@ pub enum MergeStrategy {
     FastForwardOnly,
 }
 
-/// Issue field recording the branch an owner (epic or standalone issue) is
+/// Issue field recording the branch an owner (a parent or standalone issue) is
 /// worked on and the branch it was started from. Written by `atelier start`.
 pub const WORKFLOW_BRANCH_FIELD: &str = "workflow_branch";
 
@@ -347,8 +345,8 @@ impl WorkflowPolicy {
             })
     }
 
-    /// Canonical branch for a branch owner: `epic/<id>` for epics and
-    /// `<issue_type>/<id>` for standalone issues.
+    /// Canonical branch for a branch owner (a parent or a standalone issue):
+    /// `<issue_type>/<id>`.
     pub fn branch_name_for_owner(&self, owner: &Issue) -> Result<String> {
         let branch = format!("{}/{}", owner.issue_type, owner.id);
         validate_branch_value(

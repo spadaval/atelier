@@ -1368,7 +1368,11 @@ pub fn parse_issue_sections_for_type(
                         issue_id.as_deref(),
                         &heading,
                         relative,
-                        &format!("Unknown issue body section '{heading}'")
+                        &if matches!(heading.as_str(), "Proof" | "Delivers" | "Epics") {
+                            format!("Unknown issue body section '{heading}'; it belonged to the retired epic type, which is now a parent issue (atelier-9vq3). Run `atelier migrate epics` to convert epic records")
+                        } else {
+                            format!("Unknown issue body section '{heading}'")
+                        }
                     )
                 );
             }
@@ -1415,34 +1419,34 @@ pub fn parse_issue_sections_for_type(
     let required = |name| required_issue_section(&sections, name, relative, issue_id.as_deref());
     let optional = |name: IssueSectionName| sections.get(name.title()).cloned();
     let (body, allowed) = match issue_type {
-        "epic" => (
-            IssueBody::Epic {
-                outcome: required(Outcome)?,
-                proof: optional(Proof),
-                delivers: optional(Delivers),
-                scope: optional(Scope),
-                unknowns: optional(Unknowns),
-                design: optional(Design),
-            },
-            vec![Outcome, Proof, Delivers, Scope, Unknowns, Design],
-        ),
         "mission" => (
             IssueBody::Mission {
                 outcome: required(Outcome)?,
                 success_criteria: optional(SuccessCriteria),
-                epics: optional(Epics),
             },
-            vec![Outcome, SuccessCriteria, Epics],
+            vec![Outcome, SuccessCriteria],
         ),
-        _ => (
-            IssueBody::Issue {
-                goal: required(Goal)?,
-                done_when: required(DoneWhen)?,
-                scope: optional(Scope),
-                context: optional(Context),
-            },
-            vec![Goal, DoneWhen, Scope, Context],
-        ),
+        _ => {
+            if issue_type == "epic" || sections.contains_key(Outcome.title()) {
+                if !sections.contains_key(Goal.title()) {
+                    bail!(
+                        "{} has the retired epic shape (Outcome, Proof, Delivers); epics are now parent issues with Goal and Done when (atelier-9vq3). Run `atelier migrate epics` to convert them",
+                        display_state_path(relative)
+                    );
+                }
+            }
+            (
+                IssueBody::Issue {
+                    goal: required(Goal)?,
+                    done_when: required(DoneWhen)?,
+                    scope: optional(Scope),
+                    context: optional(Context),
+                    unknowns: optional(Unknowns),
+                    design: optional(Design),
+                },
+                vec![Goal, DoneWhen, Scope, Context, Unknowns, Design],
+            )
+        }
     };
     for heading in sections.keys() {
         if !allowed

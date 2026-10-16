@@ -40,15 +40,8 @@ pub fn validate_issue_hierarchy(
             ));
         }
     }
-    if issue.issue_type == "epic" {
-        if let Some(parent_id) = parent_id {
-            return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: epic issue {} cannot have parent {}; epics are root work packages",
-                issue.id,
-                parent_id
-            ));
-        }
-    }
+    // One level: any non-mission issue may be a parent, and a parent's
+    // children are leaves (atelier-9vq3).
     if let Some(parent_id) = parent_id {
         let parent = index.get_issue(parent_id).ok_or_else(|| {
             anyhow!(
@@ -57,28 +50,34 @@ pub fn validate_issue_hierarchy(
                 parent_id
             )
         })?;
-        if parent.issue_type != "epic" {
+        if parent.issue_type == "mission" {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: issue {} cannot be child of {} {}; only epics can own child work",
+                "workflow_issue_hierarchy_invalid: issue {} cannot be child of mission {}; link mission work with `atelier issue link <issue-id> <mission-id> --role advances`",
                 issue.id,
-                parent.issue_type,
                 parent.id
             ));
         }
-    }
-    let children = index.get_subissues(&issue.id);
-    if !children.is_empty() && issue.issue_type != "epic" {
-        let child_ids = children
-            .iter()
-            .map(|child| child.id.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(anyhow!(
-            "workflow_issue_hierarchy_invalid: {} issue {} cannot own child work {}; only epics can own child work",
-            issue.issue_type,
-            issue.id,
-            child_ids
-        ));
+        if let Some(grandparent) = &parent.parent_id {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} cannot be child of {}, which is itself a child of {}; parents are one level deep",
+                issue.id,
+                parent.id,
+                grandparent
+            ));
+        }
+        let children = index.get_subissues(&issue.id);
+        if !children.is_empty() {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} has children ({}) and cannot also have parent {}; parents are one level deep",
+                issue.id,
+                children
+                    .iter()
+                    .map(|child| child.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                parent_id
+            ));
+        }
     }
     Ok(())
 }
@@ -86,16 +85,15 @@ pub fn validate_issue_hierarchy(
 /// The branch that holds an issue's work, derived from its branch owner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkBranch {
-    /// The epic or standalone issue that owns the branch.
+    /// The parent or standalone issue that owns the branch.
     pub owner_id: String,
     pub branch: String,
     /// The base recorded by `atelier start` on the owner, if it was started.
     pub recorded_base: Option<String>,
 }
 
-/// Resolves the branch owner and branch for an issue: a child issue works on
-/// its nearest parent epic's branch, an epic owns `epic/<id>`, and a
-/// standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
+/// Resolves the branch owner and branch for an issue: a child works on its
+/// parent's branch, and a parent or standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
 /// by `atelier start` wins over the derived name. Missions have no branch.
 pub fn resolve_work_branch(
     policy: &WorkflowPolicy,
@@ -105,11 +103,11 @@ pub fn resolve_work_branch(
     let issue = index.require_issue(issue_id)?;
     if issue.issue_type == "mission" {
         return Err(anyhow!(
-            "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its epics or issues instead.",
+            "workflow_branch_mission: {} is a mission; missions are coordinated, not worked on a branch. Start one of its issues instead.",
             issue.id
         ));
     }
-    // Loaded graphs already guarantee that any parent is a direct epic owner.
+    // Loaded graphs already guarantee that any parent is a direct, one-level owner.
     let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
     let (branch, recorded_base) = match &owner.workflow_branch {
         Some(branch) => (branch.work_branch.clone(), Some(branch.branch_base.clone())),

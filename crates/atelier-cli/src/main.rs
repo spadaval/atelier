@@ -45,7 +45,7 @@ Common commands:
   atelier work missions
   atelier issue list
   atelier work mission <mission-id>
-  atelier work epic <epic-id>
+  atelier work parent <parent-id>
   atelier issue show <id>
   atelier issue link <blocked-id> <blocker-id> --role blocked_by
   atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
@@ -218,10 +218,32 @@ enum Commands {
         retention_days: Option<u64>,
     },
 
+    /// One-shot record migrations
+    Migrate {
+        #[command(subcommand)]
+        action: MigrateCommands,
+    },
+
     /// Validate tracker records and their graph
     Check {
         /// Optional issue ID
         id: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum MigrateCommands {
+    /// Retype retired epic records as parent issues: Outcome becomes Goal,
+    /// Proof and Delivers become Done when, draft becomes backlog (or the
+    /// type's initial status), and the policy loses the epic type. Dry run
+    /// unless --apply
+    Epics {
+        /// Issue type for migrated epics
+        #[arg(long, default_value = "feature")]
+        to: String,
+        /// Write the changes; without this flag the command only reports them
+        #[arg(long)]
+        apply: bool,
     },
 }
 
@@ -250,8 +272,8 @@ enum WorkCommands {
         #[arg(long)]
         all: bool,
     },
-    /// Show one epic dashboard
-    Epic { id: String },
+    /// Show one parent issue's dashboard: the parent and its children
+    Parent { id: String },
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
     Ready,
@@ -521,7 +543,7 @@ fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> Strin
 
 fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
-        "issue" | "epic" => Some("atelier issue show"),
+        "issue" => Some("atelier issue show"),
         "mission" => Some("atelier issue show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
@@ -637,8 +659,8 @@ fn run() -> Result<()> {
                     },
                     quiet,
                 ),
-                Some(WorkCommands::Epic { id }) => {
-                    commands::work::epic_dashboard(&index, &id, quiet)
+                Some(WorkCommands::Parent { id }) => {
+                    commands::work::parent_dashboard(&index, &id, quiet)
                 }
                 Some(WorkCommands::Ready) => commands::work::list(&index, "ready", quiet),
                 Some(WorkCommands::Blocked) => commands::work::list(&index, "blocked", quiet),
@@ -835,6 +857,10 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Migrate {
+            action: MigrateCommands::Epics { to, apply },
+        } => commands::migrate::epics(&to, apply),
+
         Commands::Prune {
             apply,
             retention_days,
@@ -892,6 +918,9 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         // issue records; no other writer may interleave.
         Commands::Start { .. } => CanonicalTransactionMode::Exclusive,
         Commands::Prune { apply: true, .. } => CanonicalTransactionMode::Exclusive,
+        Commands::Migrate {
+            action: MigrateCommands::Epics { apply: true, .. },
+        } => CanonicalTransactionMode::Exclusive,
         Commands::Review {
             action:
                 ReviewCommands::Record(_)

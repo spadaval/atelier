@@ -6,8 +6,6 @@ branch_policy:
 issue_types:
   bug:
     label: Bug
-  epic:
-    label: Epic
   feature:
     label: Feature
   mission:
@@ -39,7 +37,6 @@ workflows:
   objective:
     applies_to:
     - mission
-    - epic
     initial_status: draft
     done_statuses:
     - done

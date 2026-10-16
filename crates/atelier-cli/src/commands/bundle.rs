@@ -391,12 +391,6 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                 issue.client_ref
             );
         }
-        if issue.issue_type == "epic" && issue.parent.is_some() {
-            bail!(
-                "Epic issue {} cannot have parent; epics are root work packages",
-                issue.client_ref
-            );
-        }
         if let Some(parent) = &issue.parent {
             let parent_type =
                 bundle_issue_type_for_ref(index, bundle, parent)?.ok_or_else(|| {
@@ -405,11 +399,10 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                         issue.client_ref
                     )
                 })?;
-            if parent_type != "epic" {
+            if parent_type == "mission" {
                 bail!(
-                    "Issue {} cannot be child of {} parent; only epics can own child work",
-                    issue.client_ref,
-                    parent_type
+                    "Issue {} cannot be child of a mission; use advances links for mission work",
+                    issue.client_ref
                 );
             }
         }

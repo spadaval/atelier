@@ -151,9 +151,6 @@ fn issue_sections_parseable(
         .issue_record(issue_id)
         .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
     let mut required = record.sections.required_names();
-    if record.issue.issue_type == "epic" {
-        required.push(atelier_core::IssueSectionName::Proof);
-    }
     if record.issue.issue_type == "mission" && record.issue.strategy.is_none() {
         required.push(atelier_core::IssueSectionName::SuccessCriteria);
     }

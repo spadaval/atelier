@@ -1,7 +1,7 @@
 ---
 created_at: "2026-10-01T21:19:17.672228438+00:00"
 id: "atelier-1ioo"
-issue_type: "epic"
+issue_type: "feature"
 labels: []
 workflow_branch:
   branch_base: master
@@ -45,15 +45,15 @@ title: "Complete session workflow, docs and mission validation"
 updated_at: "2026-10-15T19:31:29.446489250+00:00"
 ---
 
-## Outcome
+## Goal
 
 The rebuilt session workflow, documentation and independent acceptance proof are complete and ready for gated integration.
 
-## Proof
+## Done when
 
 The child validation item records actual checks of the strategy criteria. Independent review covers the final code, docs, policy, record contracts and done claims; a clean gated merge carries them together.
 
-## Delivers
+Delivers:
 
 S6 and S8; final acceptance of S1–S8.
 

@@ -53,7 +53,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let owner = issue.parent_id.as_deref().unwrap_or(&id);
     let owner_record = index.require_issue(owner)?;
     if owner_record.issue_type == "mission" {
-        bail!("missions have no work branch; merge one of their epics or issues");
+        bail!("missions have no work branch; merge one of their issues");
     }
     let recorded = owner_record.workflow_branch.as_ref().context(
         "merge requires committed branch ownership; run atelier start and commit its metadata",

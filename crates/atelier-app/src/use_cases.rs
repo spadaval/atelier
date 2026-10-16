@@ -47,7 +47,7 @@ pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
 }
 
 pub fn resolve_evidence_target_ref(index: &RecordIndex, kind: &str, id: &str) -> Result<String> {
-    if matches!(kind, "issue" | "epic") {
+    if kind == "issue" {
         resolve_issue_ref(index, id)
     } else {
         Ok(id.to_string())
@@ -63,7 +63,7 @@ fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> Strin
 
 fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
-        "issue" | "epic" => Some("atelier issue show"),
+        "issue" => Some("atelier issue show"),
         "mission" => Some("atelier issue show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
