@@ -5,12 +5,29 @@ use std::collections::{BTreeSet, HashSet};
 use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
-/// The blockers an issue waits on before it can start: its own, and its
-/// parent's, since children work on the parent's branch (atelier-e4c5).
+/// The parent's blockers a child also waits on before it can start, since it
+/// works on the parent's branch (atelier-e4c5). A parent blocked by one of its
+/// own children sequences its children; that does not block the children.
+pub fn inherited_blockers(index: &RecordIndex, issue_id: &str) -> Option<(String, Vec<String>)> {
+    let parent = index.get_issue(issue_id)?.parent_id?;
+    let siblings = index
+        .get_subissues(&parent)
+        .into_iter()
+        .map(|child| child.id)
+        .collect::<BTreeSet<_>>();
+    let blockers = index
+        .get_blockers(&parent)
+        .into_iter()
+        .filter(|blocker| blocker != issue_id && !siblings.contains(blocker))
+        .collect::<Vec<_>>();
+    (!blockers.is_empty()).then_some((parent, blockers))
+}
+
+/// An issue's own blockers plus those it inherits from its parent.
 pub fn effective_blockers(index: &RecordIndex, issue_id: &str) -> Vec<String> {
     let mut blockers = index.get_blockers(issue_id);
-    if let Some(parent) = index.get_issue(issue_id).and_then(|issue| issue.parent_id) {
-        blockers.extend(index.get_blockers(&parent));
+    if let Some((_, inherited)) = inherited_blockers(index, issue_id) {
+        blockers.extend(inherited);
     }
     blockers.sort();
     blockers.dedup();
@@ -50,7 +67,7 @@ pub fn dependency_readiness_batch(
         .collect::<Result<BTreeMap<_, _>>>()?;
     let blockers = terminal
         .keys()
-        .map(|id| (id.clone(), effective_blockers(index, id)))
+        .map(|id| (id.clone(), index.get_blockers(id)))
         .collect::<BTreeMap<_, _>>();
 
     fn visit(
@@ -91,7 +108,7 @@ pub fn dependency_readiness_batch(
         if !terminal.contains_key(&id) {
             bail!("dependency closure references missing issue {id}");
         }
-        let ready = visit(
+        let mut ready = visit(
             &id,
             &terminal,
             &blockers,
@@ -99,6 +116,28 @@ pub fn dependency_readiness_batch(
             &mut BTreeSet::new(),
             &mut nodes_evaluated,
         )?;
+        // Only the issue itself inherits its parent's blockers; the walk
+        // beyond them uses each blocker's own.
+        for blocker in inherited_blockers(index, &id)
+            .into_iter()
+            .flat_map(|(_, b)| b)
+        {
+            let blocker_terminal = terminal.get(&blocker).copied().ok_or_else(|| {
+                anyhow::anyhow!("dependency path references missing issue {blocker}")
+            })?;
+            if !blocker_terminal
+                || !visit(
+                    &blocker,
+                    &terminal,
+                    &blockers,
+                    &mut memo,
+                    &mut BTreeSet::new(),
+                    &mut nodes_evaluated,
+                )?
+            {
+                ready = false;
+            }
+        }
         ready_by_issue.insert(id, ready);
     }
     Ok(DependencyReadinessBatch {
@@ -153,16 +192,38 @@ pub fn dependency_closure(
     issue_id: &str,
 ) -> Result<DependencyClosure> {
     index.require_issue(issue_id)?;
-    evaluate_dependency_closure(
-        issue_id,
-        |id| Ok(effective_blockers(index, id)),
-        |id| {
-            let issue = index
-                .issue_record(id)
-                .with_context(|| format!("dependency path references missing issue {id}"))?;
-            policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)
-        },
-    )
+    let is_terminal = |id: &str| {
+        let issue = index
+            .issue_record(id)
+            .with_context(|| format!("dependency path references missing issue {id}"))?;
+        policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)
+    };
+    let mut closure =
+        evaluate_dependency_closure(issue_id, |id| Ok(index.get_blockers(id)), is_terminal)?;
+    // Inherited blockers are reported through the parent: child -> parent -> blocker.
+    if let Some((parent, inherited)) = inherited_blockers(index, issue_id) {
+        let via = evaluate_dependency_closure(
+            &parent,
+            |id| {
+                Ok(if id == parent {
+                    inherited.clone()
+                } else {
+                    index.get_blockers(id)
+                })
+            },
+            is_terminal,
+        )?;
+        let prefixed = |paths: Vec<Vec<String>>| {
+            paths.into_iter().map(|path| {
+                std::iter::once(issue_id.to_string())
+                    .chain(path)
+                    .collect::<Vec<_>>()
+            })
+        };
+        closure.open_paths.extend(prefixed(via.open_paths));
+        closure.cycle_paths.extend(prefixed(via.cycle_paths));
+    }
+    Ok(closure)
 }
 
 fn evaluate_dependency_closure(
