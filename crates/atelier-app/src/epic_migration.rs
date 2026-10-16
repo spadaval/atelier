@@ -47,6 +47,10 @@ pub fn migrate_epic_text(text: &str, to: &str, draft_status: &str) -> Result<Opt
     };
     // Refuse rather than drop content: the review gate accepts an exact
     // migration of an approved epic as unchanged, so nothing may be lost.
+    let preamble = body.split("\n## ").next().unwrap_or_default();
+    if !body.starts_with("## ") && !preamble.trim().is_empty() {
+        bail!("has text before its first section; migrate it by hand");
+    }
     for (position, (heading, _)) in sections.iter().enumerate() {
         if sections[..position]
             .iter()
@@ -147,6 +151,7 @@ mod tests {
             "## Proof\n\nA.\n\n## Done when\n\nB.\n",
             "## Delivers\n\nA.\n\n## Done when\n\nB.\n",
             "## Outcome\n\nA.\n\n## Notes\n\nB.\n\n## Notes\n\nC.\n",
+            "Preamble requirement.\n\n## Outcome\n\nA.\n\n## Proof\n\nB.\n",
         ] {
             let error = migrate_epic_text(&epic(body), "feature", "backlog").unwrap_err();
             assert!(
