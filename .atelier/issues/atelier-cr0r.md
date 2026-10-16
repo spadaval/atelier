@@ -3,6 +3,9 @@ created_at: "2026-10-16T20:47:51.689801276+00:00"
 id: "atelier-cr0r"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-cr0r
 priority: "P3"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Use the nearest parseable earlier copy in the base done-claim check"
-updated_at: "2026-10-16T20:47:51.689801276+00:00"
+updated_at: "2026-10-16T20:49:47.589645205+00:00"
 ---
 
 ## Goal

@@ -2541,6 +2541,58 @@ fn base_done_claims_survive_a_broken_record_and_merges_judge_every_parent() {
     ok(f.path(), &["land"]);
 }
 #[test]
+fn base_done_claim_check_reads_the_nearest_parseable_earlier_copy() {
+    for case in ["restored_unchanged", "reopened_then_restored"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let work = ok(f.path(), &["-q", "issue", "create", "Work"]);
+        commit(f.path(), "plan on the base");
+        ok(f.path(), &["issue", "transition", &work, "start"]);
+        ok(
+            f.path(),
+            &[
+                "issue",
+                "transition",
+                &work,
+                "close",
+                "--reason",
+                "reviewed elsewhere",
+            ],
+        );
+        commit(f.path(), "done claim that reached the upstream");
+        let upstream = tempdir().unwrap();
+        git(upstream.path(), &["init", "-q", "--bare"]);
+        git(
+            f.path(),
+            &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+        );
+        git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+        let path = f.path().join(format!(".atelier/issues/{work}.md"));
+        let done = fs::read_to_string(&path).unwrap();
+        if case == "reopened_then_restored" {
+            fs::write(
+                &path,
+                done.replace("status: \"done\"", "status: \"in_progress\""),
+            )
+            .unwrap();
+            commit(f.path(), "set it back by hand");
+        }
+        fs::write(&path, "not a record\n").unwrap();
+        commit(f.path(), "break the record");
+        fs::write(&path, &done).unwrap();
+        commit(f.path(), "restore it as done");
+        let (pass, output) = cli(f.path(), &["land"]);
+        if case == "restored_unchanged" {
+            assert!(pass, "{case}: {output}");
+        } else {
+            assert!(
+                !pass && output.contains("land_base_done_claim"),
+                "{case}: {output}"
+            );
+        }
+    }
+}
+#[test]
 fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);

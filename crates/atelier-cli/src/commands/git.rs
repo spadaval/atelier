@@ -374,9 +374,28 @@ fn base_done_claim(
             Some(None) => None,
             None => Some(false),
         };
+        // The nearest earlier copy that parses decides: unpushed commits
+        // touching the record first, then the pushed copy.
+        let earlier = |parent: &str| {
+            text(
+                repo,
+                &[
+                    "rev-list",
+                    parent,
+                    "--not",
+                    upstream,
+                    "--",
+                    &path.to_string_lossy(),
+                ],
+            )
+            .unwrap_or_default()
+            .lines()
+            .find_map(had_status)
+            .or_else(|| had_status(upstream))
+        };
         let new_claim = parents.iter().all(|parent| {
             had_status(parent)
-                .or_else(|| had_status(upstream))
+                .or_else(|| earlier(parent))
                 .is_none_or(|done| !done)
         });
         if new_claim
