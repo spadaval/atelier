@@ -49,8 +49,9 @@ fn load_bundle(index: &RecordIndex, input: &str) -> Result<BundleFile> {
         .pointer_mut("/resources/issues")
         .and_then(Value::as_array_mut)
     {
+        let original = issues.clone();
         for issue in issues {
-            fill_update_from_record(index, issue)?;
+            fill_update_from_record(index, &original, issue)?;
         }
     }
     serde_json::from_value(value).map_err(parse_error)
@@ -59,7 +60,25 @@ fn load_bundle(index: &RecordIndex, input: &str) -> Result<BundleFile> {
 /// An `update` entry names an existing record by `id` and lists only the
 /// fields it changes. Fill the rest from the record, so an update passes the
 /// same validation, planning, and staged-graph checks as a create.
-fn fill_update_from_record(index: &RecordIndex, issue: &mut Value) -> Result<()> {
+/// The existing issue a bundle parent reference names, through an `id` or
+/// the `client_ref` of an update entry.
+fn parent_ref_id(index: &RecordIndex, bundle_issues: &[Value], parent: &Value) -> Option<String> {
+    if let Some(id) = parent.get("id").and_then(Value::as_str) {
+        return index.resolve_issue_ref(id).ok().flatten();
+    }
+    let client_ref = parent.get("client_ref").and_then(Value::as_str)?;
+    let entry = bundle_issues
+        .iter()
+        .find(|entry| entry.get("client_ref").and_then(Value::as_str) == Some(client_ref))?;
+    let id = entry.get("id").and_then(Value::as_str)?;
+    index.resolve_issue_ref(id).ok().flatten()
+}
+
+fn fill_update_from_record(
+    index: &RecordIndex,
+    bundle_issues: &[Value],
+    issue: &mut Value,
+) -> Result<()> {
     let Some(object) = issue.as_object_mut() else {
         return Ok(());
     };
@@ -95,15 +114,16 @@ fn fill_update_from_record(index: &RecordIndex, issue: &mut Value) -> Result<()>
             record.issue.status
         );
     }
-    if let (Some(parent), Some(current)) = (object.get("parent"), &record.issue.parent_id) {
-        let same = parent
-            .get("id")
-            .and_then(Value::as_str)
-            .is_some_and(|parent| {
-                index.resolve_issue_ref(parent).ok().flatten().as_deref() == Some(current.as_str())
-            });
-        if !same {
-            bail!("Update {client_ref} cannot move {id} from parent {current}; use atelier issue update --parent");
+    if let Some(parent) = object.get("parent") {
+        if !index.get_subissues(&id).is_empty() {
+            bail!("Update {client_ref} cannot give {id} a parent: it has children of its own, and parents are one level deep");
+        }
+        if let Some(current) = &record.issue.parent_id {
+            let same =
+                parent_ref_id(index, bundle_issues, parent).as_deref() == Some(current.as_str());
+            if !same {
+                bail!("Update {client_ref} cannot move {id} from parent {current}; use atelier issue update --parent");
+            }
         }
     }
     if let Some(issue_type) = object.get("issue_type").and_then(Value::as_str) {
@@ -543,7 +563,8 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
                     .iter()
                     .any(|other| &other.client_ref == client_ref && other.parent.is_some()),
                 (None, Some(id)) => index
-                    .get_issue(id)
+                    .resolve_issue_ref(id)?
+                    .and_then(|id| index.get_issue(&id))
                     .is_some_and(|other| other.parent_id.is_some()),
                 (None, None) => false,
             };
@@ -596,7 +617,10 @@ fn bundle_issue_type_for_ref(
         return Ok(None);
     }
     if let Some(id) = &reference.id {
-        return Ok(index.get_issue(id).map(|issue| issue.issue_type));
+        return Ok(index
+            .resolve_issue_ref(id)?
+            .and_then(|id| index.get_issue(&id))
+            .map(|issue| issue.issue_type));
     }
     Ok(None)
 }

@@ -4243,6 +4243,12 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
             ),
             "use atelier issue update --parent",
         ),
+        (
+            format!(
+                r###"{{"client_ref":"s","operation":"update","id":"{second}","parent":{{"id":"{parent}"}}}}"###
+            ),
+            "has children of its own",
+        ),
     ] {
         fs::write(
             &revision,
@@ -4258,4 +4264,27 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
             "{expected}: {stderr}"
         );
     }
+
+    // Restating the current parent through an update entry's client_ref, and
+    // naming a parent by an ID suffix, are both accepted.
+    fs::write(
+        &revision,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Restate","resources":{{"issues":[
+              {{"client_ref":"p","operation":"update","id":"{second}"}},
+              {{"client_ref":"k","operation":"update","id":"{child}","parent":{{"client_ref":"p"}}}},
+              {{"client_ref":"n","title":"Suffix child","body":"## Goal\n\nN.\n\n## Done when\n\nN.","parent":{{"id":"{}"}}}}
+            ]}}}}"###,
+            &second[second.len() - 4..]
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", revision.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "{stderr}");
+    let suffix_child = issue_id_by_title(dir.path(), "Suffix child");
+    let parent_record = fs::read_to_string(canonical_issue_path(dir.path(), &second)).unwrap();
+    assert!(parent_record.contains(&suffix_child), "{parent_record}");
 }
