@@ -29,7 +29,8 @@ Per ADR 0022, one command orients a session: `atelier status`. It absorbs what o
 - On an owner branch `status` shows the owner body, mission and strategy path, the 8 newest reviews, and evidence with freshness; without an owner it lists up to 5 ready items under the ready count.
 - `prime` prints the same output with a one-line deprecation note.
 - The `prime` tests in `crates/atelier-cli/tests/session.rs`, `cli_integration/issues.rs`, `cli_integration/mission_worktree.rs` and `cli_integration/setup_guidance.rs` are moved to `status` or kept as alias tests, and pass.
-- No current doc or help text presents `prime` as the session command: `PRODUCT_INTENT.md`, `AGENTS.md`, `docs/product/{sessions-and-hooks,cli-surface,work-model,index}.md`, the root help in `main.rs`, and the `setup.rs` success message. `sessions-and-hooks.md` states that the session relies on the harness loading AGENTS.md (Claude Code reads it only without a `CLAUDE.md`, or through an `@AGENTS.md` import).
+- No current doc or help text presents `prime` as the session command: `PRODUCT_INTENT.md`, `AGENTS.md`, `docs/product/{sessions-and-hooks,cli-surface,work-model,index}.md`, the root help in `main.rs`, the `setup.rs` success message, and `scripts/bench_read_commands.py`. This repository's `.claude/settings.json` is regenerated with `atelier setup claude` so it calls `status`.
+- `sessions-and-hooks.md` states that the session relies on the harness loading AGENTS.md (Claude Code reads it only without a `CLAUDE.md`, or through an `@AGENTS.md` import), and `atelier setup claude` prints a warning, with the fix, when the repository has a `CLAUDE.md` that does not import `@AGENTS.md`. A test covers the warning.
 - Agent Factory `references/atelier.md` and `procedures/install.md` say `status`, changed upstream per ADR 0020 and resynced.
 
 ## Scope
