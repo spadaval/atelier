@@ -623,8 +623,83 @@ fn land_names_uncommitted_files_that_make_a_newer_pass_stale() {
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
         !pass
-            && output.contains("does not prove the current checkout")
+            && output.contains("was recorded before the uncommitted changes in this checkout")
             && output.contains("Uncommitted changes make passing proof stale: code."),
+        "{output}"
+    );
+}
+#[test]
+fn a_current_claim_whose_pass_a_later_commit_staled_does_not_blame_the_checkout() {
+    let f = Fixture::new();
+    let child = epic_child(&f);
+    f.terminal(&child);
+    for result in ["fail", "pass"] {
+        ok(
+            f.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{child}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                "Done claim proof",
+            ],
+        );
+        commit(f.path(), &format!("{result}ing proof"));
+    }
+    fs::write(f.path().join("code"), "committed after the pass\n").unwrap();
+    commit(f.path(), "code after the pass");
+    for dirty in [false, true] {
+        if dirty {
+            fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
+        }
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(
+            !pass
+                && output.contains("no longer proves the claim")
+                && !output.contains("uncommitted changes in this checkout")
+                && !output.contains("Uncommitted changes make passing proof stale"),
+            "{output}"
+        );
+    }
+}
+#[test]
+fn a_retained_claim_whose_pass_later_commits_staled_does_not_blame_the_checkout() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let done = ok(f.path(), &["-q", "issue", "create", "Done on the base"]);
+    commit(f.path(), "file it");
+    for result in ["fail", "pass"] {
+        ok(
+            f.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{done}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                "Proof",
+            ],
+        );
+        commit(f.path(), &format!("{result}ing proof"));
+    }
+    fs::write(f.path().join("later"), "code after the pass\n").unwrap();
+    commit(f.path(), "code after the pass");
+    f.terminal(&done);
+    ok(f.path(), &["-q", "issue", "create", "Later planning"]);
+    commit(f.path(), "later planning");
+    fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("no longer proves the claim")
+            && !output.contains("Uncommitted changes make passing proof stale"),
         "{output}"
     );
 }

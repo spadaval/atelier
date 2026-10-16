@@ -56,11 +56,17 @@ impl EvidenceReadContext<'_> {
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<bool> {
+        Ok(self.matches_commits_to_head(issue, record)? && self.code_clean()?)
+    }
+    /// Whether no commit since the pin changed what `record` proves; fresh
+    /// proof also needs a clean checkout.
+    fn matches_commits_to_head(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+    ) -> Result<bool> {
         let edges = self.edges(&record.data.commit, "HEAD")?;
-        if !evidence_matches_edges(self, issue, record, &edges)? {
-            return Ok(false);
-        }
-        self.code_clean()
+        evidence_matches_edges(self, issue, record, &edges)
     }
     pub fn issue_gate(
         &mut self,
@@ -182,6 +188,9 @@ pub(crate) struct NewestFailure {
     /// A newer pass that does not prove the current checkout or commit,
     /// such as one made stale by uncommitted changes (atelier-749l).
     pub(crate) stale_pass: Option<String>,
+    /// Whether that pass would still prove the claim with uncommitted
+    /// changes set aside, so the checkout alone makes it stale (atelier-x3bj).
+    pub(crate) stale_from_checkout: bool,
 }
 
 impl EvidenceReadContext<'_> {
@@ -196,7 +205,7 @@ impl EvidenceReadContext<'_> {
             .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
         let mut newest_fail = None;
         let mut newest_pass = None;
-        let mut newest_stale_pass: Option<(_, String)> = None;
+        let mut newest_stale_pass: Option<(_, String, bool)> = None;
         for link in index.list_record_links("issue", issue_id)? {
             if link.relation_type != "validates" {
                 continue;
@@ -219,9 +228,14 @@ impl EvidenceReadContext<'_> {
                         newest_pass = Some(candidate)
                     } else if newest_stale_pass
                         .as_ref()
-                        .is_none_or(|old| &candidate > old)
+                        .is_none_or(|old| (&candidate.0, &candidate.1) > (&old.0, &old.1))
                     {
-                        newest_stale_pass = Some(candidate)
+                        // Stale only because of the checkout: no commit since
+                        // the pin changed what it proves, but code is dirty.
+                        let from_checkout = fresh
+                            && self.matches_commits_to_head(issue, record).unwrap_or(false)
+                            && !self.code_clean().unwrap_or(true);
+                        newest_stale_pass = Some((candidate.0, candidate.1, from_checkout))
                     }
                 }
                 _ => {}
@@ -233,11 +247,13 @@ impl EvidenceReadContext<'_> {
                     .as_ref()
                     .is_none_or(|passed| passed.0 <= failed.0)
             })
-            .map(|(failed_at, id)| NewestFailure {
-                id,
-                stale_pass: newest_stale_pass
-                    .filter(|(passed_at, _)| *passed_at > failed_at)
-                    .map(|(_, id)| id),
+            .map(|(failed_at, id)| {
+                let stale = newest_stale_pass.filter(|(passed_at, _, _)| *passed_at > failed_at);
+                NewestFailure {
+                    id,
+                    stale_from_checkout: stale.as_ref().is_some_and(|(_, _, checkout)| *checkout),
+                    stale_pass: stale.map(|(_, id, _)| id),
+                }
             }))
     }
 
