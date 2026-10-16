@@ -242,7 +242,9 @@ fn active_transition_ancestor_blocker(
     {
         return Ok(None);
     }
-    let parked = if policy.status_category(&issue.status) == Some("todo") {
+    // Work already in flight keeps its transitions; anything entering active
+    // work from todo or blocked waits for a parked parent.
+    let parked = if policy.status_category(&issue.status) != Some("active") {
         atelier_app::work_classification::parked_parent(index, Some(policy), issue)?
     } else {
         None

@@ -4777,6 +4777,23 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
         );
     }
 
+    // A blocked child cannot start under a parked parent either.
+    let blocked = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Blocked slice",
+        "--parent",
+        &parent,
+    ]);
+    create(&["-q", "issue", "transition", &blocked, "block"]);
+    commit_all(dir.path(), "a blocked child");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &blocked]);
+    assert!(
+        !success && stderr.contains("is parked in 'backlog'"),
+        "{stderr}"
+    );
+
     create(&["-q", "issue", "transition", &parent, "plan"]);
     let ready = create(&["--quiet", "work", "ready"]);
     assert!(ready.lines().any(|line| line == child), "{ready}");
