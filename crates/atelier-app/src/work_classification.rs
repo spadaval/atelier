@@ -13,6 +13,8 @@ use crate::workflow_policy::WorkflowPolicy;
 pub enum WorkClassification {
     Active,
     Ready,
+    /// Ready work only the human can do (labelled `needs-human`).
+    NeedsHuman,
     Blocked,
     Backlog,
     Done,
@@ -23,6 +25,7 @@ impl WorkClassification {
         match self {
             Self::Active => "active",
             Self::Ready => "ready",
+            Self::NeedsHuman => "needs human",
             Self::Blocked => "blocked",
             Self::Backlog => "backlog",
             Self::Done => "done",
@@ -46,8 +49,6 @@ pub struct WorkRow {
     pub priority: String,
     pub open_blockers: Vec<String>,
     pub classification: WorkClassification,
-    /// Work only the human can do; see [`needs_human`].
-    pub needs_human: bool,
 }
 
 /// The reserved label that marks work only the human can do (being at a
@@ -69,6 +70,8 @@ impl WorkRow {
 pub struct WorkBuckets {
     pub active: Vec<WorkRow>,
     pub ready: Vec<WorkRow>,
+    /// Ready work only the human can do.
+    pub human: Vec<WorkRow>,
     pub blocked: Vec<WorkRow>,
     pub backlog: Vec<WorkRow>,
     pub done: Vec<WorkRow>,
@@ -108,6 +111,7 @@ pub fn work_buckets_for<'a>(
         match row.state_label() {
             "active" => buckets.active.push(row),
             "ready" => buckets.ready.push(row),
+            "needs human" => buckets.human.push(row),
             "blocked" => buckets.blocked.push(row),
             "done" => buckets.done.push(row),
             _ => buckets.backlog.push(row),
@@ -115,6 +119,7 @@ pub fn work_buckets_for<'a>(
     }
     sort_work_rows(&mut buckets.active);
     sort_work_rows(&mut buckets.ready);
+    sort_work_rows(&mut buckets.human);
     sort_work_rows(&mut buckets.blocked);
     sort_work_rows(&mut buckets.backlog);
     sort_work_rows(&mut buckets.done);
@@ -127,11 +132,7 @@ fn work_row(
     issue: Issue,
 ) -> Result<WorkRow> {
     let classified = classify_issue(index, workflow_policy, &issue)?;
-    let needs_human = index
-        .issue_record(&issue.id)
-        .is_some_and(|record| needs_human(&record.labels));
     Ok(WorkRow {
-        needs_human,
         id: issue.id.clone(),
         title: issue.title,
         status: issue.status,
@@ -187,6 +188,15 @@ pub fn classify_issue(
             _ if workflow_policy.is_none() && issue.status == "todo" => WorkClassification::Ready,
             _ => WorkClassification::Backlog,
         }
+    };
+    let classification = if classification == WorkClassification::Ready
+        && index
+            .issue_record(&issue.id)
+            .is_some_and(|record| needs_human(&record.labels))
+    {
+        WorkClassification::NeedsHuman
+    } else {
+        classification
     };
     Ok(ClassifiedWork {
         classification,

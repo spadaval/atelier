@@ -12,6 +12,7 @@ use atelier_core::{Issue, IssuePriority, RecordLink};
 pub struct ObjectiveBucketTotals {
     pub active: usize,
     pub ready: usize,
+    pub human: usize,
     pub blocked: usize,
     pub done: usize,
     pub backlog: usize,

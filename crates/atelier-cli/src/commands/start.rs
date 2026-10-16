@@ -192,6 +192,9 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         let base_records = git::Snapshot::at(&repo_root, state_dir, &base_commit)?;
         git::check_base_commits(&repo_root, &base_records.index, &view_policy, &base_commit)?;
     }
+    let human_work = view_index
+        .issue_record(&issue_id)
+        .is_some_and(|record| atelier_app::work_classification::needs_human(&record.labels));
     drop(snapshot);
     let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;
 
@@ -261,6 +264,11 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     }
     println!("Branch:   {branch} (owner {})", work_branch.owner_id);
     println!("Base:     {base}");
+    if human_work {
+        println!(
+            "Note:     {issue_id} is labelled needs-human; it is work for the human, not an agent."
+        );
+    }
     println!("Commit the record changes with the work they describe.");
     Ok(())
 }

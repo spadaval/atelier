@@ -73,6 +73,7 @@ pub fn mission_overview(
             match work.classification {
                 WorkClassification::Active => totals.active += 1,
                 WorkClassification::Ready => totals.ready += 1,
+                WorkClassification::NeedsHuman => totals.human += 1,
                 WorkClassification::Blocked => totals.blocked += 1,
                 WorkClassification::Done => totals.done += 1,
                 WorkClassification::Backlog => totals.backlog += 1,

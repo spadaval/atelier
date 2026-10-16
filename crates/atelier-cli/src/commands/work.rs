@@ -110,31 +110,23 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
             apply_ready_execution_gates(index, policy, &mut buckets)?;
         }
     }
-    let (human, agent): (Vec<_>, Vec<_>) = std::mem::take(&mut buckets.ready)
-        .into_iter()
-        .partition(|row| row.needs_human);
-    buckets.ready = agent;
     if quiet {
-        if bucket == "human" {
-            human.iter().for_each(|row| println!("{}", row.id));
-        } else {
-            print_quiet(bucket, &buckets);
-            if bucket == "all" {
-                human.iter().for_each(|row| println!("{}", row.id));
-            }
-        }
+        print_quiet(bucket, &buckets);
         return Ok(());
     }
 
     let groups = match bucket {
-        "ready" => vec![("Ready Work", &buckets.ready), ("Needs a Human", &human)],
-        "human" => vec![("Needs a Human", &human)],
+        "ready" => vec![
+            ("Ready Work", &buckets.ready),
+            ("Needs a Human", &buckets.human),
+        ],
+        "human" => vec![("Needs a Human", &buckets.human)],
         "blocked" => vec![("Blocked Work", &buckets.blocked)],
         "active" => vec![("Active Work", &buckets.active)],
         "all" => vec![
             ("Active Work", &buckets.active),
             ("Ready Work", &buckets.ready),
-            ("Needs a Human", &human),
+            ("Needs a Human", &buckets.human),
             ("Blocked Work", &buckets.blocked),
             ("Backlog Work", &buckets.backlog),
         ],
@@ -151,6 +143,15 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+/// The needs-human count for summaries, shown only when there is any.
+fn human_count(human: usize) -> String {
+    if human == 0 {
+        String::new()
+    } else {
+        format!(" {human} need a human,")
+    }
+}
+
 fn bucket_needs_execution_gates(bucket: &str) -> bool {
     matches!(bucket, "ready" | "human" | "all")
 }
@@ -163,6 +164,7 @@ fn apply_ready_execution_gates(
     let candidate_ids = buckets
         .ready
         .iter()
+        .chain(&buckets.human)
         .map(|row| row.id.clone())
         .collect::<BTreeSet<_>>();
     let dependency = atelier_app::objective_graph::dependency_readiness_batch(
@@ -170,21 +172,23 @@ fn apply_ready_execution_gates(
         policy,
         candidate_ids.iter().cloned(),
     )?;
-    let mut ready = Vec::new();
-    for mut row in std::mem::take(&mut buckets.ready) {
-        let dependency_ready = dependency
-            .ready_by_issue
-            .get(&row.id)
-            .copied()
-            .unwrap_or(false);
-        if dependency_ready {
-            ready.push(row);
-        } else {
-            row.open_blockers.push("readiness gate".to_string());
-            buckets.blocked.push(row);
+    for bucket in [&mut buckets.ready, &mut buckets.human] {
+        let mut kept = Vec::new();
+        for mut row in std::mem::take(bucket) {
+            let dependency_ready = dependency
+                .ready_by_issue
+                .get(&row.id)
+                .copied()
+                .unwrap_or(false);
+            if dependency_ready {
+                kept.push(row);
+            } else {
+                row.open_blockers.push("readiness gate".to_string());
+                buckets.blocked.push(row);
+            }
         }
+        *bucket = kept;
     }
-    buckets.ready = ready;
     buckets
         .blocked
         .sort_by(|left, right| left.id.cmp(&right.id));
@@ -224,10 +228,11 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             (
                 "Scope",
                 format!(
-                    "{} issues: {} active, {} ready, {} blocked, {} done, {} backlog",
+                    "{} issues: {} active, {} ready,{} {} blocked, {} done, {} backlog",
                     mission.scope_ids.len(),
                     counts.active,
                     counts.ready,
+                    human_count(counts.human),
                     counts.blocked,
                     counts.done,
                     counts.backlog
@@ -295,11 +300,13 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
 fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
     let groups: &[&[WorkRow]] = match bucket {
         "ready" => &[&buckets.ready],
+        "human" => &[&buckets.human],
         "blocked" => &[&buckets.blocked],
         "active" => &[&buckets.active],
         "all" => &[
             &buckets.active,
             &buckets.ready,
+            &buckets.human,
             &buckets.blocked,
             &buckets.backlog,
         ],
@@ -351,8 +358,13 @@ fn scoped_dashboard(
         if filter == DashboardFilter::Summary {
             let counts = &work.totals;
             let mut summary = format!(
-                "{id} active={} ready={} blocked={} done={} backlog={}",
-                counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
+                "{id} active={} ready={} human={} blocked={} done={} backlog={}",
+                counts.active,
+                counts.ready,
+                counts.human,
+                counts.blocked,
+                counts.done,
+                counts.backlog
             );
             if let Some(gaps) = proof_gaps {
                 summary.push_str(&format!(" proof_gaps={gaps}"));
@@ -376,8 +388,13 @@ fn scoped_dashboard(
         (
             "Work",
             format!(
-                "active {}, ready {}, blocked {}, done {}, backlog {}",
-                counts.active, counts.ready, counts.blocked, counts.done, counts.backlog
+                "active {}, ready {},{} blocked {}, done {}, backlog {}",
+                counts.active,
+                counts.ready,
+                human_count(counts.human),
+                counts.blocked,
+                counts.done,
+                counts.backlog
             ),
         ),
     ];
@@ -451,6 +468,7 @@ impl ScopedWork {
             match classified.classification {
                 WorkClassification::Active => totals.active += 1,
                 WorkClassification::Ready => totals.ready += 1,
+                WorkClassification::NeedsHuman => totals.human += 1,
                 WorkClassification::Blocked => totals.blocked += 1,
                 WorkClassification::Done => totals.done += 1,
                 WorkClassification::Backlog => totals.backlog += 1,
@@ -465,6 +483,7 @@ impl ScopedWork {
             DashboardFilter::Summary => &[
                 (Some(WorkClassification::Active), "Active Work"),
                 (Some(WorkClassification::Ready), "Ready Work"),
+                (Some(WorkClassification::NeedsHuman), "Needs a Human"),
                 (Some(WorkClassification::Blocked), "Blocked Work"),
                 (Some(WorkClassification::Backlog), "Backlog Work"),
                 (Some(WorkClassification::Done), "Done Work"),

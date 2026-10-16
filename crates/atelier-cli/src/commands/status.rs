@@ -13,7 +13,7 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
 
     if quiet {
         println!(
-            "work={} current_missions={} ready={}",
+            "work={} current_missions={} ready={} human={}",
             if view.work.active.is_empty() {
                 "none".to_string()
             } else {
@@ -21,6 +21,7 @@ pub fn run(index: &RecordIndex, quiet: bool) -> Result<()> {
             },
             view.current_mission_count,
             view.work.ready.len(),
+            view.work.human.len(),
         );
         return Ok(());
     }
@@ -83,6 +84,7 @@ fn print_status_view(view: &StatusView, owner: Option<String>) {
     };
     let summary_lines = vec![
         format!("Ready work:    {}", view.work.ready.len()),
+        format!("Needs a human: {}", view.work.human.len()),
         format!("Current work:  {current_work}"),
         format!("Current missions: {}", view.current_mission_count),
     ];
@@ -136,6 +138,11 @@ fn print_status_view(view: &StatusView, owner: Option<String>) {
             format!("  Choose ready work ({ready} ready issue(s) available): atelier work ready"),
             "  Inspect selected work transitions: atelier issue transition <issue-id>".to_string(),
         ]
+    } else if !view.work.human.is_empty() {
+        vec![format!(
+            "  Only work for the human is ready ({} item(s)): atelier work human",
+            view.work.human.len()
+        )]
     } else if !view.work.blocked.is_empty() {
         vec![
             "  Inspect blocked work (no ready work is available): atelier work blocked".to_string(),

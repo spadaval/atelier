@@ -183,10 +183,8 @@ fn prime_text() -> Result<String> {
         }
     }
     let waiting = atelier_app::work_classification::work_buckets(&index, Some(&source.policy))?
-        .ready
-        .iter()
-        .filter(|row| row.needs_human)
-        .count();
+        .human
+        .len();
     if waiting > 0 {
         lines.push(format!("Needs a human: {waiting} ready item(s) labelled needs-human wait for the human; agents should not start them. List them with atelier work human."));
     }

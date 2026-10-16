@@ -3875,6 +3875,28 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
         "{page}"
     );
 
+    let status = create(&["--quiet", "status"]);
+    assert!(status.contains("ready=1 human=1"), "{status}");
+
+    // Mission views keep the same split.
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Ship",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nShipped.\n\n## Success criteria\n\nS1.",
+    ]);
+    for id in [&agent, &human] {
+        create(&["-q", "issue", "link", id, &mission, "--role", "advances"]);
+    }
+    let ready = create(&["--quiet", "work", "mission", &mission, "--ready"]);
+    assert_eq!(ready, agent, "{ready}");
+    let summary = create(&["--quiet", "work", "mission", &mission]);
+    assert!(summary.contains("ready=1 human=1"), "{summary}");
+
     init_git_repo(dir.path());
     ensure_initial_git_commit(dir.path());
     let (success, prime, stderr) = run_atelier(dir.path(), &["prime"]);
@@ -3883,4 +3905,8 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
         prime.contains("Needs a human: 1 ready item(s) labelled needs-human"),
         "{prime}"
     );
+    commit_all(dir.path(), "plan");
+    let (success, started, stderr) = run_atelier(dir.path(), &["start", &human]);
+    assert!(success, "{stderr}");
+    assert!(started.contains("is labelled needs-human"), "{started}");
 }
