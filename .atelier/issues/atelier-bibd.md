@@ -4,6 +4,9 @@ id: "atelier-bibd"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-bibd
 priority: "P3"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Decide an install branch's base from outside the branch"
-updated_at: "2026-10-16T00:01:32.982045465+00:00"
+updated_at: "2026-10-16T22:33:46.243668885+00:00"
 ---
 
 ## Goal
@@ -24,6 +27,20 @@ updated_at: "2026-10-16T00:01:32.982045465+00:00"
 ## Done when
 
 A branch counts as installing Atelier only when the policy it reads was introduced by commits unique to that branch (or another rule that the branch cannot satisfy by editing its own policy), with a test for the edited-base case.
+
+## Context
+
+Review finding atelier-jsd4 on atelier-40i6, deferred: it needs a deliberate policy edit, and `atelier merge` still needs an owner, so no code reaches the base this way.
+
+## Design
+
+Decided by Sumeet (2026-10-16): an explicit flag instead of inference. `atelier land --install` passes an unowned branch whose base has no workflow policy, with the install note; plain `land` refuses it with `land_install_unconfirmed` and points to the flag. `--install` is refused on an owner's branch, on the base, and when a copy of the base has a policy. The person running land states the install, so a branch editing its own policy's base name gains nothing. The Stop hook runs plain `land`, so an install session sees the refusal at Stop until the install merges; the hook turns repeated failures into a warning, and installing happens once per repository.
+
+An earlier fix inferring installs from other refs was refused in review (atelier-4tf7, atelier-39r9) and not merged.
+
+## Context
+
+Review finding atelier-jsd4 on atelier-40i6, deferred: it needs a deliberate policy edit, and `atelier merge` still needs an owner, so no code reaches the base this way.
 
 ## Design
 
@@ -39,7 +56,3 @@ Any rule keyed off ref names has this shape. Options:
 3. Keep the current behaviour and document it as accepted. It needs a deliberate policy edit, and `atelier merge` still needs an owner, so no code reaches the base this way; the base-commit check on the base also stops an edited policy once the base name is right.
 
 Recommendation: option 1 with an explicit fallback to the working policy when the introduced base no longer exists. Waiting on Sumeet.
-
-## Context
-
-Review finding atelier-jsd4 on atelier-40i6, deferred: it needs a deliberate policy edit, and `atelier merge` still needs an owner, so no code reaches the base this way.

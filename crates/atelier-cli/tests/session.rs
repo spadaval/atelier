@@ -3177,6 +3177,45 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     );
 }
 #[test]
+fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
+    let dir = tempdir().unwrap();
+    git(dir.path(), &["init", "-qb", "main"]);
+    git(dir.path(), &["config", "user.name", "Author"]);
+    git(dir.path(), &["config", "user.email", "author@example.test"]);
+    fs::write(dir.path().join("app"), "existing code\n").unwrap();
+    commit(dir.path(), "before adoption");
+    git(dir.path(), &["branch", "old"]);
+    ok(dir.path(), &["init", "--slug", "adopted"]);
+    commit(dir.path(), "adopt Atelier on main");
+    // An unowned branch points its policy's base at the pre-adoption branch,
+    // so land sees a base without a policy (atelier-bibd).
+    git(dir.path(), &["switch", "-q", "-c", "sneaky"]);
+    let policy = dir.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    fs::write(
+        &policy,
+        text.replace("base_branch: main", "base_branch: old"),
+    )
+    .unwrap();
+    ok(dir.path(), &["-q", "issue", "create", "Untracked planning"]);
+    commit(dir.path(), "point the base at a pre-adoption branch");
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("land_install_unconfirmed")
+            && !output.contains("Installing Atelier"),
+        "{output}"
+    );
+    // An owner's branch cannot claim to be an install either.
+    git(dir.path(), &["switch", "-q", "main"]);
+    let id = ok(dir.path(), &["-q", "issue", "create", "Owned work"]);
+    commit(dir.path(), "plan owned work");
+    ok(dir.path(), &["start", &id]);
+    commit(dir.path(), "start owned work");
+    let (pass, output) = cli(dir.path(), &["land", "--install"]);
+    assert!(!pass && output.contains("land_install_invalid"), "{output}");
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);
@@ -3296,7 +3335,15 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     commit(dir.path(), "install Atelier and import the backlog");
     fs::write(dir.path().join("AGENTS.md"), "Use Atelier.\n").unwrap();
     commit(dir.path(), "review fixes to the install");
-    let output = ok(dir.path(), &["land"]);
+    // Installing is stated, not inferred from the branch's own policy.
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("land_install_unconfirmed")
+            && output.contains("atelier land --install"),
+        "{output}"
+    );
+    let output = ok(dir.path(), &["land", "--install"]);
     assert!(
         output.contains("Installing Atelier: main has no workflow policy yet")
             && output.contains("git merge --no-ff"),
@@ -3311,6 +3358,8 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     );
     let (pass, output) = cli(dir.path(), &["land"]);
     assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    let (pass, output) = cli(dir.path(), &["land", "--install"]);
+    assert!(!pass && output.contains("land_install_invalid"), "{output}");
     git(dir.path(), &["reset", "-q", "--hard", "main@{upstream}"]);
 
     // Merged as one merge commit by the repository's own review, it lands.

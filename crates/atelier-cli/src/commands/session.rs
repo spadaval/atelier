@@ -294,7 +294,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run atelier start <id> from {base}")
     })
 }
-fn land_text(requested: Option<&str>) -> Result<String> {
+fn land_text(requested: Option<&str>, install: bool) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let (head, branch, snapshot, initial_paths, index) = {
@@ -435,6 +435,9 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         current,
         false,
     )?);
+    if install && (id.is_some() || branch == source.policy.branch_policy.base_branch) {
+        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base");
+    }
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
         let ownership = issue.workflow_branch.as_ref().context("land_work_untraceable: owner has no committed branch metadata; run atelier start and commit the record")?;
@@ -491,10 +494,19 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         } else {
             format!("branch {branch}")
         };
+        // Whether a branch installs Atelier is the caller's statement, not
+        // something land infers from the branch's own, editable policy
+        // (atelier-bibd).
         match tracker_changes_since(repo, base)? {
-            None => lines.push(format!(
+            None if install => lines.push(format!(
                 "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or git merge --no-ff), then start further work with atelier start <id>."
             )),
+            None => bail!(
+                "land_install_unconfirmed: {base} has no workflow policy yet, so atelier merge cannot gate {label}. If this branch installs Atelier, rerun atelier land --install; otherwise run atelier start <id> to give the work an owner branch."
+            ),
+            Some(_) if install => bail!(
+                "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; run atelier start <id> to give the work an owner branch"
+            ),
             Some(changed) if !changed.is_empty() => {
                 const SHOWN: usize = 5;
                 let mut listed = changed
@@ -567,7 +579,13 @@ fn land_text(requested: Option<&str>) -> Result<String> {
     Ok(lines.join("\n"))
 }
 
-pub fn run(landing: bool, requested: Option<&str>, hook: bool, quiet: bool) -> Result<()> {
+pub fn run(
+    landing: bool,
+    requested: Option<&str>,
+    hook: bool,
+    install: bool,
+    quiet: bool,
+) -> Result<()> {
     let mut repeated = false;
     let input = if hook {
         let mut bytes = String::new();
@@ -592,7 +610,7 @@ pub fn run(landing: bool, requested: Option<&str>, hook: bool, quiet: bool) -> R
     };
     let result = input.and_then(|()| {
         if landing {
-            land_text(requested)
+            land_text(requested, install)
         } else {
             prime_text()
         }
