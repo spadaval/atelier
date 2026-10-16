@@ -2356,6 +2356,46 @@ fn superseding_a_child_of_a_blocked_parent_lands() {
     ok(f.path(), &["land"]);
 }
 #[test]
+fn a_superseded_childs_own_blockers_do_not_hold_its_parents_merge() {
+    let f = Fixture::new();
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Prerequisite"]);
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &f.id],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &child, &blocker, "--role", "blocked_by"],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "supersede",
+            "--reason",
+            "not needed",
+        ],
+    );
+    commit(f.path(), "retire a blocked child");
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["land", &f.id]);
+    ok(f.path(), &["merge", &f.id]);
+}
+#[test]
 fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);

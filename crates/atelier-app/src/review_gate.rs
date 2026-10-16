@@ -460,7 +460,12 @@ fn evaluate_scope(
             Vec::new(),
         ));
         let mut open = BTreeSet::new();
-        for id in &ids {
+        // A superseded child's blockers do not hold its parent (atelier-lq42).
+        for id in ids.iter().filter(|id| {
+            index
+                .get_issue(id)
+                .is_none_or(|issue| issue.status != "superseded")
+        }) {
             open.extend(
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids(),
             );
