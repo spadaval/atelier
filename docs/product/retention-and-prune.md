@@ -25,11 +25,19 @@ by Sumeet 2026-10-15):
   record with a Decision or Background section. These are the records most
   likely to be needed again, and Git history alone would bury them.
 
+Protection follows links in both directions and repeats, so one kept decision
+or Background record keeps every closed record connected to it, such as its
+parent, children, related records, and their evidence and reviews. That is
+what keeps prune from leaving dangling links.
+
 A record on another branch can still link a record that prune removed. When
 it reaches the checkout, `atelier check` (and every command, since the graph
-no longer loads) reports the missing reference, names the commit that pruned
-it, and shows how to restore it with `git show`; alternatively delete the link
-from the linking record by hand. Apply requires a clean tracked checkout and valid
+no longer loads) reports the missing reference, names the commit that deleted
+it, and shows the `git restore --source=<commit>^` command that brings it back
+(it works from any directory). If the record is still committed and only
+missing from the checkout, it suggests `git restore` instead. Alternatively,
+delete the link from the linking issue by hand, or remove a review or
+evidence record whose only target is gone. Apply requires a clean tracked checkout and valid
 records. It must not leave missing links or an invalid retained graph.
 
 Branch and worktree cleanup protects the current checkout, base branch, active

@@ -217,17 +217,23 @@ fn explain_pruned_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::E
         _ => return error,
     };
     let path = format!(".atelier/{dir}/{id}.md");
-    let deleted = crate::git_freshness::git_output(
-        repo_root,
-        &["log", "-1", "--diff-filter=D", "--format=%h", "--", &path],
-    )
-    .ok()
-    .and_then(|out| String::from_utf8(out).ok())
-    .map(|out| out.trim().to_string())
-    .filter(|commit| !commit.is_empty());
-    match deleted {
+    let git = |args: &[&str]| {
+        crate::git_freshness::git_output(repo_root, args)
+            .ok()
+            .and_then(|out| String::from_utf8(out).ok())
+            .map(|out| out.trim().to_string())
+    };
+    let unlink = "or remove the link: delete it from the linking issue's relationships, or remove a review or evidence record whose only target is gone. Commands cannot load the records until one of these is done";
+    if git(&["cat-file", "-t", &format!("HEAD:{path}")]).is_some() {
+        return anyhow!(
+            "{message}; {id} is committed at HEAD but missing from the checkout. Restore it with `git restore -- ':/{path}'`, {unlink}"
+        );
+    }
+    match git(&["log", "-1", "--diff-filter=D", "--format=%h", "--", &path])
+        .filter(|commit| !commit.is_empty())
+    {
         Some(commit) => anyhow!(
-            "{message}; {id} was pruned in commit {commit}. Restore it with `git show {commit}^:{path} > {path}`, or delete the link from the linking record's relationships by hand (commands cannot load the records until one of these is done)"
+            "{message}; {id} was deleted in commit {commit} (for example by atelier prune). Restore it with `git restore --source={commit}^ -- ':/{path}'`, {unlink}"
         ),
         None => error,
     }
@@ -358,7 +364,12 @@ impl RecordIndex {
 
     /// Structural load for guards which resolve trusted policy before validation.
     pub fn load_structural(state_dir: &Path) -> Result<Self> {
-        read_record_files(state_dir)?.into_index()
+        read_record_files(state_dir)?
+            .into_index()
+            .map_err(|error| match state_dir.parent() {
+                Some(repo_root) => explain_pruned_reference(repo_root, error),
+                None => error,
+            })
     }
     pub fn validate_policy(&self, policy: &WorkflowPolicy, repo: &Path) -> Result<()> {
         let mut errors = Vec::new();

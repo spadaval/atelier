@@ -2689,11 +2689,38 @@ fn test_prune_keeps_decision_and_research_records_and_check_explains_pruned_link
     let output = format!("{stdout}{stderr}");
     assert!(!success, "{output}");
     assert!(
-        output.contains(&format!("{plain} was pruned in commit {}", &pruned_in[..7]))
-            && output.contains(&format!(
-                "git show {}^:.atelier/issues/{plain}.md",
-                &pruned_in[..7]
-            )),
+        output.contains(&format!(
+            "{plain} was deleted in commit {}",
+            &pruned_in[..7]
+        )) && output.contains(&format!(
+            "git restore --source={}^ -- ':/.atelier/issues/{plain}.md'",
+            &pruned_in[..7]
+        )),
         "{output}"
+    );
+    // The restore command works from a subdirectory too.
+    let subdir = dir.path().join("crates");
+    fs::create_dir_all(&subdir).unwrap();
+    let status = std::process::Command::new("git")
+        .current_dir(&subdir)
+        .args([
+            "restore",
+            &format!("--source={}^", &pruned_in[..7]),
+            "--",
+            &format!(":/.atelier/issues/{plain}.md"),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(success, "{stdout}{stderr}");
+    // A record still committed but missing from the checkout gets git restore,
+    // and commands that load the records lightly explain it the same way.
+    commit_all(dir.path(), "restore the record and keep the link");
+    fs::remove_file(canonical_issue_path(dir.path(), &plain)).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["review", "list"]);
+    assert!(
+        !success && stderr.contains("is committed at HEAD but missing"),
+        "{stderr}"
     );
 }

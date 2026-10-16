@@ -42,4 +42,4 @@ Found 2026-10-15 while adopting Atelier in astromech (branch chore/atelier-track
 
 ## Close Reason
 
-Decided by Sumeet 2026-10-15: pruning keeps records linked from an open record (prune already keeps any record linked to or from a retained one) and records with decision or research content (decision records, Decision or Background sections). A missing reference to a pruned record now names the pruning commit and the git show command to restore it. Documented in docs/product/retention-and-prune.md. Test: test_prune_keeps_decision_and_research_records_and_check_explains_pruned_links.
+Decided by Sumeet 2026-10-15: pruning keeps records linked from an open record (prune already keeps any record linked to or from a retained one) and records with decision or research content (decision records, Decision or Background sections). A missing reference to a pruned record now names the deleting commit and the git restore command that brings it back. Documented in docs/product/retention-and-prune.md. Test: test_prune_keeps_decision_and_research_records_and_check_explains_pruned_links.
