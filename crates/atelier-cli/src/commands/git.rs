@@ -377,7 +377,9 @@ fn base_done_claim(
 }
 
 /// A done claim on a work branch is not base completion until the base
-/// branch's own copy of the record carries it.
+/// branch's own copy of the record carries it. Once prune removes that copy,
+/// the claim counts as merged when the branch's committed record has it and
+/// the branch tip is in the base (atelier-lwdu).
 pub(crate) fn unmerged_done_label(
     repo: &Path,
     id: &str,
@@ -386,17 +388,27 @@ pub(crate) fn unmerged_done_label(
     base_branch: &str,
 ) -> String {
     let path = format!(".atelier/issues/{id}.md");
-    let merged = resolve(repo, &format!("refs/heads/{base_branch}"))
-        .and_then(|base| git_freshness::blob(repo, &base, Path::new(&path)))
-        .ok()
-        .and_then(|blob| {
-            atelier_records::parse_issue_record(
-                &blob,
-                Path::new(&path).strip_prefix(".atelier").ok()?,
-            )
+    let status_at = |commit: &str| {
+        git_freshness::blob(repo, commit, Path::new(&path))
             .ok()
-        })
-        .is_some_and(|record| record.issue.status == status);
+            .map(|blob| {
+                atelier_records::parse_issue_record(
+                    &blob,
+                    Path::new(&path).strip_prefix(".atelier").ok()?,
+                )
+                .ok()
+                .map(|record| record.issue.status)
+            })
+    };
+    let base = resolve(repo, &format!("refs/heads/{base_branch}")).ok();
+    let merged = base.as_deref().is_some_and(|base| match status_at(base) {
+        Some(on_base) => on_base.as_deref() == Some(status),
+        None => resolve(repo, &format!("refs/heads/{branch}")).is_ok_and(|tip| {
+            status_at(&tip).flatten().as_deref() == Some(status)
+                && git_freshness::git_output(repo, &["merge-base", "--is-ancestor", &tip, base])
+                    .is_ok()
+        }),
+    });
     if merged {
         format!("{status}, merged into {base_branch}")
     } else {
