@@ -4287,4 +4287,24 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
     let suffix_child = issue_id_by_title(dir.path(), "Suffix child");
     let parent_record = fs::read_to_string(canonical_issue_path(dir.path(), &second)).unwrap();
     assert!(parent_record.contains(&suffix_child), "{parent_record}");
+    // A parent named through an update entry for a record that is already a
+    // child is refused at preview too.
+    fs::write(
+        &revision,
+        format!(
+            r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Nest","resources":{{"issues":[
+              {{"client_ref":"k","operation":"update","id":"{child}"}},
+              {{"client_ref":"g","title":"Grandchild","body":"## Goal\n\nG.\n\n## Done when\n\nG.","parent":{{"client_ref":"k"}}}}
+            ]}}}}"###
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", revision.to_str().unwrap()],
+    );
+    assert!(
+        !success && stderr.contains("parents are one level deep"),
+        "{stderr}"
+    );
 }

@@ -557,11 +557,15 @@ fn validate_bundle_hierarchy(index: &RecordIndex, bundle: &BundleFile) -> Result
             // Parents are one level deep: the parent cannot itself be a child,
             // and this child cannot be a parent in the same bundle.
             let parent_is_child = match (&parent.client_ref, &parent.id) {
-                (Some(client_ref), _) => bundle
-                    .resources
-                    .issues
-                    .iter()
-                    .any(|other| &other.client_ref == client_ref && other.parent.is_some()),
+                (Some(client_ref), _) => bundle.resources.issues.iter().any(|other| {
+                    &other.client_ref == client_ref
+                        && (other.parent.is_some()
+                            || other.id.as_ref().is_some_and(|id| {
+                                index
+                                    .get_issue(id)
+                                    .is_some_and(|record| record.parent_id.is_some())
+                            }))
+                }),
                 (None, Some(id)) => index
                     .resolve_issue_ref(id)?
                     .and_then(|id| index.get_issue(&id))
