@@ -4,6 +4,7 @@
 use anyhow::{bail, Result};
 
 /// An epic record rewritten as a parent issue.
+#[derive(Debug)]
 pub struct MigratedEpic {
     pub text: String,
     /// `(from, to)` when a draft epic moves to the draft status of `to`.
@@ -44,6 +45,24 @@ pub fn migrate_epic_text(text: &str, to: &str, draft_status: &str) -> Result<Opt
             .map(|(_, content)| content.trim().to_string())
             .filter(|content| !content.is_empty())
     };
+    // Refuse rather than drop content: the review gate accepts an exact
+    // migration of an approved epic as unchanged, so nothing may be lost.
+    for (position, (heading, _)) in sections.iter().enumerate() {
+        if sections[..position]
+            .iter()
+            .any(|(earlier, _)| earlier == heading)
+        {
+            bail!("duplicate section '{heading}'; migrate it by hand");
+        }
+    }
+    if section("Outcome").is_some() && section("Goal").is_some() {
+        bail!("has both Outcome and Goal; migrate it by hand");
+    }
+    if section("Done when").is_some()
+        && (section("Proof").is_some() || section("Delivers").is_some())
+    {
+        bail!("has Done when as well as Proof or Delivers; migrate it by hand");
+    }
     let goal = section("Outcome")
         .or_else(|| section("Goal"))
         .unwrap_or_else(|| "Outcome was not specified.".to_string());
@@ -111,4 +130,39 @@ fn split_sections(body: &str) -> Vec<(String, String)> {
         }
     }
     sections
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_epic_text;
+
+    fn epic(body: &str) -> String {
+        format!("---\nid: \"atelier-e001\"\nissue_type: \"epic\"\nstatus: \"done\"\n---\n\n{body}")
+    }
+
+    #[test]
+    fn migration_refuses_to_drop_sections() {
+        for body in [
+            "## Outcome\n\nA.\n\n## Goal\n\nB.\n",
+            "## Proof\n\nA.\n\n## Done when\n\nB.\n",
+            "## Delivers\n\nA.\n\n## Done when\n\nB.\n",
+            "## Outcome\n\nA.\n\n## Notes\n\nB.\n\n## Notes\n\nC.\n",
+        ] {
+            let error = migrate_epic_text(&epic(body), "feature", "backlog").unwrap_err();
+            assert!(
+                error.to_string().contains("migrate it by hand"),
+                "{body}: {error}"
+            );
+        }
+        let migrated = migrate_epic_text(
+            &epic("## Outcome\n\nA.\n\n## Proof\n\nB.\n"),
+            "feature",
+            "backlog",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(migrated
+            .text
+            .contains("## Goal\n\nA.\n\n## Done when\n\nB.\n"));
+    }
 }
