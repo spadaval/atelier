@@ -199,6 +199,46 @@ pub struct RecordIndex {
     links_by_record: BTreeMap<(String, String), Vec<usize>>,
 }
 
+/// A reference to a missing record often means prune removed it while a
+/// record on another branch still linked it (atelier-r7cd). Say so, and how to
+/// recover, when Git history shows the record was deleted.
+fn explain_pruned_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::Error {
+    let message = error.to_string();
+    let Some((_, rest)) = message.rsplit_once(" reference to missing ") else {
+        return error;
+    };
+    let Some((kind, id)) = rest.trim().split_once(' ') else {
+        return error;
+    };
+    let dir = match kind {
+        "issue" => "issues",
+        "evidence" => "evidence",
+        "review" => "reviews",
+        _ => return error,
+    };
+    let path = format!(".atelier/{dir}/{id}.md");
+    let git = |args: &[&str]| {
+        crate::git_freshness::git_output(repo_root, args)
+            .ok()
+            .and_then(|out| String::from_utf8(out).ok())
+            .map(|out| out.trim().to_string())
+    };
+    let unlink = "or remove the link: delete it from the linking issue's relationships, or remove a review or evidence record whose only target is gone. Commands cannot load the records until one of these is done";
+    if git(&["cat-file", "-t", &format!("HEAD:{path}")]).is_some() {
+        return anyhow!(
+            "{message}; {id} is committed at HEAD but missing from the checkout. Restore it with `git restore -- ':/{path}'`, {unlink}"
+        );
+    }
+    match git(&["log", "-1", "--diff-filter=D", "--format=%h", "--", &path])
+        .filter(|commit| !commit.is_empty())
+    {
+        Some(commit) => anyhow!(
+            "{message}; {id} was deleted in commit {commit} (for example by atelier prune). Restore it with `git restore --source={commit}^ -- ':/{path}'`, {unlink}"
+        ),
+        None => error,
+    }
+}
+
 impl RecordIndex {
     /// Loads and validates every record under `state_dir`, failing on the
     /// first invalid record file and naming it.
@@ -244,6 +284,12 @@ impl RecordIndex {
         reviews: Vec<ReviewRecord>,
     ) -> (Self, Vec<anyhow::Error>) {
         let (index, mut errors) = Self::structural(issues, evidence, reviews);
+        if let Some(repo_root) = state_dir.parent() {
+            errors = errors
+                .into_iter()
+                .map(|error| explain_pruned_reference(repo_root, error))
+                .collect();
+        }
         let Some(repo_root) = state_dir.parent() else {
             errors.push(anyhow!(
                 "Cannot determine repository root for {}",
@@ -318,7 +364,12 @@ impl RecordIndex {
 
     /// Structural load for guards which resolve trusted policy before validation.
     pub fn load_structural(state_dir: &Path) -> Result<Self> {
-        read_record_files(state_dir)?.into_index()
+        read_record_files(state_dir)?
+            .into_index()
+            .map_err(|error| match state_dir.parent() {
+                Some(repo_root) => explain_pruned_reference(repo_root, error),
+                None => error,
+            })
     }
     pub fn validate_policy(&self, policy: &WorkflowPolicy, repo: &Path) -> Result<()> {
         let mut errors = Vec::new();
