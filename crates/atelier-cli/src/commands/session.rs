@@ -294,7 +294,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run atelier start <id> from {base}")
     })
 }
-fn land_text(requested: Option<&str>) -> Result<String> {
+fn land_text(requested: Option<&str>, deep: bool) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let (head, branch, snapshot, initial_paths, index) = {
@@ -310,7 +310,6 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         (head, branch, snapshot, paths, files.into_index()?)
     };
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
-    review_gate::append_only_history(&mut read)?;
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; repair it before landing")?;
     let id = owner(&index, &branch, requested)?;
@@ -367,74 +366,60 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         .map(|id| review_gate::scope(&index, id))
         .transpose()?
         .unwrap_or_default();
-    let claim_base = branch_base
-        .clone()
-        .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.clone()));
-    // Without a branch base, a claim is retained when any parent of HEAD
-    // already has it: a merge tip, such as a branch that merged the base in
-    // last, brings claims in through its other parents (atelier-kqt9).
-    let claim_parents = if branch_base.is_some() {
-        vec![claim_base.clone()]
-    } else {
-        let parents = git::text(repo, &["rev-list", "--parents", "-n", "1", &head])?
-            .split_whitespace()
-            .skip(1)
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        if parents.is_empty() {
-            vec![claim_base.clone()]
-        } else {
-            parents
+    // Every change that reaches the base has its own claims and review
+    // records checked, so history up to a trusted point holds by induction:
+    // land checks only what changed since then, and atelier doctor checks
+    // everything (atelier-37uq).
+    let base_name = &source.policy.branch_policy.base_branch;
+    let trusted = match &branch_base {
+        _ if deep => None,
+        Some(fork) => Some(fork.clone()),
+        None => {
+            let reference = if branch == *base_name {
+                format!("{base_name}@{{upstream}}")
+            } else {
+                format!("refs/heads/{base_name}")
+            };
+            git::resolve(repo, &reference)
+                .ok()
+                .and_then(|tip| git::text(repo, &["merge-base", &tip, &head]).ok())
         }
     };
-    let mut current = std::collections::BTreeSet::new();
-    let mut historical =
-        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
-    for issue in index.issues().filter(|issue| !owned.contains(&issue.id)) {
-        if !source
-            .policy
-            .issue_status_is_terminal(&issue.issue_type, &issue.status)?
-        {
-            continue;
-        }
-        let retained_at = claim_parents.iter().find(|parent| {
-            read.issue_at(parent, &issue.id).ok().is_some_and(|before| {
-                index.issue_record(&issue.id).is_some_and(|after| {
-                    atelier_app::evidence_freshness::completion_claim_matches(&before, after)
-                })
-            })
-        });
-        match retained_at {
-            Some(parent) => {
-                historical
-                    .entry(parent.clone())
-                    .or_default()
-                    .insert(issue.id.clone());
-            }
-            None => {
-                current.insert(issue.id.clone());
-            }
-        }
+    match &trusted {
+        Some(point) => review_gate::append_only(&mut read, point)?,
+        None => review_gate::append_only_history(&mut read)?,
     }
-    let mut nodes = Vec::new();
-    for (parent, ids) in historical {
-        nodes.extend(review_gate::evaluate_claims(
-            &index,
-            &mut read,
-            &source.policy,
-            &parent,
-            ids,
-            true,
-        )?);
-    }
-    nodes.extend(review_gate::evaluate_claims(
-        &index,
+    let touched = match &trusted {
+        Some(point) => touched_claims(repo, &index, point, &head)?,
+        None => std::collections::BTreeSet::new(),
+    };
+    // A policy change can invalidate claims that held under the old policy,
+    // so every claim is checked again.
+    let claims_trusted = trusted.as_deref().filter(|point| {
+        git::text(
+            repo,
+            &[
+                "diff",
+                "--name-only",
+                point,
+                &head,
+                "--",
+                workflow_policy::WORKFLOW_POLICY_PATH,
+            ],
+        )
+        .is_ok_and(|changed| changed.trim().is_empty())
+    });
+    let mut nodes = claim_nodes(
+        repo,
         &mut read,
+        &index,
         &source.policy,
-        &claim_base,
-        current,
-        false,
-    )?);
+        &owned,
+        branch_base.as_deref(),
+        &head,
+        claims_trusted,
+        &touched,
+    )?;
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
         let ownership = issue.workflow_branch.as_ref().context("land_work_untraceable: owner has no committed branch metadata; run atelier start and commit the record")?;
@@ -592,7 +577,7 @@ pub fn run(landing: bool, requested: Option<&str>, hook: bool, quiet: bool) -> R
     };
     let result = input.and_then(|()| {
         if landing {
-            land_text(requested)
+            land_text(requested, false)
         } else {
             prime_text()
         }
@@ -618,6 +603,157 @@ pub fn run(landing: bool, requested: Option<&str>, hook: bool, quiet: bool) -> R
         } else {
             println!("{output}");
         }
+    }
+    Ok(())
+}
+
+/// Gate nodes for the done claims outside the owner's scope. Claims unchanged
+/// since `trusted` were checked when they reached it and are skipped; with no
+/// trusted point every claim is checked (atelier-37uq).
+#[allow(clippy::too_many_arguments)]
+fn claim_nodes(
+    repo: &Path,
+    read: &mut git_freshness::ReadContext<'_>,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    owned: &std::collections::BTreeSet<String>,
+    branch_base: Option<&str>,
+    head: &str,
+    trusted: Option<&str>,
+    touched: &std::collections::BTreeSet<String>,
+) -> Result<Vec<review_gate::GateNode>> {
+    let claim_base = branch_base
+        .map(str::to_owned)
+        .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.to_owned()));
+    // Without a branch base, a claim is retained when any parent of HEAD
+    // already has it: a merge tip, such as a branch that merged the base in
+    // last, brings claims in through its other parents (atelier-kqt9).
+    let claim_parents = if branch_base.is_some() {
+        vec![claim_base.clone()]
+    } else {
+        let parents = git::text(repo, &["rev-list", "--parents", "-n", "1", head])?
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if parents.is_empty() {
+            vec![claim_base.clone()]
+        } else {
+            parents
+        }
+    };
+    let mut current = std::collections::BTreeSet::new();
+    let mut historical =
+        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+    for issue in index.issues().filter(|issue| !owned.contains(&issue.id)) {
+        if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
+            continue;
+        }
+        let retained_at = claim_parents.iter().find(|parent| {
+            read.issue_at(parent, &issue.id).ok().is_some_and(|before| {
+                index.issue_record(&issue.id).is_some_and(|after| {
+                    atelier_app::evidence_freshness::completion_claim_matches(&before, after)
+                })
+            })
+        });
+        // Unchanged, with no review or evidence record about it added since.
+        let unchanged_since_trusted = |read: &mut git_freshness::ReadContext<'_>| {
+            !touched.contains(&issue.id)
+                && trusted.is_some_and(|point| {
+                    read.issue_at(point, &issue.id).ok().is_some_and(|before| {
+                        index.issue_record(&issue.id).is_some_and(|after| {
+                            atelier_app::evidence_freshness::completion_claim_matches(
+                                &before, after,
+                            )
+                        })
+                    })
+                })
+        };
+        match retained_at {
+            Some(_) if unchanged_since_trusted(read) => {}
+            Some(parent) => {
+                historical
+                    .entry(parent.clone())
+                    .or_default()
+                    .insert(issue.id.clone());
+            }
+            None => {
+                current.insert(issue.id.clone());
+            }
+        }
+    }
+    let mut nodes = Vec::new();
+    for (parent, ids) in historical {
+        nodes.extend(review_gate::evaluate_claims(
+            index, read, policy, &parent, ids, true,
+        )?);
+    }
+    nodes.extend(review_gate::evaluate_claims(
+        index,
+        read,
+        policy,
+        &claim_base,
+        current,
+        false,
+    )?);
+    Ok(nodes)
+}
+
+/// Issues that a review or evidence record added or changed since `point`
+/// is about, so their claims are checked though their own records did not
+/// change.
+fn touched_claims(
+    repo: &Path,
+    index: &RecordIndex,
+    point: &str,
+    head: &str,
+) -> Result<std::collections::BTreeSet<String>> {
+    let changed = git::text(
+        repo,
+        &[
+            "diff",
+            "--no-renames",
+            "--name-only",
+            point,
+            head,
+            "--",
+            ".atelier/reviews",
+            ".atelier/evidence",
+        ],
+    )?;
+    let mut touched = std::collections::BTreeSet::new();
+    for path in changed.lines() {
+        let Some(id) = Path::new(path).file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        if let Ok(review) = index.require_review(id) {
+            touched.insert(review.target.clone());
+        }
+        if let Some(evidence) = index.evidence(id) {
+            touched.extend(
+                evidence
+                    .header
+                    .relationships
+                    .attachments
+                    .iter()
+                    .filter(|link| link.kind == "issue")
+                    .map(|link| link.id.clone()),
+            );
+        }
+    }
+    Ok(touched)
+}
+
+/// The full verification land skips: every retained claim and the whole
+/// review history, for history that reached the base without the gates
+/// (atelier-37uq).
+pub fn doctor(quiet: bool) -> Result<()> {
+    let output = land_text(None, true)?;
+    if quiet {
+        println!("passed");
+    } else {
+        println!("{output}");
+        println!("Doctor: every done claim and the whole review history were checked.");
     }
     Ok(())
 }

@@ -3177,6 +3177,154 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     );
 }
 #[test]
+fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(f.path(), &["doctor"]);
+    // A done claim with failing proof reaches the base without the gates,
+    // as a direct push would.
+    let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    commit(f.path(), "plan it");
+    ok(f.path(), &["issue", "transition", &old, "start"]);
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &old,
+            "close",
+            "--reason",
+            "pushed directly",
+        ],
+    );
+    commit(f.path(), "done without the gates");
+    let fail = |summary: &str| {
+        ok(
+            f.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{old}"),
+                "--kind",
+                "test",
+                "--result",
+                "fail",
+                summary,
+            ],
+        );
+    };
+    fail("Proof that failed");
+    commit(f.path(), "failing proof");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    // On the base and on a work branch, land does not re-check it.
+    ok(f.path(), &["land"]);
+    let (pass, output) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(f.path(), &["land", &f.id]);
+    let (pass, _) = cli(f.path(), &["doctor"]);
+    assert!(!pass);
+
+    // A branch that adds a record about it, or edits it, checks it again.
+    fail("Another failing run");
+    commit(f.path(), "more failing proof on the branch");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    ok(f.path(), &["land", &f.id]);
+    let path = f.path().join(format!(".atelier/issues/{old}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("title: \"Pushed directly\"", "title: \"Edited\""),
+    )
+    .unwrap();
+    commit(f.path(), "edit the old claim");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+
+    // It is still checked once a later commit leaves it alone.
+    git(
+        f.path(),
+        &["commit", "-q", "--allow-empty", "-m", "later work"],
+    );
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+
+    // A policy change checks every claim under the new policy.
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~2"]);
+    let policy = f.path().join(".atelier/workflow.yaml");
+    let mut revised = fs::read_to_string(&policy).unwrap();
+    revised.push_str("# Revised policy.\n");
+    fs::write(&policy, revised).unwrap();
+    commit(f.path(), "revise the policy");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "finding",
+            &old,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "The proof never passed",
+        ],
+    );
+    commit(f.path(), "finding on the old claim");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+
+    // On the base, a claim edited since the upstream is checked though the
+    // last commit left it alone.
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(
+        &path,
+        text.replace("title: \"Pushed directly\"", "title: \"Edited\""),
+    )
+    .unwrap();
+    commit(f.path(), "edit the old claim on the base");
+    git(
+        f.path(),
+        &["commit", "-q", "--allow-empty", "-m", "later work"],
+    );
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+}
+#[test]
 fn work_starts_on_an_adoption_branch_before_the_base_has_atelier() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

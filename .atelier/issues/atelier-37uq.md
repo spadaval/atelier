@@ -3,6 +3,9 @@ created_at: "2026-10-16T22:39:25.385564040+00:00"
 id: "atelier-37uq"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-37uq
 priority: "P1"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Check only changed claims in land, and add atelier doctor for the full check"
-updated_at: "2026-10-16T22:39:25.385564040+00:00"
+updated_at: "2026-10-16T22:39:38.830447798+00:00"
 ---
 
 ## Goal
@@ -27,3 +30,5 @@ On a work branch, land evaluates only claims whose records differ from where the
 ## Context
 
 Decided by Sumeet on 2026-10-16. Supersedes most of atelier-7b6e.
+
+Measured on this repository's clean master with release builds: land took 5.77 s before and 0.31 s after; doctor takes about 5.5 s to 7.7 s. A change to `.atelier/workflow.yaml` since the trusted point checks every claim, since a new policy can invalidate claims that held under the old one. doctor, like land, holds no canonical transaction around the checks, because a passing land fences its result with an exclusive one.

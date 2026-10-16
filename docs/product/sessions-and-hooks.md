@@ -41,9 +41,18 @@ On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
-Landing also checks completed claims elsewhere in the checkout. Unchanged
-integrated claims retain proof and independent acceptance that were valid when
-completion was claimed. Historical acceptance preserves the original work's
+Landing also checks completed claims elsewhere in the checkout that changed
+since a trusted point: the branch base on a work branch, or the merge base with
+the upstream on the base branch. Every change that reaches the base had its own
+claims checked when it landed, so earlier history holds by induction. A claim
+counts as changed when its record changed, a review or evidence record about it
+was added, or the workflow policy changed. Review history is checked for
+append-only edits from the same point. `atelier doctor` checks every completed
+claim and the whole review history, for history that reached the base without
+the gates, such as a direct push (atelier-37uq).
+
+Checked integrated claims retain proof and independent acceptance that were
+valid when completion was claimed. Historical acceptance preserves the original work's
 author scope and requires immutable review history. Without an owner, a claim
 counts as unchanged when any parent of HEAD already has it, so a merge tip, such
 as a branch that merged the base in last, keeps the claims it brings in through
