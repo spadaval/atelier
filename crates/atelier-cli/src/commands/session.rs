@@ -422,7 +422,7 @@ fn land_text(requested: Option<&str>) -> Result<String> {
         };
         match tracker_changes_since(repo, base)? {
             None => lines.push(format!(
-                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review (a pull request or a reviewed merge), then start further work with atelier start <id>."
+                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or git merge --no-ff), then start further work with atelier start <id>."
             )),
             Some(changed) if !changed.is_empty() => {
                 const SHOWN: usize = 5;

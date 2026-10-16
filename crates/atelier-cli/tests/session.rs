@@ -2345,12 +2345,21 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     let output = ok(dir.path(), &["land"]);
     assert!(
         output.contains("Installing Atelier: main has no workflow policy yet")
-            && output.contains("usual review"),
+            && output.contains("git merge --no-ff"),
         "{output}"
     );
 
-    // Merged by the repository's own review, the install lands on the base.
+    // A fast-forward leaves no install merge, so the review fixes are gated.
     git(dir.path(), &["switch", "-q", "main"]);
+    git(
+        dir.path(),
+        &["merge", "-q", "--ff-only", "chore/install-atelier"],
+    );
+    let (pass, output) = cli(dir.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
+    git(dir.path(), &["reset", "-q", "--hard", "main@{upstream}"]);
+
+    // Merged as one merge commit by the repository's own review, it lands.
     git(
         dir.path(),
         &[

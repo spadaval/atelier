@@ -32,9 +32,11 @@ Land it in one of two supported ways:
   and any bundle import on a branch such as `chore/atelier-tracker`. While no
   copy of the base has a workflow policy, `land` on that branch passes with a
   note that names this path instead of `land_work_untraceable`. Merge it with
-  the repository's usual review, such as a pull request, and push. On the
-  base, the merge that brings the policy in counts as the install, together
-  with the branch commits it merges.
+  the repository's usual review as one merge commit (merge the pull request on
+  the host and pull, or `git merge --no-ff`), and push. On the base, the merge
+  that brings the policy in counts as the install, together with the branch
+  commits it merges. A fast-forward merge leaves no such commit, so the
+  branch's later commits are checked one by one and refused.
 
 Once the pushed base has the policy, the gates apply: start work with
 `atelier start`, integrate with `atelier merge`, and commit only records and
