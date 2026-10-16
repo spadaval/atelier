@@ -674,28 +674,25 @@ fn validate_bundle_issue_type(issue_type: &str) -> Result<()> {
     }
 }
 
+/// Bundles create work in the same statuses as `issue create --status`, so
+/// they cannot skip a transition and its checks (atelier-9co2).
 fn validate_bundle_issue_status(issue_type: &str, status: &str) -> Result<()> {
     validate_status(status)?;
     let repo_root = atelier_app::storage_layout::find_repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    if policy.statuses.contains_key(status) {
-        let workflow = policy.workflow_for_issue_type(issue_type)?;
-        if workflow.transitions.values().any(|transition| {
-            transition.to == status || transition.from.iter().any(|from| from == status)
-        }) || workflow.initial_status == status
-            || workflow.done_statuses.iter().any(|done| done == status)
-        {
-            Ok(())
-        } else {
-            bail!(
-                "Invalid bundle issue status '{status}'; status is not allowed for issue_type '{issue_type}'"
-            )
-        }
-    } else {
+    if !policy.statuses.contains_key(status) {
         bail!(
             "Invalid bundle issue status '{status}'; status is not defined in .atelier/workflow.yaml"
         )
     }
+    let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
+    if !allowed.contains(status) {
+        bail!(
+            "Invalid bundle issue status '{status}'; {issue_type} work cannot be created in it; use one of: {}. Other statuses are reached with atelier issue transition after the bundle is applied.",
+            allowed.into_iter().collect::<Vec<_>>().join(", ")
+        )
+    }
+    Ok(())
 }
 
 fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
@@ -879,7 +876,7 @@ fn apply_bundle_to_state(
                 parent_id: None,
                 created_at: now,
                 updated_at: now,
-                closed_at: (status == "closed").then_some(now),
+                closed_at: None,
             },
             labels: sorted(issue.labels.clone()),
             sections,

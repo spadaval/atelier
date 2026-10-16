@@ -4,6 +4,9 @@ id: "atelier-9co2"
 issue_type: "bug"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-9co2
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Stop bundles creating records in statuses that need a transition"
-updated_at: "2026-10-16T00:34:05.289873857+00:00"
+updated_at: "2026-10-16T18:46:31.234295231+00:00"
 ---
 
 ## Goal

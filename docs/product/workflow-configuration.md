@@ -63,7 +63,8 @@ before the decision type existed can copy its `issue_types` entry and
 `atelier issue create --status backlog` files new work there directly. Create
 accepts the workflow's initial status, or a todo-category status one
 unchecked transition away from it; a status behind checks or required fields,
-such as an objective's `todo` behind `ready`, needs its transition. Inspect actual policy and `atelier issue transition <id>` before executing a
+such as an objective's `todo` behind `ready`, needs its transition. Bundle
+`create` entries follow the same rule. Inspect actual policy and `atelier issue transition <id>` before executing a
 transition; a todo category alone is not permission to start.
 
 Transitions write the issue record after checks pass. They do not create

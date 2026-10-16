@@ -49,7 +49,7 @@ Client references never become canonical record IDs.
 | `body` | Required typed Markdown body, using the same shape as CLI `--body`. |
 | `issue_type` | Repository-supported type; default `task`. |
 | `priority` | `critical`, `high`, `medium`, or `low`; default `medium`. |
-| `status` | Optional initial status; defaults to the selected workflow's initial status. |
+| `status` | Optional initial status; defaults to the selected workflow's initial status. Accepts the same statuses as `atelier issue create --status`: the initial status, or a todo-category status one unchecked transition away from it (such as `backlog`). Active and done statuses are reached with `atelier issue transition` after applying (atelier-9co2). |
 | `strategy` | Optional object with `path`; no revision number. |
 | `labels` | Optional string array. |
 | `parent` | Optional parent issue reference; any work item can be a parent, one level deep. |
