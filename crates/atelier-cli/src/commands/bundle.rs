@@ -87,6 +87,25 @@ fn fill_update_from_record(index: &RecordIndex, issue: &mut Value) -> Result<()>
     if object.contains_key("status") {
         bail!("Update {client_ref} cannot set status; change {id}'s status with atelier issue transition");
     }
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if object.contains_key("body") && policy.status_category(&record.issue.status) == Some("done") {
+        bail!(
+            "issue_body_done: update {client_ref} would change the body of {id}, which is {}; its done claim and proof were judged against the current acceptance. File follow-up work instead",
+            record.issue.status
+        );
+    }
+    if let (Some(parent), Some(current)) = (object.get("parent"), &record.issue.parent_id) {
+        let same = parent
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|parent| {
+                index.resolve_issue_ref(parent).ok().flatten().as_deref() == Some(current.as_str())
+            });
+        if !same {
+            bail!("Update {client_ref} cannot move {id} from parent {current}; use atelier issue update --parent");
+        }
+    }
     if let Some(issue_type) = object.get("issue_type").and_then(Value::as_str) {
         if issue_type != record.issue.issue_type {
             bail!(
@@ -408,6 +427,17 @@ fn validate_bundle(index: &RecordIndex, bundle: &BundleFile) -> Result<()> {
         validate_record_kind(kind)?;
     }
 
+    let mut updated = BTreeSet::new();
+    for issue in &bundle.resources.issues {
+        if let Some(id) = &issue.id {
+            if !updated.insert(id.clone()) {
+                bail!(
+                    "Bundle updates {id} more than once (again as {}); merge the changes into one entry",
+                    issue.client_ref
+                );
+            }
+        }
+    }
     for issue in &bundle.resources.issues {
         validate_issue_operation(issue)?;
         if issue.title.trim().is_empty() {
@@ -661,7 +691,7 @@ fn apply_bundle_file(
     if let Err(error) = cleanup_bundle_stage(&stage) {
         if result.is_ok() {
             tracing::warn!(
-                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this create-only bundle; verify with `atelier check`, then remove the leftover staging directory.",
+                "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this bundle; verify with `atelier check`, then remove the leftover staging directory.",
                 stage.display(),
                 error
             );
@@ -691,7 +721,7 @@ fn ensure_no_bundle_recovery_artifacts(state_dir: &Path) -> Result<()> {
     artifacts.sort();
     if !artifacts.is_empty() {
         bail!(
-            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry a create-only bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry the bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
             artifacts
                 .iter()
                 .map(|path| path.display().to_string())
@@ -758,6 +788,7 @@ fn apply_bundle_to_state(
             record.issue.updated_at = chrono::Utc::now();
             record.labels = sorted(issue.labels.clone());
             record.sections.body = sections.body;
+            check_bundle_record(&record)?;
             store.write_issue_atomic(&record)?;
             resolved.insert(
                 issue.client_ref.clone(),
@@ -807,6 +838,7 @@ fn apply_bundle_to_state(
             sections,
             relationships: Relationships::default(),
         };
+        check_bundle_record(&record)?;
         store.write_issue_atomic(&record)?;
         resolved.insert(
             issue.client_ref.clone(),
@@ -906,6 +938,31 @@ fn apply_bundle_to_state(
         "relationships": applied_relationships,
         "notes": plan.notes.len(),
     }))
+}
+
+/// A record a bundle writes passes the per-record rules `atelier check`
+/// applies, and a mission's strategy names an existing file.
+fn check_bundle_record(record: &CanonicalIssueRecord) -> Result<()> {
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let findings = atelier_app::lint::issue_findings([record], &repo_root, false);
+    if let Some(finding) = findings.first() {
+        bail!(
+            "Bundle record {} ({}) is invalid: {}",
+            record.issue.id,
+            record.issue.title,
+            finding.message
+        );
+    }
+    if let Some(strategy) = &record.issue.strategy {
+        if !repo_root.join(&strategy.path).is_file() {
+            bail!(
+                "Bundle mission {} links strategy {}, which does not exist",
+                record.issue.id,
+                strategy.path
+            );
+        }
+    }
+    Ok(())
 }
 
 fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
@@ -1038,7 +1095,7 @@ pub(crate) fn install_directories(
     if result.is_ok() {
         if let Err(error) = cleanup_bundle_backup(&backup) {
             tracing::warn!(
-                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this create-only bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
+                "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
                 backup.display(),
                 error
             );

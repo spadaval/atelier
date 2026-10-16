@@ -4008,6 +4008,9 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
         (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","status":"done"}}"###), "cannot set status"),
         (r###"{"client_ref":"a","operation":"update","id":"atelier-zzzz"}"###.to_string(), "missing issue atelier-zzzz"),
         (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","issue_type":"bug"}}"###), "cannot change"),
+        (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","labels":["x"]}},{{"client_ref":"a2","operation":"update","id":"{}","labels":["y"]}}"###, &first[first.len() - 4..]), "more than once"),
+        (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip.","strategy":{{"path":"docs/missing.md"}}}}"###), "does not exist"),
+        (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip."}}"###), "Mission requires Success criteria"),
         (r###"{"client_ref":"a","operation":"update","title":"No id","body":"## Goal\n\nG.\n\n## Done when\n\nD."}"###.to_string(), "needs the id"),
     ] {
         fs::write(
@@ -4015,8 +4018,59 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
             format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{body}]}}}}"###),
         )
         .unwrap();
-        let (success, _, stderr) =
-            run_atelier(dir.path(), &["bundle", "preview", revision.to_str().unwrap()]);
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "apply", revision.to_str().unwrap(), "--yes"],
+        );
         assert!(!success && stderr.contains(expected), "{expected}: {stderr}");
+    }
+
+    // Done records keep the acceptance their proof was judged against, and
+    // moving a record to another parent is an issue update.
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &third,
+            "supersede",
+            "--reason",
+            "Not needed",
+        ],
+    );
+    let parent = issue_id_by_title(dir.path(), "First slice, revised");
+    let (success, child, _) = run_atelier(
+        dir.path(),
+        &["-q", "issue", "create", "Child", "--parent", &second],
+    );
+    assert!(success);
+    let child = child.trim().to_string();
+    for (body, expected) in [
+        (
+            format!(
+                r###"{{"client_ref":"c","operation":"update","id":"{third}","body":"## Goal\n\nC2.\n\n## Done when\n\nC2."}}"###
+            ),
+            "issue_body_done",
+        ),
+        (
+            format!(
+                r###"{{"client_ref":"k","operation":"update","id":"{child}","parent":{{"id":"{parent}"}}}}"###
+            ),
+            "use atelier issue update --parent",
+        ),
+    ] {
+        fs::write(
+            &revision,
+            format!(r###"{{"schema":"atelier.bundle","schema_version":2,"title":"Bad","resources":{{"issues":[{body}]}}}}"###),
+        )
+        .unwrap();
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["bundle", "preview", revision.to_str().unwrap()],
+        );
+        assert!(
+            !success && stderr.contains(expected),
+            "{expected}: {stderr}"
+        );
     }
 }
