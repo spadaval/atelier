@@ -414,7 +414,7 @@ fn evaluate_scope(
     {
         if !ancestor(read, &record.commit, "HEAD") {
             bail!(
-                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. Reset the branch to the tip it had before (find it with `git reflog`), then merge the base in with `git merge` instead",
+                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. Reset the branch to the tip it had before (find it with `git reflog`), cherry-pick any commits made after the rebase back onto it (record review events made since then again: they pin rewritten commits), then merge the base in with `git merge` instead",
                 record.header.id
             );
         }

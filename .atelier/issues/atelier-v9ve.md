@@ -3,6 +3,9 @@ created_at: "2026-10-16T18:47:46.535528279+00:00"
 id: "atelier-v9ve"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-v9ve
 priority: "P2"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Warn that rebase recovery drops commits made after the rebase"
-updated_at: "2026-10-16T18:47:46.535528279+00:00"
+updated_at: "2026-10-16T19:52:46.571598019+00:00"
 ---
 
 ## Goal

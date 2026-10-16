@@ -596,17 +596,46 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     commit(fixture.path(), "other work landed on the base");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
     git(fixture.path(), &["rebase", "-q", "main"]);
+    // Work continues after the rebase before the refusal is noticed.
+    ok(
+        fixture.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{}", fixture.id),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Proof recorded after the rebase",
+        ],
+    );
+    commit(fixture.path(), "proof after the rebase");
+    let after_rebase = git(fixture.path(), &["rev-parse", "HEAD"]);
     fixture.refusal("pins a commit outside the work branch");
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id]);
     assert!(
-        output.contains("rebased or reset") && output.contains("git reflog"),
+        output.contains("rebased or reset")
+            && output.contains("git reflog")
+            && output.contains("cherry-pick any commits made after the rebase"),
         "{output}"
     );
 
-    // The advised recovery: restore the reviewed tip, then merge the base.
+    // The advised recovery: restore the reviewed tip, cherry-pick the later
+    // work back, then merge the base.
     git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
+    git(fixture.path(), &["cherry-pick", &after_rebase]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(fixture
+        .path()
+        .join(".atelier/evidence")
+        .read_dir()
+        .unwrap()
+        .any(|entry| fs::read_to_string(entry.unwrap().path())
+            .unwrap()
+            .contains("Proof recorded after the rebase")));
 }
 
 #[test]
