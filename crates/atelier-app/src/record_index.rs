@@ -323,10 +323,12 @@ impl RecordIndex {
         let mut index = Self::default();
         let mut errors = Vec::new();
         let mut global_ids = BTreeSet::new();
+        let mut dropped = BTreeSet::new();
         for record in issues {
             let id = record.issue.id.clone();
             if !global_ids.insert(id.clone()) {
                 errors.push(anyhow!("Duplicate issue ID in record files: {id}"));
+                dropped.insert(("issue".to_owned(), id));
                 continue;
             }
             index.issues.insert(id, record);
@@ -335,6 +337,7 @@ impl RecordIndex {
             let id = record.header.id.clone();
             if !global_ids.insert(id.clone()) {
                 errors.push(anyhow!("Duplicate record ID in record files: {id}"));
+                dropped.insert(("evidence".to_owned(), id));
                 continue;
             }
             index.evidence.insert(id, record);
@@ -345,6 +348,7 @@ impl RecordIndex {
                     "Duplicate record ID in record files: {}",
                     record.header.id
                 ));
+                dropped.insert(("review".to_owned(), record.header.id.clone()));
                 continue;
             }
             index.reviews.insert(record.header.id.clone(), record);
@@ -359,6 +363,15 @@ impl RecordIndex {
             }
         }
         index.order();
+        // A duplicate ID drops a record; references to that kind and ID are
+        // not also reported missing (atelier-ip9e).
+        errors.retain(|error| {
+            !error
+                .to_string()
+                .rsplit_once(" reference to missing ")
+                .and_then(|(_, target)| target.split_once(' '))
+                .is_some_and(|(kind, id)| dropped.contains(&(kind.to_owned(), id.to_owned())))
+        });
         (index, errors)
     }
 
@@ -1446,6 +1459,75 @@ mod tests {
         assert_eq!(
             index.resolve_issue_ref("child").unwrap().as_deref(),
             Some("atelier-child")
+        );
+    }
+
+    #[test]
+    fn duplicate_id_is_reported_once_without_missing_reference_cascade() {
+        let dir = tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        let owner = issue_record("atelier-dup", "task", "todo");
+        // Evidence sharing the issue's ID is dropped; the reviewer's evidence
+        // still names it.
+        let shadow =
+            crate::test_records::evidence_record("atelier-dup", "atelier-dup", "validates");
+        let mut referrer =
+            crate::test_records::evidence_record("atelier-ref", "atelier-dup", "validates");
+        referrer
+            .header
+            .relationships
+            .attachments
+            .push(atelier_records::attachment_relationship(
+                "evidence",
+                "atelier-dup",
+                "related",
+            ));
+        let errors = RecordIndex::validation_errors(
+            &state,
+            vec![owner.clone()],
+            vec![shadow.clone(), referrer.clone()],
+            Vec::new(),
+        )
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+        assert_eq!(errors, ["Duplicate record ID in record files: atelier-dup"]);
+        let first =
+            RecordIndex::from_records(vec![owner], vec![shadow, referrer], Vec::new()).unwrap_err();
+        assert_eq!(
+            first.to_string(),
+            "Duplicate record ID in record files: atelier-dup"
+        );
+
+        // A reference of another kind to the same ID is still missing.
+        let mut referrer =
+            crate::test_records::evidence_record("atelier-ref", "atelier-real", "validates");
+        referrer
+            .header
+            .relationships
+            .attachments
+            .push(atelier_records::attachment_relationship(
+                "issue",
+                "atelier-twin",
+                "related",
+            ));
+        let twin =
+            crate::test_records::evidence_record("atelier-twin", "atelier-real", "validates");
+        let errors = RecordIndex::validation_errors(
+            &state,
+            vec![issue_record("atelier-real", "task", "todo")],
+            vec![twin.clone(), twin, referrer],
+            Vec::new(),
+        )
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+        assert_eq!(
+            errors,
+            [
+                "Duplicate record ID in record files: atelier-twin",
+                "atelier-ref has related reference to missing issue atelier-twin",
+            ]
         );
     }
 
