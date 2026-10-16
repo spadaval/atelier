@@ -18,9 +18,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-16T00:51:53.117405550+00:00"
+status: "done"
 title: "Give missions and epics a place for research and references"
-updated_at: "2026-10-16T00:49:30.826583903+00:00"
+updated_at: "2026-10-16T00:51:53.117405550+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,7 @@ A mission and an epic can each carry free-form background (research, references,
 astromech: the EDDN sender rules apply to six EDDN issues but had to go in the Context of "EDDN sender core". The tool-by-tool research table and the won't-do list went into `docs/strategies/replace-the-toolbox.md`. Parser: `crates/atelier-records/src/lib.rs` (allowed sections per type).
 
 Found 2026-10-15 while moving astromech's BACKLOG.md (about 135 items with research, references and decisions) into Atelier records. Sumeet's principle: Atelier records should hold the whole backlog; needing a side document means Atelier needs work.
+
+## Close Reason
+
+Missions and work items (including parents) accept an optional Background section for shared research, references and motivation; issue show displays it, check, bundles and issue update --body accept it. Documented in work-model.md, mission-authoring.md, the bundle contract and the record-store doc; the Agent Factory tracker-records reference changes upstream under atelier-92mz. Test: test_missions_and_parents_carry_background_research.
