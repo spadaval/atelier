@@ -33,6 +33,17 @@ Decisions are the human's by default: an open decision is listed under
 filed, decided, and closed on the base branch as planning changes (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
+Backlog conventions (decision atelier-ermg, under atelier-b7hb):
+
+- **Size** is the reserved label `size:s`, `size:m`, `size:l`, or `size:xl`.
+  `check` rejects other values and more than one size, `issue show` displays
+  it, and `issue update -l size:<x>` replaces the previous size.
+- **Unverified assumptions** go in a work item's Unknowns section.
+- **Won't-do** items are `decision` records whose Decision says no and why;
+  prune keeps them.
+- **Already-built** work is described in the parent's Background or Context,
+  not filed as done records without a done claim.
+
 Repositories with records from before this change run
 `atelier migrate epics --apply` once: it retypes each epic as a feature (or
 `--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,

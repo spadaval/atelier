@@ -4,17 +4,23 @@ id: "atelier-b7hb"
 issue_type: "feature"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-b7hb
 priority: "P3"
 relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-ermg"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Represent size, unverified assumptions, won't-do decisions and already-built work"
-updated_at: "2026-10-15T21:00:45.353749565+00:00"
+updated_at: "2026-10-16T01:31:49.982685372+00:00"
 ---
 
 ## Goal

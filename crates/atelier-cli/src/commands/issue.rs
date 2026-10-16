@@ -110,6 +110,9 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     if let Some(assignee) = label_value(&record.labels, "assignee:") {
         println!("Assignee: {assignee}");
     }
+    if let Some(size) = label_value(&record.labels, atelier_app::lint::SIZE_LABEL_PREFIX) {
+        println!("Size:     {}", size.to_uppercase());
+    }
     if !record.labels.is_empty() {
         println!("Labels:   {}", record.labels.join(", "));
     }
@@ -924,6 +927,12 @@ pub fn update_lifecycle(
         None => {}
     }
     for label in input.labels {
+        // A record has one size; a new size label replaces the old one.
+        if label.starts_with(atelier_app::lint::SIZE_LABEL_PREFIX) {
+            record
+                .labels
+                .retain(|existing| !existing.starts_with(atelier_app::lint::SIZE_LABEL_PREFIX));
+        }
         push_unique(&mut record.labels, label.to_string());
         changed_fields.push("labels");
     }

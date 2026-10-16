@@ -5,6 +5,10 @@ use atelier_records::{issue_record_path, CanonicalIssueRecord, IssueSectionName}
 
 use crate::record_index::{read_record_files, RecordIndex};
 
+/// Reserved size labels (atelier-b7hb): `size:s`, `size:m`, `size:l`, `size:xl`.
+pub const SIZE_LABEL_PREFIX: &str = "size:";
+const SIZES: [&str; 4] = ["s", "m", "l", "xl"];
+
 pub struct LintRequest<'a> {
     pub state_dir: &'a Path,
     pub issue_ref: Option<&'a str>,
@@ -133,6 +137,23 @@ pub fn issue_findings<'a>(
         };
         if issue.title.trim().is_empty() {
             findings.push(finding("Issue title must not be empty".to_string()));
+        }
+        // Size is the reserved label size:s|m|l|xl, at most one per record.
+        let sizes = record
+            .labels
+            .iter()
+            .filter_map(|label| label.strip_prefix(SIZE_LABEL_PREFIX))
+            .collect::<Vec<_>>();
+        if let Some(size) = sizes.iter().find(|size| !SIZES.contains(size)) {
+            findings.push(finding(format!(
+                "Size label size:{size} is not one of size:s, size:m, size:l, size:xl"
+            )));
+        }
+        if sizes.len() > 1 {
+            findings.push(finding(format!(
+                "Issue has {} size labels; keep one of size:s, size:m, size:l, size:xl",
+                sizes.len()
+            )));
         }
         if let Some(policy) = &workflow_policy {
             if let Err(error) =
