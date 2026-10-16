@@ -3501,6 +3501,73 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     );
 }
 #[test]
+fn land_checks_a_mission_whose_advancing_work_reopens() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    // A policy whose missions close only once their advancing work is done.
+    let policy = f.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    let objective = text.find("  objective:").unwrap();
+    let close = objective
+        + text[objective..]
+            .find("        - blockers.none_open\n")
+            .unwrap();
+    let mut revised = text.clone();
+    revised.insert_str(close, "        - work.terminal\n");
+    fs::write(&policy, revised).unwrap();
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShipped.\n\n## Success criteria\n\nIt ships.",
+            "Mission",
+        ],
+    );
+    let work = ok(f.path(), &["-q", "issue", "create", "Advancing work"]);
+    ok(f.path(), &["issue", "link", &work, &mission]);
+    commit(f.path(), "plan the mission");
+    ok(f.path(), &["issue", "transition", &work, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &work, "close", "--reason", "done"],
+    );
+    for transition in ["ready", "start"] {
+        ok(f.path(), &["issue", "transition", &mission, transition]);
+    }
+    ok(
+        f.path(),
+        &["issue", "transition", &mission, "close", "--reason", "done"],
+    );
+    commit(f.path(), "complete the mission without the gates");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(f.path(), &["land", &f.id]);
+
+    // Reopening the work changes only its own record.
+    let path = f.path().join(format!(".atelier/issues/{work}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("status: \"done\""), "{text}");
+    fs::write(&path, text.replace("status: \"done\"", "status: \"todo\"")).unwrap();
+    commit(f.path(), "reopen the advancing work");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(
+        !pass && output.contains(&format!("{mission} work.terminal")),
+        "{output}"
+    );
+}
+#[test]
 fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

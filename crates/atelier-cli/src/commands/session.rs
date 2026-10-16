@@ -714,7 +714,7 @@ fn claim_nodes(
 
 /// Issues whose claims a change since `point` can affect, though their own
 /// records may not have changed: every changed issue record and the issues
-/// it links as blocked, parent or child, and the targets of every changed
+/// it links as blocked, parent, child or advanced, and the targets of every changed
 /// review or evidence record, each as it was at `point` and as it is now,
 /// then every issue those reach through the same links.
 /// `None` when a record at `point` cannot be read, so every claim is checked.
@@ -767,6 +767,14 @@ fn touched_claims(
                 .blocks
                 .iter()
                 .chain(&record.relationships.children)
+                .map(|link| link.id.clone()),
+        );
+        touched.extend(
+            record
+                .relationships
+                .relates
+                .iter()
+                .filter(|link| link.kind == "issue" && link.relation_type == "advances")
                 .map(|link| link.id.clone()),
         );
     }
@@ -831,15 +839,31 @@ fn touched_claims(
         }
     }
     // The blocker and open-work checks follow whole chains: blockers of
-    // blockers, blockers a parent passes to its children, and children of
-    // children. A claim is checked when anything along its chain changed.
+    // blockers, blockers a parent passes to its children, children of
+    // children, and work that advances a mission, in either direction. A
+    // claim is checked when anything along its chain changed.
+    let mut advanced_by = std::collections::BTreeMap::<String, Vec<String>>::new();
+    for record in index.issue_records() {
+        for link in &record.relationships.relates {
+            if link.kind == "issue" && link.relation_type == "advances" {
+                advanced_by
+                    .entry(link.id.clone())
+                    .or_default()
+                    .push(record.issue.id.to_string());
+            }
+        }
+    }
     let mut queue = touched.iter().cloned().collect::<Vec<_>>();
     while let Some(id) = queue.pop() {
-        let Some(record) = index.issue_record(&id) else {
-            continue;
-        };
-        let mut next = std::collections::BTreeSet::new();
-        linked(record, &mut next);
+        let mut next = advanced_by
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        if let Some(record) = index.issue_record(&id) {
+            linked(record, &mut next);
+        }
         queue.extend(next.into_iter().filter(|id| touched.insert(id.clone())));
     }
     Ok(Some(touched))
