@@ -3918,10 +3918,20 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         &["--quiet", "work", "mission", &mission, "--ready"],
     );
     assert!(success, "{stderr}");
-    assert_eq!(
-        quiet.lines().collect::<Vec<_>>(),
-        ids.iter().map(String::as_str).collect::<Vec<_>>()
-    );
+    let quiet = quiet.lines().collect::<Vec<_>>();
+    let mut every = quiet.clone();
+    every.sort_unstable();
+    assert_eq!(every, ids.iter().map(String::as_str).collect::<Vec<_>>());
+    // Quiet rows come in the work order the human view lists.
+    let (success, human, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission, "--ready"]);
+    assert!(success, "{stderr}");
+    let shown = human
+        .lines()
+        .filter_map(|line| line.trim_start().split_whitespace().next())
+        .filter(|token| ids.iter().any(|id| id == token))
+        .collect::<Vec<_>>();
+    assert_eq!(quiet, shown, "{human}");
 }
 
 #[test]

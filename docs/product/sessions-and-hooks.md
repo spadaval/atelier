@@ -128,8 +128,8 @@ into <base>` until the base branch's own copy of the record is done, and
 `| merged into <base>` after.
 
 The same summaries, read once per command, mark ready work that is in flight
-elsewhere: in `status`'s ready items and unassigned work, and in `work ready`
-and `work all`, an
+elsewhere: in `status`'s ready items and unassigned work, in `work ready`
+and `work all`, and in the Ready Work of `work mission` and `work parent`, an
 item that owns another local branch gets a `↳` line under its row with its
 state there, `<status> on <branch>`, plus `, not merged` or `, merged into
 <base>` for a done claim. The item stays listed and classified from the

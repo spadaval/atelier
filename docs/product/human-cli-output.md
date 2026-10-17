@@ -186,9 +186,12 @@ command just run or a filter for rows already on screen:
   parent or else the issue itself; an owner with no recorded branch, such as
   a mission or decision, offers `atelier land` alone;
 - `work mission` and `work parent` offer `atelier start <id>` for the first
-  item of Ready Work, and their transitions only while the objective has any;
-- `issue create` offers `atelier start <new id>`, or for a mission or
-  decision, which have no branch, its transition options.
+  item of Ready Work, in work order, that no other branch has started, and
+  their transitions only while the objective has any;
+- `issue create` offers `atelier start <new id>` when the item's workflow has
+  a `start` transition from the status it was created in; otherwise, as for
+  backlog work or a mission or decision, which have no branch, it offers the
+  transition options.
 
 A list that leaves rows out ends with a line that counts them and names the
 command that shows them all: ``... 4 more done work items omitted; see
