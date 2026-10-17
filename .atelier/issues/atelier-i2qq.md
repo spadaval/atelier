@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Write one item-line, verdict, confirmation and quiet contract for all views"
-updated_at: "2026-10-17T01:10:57.991429157+00:00"
+updated_at: "2026-10-17T03:52:32.829313536+00:00"
 ---
 
 ## Goal
@@ -61,3 +61,7 @@ Extends atelier-deyy, which writes the first dense-output rule and the `work` vi
 ## Unknowns
 
 - Design the item-line contract and the shared row and heading helpers so built-in views could later be expressed as declarative view definitions (filter, fields from a fixed vocabulary, shared sort, grouping) without changing their output. atelier-e95f, custom work views, depends on this. It is not a requirement here; it is a design constraint to keep open.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-16: From review of atelier-deyy: issue show --full Recent Activity Facts rows lack the ✓ mark, and work-view-ordering.md's Row State Vocabulary omits the backlog and needs human prefixes that work mission --all prints. Fold both into this contract.
