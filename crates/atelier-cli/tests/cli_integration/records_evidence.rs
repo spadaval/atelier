@@ -831,7 +831,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
     assert!(!success, "evidence ID should not resolve as an issue");
     assert!(
         stderr.contains(&format!(
-            "{evidence_id} is a evidence record, not an issue record"
+            "{evidence_id} is an evidence record, not an issue."
         )),
         "wrong-kind evidence lookup should name actual and expected kinds: {stderr}"
     );
@@ -856,7 +856,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", unknown_id]);
     assert!(!success, "unknown ID should fail");
     assert!(
-        stderr.contains("was not found"),
+        stderr.contains("issue atelier-zzzz not found"),
         "unknown ID should keep concise not-found error: {stderr}"
     );
     assert!(
@@ -1079,8 +1079,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     );
     assert!(!success, "conflicting summaries should fail");
     assert!(
-        stderr.contains("use either --summary or a positional summary"),
-        "conflict error should be actionable: {stderr}"
+        stderr.contains("the argument '--summary <SUMMARY>' cannot be used with '[SUMMARY_TEXT]'"),
+        "the parser should reject conflicting summaries: {stderr}"
     );
 
     let (success, _, stderr) = run_atelier(

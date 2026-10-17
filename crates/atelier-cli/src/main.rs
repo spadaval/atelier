@@ -1,6 +1,5 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use atelier::commands;
-use atelier_app::record_index::RecordIndex;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
 use clap::{Parser, Subcommand};
@@ -273,22 +272,23 @@ enum MigrateCommands {
 #[derive(Subcommand)]
 enum WorkCommands {
     /// Show one mission dashboard
+    #[command(group(clap::ArgGroup::new("filter").multiple(false)))]
     Mission {
         id: String,
         /// Show mission-scoped ready work only
-        #[arg(long)]
+        #[arg(long, group = "filter")]
         ready: bool,
         /// Show mission-scoped blocked work only
-        #[arg(long)]
+        #[arg(long, group = "filter")]
         blocked: bool,
         /// Show mission-scoped active work only
-        #[arg(long)]
+        #[arg(long, group = "filter")]
         active: bool,
         /// Show mission-scoped done work only
-        #[arg(long)]
+        #[arg(long, group = "filter")]
         done: bool,
         /// Show all mission-scoped work
-        #[arg(long)]
+        #[arg(long, group = "filter")]
         all: bool,
     },
     /// Show one parent issue's dashboard: the parent and its children
@@ -423,7 +423,7 @@ enum IssueCommands {
         #[arg(long = "remove-label")]
         remove_label: Vec<String>,
         /// Set the parent issue ID
-        #[arg(long)]
+        #[arg(long, conflicts_with = "no_parent")]
         parent: Option<String>,
         /// Clear parent issue
         #[arg(long)]
@@ -507,14 +507,14 @@ another target.")]
         #[arg(long = "kind")]
         evidence_kind: String,
         /// Explicit manual result; command capture derives it from the exit status.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "command")]
         result: Option<atelier_core::EvidenceResult>,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
         #[arg(long, default_value = "validates")]
         role: String,
-        #[arg(long)]
+        #[arg(long, conflicts_with = "summary_text")]
         summary: Option<String>,
         #[arg(long)]
         path: Option<String>,
@@ -542,38 +542,6 @@ another target.")]
         #[arg(long)]
         result: Option<atelier_core::EvidenceResult>,
     },
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn resolve_issue_arg(index: &RecordIndex, issue_ref: &str) -> Result<String> {
-    match commands::issue::resolve_id(index, issue_ref) {
-        Ok(id) => Ok(id),
-        Err(error) => match index.record_kind_for_id(issue_ref) {
-            Some(actual_kind) if actual_kind != "issue" => {
-                bail!("{}", wrong_kind_message("issue", actual_kind, issue_ref));
-            }
-            _ => Err(error),
-        },
-    }
-}
-
-fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
-    let suggested = show_command_for_kind(actual_kind)
-        .map(|command| format!(" Use `{command} {id}`."))
-        .unwrap_or_default();
-    format!("{id} is a {actual_kind} record, not a {expected_kind} record.{suggested}")
-}
-
-fn show_command_for_kind(kind: &str) -> Option<&'static str> {
-    match kind {
-        "issue" => Some("atelier issue show"),
-        "mission" => Some("atelier issue show"),
-        "evidence" => Some("atelier evidence show"),
-        _ => None,
-    }
 }
 
 // ============================================================================
@@ -786,15 +754,10 @@ fn run() -> Result<()> {
                                 .map(|id| (target.kind.clone(), id))
                         })
                         .transpose()?;
-                    let summary = match (summary.as_deref(), summary_text.as_deref()) {
-                        (Some(_), Some(_)) => {
-                            bail!("use either --summary or a positional summary, not both")
-                        }
-                        (Some(summary), None) | (None, Some(summary)) => summary,
-                        (None, None) => {
-                            bail!("evidence record without a command requires a summary")
-                        }
-                    };
+                    let summary = summary
+                        .as_deref()
+                        .or(summary_text.as_deref())
+                        .context("evidence record without a command requires a summary")?;
                     let evidence_id = commands::evidence::add_returning_id(
                         &index,
                         &state_dir,
@@ -828,16 +791,7 @@ fn run() -> Result<()> {
                         .load_evidence_by_id(&evidence_id)?;
                     commands::evidence::print_new_record(&evidence, quiet)
                 } else {
-                    if result.is_some() {
-                        bail!("command capture derives its result; omit --result when passing a command");
-                    }
-                    let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
-                        (Some(_), Some(_)) => {
-                            bail!("use either --summary or a positional summary, not both")
-                        }
-                        (Some(summary), None) | (None, Some(summary)) => Some(summary),
-                        (None, None) => None,
-                    };
+                    let command_summary = summary.as_deref().or(summary_text.as_deref());
                     commands::evidence::capture(commands::evidence::CaptureOptions {
                         evidence_kind: &evidence_kind,
                         summary: command_summary,
@@ -863,6 +817,7 @@ fn run() -> Result<()> {
                 role,
             } => {
                 let (state_dir, index) = load_repository()?;
+                let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, &id)?;
                 let target_id =
                     use_cases::resolve_evidence_target_ref(&index, &target_kind, &target_id)?;
                 commands::evidence::attach(

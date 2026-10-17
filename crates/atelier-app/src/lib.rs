@@ -17,6 +17,7 @@ pub mod mission_readiness;
 pub mod objective_graph;
 pub mod project_config;
 pub mod record_index;
+pub mod record_ref;
 pub mod review_gate;
 pub mod storage_layout;
 pub mod use_cases;

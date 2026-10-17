@@ -15,6 +15,7 @@ use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
 use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
+use atelier_app::record_ref::RecordKind;
 use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, ISSUE_NOTE_KINDS};
@@ -26,28 +27,7 @@ const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
 
 pub fn resolve_id(index: &RecordIndex, issue_ref: &str) -> Result<String> {
-    if let Some(id) = index.resolve_issue_ref(issue_ref)? {
-        return Ok(id);
-    }
-
-    if let Some(actual_kind) = index.record_kind_for_id(issue_ref) {
-        bail!(
-            "{} is a {} record, not an issue record. Use `{}`.",
-            issue_ref,
-            actual_kind,
-            show_command_for_kind(actual_kind, issue_ref)
-        );
-    }
-
-    Err(anyhow!("Issue {issue_ref} was not found"))
-}
-
-fn show_command_for_kind(kind: &str, id: &str) -> String {
-    match kind {
-        "mission" => format!("atelier issue show {id}"),
-        "evidence" => format!("atelier evidence show {id}"),
-        _ => format!("atelier {kind} show {id}"),
-    }
+    index.resolve(RecordKind::Issue, issue_ref)
 }
 
 fn label_value(labels: &[String], prefix: &str) -> Option<String> {
@@ -74,7 +54,7 @@ pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool) -> Result<()
             let id = resolve_id(index, issue_ref)?;
             index
                 .issue_record(&id)
-                .ok_or_else(|| anyhow!("Issue {id} not found"))
+                .ok_or_else(|| index.not_found(RecordKind::Issue, &id))
         })
         .collect::<Result<Vec<_>>>()?;
     if full {
@@ -1245,10 +1225,11 @@ pub fn update_lifecycle(
 /// Append a dated note to the issue record's Notes section.
 pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> Result<()> {
     if !ISSUE_NOTE_KINDS.contains(&kind) {
-        bail!(
-            "Invalid note kind '{kind}'. Valid kinds: {}",
-            ISSUE_NOTE_KINDS.join(", ")
-        );
+        bail!(atelier_core::invalid_value_message(
+            "note kind",
+            kind,
+            ISSUE_NOTE_KINDS
+        ));
     }
     if text.trim().is_empty() {
         bail!("Note text for issue {issue_id} must not be empty");

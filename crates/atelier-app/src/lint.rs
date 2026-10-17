@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use atelier_records::{issue_record_path, CanonicalIssueRecord, IssueSectionName};
 
 use crate::record_index::{read_record_files, RecordIndex};
+use crate::record_ref::{match_id, not_found, wrong_kind, RecordKind};
 
 /// Reserved size labels (atelier-b7hb): `size-s`, `size-m`, `size-l`,
 /// `size-xl`, the form adopters already use.
@@ -334,47 +335,33 @@ fn resolve_issue_id(files: &crate::record_index::RecordFiles, issue_ref: &str) -
         .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
-    if ids.iter().any(|id| id == issue_ref) {
-        return Ok(issue_ref.to_string());
+    if let Some(id) = match_id(RecordKind::Issue, issue_ref, ids.iter().map(String::as_str))? {
+        return Ok(id);
     }
-    if !issue_ref.is_empty()
-        && issue_ref
-            .chars()
-            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
-    {
-        let suffix = format!("-{issue_ref}");
-        let matches = ids
-            .iter()
-            .filter(|id| id.ends_with(&suffix))
-            .collect::<Vec<_>>();
-        match matches.as_slice() {
-            [id] => return Ok((*id).clone()),
-            [] => {}
-            _ => bail!(
-                "Issue key {issue_ref} is ambiguous: {}",
-                matches
-                    .iter()
-                    .map(|id| id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
-    }
-    if files
+    let evidence = files
         .evidence
         .iter()
-        .any(|record| record.header.id == issue_ref)
-    {
-        bail!(
-            "{issue_ref} is a evidence record, not an issue record. Use `atelier evidence show {issue_ref}`."
-        );
+        .map(|record| record.header.id.as_str());
+    let reviews = files.reviews.iter().map(|record| record.header.id.as_str());
+    for (kind, other_ids) in [
+        (RecordKind::Evidence, evidence.collect::<Vec<_>>()),
+        (RecordKind::Review, reviews.collect::<Vec<_>>()),
+    ] {
+        if let Ok(Some(id)) = match_id(kind, issue_ref, other_ids) {
+            return Err(wrong_kind(RecordKind::Issue, kind, &id));
+        }
     }
-    if issue_ref.contains('-')
-        && issue_ref.chars().all(|character| {
+    let lowered = issue_ref.to_ascii_lowercase();
+    if lowered.contains('-')
+        && lowered.chars().all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
         })
     {
-        return Ok(issue_ref.to_string());
+        return Ok(lowered);
     }
-    Err(anyhow!("Issue {issue_ref} was not found"))
+    Err(not_found(
+        RecordKind::Issue,
+        issue_ref,
+        ids.iter().map(String::as_str),
+    ))
 }

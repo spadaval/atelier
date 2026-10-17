@@ -14,7 +14,10 @@ pub type IssueId = String;
 /// backlog, done, todo`.
 pub fn invalid_value_message<S: AsRef<str>>(field: &str, value: &str, valid: &[S]) -> String {
     let valid = valid.iter().map(AsRef::as_ref).collect::<Vec<_>>();
-    format!("Invalid {field} '{value}'. Valid values: {}", valid.join(", "))
+    format!(
+        "Invalid {field} '{value}'. Valid values: {}",
+        valid.join(", ")
+    )
 }
 
 pub const ISSUE_PRIORITY_LABELS: &[&str] = &["critical", "high", "medium", "low"];

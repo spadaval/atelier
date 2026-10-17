@@ -123,7 +123,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 
         super::IssueCommands::Note { id, text, kind } => {
             let (state_dir, index) = load_repository()?;
-            let id = super::resolve_issue_arg(&index, &id)?;
+            let id = commands::issue::resolve_id(&index, &id)?;
             commands::issue::append_note(&state_dir, &id, &kind, &text)
         }
 

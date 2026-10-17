@@ -430,7 +430,8 @@ fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
 }
 
 pub fn show(index: &RecordIndex, id: &str, quiet: bool) -> Result<()> {
-    let record = index.require_evidence(id)?;
+    let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, id)?;
+    let record = index.require_evidence(&id)?;
     print_record(index, record, quiet)
 }
 

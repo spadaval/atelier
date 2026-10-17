@@ -1,5 +1,6 @@
 //! Creation and inspection of immutable, self-declared review events.
 use anyhow::{bail, Result};
+use atelier_app::record_ref::RecordKind;
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
 use atelier_core::{FindingDecision, ReviewEvent};
 
@@ -8,7 +9,11 @@ pub fn decision(value: &str) -> Result<FindingDecision> {
         "fix_now" => Ok(FindingDecision::FixNow),
         "defer" => Ok(FindingDecision::Defer),
         "no_action" => Ok(FindingDecision::NoAction),
-        _ => bail!("decision must be fix_now, defer or no_action"),
+        _ => bail!(atelier_core::invalid_value_message(
+            "decision",
+            value,
+            &["fix_now", "defer", "no_action"]
+        )),
     }
 }
 
@@ -22,9 +27,7 @@ pub fn append(
 ) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let owner = index
-        .resolve_issue_ref(owner_ref)?
-        .ok_or_else(|| anyhow::anyhow!("issue {owner_ref} not found"))?;
+    let owner = index.resolve(RecordKind::Issue, owner_ref)?;
     let pin = commit
         .map(str::to_owned)
         .unwrap_or(git::head_commit(layout.repo_root())?);
@@ -91,13 +94,17 @@ pub fn disposition(
 ) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let original = index.require_review(finding)?;
+    let finding = index.resolve(RecordKind::Review, finding)?;
+    let original = index.require_review(&finding)?;
+    let follow_up = follow_up
+        .map(|id| index.resolve(RecordKind::Issue, &id))
+        .transpose()?;
     let event = ReviewEvent::Disposition {
-        finding: finding.into(),
         decision: self::decision(decision)?,
         supersedes: index
-            .latest_disposition(finding)
+            .latest_disposition(&finding)
             .map(|record| record.header.id.clone()),
+        finding,
         resolution_commit: resolution,
         follow_up,
     };
@@ -107,9 +114,12 @@ pub fn disposition(
 pub fn list(owner: Option<&str>, json: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+    let owner = owner
+        .map(|id| index.resolve(RecordKind::Issue, id))
+        .transpose()?;
     let records = index
         .reviews()
-        .filter(|record| owner.is_none_or(|id| record.target == id))
+        .filter(|record| owner.as_ref().is_none_or(|id| &record.target == id))
         .collect::<Vec<_>>();
     if json {
         println!("{}", serde_json::to_string_pretty(&records)?);
@@ -129,7 +139,9 @@ pub fn show(id: &str) -> Result<()> {
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     println!(
         "{}",
-        serde_json::to_string_pretty(index.require_review(id)?)?
+        serde_json::to_string_pretty(
+            index.require_review(&index.resolve(RecordKind::Review, id)?)?
+        )?
     );
     Ok(())
 }
