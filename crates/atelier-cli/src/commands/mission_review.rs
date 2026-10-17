@@ -93,6 +93,21 @@ fn mission_line(view: &Debrief) -> String {
     .text()
 }
 
+/// One review event on the mission, as both reviews and both forms show it.
+fn event_line(event: &atelier_app::mission_review::MissionEvent) -> String {
+    format!(
+        "{} {} {} by {} at {} | {}",
+        event.event,
+        event.id,
+        local_date(event.created_at),
+        event.identity,
+        short_commit(&event.commit),
+        event.summary
+    )
+}
+
+const NO_PLAN_APPROVAL: &str = "No plan approval recorded.";
+
 /// The page under `.atelier/runtime/reviews/`, which is never committed.
 fn write_review_page(
     repo_root: &Path,
@@ -265,20 +280,7 @@ fn render_markdown(
     let events = view
         .mission_events
         .iter()
-        .flat_map(|event| {
-            render_row_wrapped(
-                context,
-                &format!(
-                    "{} {} {} by {} at {} | {}",
-                    event.event,
-                    event.id,
-                    local_date(event.created_at),
-                    event.identity,
-                    short_commit(&event.commit),
-                    event.summary
-                ),
-            )
-        })
+        .flat_map(|event| render_row_wrapped(context, &event_line(event)))
         .collect::<Vec<_>>();
     let follow_ups = view
         .follow_ups
@@ -624,17 +626,7 @@ fn render_html(
         &list(
             view.mission_events
                 .iter()
-                .map(|event| {
-                    format!(
-                        "{} {} {} by {} at {}: {}",
-                        event.event,
-                        event.id,
-                        local_date(event.created_at),
-                        event.identity,
-                        short_commit(&event.commit),
-                        event.summary
-                    )
-                })
+                .map(|event| event_line(event))
                 .collect(),
         ),
     ));
@@ -801,23 +793,10 @@ pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) ->
     let mut events = view
         .mission_events
         .iter()
-        .flat_map(|event| {
-            render_row_wrapped(
-                context,
-                &format!(
-                    "{} {} {} by {} at {} | {}",
-                    event.event,
-                    event.id,
-                    local_date(event.created_at),
-                    event.identity,
-                    short_commit(&event.commit),
-                    event.summary
-                ),
-            )
-        })
+        .flat_map(|event| render_row_wrapped(context, &event_line(event)))
         .collect::<Vec<_>>();
     if approvals == 0 {
-        events.push("No plan approval recorded.".to_string());
+        events.push(NO_PLAN_APPROVAL.to_string());
     }
     let optional = |title: &str, lines: Vec<String>| {
         if lines.is_empty() {
@@ -953,6 +932,9 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
             escape(problem)
         ));
     }
+    if view.criteria.parse.criteria.is_empty() && view.criteria.parse.problems.is_empty() {
+        criteria = "<p class=\"muted\">None defined.</p>".to_string();
+    }
     body.push_str(&section("criteria", "Success Criteria", &criteria));
 
     let mut scope = String::from("<table><thead><tr><th>Item</th><th>Status</th><th>Size</th><th>Title</th><th>Blocked by</th></tr></thead><tbody>");
@@ -1018,34 +1000,30 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
     body.push_str(&section(
         "risks",
         "Risks",
-        &view
-            .risks
-            .as_deref()
-            .map(prose)
-            .unwrap_or_else(|| "<p class=\"muted\">The strategy names none.</p>".to_string()),
+        &view.risks.as_deref().map(prose).unwrap_or_else(|| {
+            if view.strategy.is_some() {
+                "<p class=\"muted\">The strategy names none.</p>".to_string()
+            } else {
+                "<p class=\"muted\">No strategy is linked.</p>".to_string()
+            }
+        }),
     ));
-    let events = view
+    let mut events = view
         .mission_events
         .iter()
-        .map(|event| {
-            format!(
-                "<li>{} {} by {} at <code>{}</code>: {}</li>",
-                escape(event.event),
-                escape(&local_date(event.created_at).to_string()),
-                escape(&event.identity),
-                escape(short_commit(&event.commit)),
-                escape(&event.summary)
-            )
-        })
+        .map(event_line)
+        .collect::<Vec<_>>();
+    if approvals == 0 {
+        events.push(NO_PLAN_APPROVAL.to_string());
+    }
+    let events = events
+        .iter()
+        .map(|line| format!("<li>{}</li>", escape(line)))
         .collect::<String>();
     body.push_str(&section(
         "reviews",
         "Mission Reviews",
-        &if events.is_empty() {
-            "<p class=\"muted\">No plan approval recorded.</p>".to_string()
-        } else {
-            format!("<ul class=\"facts\">{events}</ul>")
-        },
+        &format!("<ul class=\"facts\">{events}</ul>"),
     ));
     review_page::page(
         &format!("Brief: {} {}", mission.id, mission.title),

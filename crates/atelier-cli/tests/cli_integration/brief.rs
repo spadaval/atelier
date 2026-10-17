@@ -242,4 +242,49 @@ fn brief_html_holds_the_same_facts_as_the_markdown() {
         assert!(markdown.contains(fact) && html.contains(fact), "{fact}");
     }
     assert!(html.contains("<td>M</td>"), "size shown: {html}");
+    // The blocked-by cell and the approval's event ID are on the page.
+    let blocked_row = html
+        .split(&format!("<td class=\"id\">{}</td>", p.blocked))
+        .nth(1)
+        .unwrap();
+    let row = blocked_row.split("</tr>").next().unwrap();
+    assert!(
+        row.ends_with(&format!("<td class=\"id\">{}</td>", p.decision)),
+        "{row}"
+    );
+    let approval = markdown
+        .lines()
+        .find(|line| line.starts_with("approval atelier-"))
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap();
+    assert!(html.contains(approval), "{approval}");
+    assert!(!html.contains("No plan approval recorded."));
+}
+
+#[test]
+fn brief_says_no_plan_approval_in_both_forms_when_only_other_events_exist() {
+    let dir = tempdir().unwrap();
+    let p = plan(dir.path());
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "record",
+            &p.mission,
+            "--identity",
+            "Human",
+            "Looked at the plan",
+        ],
+    );
+    let markdown = ok(dir.path(), &["brief", &p.mission]);
+    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    for form in [&markdown, &html] {
+        assert!(
+            form.contains("Looked at the plan") && form.contains("No plan approval recorded."),
+            "{form}"
+        );
+    }
 }

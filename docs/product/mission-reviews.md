@@ -65,5 +65,7 @@ with the same facts, under the same rules as the debrief page.
 
 A plan approval is an ordinary review event on the mission:
 `atelier review approve <mission> --identity "<human>" "<summary>"`. The
-brief and the debrief both show it; without one, the brief says no plan
-approval is recorded. Atelier adds no approval gate (ADR 0018).
+brief and the debrief both show it; without one, both forms of the brief say
+no plan approval is recorded. Any approval event on the mission counts, so a
+later approval of the debrief also reads as approval in a brief generated
+after it. Atelier adds no approval gate (ADR 0018).

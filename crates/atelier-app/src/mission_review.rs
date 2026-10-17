@@ -119,15 +119,10 @@ pub fn debrief(
     };
     let scope = mission_issue_ids(index, mission_id)?;
     // Items linked to the mission directly, as opposed to their children.
-    let linked = scope
+    let linked = scope_tree(index, &scope)
         .iter()
-        .filter(|id| {
-            index
-                .issue_record(id)
-                .and_then(|record| record.issue.parent_id.as_ref())
-                .is_none_or(|parent| !scope.contains(parent))
-        })
-        .cloned()
+        .filter(|(_, parent)| parent.is_none())
+        .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
     let children = scope
         .iter()
@@ -149,15 +144,9 @@ pub fn debrief(
     )?;
 
     let mut items = Vec::new();
-    for id in &linked {
-        let Some(record) = index.issue_record(id) else {
-            continue;
-        };
-        items.push(item_review(index, policy, &record.issue, None));
-        for child in index.child_ids(id) {
-            if let Some(child) = index.issue_record(child) {
-                items.push(item_review(index, policy, &child.issue, Some(id.clone())));
-            }
+    for (id, parent) in scope_tree(index, &scope) {
+        if let Some(record) = index.issue_record(&id) {
+            items.push(item_review(index, policy, &record.issue, parent));
         }
     }
 
@@ -432,16 +421,7 @@ pub fn brief(
             .is_some_and(|record| category(&record.issue).as_deref() == Some("done"))
     };
     let scope = mission_issue_ids(index, mission_id)?;
-    let linked = scope
-        .iter()
-        .filter(|id| {
-            index
-                .issue_record(id)
-                .and_then(|record| record.issue.parent_id.as_ref())
-                .is_none_or(|parent| !scope.contains(parent))
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+
     let brief_item = |issue: &Issue, parent: Option<String>| {
         let record = index.issue_record(&issue.id);
         let labels = record.map(|record| record.labels.as_slice()).unwrap_or(&[]);
@@ -467,15 +447,9 @@ pub fn brief(
         }
     };
     let mut items = Vec::new();
-    for id in &linked {
-        let Some(record) = index.issue_record(id) else {
-            continue;
-        };
-        items.push(brief_item(&record.issue, None));
-        for child in index.child_ids(id) {
-            if let Some(child) = index.issue_record(child) {
-                items.push(brief_item(&child.issue, Some(id.clone())));
-            }
+    for (id, parent) in scope_tree(index, &scope) {
+        if let Some(record) = index.issue_record(&id) {
+            items.push(brief_item(&record.issue, parent));
         }
     }
     let human_decisions = items
@@ -510,4 +484,26 @@ pub fn brief(
         mission_events: mission_events(index, mission_id),
         mission,
     })
+}
+
+/// The mission's scope as both reviews list it: each item linked to the
+/// mission, followed by its children, each child with its parent.
+pub fn scope_tree(index: &RecordIndex, scope: &BTreeSet<String>) -> Vec<(String, Option<String>)> {
+    let mut tree = Vec::new();
+    for id in scope {
+        let parent = index
+            .issue_record(id)
+            .and_then(|record| record.issue.parent_id.clone())
+            .filter(|parent| scope.contains(parent));
+        if parent.is_some() {
+            continue;
+        }
+        tree.push((id.clone(), None));
+        for child in index.child_ids(id) {
+            if scope.contains(child) {
+                tree.push((child.clone(), Some(id.clone())));
+            }
+        }
+    }
+    tree
 }
