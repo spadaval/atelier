@@ -118,8 +118,10 @@ fn status_and_active_landing_are_fresh_and_read_only() {
         status.contains(&f.id) && status.contains("Ship session behavior"),
         "{status}"
     );
-    // An owner's session continues the owner instead of choosing ready work.
+    // An owner's session continues the owner instead of choosing ready work,
+    // even though the owner itself is open work outside any mission.
     assert!(!status.contains("Ready Work\n"), "{status}");
+    assert!(!status.contains("Unassigned Work"), "{status}");
     // Static guidance stays out of the view (ADR 0022 Decision 2).
     assert!(
         !status.contains("Guidance:") && !status.contains("Before handing off"),
