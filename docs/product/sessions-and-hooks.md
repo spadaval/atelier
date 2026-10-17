@@ -120,3 +120,10 @@ remains visible, including branches sharing a tracker tree. A branch's done
 claim is not base completion: a done owner shows as `done on branch <branch>,
 not merged into <base>` until the base branch's own copy of the record is
 done.
+
+The same summaries, read once per command, mark ready work that is in flight
+elsewhere: in `status`'s ready items and in `work ready` and `work all`, an
+item that owns another local branch gets a `↳` line under its row with its
+state there, `<status> on <branch>`, plus `, not merged` or `, merged into
+<base>` for a done claim. The item stays listed and classified from the
+current checkout's records. If the summaries cannot be read, the page says so.
