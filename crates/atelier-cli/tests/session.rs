@@ -4059,6 +4059,66 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     );
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
 }
+/// The `↳` line under a ready row, if any.
+fn ready_mark<'a>(output: &'a str, id: &str) -> Option<&'a str> {
+    let ready = section(output, "Ready Work");
+    let row = ready
+        .iter()
+        .position(|line| line.contains(&format!(" {id} [todo]")))
+        .unwrap_or_else(|| panic!("{id} is listed as ready: {output}"));
+    ready
+        .get(row + 1)
+        .and_then(|line| line.trim_start().strip_prefix("↳ "))
+}
+#[test]
+fn ready_work_owned_on_several_branches_lists_each_branch_state() {
+    let f = Fixture::new();
+    // A second branch claims the same item.
+    let again = format!("again/{}", f.id);
+    git(f.path(), &["switch", "-q", "-c", &again]);
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.workflow_branch.as_mut().unwrap().work_branch = again.clone();
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "claim on a second branch");
+    git(f.path(), &["switch", "-q", "main"]);
+    let expected = format!("in_progress on {again}; in_progress on {}", f.branch);
+    for args in [&["work", "ready"][..], &["status"]] {
+        let output = ok(f.path(), args);
+        assert_eq!(
+            ready_mark(&output, &f.id),
+            Some(expected.as_str()),
+            "{output}"
+        );
+    }
+}
+#[test]
+fn ready_work_on_an_unreadable_branch_says_its_state_is_unknown() {
+    let f = Fixture::new();
+    // The owner's branch commits a policy that cannot be parsed.
+    fs::write(f.path().join(".atelier/workflow.yaml"), "not: [a policy\n").unwrap();
+    commit(f.path(), "break the branch policy");
+    // A branch whose owner cannot be found is named on the page instead.
+    git(f.path(), &["switch", "-q", "-c", "custom/broken", "main"]);
+    fs::write(f.path().join(".atelier/workflow.yaml"), "not: [a policy\n").unwrap();
+    commit(f.path(), "broken branch without an owner");
+    git(f.path(), &["switch", "-q", "main"]);
+    let unknown = format!("state unknown on {}: ", f.branch);
+    for args in [&["work", "ready"][..], &["work", "all"], &["status"]] {
+        let output = ok(f.path(), args);
+        assert!(
+            ready_mark(&output, &f.id).is_some_and(|mark| mark.starts_with(&unknown)),
+            "{args:?}: {output}"
+        );
+        assert!(output.contains("custom/broken"), "{args:?}: {output}");
+    }
+    let output = ok(f.path(), &["work", "ready"]);
+    assert!(
+        output
+            .lines()
+            .any(|line| line.starts_with("State unknown on custom/broken, owner not found: ")),
+        "{output}"
+    );
+}
 #[test]
 fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates() {
     let dir = tempdir().unwrap();

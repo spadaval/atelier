@@ -1,12 +1,13 @@
 use anyhow::{bail, Result};
 use atelier_app::record_index::RecordIndex;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::mission_overview::mission_overview;
 use atelier_app::work_classification::{ClassifiedWork, WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
 
+use crate::commands::git::InFlight;
 use crate::human_output::{
     print_page, render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
     DisplayRole, FooterAction, IssueHeadingRow, IssueListPanel, IssueListRow, RenderContext,
@@ -136,16 +137,13 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     };
     // Ready work another local branch already started is marked with its
     // state there; the summaries are read once for the whole page.
-    let (in_flight, unavailable) = if matches!(bucket, "ready" | "all") {
-        match in_flight_marks(index) {
-            Ok(marks) => (marks, None),
-            Err(error) => (
-                BTreeMap::new(),
-                Some(format!("In-flight marks unavailable: {error:#}")),
-            ),
-        }
+    let in_flight = if matches!(bucket, "ready" | "all") {
+        in_flight_marks(index).unwrap_or_else(|error| InFlight {
+            notices: vec![format!("In-flight marks unavailable: {error:#}")],
+            ..InFlight::default()
+        })
     } else {
-        (BTreeMap::new(), None)
+        InFlight::default()
     };
     let context = RenderContext::for_stdout();
     let mut panels = groups
@@ -153,19 +151,21 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
         .map(|(title, rows)| {
             let panel = IssueListPanel::from_work_rows(title, rows);
             if title == "Ready Work" {
-                panel.marks(&in_flight)
+                panel.marks(&in_flight.marks)
             } else {
                 panel
             }
             .render(context)
         })
         .collect::<Vec<_>>();
-    panels.extend(unavailable.map(|line| render_lines_section("", [line])));
+    if !in_flight.notices.is_empty() {
+        panels.push(render_lines_section("", in_flight.notices));
+    }
     print_page("Atelier Work", panels, context);
     Ok(())
 }
 
-fn in_flight_marks(index: &RecordIndex) -> Result<BTreeMap<String, String>> {
+fn in_flight_marks(index: &RecordIndex) -> Result<InFlight> {
     let layout = atelier_app::storage_layout::StorageLayout::discover()?;
     Ok(
         crate::commands::git::branch_summaries(layout.repo_root(), &layout.canonical_dir(), index)?

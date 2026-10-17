@@ -101,9 +101,11 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         _ => Ok(None),
     };
     let branches = git::branch_summaries(repo, &layout.canonical_dir(), &index);
+    // Unreadable branches without a known owner are already reported in the
+    // branch section below, so only the marks are used here.
     let in_flight = branches
         .as_ref()
-        .map(git::BranchSummaries::in_flight)
+        .map(|summaries| summaries.in_flight().marks)
         .unwrap_or_default();
     let mut page = render_status_page(&view, &diagnostics, &checkout, &owner, &in_flight, context);
     let branches = branches
