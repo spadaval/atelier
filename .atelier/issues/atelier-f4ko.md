@@ -4,6 +4,9 @@ id: "atelier-f4ko"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-f4ko
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name the record a load-time policy or reference error is about"
-updated_at: "2026-10-17T08:57:24.590052777+00:00"
+updated_at: "2026-10-17T08:57:29.951861253+00:00"
 ---
 
 ## Goal
