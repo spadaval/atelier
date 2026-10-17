@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T09:10:12.018552226+00:00"
+status: "done"
 title: "Keep colour and whole tokens when an item line wraps"
-updated_at: "2026-10-17T09:06:12.318771550+00:00"
+updated_at: "2026-10-17T09:10:12.018552226+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ updated_at: "2026-10-17T09:06:12.318771550+00:00"
 - A wrapped item line keeps the colour of each field it paints on one line.
 - A status with its mark, and each `| <cue>`, stays on one line unless it alone is wider than the terminal.
 - Rendering tests cover a narrow coloured row.
+
+## Close Reason
+
+ItemLine wraps by whole fields and title words, painting each piece as render does; covered by a narrow coloured row test
