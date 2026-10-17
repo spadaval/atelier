@@ -122,6 +122,7 @@ fn status_and_active_landing_are_fresh_and_read_only() {
     // even though the owner itself is open work outside any mission.
     assert!(!status.contains("Ready Work\n"), "{status}");
     assert!(!status.contains("Unassigned Work"), "{status}");
+    assert!(!status.contains("Unassigned work:"), "{status}");
     // Static guidance stays out of the view (ADR 0022 Decision 2).
     assert!(
         !status.contains("Guidance:") && !status.contains("Before handing off"),
@@ -606,6 +607,15 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
         output.contains(&format!("{} @", f.branch))
             && output.contains(&format!("{} in_progress ", f.id))
             && output.contains("Other Local Work Branches (committed records)"),
+        "{output}"
+    );
+    // The branch rows come before the footer, which is the last section.
+    let (body, footer) = output
+        .rsplit_once("\n\nNext\n----\n")
+        .unwrap_or_else(|| panic!("no Next section:\n{output}"));
+    assert!(body.contains("Other Local Work Branches"), "{output}");
+    assert!(
+        footer.lines().all(|line| line.starts_with("  ")),
         "{output}"
     );
     assert_eq!(
@@ -4174,7 +4184,7 @@ fn unassigned_work_in_flight_on_another_branch_is_marked_past_the_ready_list() {
             .any(|line| line.contains(&f.id)),
         "{status}"
     );
-    let unassigned = section(&status, "Unassigned Work (6)");
+    let unassigned = section(&status, "Unassigned Work");
     let row = unassigned
         .iter()
         .position(|line| line.starts_with(&format!("  {} todo", f.id)))

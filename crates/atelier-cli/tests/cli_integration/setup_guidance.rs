@@ -1501,7 +1501,7 @@ fn test_root_status_lists_the_top_five_ready_items_without_an_owner() {
     }
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(stdout.contains("Ready work:    7"), "{stdout}");
+    assert!(stdout.contains("Ready work:       7"), "{stdout}");
     let ready = stdout
         .split("Ready Work\n----------\n")
         .nth(1)
@@ -2117,7 +2117,9 @@ fn test_root_start_reports_workflow_validator_failure() {
         stdout.contains("expected at least 1 fresh passing evidence"),
         "{stdout}"
     );
-    assert!(stdout.contains("Hint: Record fresh proof"), "{stdout}");
+    // The hint is the error's next step, shown once, on stderr.
+    assert!(!stdout.contains("Record fresh proof"), "{stdout}");
+    assert!(stderr.contains("Next: Record fresh proof"), "{stderr}");
     assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
@@ -3057,7 +3059,7 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
         .1;
     assert!(
         blocked_start.contains(&format!(
-            "Hint: Inspect the blocker with `atelier issue show {blocker_id}`"
+            "Next: Inspect the blocker with `atelier issue show {blocker_id}`"
         )),
         "{blocked_start}"
     );

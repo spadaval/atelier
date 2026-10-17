@@ -430,6 +430,14 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         overview.contains("Scope: 3 issues: 1 ready, 2 blocked\n"),
         "{overview}"
     );
+    // The mission's own view labels its scope counts the same way.
+    let (success, mission_view, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission_id]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(
+        mission_view.contains("\n\nScope: 3 issues: 1 ready, 2 blocked\n"),
+        "{mission_view}"
+    );
     assert!(overview.contains("Open blockers: 1"), "{overview}");
     // A count line with nothing to count is left out.
     assert!(!overview.contains("Open blockers: 0"), "{overview}");
@@ -582,7 +590,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     // The mission closed with its scope open, so that work is unassigned
     // and named, not just counted.
     let leftover = format!(
-        "Unassigned: 1 open issue\n  no label (1)\n    {work_id} todo medium Work linked only to done mission\n"
+        "Unassigned: 1 open issue\n  no label: 1 open issue\n    {work_id} todo medium Work linked only to done mission\n"
     );
     assert!(default.contains(&leftover), "{default}");
     assert!(
@@ -3310,13 +3318,15 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         status.contains(&format!("Current missions: 0; last closed {last_closed}\n")),
         "{status}"
     );
+    // The summary counts unassigned work; its heading carries no count.
+    assert!(status.contains("Unassigned work:  14\n"), "{status}");
     let unassigned = status
-        .split("Unassigned Work (14)\n--------------------\n")
+        .split("Unassigned Work\n---------------\n")
         .nth(1)
         .and_then(|rest| rest.split("\n\n").next())
         .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
     let lines = unassigned.lines().collect::<Vec<_>>();
-    assert_eq!(lines[0], "cli (8)", "{unassigned}");
+    assert_eq!(lines[0], "cli: 8 open issues", "{unassigned}");
     // High priority first: the shared work and the closed mission's leftover.
     let mut high = lines[1..3].to_vec();
     high.sort();
@@ -3342,11 +3352,11 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert_eq!(
         headings,
         [
-            "cli (8)",
-            "alpha (1)",
-            "beta (1)",
-            "delta (1)",
-            "gamma (1)",
+            "cli: 8 open issues",
+            "alpha: 1 open issue",
+            "beta: 1 open issue",
+            "delta: 1 open issue",
+            "gamma: 1 open issue",
             "... 2 more labels omitted; see `atelier work missions`"
         ],
         "{unassigned}"
@@ -3360,14 +3370,15 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     );
     assert!(!overview.contains("No missions match"), "{overview}");
     assert!(
-        overview.contains(&format!("Unassigned: 14 open issues\n  cli (8)\n"))
-            && overview.contains(&format!("    {leftover} todo high Leftover work\n")),
+        overview.contains(&format!(
+            "Unassigned: 14 open issues\n  cli: 8 open issues\n"
+        )) && overview.contains(&format!("    {leftover} todo high Leftover work\n")),
         "{overview}"
     );
     assert!(
-        overview.contains(&format!("  gamma (1)\n"))
+        overview.contains(&format!("  gamma: 1 open issue\n"))
             && overview.contains(&format!(
-                "  review (1)\n    {shared} todo high Shared work\n  no label (2)\n"
+                "  review: 1 open issue\n    {shared} todo high Shared work\n  no label: 2 open issues\n"
             )),
         "{overview}"
     );
@@ -3411,7 +3422,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert!(missions.contains(&format!("{open} todo ")), "{overview}");
     assert!(
         unassigned.contains(&format!(
-            "  no label (1)\n    {loose} todo medium Loose work\n"
+            "  no label: 1 open issue\n    {loose} todo medium Loose work\n"
         )),
         "{overview}"
     );
@@ -3419,13 +3430,14 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status.contains("Current missions: 1\n"), "{status}");
+    assert!(status.contains("Unassigned work:  13\n"), "{status}");
     let unassigned = status
-        .split("Unassigned Work (13)\n")
+        .split("Unassigned Work\n")
         .nth(1)
         .and_then(|rest| rest.split("\n\n").next())
         .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
     assert!(
-        unassigned.starts_with("--------------------\ncli (8)\n"),
+        unassigned.starts_with("---------------\ncli: 8 open issues\n"),
         "{status}"
     );
     assert!(!unassigned.contains(&scoped), "{status}");

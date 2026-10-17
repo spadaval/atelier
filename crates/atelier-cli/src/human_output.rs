@@ -674,7 +674,7 @@ pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
 }
 
 /// Unassigned open work by label, for both `status` and `work missions`: a
-/// `<label> (<count>)` line per group, then up to `row_limit` issue rows in
+/// `<label>: <count> open issues` line per group, then up to `row_limit` issue rows in
 /// the shared work order and a count of the rest that names `work missions
 /// --all`, which shows them. A row too wide for
 /// the terminal continues on lines indented past the rows, so it never reads
@@ -693,9 +693,9 @@ pub(crate) fn render_unassigned_groups(
     let mut lines = Vec::new();
     for group in groups.iter().take(group_limit) {
         lines.push(format!(
-            "{indent}{} ({})",
+            "{indent}{}: {}",
             group.label.as_deref().unwrap_or("no label"),
-            group.work.len()
+            count_noun(group.work.len(), "open issue")
         ));
         for index in crate::commands::work_order::ordered_work_indices(&group.work)
             .into_iter()
