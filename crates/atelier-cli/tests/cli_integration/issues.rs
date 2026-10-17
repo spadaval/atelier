@@ -4176,10 +4176,7 @@ fn links_leave_the_shared_mission_and_blocker_unchanged_and_read_from_either_sid
         "{shown}"
     );
     let shown = run(&["issue", "show", &mission, "--full"]);
-    assert!(
-        shown.contains(&format!("advances {work} [todo]")),
-        "{shown}"
-    );
+    assert!(shown.contains(&format!("advances {work} todo")), "{shown}");
     let shown = run(&["issue", "show", &work, "--full"]);
     let linked = &shown[shown.find("Linked Issues").unwrap()..];
     assert!(
