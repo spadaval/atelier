@@ -1031,11 +1031,11 @@ fn test_queries_fail_naming_the_invalid_record_file() {
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
     assert!(!success, "schema drift should block the query");
+    let schema_path = format!(".atelier/issues/{schema_issue_id}.md");
     assert!(
-        stderr.contains(&format!(
-            "Invalid record file .atelier/issues/{schema_issue_id}.md"
-        )) && stderr.contains("Unsupported schema_version 99"),
-        "schema drift diagnostic should name the file: {stderr}"
+        stderr.contains(&format!("Unsupported schema_version 99 in {schema_path}"))
+            && stderr.matches(&schema_path).count() == 1,
+        "schema drift diagnostic should name the file once: {stderr}"
     );
 
     let malformed_dir = tempdir().unwrap();
@@ -1060,11 +1060,11 @@ fn test_queries_fail_naming_the_invalid_record_file() {
     ] {
         let (success, _, stderr) = run_atelier(malformed_dir.path(), args);
         assert!(!success, "malformed records should block {args:?}");
+        let malformed_path = format!(".atelier/issues/{malformed_issue_id}.md");
         assert!(
-            stderr.contains(&format!(
-                "Invalid record file .atelier/issues/{malformed_issue_id}.md"
-            )) && stderr.contains("Invalid YAML front matter"),
-            "{args:?} diagnostic should name the file: {stderr}"
+            stderr.contains(&format!("Invalid YAML front matter in {malformed_path}"))
+                && stderr.matches(&malformed_path).count() == 1,
+            "{args:?} diagnostic should name the file once: {stderr}"
         );
     }
 }
@@ -1099,9 +1099,10 @@ fn test_check_reports_every_invalid_record_file() {
         format!(".atelier/issues/{}.md", ids[1]),
         ".atelier/evidence/atelier-bad1.md".to_string(),
     ] {
-        assert!(
-            stdout.contains(&format!("Invalid record file {path}")),
-            "missing {path}: {stdout}\n{stderr}"
+        assert_eq!(
+            stdout.matches(&path).count(),
+            1,
+            "{path} should be named once: {stdout}\n{stderr}"
         );
     }
 }

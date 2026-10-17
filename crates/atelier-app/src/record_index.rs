@@ -84,15 +84,26 @@ pub(crate) fn read_record_paths(
             Ok(Some(ParsedRecord::Review(record))) => files.reviews.push(*record),
             Ok(None) => {}
             Err(error) => files.errors.push(RecordFileError {
+                error: name_record_file(error, &relative),
                 path: relative.clone(),
-                error: error.context(format!(
-                    "Invalid record file {}",
-                    display_state_path(&relative)
-                )),
             }),
         }
     }
     Ok((files, changed))
+}
+
+/// Names the bad record file once: most parser errors already name it, so
+/// the generic context is added only when no message in the chain does.
+fn name_record_file(error: anyhow::Error, relative: &Path) -> anyhow::Error {
+    let path = relative.to_string_lossy().replace('\\', "/");
+    if error.chain().any(|cause| cause.to_string().contains(&path)) {
+        error
+    } else {
+        error.context(format!(
+            "Invalid record file {}",
+            display_state_path(relative)
+        ))
+    }
 }
 
 enum ParsedRecord {
@@ -1412,9 +1423,75 @@ mod tests {
 
         let error = RecordIndex::load(&state_dir).unwrap_err();
 
+        assert_eq!(
+            format!("{error:#}"),
+            "Missing YAML front matter in .atelier/issues/atelier-bad1.md"
+        );
+    }
+
+    fn load_error_with_issue_markdown(edit: impl Fn(&str) -> String) -> String {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        fs::create_dir_all(state_dir.join("issues")).unwrap();
+        let markdown =
+            atelier_records::render_issue_record(&issue_record("atelier-bad1", "task", "todo"))
+                .unwrap();
+        fs::write(state_dir.join("issues/atelier-bad1.md"), edit(&markdown)).unwrap();
+        format!("{:#}", RecordIndex::load(&state_dir).unwrap_err())
+    }
+
+    #[test]
+    fn load_names_a_bad_priority_record_once() {
+        let error = load_error_with_issue_markdown(|markdown| {
+            markdown
+                .lines()
+                .map(|line| {
+                    if line.starts_with("priority:") {
+                        "priority: \"low\""
+                    } else {
+                        line
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
+
+        assert_eq!(
+            error,
+            "priority 'low' in .atelier/issues/atelier-bad1.md: records store \
+             P0 (critical), P1 (high), P2 (medium) or P3 (low)"
+        );
+    }
+
+    #[test]
+    fn load_names_a_record_with_invalid_yaml_once() {
+        let error =
+            load_error_with_issue_markdown(|markdown| markdown.replacen("---\n", "---\n: [\n", 1));
+
         assert!(
-            format!("{error:#}").contains("Invalid record file .atelier/issues/atelier-bad1.md"),
-            "unexpected error: {error:#}"
+            error.starts_with("Invalid YAML front matter in .atelier/issues/atelier-bad1.md: "),
+            "unexpected error: {error}"
+        );
+        assert_eq!(error.matches("atelier-bad1.md").count(), 1, "{error}");
+    }
+
+    #[test]
+    fn record_file_errors_add_the_path_only_when_missing() {
+        let relative = Path::new("issues/atelier-bad1.md");
+
+        let bare = name_record_file(anyhow::anyhow!("boom"), relative);
+        assert_eq!(
+            format!("{bare:#}"),
+            "Invalid record file .atelier/issues/atelier-bad1.md: boom"
+        );
+
+        let named = name_record_file(
+            anyhow::anyhow!("detail").context("invalid review reviews/atelier-r1.md"),
+            Path::new("reviews/atelier-r1.md"),
+        );
+        assert_eq!(
+            format!("{named:#}"),
+            "invalid review reviews/atelier-r1.md: detail"
         );
     }
 

@@ -407,7 +407,10 @@ mod tests {
                 assert_eq!(files.issues.len(), 1);
                 assert_eq!(files.errors.len(), 1);
                 let parse_error = files.into_index().unwrap_err().to_string();
-                assert!(parse_error.contains("Invalid record file"));
+                assert_eq!(
+                    parse_error,
+                    "Missing YAML front matter in .atelier/issues/atelier-bad.md"
+                );
                 let (index, paths) = snapshot.read_record_files(repo.path(), false).unwrap();
                 assert!(paths.is_empty());
                 assert_eq!(index.into_index().unwrap_err().to_string(), parse_error);
