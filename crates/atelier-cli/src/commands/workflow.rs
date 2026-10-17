@@ -125,8 +125,10 @@ pub(crate) fn print_applied_transition(
 }
 
 /// Fails when required fields, ancestry, or validators block the transition.
-/// The error names every blocker; the full transition report precedes it on
-/// stdout unless `quiet`, whose refusal leaves stdout empty.
+/// The error names every blocker, then each failed validator's hint as its
+/// `Next:` step, so the recovery reaches stderr in every mode. The transition
+/// report precedes it on stdout unless `quiet`, whose refusal leaves stdout
+/// empty.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn ensure_transition_allowed(
     index: &RecordIndex,
@@ -154,11 +156,23 @@ pub(crate) fn ensure_transition_allowed(
             &transition_command(&issue.id, transition_name, transition),
         );
     }
+    let blockers = blockers.join("; ");
+    let hints = validator_results
+        .iter()
+        .filter(|result| !result.passed)
+        .filter_map(|result| result.help.as_deref())
+        .collect::<Vec<_>>();
+    if hints.is_empty() {
+        bail!(
+            "Transition '{transition_name}' is blocked for issue {}: {blockers}",
+            issue.id
+        );
+    }
     bail!(
-        "Transition '{}' is blocked for issue {}: {}",
-        transition_name,
+        "Transition '{transition_name}' is blocked for issue {}: {}. Next: {}",
         issue.id,
-        blockers.join("; ")
+        blockers.trim_end_matches('.'),
+        hints.join("; ")
     )
 }
 
@@ -441,6 +455,7 @@ fn render_issue_transition_options(
                 "Validators",
                 &option.validator_results,
                 style_policy,
+                true,
             ));
             lines.extend(render_text_list("Description", &option.descriptions));
         }
@@ -485,13 +500,14 @@ fn print_transition_attempt(
     println!("From:       {}", issue.status);
     println!("To:         {}", destination);
     println!("Command:    {}", command);
+    // Hints are left to the error, which follows on stderr.
     print_transition_detail("Validators", validator_results);
     print_text_list("Blockers", blockers);
     print_text_list("Description", descriptions);
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
-    for line in render_transition_detail(title, results, StylePolicy::for_stdout()) {
+    for line in render_transition_detail(title, results, StylePolicy::for_stdout(), false) {
         println!("{line}");
     }
 }
@@ -500,6 +516,7 @@ fn render_transition_detail(
     title: &str,
     results: &[ValidatorResult],
     style_policy: StylePolicy,
+    hints: bool,
 ) -> Vec<String> {
     let mut lines = vec![human_output::section_heading(title)];
     if results.is_empty() {
@@ -518,7 +535,7 @@ fn render_transition_detail(
             result.validator
         ));
         lines.push(format!("      {}", result.reason));
-        if let Some(help) = &result.help {
+        if let Some(help) = result.help.as_ref().filter(|_| hints) {
             lines.push(format!("      Hint: {help}"));
         }
     }

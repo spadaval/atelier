@@ -127,6 +127,16 @@ fn every_command_prints_its_documented_quiet_token() {
 
     assert_eq!(q.ok("init", &["--slug", "atelier"]), "atelier\n");
     assert_eq!(q.ok("init", &["--force"]), "atelier\n");
+    // Closing work needs proof, so a close without it refuses with a hint.
+    let policy_path = dir.join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&policy_path).unwrap();
+    let close = "after its children.\n        validators:\n        - blockers.none_open\n";
+    assert!(policy.contains(close), "{policy}");
+    fs::write(
+        &policy_path,
+        policy.replace(close, &format!("{close}        - evidence.attached\n")),
+    )
+    .unwrap();
     let reslug = q.refused("init", &["--slug", "other"]);
     assert!(reslug.contains("already sets project_slug"), "{reslug}");
     not_atelier(q.refused_in(outside, "setup", &["claude"]));
@@ -297,16 +307,27 @@ fn every_command_prints_its_documented_quiet_token() {
     // Lifecycle on the owner's branch.
     commit_all(dir, "plan");
     // A refused transition leaves out its report (atelier-fnak); the error
-    // names the blocker.
+    // names the blocker and the validator's hint as its next step.
     let blocker = format!("blocker path {other} -> {owner}");
+    let hint = format!("Next: Inspect the blocker with `atelier issue show {owner}`");
     let start = q.refused("start", &[&other]);
-    assert!(start.contains(&blocker), "{start}");
+    assert!(start.contains(&blocker) && start.contains(&hint), "{start}");
     let transition = q.refused("issue transition", &[&other, "start"]);
-    assert!(transition.contains(&blocker), "{transition}");
+    assert!(
+        transition.contains(&blocker) && transition.contains(&hint),
+        "{transition}"
+    );
     assert_eq!(git_current_branch(dir), "main");
     assert_eq!(q.ok("start", &[&owner]), format!("task/{owner}\n"));
     assert_eq!(git_current_branch(dir), format!("task/{owner}"));
     let target = format!("issue/{owner}");
+    let unproven = q.refused("issue transition", &[&owner, "close", "--reason", "done"]);
+    assert!(
+        unproven.contains(&format!(
+            "Next: Record fresh proof with `atelier evidence record --target {target}"
+        )),
+        "{unproven}"
+    );
     let captured = q.ok(
         "evidence record",
         &[

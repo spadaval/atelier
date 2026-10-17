@@ -246,9 +246,10 @@ refusal of it leaves stdout empty:
 Values are numbers except `prune`'s `mode`. A failure still exits non-zero
 and says why on stderr: `check` prints its findings there, and `merge` its
 failed gates. A refused `start` or `issue transition` prints no transition
-report; its error names each blocker. Notes that would otherwise follow the
-token, such as `start`'s needs-human note, also go to stderr. `--quiet` with
-`--json` is a usage error, since they are two script formats.
+report; its error, in every mode, names each blocker and then gives each
+failed validator's hint as its `Next:` step. Notes that would otherwise follow
+the token, such as `start`'s needs-human note, also go to stderr. `--quiet`
+with `--json` is a usage error, since they are two script formats.
 
 ### Errors
 
