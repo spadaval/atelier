@@ -22,8 +22,8 @@ deprecation line, kept while adopters' installed hooks still call it.
 A session's repository instructions come from AGENTS.md, which the harness
 loads, not from `status`. Claude Code reads AGENTS.md only when the repository
 has no `CLAUDE.md`, or through an `@AGENTS.md` import in it, so `atelier setup
-claude` warns, with that fix, when AGENTS.md exists and a `CLAUDE.md` or
-`.claude/CLAUDE.md` does not import `@AGENTS.md`.
+claude` warns, with that fix, when AGENTS.md exists and the repository has a
+`CLAUDE.md` or `.claude/CLAUDE.md` but neither imports `@AGENTS.md`.
 
 `land` checks a handoff without writing records, committing, switching, or
 merging; a failed plain command exits nonzero with the failed invariant and

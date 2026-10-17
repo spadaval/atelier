@@ -466,12 +466,23 @@ fn setup_warns_when_claude_md_keeps_agents_md_from_loading() {
     fs::write(f.path().join("CLAUDE.md"), "Project notes.\n\n@AGENTS.md\n").unwrap();
     let out = ok(f.path(), &["setup", "claude"]);
     assert!(!out.contains(warning), "{out}");
-    // The project memory may also live in .claude/CLAUDE.md.
-    fs::remove_file(f.path().join("CLAUDE.md")).unwrap();
+    // Claude Code loads every project memory file, so one import suffices.
     fs::write(f.path().join(".claude/CLAUDE.md"), "Project notes.\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(!out.contains("does not import"), "{out}");
+    // The project memory may also live only in .claude/CLAUDE.md.
+    fs::remove_file(f.path().join("CLAUDE.md")).unwrap();
     let out = ok(f.path(), &["setup", "claude"]);
     assert!(
         out.contains("Warning: .claude/CLAUDE.md does not import @AGENTS.md"),
+        "{out}"
+    );
+    // Neither memory file importing it names both.
+    fs::write(f.path().join("CLAUDE.md"), "Project notes.\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(
+        out.contains("Warning: CLAUDE.md and .claude/CLAUDE.md do not import @AGENTS.md")
+            && out.contains("Add a line containing @AGENTS.md to CLAUDE.md."),
         "{out}"
     );
 }

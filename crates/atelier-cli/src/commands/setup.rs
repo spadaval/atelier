@@ -101,36 +101,37 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
             println!("Hooks are disabled by existing settings; enable them in Claude Code before dogfooding.");
         }
     }
-    if let Some(memory) = memory_without_agents_import(layout.repo_root()) {
+    let memories = memory_without_agents_import(layout.repo_root());
+    if let Some(first) = memories.first() {
         eprintln!(
-            "Warning: {} does not import @AGENTS.md, so Claude Code will not load AGENTS.md and sessions miss the repository's instructions. Add a line containing @AGENTS.md to {}.",
-            memory.display(),
-            memory.display()
+            "Warning: {} {} not import @AGENTS.md, so Claude Code will not load AGENTS.md and sessions miss the repository's instructions. Add a line containing @AGENTS.md to {first}.",
+            memories.join(" and "),
+            if memories.len() == 1 { "does" } else { "do" },
         );
     }
     Ok(())
 }
 
-/// A project `CLAUDE.md` that keeps AGENTS.md from loading: Claude Code reads
-/// AGENTS.md only when there is no `CLAUDE.md`, or through an `@AGENTS.md`
-/// import in it (ADR 0022).
-fn memory_without_agents_import(repo: &Path) -> Option<std::path::PathBuf> {
+/// The project `CLAUDE.md` files that keep AGENTS.md from loading. Claude
+/// Code reads AGENTS.md only when there is no `CLAUDE.md`, or through an
+/// `@AGENTS.md` import, and it loads every project memory file, so one
+/// import suffices (ADR 0022). Empty when nothing needs fixing.
+fn memory_without_agents_import(repo: &Path) -> Vec<&'static str> {
     if !repo.join("AGENTS.md").is_file() {
-        return None;
+        return Vec::new();
     }
-    ["CLAUDE.md", ".claude/CLAUDE.md"]
-        .into_iter()
-        .map(|relative| repo.join(relative))
-        .find(|path| {
-            fs::read_to_string(path).is_ok_and(|text| {
-                !text
-                    .split_whitespace()
-                    .any(|token| matches!(token, "@AGENTS.md" | "@./AGENTS.md"))
-            })
-        })
-        .map(|path| {
-            path.strip_prefix(repo)
-                .map(Path::to_path_buf)
-                .unwrap_or(path)
-        })
+    let mut memories = Vec::new();
+    for relative in ["CLAUDE.md", ".claude/CLAUDE.md"] {
+        let Ok(text) = fs::read_to_string(repo.join(relative)) else {
+            continue;
+        };
+        if text
+            .split_whitespace()
+            .any(|token| matches!(token, "@AGENTS.md" | "@./AGENTS.md"))
+        {
+            return Vec::new();
+        }
+        memories.push(relative);
+    }
+    memories
 }
