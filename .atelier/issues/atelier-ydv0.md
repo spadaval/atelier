@@ -21,9 +21,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T07:14:46.034928385+00:00"
+status: "done"
 title: "Add a merge strategy that merges a clean branch into the base and checks the merged tree"
-updated_at: "2026-10-17T05:22:51.964977661+00:00"
+updated_at: "2026-10-17T07:14:46.034928385+00:00"
 ---
 
 ## Goal
@@ -50,3 +51,7 @@ updated_at: "2026-10-17T05:22:51.964977661+00:00"
 ## Context
 
 Lockfile changes still need re-review and re-validation. This item adds no path exemptions (Sumeet, 2026-10-16), and the merged-tree checks are what catch a lockfile that merges cleanly but is broken. This is the second step after the merge-readiness view in status, which needs no change to the merge model. From the 2026-10-16 transcript retrospective.
+
+## Close Reason
+
+branch_policy.merge_strategy: merge_commit makes atelier merge build the merge of the branch into the current base with git merge-tree, refuse conflicts naming the files, run merge_checks (at least one shell.check) in a detached checkout of the merge commit, gate the merge commit's records, refuse when the base changed in-scope issue, review or evidence records since the fork point (merge_base_records), check the done claims the merged records affect, and fast-forward the base to the merge commit only when every gate passes. A base that moves during checks is refused by the existing merge_snapshot_changed fence (the item named land_base_changed). A clean merge keeps the branch's approval. The merged tree's proof is the merge.merged_tree gate line and the merge commit message, which name the shell checks that passed on that tree; merge writes no tracker records. fast_forward_only stays the default. reviews-and-merge.md says merge creates the merge commit and nothing else. Tests in merge_gates.rs cover a clean merge onto a moved base, a refused conflict, a lockfile git merges cleanly but a lock-consistency check rejects, a moved base, merge_unproven, base-side records, a broken base claim, and a sibling the base completed. Full suite with test hooks passes at 1d90c9f5.
