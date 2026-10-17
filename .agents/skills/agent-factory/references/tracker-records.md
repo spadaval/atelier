@@ -34,7 +34,8 @@ the strategy file through the mission's strategy path (see
 <One paragraph: the outcome, in plain words.>
 
 ## Success criteria
-<Only when there is no strategy file; otherwise the strategy owns them.>
+<Only when there is no strategy file; otherwise the strategy owns them. One
+`- <slug>: <claim>` bullet per criterion.>
 
 ## Background
 <Research, references, and motivation the mission's work shares. Omit when
@@ -100,7 +101,7 @@ A parent uses the Issue template with these meanings:
 - **Goal:** what is true when the increment is done, observably.
 - **Done when:** how the outcome will be shown (author proof plus review, or
   a linked validation item) and which mission success criteria it delivers,
-  by number, e.g. S1, S3.
+  by slug, e.g. `pipe-safe`, S3.
 - **Unknowns:** what must be learned before or during the increment.
 - **Background:** context every child shares, so children need not repeat it.
 

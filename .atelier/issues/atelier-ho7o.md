@@ -4,10 +4,15 @@ id: "atelier-ho7o"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ho7o
 priority: "P1"
 relationships:
   blocks: []
-  children: []
+  children:
+  - kind: "issue"
+    id: "atelier-stsa"
   attachments: []
   relates:
   - kind: "issue"
@@ -15,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Parse mission criteria and let evidence receipts name the criteria they judge"
-updated_at: "2026-10-17T17:25:59.150801823+00:00"
+updated_at: "2026-10-17T18:04:48.912369448+00:00"
 ---
 
 ## Goal

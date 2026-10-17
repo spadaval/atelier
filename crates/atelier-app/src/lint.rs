@@ -144,6 +144,13 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         scoped_id.is_some(),
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
+    if findings.is_empty() {
+        findings.extend(criteria_findings(
+            state_dir,
+            repo_root,
+            scoped_id.as_deref(),
+        )?);
+    }
 
     Ok(LintView {
         scoped_id,
@@ -253,6 +260,52 @@ pub fn issue_findings<'a>(
         }
     }
     findings
+}
+
+/// Receipts that name mission criteria (atelier-et6q): each named criterion
+/// must be one the target's mission defines, so a typo or a renamed slug is
+/// never silent. Scoped to one issue, only receipts targeting it.
+fn criteria_findings(
+    state_dir: &Path,
+    repo_root: &Path,
+    scoped_id: Option<&str>,
+) -> Result<Vec<LintFinding>> {
+    let index = RecordIndex::load(state_dir)?;
+    let mut findings = Vec::new();
+    for record in index.evidence_records() {
+        let Some(target) = record
+            .data
+            .target
+            .as_ref()
+            .filter(|target| target.kind == "issue")
+        else {
+            if !record.data.criteria.is_empty() {
+                findings.push(LintFinding {
+                    id: record.header.id.clone(),
+                    message: "Evidence names criteria but has no issue target".to_string(),
+                });
+            }
+            continue;
+        };
+        if scoped_id.is_some_and(|id| id != target.id) {
+            continue;
+        }
+        let slugs = record
+            .data
+            .criteria
+            .iter()
+            .map(|criterion| criterion.slug.as_str())
+            .collect::<Vec<_>>();
+        for problem in
+            crate::criteria::receipt_criteria_problems(&index, repo_root, &target.id, &slugs)?
+        {
+            findings.push(LintFinding {
+                id: record.header.id.clone(),
+                message: format!("Evidence {problem}"),
+            });
+        }
+    }
+    Ok(findings)
 }
 
 /// Mission strategy links: each mission's strategy path is the canonical

@@ -6,6 +6,13 @@ are the authoring reference. Atelier validates the resulting records and graph.
 
 A mission is a front door to a strategy, not a second strategy or a status table.
 Link the strategy by path, state the outcome, and identify success criteria.
+A criterion is a `- <slug>: <text>` bullet under the strategy's Success
+Criteria heading (any level), or under the mission's own Success criteria
+section when it links no strategy (decision atelier-et6q). The slug is
+lowercase kebab-case, such as `pipe-safe`, or a positional `S<n>`, and is
+unique within the mission; indented lines continue the bullet before them.
+Views list criteria in document order and report any other bullet in that
+section as a problem.
 When no separate strategy exists, the mission body carries that intent. Put
 research, references, and motivation that the mission's work shares in its
 Background section; a strategy still owns intent, boundaries, and tradeoffs.

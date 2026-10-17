@@ -63,6 +63,12 @@ what each record contains.
 - Use `atelier evidence record` with `--target`, `--kind`, and a summary.
   Capture a command after `--` to pin current HEAD and derive the result from
   the exit status. Manual receipts require an explicit `--result`.
+- A receipt that judges mission success criteria names each with its own
+  result: `--criterion pipe-safe=pass --criterion quiet-tokens=fail` for
+  manual proof, or a bare `--criterion <slug>` that takes a captured
+  command's result. Target the mission or an item advancing it; `check`
+  refuses a slug the mission does not define. `atelier work mission <id>`
+  marks each criterion proven, failing or unproven from the newest receipt.
 - Every receipt names a full Git commit and one result. Presence alone is not
   passing proof: an older pass does not cover a later relevant change, and a
   newer failure blocks completion.
