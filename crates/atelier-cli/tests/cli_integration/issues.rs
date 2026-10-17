@@ -630,7 +630,7 @@ fn test_issue_show_rollup_counts_all_children_and_bounds_only_visible_rows() {
     }
     let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &owner, "--full"]);
     assert!(success, "{stderr}");
-    let rollup = shown.split("Mission Rollup").nth(1).unwrap();
+    let rollup = shown.split("Parent Rollup").nth(1).unwrap();
     assert!(rollup.contains("7 scoped issues"), "{rollup}");
     assert!(rollup.contains("ready 7"), "{rollup}");
     let ready_rows = rollup
