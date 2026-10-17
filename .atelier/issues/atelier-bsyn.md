@@ -4,6 +4,9 @@ id: "atelier-bsyn"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-bsyn
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Report a dead git cat-file child instead of ending on SIGPIPE"
-updated_at: "2026-10-17T08:41:51.157406002+00:00"
+updated_at: "2026-10-17T08:41:56.539484184+00:00"
 ---
 
 ## Goal
