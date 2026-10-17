@@ -402,7 +402,7 @@ fn render_status_page(
         Vec::new()
     } else {
         IssueListPanel::from_work_rows("Ready Work", &view.work.ready)
-            .limit(READY_SHOWN)
+            .limit(READY_SHOWN, "atelier work ready")
             .marks(in_flight)
             .render(context)
     };
@@ -526,7 +526,7 @@ fn render_status_page(
         },
         ready_panel,
         IssueListPanel::new("Current Work", active_rows)
-            .limit(8)
+            .limit(8, "atelier work active")
             .render(context),
         unassigned_panel(overview, owned, in_flight, context),
         render_metadata(Some("Local State"), &local_state),

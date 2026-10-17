@@ -176,6 +176,24 @@ one sentence after `Hint:` that names its command in backticks, such as
 ``Hint: Inspect the blocker with `atelier issue show <id>` ``; it carries no
 second prefix.
 
+A view offers only the steps the record's state allows, and never the
+command just run or a filter for rows already on screen:
+
+- a done record offers no edit and no transition options, since its body
+  cannot be revised and its status has no transitions out;
+- after a transition to a done status, the steps are the handoff, `atelier
+  land <owner>` and `atelier merge <owner> --check`, where the owner is the
+  parent or else the issue itself; an owner with no recorded branch, such as
+  a mission or decision, offers `atelier land` alone;
+- `work mission` and `work parent` offer `atelier start <id>` for the first
+  item of Ready Work, and their transitions only while the objective has any;
+- `issue create` offers `atelier start <new id>`, or for a mission or
+  decision, which have no branch, its transition options.
+
+A list that leaves rows out ends with a line that counts them and names the
+command that shows them all: ``... 4 more done work items omitted; see
+`atelier work mission atelier-kgcr --done` ``.
+
 Every next step, hint and error recovery step names the real ID when the
 command knows it: the top ready item in `status`, the top mission in `work`,
 the first row of `issue list`, each runnable transition's command in `issue
@@ -261,7 +279,9 @@ brief view gives one line per fact and leaves out empty facts:
 - `Transitions:`, which names the allowed transitions, then each group of
   blocked transitions with the reason they share, separated by `|`. A
   transition whose only gap is a required argument is allowed and shows its
-  flag, as in `supersede --reason`;
+  flag, as in `supersede --reason`. A done record shows `Closed <date>: <first
+  line of its Close Reason>` instead, as `--full`'s Transition Readiness
+  does;
 - the two lead sections of the record's body shape: Goal and Done when for
   work items, Outcome and Success criteria for missions, and Question and
   Decision for decisions. These say what the item is for and what finishes

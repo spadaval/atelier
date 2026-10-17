@@ -306,6 +306,9 @@ enum WorkCommands {
     Parent {
         /// Parent issue ID
         id: String,
+        /// Show every item in the parent's scope, none omitted
+        #[arg(long)]
+        all: bool,
     },
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
@@ -707,8 +710,8 @@ fn run() -> Result<()> {
                     },
                     quiet,
                 ),
-                Some(WorkCommands::Parent { id }) => {
-                    commands::work::parent_dashboard(&index, &id, quiet)
+                Some(WorkCommands::Parent { id, all }) => {
+                    commands::work::parent_dashboard(&index, &id, all, quiet)
                 }
                 Some(WorkCommands::Ready) => commands::work::list(&index, "ready", quiet),
                 Some(WorkCommands::Blocked) => commands::work::list(&index, "blocked", quiet),

@@ -281,7 +281,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
     }
     if overview.missions.len() > 20 {
         lines.push(format!(
-            "{} omitted",
+            "{} omitted; see `atelier issue list --issue-type mission`",
             count_noun(overview.missions.len() - 20, "more mission")
         ));
     }
@@ -352,8 +352,18 @@ pub fn mission_dashboard(
     scoped_dashboard(index, mission_ref, "mission", options.filter(), quiet)
 }
 
-pub fn parent_dashboard(index: &RecordIndex, parent_ref: &str, quiet: bool) -> Result<()> {
-    scoped_dashboard(index, parent_ref, "parent", DashboardFilter::Summary, quiet)
+pub fn parent_dashboard(
+    index: &RecordIndex,
+    parent_ref: &str,
+    all: bool,
+    quiet: bool,
+) -> Result<()> {
+    let filter = if all {
+        DashboardFilter::All
+    } else {
+        DashboardFilter::Summary
+    };
+    scoped_dashboard(index, parent_ref, "parent", filter, quiet)
 }
 
 /// The dashboards that do show an issue a scoped view refused: its own
@@ -473,11 +483,11 @@ fn scoped_dashboard(
     let context = RenderContext::for_stdout();
     let mut panels = vec![render_metadata(None, &metadata)];
     panels.extend(
-        work.panels(filter)
+        work.panels(&issue, filter)
             .into_iter()
             .map(|panel| panel.render(context)),
     );
-    panels.push(objective_footer(context, &issue, counts));
+    panels.push(objective_footer(context, &issue, &work)?);
     print_page(&title, panels, context);
     Ok(())
 }
@@ -538,7 +548,7 @@ impl ScopedWork {
         Ok(Self { rows, size, totals })
     }
 
-    fn panels(&self, filter: DashboardFilter) -> Vec<IssueListPanel> {
+    fn panels(&self, objective: &Issue, filter: DashboardFilter) -> Vec<IssueListPanel> {
         let groups: &[(Option<WorkClassification>, &str)] = match filter {
             DashboardFilter::Summary => &[
                 (Some(WorkClassification::Active), "Active Work"),
@@ -584,13 +594,12 @@ impl ScopedWork {
                 if rows.is_empty() && filter == DashboardFilter::Summary {
                     return None;
                 }
-                let panel = IssueListPanel::new(*title, rows).limit(
-                    if filter == DashboardFilter::Summary {
-                        8
-                    } else {
-                        usize::MAX
-                    },
-                );
+                let panel = IssueListPanel::new(*title, rows);
+                let panel = if filter == DashboardFilter::Summary {
+                    panel.limit(8, scoped_view_command(objective, *state))
+                } else {
+                    panel
+                };
                 // Only the unfiltered list mixes work states.
                 Some(if state.is_none() {
                     panel.row_states()
@@ -609,35 +618,56 @@ fn strip_mission_title_prefix(title: &str) -> &str {
         .unwrap_or(title)
 }
 
+/// The view of `objective` that lists every item in work state `state`:
+/// the mission's filter for that state where it has one, or else the whole
+/// scope, which is all a parent view offers.
+pub(crate) fn scoped_view_command(objective: &Issue, state: Option<WorkClassification>) -> String {
+    let view = if objective.issue_type == "mission" {
+        "mission"
+    } else {
+        "parent"
+    };
+    let flag = match (view, state) {
+        ("mission", Some(WorkClassification::Ready)) => "--ready",
+        ("mission", Some(WorkClassification::Blocked)) => "--blocked",
+        ("mission", Some(WorkClassification::Active)) => "--active",
+        ("mission", Some(WorkClassification::Done)) => "--done",
+        _ => "--all",
+    };
+    format!("atelier work {view} {} {flag}", objective.id)
+}
+
+/// Steps from the objective's state: its record, its transitions while it
+/// has any, and starting the top ready item. The views of other work states
+/// are named where rows are omitted, so the footer does not repeat them.
 fn objective_footer(
     context: RenderContext,
     issue: &Issue,
-    counts: &ObjectiveBucketTotals,
-) -> Vec<String> {
-    let mission_id = &issue.id;
-    let mut actions = vec![
-        FooterAction::new(
-            format!("Show {} record", issue.issue_type),
-            format!("atelier issue show {mission_id}"),
-        ),
-        FooterAction::new(
+    work: &ScopedWork,
+) -> Result<Vec<String>> {
+    let id = &issue.id;
+    let mut actions = vec![FooterAction::new(
+        format!("Show {} record", issue.issue_type),
+        format!("atelier issue show {id}"),
+    )];
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    if crate::commands::issue_workflow::issue_has_transitions(policy.as_ref(), issue) {
+        actions.push(FooterAction::new(
             "Inspect transitions",
-            format!("atelier issue transition {mission_id}"),
-        ),
-    ];
-    if issue.issue_type == "mission" && counts.ready > 0 {
-        actions.push(FooterAction::new(
-            "List mission ready work",
-            format!("atelier work mission {mission_id} --ready"),
+            format!("atelier issue transition {id}"),
         ));
     }
-    if issue.issue_type == "mission" && counts.blocked > 0 {
+    if let Some((top, _)) = work
+        .rows
+        .iter()
+        .find(|(_, work)| work.classification == WorkClassification::Ready)
+    {
         actions.push(FooterAction::new(
-            "List mission blockers",
-            format!("atelier work mission {mission_id} --blocked"),
+            "Start the top ready item",
+            format!("atelier start {}", top.id),
         ));
     }
-    render_footer_section(context, actions)
+    Ok(render_footer_section(context, actions))
 }
 
 fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {

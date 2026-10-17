@@ -30,7 +30,7 @@ atelier work human
 atelier work blocked
 atelier work missions
 atelier work mission <mission-id>
-atelier work parent <parent-id>
+atelier work parent <parent-id> [--all]
 atelier issue show <id>... [--full]
 atelier issue transition <id>
 atelier start <id>

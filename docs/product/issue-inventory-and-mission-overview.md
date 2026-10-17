@@ -10,11 +10,15 @@ missions. Human output shows at most 20 missions and reports omissions. Quiet
 output includes every matching mission ID in the same status, priority, and ID
 order. `atelier work mission <id>` shows one mission's outcome, scope,
 blockers, and operational work. `atelier work parent <id>` focuses on a parent
-issue and its direct children. `issue show` is the record view: brief by
-default, with `--full` for the whole record.
+issue and its direct children; `--all` lists them all in one list. `issue
+show` is the record view: brief by default, with `--full` for the whole
+record.
 
 Objective counts use the complete scope. Display limits trim visible rows,
-without changing counts or the underlying scope facts.
+without changing counts or the underlying scope facts. A line that counts
+omitted rows names the command that shows them, such as ``... 4 more done
+work items omitted; see `atelier work mission atelier-kgcr --done` ``: a mission's
+filter for that work state, or `--all` where the view has no such filter.
 
 Below the missions, `work missions` lists unassigned work: open non-mission
 issues outside the scope (`advances` links and their descendants) of every

@@ -436,6 +436,9 @@ pub(crate) struct IssueListPanel {
     title: String,
     rows: Vec<IssueListRow>,
     limit: usize,
+    /// The command that shows every row, named when rows are omitted; only
+    /// [`Self::limit`] omits rows, and it sets this.
+    rest: String,
     /// Rows lead with their work state, for panels whose title does not
     /// name one state.
     row_states: bool,
@@ -468,14 +471,18 @@ impl IssueListPanel {
         Self {
             title: title.into(),
             rows,
-            limit: 20,
+            limit: usize::MAX,
+            rest: String::new(),
             row_states: false,
             marks: BTreeMap::new(),
         }
     }
 
-    pub(crate) fn limit(mut self, limit: usize) -> Self {
+    /// Shows at most `limit` rows; the line counting the rest names `rest`,
+    /// the command that shows them all.
+    pub(crate) fn limit(mut self, limit: usize, rest: impl Into<String>) -> Self {
         self.limit = limit;
+        self.rest = rest.into();
         self
     }
 
@@ -521,8 +528,9 @@ impl IssueListPanel {
         let omitted = self.rows.len().saturating_sub(limit);
         if omitted > 0 {
             lines.push(format!(
-                "  ... {} omitted",
-                count_noun(omitted, &format!("more {} item", self.title.to_lowercase()))
+                "  ... {} omitted; see `{}`",
+                count_noun(omitted, &format!("more {} item", self.title.to_lowercase())),
+                self.rest
             ));
         }
         lines
@@ -890,6 +898,8 @@ pub(crate) fn print_footer(actions: impl IntoIterator<Item = FooterAction>) {
     }
 }
 
+/// The checkout's changed paths, up to `sample_limit` of them; the rest are
+/// counted and left to `git status`.
 pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
     if paths.is_empty() {
         return "clean".to_string();
@@ -903,7 +913,7 @@ pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
         summary.push_str(&sample.join(", "));
     }
     if omitted > 0 {
-        summary.push_str(&format!(", {omitted} more omitted"));
+        summary.push_str(&format!(", {omitted} more omitted; see `git status`"));
     }
     summary
 }
@@ -1204,7 +1214,10 @@ mod tests {
     #[test]
     fn path_summary_bounds_samples() {
         let paths = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        assert_eq!(path_summary(&paths, 2), "3 paths: a, b, 1 more omitted");
+        assert_eq!(
+            path_summary(&paths, 2),
+            "3 paths: a, b, 1 more omitted; see `git status`"
+        );
     }
 
     #[test]
@@ -1438,10 +1451,10 @@ mod tests {
             list_row("atelier-b", "todo", "todo", WorkClassification::Ready, 0),
             list_row("atelier-c", "todo", "todo", WorkClassification::Ready, 0),
         ];
-        let panel = IssueListPanel::new("Ready Work", rows).limit(1);
+        let panel = IssueListPanel::new("Ready Work", rows).limit(1, "atelier work ready");
         assert_eq!(
             panel.render(RenderContext::plain()).join("\n"),
-            "Ready Work\n----------\n  atelier-a todo medium ATELIER-A\n  ... 2 more ready work items omitted"
+            "Ready Work\n----------\n  atelier-a todo medium ATELIER-A\n  ... 2 more ready work items omitted; see `atelier work ready`"
         );
     }
 

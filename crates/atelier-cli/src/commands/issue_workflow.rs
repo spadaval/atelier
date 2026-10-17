@@ -31,3 +31,15 @@ pub(crate) fn format_status_with_category(category: Option<&str>, status: &str) 
 pub(crate) fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
     issue_status_category(policy, &issue.status).as_deref() == Some("done")
 }
+
+/// Whether the working policy configures any transition out of the issue's
+/// status; most done statuses have none.
+pub(crate) fn issue_has_transitions(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
+    policy
+        .and_then(|policy| {
+            policy
+                .transitions_from_status(&issue.issue_type, &issue.status)
+                .ok()
+        })
+        .is_some_and(|transitions| !transitions.is_empty())
+}

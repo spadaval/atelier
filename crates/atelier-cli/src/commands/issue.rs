@@ -18,6 +18,7 @@ use atelier_app::issue_read::{ObjectiveBucketTotals, ObjectiveReadSummary};
 use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::record_ref::RecordKind;
+use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::validate_issue_type;
@@ -132,7 +133,10 @@ fn render_issue_brief(
             brief_issue_rows(index, workflow_policy, inherited)?,
         );
     }
-    lines.push(format!("Transitions: {}", transition_summary(index, issue)));
+    lines.push(match closed_line(workflow_policy, record) {
+        Some(closed) => closed,
+        None => format!("Transitions: {}", transition_summary(index, issue)),
+    });
 
     let lead = record.sections.lead_names();
     for name in lead {
@@ -149,6 +153,27 @@ fn render_issue_brief(
         lines.push(format!("More with --full: {}", more.join(", ")));
     }
     Ok(lines)
+}
+
+/// `Closed <date>: <first line of the Close Reason>` for a done record, which
+/// stands in for its transitions: a done record has none to offer.
+fn closed_line(
+    workflow_policy: Option<&WorkflowPolicy>,
+    record: &CanonicalIssueRecord,
+) -> Option<String> {
+    let issue = &record.issue;
+    if !crate::commands::issue_workflow::issue_is_done(workflow_policy, issue) {
+        return None;
+    }
+    let date = local_date(issue.closed_at.unwrap_or(issue.updated_at));
+    let reason = record
+        .sections
+        .section(atelier_records::IssueSectionName::CloseReason)
+        .and_then(|reason| reason.lines().map(str::trim).find(|line| !line.is_empty()));
+    Some(match reason {
+        Some(reason) => format!("Closed {date}: {reason}"),
+        None => format!("Closed {date}"),
+    })
 }
 
 /// The issue's item line, its status marked ✓ or ⚠ by its category under
@@ -350,8 +375,17 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         println!("File:     {}", path.display());
     }
     render_parent_context(index, canonical_id)?;
-    let options = crate::commands::workflow::issue_transition_options(index, canonical_id);
-    render_transition_readiness(&options, canonical_id);
+    let done = crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), issue);
+    match closed_line(workflow_policy.as_ref(), record) {
+        Some(closed) => print_panel(render_lines_section(
+            "Transition Readiness",
+            [format!("  {closed}")],
+        )),
+        None => render_transition_readiness(&crate::commands::workflow::issue_transition_options(
+            index,
+            canonical_id,
+        )),
+    }
 
     for name in IssueSections::ALL_NAMES {
         print_text_section(name.title(), record.sections.section(name));
@@ -370,14 +404,18 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
     render_issue_link_section(index, canonical_id)?;
-    render_objective_rollup_section(objective_summary.as_ref());
+    render_objective_rollup_section(issue, objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
-    render_command_footer(canonical_id)?;
+    render_command_footer(
+        canonical_id,
+        done,
+        crate::commands::issue_workflow::issue_has_transitions(workflow_policy.as_ref(), issue),
+    )?;
     Ok(())
 }
 
-fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
+fn render_objective_rollup_section(issue: &Issue, summary: Option<&ObjectiveReadSummary>) {
     let Some(summary) = summary else {
         return;
     };
@@ -421,18 +459,26 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     }
     print_panel(render_metadata(Some("Objective Rollup"), &rollup));
 
-    for (title, rows) in [
-        ("Active Work", &summary.scope.work.active),
-        ("Ready Work", &summary.scope.work.ready),
-        ("Needs a Human", &summary.scope.work.human),
-        ("Parents and Missions", &summary.scope.work.context),
-        ("Blocked Work", &summary.scope.work.blocked),
-        ("Done Work", &summary.scope.work.done),
+    let work = &summary.scope.work;
+    for (title, state, rows) in [
+        ("Active Work", WorkClassification::Active, &work.active),
+        ("Ready Work", WorkClassification::Ready, &work.ready),
+        ("Needs a Human", WorkClassification::NeedsHuman, &work.human),
+        (
+            "Parents and Missions",
+            WorkClassification::Context,
+            &work.context,
+        ),
+        ("Blocked Work", WorkClassification::Blocked, &work.blocked),
+        ("Done Work", WorkClassification::Done, &work.done),
     ] {
         if !rows.is_empty() {
             print_panel(
                 IssueListPanel::from_work_rows(title, rows)
-                    .limit(OBJECTIVE_ROLLUP_LIMIT)
+                    .limit(
+                        OBJECTIVE_ROLLUP_LIMIT,
+                        crate::commands::work::scoped_view_command(issue, Some(state)),
+                    )
                     .render(RenderContext::for_stdout()),
             );
         }
@@ -491,7 +537,9 @@ pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -
     Ok(())
 }
 
-fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>, canonical_id: &str) {
+/// Each transition with whether it is allowed and the command that runs it;
+/// the footer offers the options view, so this section does not repeat it.
+fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>) {
     let mut lines = Vec::new();
     match options {
         Ok(options) => {
@@ -519,9 +567,6 @@ fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>, can
             lines.push(format!("  options: blocked - {error}"));
         }
     }
-    lines.push(format!(
-        "  options: atelier issue transition {canonical_id}"
-    ));
     print_panel(render_lines_section("Transition Readiness", lines));
 }
 
@@ -699,13 +744,18 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn render_command_footer(canonical_id: &str) -> Result<()> {
+/// The steps the record's state allows: a done record's body cannot be
+/// revised, so it offers no edit, and a status with no transitions out
+/// offers no transition options.
+fn render_command_footer(canonical_id: &str, done: bool, has_transitions: bool) -> Result<()> {
     let mut actions = Vec::new();
-    if let Some(path) = canonical_issue_path(canonical_id)? {
-        actions.push(FooterAction::new(
-            "Edit issue Markdown",
-            path.display().to_string(),
-        ));
+    if !done {
+        if let Some(path) = canonical_issue_path(canonical_id)? {
+            actions.push(FooterAction::new(
+                "Edit issue Markdown",
+                path.display().to_string(),
+            ));
+        }
     }
     actions.extend([
         FooterAction::new(
@@ -716,11 +766,13 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
             "Add a note",
             format!("atelier issue note {} \"...\"", canonical_id),
         ),
-        FooterAction::new(
+    ]);
+    if has_transitions {
+        actions.push(FooterAction::new(
             "Show transition options",
             format!("atelier issue transition {}", canonical_id),
-        ),
-    ]);
+        ));
+    }
     print_panel(render_footer_section(RenderContext::for_stdout(), actions));
     Ok(())
 }
@@ -879,13 +931,22 @@ pub fn create_lifecycle(
             FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
             FooterAction::new("Validate this issue", format!("atelier check {id}")),
             FooterAction::new("Inspect this issue", format!("atelier issue show {id}")),
-            FooterAction::new(
-                "Inspect tracked work transitions",
-                format!("atelier issue transition {id}"),
-            ),
+            create_next_step(&record.issue),
         ],
     ));
     Ok(())
+}
+
+/// Work starts with `atelier start`; missions and decisions have no branch to
+/// start, so they move by transition instead.
+fn create_next_step(issue: &Issue) -> FooterAction {
+    match issue.issue_type.as_str() {
+        "mission" | "decision" => FooterAction::new(
+            "Show transition options",
+            format!("atelier issue transition {}", issue.id),
+        ),
+        _ => FooterAction::new("Start this work", format!("atelier start {}", issue.id)),
+    }
 }
 
 fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {

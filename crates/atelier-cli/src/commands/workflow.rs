@@ -78,17 +78,38 @@ pub fn transition_issue(
         return Ok(());
     }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
-    human_output::print_footer([
-        FooterAction::new(
-            "Inspect this issue",
-            format!("atelier issue show {}", before.id),
-        ),
-        FooterAction::new(
+    let mut next = vec![FooterAction::new(
+        "Inspect this issue",
+        format!("atelier issue show {}", before.id),
+    )];
+    if policy.status_category(&transition.to) == Some("done") {
+        next.extend(handoff_steps(index, &before)?);
+    } else {
+        next.push(FooterAction::new(
             "Show transition options",
             format!("atelier issue transition {}", before.id),
-        ),
-    ]);
+        ));
+    }
+    human_output::print_footer(next);
     Ok(())
+}
+
+/// After a done claim the work is handed off, not moved again: check the
+/// handoff, then whether the branch owner can merge. An owner with no
+/// recorded branch, such as a mission or a decision, has nothing to merge.
+fn handoff_steps(index: &RecordIndex, issue: &Issue) -> Result<Vec<FooterAction>> {
+    let owner_id = issue.parent_id.as_deref().unwrap_or(&issue.id);
+    let owner = index.require_issue(owner_id)?;
+    if owner.workflow_branch.is_none() {
+        return Ok(vec![FooterAction::new("Check handoff", "atelier land")]);
+    }
+    Ok(vec![
+        FooterAction::new("Check handoff", format!("atelier land {owner_id}")),
+        FooterAction::new(
+            "Check completed-owner merge readiness",
+            format!("atelier merge {owner_id} --check"),
+        ),
+    ])
 }
 
 pub(crate) fn print_applied_transition(

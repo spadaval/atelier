@@ -5809,3 +5809,280 @@ fn prune_cutoff_is_the_local_day() {
         );
     }
 }
+
+// ==================== State-dependent footers (atelier-ksx6) ====================
+
+/// The `Next` section of a view, from its heading to the end.
+fn next_section(output: &str) -> &str {
+    output
+        .split_once("\nNext\n----\n")
+        .map(|(_, rest)| rest)
+        .unwrap_or_else(|| panic!("no Next section:\n{output}"))
+}
+
+fn close_issue(dir: &Path, issue_id: &str, reason: &str) -> String {
+    move_issue_to_review(dir, issue_id);
+    attach_issue_pass_evidence(dir, issue_id);
+    let (success, stdout, stderr) = run_atelier(
+        dir,
+        &["issue", "transition", issue_id, "close", "--reason", reason],
+    );
+    assert!(success, "close {issue_id} failed: {stderr}");
+    stdout
+}
+
+#[test]
+fn test_done_issue_shows_its_close_and_offers_no_edit_or_transition() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Finished work"]);
+    assert!(success, "{stderr}");
+    let id = issue_id_by_title(dir.path(), "Finished work");
+    close_issue(
+        dir.path(),
+        &id,
+        "Shipped the fix\n\nWith more detail below.",
+    );
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let closed = format!("Closed {today}: Shipped the fix");
+
+    let (success, brief, stderr) = run_atelier(dir.path(), &["issue", "show", &id]);
+    assert!(success, "{stderr}");
+    assert!(brief.contains(&format!("\n{closed}\n")), "{brief}");
+    assert!(!brief.contains("Transitions:"), "{brief}");
+
+    let (success, full, stderr) = run_atelier(dir.path(), &["issue", "show", &id, "--full"]);
+    assert!(success, "{stderr}");
+    assert!(
+        full.contains(&format!(
+            "Transition Readiness\n--------------------\n  {closed}\n\n"
+        )),
+        "{full}"
+    );
+    assert!(!full.contains("no configured transitions"), "{full}");
+    let next = next_section(&full);
+    assert!(!next.contains("Edit issue Markdown"), "{next}");
+    assert!(!next.contains("issue transition"), "{next}");
+    assert!(next.contains(&format!("atelier check {id}")), "{next}");
+}
+
+#[test]
+fn test_open_issue_footer_keeps_edit_and_transition_options_once() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Open work"]);
+    assert!(success, "{stderr}");
+    let id = issue_id_by_title(dir.path(), "Open work");
+    let (success, full, stderr) = run_atelier(dir.path(), &["issue", "show", &id, "--full"]);
+    assert!(success, "{stderr}");
+    let next = next_section(&full);
+    assert!(next.contains("Edit issue Markdown"), "{next}");
+    assert_eq!(
+        full.matches(&format!("atelier issue transition {id}\n"))
+            .count(),
+        1,
+        "the options command appears once, in the footer:\n{full}"
+    );
+}
+
+#[test]
+fn test_close_transition_footer_offers_handoff_not_transitions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Unstarted work"]);
+    assert!(success, "{stderr}");
+    let standalone = issue_id_by_title(dir.path(), "Unstarted work");
+    // An owner with no recorded branch has nothing to merge.
+    let closed = close_issue(dir.path(), &standalone, "Done");
+    let next = next_section(&closed);
+    assert!(!next.contains("issue transition"), "{closed}");
+    assert!(next.contains("Check handoff: atelier land\n"), "{closed}");
+    assert!(!next.contains("merge"), "{closed}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Owning parent"]);
+    assert!(success, "{stderr}");
+    let parent = issue_id_by_title(dir.path(), "Owning parent");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Owned child", "--parent", &parent],
+    );
+    assert!(success, "{stderr}");
+    let child = issue_id_by_title(dir.path(), "Owned child");
+    // The branch `atelier start` would record on the parent.
+    edit_canonical_issue(dir.path(), &parent, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "in_progress").replacen(
+            "\npriority: ",
+            "\nworkflow_branch:\n  branch_base: main\n  work_branch: feature/owning-parent\npriority: ",
+            1,
+        )
+    });
+    let closed = close_issue(dir.path(), &child, "Done");
+    let next = next_section(&closed);
+    assert!(
+        next.contains(&format!("atelier land {parent}\n")),
+        "{closed}"
+    );
+    assert!(
+        next.contains(&format!("atelier merge {parent} --check\n")),
+        "{closed}"
+    );
+    assert!(!next.contains("issue transition"), "{closed}");
+}
+
+#[test]
+fn test_issue_create_footer_offers_start_for_work_and_transitions_for_missions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, created, stderr) = run_atelier(dir.path(), &["issue", "create", "New work"]);
+    assert!(success, "{stderr}");
+    let id = issue_id_by_title(dir.path(), "New work");
+    let next = next_section(&created);
+    assert!(
+        next.contains(&format!("Start this work: atelier start {id}\n")),
+        "{created}"
+    );
+    assert!(!next.contains("issue transition"), "{created}");
+
+    let (success, created, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "New mission", "--issue-type", "mission"],
+    );
+    assert!(success, "{stderr}");
+    let mission = issue_id_by_title(dir.path(), "New mission");
+    let next = next_section(&created);
+    assert!(
+        next.contains(&format!("atelier issue transition {mission}\n")),
+        "{created}"
+    );
+    assert!(!next.contains("atelier start"), "{created}");
+}
+
+#[test]
+fn test_mission_views_offer_start_and_name_flags_for_omitted_rows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Footer mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let mission = issue_id_by_title(dir.path(), "Footer mission");
+    let mut work = Vec::new();
+    for number in 0..10 {
+        let title = format!("Mission ready {number}");
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", &title]);
+        assert!(success, "{stderr}");
+        let id = issue_id_by_title(dir.path(), &title);
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", &mission, &id, "--role", "advances"],
+        );
+        assert!(success, "{stderr}");
+        work.push(id);
+    }
+
+    let (success, summary, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success, "{stderr}");
+    let top = summary
+        .split("Ready Work\n----------\n")
+        .nth(1)
+        .and_then(|rows| rows.split_whitespace().next())
+        .unwrap_or_else(|| panic!("no ready rows:\n{summary}"))
+        .to_string();
+    assert!(
+        summary.contains(&format!(
+            "... 2 more ready work items omitted; see `atelier work mission {mission} --ready`"
+        )),
+        "{summary}"
+    );
+    let next = next_section(&summary);
+    assert!(
+        next.contains(&format!("Start the top ready item: atelier start {top}\n")),
+        "{summary}"
+    );
+    assert!(!next.contains("--ready"), "{summary}");
+
+    let (success, ready, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission, "--ready"]);
+    assert!(success, "{stderr}");
+    assert!(!ready.contains("omitted"), "{ready}");
+    let next = next_section(&ready);
+    assert!(
+        !next.contains(&format!("atelier work mission {mission}")),
+        "the footer repeats the view or a filter:\n{ready}"
+    );
+    assert!(next.contains(&format!("atelier start {top}\n")), "{ready}");
+
+    let (success, full, stderr) = run_atelier(dir.path(), &["issue", "show", &mission, "--full"]);
+    assert!(success, "{stderr}");
+    assert!(
+        full.contains(&format!(
+            "... 5 more ready work items omitted; see `atelier work mission {mission} --ready`"
+        )),
+        "{full}"
+    );
+}
+
+#[test]
+fn test_done_mission_footer_offers_no_transitions() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Finished mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let mission = issue_id_by_title(dir.path(), "Finished mission");
+    edit_canonical_issue(dir.path(), &mission, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "done")
+    });
+    let (success, view, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success, "{stderr}");
+    let next = next_section(&view);
+    assert_eq!(
+        next.trim_end(),
+        format!("  Show mission record: atelier issue show {mission}"),
+        "{view}"
+    );
+}
+
+#[test]
+fn test_work_parent_all_shows_every_child_its_summary_omits() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Wide parent"]);
+    assert!(success, "{stderr}");
+    let parent = issue_id_by_title(dir.path(), "Wide parent");
+    for number in 0..10 {
+        let title = format!("Wide child {number}");
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "create", &title, "--parent", &parent],
+        );
+        assert!(success, "{stderr}");
+    }
+    let (success, summary, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(
+        summary.contains(&format!(
+            "... 2 more ready work items omitted; see `atelier work parent {parent} --all`"
+        )),
+        "{summary}"
+    );
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "parent", &parent, "--all"]);
+    assert!(success, "{stderr}");
+    assert!(!all.contains("omitted"), "{all}");
+    assert_eq!(all.matches("Wide child").count(), 10, "{all}");
+}
