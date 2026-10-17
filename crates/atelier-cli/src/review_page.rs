@@ -66,7 +66,7 @@ pub(crate) fn prose(text: &str) -> String {
 }
 
 /// Escaped text with `` `code` `` spans as `<code>`.
-fn inline(text: &str) -> String {
+pub(crate) fn inline(text: &str) -> String {
     let mut html = String::new();
     for (position, part) in text.split('`').enumerate() {
         if position % 2 == 1 {
@@ -190,6 +190,9 @@ mod tests {
         );
         let html = page("T<", "<p>body</p>", "f&");
         assert!(html.contains("<title>T&lt;</title>") && html.contains("<footer>f&amp;</footer>"));
-        assert!(!html.contains("<script") && !html.contains("http"), "no scripts or external resources");
+        assert!(
+            !html.contains("<script") && !html.contains("http"),
+            "no scripts or external resources"
+        );
     }
 }

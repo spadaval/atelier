@@ -18,6 +18,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `merge` | Check base policy and fast-forward reviewed work, or merge it under `merge_commit`. |
 | `land` | Check handoff invariants and committed records. |
 | `doctor` | Check every done claim and the whole review history. |
+| `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `setup` | Install supported harness hooks. |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |

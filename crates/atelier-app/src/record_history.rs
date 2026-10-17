@@ -37,7 +37,10 @@ impl RecordHistory {
 
 /// Every commit in HEAD's history that touched one of the records, read as
 /// that commit left it. Empty without a commit to read.
-pub fn issue_histories(read: &mut ReadContext<'_>, ids: &BTreeSet<String>) -> Result<RecordHistory> {
+pub fn issue_histories(
+    read: &mut ReadContext<'_>,
+    ids: &BTreeSet<String>,
+) -> Result<RecordHistory> {
     let mut history = RecordHistory::default();
     if ids.is_empty() {
         return Ok(history);
@@ -120,6 +123,8 @@ impl From<&RecordVersion> for Moment {
 pub struct MissionTimeline {
     /// The first version that left `draft`, or the mission's first version.
     pub started: Option<Moment>,
+    /// The version that made the mission's current done claim.
+    pub closed: Option<Moment>,
     /// Items first linked to the mission after it started, with when.
     pub added_after_start: Vec<(String, Moment)>,
     /// Items whose done claim was later withdrawn, with when.
@@ -148,34 +153,48 @@ pub fn mission_timeline(
                 .is_some_and(|record| record.issue.status != "draft")
         })
         .map(Moment::from);
+    let done = |record: &CanonicalIssueRecord| {
+        policy.and_then(|policy| policy.status_category(&record.issue.status)) == Some("done")
+    };
+    // Walking back from the newest version, the oldest of the trailing run
+    // of done versions made the current claim.
+    let closed = mission
+        .iter()
+        .rev()
+        .take_while(|version| version.record.as_ref().is_some_and(done))
+        .last()
+        .map(Moment::from);
     let mut timeline = MissionTimeline {
         started,
+        closed,
         ..MissionTimeline::default()
     };
     for id in linked {
-        let joined = history
-            .of(id)
-            .iter()
-            .find(|version| version.record.as_ref().is_some_and(|record| advances(record, mission_id)))
-            .or_else(|| {
-                // Older records stored the link on the mission's side.
-                mission.iter().find(|version| {
-                    version
-                        .record
-                        .as_ref()
-                        .is_some_and(|record| advances(record, id))
-                })
-            })
-            .map(Moment::from);
+        // The link may live on either record, and older records stored it on
+        // the mission's side, so the item joined at the earlier of the two.
+        let on_item = history.of(id).iter().find(|version| {
+            version
+                .record
+                .as_ref()
+                .is_some_and(|record| advances(record, mission_id))
+        });
+        let on_mission = mission.iter().find(|version| {
+            version
+                .record
+                .as_ref()
+                .is_some_and(|record| advances(record, id))
+        });
+        let joined = match (on_item, on_mission) {
+            (Some(a), Some(b)) => Some(if a.time <= b.time { a } else { b }),
+            (a, b) => a.or(b),
+        }
+        .map(Moment::from);
         if let (Some(joined), Some(started)) = (joined, &timeline.started) {
             if joined.time > started.time {
                 timeline.added_after_start.push((id.clone(), joined));
             }
         }
     }
-    let done = |record: &CanonicalIssueRecord| {
-        policy.and_then(|policy| policy.status_category(&record.issue.status)) == Some("done")
-    };
     for id in scope {
         let mut was_done = false;
         for version in history.of(id) {

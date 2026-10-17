@@ -232,6 +232,17 @@ pub fn mission_proof(
     read: &mut ReadContext<'_>,
     mission_id: &str,
 ) -> Result<MissionProof> {
+    mission_proof_until(index, read, mission_id, None)
+}
+
+/// [`mission_proof`] with the deciding receipt's age counted up to `until`
+/// rather than HEAD, as a debrief counts it up to the mission's close.
+pub fn mission_proof_until(
+    index: &RecordIndex,
+    read: &mut ReadContext<'_>,
+    mission_id: &str,
+    until: Option<&str>,
+) -> Result<MissionProof> {
     let repo_root = read.repo;
     let criteria = mission_criteria(index, repo_root, mission_id)?;
     // A receipt belongs to the mission it was recorded against, wherever its
@@ -267,8 +278,12 @@ pub fn mission_proof(
                 None => false,
             };
             // Only the deciding receipt's age is shown, so only it is counted.
-            let code_commits_since = match (&head, in_history && !decided) {
-                (Some(head), true) => Some(code_commits_between(read, &record.data.commit, head)?),
+            let end = until.or(head.as_deref());
+            let code_commits_since = match (end, in_history && !decided) {
+                (Some(end), true) if read.ancestor(&record.data.commit, end)? => {
+                    Some(code_commits_between(read, &record.data.commit, end)?)
+                }
+                (Some(_), true) => Some(0),
                 _ => None,
             };
             decided |= in_history;

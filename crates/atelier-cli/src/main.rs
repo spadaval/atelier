@@ -209,6 +209,17 @@ enum Commands {
     /// `land` checks only what changed since the base.
     Doctor,
 
+    /// Review a finished mission: criteria and proof, each item's report,
+    /// decisions, derived deviations and follow-ups
+    Debrief {
+        /// Mission ID
+        id: String,
+        /// Write a self-contained HTML page under .atelier/runtime/reviews/
+        /// instead of printing Markdown
+        #[arg(long)]
+        html: bool,
+    },
+
     /// Prune accumulated artifacts safely
     Prune {
         /// Apply eligible cleanup; without this flag the command only reports candidates
@@ -703,6 +714,10 @@ fn run() -> Result<()> {
         }
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
+        Commands::Debrief { id, html } => {
+            let (_, index) = load_repository()?;
+            commands::mission_review::debrief(&index, &id, html, quiet)
+        }
 
         Commands::Work { action: None } => {
             work_index(quiet);

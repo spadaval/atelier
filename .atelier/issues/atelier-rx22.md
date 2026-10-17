@@ -4,6 +4,9 @@ id: "atelier-rx22"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-rx22
 priority: "P1"
 relationships:
   blocks: []
@@ -24,9 +27,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Review a finished mission with atelier debrief"
-updated_at: "2026-10-17T19:08:44.071690858+00:00"
+updated_at: "2026-10-17T19:08:48.676401236+00:00"
 ---
 
 ## Goal

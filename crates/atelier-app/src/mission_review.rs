@@ -9,6 +9,7 @@ use atelier_core::{
     CloseReport, EvidenceResult, FindingDecision, Issue, IssueSectionName, ReviewEvent,
 };
 
+use crate::criteria::{mission_proof_until, CriterionMark, MissionProof};
 use crate::decisions::{mission_decisions, Decisions};
 use crate::git_freshness::ReadContext;
 use crate::objective_graph::{mission_issue_ids, mission_objective_kind};
@@ -56,6 +57,13 @@ pub enum Deviation {
     },
     /// A done claim later withdrawn.
     Reopened { id: String, date: String },
+    /// A proven criterion whose deciding proof predates code that landed
+    /// before the mission closed (or before HEAD while it is open).
+    AgedProof {
+        slug: String,
+        evidence: String,
+        commits: usize,
+    },
 }
 
 /// A review event on the mission itself, such as a plan approval.
@@ -78,6 +86,7 @@ pub struct Debrief {
     /// The commit the review was generated from; `None` without history.
     pub generated_from: Option<String>,
     pub timeline: MissionTimeline,
+    pub criteria: MissionProof,
     pub items: Vec<ItemReview>,
     pub decisions: Decisions,
     pub deviations: Vec<Deviation>,
@@ -116,6 +125,15 @@ pub fn debrief(
         .collect::<BTreeSet<_>>();
     let timeline = mission_timeline(read, policy, mission_id, &scope, &linked)?;
     let generated_from = read.pinned("HEAD").ok();
+    let criteria = mission_proof_until(
+        index,
+        read,
+        mission_id,
+        timeline
+            .closed
+            .as_ref()
+            .map(|moment| moment.commit.as_str()),
+    )?;
 
     let mut items = Vec::new();
     for id in &linked {
@@ -209,6 +227,20 @@ pub fn debrief(
             }
         }
     }
+    for proof in &criteria.proofs {
+        if proof.mark != CriterionMark::Proven {
+            continue;
+        }
+        if let Some(receipt) = proof.deciding() {
+            if let Some(commits) = receipt.code_commits_since.filter(|commits| *commits > 0) {
+                deviations.push(Deviation::AgedProof {
+                    slug: proof.criterion.slug.clone(),
+                    evidence: receipt.evidence_id.clone(),
+                    commits,
+                });
+            }
+        }
+    }
     for (id, moment) in &timeline.reopened {
         deviations.push(Deviation::Reopened {
             id: id.clone(),
@@ -237,10 +269,14 @@ pub fn debrief(
             .section(IssueSectionName::Outcome)
             .unwrap_or_default()
             .to_string(),
-        strategy: mission.strategy.as_ref().map(|strategy| strategy.path.clone()),
+        strategy: mission
+            .strategy
+            .as_ref()
+            .map(|strategy| strategy.path.clone()),
         mission,
         generated_from,
         timeline,
+        criteria,
         items,
         decisions: mission_decisions(index, policy, mission_id)?,
         deviations,
@@ -290,7 +326,8 @@ fn newest_receipt(
         };
         let record = index.require_evidence(&evidence_id)?;
         if newest.is_none_or(|known| {
-            (record.data.captured_at, &record.header.id) > (known.data.captured_at, &known.header.id)
+            (record.data.captured_at, &record.header.id)
+                > (known.data.captured_at, &known.header.id)
         }) {
             newest = Some(record);
         }
