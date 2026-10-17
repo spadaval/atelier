@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T09:42:38.160751086+00:00"
+status: "done"
 title: "Make status follow the count and footer rules"
-updated_at: "2026-10-17T09:36:38.429542663+00:00"
+updated_at: "2026-10-17T09:42:38.160751086+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Mission validation (evidence atelier-pnha) found `status` breaking the contract 
 
 - Counts in headings follow the Counts rule, the `Next` section is last, and one label names scope counts everywhere.
 - Rendering tests cover each.
+
+## Close Reason
+
+status counts unassigned work in its summary (Unassigned work: N) with no count in the heading; label groups in status and work missions read '<label>: N open issues'; Other Local Work Branches precedes the Next footer, which is last; work mission, work parent and brief issue show label scope counts Scope:. Rendering tests cover each; evidence atelier-mtt5, atelier-mwtj, atelier-y9kg.
