@@ -6,7 +6,9 @@ labels:
 - "orientation"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-jcki"
   children: []
   attachments: []
   relates:

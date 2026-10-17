@@ -6,7 +6,15 @@ labels:
 - "orientation"
 priority: "P3"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-46nq"
+  - kind: "issue"
+    id: "atelier-5zta"
+  - kind: "issue"
+    id: "atelier-i2qq"
+  - kind: "issue"
+    id: "atelier-tf9n"
   children: []
   attachments: []
   relates:
