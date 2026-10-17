@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use atelier::commands;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
+use atelier_core::{EvidenceResult, FindingDecision};
 use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
 use std::env;
@@ -98,9 +99,9 @@ enum ReviewCommands {
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
-        /// Recommended decision: fix_now, defer or no_action
-        #[arg(long)]
-        recommendation: String,
+        /// Recommended decision
+        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
+        recommendation: FindingDecision,
     },
     /// Record an explicit trivial exemption, with why correctness is evident
     Trivial(ReviewArgs),
@@ -111,9 +112,9 @@ enum ReviewCommands {
         /// Who decides; defer and no_action need a non-author identity
         #[arg(long)]
         identity: String,
-        /// fix_now, defer or no_action
-        #[arg(long)]
-        decision: String,
+        /// The decision on the finding
+        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
+        decision: FindingDecision,
         /// For fix_now: the full commit that resolves the finding, later than its pin
         #[arg(long)]
         resolution_commit: Option<String>,
@@ -527,13 +528,17 @@ another target.")]
         #[arg(long = "kind")]
         evidence_kind: String,
         /// Explicit manual result; command capture derives it from the exit status
-        #[arg(long, conflicts_with = "command", value_parser = evidence_result_parser())]
+        #[arg(
+            long,
+            conflicts_with = "command",
+            value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str)
+        )]
         result: Option<atelier_core::EvidenceResult>,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
-        /// Relation to the target; validates is the only accepted role
-        #[arg(long, default_value = "validates")]
+        /// Relation to the target
+        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
         role: String,
         /// What the evidence shows; the same as the positional summary
         #[arg(long, conflicts_with = "summary_text")]
@@ -562,28 +567,41 @@ another target.")]
     Attach {
         /// Evidence record ID
         id: String,
-        /// Target record kind: issue or evidence
+        /// Target record kind
+        #[arg(value_parser = ["issue", "evidence"])]
         target_kind: String,
         /// Target record ID
         target_id: String,
-        /// Relation to the target; validates is the only accepted role
-        #[arg(long, default_value = "validates")]
+        /// Relation to the target
+        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
         role: String,
     },
     /// List evidence records, optionally filtering their explicit result
     List {
         /// Show only records with this result
-        #[arg(long, value_parser = evidence_result_parser())]
+        #[arg(long, value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str))]
         result: Option<atelier_core::EvidenceResult>,
     },
 }
 
-/// Parses an evidence result and lists every result in help.
-fn evidence_result_parser() -> impl TypedValueParser<Value = atelier_core::EvidenceResult> {
-    clap::builder::PossibleValuesParser::new(
-        atelier_core::EvidenceResult::ALL.map(atelier_core::EvidenceResult::as_str),
-    )
-    .map(|value| value.parse().expect("every possible value parses"))
+/// The relation roles evidence may have to its target.
+const EVIDENCE_ROLES: [&str; 1] = ["validates"];
+
+/// Lists `values` by name in help and parses a name back to its value, so
+/// any other name is a usage error.
+fn named_values<T, const N: usize>(
+    values: [T; N],
+    name: fn(T) -> &'static str,
+) -> impl TypedValueParser<Value = T>
+where
+    T: Copy + Send + Sync + 'static,
+{
+    clap::builder::PossibleValuesParser::new(values.map(name)).map(move |chosen| {
+        values
+            .into_iter()
+            .find(|value| name(*value) == chosen)
+            .expect("the parser accepts only listed names")
+    })
 }
 
 // ============================================================================
@@ -730,12 +748,7 @@ fn run() -> Result<()> {
                 ReviewCommands::Finding {
                     args,
                     recommendation,
-                } => append(
-                    args,
-                    ReviewEvent::Finding {
-                        recommendation: commands::review::decision(&recommendation)?,
-                    },
-                ),
+                } => append(args, ReviewEvent::Finding { recommendation }),
                 ReviewCommands::Disposition {
                     finding,
                     identity,
@@ -746,7 +759,7 @@ fn run() -> Result<()> {
                 } => commands::review::disposition(
                     &finding,
                     &identity,
-                    &decision,
+                    decision,
                     resolution_commit,
                     follow_up,
                     &summary,
@@ -998,7 +1011,7 @@ fn parse_cli_or_exit() -> Cli {
 #[cfg(test)]
 mod help_tests {
     use super::Cli;
-    use clap::{Command, CommandFactory};
+    use clap::{Command, CommandFactory, Parser};
 
     /// Every command in the tree, with its path, after globals propagate.
     /// clap's generated `help` subcommands take no arguments and are skipped.
@@ -1033,6 +1046,70 @@ mod help_tests {
             }
         }
         assert!(missing.is_empty(), "arguments without help: {missing:?}");
+    }
+
+    #[test]
+    fn fixed_values_are_listed_and_others_are_usage_errors() {
+        let cases: [(&[&str], &str); 7] = [
+            (
+                &[
+                    "review",
+                    "finding",
+                    "x",
+                    "s",
+                    "--identity",
+                    "i",
+                    "--recommendation",
+                ],
+                "fix_now, defer, no_action",
+            ),
+            (
+                &[
+                    "review",
+                    "disposition",
+                    "x",
+                    "s",
+                    "--identity",
+                    "i",
+                    "--decision",
+                ],
+                "fix_now, defer, no_action",
+            ),
+            (
+                &["evidence", "record", "--kind", "test", "s", "--result"],
+                "pass, fail, blocked, not-applicable",
+            ),
+            (
+                &["evidence", "list", "--result"],
+                "pass, fail, blocked, not-applicable",
+            ),
+            (
+                &["evidence", "record", "--kind", "test", "s", "--role"],
+                "validates",
+            ),
+            (
+                &["evidence", "attach", "e", "issue", "t", "--role"],
+                "validates",
+            ),
+            (&["evidence", "attach", "e", "t"], "issue, evidence"),
+        ];
+        for (args, values) in cases {
+            let args = std::iter::once("atelier")
+                .chain(args.iter().copied())
+                .chain(["bogus"]);
+            let error = match Cli::try_parse_from(args) {
+                Ok(_) => panic!("an option with values {values} accepted bogus"),
+                Err(error) => error,
+            };
+            assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+            assert_eq!(error.exit_code(), 2);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("[possible values: {values}]")),
+                "{error}"
+            );
+        }
     }
 
     #[test]

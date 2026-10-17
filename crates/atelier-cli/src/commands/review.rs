@@ -4,19 +4,6 @@ use atelier_app::record_ref::RecordKind;
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
 use atelier_core::{FindingDecision, ReviewEvent};
 
-pub fn decision(value: &str) -> Result<FindingDecision> {
-    match value {
-        "fix_now" => Ok(FindingDecision::FixNow),
-        "defer" => Ok(FindingDecision::Defer),
-        "no_action" => Ok(FindingDecision::NoAction),
-        _ => bail!(atelier_core::invalid_value_message(
-            "decision",
-            value,
-            &["fix_now", "defer", "no_action"]
-        )),
-    }
-}
-
 pub fn append(
     owner_ref: &str,
     identity: &str,
@@ -86,7 +73,7 @@ pub fn append(
 pub fn disposition(
     finding: &str,
     identity: &str,
-    decision: &str,
+    decision: FindingDecision,
     resolution: Option<String>,
     follow_up: Option<String>,
     summary: &str,
@@ -100,7 +87,7 @@ pub fn disposition(
         .map(|id| index.resolve(RecordKind::Issue, &id))
         .transpose()?;
     let event = ReviewEvent::Disposition {
-        decision: self::decision(decision)?,
+        decision,
         supersedes: index
             .latest_disposition(&finding)
             .map(|record| record.header.id.clone()),
