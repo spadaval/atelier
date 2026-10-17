@@ -52,55 +52,6 @@ impl MissionDashboardOptions {
     }
 }
 
-pub fn dashboards(index: &RecordIndex, quiet: bool) -> Result<()> {
-    if quiet {
-        println!("ready");
-        println!("human");
-        println!("blocked");
-        println!("active");
-        println!("all");
-        println!("missions");
-        println!("mission");
-        println!("parent");
-        return Ok(());
-    }
-
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let overview = mission_overview(index, policy.as_ref(), false)?;
-    let mut next = vec![
-        FooterAction::new("Browse ready work", "atelier work ready"),
-        FooterAction::new("Triage blockers", "atelier work blocked"),
-        FooterAction::new("Compare missions", "atelier work missions"),
-    ];
-    // The mission `work missions` lists first; with none open there is no
-    // dashboard to point at.
-    if let Some(top) = overview.missions.first() {
-        next.push(FooterAction::new(
-            "Open the top mission's dashboard",
-            format!("atelier work mission {}", top.issue.id),
-        ));
-    }
-    print_page(
-        "Atelier Work",
-        [
-            render_lines_section(
-                "Dashboards",
-                [
-                    "ready    Small top-level executable work picker",
-                    "human    Ready work only the human can do (needs-human)",
-                    "blocked  Repo-wide blocker triage",
-                    "missions Flat mission summaries with complete scope counts",
-                    "mission  Live mission orchestration dashboard",
-                    "parent   A parent issue and its children",
-                ],
-            ),
-            render_footer_section(RenderContext::for_stdout(), next),
-        ],
-        RenderContext::for_stdout(),
-    );
-    Ok(())
-}
-
 pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut buckets = atelier_app::work_classification::work_buckets(index, policy.as_ref())?;

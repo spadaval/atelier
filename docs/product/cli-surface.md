@@ -1,14 +1,15 @@
 # CLI Surface
 
 The primary interface is the `atelier` CLI and tracked Markdown. Read command
-help for exact flags. Use `target/debug/atelier` to try changes; the installed
+help for exact flags. Root help lists every command from its own description,
+then the common commands in lifecycle order. Use `target/debug/atelier` to try changes; the installed
 binary runs the Claude Code hooks (see [development setup](development-setup.md)).
 
 | Surface | Purpose |
 | --- | --- |
 | `init` | Initialize repository records and policy. |
 | `status` | Orient a session: checkout, owner, work, missions, and labeled branch summaries. |
-| `work` | Ready, blocked, active, all, and mission views. |
+| `work` | Ready, human, blocked, active, all, mission, parent, and mission overview views; bare `work` lists them. |
 | `issue` | Create, list, show, update, transition, note, link, and unlink work. |
 | `start` | Prepare the branch owner and start selected work. |
 | `bundle` | Preview and apply one-shot graph input. |
@@ -20,6 +21,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `setup` | Install supported harness hooks. |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
+| `migrate` | Apply one-shot record migrations, such as `migrate epics`. |
 
 ## Orientation and ordinary work
 
@@ -100,6 +102,6 @@ records and policy; it does not repair a hidden cache. Prune is dry-run by defau
 and removes only eligible artifacts in apply mode. Commit canonical deletions.
 
 Removed surfaces include provider review, review rooms, transition actions,
-`work queue`, `history`, `doctor`, `man`, `rules`, telemetry, import/export, hidden branch
+`work queue`, `history`, `man`, `rules`, telemetry, import/export, hidden branch
 helpers, cache rebuild, and a TUI. Use ordinary Git for history and recovery.
 There is no compatibility command layer.
