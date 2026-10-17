@@ -455,8 +455,8 @@ impl RecordIndex {
         roots: &mut BTreeSet<&'a String>,
         errors: &mut Vec<anyhow::Error>,
     ) -> Result<()> {
-        // Each missing reference is reported here, and checks that need the
-        // referenced record are skipped.
+        // Every missing reference is reported here before any other check,
+        // and checks that need a missing record are skipped.
         let mut exists = |relation: &str, kind: &str, id: &str| {
             self.ensure_reference(("review", &record.header.id), relation, kind, id)
                 .map_err(|error| errors.push(error))
@@ -473,7 +473,11 @@ impl RecordIndex {
             if let Some(issue) = follow_up {
                 exists("follow-up", "issue", issue);
             }
-            if !exists("finding", "review", finding) {
+            let finding_exists = exists("finding", "review", finding);
+            let supersedes_exists = supersedes
+                .as_ref()
+                .is_none_or(|previous| exists("supersedes", "review", previous));
+            if !finding_exists || !supersedes_exists {
                 return Ok(());
             }
             let original = &self.reviews[finding];
@@ -486,9 +490,6 @@ impl RecordIndex {
                 );
             }
             if let Some(previous) = supersedes {
-                if !exists("supersedes", "review", previous) {
-                    return Ok(());
-                }
                 let previous_record = &self.reviews[previous];
                 if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
                 {
@@ -1632,6 +1633,74 @@ mod tests {
         assert_eq!(
             index.resolve_issue_ref("child").unwrap().as_deref(),
             Some("atelier-child")
+        );
+    }
+
+    fn disposition(
+        id: &str,
+        target: &str,
+        finding: &str,
+        supersedes: &str,
+        follow_up: &str,
+    ) -> ReviewRecord {
+        let commit = "a".repeat(40);
+        let text = format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: decided\ntarget: {target}\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: disposition\n  finding: {finding}\n  decision: fix_now\n  supersedes: {supersedes}\n  resolution_commit: {commit}\n  follow_up: {follow_up}\n---\n\ndecided\n"
+        );
+        atelier_records::review::parse_review_record(&text, Path::new(&format!("reviews/{id}.md")))
+            .unwrap()
+    }
+
+    fn review_validation_errors(reviews: Vec<ReviewRecord>) -> Vec<String> {
+        let dir = tempdir().unwrap();
+        RecordIndex::validation_errors(
+            &dir.path().join(".atelier"),
+            vec![issue_record("atelier-real", "task", "todo")],
+            Vec::new(),
+            reviews,
+        )
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+    }
+
+    #[test]
+    fn disposition_missing_finding_and_supersedes_reports_each_once() {
+        let errors = review_validation_errors(vec![disposition(
+            "atelier-dsp1",
+            "atelier-real",
+            "atelier-nofi",
+            "atelier-nosu",
+            "null",
+        )]);
+        let path = ".atelier/reviews/atelier-dsp1.md";
+        assert_eq!(
+            errors,
+            [
+                format!("Review atelier-dsp1 in {path} has finding reference to missing review atelier-nofi"),
+                format!("Review atelier-dsp1 in {path} has supersedes reference to missing review atelier-nosu"),
+            ]
+        );
+    }
+
+    #[test]
+    fn review_with_every_reference_missing_reports_each_once() {
+        let errors = review_validation_errors(vec![disposition(
+            "atelier-dsp2",
+            "atelier-gone",
+            "atelier-nofi",
+            "atelier-nosu",
+            "atelier-nofu",
+        )]);
+        let path = ".atelier/reviews/atelier-dsp2.md";
+        assert_eq!(
+            errors,
+            [
+                format!("Review atelier-dsp2 in {path} has review target reference to missing issue atelier-gone"),
+                format!("Review atelier-dsp2 in {path} has follow-up reference to missing issue atelier-nofu"),
+                format!("Review atelier-dsp2 in {path} has finding reference to missing review atelier-nofi"),
+                format!("Review atelier-dsp2 in {path} has supersedes reference to missing review atelier-nosu"),
+            ]
         );
     }
 
