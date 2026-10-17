@@ -26,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Make status the session-start view and retire prime"
-updated_at: "2026-10-17T02:21:43.908405570+00:00"
+updated_at: "2026-10-17T02:35:36.819123298+00:00"
 ---
 
 ## Goal
