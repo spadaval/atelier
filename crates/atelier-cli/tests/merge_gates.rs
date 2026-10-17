@@ -2128,7 +2128,8 @@ fn merge_commit_strategy_lands_a_clean_branch_on_a_moved_base_and_land_accepts_i
     assert!(
         output.contains("pass review.current")
             && output.contains("pass shell.check")
-            && output.contains("pass merge.merged_tree: merge_checks ran on merged tree"),
+            && output.contains("pass merge.merged_tree: merge_checks ran on merged tree")
+            && output.contains("and passed: test -f src.rs"),
         "{output}"
     );
     assert_eq!(git(fixture.path(), &["rev-parse", "main"]), base);
@@ -2145,8 +2146,12 @@ fn merge_commit_strategy_lands_a_clean_branch_on_a_moved_base_and_land_accepts_i
         git(fixture.path(), &["show", "main:shared.txt"]),
         "base\n2\n3\n4\nbranch"
     );
-    assert!(git(fixture.path(), &["log", "-1", "--format=%B", "main"])
-        .contains("merge_checks passed on this tree"));
+    let message = git(fixture.path(), &["log", "-1", "--format=%B", "main"]);
+    assert!(
+        message.contains("merge_checks passed on this tree")
+            && message.contains("- shell.check: test -f src.rs"),
+        "{message}"
+    );
     // The merge commit is the only commit merge creates.
     assert_eq!(
         git(
@@ -2258,6 +2263,7 @@ fn merge_commit_strategy_runs_merge_checks_on_the_merged_tree_and_refuses_a_brok
         !passed
             && output.contains("FAIL shell.check")
             && output.contains("Cargo.lock lacks log needed by tools/Cargo.toml")
+            && output.contains("FAIL merge.merged_tree")
             && output.contains("merge blocked: shell.check"),
         "{output}"
     );
@@ -2338,4 +2344,23 @@ fn merge_commit_strategy_gates_the_records_the_base_gained_after_the_fork_point(
     commit(other.path(), "base blocks the item");
     git(other.path(), &["switch", "-q", &other.branch]);
     other.refusal("blockers.none_open");
+}
+
+#[test]
+fn merge_commit_strategy_needs_a_shell_check_to_prove_the_merged_tree() {
+    // Record checks read records, not the merged tree, so they prove nothing
+    // about what merging would build.
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &[]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path)
+        .unwrap()
+        .replace("merge_checks: []", "merge_checks:\n  - lint.none_blocking");
+    fs::write(&path, policy).unwrap();
+    commit(fixture.path(), "only a record check");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    fixture.refusal("merge_unproven");
+    assert_eq!(worktrees(fixture.path()), 1);
 }

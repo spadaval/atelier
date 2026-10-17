@@ -83,6 +83,18 @@ fn merged_tree(
     Ok(tree)
 }
 
+/// The commands of the `merge_checks` that run on the merged tree; the other
+/// checks read records, so they prove nothing about what merging builds.
+fn tree_checks(policy: &WorkflowPolicy) -> impl Iterator<Item = &str> {
+    policy
+        .merge_checks
+        .iter()
+        .filter_map(|check| match &check.params {
+            Some(ValidatorParams::ShellCheck { command }) => Some(command.as_str()),
+            _ => None,
+        })
+}
+
 /// The merge commit object; it reaches the base only if its tree passes.
 fn merge_commit(
     repo: &Path,
@@ -91,15 +103,8 @@ fn merge_commit(
     (base, base_head): (&str, &str),
     (branch, head): (&str, &str),
 ) -> Result<String> {
-    let checks = policy
-        .merge_checks
-        .iter()
-        .map(|check| match &check.params {
-            Some(ValidatorParams::ShellCheck { command }) => {
-                format!("- {}: {command}", check.builtin)
-            }
-            _ => format!("- {}", check.builtin),
-        })
+    let checks = tree_checks(policy)
+        .map(|command| format!("- shell.check: {command}"))
         .collect::<Vec<_>>()
         .join("\n");
     let message = format!(
@@ -267,8 +272,8 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let tree = if strategy == MergeStrategy::MergeCommit {
         // Evidence at the branch head does not prove a tree the base has
         // changed; only checks run on the merged tree can.
-        if source.policy.merge_checks.is_empty() {
-            bail!("merge_unproven: merge_strategy merge_commit needs merge_checks in the base policy for {base}; they run on the merged tree, which evidence at the branch head does not prove");
+        if tree_checks(&source.policy).next().is_none() {
+            bail!("merge_unproven: merge_strategy merge_commit needs a shell.check in the base policy's merge_checks for {base}; it runs on the merged tree, which evidence at the branch head and record checks do not prove");
         }
         Some(merged_tree(repo, base, &base_head, &branch, &head)?)
     } else {
@@ -331,13 +336,23 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             .map_or(repo, |(_, _, checkout, _)| checkout.path.as_path()),
     )?;
     if let Some((tree, _, _, _)) = &merge {
+        // Only the shell checks examined the merged tree; it is proven when
+        // they passed there.
+        let passed = nodes
+            .iter()
+            .any(|node| node.check == "shell.check" && node.passed);
+        let commands = tree_checks(&source.policy).collect::<Vec<_>>().join("; ");
         nodes.push(review_gate::GateNode {
             kind: "workflow_validator",
             id: format!("{owner}/merge.merged_tree"),
             target: owner.into(),
             check: "merge.merged_tree".into(),
-            passed: true,
-            reason: format!("merge_checks ran on merged tree {tree} of {branch} into {base} at {base_head}; evidence at the branch head does not prove it"),
+            passed,
+            reason: if passed {
+                format!("merge_checks ran on merged tree {tree} of {branch} into {base} at {base_head} and passed: {commands}; evidence at the branch head does not prove it")
+            } else {
+                format!("merged tree {tree} of {branch} into {base} at {base_head} is unproven: shell.check failed on it: {commands}")
+            },
             supports: Vec::new(),
             stale_from_checkout: false,
         });
