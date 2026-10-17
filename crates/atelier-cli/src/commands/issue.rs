@@ -17,8 +17,8 @@ use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Issue, ISSUE_NOTE_KINDS};
-use atelier_records::{validate_issue_type, validate_priority};
+use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
+use atelier_records::validate_issue_type;
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
@@ -854,7 +854,7 @@ pub fn create_lifecycle(
             MAX_ISSUE_TITLE_LEN
         );
     }
-    validate_priority(input.priority)?;
+    let priority = IssuePriority::from_cli_input(input.priority)?.label();
     validate_configured_issue_type(state_dir, input.issue_type)?;
     let parent_id = input
         .parent
@@ -886,7 +886,7 @@ pub fn create_lifecycle(
             description: description.clone(),
             status: initial_status,
             issue_type: input.issue_type.to_string(),
-            priority: input.priority.to_string(),
+            priority: priority.to_string(),
             strategy: input
                 .strategy
                 .map(|path| mission_strategy(state_dir, input.issue_type, path))
@@ -1109,8 +1109,7 @@ pub fn update_lifecycle(
         changed_fields.push("title");
     }
     if let Some(priority) = input.priority {
-        validate_priority(priority)?;
-        record.issue.priority = priority.to_string();
+        record.issue.priority = IssuePriority::from_cli_input(priority)?.label().to_string();
         changed_fields.push("priority");
     }
     if let Some(issue_type) = input.issue_type {

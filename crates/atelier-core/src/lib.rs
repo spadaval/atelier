@@ -49,49 +49,71 @@ impl IssuePriority {
         }
     }
 
+    /// Parses the stored form, `P0`-`P3`.
     pub fn from_canonical_token(value: &str) -> Result<Self, ParseIssuePriorityError> {
         match value {
             "P0" => Ok(Self::P0),
             "P1" => Ok(Self::P1),
             "P2" => Ok(Self::P2),
             "P3" => Ok(Self::P3),
-            other => Err(ParseIssuePriorityError::new(other)),
+            other => Err(ParseIssuePriorityError::new(other, PriorityForm::Stored)),
         }
     }
 
+    /// Parses the displayed word, `critical`, `high`, `medium` or `low`.
     pub fn from_label(value: &str) -> Result<Self, ParseIssuePriorityError> {
         match value {
             "critical" => Ok(Self::P0),
             "high" => Ok(Self::P1),
             "medium" => Ok(Self::P2),
             "low" => Ok(Self::P3),
-            other => Err(ParseIssuePriorityError::new(other)),
+            other => Err(ParseIssuePriorityError::new(other, PriorityForm::Label)),
         }
     }
 
+    /// Parses command input, which accepts the stored form and the word alike.
     pub fn from_cli_input(value: &str) -> Result<Self, ParseIssuePriorityError> {
-        Self::from_label(value)
+        Self::from_canonical_token(value)
+            .or_else(|_| Self::from_label(value))
+            .map_err(|_| ParseIssuePriorityError::new(value, PriorityForm::Either))
     }
+}
+
+/// The stored priority tokens with their words, as record errors state them.
+pub const ISSUE_PRIORITY_STORED_FORMS: &str = "P0 (critical), P1 (high), P2 (medium) or P3 (low)";
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum PriorityForm {
+    Stored,
+    Label,
+    Either,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParseIssuePriorityError {
     value: String,
+    expected: PriorityForm,
 }
 
 impl ParseIssuePriorityError {
-    fn new(value: &str) -> Self {
+    fn new(value: &str, expected: PriorityForm) -> Self {
         Self {
             value: value.to_string(),
+            expected,
         }
     }
 }
 
 impl fmt::Display for ParseIssuePriorityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let valid = match self.expected {
+            PriorityForm::Stored => "P0, P1, P2, P3",
+            PriorityForm::Label => "critical, high, medium, low",
+            PriorityForm::Either => "P0 or critical, P1 or high, P2 or medium, P3 or low",
+        };
         write!(
             f,
-            "Invalid priority '{}'. Valid values: critical, high, medium, low",
+            "Invalid priority '{}'. Valid values: {valid}",
             self.value
         )
     }
@@ -802,7 +824,34 @@ mod tests {
         let token_error = IssuePriority::from_canonical_token("high").unwrap_err();
         assert_eq!(
             token_error.to_string(),
-            "Invalid priority 'high'. Valid values: critical, high, medium, low"
+            "Invalid priority 'high'. Valid values: P0, P1, P2, P3"
         );
+
+        let input_error = IssuePriority::from_cli_input("urgent").unwrap_err();
+        assert_eq!(
+            input_error.to_string(),
+            "Invalid priority 'urgent'. Valid values: P0 or critical, P1 or high, P2 or medium, P3 or low"
+        );
+    }
+
+    #[test]
+    fn issue_priority_cli_input_accepts_stored_tokens_and_words() {
+        for priority in [
+            IssuePriority::P0,
+            IssuePriority::P1,
+            IssuePriority::P2,
+            IssuePriority::P3,
+        ] {
+            assert_eq!(
+                IssuePriority::from_cli_input(priority.canonical_token()),
+                Ok(priority)
+            );
+            assert_eq!(
+                IssuePriority::from_cli_input(priority.label()),
+                Ok(priority)
+            );
+        }
+        assert!(IssuePriority::from_cli_input("p1").is_err());
+        assert!(IssuePriority::from_cli_input("High").is_err());
     }
 }

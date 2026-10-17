@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
+    ISSUE_PRIORITY_STORED_FORMS,
 };
 pub use atelier_core::{
     EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueSectionName,
@@ -84,8 +85,10 @@ fn validate_token(value: &str, field: &str, label: &str) -> Result<()> {
     }
 }
 
+/// Validates an in-memory priority, which is always the word; commands
+/// normalize their input with `IssuePriority::from_cli_input` first.
 pub fn validate_priority(priority: &str) -> Result<()> {
-    IssuePriority::from_cli_input(priority)
+    IssuePriority::from_label(priority)
         .map(|_| ())
         .map_err(Into::into)
 }
@@ -750,8 +753,10 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         description: None,
         status: status.clone(),
         issue_type,
-        priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
-            .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
+        priority: db_priority(
+            &require_scalar(&front_matter, "priority", relative)?,
+            relative,
+        )?,
         strategy,
         workflow_branch,
         parent_id: None,
@@ -2205,10 +2210,15 @@ fn canonical_priority(priority: &str) -> String {
         .unwrap_or_else(|_| priority.to_string())
 }
 
-fn db_priority(priority: &str) -> Result<String> {
+fn db_priority(priority: &str, relative: &Path) -> Result<String> {
     IssuePriority::from_canonical_token(priority)
         .map(|priority| priority.label().to_string())
-        .map_err(Into::into)
+        .map_err(|_| {
+            anyhow!(
+                "priority '{priority}' in {}: records store {ISSUE_PRIORITY_STORED_FORMS}",
+                display_state_path(relative)
+            )
+        })
 }
 
 fn normalize_body(body: &str) -> String {
@@ -2989,7 +2999,10 @@ Legacy evidence summary.
             .replace("priority: \"P1\"", "priority: \"high\"");
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
-        assert!(error.to_string().contains("Invalid priority"));
+        assert_eq!(
+            error.to_string(),
+            "priority 'high' in .atelier/issues/atelier-abcd.md: records store P0 (critical), P1 (high), P2 (medium) or P3 (low)"
+        );
     }
 
     #[test]

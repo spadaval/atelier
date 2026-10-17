@@ -21,6 +21,12 @@ result against Done when, or for `supersede` why the work will not happen.
 Test names, measurements, and review status belong in evidence and review
 records, not here.
 
+Priority has two spellings for four values: records store `P0`, `P1`, `P2`
+and `P3`, which views print as `critical`, `high`, `medium` and `low`. The
+`-p`/`--priority` flags on `issue create`, `issue update` and `issue list`
+accept either spelling; bundles take the word. `check` rejects a record that
+stores the word, and names the stored token it needs.
+
 Any work item can be a parent: it may own direct children, one level deep, so a
 child has no children of its own (atelier-9vq3, decided by Sumeet 2026-10-15;
 this replaced the epic type, because elsewhere "epic" usually means a theme and
