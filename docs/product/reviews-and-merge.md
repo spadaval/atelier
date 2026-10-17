@@ -115,15 +115,25 @@ Under `merge_commit`, a branch that is behind the base can land without
 catching up. Merge builds Git's merge of the work branch into the current base
 with `git merge-tree --write-tree` and refuses with `merge_conflict`, naming
 the files, if any path conflicts; resolve those on the work branch as above.
-Evidence at the branch head does not prove the merged tree, so the policy must
-have `merge_checks` (otherwise `merge_unproven`), and they run in a temporary
-detached checkout of the merge commit instead of the work checkout. The gate
-output adds `merge.merged_tree`, naming the tree and base commit the checks ran
-on, and the merge commit's message lists the checks that passed on its tree.
-The merge commit reaches the base only when every gate passes and the base has
-not moved during the checks (`merge_snapshot_changed`). The approval of the
-branch head carries over, because a clean merge combines two reviewed changes
-and nobody edited the result. A lockfile that merges cleanly but is
+Evidence at the branch head does not prove the merged tree, so `merge_checks`
+must include a `shell.check` (otherwise `merge_unproven`); record checks such
+as `lint.none_blocking` read records and prove nothing about the tree. The
+checks run in a temporary detached checkout of the merge commit instead of the
+work checkout. The gate output adds `merge.merged_tree`, which passes only when
+the shell checks passed there and names the tree, base commit, and commands,
+and the merge commit's message lists those commands.
+
+The gates read the records of the merge commit, which is what the base would
+get, so a blocker the base added or reopened holds the merge. Review and
+evidence pins are judged only along the work branch, though, so merge refuses
+with `merge_base_records`, naming the files, when the base changed an in-scope
+issue, or a review or evidence record about one, since the branch left it:
+merge the base into the work branch so the gates judge them, then retry. Other
+base records do not touch the approval, which is judged on the work branch's
+history: it carries over, because a clean merge combines two reviewed changes
+and nobody edited the result. The merge commit reaches the base only when every
+gate passes and the base has not moved during the checks
+(`merge_snapshot_changed`). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
