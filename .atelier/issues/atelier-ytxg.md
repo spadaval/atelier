@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T09:11:15.692262634+00:00"
+status: "done"
 title: "Name the flag that shows the rest on every truncated list"
-updated_at: "2026-10-17T09:06:11.230743341+00:00"
+updated_at: "2026-10-17T09:11:15.692262634+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-17T09:06:11.230743341+00:00"
 
 - Every `... N more` line names a command or flag that shows the rest, or the list is not cut.
 - A rendering test covers each.
+
+## Close Reason
+
+Every truncated list now names the command that shows the rest, or is not cut: unassigned groups in status and work missions name `atelier work missions --all`, status's hidden-label count names `atelier work missions`, work missions --all also lifts the 20-mission and 5-item limits (folds in atelier-6trx), and issue show --full's Impact list is no longer cut. Rendering tests cover each.
