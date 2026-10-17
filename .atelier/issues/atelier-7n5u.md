@@ -4,6 +4,9 @@ id: "atelier-7n5u"
 issue_type: "bug"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-7n5u
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Mark ready work that is already in flight on another local branch"
-updated_at: "2026-10-16T23:04:58.129176254+00:00"
+updated_at: "2026-10-17T02:56:43.823215543+00:00"
 ---
 
 ## Goal
