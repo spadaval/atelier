@@ -63,9 +63,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T10:00:51.799144180+00:00"
+status: "done"
 title: "Share one output contract across every Atelier command"
-updated_at: "2026-10-17T05:23:01.143453389+00:00"
+updated_at: "2026-10-17T10:00:51.799144180+00:00"
 ---
 
 ## Outcome
@@ -98,3 +99,7 @@ On 2026-10-16, at the human's direction, the 106 audit items were split by surfa
 
 - 2026-10-17 [note] Filed from a six-surface CLI audit (99 items, all backlog). Depends on ADR 0022 (atelier-bw0b) being accepted, but that is deliberately not a blocked_by link: a link would edit bw0b's record on master and stale its pending approval on task/atelier-bw0b when master is merged in. Open question for the human: a spike on a Markdown bundle input format instead of JSON with escaped Markdown bodies.
 - 2026-10-17 [note] Split by the human's direction (Sumeet, 2026-10-16: break up over-scoped missions). 106 items was one mission across 15 surfaces. This mission keeps the cross-cutting output contract and help (14 items). The surfaces moved to: atelier-rc8j (gates: land, merge, review, evidence), atelier-uf97 (issue commands and start), atelier-4pzj (status and work views), atelier-2mky (bundle and check), atelier-nn9y (init, setup, prune, policy). The retrospective's integration items moved to atelier-k8h8. The old S5 transcript measure is now measured per surface mission. Renderer blocked_by links were kept.
+
+## Close Reason
+
+S1-S5 pass on master at 8aac392d (independent validation atelier-ba8q, after atelier-pnha failed S3 and S4 and four gap items were merged). All 28 scoped items are done and independently reviewed. The written contract is human-cli-output.md, with shared helpers and rendering tests. The Outcome's first sentence holds only for the surfaces this mission owned: verdict lines, mutation confirmations, and review show and review list output are delegated, as the Outcome states, to the surface missions (rc8j, uf97, 4pzj, 2mky, nn9y), where they are still backlog. Non-blocking gaps are filed as atelier-d8ku (rc8j) and atelier-sl01 (uf97).
