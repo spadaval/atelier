@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T07:03:57.703371896+00:00"
+status: "done"
 title: "Use one footer heading and hint format across views"
-updated_at: "2026-10-17T06:29:36.741779740+00:00"
+updated_at: "2026-10-17T07:03:57.703371896+00:00"
 ---
 
 ## Goal
@@ -47,3 +48,7 @@ Line formats differ too: `Label: command`, bare commands (the `issue link` foote
 ## Context
 
 The human's feedback on `atelier work missions`. Pairs with the hint-ID and state-aware-footer items.
+
+## Close Reason
+
+Every next-step footer goes through render_footer: one Next section of '  <label>: <command>' lines, omitted when empty; work missions rows read 'More info: atelier work mission <id>'; transition options show 'Command:'; the transitive-blocker hint is one sentence, so 'Hint: Next:' is gone. human-cli-output.md has a Next Footer rule. Proven by the fixture-repo test rendered_views_use_one_next_footer_and_no_retired_headings and the full suite (atelier-2aka), fmt (atelier-o3pt) and diff --check (atelier-j7kw).
