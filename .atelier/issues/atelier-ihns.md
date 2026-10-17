@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Show the between-missions state in status and work missions"
-updated_at: "2026-10-17T03:03:27.960827128+00:00"
+updated_at: "2026-10-17T03:15:20.745451266+00:00"
 ---
 
 ## Goal
