@@ -27,9 +27,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T19:40:36.752829447+00:00"
+status: "done"
 title: "Review a finished mission with atelier debrief"
-updated_at: "2026-10-17T19:22:43.084632814+00:00"
+updated_at: "2026-10-17T19:40:36.752829447+00:00"
 ---
 
 ## Goal
@@ -62,3 +63,19 @@ The view model lives in a new atelier-app module (`mission_review`), with one bu
   Reason: The strategy keeps pages in the ignored runtime directory and has T3 Code open them; a fixed name per mission lets a regenerated page replace the old one
 - 2026-10-17 [decision] Date an item's joining from the earlier of the first item version and the first mission version holding the advances link
   Reason: Older records stored the link on the mission's side and a later change moved it to the item, which made kgcr's items look added after the mission closed
+
+## Close Reason
+
+`atelier debrief <mission>` reviews a mission from its records and Git history, as dense Markdown and as a self-contained HTML page from one view model: criteria with proof and its age, each item's implementer report, the decision log, derived deviations, mission review events and follow-ups.
+
+### Deviations
+Review atelier-gq88 and atelier-yx83 changed the history query from a date-ordered walk to HEAD's first-parent history with merges read as their change to the base, and added reading of retired epic records; without them the real mission kgcr missed seven deviations and merged branch work looked reopened.
+
+### Decisions
+See this item's decision notes: proof aged to the mission's close, the page's fixed path, and joining dated from either record.
+
+### Surprises
+The repository's own history had moved link storage and retired the epic shape, so a debrief of an old mission must read records as they were then. The page could not be viewed in a browser here; the preview sandbox is blocked on this host.
+
+### Open items
+- atelier-lfs7: the human's review of a real HTML debrief (S7).
