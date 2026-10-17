@@ -12,7 +12,7 @@ relationships:
   relates:
   - kind: "issue"
     id: "atelier-r6bt"
-    type: "related"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

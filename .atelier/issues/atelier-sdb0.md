@@ -11,7 +11,10 @@ relationships:
     id: "atelier-jjvc"
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-1w8c"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

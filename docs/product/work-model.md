@@ -15,7 +15,11 @@ state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
 Missions and work items may also carry an optional Background section: the
 research, references, and motivation that a mission or every child of a parent
 shares, so it lives in the record instead of a side document.
-Notes and Close Reason carry dated handoffs and terminal reasons.
+Notes carry dated handoffs. Close Reason is required by done-category
+transitions and checked by `land`: one or two sentences giving the observable
+result against Done when, or for `supersede` why the work will not happen.
+Test names, measurements, and review status belong in evidence and review
+records, not here.
 
 Any work item can be a parent: it may own direct children, one level deep, so a
 child has no children of its own (atelier-9vq3, decided by Sumeet 2026-10-15;

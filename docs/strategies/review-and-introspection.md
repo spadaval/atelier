@@ -1,7 +1,7 @@
 ---
 status: draft
 mission: atelier-r6bt
-last_changed: "2026-10-16: HTML reviews for humans, dense Markdown for agents (human direction)"
+last_changed: "2026-10-17: report extends Close Reason, two-field decisions, criterion naming decided first, stsa joins (human direction)"
 ---
 
 # Why
@@ -35,19 +35,25 @@ and `debrief`, without `brief`.
 
 # Success Criteria
 
-- S1: An agent can record a decision made inside a work item, with the
-  choice, rejected alternatives, reason, and whether it is reversible or
-  one-way. `check` refuses malformed entries, and one-way decisions can be
-  listed across a mission. Shown by CLI integration tests.
-- S2: Repository policy can require an implementer report when a work item
-  closes: outcome, deviations from the plan, decisions, surprises, and open
-  items. A missing or empty report fails the close transition with a
-  recovery step. Shown by transition tests, with this repository's policy
-  enabling it.
+- S1: An agent can record a decision made inside a work item as a typed
+  note. The choice and the reason are required; rejected alternatives are
+  optional; a decision is reversible unless marked one-way. `check` refuses
+  malformed entries, and one-way decisions can be listed across a mission.
+  Shown by CLI integration tests.
+- S2: The implementer report is the Close Reason, extended. Close Reason
+  stays the required Outcome: one or two sentences giving the observable
+  result against Done when, or for `supersede` why the work will not happen.
+  Repository policy can also require the report's other parts when a work
+  item closes: deviations from the plan, decisions, surprises, and open
+  items. A missing or empty required part fails the close transition with a
+  recovery step, and `land` checks it on committed claims as it checks Close
+  Reason today. Every existing done record stays valid. Shown by transition
+  and `land` tests, with this repository's policy enabling it.
 - S3: A decision record can link the ADR it produced and supersede an earlier
   decision. Views show which decisions are current. Shown by CLI tests.
 - S4: `atelier debrief <mission>` produces a review containing: the outcome
-  against each success criterion with linked proof, each item's report, the
+  against each success criterion with linked proof (named as S3 decides),
+  each item's report, the
   decision log with one-way decisions first, derived deviations (scope added
   after the mission started, scope dropped, deferred findings, non-pass or
   stale evidence, trivial exemptions, reopened items), and follow-ups.
@@ -61,12 +67,19 @@ and `debrief`, without `brief`.
   and risks. A human's plan approval, recorded as an ordinary review event on
   the mission, appears in both the brief and the debrief. Shown by a fixture
   test.
-- S6: `prime` and `issue show` surface the current decisions that bear on the
-  item being worked, through its parent and mission. Shown by CLI tests.
+- S6: `status` and `issue show` surface the current decisions that bear on
+  the item being worked, through its parent and mission: the brief view shows
+  the count and the one-way decisions, and the full view shows them all.
+  Shown by CLI tests.
 - S7: A real mission run after S1 and S2 land produces an HTML debrief that
   the human, opening it in T3 Code, judges good enough for post-mission
-  review without asking the agent to run more commands. Shown by human
-  review, recorded as a review event.
+  review without asking the agent to run more commands. The candidate is the
+  orientation mission (ADR 0022 follow-ups), run with decision capture and
+  reports switched on. Shown by human review, recorded as a review event
+  that names the commit the debrief was generated from.
+- S8: `work mission` shows each success criterion with a proven, unproven,
+  or failing mark derived from linked evidence, using the same criterion
+  parsing and proof naming as S4 (atelier-stsa). Shown by CLI tests.
 
 # Shape
 
@@ -79,9 +92,23 @@ and `debrief`, without `brief`.
 - **Reports are views.** `brief` and `debrief` are deterministic, read-only
   commands. They write nothing and never present a receipt as passing
   without checking its result and freshness.
+- **One record-history query.** Mission start, reopen events, scope added
+  after start, and recent activity all ask when a record first appeared or
+  changed status. One Git-derived query answers them, built so its walks
+  scale with the mission's records, not with review events (atelier-83xi and
+  atelier-7b6e record the cost of per-path walks). `debrief` runs on demand;
+  anything shown at session start stays bounded or waits until the query is
+  cheap.
+- **Capture happens after review without staling it.** Close Reason is
+  already exempt from approval freshness, so an agent can write it after
+  approval. The report's other parts get the same exemption, and the close
+  transition reads them from the record body or a file, not a flag.
 - **One view model, two renderings.** Each review is computed once, then
-  rendered as dense Markdown for agents and as HTML for humans, so the forms
-  cannot disagree. Agent output follows ADR 0022 (atelier-bw0b): dense,
+  rendered as dense Markdown for agents and as HTML for humans, so the facts
+  cannot disagree; a fixture test checks that every item, criterion mark, and
+  decision in one form appears in the other. Each renderer uses its medium
+  fully: the HTML page may lead with a summary and use collapsible sections,
+  tables, and anchors. Agent output follows ADR 0022 (atelier-bw0b): dense,
   structured Markdown with scanning symbols, and no JSON or YAML modes.
 - **HTML pages are static documents.** A review page is one self-contained
   file with inline CSS, its own light and dark palette, no external
@@ -108,7 +135,8 @@ and `debrief`, without `brief`.
 
 # Scope
 
-In: record formats, `check` and transition validation, `prime`, `issue show`,
+In: record formats, `check` and transition validation, `status`, `issue show`,
+`work mission` criterion marks,
 the new `brief` and `debrief` commands with their Markdown and HTML forms,
 this repository's workflow policy, product and architecture docs (including
 a `PRODUCT_INTENT.md` sentence that static HTML review pages are documents,
@@ -139,12 +167,14 @@ record type or directory, and changes to `PRODUCT_INTENT.md` principles.
   a summary first, with sections that expand; the Markdown form may need a
   summary by default with a full flag.
 - ADR 0022 (atelier-bw0b) is not yet accepted. If it changes the dense-output
-  rule, the agent rendering follows it. atelier-stsa (success criteria and
-  their proof in `work mission`) overlaps S4 and should share its criterion
-  parsing rather than build a second one.
+  rule, the agent rendering follows it. The mission does not start until it
+  is accepted.
+- How evidence and issues name the criterion they prove is the first
+  decision of the mission (a decision record blocking S4 and S8); nothing is
+  built on criteria until it is made. The default to test: criteria parsed
+  from the strategy's `- S<n>:` bullets, and a criterion list on evidence
+  receipts.
 - Mission start time and reopen events may not be derivable cheaply without
   a history store. Check what Git history gives before designing deviations.
-- Whether the report replaces Close Reason or sits beside it, and how
-  existing records migrate, is undecided.
 - Path-scoped decisions (surfacing decisions by the files they affect) may
   help agents more than item-scoped ones. Defer until S6 shows a gap.
