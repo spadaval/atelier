@@ -3697,7 +3697,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
         git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
     };
 
-    // A blocker link is written only to the blocker's record.
+    // A blocker link is written only to the blocked record (atelier-ihss).
     let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
     ok(
         f.path(),

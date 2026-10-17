@@ -589,6 +589,11 @@ fn touched_claims(
     .lines()
     .map(str::to_owned)
     .collect::<std::collections::BTreeSet<_>>();
+    // Typed links a record declares that the gates follow; the other record
+    // may not store them (atelier-ihss).
+    fn chained(relation_type: &str) -> bool {
+        matches!(relation_type, "advances" | atelier_records::BLOCKED_BY)
+    }
     fn linked(
         record: &atelier_records::CanonicalIssueRecord,
         touched: &mut std::collections::BTreeSet<String>,
@@ -608,7 +613,7 @@ fn touched_claims(
                 .relationships
                 .relates
                 .iter()
-                .filter(|link| link.kind == "issue" && link.relation_type == "advances")
+                .filter(|link| link.kind == "issue" && chained(&link.relation_type))
                 .map(|link| link.id.clone()),
         );
     }
@@ -674,13 +679,14 @@ fn touched_claims(
     }
     // The blocker and open-work checks follow whole chains: blockers of
     // blockers, blockers a parent passes to its children, children of
-    // children, and work that advances a mission, in either direction. A
-    // claim is checked when anything along its chain changed.
-    let mut advanced_by = std::collections::BTreeMap::<String, Vec<String>>::new();
+    // children, and work that advances a mission, in either direction, so
+    // a record also reaches the records that declare a link to it. A claim
+    // is checked when anything along its chain changed.
+    let mut declared_by = std::collections::BTreeMap::<String, Vec<String>>::new();
     for record in index.issue_records() {
         for link in &record.relationships.relates {
-            if link.kind == "issue" && link.relation_type == "advances" {
-                advanced_by
+            if link.kind == "issue" && chained(&link.relation_type) {
+                declared_by
                     .entry(link.id.clone())
                     .or_default()
                     .push(record.issue.id.to_string());
@@ -689,7 +695,7 @@ fn touched_claims(
     }
     let mut queue = touched.iter().cloned().collect::<Vec<_>>();
     while let Some(id) = queue.pop() {
-        let mut next = advanced_by
+        let mut next = declared_by
             .get(&id)
             .cloned()
             .unwrap_or_default()

@@ -184,10 +184,10 @@ menus in every row. Errors name the failed invariant or path and give a useful
 recovery step. Optional verbosity may show check details and command context.
 
 `--quiet` limits output to essential IDs, counts, and result tokens. It does not
-hide failures or change behavior. Diagnostic logging uses `--log-level` and
-`--log-format`; logging is not a second work-state store. Color and terminal
-width may improve scanning without changing meaning or breaking redirected
-output.
+hide failures or change behavior. Atelier has no diagnostic logging options;
+`--log-level`, `--log-format`, `ATELIER_LOG` and `ATELIER_LOG_FORMAT` were
+removed. Warnings go to stderr as plain text. Color and terminal width may
+improve scanning without changing meaning or breaking redirected output.
 
 See [inventory and mission views](issue-inventory-and-mission-overview.md) and
 [work ordering](work-view-ordering.md) for view semantics.
