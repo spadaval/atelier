@@ -7,7 +7,9 @@ labels:
 - "cross-cutting"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-e95f"
   children: []
   attachments: []
   relates:
@@ -55,3 +57,7 @@ The doc plus the shared renderers in `crates/atelier-cli/src/human_output.rs`, a
 ## Context
 
 Extends atelier-deyy, which writes the first dense-output rule and the `work` view rows, so this is blocked by it. ADR 0022 Decision 3.
+
+## Unknowns
+
+- Design the item-line contract and the shared row and heading helpers so built-in views could later be expressed as declarative view definitions (filter, fields from a fixed vocabulary, shared sort, grouping) without changing their output. atelier-e95f, custom work views, depends on this. It is not a requirement here; it is a design constraint to keep open.
