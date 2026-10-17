@@ -457,7 +457,22 @@ fn scoped_dashboard(
         InFlight::default()
     };
     let context = RenderContext::for_stdout();
-    let mut panels = vec![render_metadata(None, &metadata)];
+    // A mission's success criteria lead its summary, each marked by its
+    // proof (atelier-stsa).
+    let criteria = if issue.issue_type == "mission"
+        && matches!(filter, DashboardFilter::Summary | DashboardFilter::All)
+    {
+        let repo_root = crate::commands::workflow::repo_root()?;
+        let mut read = atelier_app::git_freshness::ReadContext::new(&repo_root);
+        let proof = atelier_app::criteria::mission_proof(index, &mut read, &id)?;
+        if let Some(counts) = criterion_counts(&proof) {
+            metadata.push(("Criteria", counts));
+        }
+        criteria_panel(context, &proof)
+    } else {
+        Vec::new()
+    };
+    let mut panels = vec![render_metadata(None, &metadata), criteria];
     panels.extend(
         work.panels(&issue, filter, &in_flight.marks)
             .into_iter()
@@ -742,6 +757,105 @@ fn transition_readiness(
                 .cloned()
                 .unwrap_or_else(|| "blocked".to_string())
         ))
+    }
+}
+
+/// `<n> criteria: <n> proven (<n> before later code commits), <n> failing,
+/// <n> unproven`, zeros left out; `None` when the mission defines no
+/// criteria. The parenthesis keeps old proof from reading as current.
+fn criterion_counts(proof: &atelier_app::criteria::MissionProof) -> Option<String> {
+    use atelier_app::criteria::CriterionMark;
+    let total = proof.proofs.len();
+    if total == 0 {
+        return None;
+    }
+    let count = |mark: CriterionMark| proof.proofs.iter().filter(|p| p.mark == mark).count();
+    let aged = proof
+        .proofs
+        .iter()
+        .filter(|p| p.mark == CriterionMark::Proven)
+        .filter(|p| {
+            p.deciding()
+                .and_then(|receipt| receipt.code_commits_since)
+                .is_some_and(|count| count > 0)
+        })
+        .count();
+    let parts = [
+        CriterionMark::Proven,
+        CriterionMark::Failing,
+        CriterionMark::Unproven,
+    ]
+    .into_iter()
+    .map(|mark| (count(mark), mark))
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, mark)| {
+        if mark == CriterionMark::Proven && aged > 0 {
+            format!("{count} proven ({aged} before later code commits)")
+        } else {
+            format!("{count} {}", mark.word())
+        }
+    })
+    .collect::<Vec<_>>();
+    let noun = if total == 1 { "criterion" } else { "criteria" };
+    Some(format!("{total} {noun}: {}", parts.join(", ")))
+}
+
+/// One row per criterion, `<slug> <mark> <claim> | <deciding receipt>`,
+/// then what could not be read as a criterion or names one the mission
+/// does not define.
+fn criteria_panel(
+    context: RenderContext,
+    proof: &atelier_app::criteria::MissionProof,
+) -> Vec<String> {
+    use atelier_app::criteria::CriterionMark;
+    let mut rows = Vec::new();
+    for criterion in &proof.proofs {
+        let mark = match criterion.mark {
+            CriterionMark::Proven => "✓ proven",
+            CriterionMark::Failing => "⚠ failing",
+            CriterionMark::Unproven => "unproven",
+        };
+        let mut row = format!(
+            "{} {mark} {}",
+            criterion.criterion.slug,
+            first_sentence(&criterion.criterion.text)
+        );
+        if let Some(receipt) = criterion.deciding() {
+            row.push_str(&format!(
+                " | {} {} at {}",
+                receipt.evidence_id,
+                receipt.result.as_str(),
+                crate::human_output::short_commit(&receipt.commit)
+            ));
+            match receipt.code_commits_since {
+                Some(0) | None => {}
+                Some(1) => row.push_str(" | 1 code commit since"),
+                Some(count) => row.push_str(&format!(" | {count} code commits since")),
+            }
+        }
+        rows.extend(render_row_wrapped(context, &row));
+    }
+    for problem in &proof.criteria.parse.problems {
+        rows.extend(render_row_wrapped(context, &format!("⚠ {problem}")));
+    }
+    for (evidence_id, slug) in &proof.orphaned {
+        rows.extend(render_row_wrapped(
+            context,
+            &format!("⚠ {evidence_id} names criterion {slug}, which this mission does not define"),
+        ));
+    }
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    render_lines_section("Success Criteria", rows)
+}
+
+/// The text up to its first sentence end, so a row names the claim without
+/// the criterion's whole proof plan.
+fn first_sentence(text: &str) -> &str {
+    match text.find(". ") {
+        Some(end) => &text[..=end],
+        None => text,
     }
 }
 

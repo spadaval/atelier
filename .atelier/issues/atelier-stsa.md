@@ -11,16 +11,14 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-ho7o"
-    type: "blocked_by"
-  - kind: "issue"
     id: "atelier-r6bt"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T18:44:19.650398257+00:00"
+status: "done"
 title: "Show a mission's success criteria and their proof in the mission dashboard"
-updated_at: "2026-10-17T17:26:01.541129982+00:00"
+updated_at: "2026-10-17T18:44:19.650398257+00:00"
 ---
 
 ## Goal
@@ -38,3 +36,23 @@ How evidence or issues name the criterion they support (a `criteria` field, an `
 ## Notes
 
 - 2026-10-17 [note] 2026-10-17: atelier-et6q decided. Criteria are '- <slug>: <text>' bullets (S<n> still accepted) from the strategy or the mission's Success criteria section; receipts carry --criterion <slug>=<result>; check refuses unknown criteria. This item and debrief (S4) share one parser.
+- 2026-10-17 [plan] 2026-10-17: joined atelier-ho7o as its child, so the proof lookup and the dashboard marks that exercise it are built and reviewed together on feature/atelier-ho7o.
+- 2026-10-17 [decision] Show each criterion's first sentence in work mission
+  Reason: Strategy criteria run to a paragraph with their proof plan; the first sentence names the claim and keeps one line per item
+  Rejected: the full text, wrapped
+
+## Close Reason
+
+`work mission` lists each success criterion of the mission marked proven, failing or unproven from the receipts that name it, with the deciding receipt, its age in code commits, and a Criteria count line.
+
+### Deviations
+Built on atelier-ho7o's branch as its child rather than separately after it, so the proof lookup and the view that exercises it were reviewed together. A blocked receipt reads unproven, not failing, after review.
+
+### Decisions
+Rows show each criterion's first sentence (decision note on this item).
+
+### Surprises
+None.
+
+### Open items
+None.

@@ -70,6 +70,8 @@ pub fn evidence_record(id: &str, issue_id: &str, role: &str) -> EvidenceRecord {
             spawn_error: None,
             output: None,
             target: None,
+            criteria: Vec::new(),
+            criteria_mission: None,
         },
         summary: "Fixture evidence.".to_string(),
     }

@@ -10,7 +10,7 @@ use atelier_app::record_index::RecordIndex;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
-    EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceResult,
+    EvidenceCriterion, EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceResult,
     EvidenceStreamSummary, EvidenceTarget, RecordLink,
 };
 use atelier_records::{validate_record_kind, RecordStore};
@@ -30,6 +30,8 @@ pub struct CaptureOptions<'a> {
     pub target_id: Option<&'a str>,
     pub role: &'a str,
     pub command: &'a [String],
+    /// Criterion slugs; each takes the captured result.
+    pub criteria: &'a [String],
     pub quiet: bool,
 }
 
@@ -84,10 +86,20 @@ pub fn add_returning_id(
     uri: Option<&str>,
     producer: Option<&str>,
     target: Option<TargetMetadata<'_>>,
+    criteria: &[EvidenceCriterion],
 ) -> Result<String> {
     if let Some(target) = target.as_ref() {
         validate_record_ref(index, target.kind, target.id, target.role)?;
     }
+    let criteria_mission = check_criteria(
+        index,
+        state_dir,
+        target.as_ref().map(|target| (target.kind, target.id)),
+        &criteria
+            .iter()
+            .map(|criterion| criterion.slug.as_str())
+            .collect::<Vec<_>>(),
+    )?;
     let data = EvidenceRecordData {
         commit: atelier_app::git_freshness::head_commit(
             state_dir
@@ -116,11 +128,75 @@ pub fn add_returning_id(
             id: target.id.to_string(),
             role: target.role.to_string(),
         }),
+        criteria: criteria.to_vec(),
+        criteria_mission,
     };
     let created = atelier_app::project_config::record_store(state_dir)?
         .create_evidence(summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
     Ok(id)
+}
+
+/// `--criterion <slug>=<result>` values for manual proof.
+pub fn manual_criteria(values: &[String]) -> Result<Vec<EvidenceCriterion>> {
+    values
+        .iter()
+        .map(|value| {
+            value
+                .parse::<EvidenceCriterion>()
+                .map_err(anyhow::Error::msg)
+        })
+        .collect()
+}
+
+/// `--criterion <slug>` values for command capture, which derives each
+/// criterion's result from the exit status.
+pub fn captured_criteria(values: &[String]) -> Result<Vec<String>> {
+    values
+        .iter()
+        .map(|value| {
+            if value.contains('=') {
+                bail!("command capture derives each criterion's result from the exit status; pass `--criterion {}` without a result", value.split('=').next().unwrap_or_default());
+            }
+            if !atelier_core::is_criterion_slug(value) {
+                bail!("`{value}` is not a criterion slug; use lowercase kebab-case, such as `pipe-safe`, or `S<n>`");
+            }
+            Ok(value.clone())
+        })
+        .collect()
+}
+
+/// A receipt names only criteria its target's single mission defines, and
+/// each once; the answer is that mission, stored on the receipt.
+fn check_criteria(
+    index: &RecordIndex,
+    state_dir: &Path,
+    target: Option<(&str, &str)>,
+    slugs: &[&str],
+) -> Result<Option<String>> {
+    if slugs.is_empty() {
+        return Ok(None);
+    }
+    if let Some(slug) = slugs
+        .iter()
+        .enumerate()
+        .find_map(|(position, slug)| slugs[..position].contains(slug).then_some(slug))
+    {
+        bail!("--criterion names {slug} more than once");
+    }
+    let Some(("issue", target_id)) = target else {
+        bail!("--criterion needs an issue --target: the mission whose criteria it names, or an item only that mission holds");
+    };
+    let repo_root = state_dir
+        .parent()
+        .context("state directory has no repository parent")?;
+    match atelier_app::criteria::receipt_criteria_mission(index, repo_root, target_id, slugs)? {
+        Ok(mission) => Ok(Some(mission)),
+        Err(problems) => bail!(
+            "This receipt {}. Name the criteria as the mission's Success Criteria bullets spell them (`atelier work mission <id>` lists them)",
+            problems.join("; ")
+        ),
+    }
 }
 
 pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
@@ -261,7 +337,29 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             id: target.id.to_string(),
             role: target.role.to_string(),
         }),
+        criteria: Vec::new(),
+        criteria_mission: None,
     };
+    let mut data = data;
+    data.criteria = options
+        .criteria
+        .iter()
+        .map(|slug| EvidenceCriterion {
+            slug: slug.clone(),
+            result: data.result,
+        })
+        .collect();
+    data.criteria_mission = check_criteria(
+        &index,
+        &state_dir,
+        options.target_kind.zip(resolved_target_id.as_deref()),
+        &options
+            .criteria
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    )
+    .context("evidence capture postflight criteria check failed; no evidence was written")?;
     let body = atelier_records::render_evidence_transcript(&summary, &data);
 
     let created = RecordStore::for_project(&state_dir, &association.project_slug)
@@ -303,6 +401,17 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
         options.role,
     )
     .context("evidence capture preflight target validation failed; the command was not executed")?;
+    check_criteria(
+        &index,
+        &state_dir,
+        options.target_kind.zip(resolved_target_id.as_deref()),
+        &options
+            .criteria
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    )
+    .context("the command was not executed")?;
     let dirty = atelier_app::git_freshness::working_paths(layout.repo_root())?;
     if dirty
         .iter()
@@ -678,10 +787,18 @@ fn print_record_with_targets(
         println!("{label:<12} {value}");
     }
     let target = (!targets.is_empty()).then(|| targets.join(", "));
+    let criteria = (!data.criteria.is_empty()).then(|| {
+        data.criteria
+            .iter()
+            .map(|criterion| format!("{} {}", criterion.slug, criterion.result.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    });
     for (label, value) in [
         ("Command:", data.command.as_deref()),
         ("Exit Status:", data.exit_status.as_deref()),
         ("Target:", target.as_deref()),
+        ("Criteria:", criteria.as_deref()),
     ] {
         if let Some(value) = value {
             println!("{label:<12} {value}");

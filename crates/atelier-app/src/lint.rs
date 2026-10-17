@@ -134,6 +134,9 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         }));
     }
 
+    // Receipt criteria need a loadable index, so only invalid records hold
+    // them back, not unrelated issue findings.
+    let records_valid = findings.is_empty();
     let scoped_records = files
         .issues
         .iter()
@@ -144,6 +147,13 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         scoped_id.is_some(),
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
+    if records_valid {
+        findings.extend(criteria_findings(
+            state_dir,
+            repo_root,
+            scoped_id.as_deref(),
+        )?);
+    }
 
     Ok(LintView {
         scoped_id,
@@ -253,6 +263,60 @@ pub fn issue_findings<'a>(
         }
     }
     findings
+}
+
+/// Receipts that name mission criteria (atelier-et6q): each named criterion
+/// must be one the target's mission defines, so a typo or a renamed slug is
+/// never silent. Scoped to one issue, only receipts targeting it, or for a
+/// mission, receipts targeting it or an item in its scope.
+fn criteria_findings(
+    state_dir: &Path,
+    repo_root: &Path,
+    scoped_id: Option<&str>,
+) -> Result<Vec<LintFinding>> {
+    let index = RecordIndex::load(state_dir)?;
+    let scope = match scoped_id {
+        Some(id)
+            if index
+                .issue_record(id)
+                .is_some_and(|record| record.issue.issue_type == "mission") =>
+        {
+            let mut scope = crate::objective_graph::mission_issue_ids(&index, id)?;
+            scope.insert(id.to_string());
+            Some(scope)
+        }
+        Some(id) => Some(std::collections::BTreeSet::from([id.to_string()])),
+        None => None,
+    };
+    let mut findings = Vec::new();
+    for record in index.evidence_records() {
+        let Some(mission) = record.data.criteria_mission.as_deref() else {
+            continue;
+        };
+        let target = record
+            .data
+            .target
+            .as_ref()
+            .filter(|target| target.kind == "issue")
+            .map(|target| target.id.as_str());
+        let in_scope = |id: &str| scope.as_ref().is_none_or(|scope| scope.contains(id));
+        if !in_scope(mission) && !target.is_some_and(in_scope) {
+            continue;
+        }
+        let slugs = record
+            .data
+            .criteria
+            .iter()
+            .map(|criterion| criterion.slug.as_str())
+            .collect::<Vec<_>>();
+        for problem in crate::criteria::undefined_criteria(&index, repo_root, mission, &slugs)? {
+            findings.push(LintFinding {
+                id: record.header.id.clone(),
+                message: format!("Evidence {problem}"),
+            });
+        }
+    }
+    Ok(findings)
 }
 
 /// Mission strategy links: each mission's strategy path is the canonical

@@ -556,6 +556,12 @@ another target.")]
         /// Who or what produced the evidence, such as an agent name
         #[arg(long)]
         producer: Option<String>,
+        /// A mission success criterion this receipt judges, as <slug>=<result>
+        /// for manual proof, or a bare <slug> that takes a captured command's
+        /// result; repeat for several. Needs --target on the mission, or on an
+        /// item that only that mission holds
+        #[arg(long = "criterion", value_name = "CRITERION")]
+        criteria: Vec<String>,
         /// Manual evidence summary; command-backed evidence passes its command after `--`
         summary_text: Option<String>,
         /// Command to run and capture; its exit status sets the result
@@ -811,6 +817,7 @@ fn run() -> Result<()> {
                 path,
                 uri,
                 producer,
+                criteria,
                 summary_text,
                 command,
             } => {
@@ -849,6 +856,7 @@ fn run() -> Result<()> {
                                 role: &role,
                             }
                         }),
+                        &commands::evidence::manual_criteria(&criteria)?,
                     )?;
                     if let Some((kind, id)) = resolved_target {
                         commands::evidence::attach_silently(
@@ -875,6 +883,7 @@ fn run() -> Result<()> {
                         target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
                         role: &role,
                         command: &command,
+                        criteria: &commands::evidence::captured_criteria(&criteria)?,
                         quiet,
                     })
                 }
