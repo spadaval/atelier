@@ -1,0 +1,33 @@
+---
+created_at: "2026-10-17T08:21:38.945007213+00:00"
+id: "atelier-467y"
+issue_type: "bug"
+labels:
+- "cli-output"
+priority: "P3"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates:
+  - kind: "issue"
+    id: "atelier-rc8j"
+    type: "advances"
+schema: "atelier.issue"
+schema_version: 2
+status: "backlog"
+title: "Give land's Stop-hook refusal one code and one recovery step"
+updated_at: "2026-10-17T08:21:38.945007213+00:00"
+---
+
+## Goal
+
+Found in review of atelier-91w1:
+- The land hook's block reason (`crates/atelier-cli/src/commands/session.rs`, about line 460) appends "Fix the named check or hand off…" after the error's own `Next:` step, so the agent gets two recovery steps (finding atelier-268e).
+- Any snapshot failure that is not an uncommitted-record error, Git failures included, is labelled `land_records_uncommitted` with a "commit records" step (about lines 51-57), contradicting the rule that Git failures carry no code (finding atelier-owat).
+
+## Done when
+
+- A hook block reason carries exactly one recovery step.
+- Only an uncommitted-record failure is coded `land_records_uncommitted`; other snapshot failures keep their own message.
+- Tests cover a hook refusal and a Git failure during land.
