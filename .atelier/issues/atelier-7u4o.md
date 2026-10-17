@@ -4,6 +4,9 @@ id: "atelier-7u4o"
 issue_type: "feature"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-7u4o
 priority: "P2"
 relationships:
   blocks:
@@ -20,9 +23,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make issue show brief by default and accept several IDs"
-updated_at: "2026-10-16T23:04:58.306346849+00:00"
+updated_at: "2026-10-17T02:21:54.384528199+00:00"
 ---
 
 ## Goal
