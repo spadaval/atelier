@@ -2,7 +2,7 @@ schema: atelier.workflow
 schema_version: 3
 branch_policy:
   base_branch: master
-  merge_strategy: fast_forward_only
+  merge_strategy: merge_commit
 issue_types:
   bug:
     label: Bug
@@ -157,3 +157,16 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
+# Run on the merged tree in a temporary checkout. Tests keep TMPDIR inside its
+# ignored target/, since /tmp on this host is a small tmpfs.
+merge_checks:
+  - shell.check:
+      command: "git diff --check HEAD^ HEAD -- . ':!.atelier'"
+  - shell.check:
+      command: "cargo fmt -- --check"
+  - shell.check:
+      command: "cargo metadata --locked --format-version 1 > /dev/null"
+  - shell.check:
+      command: "mkdir -p target/tmp && TMPDIR=\"$PWD/target/tmp\" cargo nextest run"
+  - shell.check:
+      command: "mkdir -p target/tmp && TMPDIR=\"$PWD/target/tmp\" cargo nextest run --features test-hooks"

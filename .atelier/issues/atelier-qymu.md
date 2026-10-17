@@ -4,6 +4,9 @@ id: "atelier-qymu"
 issue_type: "task"
 labels:
 - "adoption"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-qymu
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Integrate this repository's work with merge_commit and the full suite on the merged tree"
-updated_at: "2026-10-17T15:43:38.142328911+00:00"
+updated_at: "2026-10-17T15:43:44.306340755+00:00"
 ---
 
 ## Goal
