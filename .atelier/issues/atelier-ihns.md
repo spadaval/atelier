@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-10-17T03:26:57.272598982+00:00"
+status: "done"
 title: "Show the between-missions state in status and work missions"
-updated_at: "2026-10-17T03:15:20.745451266+00:00"
+updated_at: "2026-10-17T03:26:57.272598982+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ The status and Mission Overview renderers and their tests. No new record fields.
 ## Context
 
 Seen on master on 2026-10-16: mission atelier-kgcr done, 13 unassigned issues. `docs/product/issue-inventory-and-mission-overview.md`.
+
+## Close Reason
+
+With no open mission, status and work missions name the last closed mission and group open work outside open missions by label; independently reviewed; suites pass after merging master.
