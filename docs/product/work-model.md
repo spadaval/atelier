@@ -54,8 +54,9 @@ cannot be reversed cheaply. The note stores the choice on its first line and
 indented `Reason:` and `Rejected:` lines, tagged `[decision]` or
 `[decision one-way]`. `check` refuses a decision note without a choice or a
 reason. `work decisions <mission>` lists the decisions across a mission's
-scope: one-way notes first, then current decision records, then reversible
-notes, then superseded records.
+scope: one-way notes first, then current decision records (decided and not
+superseded), then reversible notes, then open decision records, which are
+proposals and not yet in force, then superseded records.
 
 Backlog conventions (decision atelier-ermg, under atelier-b7hb):
 

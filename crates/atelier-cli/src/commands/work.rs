@@ -10,8 +10,8 @@ use atelier_core::Issue;
 use crate::commands::git::InFlight;
 use crate::human_output::{
     count_noun, last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_unassigned_groups, scope_counts, FooterAction,
-    IssueListPanel, IssueListRow, ItemLine, RenderContext, TextStyle,
+    render_lines_section, render_metadata, render_row_wrapped, render_unassigned_groups,
+    scope_counts, FooterAction, IssueListPanel, IssueListRow, ItemLine, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -744,9 +744,9 @@ fn transition_readiness(
     }
 }
 
-/// `work decisions <mission>`: the decisions made across a mission's scope,
-/// one-way decision notes first, then decision records, then reversible
-/// notes. Superseded decision records follow, and malformed notes last.
+/// `work decisions <mission>`: the decisions made across a mission's scope.
+/// One-way decision notes lead, then current decision records and
+/// reversible notes; open and superseded records and malformed notes follow.
 pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<()> {
     let id = crate::commands::issue::resolve_id(index, mission_ref)?;
     let mission = index.require_issue(&id)?;
@@ -780,51 +780,50 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
         return Ok(());
     }
     let context = RenderContext::for_stdout();
-    let note_line = |note: &atelier_app::decisions::NoteDecision| {
-        let decision = &note.decision;
-        let mut line = format!(
-            "{} {} {} | because {}",
-            note.issue_id, decision.date, decision.choice, decision.reason
-        );
-        if !decision.rejected.is_empty() {
-            line.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
-        }
-        line
+    let note_lines = |one_way: bool| {
+        decisions
+            .notes
+            .iter()
+            .filter(|note| note.decision.one_way == one_way)
+            .flat_map(|note| {
+                let decision = &note.decision;
+                let mut row = format!(
+                    "{} {} {} | because {}",
+                    note.issue_id, decision.date, decision.choice, decision.reason
+                );
+                if !decision.rejected.is_empty() {
+                    row.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
+                }
+                render_row_wrapped(context, &row)
+            })
+            .collect::<Vec<_>>()
     };
-    let record_line = |record: &atelier_app::decisions::RecordDecision| {
-        let issue = &record.issue;
-        let category = policy
-            .as_ref()
-            .and_then(|policy| policy.status_category(&issue.status));
-        let mut line = ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
-            .state(category, None);
-        if let Some(adr) = &issue.adr {
-            line = line.cue(format!("ADR {}", adr.path));
-        }
-        if !record.supersedes.is_empty() {
-            line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
-        }
-        if !record.superseded_by.is_empty() {
-            line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
-        }
-        line.render_wrapped(context, "")
+    let record_lines = |keep: &dyn Fn(&atelier_app::decisions::RecordDecision) -> bool| {
+        decisions
+            .records
+            .iter()
+            .filter(|record| keep(record))
+            .flat_map(|record| {
+                let issue = &record.issue;
+                let category = policy
+                    .as_ref()
+                    .and_then(|policy| policy.status_category(&issue.status));
+                let mut line =
+                    ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+                        .state(category, None);
+                if let Some(adr) = &issue.adr {
+                    line = line.cue(format!("ADR {}", adr.path));
+                }
+                if !record.supersedes.is_empty() {
+                    line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
+                }
+                if !record.superseded_by.is_empty() {
+                    line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
+                }
+                line.render_wrapped(context, "")
+            })
+            .collect::<Vec<_>>()
     };
-    let one_way = decisions
-        .notes
-        .iter()
-        .filter(|note| note.decision.one_way)
-        .map(note_line)
-        .collect::<Vec<_>>();
-    let reversible = decisions
-        .notes
-        .iter()
-        .filter(|note| !note.decision.one_way)
-        .map(note_line)
-        .collect::<Vec<_>>();
-    let (current, superseded): (Vec<_>, Vec<_>) = decisions
-        .records
-        .iter()
-        .partition(|record| record.is_current());
     let section = |title: &str, lines: Vec<String>| {
         if lines.is_empty() {
             Vec::new()
@@ -835,10 +834,20 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
     let malformed = decisions
         .malformed
         .iter()
-        .map(|note| format!("⚠ {} {} {}", note.issue_id, note.date, note.defect))
+        .flat_map(|note| {
+            render_row_wrapped(
+                context,
+                &format!(
+                    "⚠ {} decision note {} ({}) {}",
+                    note.issue_id, note.number, note.date, note.defect
+                ),
+            )
+        })
         .collect::<Vec<_>>();
-    let total = decisions.notes.len() + decisions.records.len();
-    let summary = if total == 0 && malformed.is_empty() {
+    let summary = if decisions.notes.is_empty()
+        && decisions.records.is_empty()
+        && decisions.malformed.is_empty()
+    {
         vec!["No decisions recorded in this mission's scope.".to_string()]
     } else {
         Vec::new()
@@ -855,15 +864,19 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
         &format!("Decisions: {title}"),
         [
             summary,
-            section("One-way Decisions", one_way),
+            section("One-way Decisions", note_lines(true)),
             section(
                 "Decision Records",
-                current.into_iter().flat_map(record_line).collect(),
+                record_lines(&|record| record.is_current()),
             ),
-            section("Reversible Decisions", reversible),
+            section("Reversible Decisions", note_lines(false)),
+            section(
+                "Open Decision Records",
+                record_lines(&|record| !record.decided && !record.is_superseded()),
+            ),
             section(
                 "Superseded Decisions",
-                superseded.into_iter().flat_map(record_line).collect(),
+                record_lines(&|record| record.is_superseded()),
             ),
             section("Malformed Decision Notes", malformed),
             render_footer_section(

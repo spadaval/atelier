@@ -75,6 +75,21 @@ their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
 `review list` in atelier-h6o4, `review show` in atelier-3u2u, and
 `evidence list` in atelier-u0ig.
 
+### Decision Rows
+
+`work decisions` lists decision records as item lines, with `| ADR <path>`,
+`| supersedes <ids>` and `| superseded by <ids>` cues. A decision note is not
+an item, so it has its own row, in the same field order:
+
+```
+<item-id> <date> <choice> | because <reason>[ | rejected <alternative>; ...]
+⚠ <item-id> decision note <n> (<date>) <defect>
+```
+
+The second form lists a note `check` refuses, numbered as `check` numbers
+it. Both rows wrap as item lines do, continuing on lines indented past the
+rows.
+
 ### Commits and Timestamps
 
 - A commit is shown by its first 8 characters. The full 40 appear only where

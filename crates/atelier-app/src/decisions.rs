@@ -19,10 +19,12 @@ pub struct NoteDecision {
     pub decision: DecisionNote,
 }
 
-/// A decision note `check` refuses, with its defect.
+/// A decision note `check` refuses, with its defect. `number` counts the
+/// item's decision notes from 1, as `check` names them.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MalformedDecision {
     pub issue_id: String,
+    pub number: usize,
     pub date: String,
     pub defect: String,
 }
@@ -32,14 +34,22 @@ pub struct MalformedDecision {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecordDecision {
     pub issue: Issue,
+    /// Closed with its Decision, and not retired by its own status.
+    pub decided: bool,
     pub superseded_by: Vec<String>,
     pub supersedes: Vec<String>,
 }
 
 impl RecordDecision {
-    /// Not replaced by a decided record, and not retired by its own status.
+    /// Decided, and not replaced by a decided record. An open decision
+    /// record is a proposal and changes nothing until it is decided.
     pub fn is_current(&self) -> bool {
-        self.superseded_by.is_empty() && self.issue.status != "superseded"
+        self.decided && self.superseded_by.is_empty()
+    }
+
+    /// Replaced by a decided record or retired by its own status.
+    pub fn is_superseded(&self) -> bool {
+        !self.superseded_by.is_empty() || self.issue.status == "superseded"
     }
 }
 
@@ -82,18 +92,22 @@ pub fn decisions_in(
         let Some(record) = index.issue_record(id) else {
             continue;
         };
-        for note in record.sections.note_entries() {
-            match DecisionNote::from_note(&note) {
-                Some(Ok(decision)) => decisions.notes.push(NoteDecision {
+        let notes = record.sections.note_entries();
+        let parsed = notes
+            .iter()
+            .filter_map(|note| Some((note, DecisionNote::from_note(note)?)));
+        for (number, (note, decision)) in parsed.enumerate() {
+            match decision {
+                Ok(decision) => decisions.notes.push(NoteDecision {
                     issue_id: id.clone(),
                     decision,
                 }),
-                Some(Err(defect)) => decisions.malformed.push(MalformedDecision {
+                Err(defect) => decisions.malformed.push(MalformedDecision {
                     issue_id: id.clone(),
+                    number: number + 1,
                     date: note.date.clone(),
                     defect,
                 }),
-                None => {}
             }
         }
         if record.issue.issue_type == "decision" {
@@ -132,6 +146,7 @@ pub fn record_decision(
     supersedes.sort();
     RecordDecision {
         issue: issue.clone(),
+        decided: decided(policy, issue),
         superseded_by,
         supersedes,
     }

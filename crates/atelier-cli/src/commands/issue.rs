@@ -1394,7 +1394,8 @@ pub fn append_note(
         {
             bail!("--rejected must name an alternative");
         }
-        DecisionNote::note_parts(text, reason, decision.rejected, decision.one_way)
+        DecisionNote::checked_note_parts(text, reason, decision.rejected, decision.one_way)
+            .map_err(|defect| anyhow!("Cannot record this decision: {defect}"))?
     } else {
         if decision.reason.is_some() || !decision.rejected.is_empty() || decision.one_way {
             bail!("--reason, --rejected and --one-way apply only to `--kind decision`");

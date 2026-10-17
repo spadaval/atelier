@@ -194,6 +194,88 @@ fn check_refuses_malformed_decision_notes() {
         output.contains(&format!("{work}: Decision note 3 (2026-10-18) tag [decision maybe] is not [decision] or [decision one-way]")),
         "{output}"
     );
+    let mission = issue_id_by_title(dir.path(), "Mission");
+    let view = ok(dir.path(), &["work", "decisions", &mission]);
+    assert!(
+        view.contains(&format!(
+            "⚠ {work} decision note 2 (2026-10-18) has no reason"
+        )),
+        "{view}"
+    );
+}
+
+#[test]
+fn decision_notes_never_store_what_check_refuses() {
+    let dir = tempdir().unwrap();
+    let (_, work, _, _) = mission_fixture(dir.path());
+    // A label inside a multi-line choice is folded into the choice line.
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "note",
+            &work,
+            "--kind",
+            "decision",
+            "Use V\nReason: injected",
+            "--reason",
+            "R",
+        ],
+    );
+    assert!(read_canonical_record(dir.path(), "issues", &work)
+        .contains("[decision] Use V Reason: injected\n  Reason: R\n"));
+    for args in [
+        &["Reason: leading label", "--reason", "R"][..],
+        &["Choice", "--reason", "R", "--rejected", "Rejected: nested"],
+    ] {
+        let mut full = vec!["issue", "note", &work, "--kind", "decision"];
+        full.extend_from_slice(args);
+        let stderr = refused(dir.path(), &full);
+        assert!(
+            stderr.contains("must not start with `Reason:` or `Rejected:`"),
+            "{stderr}"
+        );
+    }
+    ok(dir.path(), &["check"]);
+}
+
+#[test]
+fn long_decision_rows_continue_past_the_rows() {
+    let dir = tempdir().unwrap();
+    let (mission, work, _, _) = mission_fixture(dir.path());
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "note",
+            &work,
+            "--kind",
+            "decision",
+            "Choose the long option that needs several words to say",
+            "--reason",
+            "because the explanation is also long enough to wrap",
+        ],
+    );
+    let (success, view, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["work", "decisions", &mission],
+        &[("COLUMNS", "50")],
+    );
+    assert!(success, "{stderr}");
+    let reversible = view.find("Reversible Decisions").expect(&view);
+    let rows = view[reversible..]
+        .lines()
+        .skip(2)
+        .take_while(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    assert!(rows.len() > 1, "{view}");
+    assert!(rows[0].starts_with(&work), "{view}");
+    assert!(
+        rows[1..]
+            .iter()
+            .all(|line| line.starts_with("    ") && line.len() <= 50),
+        "{view}"
+    );
 }
 
 #[test]
@@ -241,13 +323,24 @@ fn decision_records_link_an_adr_and_show_supersession() {
         ],
     );
 
-    // An undecided newer record does not yet replace the old decision.
+    // An undecided newer record does not yet replace the old decision, and
+    // is not current itself.
     let view = ok(dir.path(), &["work", "decisions", &mission]);
     assert!(!view.contains("Superseded Decisions"), "{view}");
+    let records = view.find("Decision Records\n").expect(&view);
+    let open = view.find("Open Decision Records").expect(&view);
     assert!(
-        view.contains(&format!("{old} ✓ done medium Old decision")),
+        view[records..open].contains(&format!("{old} ✓ done medium Old decision")),
         "{view}"
     );
+    assert!(
+        view[open..].contains(&format!(
+            "{new} todo medium New decision | ADR docs/adr/0001-choice.md | supersedes {old}"
+        )),
+        "{view}"
+    );
+    let quiet = ok(dir.path(), &["work", "decisions", &mission, "-q"]);
+    assert_eq!(quiet.trim(), old, "an open record is not current");
 
     ok(
         dir.path(),
@@ -261,6 +354,7 @@ fn decision_records_link_an_adr_and_show_supersession() {
         ],
     );
     let view = ok(dir.path(), &["work", "decisions", &mission]);
+    assert!(!view.contains("Open Decision Records"), "{view}");
     let records = view.find("Decision Records").expect(&view);
     let superseded = view.find("Superseded Decisions").expect(&view);
     assert!(

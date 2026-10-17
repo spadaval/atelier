@@ -528,11 +528,7 @@ impl DecisionNote {
             DECISION_NOTE_KIND.to_string()
         };
         let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
-        let mut text = format!(
-            "{}\n{DECISION_REASON_LABEL} {}",
-            choice.trim(),
-            flat(reason)
-        );
+        let mut text = format!("{}\n{DECISION_REASON_LABEL} {}", flat(choice), flat(reason));
         for alternative in rejected {
             text.push_str(&format!(
                 "\n{DECISION_REJECTED_LABEL} {}",
@@ -540,6 +536,36 @@ impl DecisionNote {
             ));
         }
         (tag, text)
+    }
+
+    /// Builds the note a decision is stored as and parses it back, so the
+    /// note command never writes a decision `check` would refuse.
+    pub fn checked_note_parts(
+        choice: &str,
+        reason: &str,
+        rejected: &[String],
+        one_way: bool,
+    ) -> Result<(String, String), String> {
+        let starts_with_label = |text: &str| {
+            let text = text.trim_start();
+            text.starts_with(DECISION_REASON_LABEL) || text.starts_with(DECISION_REJECTED_LABEL)
+        };
+        if starts_with_label(choice) || rejected.iter().any(|value| starts_with_label(value)) {
+            return Err(format!(
+                "the choice and rejected alternatives must not start with `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}`"
+            ));
+        }
+        let (tag, text) = Self::note_parts(choice, reason, rejected, one_way);
+        let note = IssueNote {
+            date: String::new(),
+            tag: tag.clone(),
+            text: text.clone(),
+        };
+        match Self::from_note(&note) {
+            Some(Ok(_)) => Ok((tag, text)),
+            Some(Err(defect)) => Err(format!("the decision note {defect}")),
+            None => Err("the note is not a decision".to_string()),
+        }
     }
 
     /// Reads a decision from a note; `None` when the note is another kind,
