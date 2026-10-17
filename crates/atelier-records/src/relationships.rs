@@ -3,6 +3,10 @@ pub use atelier_core::{
     AttachmentRelationship, RelatesRelationship, RelationshipTarget, Relationships,
 };
 
+/// The typed link a blocked issue declares to its blocker. A blocker that
+/// declares the edge stores it in `blocks` instead; both mean the same edge.
+pub const BLOCKED_BY: &str = "blocked_by";
+
 pub fn issue_relationship_target(id: &str) -> RelationshipTarget {
     relationship_target(ISSUE_KIND.kind, id)
 }

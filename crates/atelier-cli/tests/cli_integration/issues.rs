@@ -4044,13 +4044,21 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
         ))
     };
 
-    // CLI: work-first order records the link on both records.
+    // CLI: the record that declares the link stores it, and the mission
+    // record is left unchanged (atelier-ihss).
+    let mission_before = read_canonical_record(dir.path(), "issues", &mission);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &task, &mission, "--role", "advances"],
     );
     assert!(success, "{stderr}");
-    assert!(relates_to(&task, &mission) && relates_to(&mission, &task));
+    assert!(relates_to(&task, &mission));
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &mission),
+        mission_before
+    );
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success && overview.contains(&task), "{overview}{stderr}");
     // CLI: two non-missions cannot advance each other.
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -4077,7 +4085,11 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     );
     assert!(success, "{stderr}");
     let epic = issue_id_by_title(dir.path(), "Bundled epic");
-    assert!(relates_to(&epic, &mission) && relates_to(&mission, &epic));
+    assert!(relates_to(&epic, &mission));
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &mission),
+        mission_before
+    );
     let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
     assert!(success && overview.contains(&epic), "{overview}{stderr}");
 
@@ -4114,6 +4126,82 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     );
     let (success, list, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success && !list.contains("Bad epic"), "{list}");
+}
+
+#[test]
+fn links_leave_the_shared_mission_and_blocker_unchanged_and_read_from_either_side() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str, issue_type: &str, body: &str| {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--issue-type",
+                issue_type,
+                "--body",
+                body,
+            ],
+        );
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let task_body = "## Goal\n\nWork.\n\n## Done when\n\nDone.";
+    let mission = create(
+        "Shared mission",
+        "mission",
+        "## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.",
+    );
+    let blocker = create("Shared blocker", "task", task_body);
+    let work = create("New work", "task", task_body);
+    let bytes = |id: &str| fs::read(canonical_record_path(dir.path(), "issues", id)).unwrap();
+    let (mission_before, blocker_before) = (bytes(&mission), bytes(&blocker));
+    let run = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stdout}{stderr}");
+        stdout
+    };
+
+    run(&["issue", "link", &work, &mission, "--role", "advances"]);
+    run(&["issue", "link", &work, &blocker, "--role", "blocked_by"]);
+    assert_eq!(bytes(&mission), mission_before);
+    assert_eq!(bytes(&blocker), blocker_before);
+
+    // The other records see the links at read time.
+    let shown = run(&["issue", "show", &blocker, "--full"]);
+    let blocking = &shown[shown.find("Blocking").unwrap()..];
+    assert!(
+        blocking[..blocking.find("Linked Issues").unwrap()].contains(&work),
+        "{shown}"
+    );
+    let shown = run(&["issue", "show", &mission, "--full"]);
+    assert!(shown.contains(&format!("advances {work} todo")), "{shown}");
+    let shown = run(&["issue", "show", &work, "--full"]);
+    let linked = &shown[shown.find("Linked Issues").unwrap()..];
+    assert!(
+        linked.contains(&format!("advances {mission}")) && !linked.contains("blocked_by"),
+        "{shown}"
+    );
+    assert!(run(&["work", "blocked"]).contains(&work));
+    assert!(run(&["work", "mission", &mission]).contains(&work));
+    run(&["check"]);
+
+    // The same edge declared from the other record already exists, and
+    // unlinking from either side removes it from the record that stores it.
+    assert!(run(&["issue", "link", &blocker, &work, "--role", "blocks"]).contains("already exists"));
+    assert!(
+        run(&["issue", "link", &mission, &work, "--role", "advances"]).contains("already exists")
+    );
+    assert_eq!(bytes(&mission), mission_before);
+    assert_eq!(bytes(&blocker), blocker_before);
+    run(&["issue", "unlink", &blocker, &work, "--role", "blocks"]);
+    run(&["issue", "unlink", &mission, &work, "--role", "advances"]);
+    let stored = read_canonical_record(dir.path(), "issues", &work);
+    assert!(stored.contains("  relates: []\n"), "{stored}");
+    assert!(run(&["work", "ready"]).contains(&work));
 }
 
 #[test]
@@ -5560,4 +5648,62 @@ fn test_size_labels_are_validated_shown_and_replaced() {
         !success && output.contains("size-huge is not one of"),
         "{output}"
     );
+}
+
+/// A note is dated by the local day that `Created`/`Updated` show, not the
+/// UTC day. UTC-12 and UTC+14 are always on different days, so at least one
+/// of them differs from the UTC day.
+#[test]
+fn notes_are_dated_by_the_local_day() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    run_atelier(dir.path(), &["issue", "create", "Dated work"]);
+    let issue_id = issue_id_by_title(dir.path(), "Dated work");
+
+    // POSIX TZ offsets are west-positive: `UTC+12` is twelve hours behind.
+    for (tz, east_seconds) in [("UTC+12", -12 * 3600), ("UTC-14", 14 * 3600)] {
+        let zone = chrono::FixedOffset::east_opt(east_seconds).unwrap();
+        let local_day = || chrono::Utc::now().with_timezone(&zone).date_naive();
+        let before = local_day();
+        let text = format!("note in {tz}");
+        let (success, _, stderr) = run_atelier_with_env(
+            dir.path(),
+            &["issue", "note", &issue_id, &text],
+            &[("TZ", tz)],
+        );
+        assert!(success, "note in {tz} failed: {stderr}");
+        let after = local_day();
+        let record = read_canonical_record(dir.path(), "issues", &issue_id);
+        let dated = |day: chrono::NaiveDate| record.contains(&format!("- {day} [note] {text}\n"));
+        assert!(
+            dated(before) || dated(after),
+            "note in {tz} should be dated {before}: {record}"
+        );
+    }
+}
+
+#[test]
+fn prune_cutoff_is_the_local_day() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    // POSIX TZ offsets are west-positive: `UTC+12` is twelve hours behind.
+    for (tz, east_seconds) in [("UTC+12", -12 * 3600), ("UTC-14", 14 * 3600)] {
+        let zone = chrono::FixedOffset::east_opt(east_seconds).unwrap();
+        let cutoff =
+            || chrono::Utc::now().with_timezone(&zone).date_naive() - chrono::Duration::days(3);
+        let before = cutoff();
+        let (success, stdout, stderr) = run_atelier_with_env(
+            dir.path(),
+            &["prune", "--retention-days", "3"],
+            &[("TZ", tz)],
+        );
+        assert!(success, "prune in {tz} failed: {stderr}");
+        let after = cutoff();
+        let shows = |day: chrono::NaiveDate| stdout.contains(&format!("before {day}\n"));
+        assert!(
+            shows(before) || shows(after),
+            "prune in {tz} should cut off before {before}: {stdout}"
+        );
+    }
 }

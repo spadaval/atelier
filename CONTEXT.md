@@ -30,8 +30,10 @@ Use these terms for the verified repo-native tracker defined by
 | Land | A session handoff check of committed records and tracker invariants. |
 | Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |
 
-The graph stores hierarchy in `children`, dependencies in `blocks`, evidence in
-`attachments`, and semantic links in `relates`. Missions are not hierarchy
+The graph stores hierarchy in `children`, dependencies in `blocks` (on the
+blocker) or as `blocked_by` in `relates` (on the blocked issue), evidence in
+`attachments`, and semantic links in `relates`. Each issue link is stored only
+on the record that declares it; reverse views are derived when read. Missions are not hierarchy
 parents. Any work item may have direct children, one level deep; standalone
 issues remain valid. Mission membership uses `advances`, not parent fields.
 

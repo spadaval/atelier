@@ -968,15 +968,16 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         git(fixture.path(), &["switch", "-q", &fixture.branch]);
         git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
         // Planning on the branch adds work to the mission before approval.
+        // The mission declares each link, so both sides edit its record.
         let branch_work = ok(fixture.path(), &["-q", "issue", "create", "Branch work"]);
-        ok(fixture.path(), &["issue", "link", &branch_work, &mission]);
+        ok(fixture.path(), &["issue", "link", &mission, &branch_work]);
         commit(fixture.path(), "branch planning");
         fixture.approval("Reviewer");
 
         // Planning on the base adds other work to the same mission.
         git(fixture.path(), &["switch", "-q", "main"]);
         let base_work = ok(fixture.path(), &["-q", "issue", "create", "Base work"]);
-        ok(fixture.path(), &["issue", "link", &base_work, &mission]);
+        ok(fixture.path(), &["issue", "link", &mission, &base_work]);
         if case == "base_scope_edit" {
             // The owner's Goal, far from the branch's own edits, so Git
             // merges it cleanly into the approved work.
@@ -1039,6 +1040,52 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         if case == "union" {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(output.contains("pass review.current"), "{output}");
+        } else {
+            fixture.refusal("FAIL review.current");
+        }
+    }
+}
+
+/// A link is stored only on the record that declares it (atelier-ihss), so
+/// new work that waits on the approved owner, on the branch or merged in
+/// from the base, leaves the owner's record and its approval alone. A link
+/// the owner declares, or one changing an existing record, still edits a
+/// record the approval covers, as before.
+#[test]
+fn links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_it() {
+    for case in [
+        "branch_new_blocked_by_owner",
+        "base_new_blocked_by_owner",
+        "owner_blocked_by_existing",
+        "existing_blocked_by_owner",
+    ] {
+        let fixture = Fixture::new();
+        let existing = ok(fixture.path(), &["-q", "issue", "create", "Existing"]);
+        commit(fixture.path(), "an existing issue");
+        fixture.approval("Reviewer");
+        if case == "base_new_blocked_by_owner" {
+            git(fixture.path(), &["switch", "-q", "main"]);
+        }
+        let (source, target) = match case {
+            "owner_blocked_by_existing" => (fixture.id.clone(), existing),
+            "existing_blocked_by_owner" => (existing, fixture.id.clone()),
+            _ => (
+                ok(fixture.path(), &["-q", "issue", "create", "Follow-up"]),
+                fixture.id.clone(),
+            ),
+        };
+        ok(
+            fixture.path(),
+            &["issue", "link", &source, &target, "--role", "blocked_by"],
+        );
+        commit(fixture.path(), "link after approval");
+        if case == "base_new_blocked_by_owner" {
+            git(fixture.path(), &["switch", "-q", &fixture.branch]);
+            git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+        }
+        if case.contains("new") {
+            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+            assert!(output.contains("pass review.current"), "{case}: {output}");
         } else {
             fixture.refusal("FAIL review.current");
         }

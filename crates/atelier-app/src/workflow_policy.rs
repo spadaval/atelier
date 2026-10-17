@@ -41,8 +41,9 @@ pub fn creatable_statuses(
         .collect())
 }
 
-/// `advances` joins a mission to work in its scope. It is stored on both
-/// records, so either endpoint may declare it; exactly one must be a mission.
+/// `advances` joins a mission to work in its scope. Either endpoint may
+/// declare it, and only the declaring record stores it; exactly one must be a
+/// mission.
 pub fn validate_advances_endpoints(
     source: &str,
     source_type: &str,

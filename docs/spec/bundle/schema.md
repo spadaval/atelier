@@ -96,10 +96,12 @@ complete staged graph. Errors name the rejected field, reference, record, or
 `client_ref` where available. No invalid reference or cycle may be installed.
 
 Parent references normalize to parent-to-child relationships. Both `blocked_by` and `blocks`
-normalize to blocker-to-blocked relationships. `advances` is stored on both
-records, as `atelier issue link` stores it, so a mission listing a parent and the
-parent listing the mission are the same mission-to-work edge; declaring both is a
-duplicate. `validates` retains its semantic role. Duplicate normalized edges are
+normalize to blocker-to-blocked relationships, and a mission listing a parent
+and the parent listing the mission are the same mission-to-work `advances`
+edge; declaring an edge from both endpoints is a duplicate. Each edge is
+stored only on the record whose entry declared it, as `atelier issue link`
+stores it: an issue's `blocked_by` in its own record, its `blocks` in its own
+`blocks`. `validates` retains its semantic role. Duplicate normalized edges are
 errors.
 
 Preview and apply report the same normalized plan in deterministic order; apply

@@ -1,3 +1,4 @@
+use crate::human_output::local_date;
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::MergeStrategy;
@@ -867,10 +868,10 @@ fn canonical_retention_cutoff(
     retention_days_override: Option<u64>,
 ) -> (u64, NaiveDate) {
     let retention_days = retention_days_override.unwrap_or(tracker.canonical_retention_days);
-    let cutoff = Utc::now()
-        .date_naive()
+    let today = local_date(Utc::now());
+    let cutoff = today
         .checked_sub_days(Days::new(retention_days))
-        .unwrap_or_else(|| Utc::now().date_naive());
+        .unwrap_or(today);
     (retention_days, cutoff)
 }
 
@@ -891,7 +892,7 @@ fn issue_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonica
             continue;
         }
         let latest_at = issue.closed_at.unwrap_or(issue.updated_at);
-        if latest_at.date_naive() < cutoff {
+        if local_date(latest_at) < cutoff {
             old_terminal.insert(issue.id.clone());
         }
     }
@@ -982,7 +983,7 @@ fn review_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonic
     tracker
         .index
         .reviews()
-        .filter(|record| record.header.created_at.date_naive() < cutoff)
+        .filter(|record| local_date(record.header.created_at) < cutoff)
         .map(|record| CanonicalCandidate {
             kind: "review-record",
             id: record.header.id.clone(),
@@ -1015,7 +1016,7 @@ fn evidence_candidates(
     let all_evidence = tracker.index.evidence_records();
     let old_evidence = all_evidence
         .iter()
-        .filter(|record| record.header.updated_at.date_naive() < cutoff)
+        .filter(|record| local_date(record.header.updated_at) < cutoff)
         .map(|record| record.header.id.clone())
         .collect::<BTreeSet<_>>();
     let retained_records = all_evidence
@@ -1055,7 +1056,7 @@ fn retained_record_ids(index: &RecordIndex, cutoff: NaiveDate) -> BTreeSet<(Stri
     index
         .evidence_records()
         .into_iter()
-        .filter(|record| record.header.updated_at.date_naive() >= cutoff)
+        .filter(|record| local_date(record.header.updated_at) >= cutoff)
         .map(|record| (record.header.kind.clone(), record.header.id.clone()))
         .collect()
 }
@@ -1308,7 +1309,7 @@ fn print_canonical_candidate(candidate: &CanonicalCandidate, summary: &Canonical
             candidate.kind,
             candidate.id,
             candidate.status,
-            candidate.latest_at.date_naive(),
+            local_date(candidate.latest_at),
             display_git_path(&candidate.path),
             reason
         );
@@ -1322,7 +1323,7 @@ fn print_canonical_candidate(candidate: &CanonicalCandidate, summary: &Canonical
         candidate.kind,
         candidate.id,
         candidate.status,
-        candidate.latest_at.date_naive(),
+        local_date(candidate.latest_at),
         display_git_path(&candidate.path)
     );
     println!(

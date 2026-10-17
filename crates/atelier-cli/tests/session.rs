@@ -2076,7 +2076,7 @@ fn root_review_mode_must_be_regular_non_executable() {
 
 #[test]
 fn terminal_review_cluster_prune_remains_a_valid_handoff() {
-    for (days_ago, retired) in [(2000, true), (1, true), (0, false)] {
+    for (days_ago, retired) in [(2000, true), (2, true), (0, false)] {
         let f = Fixture::new();
         git(f.path(), &["switch", "main"]);
         let id = ok(
@@ -3697,7 +3697,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
         git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
     };
 
-    // A blocker link is written only to the blocker's record.
+    // A blocker link is written only to the blocked record (atelier-ihss).
     let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
     ok(
         f.path(),

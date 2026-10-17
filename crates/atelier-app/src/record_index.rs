@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use atelier_core::{EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, ReviewRecord};
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
-    validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships,
+    validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
     WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 
@@ -477,6 +477,13 @@ impl RecordIndex {
     fn index_issue_graph(&mut self, errors: &mut Vec<anyhow::Error>) {
         let mut parents = BTreeMap::<String, String>::new();
         let mut relation_keys = BTreeSet::new();
+        // `(blocker, blocked)` edges the blocked issue declares. The blocker
+        // may store the same edge in `blocks`, as records written before
+        // atelier-ihss do, so these join the graph once each after `blocks`.
+        let mut declared_blockers = Vec::new();
+        // Records written before atelier-ihss store a typed link on both
+        // records; it is one relation, kept from whichever record comes first.
+        let mut indexed_relations = BTreeSet::new();
         for record in self.issues.values() {
             let id = &record.issue.id;
             for blocked in &record.relationships.blocks {
@@ -557,6 +564,18 @@ impl RecordIndex {
                     ));
                     continue;
                 }
+                if relation.relation_type == BLOCKED_BY {
+                    declared_blockers.push((relation.id.clone(), id.clone()));
+                    continue;
+                }
+                let pair = if *id < relation.id {
+                    (id.clone(), relation.id.clone())
+                } else {
+                    (relation.id.clone(), id.clone())
+                };
+                if !indexed_relations.insert((pair, relation.relation_type.clone())) {
+                    continue;
+                }
                 let relation = Relation {
                     issue_id_1: id.clone(),
                     issue_id_2: relation.id.clone(),
@@ -569,6 +588,13 @@ impl RecordIndex {
                         .or_default()
                         .push(relation.clone());
                 }
+            }
+        }
+        for (blocker, blocked) in declared_blockers {
+            let blocking = self.blocking.entry(blocker.clone()).or_default();
+            if !blocking.contains(&blocked) {
+                blocking.push(blocked.clone());
+                self.blockers.entry(blocked).or_default().push(blocker);
             }
         }
         for (child, parent) in parents {
@@ -723,7 +749,11 @@ impl RecordIndex {
                 checked_by_issue_graph,
                 errors,
             ) {
-                let issue_relation = source_kind == "issue" && relation.kind == "issue";
+                // A blocker edge is queried through the blocker graph, as
+                // `blocks` is, not as a typed link.
+                let issue_relation = source_kind == "issue"
+                    && relation.kind == "issue"
+                    && relation.relation_type != BLOCKED_BY;
                 if let Err(error) = push(
                     &relation.kind,
                     &relation.id,
@@ -990,8 +1020,9 @@ impl RecordIndex {
         self.blocking.get(issue_id).cloned().unwrap_or_default()
     }
 
-    /// Every issue-to-issue relation touching `issue_id`. `issue_id_1` is the
-    /// issue whose record declares the relation.
+    /// Every issue-to-issue relation touching `issue_id`, once each, whichever
+    /// record stores it. `issue_id_1` is the issue whose record declares the
+    /// relation (for a relation both records store, the first by id).
     pub fn get_typed_relations(&self, issue_id: &str) -> Vec<Relation> {
         self.relations.get(issue_id).cloned().unwrap_or_default()
     }
