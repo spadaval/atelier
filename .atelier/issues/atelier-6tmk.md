@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Handle repositories without Git or without commits"
-updated_at: "2026-10-17T01:10:57.981187320+00:00"
+updated_at: "2026-10-17T02:41:22.663991335+00:00"
 ---
 
 ## Goal
@@ -42,3 +42,7 @@ updated_at: "2026-10-17T01:10:57.981187320+00:00"
 ## Context
 
 `git_freshness::head_commit` (crates/atelier-app/src/git_freshness.rs) is the common failure point. `git_state` in crates/atelier-cli/src/commands/status.rs:182 relays git's stderr.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-16: Review of atelier-sdb0 found status on an unborn HEAD prints 'Checkout: unavailable - git ls-tree -rz HEAD failed' (previously 'No commits yet'). Include status in this fix.
