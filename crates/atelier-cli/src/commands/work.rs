@@ -9,9 +9,10 @@ use atelier_core::Issue;
 
 use crate::commands::git::InFlight;
 use crate::human_output::{
-    count_noun, last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_row_wrapped, render_unassigned_groups,
-    scope_counts, FooterAction, IssueListPanel, IssueListRow, ItemLine, RenderContext, TextStyle,
+    count_noun, decision_note_rows, decision_record_rows, last_closed_mission, print_page,
+    render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
+    render_row_wrapped, render_unassigned_groups, scope_counts, FooterAction, IssueListPanel,
+    IssueListRow, ItemLine, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -456,7 +457,22 @@ fn scoped_dashboard(
         InFlight::default()
     };
     let context = RenderContext::for_stdout();
-    let mut panels = vec![render_metadata(None, &metadata)];
+    // A mission's success criteria lead its summary, each marked by its
+    // proof (atelier-stsa).
+    let criteria = if issue.issue_type == "mission"
+        && matches!(filter, DashboardFilter::Summary | DashboardFilter::All)
+    {
+        let repo_root = crate::commands::workflow::repo_root()?;
+        let mut read = atelier_app::git_freshness::ReadContext::new(&repo_root);
+        let proof = atelier_app::criteria::mission_proof(index, &mut read, &id)?;
+        if let Some(counts) = criterion_counts(&proof) {
+            metadata.push(("Criteria", counts));
+        }
+        criteria_panel(context, &proof)
+    } else {
+        Vec::new()
+    };
+    let mut panels = vec![render_metadata(None, &metadata), criteria];
     panels.extend(
         work.panels(&issue, filter, &in_flight.marks)
             .into_iter()
@@ -744,6 +760,105 @@ fn transition_readiness(
     }
 }
 
+/// `<n> criteria: <n> proven (<n> before later code commits), <n> failing,
+/// <n> unproven`, zeros left out; `None` when the mission defines no
+/// criteria. The parenthesis keeps old proof from reading as current.
+fn criterion_counts(proof: &atelier_app::criteria::MissionProof) -> Option<String> {
+    use atelier_app::criteria::CriterionMark;
+    let total = proof.proofs.len();
+    if total == 0 {
+        return None;
+    }
+    let count = |mark: CriterionMark| proof.proofs.iter().filter(|p| p.mark == mark).count();
+    let aged = proof
+        .proofs
+        .iter()
+        .filter(|p| p.mark == CriterionMark::Proven)
+        .filter(|p| {
+            p.deciding()
+                .and_then(|receipt| receipt.code_commits_since)
+                .is_some_and(|count| count > 0)
+        })
+        .count();
+    let parts = [
+        CriterionMark::Proven,
+        CriterionMark::Failing,
+        CriterionMark::Unproven,
+    ]
+    .into_iter()
+    .map(|mark| (count(mark), mark))
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, mark)| {
+        if mark == CriterionMark::Proven && aged > 0 {
+            format!("{count} proven ({aged} before later code commits)")
+        } else {
+            format!("{count} {}", mark.word())
+        }
+    })
+    .collect::<Vec<_>>();
+    let noun = if total == 1 { "criterion" } else { "criteria" };
+    Some(format!("{total} {noun}: {}", parts.join(", ")))
+}
+
+/// One row per criterion, `<slug> <mark> <claim> | <deciding receipt>`,
+/// then what could not be read as a criterion or names one the mission
+/// does not define.
+fn criteria_panel(
+    context: RenderContext,
+    proof: &atelier_app::criteria::MissionProof,
+) -> Vec<String> {
+    use atelier_app::criteria::CriterionMark;
+    let mut rows = Vec::new();
+    for criterion in &proof.proofs {
+        let mark = match criterion.mark {
+            CriterionMark::Proven => "✓ proven",
+            CriterionMark::Failing => "⚠ failing",
+            CriterionMark::Unproven => "unproven",
+        };
+        let mut row = format!(
+            "{} {mark} {}",
+            criterion.criterion.slug,
+            first_sentence(&criterion.criterion.text)
+        );
+        if let Some(receipt) = criterion.deciding() {
+            row.push_str(&format!(
+                " | {} {} at {}",
+                receipt.evidence_id,
+                receipt.result.as_str(),
+                crate::human_output::short_commit(&receipt.commit)
+            ));
+            match receipt.code_commits_since {
+                Some(0) | None => {}
+                Some(1) => row.push_str(" | 1 code commit since"),
+                Some(count) => row.push_str(&format!(" | {count} code commits since")),
+            }
+        }
+        rows.extend(render_row_wrapped(context, &row));
+    }
+    for problem in &proof.criteria.parse.problems {
+        rows.extend(render_row_wrapped(context, &format!("⚠ {problem}")));
+    }
+    for (evidence_id, slug) in &proof.orphaned {
+        rows.extend(render_row_wrapped(
+            context,
+            &format!("⚠ {evidence_id} names criterion {slug}, which this mission does not define"),
+        ));
+    }
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    render_lines_section("Success Criteria", rows)
+}
+
+/// The text up to its first sentence end, so a row names the claim without
+/// the criterion's whole proof plan.
+fn first_sentence(text: &str) -> &str {
+    match text.find(". ") {
+        Some(end) => &text[..=end],
+        None => text,
+    }
+}
+
 /// `work decisions <mission>`: the decisions made across a mission's scope.
 /// One-way decision notes lead, then current decision records and
 /// reversible notes; open and superseded records and malformed notes follow.
@@ -785,17 +900,7 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
             .notes
             .iter()
             .filter(|note| note.decision.one_way == one_way)
-            .flat_map(|note| {
-                let decision = &note.decision;
-                let mut row = format!(
-                    "{} {} {} | because {}",
-                    note.issue_id, decision.date, decision.choice, decision.reason
-                );
-                if !decision.rejected.is_empty() {
-                    row.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
-                }
-                render_row_wrapped(context, &row)
-            })
+            .flat_map(|note| decision_note_rows(context, note))
             .collect::<Vec<_>>()
     };
     let record_lines = |keep: &dyn Fn(&atelier_app::decisions::RecordDecision) -> bool| {
@@ -803,25 +908,7 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
             .records
             .iter()
             .filter(|record| keep(record))
-            .flat_map(|record| {
-                let issue = &record.issue;
-                let category = policy
-                    .as_ref()
-                    .and_then(|policy| policy.status_category(&issue.status));
-                let mut line =
-                    ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
-                        .state(category, None);
-                if let Some(adr) = &issue.adr {
-                    line = line.cue(format!("ADR {}", adr.path));
-                }
-                if !record.supersedes.is_empty() {
-                    line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
-                }
-                if !record.superseded_by.is_empty() {
-                    line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
-                }
-                line.render_wrapped(context, "")
-            })
+            .flat_map(|record| decision_record_rows(context, policy.as_ref(), record))
             .collect::<Vec<_>>()
     };
     let section = |title: &str, lines: Vec<String>| {

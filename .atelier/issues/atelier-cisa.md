@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Say which approval merge --check considered and why it is not current"
-updated_at: "2026-10-17T01:10:57.975874283+00:00"
+updated_at: "2026-10-17T19:00:36.346655411+00:00"
 ---
 
 ## Goal
@@ -42,3 +42,7 @@ updated_at: "2026-10-17T01:10:57.975874283+00:00"
 ## Context
 
 The real case: a clean `git merge master` into task/atelier-bw0b (master had edited .atelier/issues/atelier-bw0b.md) made approval atelier-x16l stale with no explanation. `allowed_base_merge` (review_gate.rs:194) correctly lets in-scope records change only in status. But the `merge_diverged` advice shown just before says "a clean merge keeps the approval", so the reader was told the opposite of what happened.
+
+## Notes
+
+- 2026-10-17 [note] Retro 2026-10-17: o3lm 06:25Z and 07:47Z, merge --check said 'resolution needs fresh independent approval' without naming the fix commit the approval predates; the orchestrator had to rediscover the re-approve step each time.

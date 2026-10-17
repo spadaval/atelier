@@ -5,6 +5,7 @@
 
 pub mod base_policy;
 pub mod committed_snapshot;
+pub mod criteria;
 pub mod decisions;
 pub mod epic_migration;
 pub mod evidence_freshness;

@@ -24,9 +24,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Review a finished mission with atelier debrief"
-updated_at: "2026-10-17T18:53:19.567771438+00:00"
+updated_at: "2026-10-17T19:08:44.071690858+00:00"
 ---
 
 ## Goal

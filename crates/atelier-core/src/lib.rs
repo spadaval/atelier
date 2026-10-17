@@ -436,6 +436,117 @@ pub enum IssueSectionName {
     CloseReason,
 }
 
+/// One success criterion of a mission (atelier-et6q): a `- <slug>: <text>`
+/// bullet under the success criteria heading.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Criterion {
+    pub slug: String,
+    pub text: String,
+}
+
+/// The criteria read from a success criteria section, in document order,
+/// and what could not be read as a criterion.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct CriteriaParse {
+    pub criteria: Vec<Criterion>,
+    pub problems: Vec<String>,
+}
+
+impl CriteriaParse {
+    pub fn get(&self, slug: &str) -> Option<&Criterion> {
+        self.criteria
+            .iter()
+            .find(|criterion| criterion.slug == slug)
+    }
+}
+
+/// A criterion slug is lowercase kebab-case (`pipe-safe`) or a legacy
+/// positional `S<n>`.
+pub fn is_criterion_slug(slug: &str) -> bool {
+    let positional = slug
+        .strip_prefix('S')
+        .is_some_and(|number| !number.is_empty() && number.chars().all(|c| c.is_ascii_digit()));
+    let kebab = !slug.is_empty()
+        && slug.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        });
+    positional || kebab
+}
+
+/// The body of a strategy's success criteria heading (any level, any case),
+/// up to the next heading of the same or a higher level.
+pub fn strategy_criteria_section(markdown: &str) -> Option<String> {
+    let heading_level = |line: &str| {
+        let level = line.chars().take_while(|c| *c == '#').count();
+        (level > 0 && line[level..].starts_with(' ')).then_some(level)
+    };
+    let mut lines = markdown.lines();
+    let level = lines.by_ref().find_map(|line| {
+        let level = heading_level(line)?;
+        line[level..]
+            .trim()
+            .eq_ignore_ascii_case("success criteria")
+            .then_some(level)
+    })?;
+    let body = lines
+        .take_while(|line| heading_level(line).is_none_or(|next| next > level))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(body)
+}
+
+/// Reads `- <slug>: <text>` bullets. Indented lines continue the bullet
+/// before them; any other top-level bullet, or a repeated slug, is a
+/// problem.
+pub fn parse_criteria(section: &str) -> CriteriaParse {
+    let mut parsed = CriteriaParse::default();
+    let mut open = false;
+    for line in section.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) {
+            if open {
+                if let Some(criterion) = parsed.criteria.last_mut() {
+                    criterion.text.push(' ');
+                    criterion.text.push_str(line.trim());
+                }
+            }
+            continue;
+        }
+        open = false;
+        let Some(bullet) = line.strip_prefix("- ") else {
+            continue;
+        };
+        let criterion = bullet
+            .split_once(':')
+            .map(|(slug, text)| (slug.trim(), text.trim()))
+            .filter(|(slug, _)| is_criterion_slug(slug));
+        match criterion {
+            Some((slug, _)) if parsed.get(slug).is_some() => {
+                parsed
+                    .problems
+                    .push(format!("criterion {slug} is defined twice"));
+            }
+            Some((slug, text)) => {
+                parsed.criteria.push(Criterion {
+                    slug: slug.to_string(),
+                    text: text.to_string(),
+                });
+                open = true;
+            }
+            None => parsed.problems.push(format!(
+                "bullet `{}` does not start with a criterion slug such as `pipe-safe:` or `S1:`",
+                line.chars().take(60).collect::<String>()
+            )),
+        }
+    }
+    parsed
+}
+
 /// The implementer report's parts beyond the Outcome (atelier-sfsq). Each is
 /// a `### <title>` subsection of Close Reason; the text before the first is
 /// the Outcome. Policy requires a part with the `report.<key>` field.
@@ -1136,6 +1247,44 @@ pub struct EvidenceRecordData {
     pub output: Option<EvidenceOutputSummary>,
     #[serde(default)]
     pub target: Option<EvidenceTarget>,
+    /// The mission criteria this receipt judges, each with its own result
+    /// (atelier-et6q).
+    #[serde(default)]
+    pub criteria: Vec<EvidenceCriterion>,
+    /// The mission whose criteria `criteria` names, fixed when the receipt
+    /// is recorded so the proof stays with that mission if its target moves.
+    #[serde(default)]
+    pub criteria_mission: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceCriterion {
+    pub slug: String,
+    pub result: EvidenceResult,
+}
+
+impl std::str::FromStr for EvidenceCriterion {
+    type Err = String;
+
+    /// Reads `<slug>=<result>`, as `evidence record --criterion` takes it.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (slug, result) = value.split_once('=').ok_or_else(|| {
+            format!(
+                "criterion `{value}` needs a result: `<slug>=<result>`, such as `pipe-safe=pass`"
+            )
+        })?;
+        let slug = slug.trim();
+        if !is_criterion_slug(slug) {
+            return Err(format!(
+                "`{slug}` is not a criterion slug; use lowercase kebab-case, such as `pipe-safe`, or `S<n>`"
+            ));
+        }
+        Ok(Self {
+            slug: slug.to_string(),
+            result: result.trim().parse()?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -1168,6 +1317,40 @@ fn plural_suffix(count: usize) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn criteria_parse_slugs_continuations_and_problems() {
+        let strategy = "# Why\n\n- S9: not here\n\n# Success Criteria\n\n- S1: First\n  continues\n- pipe-safe: Second\n- Plain prose bullet\n- S1: again\n\n## Detail\n\n- S2: nested heading is still in the section\n\n# Shape\n\n- S3: outside\n";
+        let section = strategy_criteria_section(strategy).unwrap();
+        let parsed = parse_criteria(&section);
+        assert_eq!(
+            parsed.criteria,
+            vec![
+                Criterion {
+                    slug: "S1".into(),
+                    text: "First continues".into()
+                },
+                Criterion {
+                    slug: "pipe-safe".into(),
+                    text: "Second".into()
+                },
+                Criterion {
+                    slug: "S2".into(),
+                    text: "nested heading is still in the section".into()
+                },
+            ]
+        );
+        assert_eq!(parsed.problems.len(), 2, "{:?}", parsed.problems);
+        assert!(parsed.problems[0].contains("Plain prose bullet"));
+        assert!(parsed.problems[1].contains("S1 is defined twice"));
+        assert!(strategy_criteria_section("# Why\n").is_none());
+        for slug in ["S1", "S12", "pipe-safe", "a1-b2"] {
+            assert!(is_criterion_slug(slug), "{slug}");
+        }
+        for slug in ["", "S", "Pipe", "pipe_safe", "-x", "x-", "a--b", "s 1"] {
+            assert!(!is_criterion_slug(slug), "{slug}");
+        }
+    }
 
     fn sections_with_notes(notes: &str) -> IssueSections {
         let mut sections = IssueSections::for_type("task", Some("Goal"));

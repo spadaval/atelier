@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Use one evidence target syntax and a result token in quiet output"
-updated_at: "2026-10-17T01:10:57.975561669+00:00"
+updated_at: "2026-10-17T19:00:36.345309189+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Small inconsistencies in the evidence commands:
 - No error mentions `--target-kind` or `--target-id`.
 - Quiet `evidence record` and `evidence show` print `<id> <result>` (for example `atelier-n3tn fail`).
 - Tests cover each item.
+
+## Notes
+
+- 2026-10-17 [note] Retro 2026-10-17: `evidence record --target atelier-sdb0` failed with '--target must use kind/id syntax' while every other command takes a bare id (1w8c, 02:53Z).

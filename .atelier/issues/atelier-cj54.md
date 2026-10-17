@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Let issue update replace one body section"
-updated_at: "2026-10-17T01:36:20.904463567+00:00"
+updated_at: "2026-10-17T19:00:36.344655499+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,7 @@ updated_at: "2026-10-17T01:36:20.904463567+00:00"
 ## Context
 
 From the 2026-10-16 transcript retrospective.
+
+## Notes
+
+- 2026-10-17 [note] Retro 2026-10-17: agents keep splicing record and strategy bodies with Python str.replace (e592938d three times). Still wanted; pairs with the new --body-file item.

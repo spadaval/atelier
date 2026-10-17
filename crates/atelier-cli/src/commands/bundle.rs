@@ -974,6 +974,8 @@ fn apply_bundle_to_state(
             spawn_error: None,
             output: None,
             target: None,
+            criteria: Vec::new(),
+            criteria_mission: None,
         };
         let record = store.create_evidence(&evidence.title, "recorded", &evidence.body, data)?;
         let id = record.header.id;

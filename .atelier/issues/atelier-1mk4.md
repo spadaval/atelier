@@ -4,6 +4,9 @@ id: "atelier-1mk4"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-1mk4
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T18:48:13.697994837+00:00"
+status: "done"
 title: "Show the current decisions on an item in status and issue show"
-updated_at: "2026-10-17T18:17:06.615557096+00:00"
+updated_at: "2026-10-17T18:48:13.697994837+00:00"
 ---
 
 ## Goal
@@ -37,3 +41,27 @@ S6 of docs/strategies/review-and-introspection.md. An agent working an item shou
 ## Unknowns
 
 How much this adds to `status` output on a mission with many decisions (ADR 0022's density rules apply).
+
+## Notes
+
+- 2026-10-17 [decision] Bring in the notes on the item, its parent and its mission, and the current decision records across the mission's scope; leave out sibling items' notes
+  Reason: Sibling notes are local to other work and would drown the brief view; decision records are mission-wide choices that bind every item
+  Rejected: every decision note in the mission's scope
+- 2026-10-17 [decision] Move decision row rendering into human_output so work decisions, issue show and status share one row shape
+  Reason: Three views showing the same rows must not drift apart
+
+## Close Reason
+
+`issue show` and `status` list the current decisions bearing on an item, through its parent and mission: a count with the one-way decisions in the brief views, and every current decision in `issue show --full`.
+
+### Deviations
+None.
+
+### Decisions
+See this item's decision notes: which decisions bear on an item (not sibling notes), and one shared row renderer.
+
+### Surprises
+None; the decisions module from atelier-fip8 needed only an item-scoped lookup.
+
+### Open items
+None.

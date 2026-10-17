@@ -100,6 +100,8 @@ mod tests {
                     spawn_error: None,
                     output: None,
                     target: None,
+                    criteria: Vec::new(),
+                    criteria_mission: None,
                 },
             )
             .unwrap();

@@ -182,6 +182,8 @@ struct Owner {
     body: String,
     missions: Vec<(String, Option<String>)>,
     work: Vec<String>,
+    /// The brief form of the current decisions bearing on the owner.
+    decisions: Vec<String>,
     reviews: Vec<String>,
     evidence: Vec<String>,
     inspect: String,
@@ -278,6 +280,10 @@ impl Owner {
             body: crate::utils::truncate(body, 3000),
             missions,
             work,
+            decisions: crate::human_output::decision_brief_lines(
+                RenderContext::plain(),
+                &atelier_app::decisions::item_decisions(index, Some(policy), id)?,
+            ),
             reviews: reviews(index, &scope),
             evidence: evidence(repo, index, &scope, checkout)?,
             inspect: if index.get_subissues(id).is_empty() {
@@ -524,6 +530,9 @@ fn render_status_page(
         panels.push(render_text_section("Owner Record", Some(&owner.body)));
         if !owner.work.is_empty() {
             panels.push(render_lines_section("Owner Work", owner.work.clone()));
+        }
+        if !owner.decisions.is_empty() {
+            panels.push(render_lines_section("", owner.decisions.clone()));
         }
         panels.push(render_lines_section("Reviews", owner.reviews.clone()));
         panels.push(render_lines_section("Evidence", owner.evidence.clone()));

@@ -27,6 +27,34 @@ atelier evidence record --target issue/<id> --kind test -- <command>
 Command capture refuses a caller-supplied result. Commit the state you intend
 to check before recording proof, so the receipt describes that committed state.
 
+A receipt that judges mission success criteria names each one with its own
+result, so one validation run can pass some criteria and fail others:
+
+```text
+atelier evidence record --target issue/<id> --kind validation --result fail \
+  --criterion pipe-safe=pass --criterion quiet-tokens=fail "Validated the output"
+atelier evidence record --target issue/<id> --kind test --criterion pipe-safe -- <command>
+```
+
+Command capture gives each bare `--criterion <slug>` the command's result. The
+target must be the mission or an item in the scope of that one mission (an
+item in several missions names no criteria; target the mission instead), and
+each slug one the mission defines. The receipt stores that mission as
+`criteria_mission`, so its proof stays with the mission if the item later
+moves (see [mission authoring](mission-authoring.md)); `evidence
+record` refuses others before it runs anything, and `check` reports a receipt
+whose slug the mission no longer defines, so renaming a criterion never
+silently orphans its proof. Issues carry no criterion bookkeeping.
+
+`atelier work mission <id>` marks each criterion from the newest receipt
+recorded against the mission that names it and whose commit is in HEAD's
+history: `✓ proven` when it passes, `⚠ failing` when it
+fails, and `unproven` with no such receipt or a blocked or not-applicable
+one. Item-level freshness, which any later code commit breaks, is not
+applied to mission criteria; the row instead says how many code commits
+followed the deciding proof, and the `Criteria:` line counts proven criteria
+whose proof came before later code commits.
+
 Use `atelier evidence show <evidence-id>` and `atelier evidence list` to inspect
 receipts; `list --result fail` filters for a particular explicit result. Use `attach` only when the existing proof also supports another item.
 Correct a claim by adding a new receipt, not by rewriting a receipt that later

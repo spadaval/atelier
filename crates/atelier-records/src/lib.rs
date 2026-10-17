@@ -8,8 +8,8 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
-    EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
-    ISSUE_PRIORITY_STORED_FORMS,
+    EvidenceCriterion, EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue,
+    IssuePriority, ISSUE_PRIORITY_STORED_FORMS,
 };
 pub use atelier_core::{
     EvidenceRecord, EvidenceResult, IssueAdr, IssueBody, IssueFieldError, IssueSectionName,
@@ -956,6 +956,12 @@ pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
         data.independence_level.as_deref(),
     )?;
     write_evidence_target(&mut output, data.target.as_ref())?;
+    write_evidence_criteria(&mut output, &data.criteria)?;
+    write_yaml_scalar_if_some(
+        &mut output,
+        "criteria_mission",
+        data.criteria_mission.as_deref(),
+    )?;
     write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
     write_yaml_relationships(&mut output, &relationships)?;
@@ -1011,6 +1017,13 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
         success: optional_bool(&front_matter, "success", relative)?,
         spawn_error: optional_scalar(&front_matter, "spawn_error")?,
         output: optional_yaml_value::<EvidenceOutputSummary>(&front_matter, "output", relative)?,
+        criteria: optional_yaml_value::<Vec<EvidenceCriterion>>(
+            &front_matter,
+            "criteria",
+            relative,
+        )?
+        .unwrap_or_default(),
+        criteria_mission: optional_scalar(&front_matter, "criteria_mission")?,
     };
     apply_evidence_body_sections(&mut data, body);
 
@@ -1034,6 +1047,29 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
 
 fn validate_evidence_record(record: &EvidenceRecord, relative: &Path) -> Result<()> {
     let data = &record.data;
+    if data.criteria.is_empty() != data.criteria_mission.is_none() {
+        bail!(
+            "evidence names criteria without the mission they belong to, or a mission without criteria, in {}",
+            display_state_path(relative)
+        );
+    }
+    let mut slugs = BTreeSet::new();
+    for criterion in &data.criteria {
+        if !atelier_core::is_criterion_slug(&criterion.slug) {
+            bail!(
+                "evidence criterion `{}` is not a criterion slug in {}",
+                criterion.slug,
+                display_state_path(relative)
+            );
+        }
+        if !slugs.insert(criterion.slug.as_str()) {
+            bail!(
+                "evidence names criterion {} more than once in {}",
+                criterion.slug,
+                display_state_path(relative)
+            );
+        }
+    }
     if data.evidence_type.trim().is_empty() {
         bail!(
             "Evidence record {} must include evidence_type",
@@ -1956,6 +1992,21 @@ fn write_evidence_target(output: &mut String, target: Option<&EvidenceTarget>) -
     Ok(())
 }
 
+/// `criteria:` as a list of `slug`/`result` pairs, slug first.
+fn write_evidence_criteria(output: &mut String, criteria: &[EvidenceCriterion]) -> Result<()> {
+    if criteria.is_empty() {
+        return Ok(());
+    }
+    output.push_str("criteria:\n");
+    for criterion in criteria {
+        output.push_str("- ");
+        write_yaml_scalar(output, "slug", Some(&criterion.slug))?;
+        output.push_str("  ");
+        write_yaml_scalar(output, "result", Some(criterion.result.as_str()))?;
+    }
+    Ok(())
+}
+
 fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String {
     let normalized = normalize_body(body.unwrap_or(""));
     if data.output.is_none() || evidence_body_has_transcript_sections(&normalized) {
@@ -2333,6 +2384,8 @@ mod tests {
             spawn_error: None,
             output: None,
             target: None,
+            criteria: Vec::new(),
+            criteria_mission: None,
         };
         EvidenceRecord {
             header: record_header(
