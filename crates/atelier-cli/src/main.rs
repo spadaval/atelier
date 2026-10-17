@@ -67,19 +67,6 @@ struct Cli {
     #[arg(short, long, global = true)]
     quiet: bool,
 
-    /// Log level for diagnostic output (error, warn, info, debug, trace)
-    #[arg(long, global = true, default_value = "warn", env = "ATELIER_LOG")]
-    log_level: String,
-
-    /// Log format (text, json)
-    #[arg(
-        long,
-        global = true,
-        default_value = "text",
-        env = "ATELIER_LOG_FORMAT"
-    )]
-    log_format: String,
-
     #[command(subcommand)]
     command: Commands,
 }
@@ -590,22 +577,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     }
 }
 
-fn init_tracing(log_level: &str, log_format: &str) {
-    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-    let filter = EnvFilter::try_new(log_level).unwrap_or_else(|_| EnvFilter::new("warn"));
-    if log_format == "json" {
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt::layer().json().with_writer(std::io::stderr))
-            .init();
-    } else {
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt::layer().with_target(false).with_writer(std::io::stderr))
-            .init();
-    }
-}
-
 // ============================================================================
 // Dispatch helpers for canonical subcommands
 // ============================================================================
@@ -643,7 +614,6 @@ fn load_dotenv() -> Result<()> {
 
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
-    init_tracing(&cli.log_level, &cli.log_format);
     // Hold an association transaction across every repository command's
     // complete read/validate/write lifetime. Reads share it; every writer owns
     // it exclusively so read-modify-write commands cannot lose concurrent edits.

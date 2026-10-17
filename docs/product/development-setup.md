@@ -30,7 +30,8 @@ Claude Code hooks; it can lag `master`, so reinstall after merging changes to
 session commands. No external service, provider credential, `.env`, or
 devcontainer is required.
 
-Optional `ATELIER_LOG` and `ATELIER_LOG_FORMAT` configure diagnostics. Producer
+Atelier reads no logging configuration; the former `--log-level`,
+`--log-format`, `ATELIER_LOG` and `ATELIER_LOG_FORMAT` were removed. Producer
 identity is self-declared; commands with attribution accept an explicit identity
 where documented by help. Do not commit credentials or local runtime files.
 
