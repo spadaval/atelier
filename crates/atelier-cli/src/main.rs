@@ -67,19 +67,6 @@ struct Cli {
     #[arg(short, long, global = true)]
     quiet: bool,
 
-    /// Log level for diagnostic output (error, warn, info, debug, trace)
-    #[arg(long, global = true, default_value = "warn", env = "ATELIER_LOG")]
-    log_level: String,
-
-    /// Log format (text, json)
-    #[arg(
-        long,
-        global = true,
-        default_value = "text",
-        env = "ATELIER_LOG_FORMAT"
-    )]
-    log_format: String,
-
     #[command(subcommand)]
     command: Commands,
 }
@@ -472,7 +459,8 @@ enum IssueCommands {
         /// readiness: related, part_of, implements, supersedes, duplicates,
         /// derived_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
-        /// record's relates field
+        /// record's relates field. Only the source record is written; the
+        /// target reads the link from it
         #[arg(long, default_value = "advances")]
         role: String,
     },
@@ -589,22 +577,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     }
 }
 
-fn init_tracing(log_level: &str, log_format: &str) {
-    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-    let filter = EnvFilter::try_new(log_level).unwrap_or_else(|_| EnvFilter::new("warn"));
-    if log_format == "json" {
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt::layer().json().with_writer(std::io::stderr))
-            .init();
-    } else {
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt::layer().with_target(false).with_writer(std::io::stderr))
-            .init();
-    }
-}
-
 // ============================================================================
 // Dispatch helpers for canonical subcommands
 // ============================================================================
@@ -614,8 +586,22 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // ============================================================================
 
 fn main() -> Result<()> {
+    restore_default_sigpipe();
     load_dotenv()?;
     run()
+}
+
+/// Rust ignores SIGPIPE, so a write to a reader that closed early, as `head`
+/// does, fails and `println!` panics. Restoring the default ends the process
+/// quietly instead, with the conventional status 141, as other command-line
+/// tools do.
+fn restore_default_sigpipe() {
+    #[cfg(unix)]
+    // SAFETY: called first in `main`, before any thread or I/O exists;
+    // SIG_DFL is a valid disposition for SIGPIPE.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
 }
 
 fn load_dotenv() -> Result<()> {
@@ -628,7 +614,6 @@ fn load_dotenv() -> Result<()> {
 
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
-    init_tracing(&cli.log_level, &cli.log_format);
     // Hold an association transaction across every repository command's
     // complete read/validate/write lifetime. Reads share it; every writer owns
     // it exclusively so read-modify-write commands cannot lose concurrent edits.

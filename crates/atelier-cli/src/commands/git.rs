@@ -414,7 +414,10 @@ fn base_done_claim(
 /// branch's own copy of the record carries it. Once prune removes that copy,
 /// the claim counts as merged when the branch's committed record has it and
 /// the branch tip is in the base (atelier-lwdu).
-pub(crate) fn unmerged_done_label(
+///
+/// The cue after a done owner's item line: `merged into <base>` or `not
+/// merged into <base>`.
+pub(crate) fn done_merge_cue(
     repo: &Path,
     id: &str,
     status: &str,
@@ -422,9 +425,9 @@ pub(crate) fn unmerged_done_label(
     base_branch: &str,
 ) -> String {
     if done_merged(repo, id, status, branch, base_branch) {
-        format!("{status}, merged into {base_branch}")
+        format!("merged into {base_branch}")
     } else {
-        format!("{status} on branch {branch}, not merged into {base_branch}")
+        format!("not merged into {base_branch}")
     }
 }
 
@@ -460,6 +463,7 @@ struct BranchOwner {
     id: String,
     title: String,
     status: String,
+    priority: String,
     /// The status's category under the branch's own policy.
     category: Option<String>,
     /// Set for a done owner: whether its claim is merged into the base.
@@ -471,6 +475,24 @@ impl BranchOwner {
     /// The status word with its ✓ or ⚠, as the checkout's own rows mark it.
     fn cue(&self) -> String {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
+    }
+
+    /// `<branch> @ <commit>: <item line> | <merge state> | N active`.
+    fn line(&self, base: &str) -> String {
+        let mut line =
+            crate::human_output::ItemLine::new(&self.id, &self.status, &self.priority, &self.title)
+                .state(self.category.as_deref(), None);
+        match self.merged {
+            Some(true) => line = line.cue(format!("merged into {base}")),
+            Some(false) => line = line.cue(format!("not merged into {base}")),
+            None => {}
+        }
+        format!(
+            "{} @ {}: {}",
+            self.branch,
+            crate::human_output::short_commit(&self.commit),
+            line.cue(format!("{} active", self.active)).text()
+        )
     }
 }
 
@@ -509,24 +531,7 @@ impl BranchSummaries {
             .entries
             .iter()
             .map(|owner| match owner {
-                Ok(owner) => {
-                    let cue = owner.cue();
-                    let status = match owner.merged {
-                        Some(true) => format!("{cue}, merged into {base}"),
-                        Some(false) => {
-                            format!("{cue} on branch {}, not merged into {base}", owner.branch)
-                        }
-                        None => cue,
-                    };
-                    format!(
-                        "{} @ {}: {} [{status}] {} — {} active (committed branch records)",
-                        owner.branch,
-                        &owner.commit[..8],
-                        owner.id,
-                        owner.title,
-                        owner.active
-                    )
-                }
+                Ok(owner) => owner.line(base),
                 Err(unreadable) => {
                     format!(
                         "{}: unavailable — {:#}",
@@ -703,6 +708,7 @@ fn branch_summaries_for(
                     commit: commit.to_owned(),
                     title: owner.title.clone(),
                     status: owner.status.clone(),
+                    priority: owner.priority.clone(),
                     category: category.map(str::to_owned),
                     id,
                     merged,

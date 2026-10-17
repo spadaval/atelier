@@ -1589,7 +1589,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Ready work:"));
     assert!(stdout.contains("Ready Work\n----------\n"), "{stdout}");
     assert!(stdout.contains("Ready item"), "{stdout}");
-    assert!(stdout.contains("Current work:"));
+    assert!(stdout.contains("Current Work\n------------\n"));
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));
     assert!(stdout.contains("Choose ready work"));
@@ -1655,7 +1655,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
     assert!(success, "transition failed: {stderr}");
     assert!(transition_out.contains("Issue Transitions"));
     assert!(
-        transition_out.contains("start [allowed]"),
+        transition_out.contains("start: allowed"),
         "{transition_out}"
     );
     assert!(
@@ -1663,7 +1663,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
-        transition_out.contains("block [allowed]"),
+        transition_out.contains("block: allowed"),
         "{transition_out}"
     );
     assert!(
@@ -1788,7 +1788,9 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains("Current work:  1 issue(s)"));
+    assert!(status_out.contains(&format!(
+        "\nCurrent Work\n------------\n  {issue_id} in_progress "
+    )));
     assert!(status_out.contains(&issue_id.to_string()));
 }
 
@@ -1843,7 +1845,7 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(
-        status_out.contains("Current work:  2 issue(s)"),
+        section_rows(&status_out, "Current Work").len() == 2,
         "{status_out}"
     );
     assert!(status_out.contains(&active_id.to_string()));
@@ -1916,7 +1918,7 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(
-        status_out.contains("Current work:  2 issue(s)"),
+        section_rows(&status_out, "Current Work").len() == 2,
         "{status_out}"
     );
     assert!(status_out.contains(&first_id.to_string()));
@@ -1950,7 +1952,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
-    assert!(options_out.contains("start [blocked]"), "{options_out}");
+    assert!(options_out.contains("start: blocked"), "{options_out}");
     assert!(
         options_out.contains("expected at least 1 fresh passing evidence"),
         "{options_out}"
@@ -2125,7 +2127,10 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains("Current work:  none"), "{status_out}");
+    assert!(
+        status_out.contains("\nCurrent Work\n------------\n(none)\n"),
+        "{status_out}"
+    );
     assert!(
         issue_text.contains("## Close Reason\n\ndone"),
         "{issue_text}"
@@ -2205,7 +2210,9 @@ fn test_removed_abandon_preserves_issue_status() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(
-        status_out.contains("Current work:  1 issue(s)"),
+        status_out.contains(&format!(
+            "\nCurrent Work\n------------\n  {issue_id} in_progress "
+        )),
         "{status_out}"
     );
     assert!(status_out.contains(&issue_id.to_string()));
@@ -2314,7 +2321,7 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
-    assert!(options_out.contains("close [blocked]"), "{options_out}");
+    assert!(options_out.contains("close: blocked"), "{options_out}");
     assert!(options_out.contains("  Decision: blocked"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
@@ -2767,4 +2774,43 @@ fn test_prune_keeps_decision_and_research_records_and_check_explains_pruned_link
         !success && stderr.contains("is committed at HEAD but missing"),
         "{stderr}"
     );
+}
+
+/// The rows under a status section heading, up to the next blank line.
+fn section_rows<'a>(output: &'a str, title: &str) -> Vec<&'a str> {
+    output
+        .split(&format!("\n{title}\n{}\n", "-".repeat(title.len())))
+        .nth(1)
+        .unwrap_or_default()
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .collect()
+}
+
+#[test]
+fn test_removed_log_flags_are_rejected_and_absent_from_help() {
+    let dir = tempdir().unwrap();
+    for args in [
+        &["--log-level", "debug", "status"][..],
+        &["--log-level", "bogus", "status"][..],
+        &["--log-format", "xml", "status"][..],
+        &["status", "--log-format", "json"][..],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(dir.path())
+            .args(args)
+            .output()
+            .expect("Failed to execute atelier");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(stderr.contains("unexpected argument"), "{args:?}: {stderr}");
+    }
+    for help in [&["--help"][..], &["init", "--help"][..]] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), help);
+        assert!(success, "{help:?} failed: {stderr}");
+        assert!(
+            !stdout.contains("--log-"),
+            "{help:?} lists log flags:\n{stdout}"
+        );
+    }
 }

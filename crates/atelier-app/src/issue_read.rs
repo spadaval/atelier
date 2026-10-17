@@ -182,18 +182,12 @@ fn relationship_summary(
     }
 
     for link in index.list_record_links("issue", &objective.id)? {
-        match link.relation_type.as_str() {
-            "blocked_by" => {
-                if let Some(issue_id) = linked_issue_side(&link, &objective.id) {
-                    blocker_ids.insert(issue_id.to_string());
-                }
-            }
-            "validates" if link_touches_evidence(&link) => {}
-            _ => summary.other_links += 1,
+        if !(link.relation_type == "validates" && link_touches_evidence(&link)) {
+            summary.other_links += 1;
         }
     }
 
-    for issue_id in scope_ids {
+    for issue_id in scope_ids.iter().chain([&objective.id]) {
         for blocker_id in index.get_blockers(issue_id) {
             blocker_ids.insert(blocker_id);
         }
@@ -241,20 +235,6 @@ fn validating_evidence_count(index: &RecordIndex, issue_id: &str) -> Result<usiz
         .into_iter()
         .filter(|link| link.relation_type == "validates" && link_touches_evidence(link))
         .count())
-}
-
-fn linked_issue_side<'a>(link: &'a RecordLink, objective_id: &str) -> Option<&'a str> {
-    if link.source_kind == "issue" && link.source_id == objective_id && link.target_kind == "issue"
-    {
-        Some(&link.target_id)
-    } else if link.target_kind == "issue"
-        && link.target_id == objective_id
-        && link.source_kind == "issue"
-    {
-        Some(&link.source_id)
-    } else {
-        None
-    }
 }
 
 fn link_touches_evidence(link: &RecordLink) -> bool {

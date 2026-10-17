@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-5rs0
 priority: "P1"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T06:26:33.339816884+00:00"
+status: "done"
 title: "Exit cleanly when piped output is closed early"
-updated_at: "2026-10-17T06:14:10.544747886+00:00"
+updated_at: "2026-10-17T06:26:33.339816884+00:00"
 ---
 
 ## Goal
@@ -40,3 +44,7 @@ The exit status is 101. Four auditors hit this, on `issue show`, `review list`, 
 ## Scope
 
 Fix it once in `crates/atelier-cli/src/main.rs`: restore the default SIGPIPE disposition on Unix at start-up, or map `io::ErrorKind::BrokenPipe` to a clean exit. Don't patch individual commands.
+
+## Close Reason
+
+main.rs restores the default SIGPIPE disposition on Unix at start-up, so every command piped into an early-closing reader ends with status 0 or 141 and no panic. The closed-stdout integration test fails without the fix and passes with it.

@@ -40,9 +40,15 @@ atelier start <id>
 context. A mission is created with `issue create --issue-type mission`. Use a
 parent issue (any work item) for direct implementation children, one level
 deep, and `advances` for mission scope.
-An `advances` link joins one mission to one non-mission issue and is stored on
-both records, so either argument order records the same link; the examples name
-the work first.
+An `advances` link joins one mission to one non-mission issue. Every
+`issue link` is stored only on the first record named, the one that declares
+it, and the other record reads it from there, so linking new work to a shared
+mission or blocker leaves that record unchanged (atelier-ihss). Either argument
+order records the same `advances` link, and `--role blocks` is the blocker
+declaring `blocked_by` from its side; the examples name the work first. Records
+from before this change may store a link on both records or, for a blocker,
+only in the blocker's `blocks`; they read the same, and `issue unlink` removes
+a link wherever it is stored.
 Creation presets (`--template`) and mission text generation flags
 (`--constraint`, `--risk`, `--validation`) are retired. Author typed Markdown
 with `--body`, and choose `--issue-type`, priority, and labels explicitly; Agent

@@ -299,6 +299,9 @@ struct PlannedRelationship {
     source: PlannedRef,
     target: PlannedRef,
     role: String,
+    /// The target's own entry declared the edge, so only the target's
+    /// record stores it (atelier-ihss).
+    declared_by_target: bool,
 }
 
 #[derive(Debug)]
@@ -311,7 +314,8 @@ struct PlannedNote<'a> {
 ///
 /// Relationship direction is canonical rather than dependent on the authored
 /// field: parents point to children and blockers point to blocked issues. This
-/// makes `blocked_by` and `blocks` normalize to the same graph edge.
+/// makes `blocked_by` and `blocks` normalize to the same graph edge. The edge
+/// is stored only on the record whose entry declared it.
 #[derive(Debug)]
 struct BundleGraphPlan<'a> {
     issues: Vec<&'a BundleIssue>,
@@ -343,6 +347,7 @@ impl<'a> BundleGraphPlan<'a> {
                     planned_bundle_ref(index, bundle, parent)?,
                     issue_ref.clone(),
                     "parent",
+                    false,
                 )?;
             }
             for blocker in &issue.blocked_by {
@@ -351,6 +356,7 @@ impl<'a> BundleGraphPlan<'a> {
                     planned_bundle_ref(index, bundle, blocker)?,
                     issue_ref.clone(),
                     "blocks",
+                    true,
                 )?;
             }
             for blocked in &issue.blocks {
@@ -359,18 +365,26 @@ impl<'a> BundleGraphPlan<'a> {
                     issue_ref.clone(),
                     planned_bundle_ref(index, bundle, blocked)?,
                     "blocks",
+                    false,
                 )?;
             }
             // Validation ensures exactly one endpoint is a mission. Plan the
             // edge from the mission so declaring it on both sides is a duplicate.
             for target in &issue.advances {
                 let target_ref = planned_bundle_ref(index, bundle, target)?;
-                let (source, target) = if issue.issue_type == "mission" {
-                    (issue_ref.clone(), target_ref)
-                } else {
+                let declared_by_target = issue.issue_type != "mission";
+                let (source, target) = if declared_by_target {
                     (target_ref, issue_ref.clone())
+                } else {
+                    (issue_ref.clone(), target_ref)
                 };
-                insert_planned_relationship(&mut relationships, source, target, "advances")?;
+                insert_planned_relationship(
+                    &mut relationships,
+                    source,
+                    target,
+                    "advances",
+                    declared_by_target,
+                )?;
             }
         }
         for record in &evidence {
@@ -381,6 +395,7 @@ impl<'a> BundleGraphPlan<'a> {
                     source.clone(),
                     planned_bundle_ref(index, bundle, target)?,
                     "validates",
+                    false,
                 )?;
             }
         }
@@ -399,13 +414,20 @@ fn insert_planned_relationship(
     source: PlannedRef,
     target: PlannedRef,
     role: &str,
+    declared_by_target: bool,
 ) -> Result<()> {
     let relationship = PlannedRelationship {
         source,
         target,
         role: role.to_string(),
+        declared_by_target,
     };
-    if !relationships.insert(relationship.clone()) {
+    // The same edge declared from its other endpoint is a duplicate too.
+    let from_other_endpoint = PlannedRelationship {
+        declared_by_target: !declared_by_target,
+        ..relationship.clone()
+    };
+    if relationships.contains(&from_other_endpoint) || !relationships.insert(relationship.clone()) {
         bail!(
             "Duplicate bundle relationship after normalization: {} -> {} ({})",
             planned_ref_label(&relationship.source),
@@ -734,7 +756,7 @@ fn apply_bundle_file(
     })();
     if let Err(error) = cleanup_bundle_stage(&stage) {
         if result.is_ok() {
-            tracing::warn!(
+            eprintln!(
                 "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this bundle; verify with `atelier check`, then remove the leftover staging directory.",
                 stage.display(),
                 error
@@ -965,7 +987,13 @@ fn apply_bundle_to_state(
     for relationship in &plan.relationships {
         let source = resolve_planned_ref(&resolved, &relationship.source)?;
         let target = resolve_planned_ref(&resolved, &relationship.target)?;
-        apply_planned_relationship(&store, &source, &target, &relationship.role)?;
+        apply_planned_relationship(
+            &store,
+            &source,
+            &target,
+            &relationship.role,
+            relationship.declared_by_target,
+        )?;
         applied_relationships.push(resolved_relationship_value(
             &source,
             &target,
@@ -1138,7 +1166,7 @@ pub(crate) fn install_directories(
     })();
     if result.is_ok() {
         if let Err(error) = cleanup_bundle_backup(&backup) {
-            tracing::warn!(
+            eprintln!(
                 "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
                 backup.display(),
                 error
@@ -1353,6 +1381,7 @@ fn apply_planned_relationship(
     source: &ResolvedRef,
     target: &ResolvedRef,
     role: &str,
+    declared_by_target: bool,
 ) -> Result<()> {
     match role {
         "parent" => {
@@ -1365,9 +1394,12 @@ fn apply_planned_relationship(
             if source.kind != "issue" || target.kind != "issue" {
                 bail!("blocks relationship endpoints must both be issues");
             }
-            store.add_issue_block(&target.id, &source.id)?;
+            store.add_issue_block(&target.id, &source.id, !declared_by_target)?;
         }
-        // Stored on both records, as `atelier issue link` does.
+        // Stored on the declaring record only, as `atelier issue link` does.
+        "advances" if declared_by_target => {
+            store.add_issue_relation(&target.id, &source.id, "advances")?;
+        }
         "advances" => {
             store.add_issue_relation(&source.id, &target.id, "advances")?;
         }

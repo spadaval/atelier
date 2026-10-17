@@ -10,8 +10,8 @@ use atelier_core::Issue;
 use crate::commands::git::InFlight;
 use crate::human_output::{
     last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_unassigned_groups, FooterAction, IssueHeadingRow,
-    IssueListPanel, IssueListRow, RenderContext, TextStyle,
+    render_lines_section, render_metadata, render_unassigned_groups, FooterAction, IssueListPanel,
+    IssueListRow, ItemLine, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -246,16 +246,14 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             lines.push(String::new());
         }
         lines.extend(
-            IssueHeadingRow {
-                indent: "",
-                id: &mission.issue.id,
-                issue_type: None,
-                status: &mission.issue.status,
-                status_category: &mission.status_category,
-                priority: &mission.issue.priority,
-                title: &mission.issue.title,
-            }
-            .render(context),
+            ItemLine::new(
+                &mission.issue.id,
+                &mission.issue.status,
+                &mission.issue.priority,
+                &mission.issue.title,
+            )
+            .state(Some(&mission.status_category), None)
+            .render_wrapped(context, ""),
         );
         let counts = &mission.totals;
         for (label, value) in [
@@ -445,9 +443,9 @@ fn scoped_dashboard(
             counts.backlog
         ),
     )];
+    // The title is the item line, so no metadata repeats its status.
+    let category = policy_category(&issue.status)?;
     let title = if let Some(proof_gaps) = proof_gaps {
-        // The parent's title line has no status; a mission's names it.
-        metadata.insert(0, ("Status", issue.status.clone()));
         metadata.extend([
             (
                 "Mission",
@@ -460,16 +458,23 @@ fn scoped_dashboard(
                 transition_readiness(index, &id, "start")?,
             ),
         ]);
-        format!("Work Parent {id} - {}", issue.title)
+        ItemLine::new(&id, &issue.status, &issue.priority, &issue.title)
+            .issue_type(&issue.issue_type)
+            .state(category.as_deref(), None)
+            .text()
     } else {
         if let Some(strategy) = issue.strategy()? {
             metadata.push(("Strategy", strategy.path));
         }
-        format!(
-            "{id} [mission] {} - {}",
-            issue.status,
-            strip_mission_title_prefix(&issue.title)
+        ItemLine::new(
+            &id,
+            &issue.status,
+            &issue.priority,
+            strip_mission_title_prefix(&issue.title),
         )
+        .issue_type("mission")
+        .state(category.as_deref(), None)
+        .text()
     };
     let context = RenderContext::for_stdout();
     let mut panels = vec![render_metadata(None, &metadata)];
@@ -698,4 +703,12 @@ mod tests {
             assert!(!bucket_needs_execution_gates(bucket), "{bucket}");
         }
     }
+}
+
+/// The status's category under the working policy, when there is one.
+fn policy_category(status: &str) -> Result<Option<String>> {
+    Ok(
+        crate::commands::issue_workflow::load_issue_workflow_policy()?
+            .and_then(|policy| policy.status_category(status).map(str::to_owned)),
+    )
 }

@@ -729,16 +729,16 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
     );
     // Subissues show each child's work state, marked ⚠ when blocked.
     assert!(
-        subissues.contains(&format!("\n  {contract_id} [ready] medium")),
+        subissues.contains(&format!("\n  {contract_id} ready medium")),
         "{subissues}"
     );
     assert!(
-        subissues.contains(&format!("\n  {implementation_id} [⚠ blocked] medium")),
+        subissues.contains(&format!("\n  {implementation_id} ⚠ blocked medium")),
         "{subissues}"
     );
     assert!(
         subissues.contains(&format!(
-            "\n  {external_child_id} [⚠ blocked] medium - External blocked child | 1 blocker"
+            "\n  {external_child_id} ⚠ blocked medium External blocked child | 1 blocker"
         )),
         "{subissues}"
     );
@@ -748,7 +748,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
         .nth(1)
         .expect("Blocked Work panel");
     assert!(
-        blocked.contains(&format!("\n  {implementation_id} [⚠ todo] medium")),
+        blocked.contains(&format!("\n  {implementation_id} ⚠ todo medium")),
         "{stdout}"
     );
     assert!(!stdout.contains(&external_blocker_id), "{stdout}");
@@ -871,10 +871,10 @@ fn test_issue_show_is_brief_by_default() {
     assert_eq!(
         show_ok(dir.path(), &["issue", "show", &child]),
         format!(
-            "{child} [task] todo - First child\n\
-             Mission: {mission} draft - Brief mission\n\
-             Parent: {parent} todo - Brief parent\n\
-             Blocked by: {blocker} todo - Blocker\n\
+            "{child} task todo medium First child\n\
+             Mission: {mission} draft medium Brief mission\n\
+             Parent: {parent} todo medium Brief parent\n\
+             Blocked by: {blocker} todo medium Blocker\n\
              Transitions: block, defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
              Goal: Child goal.\n\
              Done when: Child done.\n\
@@ -884,11 +884,11 @@ fn test_issue_show_is_brief_by_default() {
     assert_eq!(
         show_ok(dir.path(), &["issue", "show", &parent]),
         format!(
-            "{parent} [task] todo - Brief parent\n\
-             Mission: {mission} draft - Brief mission\n\
+            "{parent} task todo medium Brief parent\n\
+             Mission: {mission} draft medium Brief mission\n\
              Children:\n  \
-             {sibling} ready - Second child\n  \
-             {child} ⚠ blocked - First child\n\
+             {sibling} ready medium Second child\n  \
+             {child} ⚠ blocked medium First child\n\
              Transitions: block, defer, start, supersede --reason\n\
              Goal: Parent goal.\n\
              Done when: Parent done.\n"
@@ -898,7 +898,7 @@ fn test_issue_show_is_brief_by_default() {
     assert_eq!(
         show_ok(dir.path(), &["issue", "show", &mission]),
         format!(
-            "{mission} [mission] draft - Brief mission\n\
+            "{mission} mission draft medium Brief mission\n\
              Work: 3 issues - ready 1, context 1, blocked 1\n\
              Transitions: ready, supersede --reason\n\
              Outcome: Agents read one view.\n\
@@ -921,13 +921,13 @@ fn test_issue_show_is_brief_by_default() {
     let sibling_view = show_ok(dir.path(), &["issue", "show", &sibling]);
     assert!(
         sibling_view.contains(&format!(
-            "\nBlocked via parent {parent}: {blocker} ✓ done - Blocker\n"
+            "\nBlocked via parent {parent}: {blocker} ✓ done medium Blocker\n"
         )),
         "{sibling_view}"
     );
     let child_view = show_ok(dir.path(), &["issue", "show", &child]);
     assert!(
-        child_view.contains(&format!("\nBlocked by: {blocker} ✓ done - Blocker\n")),
+        child_view.contains(&format!("\nBlocked by: {blocker} ✓ done medium Blocker\n")),
         "{child_view}"
     );
     assert!(
@@ -1023,7 +1023,7 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
     let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
     assert!(
         parent_view.contains(&format!(
-            "\nChildren: {open} needs human - Open format question\n"
+            "\nChildren: {open} needs human medium Open format question\n"
         )),
         "{parent_view}"
     );
@@ -1067,7 +1067,7 @@ fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
         assert_eq!(
             show_ok(dir.path(), &["issue", "show", id]),
             format!(
-                "{id} [task] ✓ {status} - Finished work\n\
+                "{id} task ✓ {status} medium Finished work\n\
                  Transitions: none\n\
                  Goal: Finish.\n\
                  Done when: Finished.\n"
@@ -1127,7 +1127,7 @@ fn test_issue_show_full_gives_the_whole_record_for_each_id() {
     let full = |id: &str| show_ok(dir.path(), &["issue", "show", id, "--full"]);
     let child_full = full(&child);
     for section in [
-        "Priority:",
+        "Category:",
         "Hierarchy",
         "Transition Readiness",
         "Context\n-------\nOnly in the full view.",
@@ -1365,10 +1365,10 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
         run_atelier(dir.path(), &["issue", "show", &dependent_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains(&issue_id));
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "show", &dependent_id, "--full"]);
-    assert!(success, "issue show failed: {stderr}");
-    assert!(stdout.contains("Status:   todo"), "{stdout}");
+    assert!(
+        stdout.starts_with(&format!("{dependent_id} task todo ")),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -1399,8 +1399,10 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "custom issue show failed: {stderr}");
-    assert!(stdout.contains("Type:     incident"), "{stdout}");
-    assert!(stdout.contains("Status:   in_progress"), "{stdout}");
+    assert!(
+        stdout.starts_with(&format!("{issue_id} incident in_progress ")),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -1473,9 +1475,8 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
 
     let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "declared mission issue show failed: {stderr}");
-    assert!(show.contains("Type:     mission"), "{show}");
     assert!(
-        show.contains("Status:   draft"),
+        show.starts_with(&format!("{issue_id} mission draft ")),
         "declared mission should use its configured initial status: {show}"
     );
 }
@@ -1559,7 +1560,10 @@ fn test_bundle_apply_accepts_configured_custom_issue_type() {
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "custom bundled issue show failed: {stderr}");
-    assert!(stdout.contains("Type:     incident"), "{stdout}");
+    assert!(
+        stdout.starts_with(&format!("{issue_id} incident todo ")),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -1902,9 +1906,11 @@ fn test_show_issue_rich_human_output() {
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
-    assert!(stdout.contains("Status:   todo"));
-    assert!(stdout.contains("Type:"));
-    assert!(stdout.contains("Priority: medium"));
+    // The title line states type, status and priority; no line repeats them.
+    assert!(stdout.starts_with(&format!("{target_id} feature todo medium Target issue\n")));
+    assert!(!stdout.contains("Status:"));
+    assert!(!stdout.contains("Type:"));
+    assert!(!stdout.contains("Priority:"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
     // The subissue inherits its parent's open blocker.
     assert!(
@@ -1912,7 +1918,7 @@ fn test_show_issue_rich_human_output() {
         "{stdout}"
     );
     assert!(stdout.contains("Blocking issue"));
-    assert!(stdout.contains("(open blocker)"));
+    assert!(stdout.contains(" | open blocker\n"));
     assert!(stdout.contains("Downstream issue"));
     assert!(stdout.contains("Notes"));
     assert!(stdout.contains("[note] Recent note"));
@@ -2037,7 +2043,8 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
         run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
     assert!(evidence_out.contains("Canonical evidence summary"));
-    assert!(evidence_out.contains("Status:      recorded"));
+    assert!(evidence_out.starts_with(&format!("{evidence_id} evidence recorded ")));
+    assert!(!evidence_out.contains("Status:"));
     assert!(evidence_out.contains("Kind:        test"));
     assert!(!evidence_out.contains("Kind:        sqlite"));
 
@@ -2177,7 +2184,10 @@ fn test_close_issue() {
     let issue_id = close_issue_with_evidence(dir.path(), "1", Some("done"));
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
-    assert!(show_out.contains("Status:   done"), "{show_out}");
+    assert!(
+        show_out.starts_with(&format!("{issue_id} task ✓ done ")),
+        "{show_out}"
+    );
 }
 
 // ==================== Issue Delete Tests ====================
@@ -2412,7 +2422,7 @@ fn test_issue_create_is_durable_from_record_files() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Create-only durable"));
     assert!(stdout.contains("Created body"));
-    assert!(stdout.contains("Priority: high"));
+    assert!(stdout.starts_with(&format!("{issue_id} task todo high ")));
 }
 
 // ==================== Dependencies Tests ====================
@@ -2470,7 +2480,7 @@ fn test_work_blocked_lists_directly_blocked_issues() {
     assert!(success, "work blocked failed: {stderr}");
     assert!(
         stdout.contains(&format!(
-            "Blocked Work\n------------\n  {blocked_id} [⚠ todo] medium - Blocked issue | 1 blocker\n"
+            "Blocked Work\n------------\n  {blocked_id} ⚠ todo medium Blocked issue | 1 blocker\n"
         )),
         "{stdout}"
     );
@@ -2900,7 +2910,7 @@ fn test_issue_update_issue_type_persists() {
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Container work"));
-    assert!(stdout.contains("Type:     feature"));
+    assert!(stdout.starts_with(&format!("{issue_id} feature ")));
 }
 
 #[test]
@@ -3038,7 +3048,9 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
 
     let (success, dashboard, stderr) = run_atelier(dir.path(), &["work", "mission", &mission_id]);
     assert!(success, "work mission failed: {stderr}");
-    assert!(dashboard.contains(&format!("{mission_id} [mission] draft - Dashboard cleanup")));
+    assert!(dashboard.contains(&format!(
+        "{mission_id} mission draft medium Dashboard cleanup"
+    )));
     assert!(
         dashboard.contains("docs/strategies/dashboard-cleanup.md"),
         "{dashboard}"
@@ -3052,7 +3064,10 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(dashboard.contains("Blocked mission work"), "{dashboard}");
     assert!(dashboard.contains("Backlog Work"), "{dashboard}");
     assert!(dashboard.contains("Future mission outcome"), "{dashboard}");
-    assert!(dashboard.contains("[backlog]"), "{dashboard}");
+    assert!(
+        dashboard.contains(" backlog medium Future mission outcome"),
+        "{dashboard}"
+    );
     assert!(
         dashboard.contains(&format!("blockers: {blocker_id}")),
         "{dashboard}"
@@ -3091,7 +3106,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     let (success, transition, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &mission_id]);
     assert!(success, "issue transition failed: {stderr}");
-    assert!(transition.contains("start [allowed]"), "{transition}");
+    assert!(transition.contains("start: allowed"), "{transition}");
     assert!(!transition.contains("publish"), "{transition}");
 
     let (success, verbose, stderr) = run_atelier(
@@ -3155,7 +3170,7 @@ fn test_work_views_render_one_dense_line_per_item() {
             .map(str::to_string)
             .collect()
     };
-    let row = |id: &str, status: &str, title: &str| format!("  {id} [{status}] medium - {title}");
+    let row = |id: &str, status: &str, title: &str| format!("  {id} {status} medium {title}");
     let blocked_row = format!(
         "{} | blockers: {ready} | 1 blocker",
         row(&blocked, "⚠ todo", "Blocked item")
@@ -3164,7 +3179,7 @@ fn test_work_views_render_one_dense_line_per_item() {
     let (success, summary, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
     assert!(success, "work mission failed: {stderr}");
     assert!(
-        summary.starts_with(&format!("{mission} [mission] draft - Dense mission\n")),
+        summary.starts_with(&format!("{mission} mission draft medium Dense mission\n")),
         "{summary}"
     );
     // The title line names the status, so no Status line repeats it.
@@ -3262,11 +3277,12 @@ fn test_work_views_render_one_dense_line_per_item() {
 
     let (success, parent_view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
     assert!(success, "work parent failed: {stderr}");
-    // A parent's title line has no status, so its Status line stays.
+    // The title line states the status, so no Status line repeats it.
     assert!(
-        parent_view.contains("\nStatus              : todo\n"),
+        parent_view.starts_with(&format!("{parent} feature todo medium Parent feature\n")),
         "{parent_view}"
     );
+    assert!(!parent_view.contains("Status"), "{parent_view}");
     assert_eq!(
         section(&parent_view, "Ready Work"),
         [row(&child, "todo", "Child task")]
@@ -3289,7 +3305,7 @@ fn test_work_views_render_one_dense_line_per_item() {
     );
     assert!(
         status.contains(&format!(
-            "\n  {unassigned} [⚠ todo] medium - Unassigned blocked | 1 blocker\n"
+            "\n  {unassigned} ⚠ todo medium Unassigned blocked | 1 blocker\n"
         )),
         "{status}"
     );
@@ -3559,7 +3575,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         let (success, options, stderr) =
             run_atelier(dir.path(), &["issue", "transition", issue_id]);
         assert!(success, "retired child transition options failed: {stderr}");
-        assert!(options.contains("start [blocked]"), "{options}");
+        assert!(options.contains("start: blocked"), "{options}");
         assert!(options.contains(&format!("terminal ancestor {retired_epic_id}")));
         assert!(options.contains("cannot enter active-category status 'in_progress'"));
         assert!(options.contains(&format!("atelier issue show {retired_epic_id}")));
@@ -3649,7 +3665,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         "{subissues}"
     );
     assert!(
-        subissues.contains(&format!("\n  {retired_blocked_id} [backlog]")),
+        subissues.contains(&format!("\n  {retired_blocked_id} backlog")),
         "{subissues}"
     );
     assert!(!subissues.contains("[blocked]"), "{subissues}");
@@ -3907,7 +3923,13 @@ fn test_status_footer_uses_complete_work_buckets() {
         assert!(success, "{stderr}");
         assert!(output.contains(expected), "{output}");
         if status == "in_progress" {
-            assert!(output.contains("Current work:  1 issue(s)"), "{output}");
+            assert!(!output.contains("Current work:"), "{output}");
+            assert!(
+                output.contains(&format!(
+                    "\nCurrent Work\n------------\n  {id} in_progress "
+                )),
+                "{output}"
+            );
             assert!(output.contains("Status guidance"), "{output}");
         }
     }
@@ -4020,13 +4042,21 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
         ))
     };
 
-    // CLI: work-first order records the link on both records.
+    // CLI: the record that declares the link stores it, and the mission
+    // record is left unchanged (atelier-ihss).
+    let mission_before = read_canonical_record(dir.path(), "issues", &mission);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "link", &task, &mission, "--role", "advances"],
     );
     assert!(success, "{stderr}");
-    assert!(relates_to(&task, &mission) && relates_to(&mission, &task));
+    assert!(relates_to(&task, &mission));
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &mission),
+        mission_before
+    );
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success && overview.contains(&task), "{overview}{stderr}");
     // CLI: two non-missions cannot advance each other.
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -4053,7 +4083,11 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     );
     assert!(success, "{stderr}");
     let epic = issue_id_by_title(dir.path(), "Bundled epic");
-    assert!(relates_to(&epic, &mission) && relates_to(&mission, &epic));
+    assert!(relates_to(&epic, &mission));
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &mission),
+        mission_before
+    );
     let (success, overview, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
     assert!(success && overview.contains(&epic), "{overview}{stderr}");
 
@@ -4090,6 +4124,82 @@ fn advances_joins_a_mission_and_work_the_same_way_from_bundle_and_cli() {
     );
     let (success, list, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success && !list.contains("Bad epic"), "{list}");
+}
+
+#[test]
+fn links_leave_the_shared_mission_and_blocker_unchanged_and_read_from_either_side() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |title: &str, issue_type: &str, body: &str| {
+        let (success, stdout, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--issue-type",
+                issue_type,
+                "--body",
+                body,
+            ],
+        );
+        assert!(success, "{stderr}");
+        stdout.trim().to_string()
+    };
+    let task_body = "## Goal\n\nWork.\n\n## Done when\n\nDone.";
+    let mission = create(
+        "Shared mission",
+        "mission",
+        "## Outcome\n\nShip.\n\n## Success criteria\n\n- S1: shipped.",
+    );
+    let blocker = create("Shared blocker", "task", task_body);
+    let work = create("New work", "task", task_body);
+    let bytes = |id: &str| fs::read(canonical_record_path(dir.path(), "issues", id)).unwrap();
+    let (mission_before, blocker_before) = (bytes(&mission), bytes(&blocker));
+    let run = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stdout}{stderr}");
+        stdout
+    };
+
+    run(&["issue", "link", &work, &mission, "--role", "advances"]);
+    run(&["issue", "link", &work, &blocker, "--role", "blocked_by"]);
+    assert_eq!(bytes(&mission), mission_before);
+    assert_eq!(bytes(&blocker), blocker_before);
+
+    // The other records see the links at read time.
+    let shown = run(&["issue", "show", &blocker, "--full"]);
+    let blocking = &shown[shown.find("Blocking").unwrap()..];
+    assert!(
+        blocking[..blocking.find("Linked Issues").unwrap()].contains(&work),
+        "{shown}"
+    );
+    let shown = run(&["issue", "show", &mission, "--full"]);
+    assert!(shown.contains(&format!("advances {work} todo")), "{shown}");
+    let shown = run(&["issue", "show", &work, "--full"]);
+    let linked = &shown[shown.find("Linked Issues").unwrap()..];
+    assert!(
+        linked.contains(&format!("advances {mission}")) && !linked.contains("blocked_by"),
+        "{shown}"
+    );
+    assert!(run(&["work", "blocked"]).contains(&work));
+    assert!(run(&["work", "mission", &mission]).contains(&work));
+    run(&["check"]);
+
+    // The same edge declared from the other record already exists, and
+    // unlinking from either side removes it from the record that stores it.
+    assert!(run(&["issue", "link", &blocker, &work, "--role", "blocks"]).contains("already exists"));
+    assert!(
+        run(&["issue", "link", &mission, &work, "--role", "advances"]).contains("already exists")
+    );
+    assert_eq!(bytes(&mission), mission_before);
+    assert_eq!(bytes(&blocker), blocker_before);
+    run(&["issue", "unlink", &blocker, &work, "--role", "blocks"]);
+    run(&["issue", "unlink", &mission, &work, "--role", "advances"]);
+    let stored = read_canonical_record(dir.path(), "issues", &work);
+    assert!(stored.contains("  relates: []\n"), "{stored}");
+    assert!(run(&["work", "ready"]).contains(&work));
 }
 
 #[test]

@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make not-found and invalid-value errors consistent, with short IDs everywhere"
-updated_at: "2026-10-17T01:10:57.989574856+00:00"
+updated_at: "2026-10-17T06:27:40.095358227+00:00"
 ---
 
 ## Goal

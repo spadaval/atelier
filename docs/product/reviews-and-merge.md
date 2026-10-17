@@ -53,7 +53,11 @@ make approval stale. Later commits may add new review/evidence files, create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
 Close Reason without changing the approved acceptance. Adding a child to the
-owner edits the owner's record, so it does make approval stale. Each commit is checked; changing and then restoring code
+owner edits the owner's record, so it does make approval stale. A link is
+stored only on the record that declares it (atelier-ihss), so new work that
+links itself `blocked_by` the owner leaves the owner's record and its approval
+alone; a link the owner declares, or one written into an existing record
+outside the scope, is a relationship edit and makes approval stale. Each commit is checked; changing and then restoring code
 does not recover an old approval. New material edits require renewed review.
 
 Merging the base into a reviewed branch keeps its approval when the merge is
@@ -61,7 +65,7 @@ clean: every other parent is already on the base, and the merge commit is
 exactly the tree `git merge-tree` produces from its parents, with no conflict
 resolution or edits made while merging (atelier-n7g1). The base commits it
 brings in were reviewed on their own branches. A merge whose conflicts are
-only in records, such as both sides adding to a mission's `advances`, also
+only in records, such as both sides linking work from a mission's record, also
 keeps the approval when it matches Git's own merge everywhere else and each
 conflicted record is a three-way merge of its sides: every field takes the
 side that changed it, relationship and label lists keep each side's additions
@@ -69,8 +73,9 @@ and removals, and a field both sides changed differently needs renewed
 review. So a resolution cannot drop a blocker or child the base added
 (atelier-1isk). In either kind of merge, a record in the owner's scope may
 still change only in status: any other base edit to it, such as a new child,
-a `blocked_by` link to the owner (stored in the owner's `blocks`) or new
-acceptance, needs renewed review. A conflicted or hand-edited
+a blocker the record declares, or new acceptance, needs renewed review. New
+work on the base linked `blocked_by` the owner is stored in the new record
+only, so it leaves the approval current. A conflicted or hand-edited
 merge, or one that brings in a branch not yet on the base, needs renewed
 review. Proof is different: tests must run again on the merged result, so
 record fresh evidence after merging the base.

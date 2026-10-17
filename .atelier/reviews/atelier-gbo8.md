@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-gbo8
+title: 'Reviewed git diff master HEAD at c4b06e91 against atelier-i2qq Goal/Done when/Scope/Unknowns/Notes, ADR 0022 Decision 3 and standards. Read every changed source, test and doc hunk. Rebuilt target/debug/atelier and ran status, work all, work missions, work mission atelier-o3lm/atelier-k8h8 --all, work parent, issue list, issue show (brief and --full, mission and task), evidence show, evidence list, review list/show, issue transition, and COLUMNS=40 work all/work missions, in this repo and in a fresh fixture repo with a non-ASCII title (underline width correct). Reran cargo nextest run (676 passed) and cargo fmt --check plus git diff --check master (pass). Item line, 8-char hashes and local timestamps hold in the views the doc lists; no brackets remain on state; deyy''s two deferred notes are folded in; verdict, confirmation and quiet sections are stated as rules with named adopting items, per Scope. ItemLine keeps a fixed field vocabulary and order, so e95f stays open, except the title-stuffed blocker cue in work.rs. One fix_now: no test pins Current Work vs Owner agreement. Not checked: land, merge, start, doctor and evidence record end to end (not run; mutating or gating), colour output on a real TTY beyond unit tests, review/evidence views owned by other items.'
+target: atelier-i2qq
+identity: Independent reviewer (Claude subagent)
+commit: c4b06e91043b5f0b07fce4a2cb9a0ba9e6cd2945
+created_at: 2026-10-17T06:18:20.022363678Z
+event:
+  event: review
+---
+
+Reviewed git diff master HEAD at c4b06e91 against atelier-i2qq Goal/Done when/Scope/Unknowns/Notes, ADR 0022 Decision 3 and standards. Read every changed source, test and doc hunk. Rebuilt target/debug/atelier and ran status, work all, work missions, work mission atelier-o3lm/atelier-k8h8 --all, work parent, issue list, issue show (brief and --full, mission and task), evidence show, evidence list, review list/show, issue transition, and COLUMNS=40 work all/work missions, in this repo and in a fresh fixture repo with a non-ASCII title (underline width correct). Reran cargo nextest run (676 passed) and cargo fmt --check plus git diff --check master (pass). Item line, 8-char hashes and local timestamps hold in the views the doc lists; no brackets remain on state; deyy's two deferred notes are folded in; verdict, confirmation and quiet sections are stated as rules with named adopting items, per Scope. ItemLine keeps a fixed field vocabulary and order, so e95f stays open, except the title-stuffed blocker cue in work.rs. One fix_now: no test pins Current Work vs Owner agreement. Not checked: land, merge, start, doctor and evidence record end to end (not run; mutating or gating), colour output on a real TTY beyond unit tests, review/evidence views owned by other items.

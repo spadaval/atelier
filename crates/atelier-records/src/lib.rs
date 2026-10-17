@@ -31,7 +31,7 @@ pub use record_kinds::{
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
     relates_relationship, relationship_target, sort_relationships, AttachmentRelationship,
-    RelatesRelationship, RelationshipTarget, Relationships,
+    RelatesRelationship, RelationshipTarget, Relationships, BLOCKED_BY,
 };
 
 /// Split a canonical Markdown document into YAML front matter and body text.
@@ -430,42 +430,65 @@ impl RecordStore {
         Ok(true)
     }
 
-    pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+    /// Records that `blocker_id` blocks `blocked_id` on the one record that
+    /// declares it, so the other record stays unchanged (atelier-ihss): the
+    /// blocked issue's `relates` (`blocked_by`), or the blocker's `blocks`
+    /// when the blocker declares it. The edge already exists if either
+    /// record stores it.
+    pub fn add_issue_block(
+        &self,
+        blocked_id: &str,
+        blocker_id: &str,
+        declared_by_blocker: bool,
+    ) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         if blocked_id == blocker_id {
             bail!("An issue cannot block itself");
         }
-        self.load_issue_by_id(blocked_id)?;
+        let mut blocked = self.load_issue_by_id(blocked_id)?;
+        let mut blocker = self.load_issue_by_id(blocker_id)?;
+        let blocks_entry = issue_relationship_target(blocked_id);
+        let blocked_by_entry = issue_relates_relationship(blocker_id, BLOCKED_BY);
+        if blocker.relationships.blocks.contains(&blocks_entry)
+            || blocked.relationships.relates.contains(&blocked_by_entry)
+        {
+            return Ok(false);
+        }
         if self.would_create_block_cycle(blocked_id, blocker_id)? {
             bail!("Adding this dependency would create a circular dependency chain");
         }
-
-        let target = issue_relationship_target(blocked_id);
-        let mut blocker = self.load_issue_by_id(blocker_id)?;
-        if !insert_unique(&mut blocker.relationships.blocks, target) {
-            return Ok(false);
+        if declared_by_blocker {
+            blocker.relationships.blocks.push(blocks_entry);
+            self.write_issue_atomic(&blocker)?;
+        } else {
+            blocked.relationships.relates.push(blocked_by_entry);
+            self.write_issue_atomic(&blocked)?;
         }
-        self.write_issue_atomic(&blocker)?;
         Ok(true)
     }
 
+    /// Removes a blocker edge from whichever record stores it.
     pub fn remove_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
-        self.load_issue_by_id(blocked_id)?;
-        let target = issue_relationship_target(blocked_id);
+        let mut blocked = self.load_issue_by_id(blocked_id)?;
         let mut blocker = self.load_issue_by_id(blocker_id)?;
-        let original_len = blocker.relationships.blocks.len();
-        blocker
-            .relationships
-            .blocks
-            .retain(|existing| existing != &target);
-        if blocker.relationships.blocks.len() == original_len {
-            return Ok(false);
+        let blocks_entry = issue_relationship_target(blocked_id);
+        let blocked_by_entry = issue_relates_relationship(blocker_id, BLOCKED_BY);
+        let blocker_changed = remove_all(&mut blocker.relationships.blocks, &blocks_entry);
+        let blocked_changed = remove_all(&mut blocked.relationships.relates, &blocked_by_entry);
+        if blocker_changed {
+            self.write_issue_atomic(&blocker)?;
         }
-        self.write_issue_atomic(&blocker)?;
-        Ok(true)
+        if blocked_changed {
+            self.write_issue_atomic(&blocked)?;
+        }
+        Ok(blocker_changed || blocked_changed)
     }
 
+    /// Records a typed link on `issue_id`, the record that declares it, and
+    /// leaves `related_id` unchanged (atelier-ihss). Records from before
+    /// this stored the link on both sides, so a copy on either side means it
+    /// already exists.
     pub fn add_issue_relation(
         &self,
         issue_id: &str,
@@ -474,26 +497,25 @@ impl RecordStore {
     ) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_issue_relation_type(relation_type)?;
+        if relation_type == BLOCKED_BY {
+            return self.add_issue_block(issue_id, related_id, false);
+        }
         if issue_id == related_id {
             bail!("Cannot relate an issue to itself");
         }
         let mut issue = self.load_issue_by_id(issue_id)?;
-        let mut related = self.load_issue_by_id(related_id)?;
-        let issue_target = issue_relates_relationship(issue_id, relation_type);
+        let related = self.load_issue_by_id(related_id)?;
         let related_target = issue_relates_relationship(related_id, relation_type);
-        let issue_changed = !issue.relationships.relates.contains(&related_target);
-        let related_changed = !related.relationships.relates.contains(&issue_target);
-        if !issue_changed && !related_changed {
+        if issue.relationships.relates.contains(&related_target)
+            || related
+                .relationships
+                .relates
+                .contains(&issue_relates_relationship(issue_id, relation_type))
+        {
             return Ok(false);
         }
-        if issue_changed {
-            issue.relationships.relates.push(related_target);
-            self.write_issue_atomic(&issue)?;
-        }
-        if related_changed {
-            related.relationships.relates.push(issue_target);
-            self.write_issue_atomic(&related)?;
-        }
+        issue.relationships.relates.push(related_target);
+        self.write_issue_atomic(&issue)?;
         Ok(true)
     }
 
@@ -505,6 +527,9 @@ impl RecordStore {
     ) -> Result<bool> {
         let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
         validate_relation_type(relation_type)?;
+        if relation_type == BLOCKED_BY {
+            return self.remove_issue_block(issue_id, related_id);
+        }
         let mut issue = self.load_issue_by_id(issue_id)?;
         let mut related = self.load_issue_by_id(related_id)?;
         let issue_target = issue_relates_relationship(issue_id, relation_type);
@@ -572,6 +597,14 @@ impl RecordStore {
                         .entry(issue.issue.id.clone())
                         .or_default()
                         .push(blocked.id);
+                }
+            }
+            for relation in issue.relationships.relates {
+                if relation.kind == ISSUE_KIND.kind && relation.relation_type == BLOCKED_BY {
+                    blocking_by_blocker
+                        .entry(relation.id)
+                        .or_default()
+                        .push(issue.issue.id.clone());
                 }
             }
         }
@@ -1042,6 +1075,12 @@ fn add_relationship_to_bucket(
             relates_relationship(target_kind, target_id, relation_type),
         )
     }
+}
+
+fn remove_all<T: PartialEq>(values: &mut Vec<T>, value: &T) -> bool {
+    let original_len = values.len();
+    values.retain(|existing| existing != value);
+    values.len() != original_len
 }
 
 fn insert_unique<T: PartialEq>(values: &mut Vec<T>, value: T) -> bool {
@@ -3086,46 +3125,127 @@ Legacy evidence summary.
             .is_empty());
     }
 
+    fn empty_issues(store: &RecordStore, ids: &[&str]) {
+        for id in ids {
+            let mut record = issue_record(id);
+            record.relationships = Relationships::default();
+            store.write_issue_atomic(&record).unwrap();
+        }
+    }
+
+    fn issue_bytes(store: &RecordStore, id: &str) -> Vec<u8> {
+        fs::read(store.state_dir.join(issue_record_path(id))).unwrap()
+    }
+
     #[test]
-    fn record_store_block_unblock_mutates_blocker_relationships() {
+    fn record_store_links_only_the_declaring_record() {
         let dir = tempdir().unwrap();
         let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
-        let mut blocked = issue_record("atelier-abcd");
-        blocked.relationships = Relationships::default();
-        let mut blocker = issue_record("atelier-efgh");
-        blocker.relationships = Relationships::default();
-        store.write_issue_atomic(&blocked).unwrap();
-        store.write_issue_atomic(&blocker).unwrap();
+        empty_issues(&store, &["atelier-work", "atelier-msn", "atelier-shrd"]);
+        let mission = issue_bytes(&store, "atelier-msn");
+        let blocker = issue_bytes(&store, "atelier-shrd");
 
         assert!(store
-            .add_issue_block("atelier-abcd", "atelier-efgh")
+            .add_issue_relation("atelier-work", "atelier-msn", "advances")
             .unwrap());
-        assert!(!store
-            .add_issue_block("atelier-abcd", "atelier-efgh")
+        assert!(store
+            .add_issue_block("atelier-work", "atelier-shrd", false)
             .unwrap());
+
+        assert_eq!(issue_bytes(&store, "atelier-msn"), mission);
+        assert_eq!(issue_bytes(&store, "atelier-shrd"), blocker);
         assert_eq!(
             store
-                .load_issue_by_id("atelier-efgh")
+                .load_issue_by_id("atelier-work")
                 .unwrap()
                 .relationships
-                .blocks,
-            vec![RelationshipTarget {
-                kind: "issue".to_string(),
-                id: "atelier-abcd".to_string(),
-            }]
+                .relates,
+            vec![
+                issue_relates_relationship("atelier-msn", "advances"),
+                issue_relates_relationship("atelier-shrd", BLOCKED_BY),
+            ]
         );
+        // Linking the same edge from the other side finds it.
+        assert!(!store
+            .add_issue_relation("atelier-msn", "atelier-work", "advances")
+            .unwrap());
+        assert!(!store
+            .add_issue_block("atelier-work", "atelier-shrd", true)
+            .unwrap());
+        assert_eq!(issue_bytes(&store, "atelier-msn"), mission);
+        assert_eq!(issue_bytes(&store, "atelier-shrd"), blocker);
+    }
+
+    #[test]
+    fn record_store_block_unblock_mutates_the_declaring_record() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
+        empty_issues(&store, &["atelier-abcd", "atelier-efgh"]);
+        let blocked_by = vec![issue_relates_relationship("atelier-efgh", BLOCKED_BY)];
+        let blocks = vec![issue_relationship_target("atelier-abcd")];
+        let relationships = |id| store.load_issue_by_id(id).unwrap().relationships;
+
+        assert!(store
+            .add_issue_block("atelier-abcd", "atelier-efgh", false)
+            .unwrap());
+        assert!(!store
+            .add_issue_block("atelier-abcd", "atelier-efgh", false)
+            .unwrap());
+        assert_eq!(relationships("atelier-abcd").relates, blocked_by);
+        assert!(relationships("atelier-efgh").blocks.is_empty());
         assert!(store
             .remove_issue_block("atelier-abcd", "atelier-efgh")
             .unwrap());
         assert!(!store
             .remove_issue_block("atelier-abcd", "atelier-efgh")
             .unwrap());
+        assert!(relationships("atelier-abcd").relates.is_empty());
+
+        // The blocker declaring it stores it in its own `blocks`.
         assert!(store
-            .load_issue_by_id("atelier-efgh")
-            .unwrap()
-            .relationships
-            .blocks
-            .is_empty());
+            .add_issue_block("atelier-abcd", "atelier-efgh", true)
+            .unwrap());
+        assert_eq!(relationships("atelier-efgh").blocks, blocks);
+        assert!(relationships("atelier-abcd").relates.is_empty());
+
+        // Unlink removes every stored copy, including both at once.
+        let mut blocked = store.load_issue_by_id("atelier-abcd").unwrap();
+        blocked.relationships.relates = blocked_by.clone();
+        store.write_issue_atomic(&blocked).unwrap();
+        assert!(store
+            .remove_issue_relation("atelier-abcd", "atelier-efgh", BLOCKED_BY)
+            .unwrap());
+        assert!(relationships("atelier-abcd").relates.is_empty());
+        assert!(relationships("atelier-efgh").blocks.is_empty());
+    }
+
+    #[test]
+    fn record_store_unlink_removes_legacy_two_sided_links() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
+        empty_issues(&store, &["atelier-work", "atelier-msn"]);
+        for (id, other) in [
+            ("atelier-work", "atelier-msn"),
+            ("atelier-msn", "atelier-work"),
+        ] {
+            let mut record = store.load_issue_by_id(id).unwrap();
+            record.relationships.relates = vec![issue_relates_relationship(other, "advances")];
+            store.write_issue_atomic(&record).unwrap();
+        }
+        assert!(!store
+            .add_issue_relation("atelier-work", "atelier-msn", "advances")
+            .unwrap());
+        assert!(store
+            .remove_issue_relation("atelier-work", "atelier-msn", "advances")
+            .unwrap());
+        for id in ["atelier-work", "atelier-msn"] {
+            assert!(store
+                .load_issue_by_id(id)
+                .unwrap()
+                .relationships
+                .relates
+                .is_empty());
+        }
     }
 
     #[test]
@@ -3139,24 +3259,27 @@ Legacy evidence summary.
         }
 
         store
-            .add_issue_block("atelier-efgh", "atelier-abcd")
+            .add_issue_block("atelier-efgh", "atelier-abcd", true)
             .unwrap();
         store
-            .add_issue_block("atelier-ijkl", "atelier-efgh")
+            .add_issue_block("atelier-ijkl", "atelier-efgh", false)
             .unwrap();
 
-        let cycle = store
-            .add_issue_block("atelier-abcd", "atelier-ijkl")
-            .unwrap_err();
-        assert!(cycle.to_string().contains("circular dependency"));
+        // The cycle runs through edges stored on either side.
+        for declared_by_blocker in [false, true] {
+            let cycle = store
+                .add_issue_block("atelier-abcd", "atelier-ijkl", declared_by_blocker)
+                .unwrap_err();
+            assert!(cycle.to_string().contains("circular dependency"));
+        }
         let self_block = store
-            .add_issue_block("atelier-abcd", "atelier-abcd")
+            .add_issue_block("atelier-abcd", "atelier-abcd", false)
             .unwrap_err();
         assert!(self_block.to_string().contains("cannot block itself"));
     }
 
     #[test]
-    fn record_store_relate_unrelate_mutates_both_issue_records() {
+    fn record_store_relate_writes_the_declaring_record_and_unrelate_removes_it() {
         let dir = tempdir().unwrap();
         let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut first = issue_record("atelier-abcd");
@@ -3184,18 +3307,12 @@ Legacy evidence summary.
                 relation_type: "derived".to_string(),
             }]
         );
-        assert_eq!(
-            store
-                .load_issue_by_id("atelier-efgh")
-                .unwrap()
-                .relationships
-                .relates,
-            vec![RelatesRelationship {
-                kind: "issue".to_string(),
-                id: "atelier-abcd".to_string(),
-                relation_type: "derived".to_string(),
-            }]
-        );
+        assert!(store
+            .load_issue_by_id("atelier-efgh")
+            .unwrap()
+            .relationships
+            .relates
+            .is_empty());
 
         assert!(store
             .remove_issue_relation("atelier-abcd", "atelier-efgh", "derived")

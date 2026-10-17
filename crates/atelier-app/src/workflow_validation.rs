@@ -226,7 +226,7 @@ fn work_terminal(
     for id in crate::objective_graph::issue_descendant_ids(index, issue_id)? {
         let issue = index.require_issue(&id)?;
         if policy.status_category(&issue.status) != Some("done") {
-            open.push(format!("{} [{}]", issue.id, issue.status));
+            open.push(format!("{} {}", issue.id, issue.status));
         }
     }
     if open.is_empty() {
@@ -357,7 +357,7 @@ mod tests {
 
         let (passed, reason) = work_terminal(&records.index(), &policy(), "atelier-epic").unwrap();
         assert!(!passed);
-        assert_eq!(reason, "open work: atelier-open [in_progress]");
+        assert_eq!(reason, "open work: atelier-open in_progress");
 
         records.get("atelier-open").issue.status = "done".to_string();
         let (passed, reason) = work_terminal(&records.index(), &policy(), "atelier-epic").unwrap();
@@ -376,7 +376,7 @@ mod tests {
         let (passed, reason) =
             work_terminal(&records.index(), &policy(), "atelier-mission").unwrap();
         assert!(!passed);
-        assert_eq!(reason, "open work: atelier-child [todo]");
+        assert_eq!(reason, "open work: atelier-child todo");
 
         records.get("atelier-child").issue.status = "done".to_string();
         let (passed, reason) =
