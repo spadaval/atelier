@@ -412,10 +412,8 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
         let after = chunk
             .split_once("</span></span></span>")
             .map_or("", |(_, after)| after);
-        // An issue reference's label is its title, never its ID.
-        if !label.starts_with("atelier-") || label.len() != "atelier-xxxx".len() {
-            outside.push_str(label);
-        }
+        // A reference's label is a title or the start of a summary, never an ID.
+        outside.push_str(label);
         outside.push_str(after);
     }
     let text = outside
@@ -1093,5 +1091,63 @@ fn a_failing_receipt_credits_no_work_with_a_criterion() {
     assert!(
         row.starts_with("fast ⚠ failing") && !row.contains("| by "),
         "{row}"
+    );
+}
+
+#[test]
+fn record_mentions_are_named_by_what_they_say() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let finding = ok(
+        dir.path(),
+        &[
+            "review",
+            "finding",
+            &planned,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Children of open parents drop out of the page entirely",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    fs::write(
+        dir.path().join("r.md"),
+        format!("Done.\n\n### Deviations\nReview {finding} changed the walk."),
+    )
+    .unwrap();
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &planned,
+            "close",
+            "--reason-file",
+            dir.path().join("r.md").to_str().unwrap(),
+        ],
+    );
+    fs::remove_file(dir.path().join("r.md")).unwrap();
+    commit_all(dir.path(), "close");
+    let markdown = ok(dir.path(), &["debrief", &mission]);
+    assert!(
+        markdown.contains(&format!("Review {finding} changed the walk.")),
+        "{markdown}"
+    );
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains(
+            "Review <span class=\"ref\" tabindex=\"0\">“Children of open parents drop out…”"
+        ),
+        "{html}"
+    );
+    assert!(
+        html.contains(&format!("<span class=\"m\">{finding}</span>")),
+        "{html}"
     );
 }

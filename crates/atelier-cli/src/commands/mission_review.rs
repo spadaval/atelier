@@ -642,9 +642,21 @@ fn link_mentions(view: &Debrief, html: &str) -> String {
             };
             out.push_str(&issue_ref(view, id, Some(&label)));
         } else if let Some(record) = view.record_refs.get(id).filter(|_| bounded) {
+            // Named by the start of what it says; the ID stays in the popover.
+            let words = record
+                .summary
+                .split_whitespace()
+                .take(6)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let label = if record.summary.split_whitespace().count() > 6 {
+                format!("“{}…”", words.trim_end_matches(['.', ',', ':', ';']))
+            } else {
+                format!("“{words}”")
+            };
             out.push_str(&format!(
                 "<span class=\"ref\" tabindex=\"0\">{}<span class=\"pop\"><b>{}</b>{}<span class=\"m\">{}</span></span></span>",
-                escape(id),
+                escape(&label),
                 escape(&capitalise(&record.kind)),
                 inline(&record.summary),
                 escape(id)
