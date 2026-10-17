@@ -1748,7 +1748,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
         ],
     );
     assert!(!success, "invalid evidence record role should fail");
-    assert_corrective_evidence_role_error(&stderr, target_id, "<evidence-id>");
+    assert_corrective_evidence_role_error(&stderr);
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
@@ -1794,7 +1794,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
         ],
     );
     assert!(!success, "invalid evidence attach role should fail");
-    assert_corrective_evidence_role_error(&stderr, reuse_id, &evidence_id);
+    assert_corrective_evidence_role_error(&stderr);
 
     let (success, attach_out, stderr) = run_atelier(
         dir.path(),
@@ -1811,8 +1811,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
     assert!(show_out.contains(&format!("issue/{reuse_id} (validates)")));
 }
 
-/// The recovery commands name the target and evidence the command was given.
-fn assert_corrective_evidence_role_error(stderr: &str, target: &str, evidence: &str) {
+fn assert_corrective_evidence_role_error(stderr: &str) {
     assert!(
         stderr.contains("invalid value 'validation' for '--role <ROLE>'"),
         "error should name invalid role: {stderr}"
