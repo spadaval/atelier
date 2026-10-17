@@ -792,6 +792,8 @@ mod issues;
 mod mission_worktree;
 #[path = "cli_integration/piped_output.rs"]
 mod piped_output;
+#[path = "cli_integration/quiet_tokens.rs"]
+mod quiet_tokens;
 #[path = "cli_integration/record_refs.rs"]
 mod record_refs;
 #[path = "cli_integration/records_evidence.rs"]

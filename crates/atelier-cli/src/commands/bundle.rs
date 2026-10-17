@@ -14,14 +14,26 @@ use atelier_records::{
 };
 use atelier_records::{CanonicalIssueRecord, RecordStore, Relationships};
 
-pub fn preview(index: &RecordIndex, input: &str) -> Result<()> {
+/// Quiet output is `passed` for a valid bundle.
+pub fn preview(index: &RecordIndex, input: &str, quiet: bool) -> Result<()> {
     let bundle = load_bundle(index, input)?;
     validate_bundle(index, &bundle)?;
     let plan = BundleGraphPlan::from_bundle(index, &bundle)?;
+    if quiet {
+        println!("passed");
+        return Ok(());
+    }
     print_bundle_summary(preview_bundle_summary(&bundle, &plan))
 }
 
-pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> Result<()> {
+/// Quiet output is the IDs of the records created or updated, one per line.
+pub fn apply(
+    index: &RecordIndex,
+    state_dir: &Path,
+    input: &str,
+    yes: bool,
+    quiet: bool,
+) -> Result<()> {
     if !yes {
         bail!("bundle apply requires --yes");
     }
@@ -33,6 +45,16 @@ pub fn apply(index: &RecordIndex, state_dir: &Path, input: &str, yes: bool) -> R
     let project_slug =
         atelier_app::project_config::ProjectConfig::load_from_state_dir(state_dir)?.project_slug;
     let summary = apply_bundle_file(state_dir, &project_slug, &bundle, &plan)?;
+    if quiet {
+        for key in ["issues", "updated", "evidence"] {
+            for record in summary["records"][key].as_array().into_iter().flatten() {
+                if let Some(id) = record["id"].as_str() {
+                    println!("{id}");
+                }
+            }
+        }
+        return Ok(());
+    }
     print_bundle_summary(summary)
 }
 

@@ -52,6 +52,14 @@ pub fn change_issue_link(
         (true, false) => store.remove_issue_relation(&source, &target, role)?,
     };
     if quiet {
+        println!(
+            "{}",
+            if declared_by_blocker {
+                &target
+            } else {
+                &source
+            }
+        );
         return Ok(());
     }
     match (unlink, changed) {

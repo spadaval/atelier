@@ -35,7 +35,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 
         super::IssueCommands::Show { ids, full } => {
             let (_, index) = load_repository()?;
-            commands::issue::show(&index, &ids, full)
+            commands::issue::show(&index, &ids, full, quiet)
         }
 
         super::IssueCommands::List {
@@ -76,7 +76,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     quiet,
                 )
             } else {
-                commands::issue::transition_options(&index, &id, verbose)
+                commands::issue::transition_options(&index, &id, verbose, quiet)
             }
         }
 
@@ -115,6 +115,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     } else {
                         parent.as_deref().map(Some)
                     },
+                    quiet,
                 },
             )
         }
@@ -122,7 +123,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Note { id, text, kind } => {
             let (state_dir, index) = load_repository()?;
             let id = commands::issue::resolve_id(&index, &id)?;
-            commands::issue::append_note(&state_dir, &id, &kind, &text)
+            commands::issue::append_note(&state_dir, &id, &kind, &text, quiet)
         }
 
         super::IssueCommands::Link { id, target, role } => {

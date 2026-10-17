@@ -641,7 +641,7 @@ fn run() -> Result<()> {
     match cli.command {
         Commands::Init { force, slug } => {
             let cwd = env::current_dir()?;
-            commands::init::run(&cwd, force, slug)
+            commands::init::run(&cwd, force, slug, quiet)
         }
 
         Commands::Status { hook } => commands::status::run(hook.is_some(), quiet, false),
@@ -694,10 +694,10 @@ fn run() -> Result<()> {
 
         Commands::Start { id } => {
             let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id)
+            commands::start::run(&index, &state_dir, &id, quiet)
         }
 
-        Commands::Merge { id, check, json } => commands::merge::run(&id, check, json),
+        Commands::Merge { id, check, json } => commands::merge::run(&id, check, json, quiet),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event| {
@@ -734,16 +734,20 @@ fn run() -> Result<()> {
                     &summary,
                     quiet,
                 ),
-                ReviewCommands::List { id, json } => commands::review::list(id.as_deref(), json),
-                ReviewCommands::Show { id } => commands::review::show(&id),
+                ReviewCommands::List { id, json } => {
+                    commands::review::list(id.as_deref(), json, quiet)
+                }
+                ReviewCommands::Show { id } => commands::review::show(&id, quiet),
             }
         }
         Commands::Bundle { action } => {
             let (state_dir, index) = load_repository()?;
             match action {
-                BundleCommands::Preview { input } => commands::bundle::preview(&index, &input),
+                BundleCommands::Preview { input } => {
+                    commands::bundle::preview(&index, &input, quiet)
+                }
                 BundleCommands::Apply { input, yes } => {
-                    commands::bundle::apply(&index, &state_dir, &input, yes)
+                    commands::bundle::apply(&index, &state_dir, &input, yes, quiet)
                 }
             }
         }
@@ -858,7 +862,7 @@ fn run() -> Result<()> {
 
         Commands::Migrate {
             action: MigrateCommands::Epics { to, apply },
-        } => commands::migrate::epics(&to, apply),
+        } => commands::migrate::epics(&to, apply, quiet),
 
         Commands::Prune {
             apply,
@@ -885,7 +889,7 @@ fn run() -> Result<()> {
 
         Commands::Check { id } => {
             let state_dir = StorageLayout::discover()?.canonical_dir();
-            commands::issue::lint(&state_dir, id.as_deref())
+            commands::issue::lint(&state_dir, id.as_deref(), quiet)
         }
     }
 }
@@ -984,8 +988,28 @@ fn work_index(quiet: bool) {
     }
 }
 
+/// `--quiet` and `--json` are two script formats, so asking for both is a
+/// usage error. Clap does not check conflicts against a global flag, so the
+/// conflict is raised here as the same parser error.
+fn reject_quiet_json(cli: Cli) -> Result<Cli, clap::Error> {
+    use clap::CommandFactory;
+    let json = matches!(
+        cli.command,
+        Commands::Review {
+            action: ReviewCommands::List { json: true, .. }
+        } | Commands::Merge { json: true, .. }
+    );
+    if cli.quiet && json {
+        return Err(Cli::command().error(
+            clap::error::ErrorKind::ArgumentConflict,
+            "the argument '--quiet' cannot be used with '--json'",
+        ));
+    }
+    Ok(cli)
+}
+
 fn parse_cli_or_exit() -> Cli {
-    match Cli::try_parse() {
+    match Cli::try_parse().and_then(reject_quiet_json) {
         Ok(cli) => cli,
         Err(error) => {
             let error = workflow_help::with_workflow_values(error);

@@ -631,38 +631,34 @@ fn bounded_list_text(value: &str) -> String {
     output
 }
 
+/// Quiet output is `<id> <result>`.
 pub fn print_record(index: &RecordIndex, record: &EvidenceRecord, quiet: bool) -> Result<()> {
     let data = &record.data;
+    if quiet {
+        println!("{} {}", record.header.id, data.result.as_str());
+        return Ok(());
+    }
     let targets = format_targets(index, &record.header.id, data)?;
-    print_record_with_targets(record, data, targets, quiet)
+    print_record_with_targets(record, data, targets)
 }
 
 /// Prints evidence created in this command, which is absent from the index.
+/// Quiet output is the new record's ID.
 pub fn print_new_record(record: &EvidenceRecord, quiet: bool) -> Result<()> {
+    if quiet {
+        println!("{}", record.header.id);
+        return Ok(());
+    }
     let data = &record.data;
     let targets = format_data_target(data).into_iter().collect();
-    print_record_with_targets(record, data, targets, quiet)
+    print_record_with_targets(record, data, targets)
 }
 
 fn print_record_with_targets(
     record: &EvidenceRecord,
     data: &EvidenceRecordData,
     targets: Vec<String>,
-    quiet: bool,
 ) -> Result<()> {
-    if quiet {
-        let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = if targets.is_empty() {
-            "(none)".to_string()
-        } else {
-            targets.join(",").replace(' ', "")
-        };
-        println!(
-            "{} {} {} exit={exit_status} target={targets}",
-            record.header.id, record.header.status, data.evidence_type
-        );
-        return Ok(());
-    }
     // The title line names the record kind and status, so no line repeats
     // them.
     println!(

@@ -2,12 +2,21 @@ use crate::human_output::{print_footer, FooterAction};
 use anyhow::Result;
 use std::path::Path;
 
-pub fn run(path: &Path, force: bool, project_slug: Option<String>) -> Result<()> {
+/// Quiet output is the project slug alone, new or already configured.
+pub fn run(path: &Path, force: bool, project_slug: Option<String>, quiet: bool) -> Result<()> {
     let view = atelier_app::init::initialize(atelier_app::init::InitRequest {
         path: path.to_path_buf(),
         force,
         project_slug,
     })?;
+    if quiet {
+        let slug = match view.project_slug {
+            Some((slug, _)) => slug,
+            None => atelier_app::project_config::ProjectConfig::load(path)?.project_slug,
+        };
+        println!("{slug}");
+        return Ok(());
+    }
     for created_path in &view.created_paths {
         println!("Created {}", created_path.display());
     }
@@ -36,7 +45,7 @@ mod tests {
     #[test]
     fn test_run_fresh_init() {
         let dir = tempdir().unwrap();
-        let result = run(dir.path(), false, None);
+        let result = run(dir.path(), false, None, false);
         assert!(result.is_ok());
 
         // Verify directories created
@@ -80,7 +89,7 @@ mod tests {
     #[test]
     fn test_run_preserves_existing_config_even_with_force() {
         let dir = tempdir().unwrap();
-        run(dir.path(), false, None).unwrap();
+        run(dir.path(), false, None, false).unwrap();
 
         let config_path = dir.path().join(".atelier/config.toml");
         let custom_config = r#"schema = "atelier.project_config"
@@ -89,7 +98,7 @@ project_slug = "custom"
 "#;
         fs::write(&config_path, custom_config).unwrap();
 
-        run(dir.path(), true, None).unwrap();
+        run(dir.path(), true, None, false).unwrap();
 
         assert_eq!(fs::read_to_string(config_path).unwrap(), custom_config);
     }
@@ -99,19 +108,19 @@ project_slug = "custom"
         let parent = tempdir().unwrap();
         let repo = parent.path().join("Astromech");
         fs::create_dir(&repo).unwrap();
-        run(&repo, false, None).unwrap();
+        run(&repo, false, None, false).unwrap();
         let config = fs::read_to_string(repo.join(".atelier/config.toml")).unwrap();
         assert!(config.contains("project_slug = \"astromech\""), "{config}");
 
         let custom = parent.path().join("other");
         fs::create_dir(&custom).unwrap();
-        assert!(run(&custom, false, Some("Bad Slug".into())).is_err());
+        assert!(run(&custom, false, Some("Bad Slug".into()), false).is_err());
         assert!(!custom.join(".atelier").exists());
-        run(&custom, false, Some("droid-shop".into())).unwrap();
+        run(&custom, false, Some("droid-shop".into()), false).unwrap();
         let config = fs::read_to_string(custom.join(".atelier/config.toml")).unwrap();
         assert!(config.contains("project_slug = \"droid-shop\""), "{config}");
-        assert!(run(&custom, true, Some("other".into())).is_err());
-        run(&custom, true, Some("droid-shop".into())).unwrap();
+        assert!(run(&custom, true, Some("other".into()), false).is_err());
+        run(&custom, true, Some("droid-shop".into()), false).unwrap();
     }
 
     #[test]
@@ -119,10 +128,10 @@ project_slug = "custom"
         let dir = tempdir().unwrap();
 
         // First init
-        run(dir.path(), false, None).unwrap();
+        run(dir.path(), false, None, false).unwrap();
 
         // Second init without force - should succeed but not recreate
-        let result = run(dir.path(), false, None);
+        let result = run(dir.path(), false, None, false);
         assert!(result.is_ok());
     }
 
@@ -131,10 +140,10 @@ project_slug = "custom"
         let dir = tempdir().unwrap();
 
         // First init
-        run(dir.path(), false, None).unwrap();
+        run(dir.path(), false, None, false).unwrap();
 
         // Force update
-        run(dir.path(), true, None).unwrap();
+        run(dir.path(), true, None, false).unwrap();
 
         assert!(dir.path().join(".atelier/config.toml").exists());
         assert!(!dir.path().join(".claude").exists());
@@ -148,7 +157,7 @@ project_slug = "custom"
         // Create only .atelier directory
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();
 
-        let result = run(dir.path(), false, None);
+        let result = run(dir.path(), false, None, false);
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier/config.toml").exists());
@@ -162,7 +171,7 @@ project_slug = "custom"
         // Create only .claude directory
         fs::create_dir_all(dir.path().join(".claude")).unwrap();
 
-        let result = run(dir.path(), false, None);
+        let result = run(dir.path(), false, None, false);
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier").exists());
@@ -175,7 +184,7 @@ project_slug = "custom"
 
         // Multiple force runs should all succeed
         for _ in 0..3 {
-            let result = run(dir.path(), true, None);
+            let result = run(dir.path(), true, None, false);
             assert!(result.is_ok());
         }
 
