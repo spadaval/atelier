@@ -4,6 +4,9 @@ id: "atelier-fnak"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-fnak
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep --quiet stdout empty when start or issue transition refuses"
-updated_at: "2026-10-17T09:36:27.970145080+00:00"
+updated_at: "2026-10-17T09:36:35.889117277+00:00"
 ---
 
 ## Goal
