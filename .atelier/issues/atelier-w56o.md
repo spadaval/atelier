@@ -18,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Tell orchestrators to update a waiting branch only when it is next to land"
-updated_at: "2026-10-17T01:36:20.763168413+00:00"
+updated_at: "2026-10-17T05:22:38.283844875+00:00"
 ---
 
 ## Goal

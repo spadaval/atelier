@@ -26,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Integrate parallel work branches without catch-up churn"
-updated_at: "2026-10-17T01:44:18.384856120+00:00"
+updated_at: "2026-10-17T05:22:38.506429195+00:00"
 ---
 
 ## Outcome
@@ -47,3 +47,7 @@ An orchestrator running several work branches at once can see which branches are
 ## Background
 
 This mission comes from the 2026-10-16 transcript retrospective. In astromech, feature/astromech-cmhv merged main into itself 16 times while it waited 4.5 hours to land, and 8 of those merges needed a fresh independent review. The cause was fast-forward-only merging combined with updating every waiting branch after each landing. Clean base merges have kept approvals since atelier-n7g1, and record-only conflicts since atelier-1isk; the remaining churn is conflict resolutions and lockfile regeneration, which rightly need review. The model is a local GitHub: Atelier writes a commit only when merging. Mission integration branches (atelier-w0su) are related but deferred by the human.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-17 plan: the mission record's Outcome and S1-S6 carry the strategy (no separate file). Ready now: w56o (guidance), kops (land trust), ydv0 (merge strategy, fast_forward_only stays default; making it default is Sumeet's call), ihss (one-sided links; sequenced before atelier-dmh5, which changes the same storage). tciw stays backlog until atelier-ftqn (mission 4pzj) lands; this mission does not take ftqn. S6 needs a later orchestrated run of >=5 parallel branches and cannot be shown in this session. Items run in parallel worktrees; catch-up merges from this run are recorded as observations.

@@ -18,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Add a merge strategy that merges a clean branch into the base and checks the merged tree"
-updated_at: "2026-10-17T01:36:20.625620010+00:00"
+updated_at: "2026-10-17T05:22:38.415722294+00:00"
 ---
 
 ## Goal

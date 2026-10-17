@@ -14,9 +14,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Owned branches trust a local base that may hold unchecked commits"
-updated_at: "2026-10-16T23:43:33.771473753+00:00"
+updated_at: "2026-10-17T05:22:38.347395833+00:00"
 ---
 
 ## Goal

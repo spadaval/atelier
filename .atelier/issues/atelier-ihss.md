@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Store each link only on the record that declares it"
-updated_at: "2026-10-17T01:36:21.184833581+00:00"
+updated_at: "2026-10-17T05:22:38.461791576+00:00"
 ---
 
 ## Goal
