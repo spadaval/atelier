@@ -1245,7 +1245,7 @@ fn test_top_level_help_only_shows_core_commands() {
         assert!(stdout.contains(command), "missing core command {command}");
     }
     assert!(!stdout.contains("Search issues, relationships, and activity"));
-    for command in ["prime", "land", "setup"] {
+    for command in ["status", "land", "setup"] {
         assert!(
             stdout
                 .lines()
@@ -1253,6 +1253,13 @@ fn test_top_level_help_only_shows_core_commands() {
             "missing session command {command}: {stdout}"
         );
     }
+    // The deprecated prime alias is not presented as a command.
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("prime ")),
+        "root help should not present prime:\n{stdout}"
+    );
     assert!(
         !stdout
             .lines()
@@ -1537,6 +1544,37 @@ fn test_mission_help_exposes_close_with_reason() {
 }
 
 #[test]
+fn test_root_status_lists_the_top_five_ready_items_without_an_owner() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    for n in 0..7 {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "create", &format!("Ready item {n}")]);
+        assert!(success, "issue create failed: {stderr}");
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Ready work:    7"), "{stdout}");
+    let ready = stdout
+        .split("Ready Work\n----------\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_default();
+    assert_eq!(
+        ready
+            .lines()
+            .filter(|line| line.contains("Ready item"))
+            .count(),
+        5,
+        "{stdout}"
+    );
+    assert!(
+        ready.contains("2 more ready work items omitted"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn test_root_status_summarizes_checkout_orientation() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1549,6 +1587,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Atelier Status"));
     assert!(stdout.contains("Ready work:"));
+    assert!(stdout.contains("Ready Work\n----------\n"), "{stdout}");
+    assert!(stdout.contains("Ready item"), "{stdout}");
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));

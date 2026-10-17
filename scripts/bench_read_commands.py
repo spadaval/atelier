@@ -355,7 +355,6 @@ def main():
             ["review", "list", "--json"],
             ["check"],
             ["check", epic],
-            ["prime"],
             ["prune"],
             ["prune", "--quiet"],
             ["bundle", "preview", str(ROOT / "docs/spec/bundle/fixtures/valid-bundle.json")],
@@ -364,7 +363,7 @@ def main():
         shutil.copytree(repo, guard_repo, dirs_exist_ok=True)
         owner, review = guard_fixture(binary, guard_repo)
         guard_commands = [
-            ["prime"], ["land"], ["land", owner],
+            ["status"], ["land"], ["land", owner],
             ["merge", owner, "--check"], ["merge", owner, "--check", "--json"],
             ["review", "list", owner], ["review", "list", owner, "--json"],
             ["review", "show", review],

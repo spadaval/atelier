@@ -46,7 +46,7 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
         ),
         None => "atelier".into(),
     };
-    for (event, action) in [("SessionStart", "prime"), ("Stop", "land")] {
+    for (event, action) in [("SessionStart", "status"), ("Stop", "land")] {
         let marker = format!(" # atelier-managed:{event}");
         let groups = hooks
             .entry(event)
@@ -96,10 +96,41 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
     if quiet {
         println!("{}", path.display());
     } else {
-        println!("Installed Claude Code SessionStart and Stop hooks in {}. Commit shared settings with the change. Hooks run prime on session start and land at Stop; repeated failures warn instead of looping. Restart Claude Code to load the settings.", path.display());
+        println!("Installed Claude Code SessionStart and Stop hooks in {}. Commit shared settings with the change. Hooks run status on session start and land at Stop; repeated failures warn instead of looping. Restart Claude Code to load the settings.", path.display());
         if settings["disableAllHooks"] == true {
             println!("Hooks are disabled by existing settings; enable them in Claude Code before dogfooding.");
         }
     }
+    if let Some(memory) = memory_without_agents_import(layout.repo_root()) {
+        eprintln!(
+            "Warning: {} does not import @AGENTS.md, so Claude Code will not load AGENTS.md and sessions miss the repository's instructions. Add a line containing @AGENTS.md to {}.",
+            memory.display(),
+            memory.display()
+        );
+    }
     Ok(())
+}
+
+/// A project `CLAUDE.md` that keeps AGENTS.md from loading: Claude Code reads
+/// AGENTS.md only when there is no `CLAUDE.md`, or through an `@AGENTS.md`
+/// import in it (ADR 0022).
+fn memory_without_agents_import(repo: &Path) -> Option<std::path::PathBuf> {
+    if !repo.join("AGENTS.md").is_file() {
+        return None;
+    }
+    ["CLAUDE.md", ".claude/CLAUDE.md"]
+        .into_iter()
+        .map(|relative| repo.join(relative))
+        .find(|path| {
+            fs::read_to_string(path).is_ok_and(|text| {
+                !text
+                    .split_whitespace()
+                    .any(|token| matches!(token, "@AGENTS.md" | "@./AGENTS.md"))
+            })
+        })
+        .map(|path| {
+            path.strip_prefix(repo)
+                .map(Path::to_path_buf)
+                .unwrap_or(path)
+        })
 }

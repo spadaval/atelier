@@ -12,7 +12,7 @@ pub(crate) struct RenderContext {
 }
 
 impl RenderContext {
-    #[cfg(test)]
+    /// Undecorated output, as hook context and redirected output receive.
     pub(crate) fn plain() -> Self {
         Self {
             style_policy: StylePolicy::plain(),
@@ -485,7 +485,6 @@ pub(crate) struct StylePolicy {
 }
 
 impl StylePolicy {
-    #[cfg(test)]
     pub(crate) fn plain() -> Self {
         Self { color: false }
     }
