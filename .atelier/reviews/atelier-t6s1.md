@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-t6s1
+title: 'Reviewed git diff master...HEAD at a30ee1a5 (git_freshness.rs Requests/ObjectReader, atelier-app libc dep, piped_output test). unsafe send: fd owned by self.0 for the call, buf valid for len, -1 mapped via last_os_error with no intervening call; correct. write_all covers short sends and EINTR (Interrupted). Requests are one small line followed by a blocking response read, so socket buffer size (8 KiB default on macOS) cannot deadlock. Parent''s child-end fd is dropped with the temporary Command; std socketpair is CLOEXEC; spawn failure closes both ends; Drop closes the request end, giving git read EOF as with a pipe. Only other piped-stdin writers are in #[cfg(test)] code, which never runs with SIG_DFL. Non-Unix branch compiled on Linux by flipping the cfgs in a scratch copy: clean. Test discriminates: with master''s git_freshness.rs restored in a scratch copy it failed 15/15 (signal 13 on the answers-once fake); with the fix it passed 15/15. At HEAD: cargo nextest run -j 4 738/738 passed, cargo fmt --check clean, no new clippy warnings. Not checked: running on macOS (relies on XNU honouring MSG_NOSIGNAL 0x80000, which libc defines for Apple) or on Windows. A try_wait check would be racy and toggling SIGPIPE process-wide is worse, so this is not unnecessary complexity. No findings.'
+target: atelier-bsyn
+identity: Independent reviewer (Claude subagent)
+commit: a30ee1a552203b9cfb21c3effbb35ea181983e3d
+created_at: 2026-10-17T09:00:57.566008670Z
+event:
+  event: review
+---
+
+Reviewed git diff master...HEAD at a30ee1a5 (git_freshness.rs Requests/ObjectReader, atelier-app libc dep, piped_output test). unsafe send: fd owned by self.0 for the call, buf valid for len, -1 mapped via last_os_error with no intervening call; correct. write_all covers short sends and EINTR (Interrupted). Requests are one small line followed by a blocking response read, so socket buffer size (8 KiB default on macOS) cannot deadlock. Parent's child-end fd is dropped with the temporary Command; std socketpair is CLOEXEC; spawn failure closes both ends; Drop closes the request end, giving git read EOF as with a pipe. Only other piped-stdin writers are in #[cfg(test)] code, which never runs with SIG_DFL. Non-Unix branch compiled on Linux by flipping the cfgs in a scratch copy: clean. Test discriminates: with master's git_freshness.rs restored in a scratch copy it failed 15/15 (signal 13 on the answers-once fake); with the fix it passed 15/15. At HEAD: cargo nextest run -j 4 738/738 passed, cargo fmt --check clean, no new clippy warnings. Not checked: running on macOS (relies on XNU honouring MSG_NOSIGNAL 0x80000, which libc defines for Apple) or on Windows. A try_wait check would be racy and toggling SIGPIPE process-wide is worse, so this is not unnecessary complexity. No findings.
