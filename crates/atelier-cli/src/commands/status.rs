@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::{self, git};
 use crate::human_output::{
-    count_noun, path_summary, render_footer_section, render_lines_section, render_metadata,
-    render_page, render_text_section, short_commit, FooterAction, IssueListPanel, IssueListRow,
-    ItemLine, RenderContext,
+    path_summary, render_footer_section, render_lines_section, render_metadata, render_page,
+    render_text_section, short_commit, FooterAction, IssueListPanel, IssueListRow, ItemLine,
+    RenderContext,
 };
 use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
@@ -470,7 +470,6 @@ fn render_status_page(
         },
     ));
 
-    let ready = view.work.ready.len();
     let next_actions = if let Ok(Some(owner)) = owner {
         vec![
             FooterAction::new("Inspect owner work", owner.inspect.clone()),
@@ -482,13 +481,8 @@ fn render_status_page(
         ]
     } else if let Some(top) = view.work.ready.first() {
         vec![
-            FooterAction::new(
-                format!(
-                    "Choose ready work ({} available)",
-                    count_noun(ready, "ready issue")
-                ),
-                "atelier work ready",
-            ),
+            // The summary already counts ready work.
+            FooterAction::new("Choose ready work", "atelier work ready"),
             FooterAction::new(
                 "Inspect the top ready item's transitions",
                 format!("atelier issue transition {}", top.id),
@@ -496,10 +490,7 @@ fn render_status_page(
         ]
     } else if !view.work.human.is_empty() {
         vec![FooterAction::new(
-            format!(
-                "Only work for the human is ready ({})",
-                count_noun(view.work.human.len(), "item")
-            ),
+            "Only work for the human is ready",
             "atelier work human",
         )]
     } else if !view.work.blocked.is_empty() {

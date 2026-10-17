@@ -122,6 +122,7 @@ fn status_and_active_landing_are_fresh_and_read_only() {
     // even though the owner itself is open work outside any mission.
     assert!(!status.contains("Ready Work\n"), "{status}");
     assert!(!status.contains("Unassigned Work"), "{status}");
+    assert!(!status.contains("Unassigned work:"), "{status}");
     // Static guidance stays out of the view (ADR 0022 Decision 2).
     assert!(
         !status.contains("Guidance:") && !status.contains("Before handing off"),

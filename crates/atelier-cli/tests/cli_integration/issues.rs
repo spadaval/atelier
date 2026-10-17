@@ -4048,7 +4048,7 @@ fn test_status_footer_uses_complete_work_buckets() {
     run_atelier(dir.path(), &["issue", "create", "Status guidance"]);
     let id = issue_id_by_title(dir.path(), "Status guidance");
     for (status, expected) in [
-        ("todo", "Choose ready work (1 ready issue available)"),
+        ("todo", "Choose ready work"),
         (
             "blocked",
             "Inspect blocked work (no ready work is available)",

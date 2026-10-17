@@ -674,7 +674,7 @@ pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
 }
 
 /// Unassigned open work by label, for both `status` and `work missions`: a
-/// `<label> (<count>)` line per group, then up to `row_limit` issue rows in
+/// `<label>: <count> open issues` line per group, then up to `row_limit` issue rows in
 /// the shared work order and a count of the rest that names `work missions
 /// --all`, which shows them. A row too wide for
 /// the terminal continues on lines indented past the rows, so it never reads
