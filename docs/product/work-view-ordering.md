@@ -56,7 +56,9 @@ visible group.
 Work views use one readable row state label:
 
 - `ready`: work whose exact configured status exposes a direct transition into
-  an active-category status and has no open blockers in the row state context;
+  an active-category status and has no open blockers in the row state context,
+  counting open work behind a closed blocker, as `start` does, so every work
+  view offers to start only work that `start` accepts;
 - `needs human`: ready work labelled `needs-human`, and unblocked open
   decisions, which only the human can do;
 - `blocked`: work with one or more open blockers, including hidden blockers
