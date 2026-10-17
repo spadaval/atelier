@@ -4,6 +4,9 @@ id: "atelier-x68o"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-x68o
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Say a bad record's path once in record-load errors"
-updated_at: "2026-10-17T08:41:50.703070286+00:00"
+updated_at: "2026-10-17T08:41:54.048430344+00:00"
 ---
 
 ## Goal
