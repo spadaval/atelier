@@ -460,9 +460,18 @@ struct BranchOwner {
     id: String,
     title: String,
     status: String,
+    /// The status's category under the branch's own policy.
+    category: Option<String>,
     /// Set for a done owner: whether its claim is merged into the base.
     merged: Option<bool>,
     active: usize,
+}
+
+impl BranchOwner {
+    /// The status word with its ✓ or ⚠, as the checkout's own rows mark it.
+    fn cue(&self) -> String {
+        crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
+    }
 }
 
 /// A branch whose committed records could not be summarized.
@@ -501,13 +510,13 @@ impl BranchSummaries {
             .iter()
             .map(|owner| match owner {
                 Ok(owner) => {
+                    let cue = owner.cue();
                     let status = match owner.merged {
-                        Some(true) => format!("✓ {}, merged into {base}", owner.status),
-                        Some(false) => format!(
-                            "✓ {} on branch {}, not merged into {base}",
-                            owner.status, owner.branch
-                        ),
-                        None => owner.status.clone(),
+                        Some(true) => format!("{cue}, merged into {base}"),
+                        Some(false) => {
+                            format!("{cue} on branch {}, not merged into {base}", owner.branch)
+                        }
+                        None => cue,
                     };
                     format!(
                         "{} @ {}: {} [{status}] {} — {} active (committed branch records)",
@@ -557,13 +566,13 @@ impl BranchSummaries {
                     &owner.id,
                     match owner.merged {
                         Some(true) => format!(
-                            "✓ {} on {}, merged into {}",
-                            owner.status, owner.branch, self.base_branch
+                            "{} on {}, merged into {}",
+                            owner.cue(),
+                            owner.branch,
+                            self.base_branch
                         ),
-                        Some(false) => {
-                            format!("✓ {} on {}, not merged", owner.status, owner.branch)
-                        }
-                        None => format!("{} on {}", owner.status, owner.branch),
+                        Some(false) => format!("{} on {}, not merged", owner.cue(), owner.branch),
+                        None => format!("{} on {}", owner.cue(), owner.branch),
                     },
                 ),
                 Err(unreadable) => {
@@ -686,13 +695,15 @@ fn branch_summaries_for(
                         })
                     })
                     .count();
-                let merged = (branch_policy.status_category(&owner.status) == Some("done"))
+                let category = branch_policy.status_category(&owner.status);
+                let merged = (category == Some("done"))
                     .then(|| done_merged(repo, &id, &owner.status, branch, base_branch));
                 rows.push(BranchOwner {
                     branch: branch.to_owned(),
                     commit: commit.to_owned(),
                     title: owner.title.clone(),
                     status: owner.status.clone(),
+                    category: category.map(str::to_owned),
                     id,
                     merged,
                     active,

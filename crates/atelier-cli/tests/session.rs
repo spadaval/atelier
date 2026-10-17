@@ -4026,9 +4026,14 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     git(f.path(), &["switch", "-q", "main"]);
     let finished = ok(f.path(), &["-q", "issue", "create", "Finished elsewhere"]);
     let idle = ok(f.path(), &["-q", "issue", "create", "Nobody's work"]);
+    let stuck = ok(f.path(), &["-q", "issue", "create", "Stuck elsewhere"]);
     commit(f.path(), "plan more work");
     ok(f.path(), &["start", &finished]);
     f.terminal(&finished);
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(f.path(), &["start", &stuck]);
+    ok(f.path(), &["issue", "transition", &stuck, "block"]);
+    commit(f.path(), "blocked elsewhere");
     git(f.path(), &["switch", "-q", "main"]);
     let marks = [
         (&f.id, format!("    ↳ in_progress on {}", f.branch)),
@@ -4036,6 +4041,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
             &finished,
             format!("    ↳ ✓ done on task/{finished}, not merged"),
         ),
+        (&stuck, format!("    ↳ ⚠ blocked on task/{stuck}")),
     ];
     for args in [&["work", "ready"][..], &["work", "all"], &["status"]] {
         let output = ok(f.path(), args);
@@ -4059,6 +4065,14 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
             ready.get(row + 1).is_none_or(|next| !next.contains('↳')),
             "{args:?}: {output}"
         );
+    }
+    // The branch rows mark the same states as the marks.
+    let status = ok(f.path(), &["status"]);
+    for row in [
+        format!("{finished} [✓ done on branch task/{finished}, not merged into main] Finished elsewhere"),
+        format!("{stuck} [⚠ blocked] Stuck elsewhere"),
+    ] {
+        assert!(status.contains(&row), "{row}: {status}");
     }
     // The checkout's own records are not overlaid.
     assert_eq!(
