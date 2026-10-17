@@ -4,10 +4,34 @@ Normal output should let an operator identify the work, understand its state,
 and choose the next concrete action. Markdown records are the durable machine
 boundary; human output is a focused view over them.
 
+## Dense Output
+
+Output is dense Markdown for every reader (ADR 0022). Agents read redirected
+output as plain text, so every token they read should carry a fact:
+
+- One line per item: `<id> [<status>] <priority> - <title>`, with a blocker
+  count when there are blockers.
+- Symbols that read without a legend go before the status word, never in
+  place of it: ✓ for a done status, ⚠ for a blocked status or work state, as
+  in `[✓ done]` or `[⚠ todo]`.
+- No token a heading already states. A section named for a work state, such
+  as Ready Work or Done Work, leaves the state off its rows; only a list that
+  mixes states leads a row with its state, and not when the status word
+  already says it. A page title that names the status needs no `Status:` line.
+- Detail views are brief by default, with a flag such as `--full` for the
+  whole record.
+- Views gain no JSON or YAML mode. `--quiet` and the `--json` flags on
+  `review list` and `merge --check` are the interfaces for scripts.
+
+When agents routinely pipe atelier output through `head`, `grep`, `sed`, or
+loops to find what they need, that is a missing view: file it as a defect in
+the views rather than adding a machine format.
+
+## Views
+
 Detail views show the item title, exact configured status, intent, blockers,
-proof, and ownership. Queues use compact rows with an ID, title, one state cue,
-and a blocker count when needed. Rollups can use workflow categories; rows
-should not repeat redundant category/status tokens.
+proof, and ownership. Queues use the item line above, grouped under sections
+named by work state. Rollups can use workflow categories.
 
 `issue show` is brief by default, and `--full` prints the whole record. The
 brief view gives one line per fact and leaves out empty facts:

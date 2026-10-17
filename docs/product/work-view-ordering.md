@@ -68,9 +68,12 @@ Work views use one readable row state label:
   examples: their status shares the `todo` category, but their next transition
   refines or plans them rather than entering active execution.
 
-Human queue rows should not print duplicate category/status tokens such as
-`todo/todo` or `active/in_progress`. Exact configured workflow status is the
-primary lifecycle label; categories belong in rollups, filters, and explicit
-metadata. Blocked rows should use the `blocked` state plus a compact count or
-drill-down cue by default, while detail surfaces preserve exact blocker IDs for
-repair.
+A work view's sections are named by row state (Ready Work, Blocked Work, Done
+Work), so their rows carry the exact configured workflow status and not the
+state: `atelier-x [⚠ todo] medium - Title | 1 blocker` under Blocked Work. A
+list that mixes states, such as `work mission --all`, leads each row with its
+state unless the status word already says it. Rows should not print duplicate
+category/status tokens such as `todo/todo` or `active/in_progress`; categories
+belong in rollups, filters, and explicit metadata. Blocked rows carry a compact
+blocker count or drill-down cue by default, while detail surfaces preserve
+exact blocker IDs for repair.

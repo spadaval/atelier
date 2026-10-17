@@ -92,7 +92,7 @@ branch still reads as ready on the base. `work ready`, the ready section of
 `work all`, and the ready and unassigned items `status` lists stay classified from the
 checkout's records, but an item that owns another local branch carries its
 committed state there on a `↳` line under its row, such as `↳ in_progress on
-bug/atelier-j48s` or `↳ done on bug/atelier-fj1t, not merged` (see
+bug/atelier-j48s` or `↳ ✓ done on bug/atelier-fj1t, not merged` (see
 [Other branches](sessions-and-hooks.md#other-branches)). Choose unmarked work,
 or check with the branch's session before taking marked work.
 
@@ -162,8 +162,8 @@ review that finds problems leaves the claim in place: the author fixes the
 findings on the work branch, and the merge waits for fresh approval. Until the
 merge, though, that branch says done for work the base does not have. So
 `status`, in its owner row and its other-branch rows, shows a done owner as
-`done on branch <work-branch>, not merged into <base>`, or as
-`done, merged into <base>` once the base branch's own copy of the record is
+`✓ done on branch <work-branch>, not merged into <base>`, or as
+`✓ done, merged into <base>` once the base branch's own copy of the record is
 done.
 
 Branch-local state can differ until integration. Use labeled cross-branch
