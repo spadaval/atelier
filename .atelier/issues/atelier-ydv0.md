@@ -4,6 +4,9 @@ id: "atelier-ydv0"
 issue_type: "feature"
 labels:
 - "merge"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ydv0
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add a merge strategy that merges a clean branch into the base and checks the merged tree"
-updated_at: "2026-10-17T05:22:38.415722294+00:00"
+updated_at: "2026-10-17T05:22:51.964977661+00:00"
 ---
 
 ## Goal
