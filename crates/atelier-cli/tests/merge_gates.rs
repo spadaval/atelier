@@ -2499,3 +2499,69 @@ fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed(
     );
     assert_eq!(worktrees(fixture.path()), 1);
 }
+
+#[test]
+fn merge_commit_strategy_accepts_a_sibling_the_base_completed_with_its_own_review() {
+    // The base completes and approves a sibling that advances the owner's
+    // mission after the fork point. Its review pins a base commit the work
+    // branch never held, which the merge commit holds (atelier-goom).
+    let fixture = Fixture::new();
+    merge_commit_policy(&fixture, &["true"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let mission = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShipped.\n\n## Success criteria\n\nIt ships.",
+            "Mission",
+        ],
+    );
+    let sibling = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--body",
+            "## Goal\n\nShip it.\n\n## Done when\n\nIt ships.",
+            "Sibling",
+        ],
+    );
+    ok(fixture.path(), &["issue", "link", &sibling, &mission]);
+    commit(fixture.path(), "plan the mission");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    ok(fixture.path(), &["issue", "link", &fixture.id, &mission]);
+    commit(fixture.path(), "the owner advances the mission");
+    fixture.approval("Reviewer");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    ok(fixture.path(), &["issue", "transition", &sibling, "start"]);
+    ok(
+        fixture.path(),
+        &["issue", "transition", &sibling, "close", "--reason", "done"],
+    );
+    commit(fixture.path(), "the sibling is done");
+    ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &sibling,
+            "--identity",
+            "Reviewer",
+            "Reviewed the sibling",
+        ],
+    );
+    commit(fixture.path(), "approve the sibling");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+
+    let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(output.contains("pass merge.merged_tree"), "{output}");
+    assert_eq!(worktrees(fixture.path()), 1);
+}

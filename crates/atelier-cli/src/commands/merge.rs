@@ -337,10 +337,12 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     )?;
     if let Some((tree, commit, _, merged)) = &merge {
         // The merged records can break a done claim the base completed after
-        // the fork point, which no checkout held before (atelier-m4gv).
+        // the fork point, which no checkout held before (atelier-m4gv). Those
+        // claims are read at the merge commit, which holds the base commits
+        // their reviews pin; the branch head may not (atelier-goom).
         nodes.extend(crate::commands::session::merge_claim_nodes(
             repo,
-            &mut read,
+            &mut git::ReadContext::from_snapshot(repo, commit.clone(), &[]),
             merged,
             &source.policy,
             owner,
