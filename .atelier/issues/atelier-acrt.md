@@ -20,17 +20,17 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Review a mission before work starts with atelier brief"
-updated_at: "2026-10-17T17:25:59.520021809+00:00"
+updated_at: "2026-10-17T18:53:19.646876456+00:00"
 ---
 
 ## Goal
 
-S5 of docs/strategies/review-and-introspection.md: `atelier brief <mission>` reviews a mission before work starts, in both forms, and shows the human's plan approval (a review event on the mission). The debrief shows the approval too.
+S5 of docs/strategies/review-and-introspection.md: `atelier brief <mission>` reviews a mission before work starts, in the same two forms as `debrief`, so the human can approve or change the plan from one page. A plan approval is an ordinary review event on the mission (`atelier review approve <mission>`), shown in both the brief and the debrief.
 
 ## Done when
 
-The S5 criterion holds, shown by a fixture test of both forms.
+`atelier brief <mission>` prints dense Markdown, and with `--html` writes a self-contained page under `.atelier/runtime/reviews/`, with: the strategy outcome; each success criterion; the scope with sizes (size labels) and statuses; blockers; unknowns (each scoped item's Unknowns section and the strategy's Risks and Unknowns section); open human decisions (open decision records and needs-human items in scope); risks; and review events on the mission, including plan approvals. A fixture test checks both forms and that their facts match. Docs describe it.
 
-## Unknowns
+## Design
 
-Whether review events can target a mission today, or need a change to the review gate. Sizes: which existing field gives an item's size.
+Reuses atelier-rx22's view-model module, criteria parsing and HTML renderer.
