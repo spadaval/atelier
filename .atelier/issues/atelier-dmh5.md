@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Store the direction of directional context links"
-updated_at: "2026-10-17T01:10:57.963324057+00:00"
+updated_at: "2026-10-17T06:57:31.852566483+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,7 @@ updated_at: "2026-10-17T01:10:57.963324057+00:00"
 ## Unknowns
 
 Whether custom roles from `.atelier/config.toml` need a declared inverse or direction flag.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-17, from review of atelier-ihss (finding atelier-3ewf, deferred here): after ihss, links are stored only on the declaring record, but two places still treat a link in the reverse direction as the same link: the duplicate check in RecordStore::add_issue_relation (crates/atelier-records/src/lib.rs ~509-515) and the two-sided dedupe in index_issue_graph (crates/atelier-app/src/record_index.rs ~569-576). So `issue link A B --role supersedes` prints 'already exists' when B already declares 'supersedes A', and if both declare it toward each other only one is indexed. In the index a Relation's issue_id_1 is the declaring record; for legacy two-sided links it is whichever id sorts first, so direction is ambiguous there. blocked_by is now a directional entry in relates; blocks remains the blocker-side form.
