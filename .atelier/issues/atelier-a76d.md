@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "help"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-a76d
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Remove or implement --log-level and --log-format"
-updated_at: "2026-10-17T06:27:39.526464797+00:00"
+updated_at: "2026-10-17T06:29:35.185163574+00:00"
 ---
 
 ## Goal
