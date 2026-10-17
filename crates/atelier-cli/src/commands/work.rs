@@ -714,6 +714,12 @@ fn transition_readiness(
     };
     if option.allowed {
         Ok(format!("{} allowed", option.name))
+    } else if option.allowed_with_arguments() {
+        Ok(format!(
+            "{} allowed, needs {}",
+            option.name,
+            option.missing_arguments.join(" ")
+        ))
     } else if let Some(result) = option
         .validator_results
         .iter()
@@ -730,7 +736,7 @@ fn transition_readiness(
             "{} blocked: {}",
             option.name,
             option
-                .blockers
+                .blockers_beyond_arguments()
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "blocked".to_string())

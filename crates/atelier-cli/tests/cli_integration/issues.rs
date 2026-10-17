@@ -6275,7 +6275,37 @@ fn test_done_parent_view_offers_no_transition_readiness() {
 
     let (success, open, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
     assert!(success, "{stderr}");
-    assert!(open.contains("Transition readiness:"), "{open}");
+    assert!(
+        open.contains("Transition readiness: start allowed\n"),
+        "{open}"
+    );
+
+    // The view reports only `start`. Only a done-category transition may
+    // require a reason, so only a workflow whose `start` ends work can make it
+    // need one; such a `start` is allowed with its flag, as in every issue
+    // view.
+    let policy_path = dir.path().join(".atelier/workflow.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    let start = "      start:\n        from: [todo, blocked]\n        to: in_progress\n";
+    assert!(policy.contains(start), "{policy}");
+    std::fs::write(
+        &policy_path,
+        policy.replace(
+            start,
+            &start.replace(
+                "to: in_progress",
+                "to: done\n        required_fields: [close_reason]",
+            ),
+        ),
+    )
+    .unwrap();
+    let (success, needs_reason, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(
+        needs_reason.contains("Transition readiness: start allowed, needs --reason\n"),
+        "{needs_reason}"
+    );
+    std::fs::write(&policy_path, policy).unwrap();
 
     for id in [&child, &parent] {
         set_issue_status(dir.path(), id, "done");
