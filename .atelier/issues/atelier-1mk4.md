@@ -21,9 +21,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T18:48:13.697994837+00:00"
+status: "done"
 title: "Show the current decisions on an item in status and issue show"
-updated_at: "2026-10-17T18:45:56.454120088+00:00"
+updated_at: "2026-10-17T18:48:13.697994837+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,19 @@ How much this adds to `status` output on a mission with many decisions (ADR 0022
   Rejected: every decision note in the mission's scope
 - 2026-10-17 [decision] Move decision row rendering into human_output so work decisions, issue show and status share one row shape
   Reason: Three views showing the same rows must not drift apart
+
+## Close Reason
+
+`issue show` and `status` list the current decisions bearing on an item, through its parent and mission: a count with the one-way decisions in the brief views, and every current decision in `issue show --full`.
+
+### Deviations
+None.
+
+### Decisions
+See this item's decision notes: which decisions bear on an item (not sibling notes), and one shared row renderer.
+
+### Surprises
+None; the decisions module from atelier-fip8 needed only an item-scoped lookup.
+
+### Open items
+None.
