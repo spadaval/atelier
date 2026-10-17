@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T07:33:12.549318008+00:00"
+status: "done"
 title: "Name the real ID in every next-step hint and error"
-updated_at: "2026-10-17T07:20:06.778603304+00:00"
+updated_at: "2026-10-17T07:33:12.549318008+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,7 @@ Hints are also quoted three ways: in backticks, bare, or in single quotes ('atel
 - Hints with no rows to point at are omitted.
 - One quoting style (backticks) is used.
 - A test renders status, prime, issue list (empty and non-empty), issue show and the hierarchy error from fixtures, and asserts no `<...-id>`/`<transition>` placeholder appears where an ID exists. Placeholders stay only where the ID truly isn't known (for example unowned-branch errors in session.rs:258/294/512/529).
+
+## Close Reason
+
+Hints, footers and error recovery steps name the real ID where the command knows it (top ready item, top mission, first list row, runnable transitions, hierarchy/link endpoints, merge/land owner, evidence target); empty-row footers are omitted; in-sentence commands use backticks; rule added to docs/product/human-cli-output.md; pinned by test_hints_name_real_ids_instead_of_placeholders.
