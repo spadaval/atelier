@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Resolve short evidence IDs in bundle files like command arguments"
-updated_at: "2026-10-17T07:17:24.592249693+00:00"
+updated_at: "2026-10-17T08:57:24.195389303+00:00"
 ---
 
 ## Goal

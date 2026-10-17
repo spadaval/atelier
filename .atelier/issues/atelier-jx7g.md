@@ -4,6 +4,9 @@ id: "atelier-jx7g"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-jx7g
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T08:53:23.325390987+00:00"
+status: "done"
 title: "Use the right article for configured issue types in wrong-kind errors"
-updated_at: "2026-10-17T08:50:18.404272846+00:00"
+updated_at: "2026-10-17T08:53:23.325390987+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,7 @@ updated_at: "2026-10-17T08:50:18.404272846+00:00"
 
 - Wrong-kind errors choose "a" or "an" from the type word, through the shared helper qrwr added.
 - A test covers a vowel-initial custom type.
+
+## Close Reason
+
+work mission and the advances link-type error now choose a or an through record_ref::with_article, shared with wrong_kind; tests cover the custom incident type (evidence atelier-5zdf, atelier-a6id, atelier-pvs7)

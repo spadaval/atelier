@@ -4,6 +4,9 @@ id: "atelier-x68o"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-x68o
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T08:48:18.175584742+00:00"
+status: "done"
 title: "Say a bad record's path once in record-load errors"
-updated_at: "2026-10-17T08:41:50.703070286+00:00"
+updated_at: "2026-10-17T08:48:18.175584742+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,7 @@ Record-load errors that already name the record path get it again from the recor
 
 - A record-load error names the path once, whether the inner error carries it or not.
 - A test pins the priority case.
+
+## Close Reason
+
+The record-index wrapper now adds 'Invalid record file X' only when no message in the error chain names X, so record-load errors (queries and check) name the path once; record_index tests pin the priority and invalid-YAML cases.

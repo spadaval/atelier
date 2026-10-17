@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Leave the parent out of work parent proof gaps, and drop stale done-record hints"
-updated_at: "2026-10-17T08:19:41.954488880+00:00"
+updated_at: "2026-10-17T08:57:23.877310906+00:00"
 ---
 
 ## Goal

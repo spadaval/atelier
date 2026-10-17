@@ -1,7 +1,8 @@
 //! Append-only Markdown review event codec and creation.
 use crate::{
-    attachment_relationship, canonical_record_path, mutation_lock::CanonicalMutationLock,
-    record_kinds::REVIEW_KIND, split_document, validate_record_id, RecordStore,
+    attachment_relationship, canonical_record_path, display_state_path,
+    mutation_lock::CanonicalMutationLock, record_kinds::REVIEW_KIND, split_document,
+    validate_record_id, RecordStore,
 };
 use anyhow::{bail, Context, Result};
 use atelier_core::{RecordHeader, Relationships, ReviewEvent, ReviewRecord};
@@ -62,12 +63,18 @@ fn relationships(target: &str, event: &ReviewEvent) -> Relationships {
 pub fn parse_review_record(text: &str, relative: &Path) -> Result<ReviewRecord> {
     let (front, body) = split_document(text).context("review needs YAML front matter")?;
     let front: Front = serde_yaml::from_str(front)
-        .with_context(|| format!("invalid review {}", relative.display()))?;
+        .with_context(|| format!("invalid review {}", display_state_path(relative)))?;
     if front.schema != REVIEW_KIND.schema || front.schema_version != REVIEW_KIND.schema_version {
-        bail!("unsupported review schema in {}", relative.display());
+        bail!(
+            "unsupported review schema in {}",
+            display_state_path(relative)
+        );
     }
     if canonical_record_path(&REVIEW_KIND, &front.id)? != relative {
-        bail!("review id does not match file path {}", relative.display());
+        bail!(
+            "review id does not match file path {}",
+            display_state_path(relative)
+        );
     }
     let record = ReviewRecord {
         header: RecordHeader {

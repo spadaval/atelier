@@ -348,8 +348,8 @@ fn scoped_dashboard(
     let has_children = !index.get_subissues(&id).is_empty();
     match issue_type {
         "mission" if issue.issue_type != "mission" => bail!(
-            "{id} is a {}, not a mission. Use {}.",
-            issue.issue_type,
+            "{id} is {}, not a mission. Use {}.",
+            atelier_app::record_ref::with_article(&issue.issue_type),
             related_dashboards(index, &issue, has_children)?
         ),
         "parent" if issue.issue_type == "mission" => {
