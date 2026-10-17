@@ -742,10 +742,10 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
         "{} may need review before changing or closing this issue.",
         count_noun(affected.len(), "downstream issue")
     )];
+    // Impact is in the full view, which is the whole record, so it is not cut.
     lines.extend(
         affected
             .iter()
-            .take(8)
             .map(|issue| {
                 Ok(format!(
                     "  {}",
@@ -754,9 +754,6 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
             })
             .collect::<Result<Vec<_>>>()?,
     );
-    if affected.len() > 8 {
-        lines.push(format!("  ... and {} more", affected.len() - 8));
-    }
     print_panel(render_lines_section("Impact", lines));
     Ok(())
 }

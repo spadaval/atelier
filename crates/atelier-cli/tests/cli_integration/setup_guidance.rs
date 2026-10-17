@@ -1320,7 +1320,8 @@ fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
     assert!(success, "work missions help failed: {stderr}");
     assert!(
         missions_help.contains("Show the Mission Overview across current missions")
-            && missions_help.contains("Include done missions in the Mission Overview"),
+            && missions_help
+                .contains("Include done missions, and show every mission and unassigned item"),
         "{missions_help}"
     );
 

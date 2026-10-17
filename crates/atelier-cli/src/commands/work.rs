@@ -165,6 +165,9 @@ fn apply_ready_execution_gates(
     Ok(())
 }
 
+/// Missions `work missions` shows without `--all`.
+const MISSIONS_SHOWN: usize = 20;
+
 pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let overview = mission_overview(index, policy.as_ref(), include_done)?;
@@ -176,8 +179,15 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
     }
 
     let context = RenderContext::for_stdout();
+    // `--all` shows the whole overview: done missions, and every mission
+    // and unassigned item past the display limits.
+    let (mission_limit, unassigned_limit) = if include_done {
+        (usize::MAX, usize::MAX)
+    } else {
+        (MISSIONS_SHOWN, crate::human_output::UNASSIGNED_SHOWN)
+    };
     let mut lines = Vec::new();
-    for mission in overview.missions.iter().take(20) {
+    for mission in overview.missions.iter().take(mission_limit) {
         if !lines.is_empty() {
             lines.push(String::new());
         }
@@ -230,10 +240,10 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             None => lines.push("No missions match the current overview.".to_string()),
         }
     }
-    if overview.missions.len() > 20 {
+    if overview.missions.len() > mission_limit {
         lines.push(format!(
-            "{} omitted; see `atelier issue list --issue-type mission`",
-            count_noun(overview.missions.len() - 20, "more mission")
+            "{} omitted; see `atelier work missions --all`",
+            count_noun(overview.missions.len() - mission_limit, "more mission")
         ));
     }
     if overview.unassigned_nonterminal > 0 {
@@ -251,6 +261,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             &Default::default(),
             "  ",
             usize::MAX,
+            unassigned_limit,
             context,
         ));
     }

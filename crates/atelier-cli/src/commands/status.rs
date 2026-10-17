@@ -571,6 +571,7 @@ fn unassigned_panel(
             in_flight,
             "",
             UNASSIGNED_GROUPS_SHOWN,
+            crate::human_output::UNASSIGNED_SHOWN,
             context,
         ),
     )

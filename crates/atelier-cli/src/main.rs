@@ -291,7 +291,7 @@ enum WorkCommands {
     All,
     /// Show the Mission Overview across current missions
     Missions {
-        /// Include done missions in the Mission Overview
+        /// Include done missions, and show every mission and unassigned item
         #[arg(long)]
         all: bool,
     },

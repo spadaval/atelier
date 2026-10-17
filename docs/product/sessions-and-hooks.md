@@ -17,7 +17,9 @@ scoped work, the 8 newest reviews, and the 8 newest evidence receipts with
 their freshness; without an owner it lists up to 5 ready items under the ready
 count, and unassigned work grouped by label as `work missions` does (see
 [mission views](issue-inventory-and-mission-overview.md)), but only the first
-5 groups, with a count of the rest, to keep the hook context bounded. With no
+5 groups, with a count of the rest that names `atelier work missions`, to keep
+the hook context bounded; a group's own count of the rest names `atelier work
+missions --all`. With no
 open mission, the missions line names the most recently closed mission and
 its close date. It creates no session record and prints state and next actions, not
 instructions. `prime` is a deprecated alias that prints the same view after a
