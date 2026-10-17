@@ -131,7 +131,12 @@ issue, or a review or evidence record about one, since the branch left it:
 merge the base into the work branch so the gates judge them, then retry. Other
 base records do not touch the approval, which is judged on the work branch's
 history: it carries over, because a clean merge combines two reviewed changes
-and nobody edited the result. The merge commit reaches the base only when every
+and nobody edited the result. No checkout holds the merged records before they
+reach the base, so merge also checks the done claims outside the item that
+they affect, as `land` does, trusting the base head: a branch that reopens work
+a mission the base closed since the fork point depends on refuses, naming the
+claim, such as `merge blocked: <mission> work.terminal` (atelier-m4gv). The
+merge commit reaches the base only when every
 gate passes and the base has not moved during the checks
 (`merge_snapshot_changed`). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
