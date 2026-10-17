@@ -184,7 +184,13 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "decision.recorded",
     "shell.check",
 ];
-const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
+const ALLOWED_REQUIRED_FIELDS: &[&str] = &[
+    "close_reason",
+    "report.deviations",
+    "report.decisions",
+    "report.surprises",
+    "report.open_items",
+];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
     "hooks",
     "triggers",
@@ -1442,17 +1448,30 @@ fn validate_transition_statuses(
             workflow_name, transition_name
         ),
     )?;
-    if transition
+    let requires_report = transition
         .required_fields
         .iter()
-        .any(|field| field == "close_reason")
+        .any(|field| atelier_core::ReportPart::from_field(field).is_some());
+    let requires_reason = transition
+        .required_fields
+        .iter()
+        .any(|field| field == "close_reason");
+    if (requires_reason || requires_report)
         && policy.status_category(&transition.to) != Some("done")
     {
         return Err(policy_error_with_field(
             "workflow_config_invalid_transition",
             display_path,
             format!("workflows.{workflow_name}.transitions.{transition_name}.required_fields"),
-            "close_reason may only be required by a done-category transition",
+            "close_reason and report parts may only be required by a done-category transition",
+        ));
+    }
+    if requires_report && !requires_reason {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_transition",
+            display_path,
+            format!("workflows.{workflow_name}.transitions.{transition_name}.required_fields"),
+            "report parts live in Close Reason, so a transition that requires one also requires close_reason",
         ));
     }
     for from_status in &transition.from {
@@ -2223,9 +2242,52 @@ mod tests {
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap_err();
         assert!(
+            error.to_string().contains(
+                "close_reason and report parts may only be required by a done-category transition"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn report_parts_need_a_done_transition_that_requires_close_reason() {
+        let start = valid_policy().replace(
+            "        description: Start work.",
+            "        required_fields: [close_reason, report.deviations]\n        description: Start work.",
+        );
+        let error = parse_policy_text(&start, WORKFLOW_POLICY_PATH).unwrap_err();
+        assert!(
             error
                 .to_string()
-                .contains("close_reason may only be required by a done-category transition"),
+                .contains("may only be required by a done-category transition"),
+            "{error}"
+        );
+        let close = valid_policy().replacen(
+            "required_fields: [close_reason]",
+            "required_fields: [report.open_items]",
+            1,
+        );
+        let error = parse_policy_text(&close, WORKFLOW_POLICY_PATH).unwrap_err();
+        assert!(
+            error.to_string().contains("also requires close_reason"),
+            "{error}"
+        );
+        let report = valid_policy().replacen(
+            "required_fields: [close_reason]",
+            "required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]",
+            1,
+        );
+        parse_policy_text(&report, WORKFLOW_POLICY_PATH).unwrap();
+        let unknown = valid_policy().replacen(
+            "required_fields: [close_reason]",
+            "required_fields: [close_reason, report.lessons]",
+            1,
+        );
+        let error = parse_policy_text(&unknown, WORKFLOW_POLICY_PATH).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported required field 'report.lessons'"),
             "{error}"
         );
     }

@@ -547,6 +547,125 @@ pub fn parse_criteria(section: &str) -> CriteriaParse {
     parsed
 }
 
+/// The implementer report's parts beyond the Outcome (atelier-sfsq). Each is
+/// a `### <title>` subsection of Close Reason; the text before the first is
+/// the Outcome. Policy requires a part with the `report.<key>` field.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ReportPart {
+    Deviations,
+    Decisions,
+    Surprises,
+    OpenItems,
+}
+
+impl ReportPart {
+    pub const ALL: [Self; 4] = [
+        Self::Deviations,
+        Self::Decisions,
+        Self::Surprises,
+        Self::OpenItems,
+    ];
+
+    /// The subsection heading, as in `### Open items`.
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Deviations => "Deviations",
+            Self::Decisions => "Decisions",
+            Self::Surprises => "Surprises",
+            Self::OpenItems => "Open items",
+        }
+    }
+
+    /// The `required_fields` entry that requires this part.
+    pub fn field(self) -> &'static str {
+        match self {
+            Self::Deviations => "report.deviations",
+            Self::Decisions => "report.decisions",
+            Self::Surprises => "report.surprises",
+            Self::OpenItems => "report.open_items",
+        }
+    }
+
+    pub fn from_field(field: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|part| part.field() == field)
+    }
+
+    fn from_heading(line: &str) -> Option<Self> {
+        let title = line.strip_prefix("###")?;
+        if title.starts_with('#') {
+            return None;
+        }
+        let title = title.trim();
+        Self::ALL
+            .into_iter()
+            .find(|part| part.title().eq_ignore_ascii_case(title))
+    }
+}
+
+/// Close Reason read as the implementer report: the Outcome, then any report
+/// parts. A `###` heading that names no part stays in the text around it.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct CloseReport {
+    pub outcome: String,
+    /// The parts in record order; a repeated heading adds to its part.
+    pub parts: Vec<(ReportPart, String)>,
+}
+
+impl CloseReport {
+    pub fn parse(text: &str) -> Self {
+        let mut report = Self::default();
+        let mut current: Option<ReportPart> = None;
+        let mut outcome = Vec::new();
+        let mut bodies: Vec<(ReportPart, Vec<&str>)> = Vec::new();
+        for line in text.lines() {
+            if let Some(part) = ReportPart::from_heading(line) {
+                current = Some(part);
+                if !bodies.iter().any(|(existing, _)| *existing == part) {
+                    bodies.push((part, Vec::new()));
+                }
+                continue;
+            }
+            match current {
+                Some(part) => {
+                    if let Some((_, body)) =
+                        bodies.iter_mut().find(|(existing, _)| *existing == part)
+                    {
+                        body.push(line);
+                    }
+                }
+                None => outcome.push(line),
+            }
+        }
+        report.outcome = outcome.join("\n").trim().to_string();
+        report.parts = bodies
+            .into_iter()
+            .map(|(part, body)| (part, body.join("\n").trim().to_string()))
+            .collect();
+        report
+    }
+
+    /// The part's text; `None` when the part is absent or empty.
+    pub fn part(&self, part: ReportPart) -> Option<&str> {
+        self.parts
+            .iter()
+            .find(|(existing, _)| *existing == part)
+            .map(|(_, body)| body.as_str())
+            .filter(|body| !body.is_empty())
+    }
+
+    /// `text` with its Outcome replaced and its report parts kept.
+    pub fn with_outcome(text: &str, outcome: &str) -> String {
+        let mut offset = 0;
+        for line in text.split_inclusive('\n') {
+            if ReportPart::from_heading(line.trim_end_matches(['\n', '\r'])).is_some() {
+                return format!("{}\n\n{}", outcome.trim(), text[offset..].trim_end());
+            }
+            offset += line.len();
+        }
+        outcome.trim().to_string()
+    }
+}
+
 /// Note kinds accepted by `IssueSections::append_note`.
 pub const ISSUE_NOTE_KINDS: &[&str] = &[
     "note",
@@ -1305,6 +1424,34 @@ mod tests {
         assert!(sections_with_notes("- 2026-10-18 [decisions] X")
             .decision_notes()
             .is_empty());
+    }
+
+    #[test]
+    fn close_reports_split_the_outcome_from_known_parts() {
+        let text = "Shipped the view.\n### Detail\nkept\n\n### Deviations\nNone.\n### open items\n- follow-up\n#### deeper\n### Surprises\n";
+        let report = CloseReport::parse(text);
+        assert_eq!(report.outcome, "Shipped the view.\n### Detail\nkept");
+        assert_eq!(report.part(ReportPart::Deviations), Some("None."));
+        assert_eq!(
+            report.part(ReportPart::OpenItems),
+            Some("- follow-up\n#### deeper")
+        );
+        assert_eq!(
+            report.part(ReportPart::Surprises),
+            None,
+            "an empty part is missing"
+        );
+        assert_eq!(report.part(ReportPart::Decisions), None);
+        assert_eq!(
+            CloseReport::with_outcome(text, " New outcome "),
+            "New outcome\n\n### Deviations\nNone.\n### open items\n- follow-up\n#### deeper\n### Surprises"
+        );
+        assert_eq!(CloseReport::with_outcome("Old", "New"), "New");
+        assert_eq!(
+            ReportPart::from_field("report.open_items"),
+            Some(ReportPart::OpenItems)
+        );
+        assert_eq!(ReportPart::from_field("close_reason"), None);
     }
 
     #[test]

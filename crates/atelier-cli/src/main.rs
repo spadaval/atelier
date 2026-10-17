@@ -385,9 +385,16 @@ enum IssueCommands {
         /// To begin work, use `atelier start <id>`, which also creates and
         /// records the owner branch; `start` here only changes the record
         transition: Option<String>,
-        /// Close reason used by transitions that require it
-        #[arg(long = "reason")]
+        /// Close reason used by transitions that require it: the Outcome,
+        /// kept above any report parts the record's Close Reason already has
+        #[arg(long = "reason", conflicts_with = "reason_file")]
         close_reason: Option<String>,
+        /// File holding the whole Close Reason: the Outcome, then report parts
+        /// as `### Deviations`, `### Decisions`, `### Surprises` and
+        /// `### Open items`. With neither flag, the record's own Close Reason
+        /// is used
+        #[arg(long)]
+        reason_file: Option<std::path::PathBuf>,
         /// Show validator passes, action preflight detail, descriptions, and debug context
         #[arg(long)]
         verbose: bool,

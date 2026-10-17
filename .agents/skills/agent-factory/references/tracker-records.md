@@ -89,6 +89,41 @@ Put follow-up findings in new issues, not in the body of a closed one. Mark
 work only a human can do, such as an account approval or a step at a
 particular machine, with the `needs-human` label so agents do not pick it up.
 
+### Close Reason and the Implementer Report
+
+Close Reason is written when the item closes. Its first paragraph is the
+Outcome: one or two sentences giving the observable result against Done
+when, or for `supersede` why the work will not happen. Test names,
+measurements, and review status go in evidence and review records.
+
+Where repository policy requires it, Close Reason also carries the
+implementer report: what a reviewer of the finished mission needs that the
+diff and the proof do not show.
+
+```md
+## Close Reason
+
+<Outcome.>
+
+### Deviations
+<Where the work departed from the issue or plan, and why. `None.` if none.>
+
+### Decisions
+<The choices that shaped the work; point at the item's decision notes rather
+than repeating them. `None.` if none.>
+
+### Surprises
+<What you did not expect: a wrong assumption, a hidden constraint, a cost.
+`None.` if none.>
+
+### Open items
+<What is left, each with its follow-up issue ID. `None.` if none.>
+```
+
+Write it in the record body, or in a file passed with `--reason-file`, then
+run the close transition; the report does not make an approval stale. Be
+candid and short: a reviewer reads these across a whole mission.
+
 ## Increment
 
 An increment is an outcome-bearing slice of a mission: usually one branch, one
