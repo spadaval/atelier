@@ -1100,7 +1100,7 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
 }
 
 #[test]
-fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
+fn test_issue_show_brief_done_items_show_their_close_but_open_items_report_failures() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let id = show_ok(
@@ -1115,6 +1115,9 @@ fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
         ],
     );
     let id = id.trim();
+    // A done record stands its close in for transitions; this one has no
+    // Close Reason, so the line is the date alone.
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     for status in ["done", "superseded"] {
         edit_canonical_record(dir.path(), "issues", id, |text| {
             text.lines()
@@ -1133,16 +1136,17 @@ fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
             show_ok(dir.path(), &["issue", "show", id]),
             format!(
                 "{id} task ✓ {status} medium Finished work\n\
-                 Transitions: none\n\
+                 Closed {today}\n\
                  Goal: Finish.\n\
                  Done when: Finished.\n"
             )
         );
     }
 
-    // A failure to read the transitions is reported, not shown as none.
+    // On open work, a failure to read the transitions is reported, not
+    // shown as none.
     edit_canonical_record(dir.path(), "issues", id, |text| {
-        text.replacen(
+        replace_front_matter_scalar(&text, "status", "todo").replacen(
             "priority:",
             "workflow_branch:\n  branch_base: gone\n  work_branch: feature/gone\npriority:",
             1,
