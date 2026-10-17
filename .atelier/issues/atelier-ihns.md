@@ -4,6 +4,9 @@ id: "atelier-ihns"
 issue_type: "feature"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ihns
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show the between-missions state in status and work missions"
-updated_at: "2026-10-16T23:04:57.934982250+00:00"
+updated_at: "2026-10-17T03:03:27.960827128+00:00"
 ---
 
 ## Goal
