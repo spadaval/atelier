@@ -29,9 +29,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Tighten work views to one dense line per item"
-updated_at: "2026-10-17T03:34:16.449909278+00:00"
+updated_at: "2026-10-17T03:46:16.502816302+00:00"
 ---
 
 ## Goal
