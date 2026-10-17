@@ -16,6 +16,7 @@ use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
 use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
+use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, ISSUE_NOTE_KINDS};
 use atelier_records::{validate_issue_type, validate_priority};
@@ -189,6 +190,16 @@ fn marked(category: Option<&str>, label: String) -> String {
     }
 }
 
+/// The work state, marked ✓ when done and ⚠ when blocked.
+fn work_cue(classification: WorkClassification) -> String {
+    let label = classification.label();
+    match classification {
+        WorkClassification::Done => format!("✓ {label}"),
+        WorkClassification::Blocked => format!("⚠ {label}"),
+        _ => label.to_string(),
+    }
+}
+
 fn brief_issue_row(
     index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
@@ -233,11 +244,10 @@ fn brief_child_rows(
         .into_iter()
         .map(|position| {
             let (child, classified) = &children[position];
-            let label = classified.classification.label();
             format!(
                 "{} {} - {}",
                 child.id,
-                marked(Some(label), label.to_string()),
+                work_cue(classified.classification),
                 child.title
             )
         })
@@ -321,17 +331,17 @@ fn blocked_transition_reason(option: &crate::commands::workflow::IssueTransition
 fn work_counts(summary: &ObjectiveReadSummary) -> String {
     let work = &summary.scope.work;
     let counts = [
-        ("active", work.active.len()),
-        ("ready", work.ready.len()),
-        ("needs a human", work.human.len()),
-        ("context", work.context.len()),
-        ("blocked", work.blocked.len()),
-        ("done", work.done.len()),
-        ("backlog", work.backlog.len()),
+        (WorkClassification::Active, work.active.len()),
+        (WorkClassification::Ready, work.ready.len()),
+        (WorkClassification::NeedsHuman, work.human.len()),
+        (WorkClassification::Context, work.context.len()),
+        (WorkClassification::Blocked, work.blocked.len()),
+        (WorkClassification::Done, work.done.len()),
+        (WorkClassification::Backlog, work.backlog.len()),
     ]
     .into_iter()
     .filter(|(_, count)| *count > 0)
-    .map(|(label, count)| format!("{label} {count}"))
+    .map(|(state, count)| format!("{} {count}", state.label()))
     .collect::<Vec<_>>();
     let total = summary.scope.total();
     if counts.is_empty() {

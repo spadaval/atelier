@@ -962,6 +962,55 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
         view.ends_with("Question: Which format?\nDecision: A.\nMore with --full: Options\n"),
         "{view}"
     );
+
+    // An open decision waits on the human, named the same way as a child row
+    // and in a mission's work counts.
+    let create = |args: &[&str]| show_ok(dir.path(), args).trim().to_string();
+    let parent = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Format parent",
+        "--body",
+        "## Goal\n\nG.\n\n## Done when\n\nD.",
+    ]);
+    let open = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Open format question",
+        "--issue-type",
+        "decision",
+        "--parent",
+        &parent,
+        "--body",
+        "## Question\n\nWhich?",
+    ]);
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Format mission",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nO.\n\n## Success criteria\n\nS.",
+    ]);
+    create(&[
+        "-q", "issue", "link", &parent, &mission, "--role", "advances",
+    ]);
+    let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
+    assert!(
+        parent_view.contains(&format!(
+            "\nChildren: {open} needs human - Open format question\n"
+        )),
+        "{parent_view}"
+    );
+    let mission_view = show_ok(dir.path(), &["issue", "show", &mission]);
+    assert!(
+        mission_view.contains("\nWork: 2 issues - needs human 1, context 1\n"),
+        "{mission_view}"
+    );
 }
 
 #[test]
