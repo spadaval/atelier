@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-jpok
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Accept P0-P3 and priority words alike, and name stored tokens in errors"
-updated_at: "2026-10-17T07:06:55.053544876+00:00"
+updated_at: "2026-10-17T07:06:55.594689468+00:00"
 ---
 
 ## Goal
