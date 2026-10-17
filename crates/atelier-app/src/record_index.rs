@@ -92,17 +92,15 @@ pub(crate) fn read_record_paths(
     Ok((files, changed))
 }
 
-/// Names the bad record file once: most parser errors already name it, so
-/// the generic context is added only when no message in the chain does.
+/// Names the bad record file once: most parser errors already name it as
+/// `.atelier/<path>`, so the generic context is added only when no message in
+/// the chain does.
 fn name_record_file(error: anyhow::Error, relative: &Path) -> anyhow::Error {
-    let path = relative.to_string_lossy().replace('\\', "/");
+    let path = display_state_path(relative);
     if error.chain().any(|cause| cause.to_string().contains(&path)) {
         error
     } else {
-        error.context(format!(
-            "Invalid record file {}",
-            display_state_path(relative)
-        ))
+        error.context(format!("Invalid record file {path}"))
     }
 }
 
@@ -1486,12 +1484,22 @@ mod tests {
         );
 
         let named = name_record_file(
-            anyhow::anyhow!("detail").context("invalid review reviews/atelier-r1.md"),
+            anyhow::anyhow!("detail").context("invalid review .atelier/reviews/atelier-r1.md"),
             Path::new("reviews/atelier-r1.md"),
         );
         assert_eq!(
             format!("{named:#}"),
-            "invalid review reviews/atelier-r1.md: detail"
+            "invalid review .atelier/reviews/atelier-r1.md: detail"
+        );
+
+        let short = name_record_file(
+            anyhow::anyhow!("detail").context("invalid review reviews/atelier-r1.md"),
+            Path::new("reviews/atelier-r1.md"),
+        );
+        assert_eq!(
+            format!("{short:#}"),
+            "Invalid record file .atelier/reviews/atelier-r1.md: \
+             invalid review reviews/atelier-r1.md: detail"
         );
     }
 

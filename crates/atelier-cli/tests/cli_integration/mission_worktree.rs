@@ -1089,15 +1089,23 @@ fn test_check_reports_every_invalid_record_file() {
         "not an evidence record",
     )
     .unwrap();
+    let review_path = ".atelier/reviews/atelier-bad2.md";
+    std::fs::create_dir_all(dir.path().join(".atelier/reviews")).unwrap();
+    std::fs::write(
+        dir.path().join(review_path),
+        "---\nschema: atelier.review\n---\n\nnot a review record\n",
+    )
+    .unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
 
     assert!(!success, "check must fail: {stdout}");
-    assert!(stdout.contains("Check found 3 findings"), "{stdout}");
+    assert!(stdout.contains("Check found 4 findings"), "{stdout}");
     for path in [
         format!(".atelier/issues/{}.md", ids[0]),
         format!(".atelier/issues/{}.md", ids[1]),
         ".atelier/evidence/atelier-bad1.md".to_string(),
+        review_path.to_string(),
     ] {
         assert_eq!(
             stdout.matches(&path).count(),
@@ -1105,6 +1113,29 @@ fn test_check_reports_every_invalid_record_file() {
             "{path} should be named once: {stdout}\n{stderr}"
         );
     }
+    assert!(
+        stdout.contains(&format!("invalid review {review_path}: ")),
+        "{stdout}"
+    );
+
+    // Queries stop at the first bad file, so leave only the review.
+    for path in [
+        format!(".atelier/issues/{}.md", ids[0]),
+        format!(".atelier/issues/{}.md", ids[1]),
+        ".atelier/evidence/atelier-bad1.md".to_string(),
+    ] {
+        std::fs::remove_file(dir.path().join(path)).unwrap();
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(
+        !success,
+        "a broken review should block issue list: {stdout}"
+    );
+    assert!(
+        stderr.contains(&format!("invalid review {review_path}: "))
+            && stderr.matches(review_path).count() == 1,
+        "issue list should name the review once: {stderr}"
+    );
 }
 
 #[test]
