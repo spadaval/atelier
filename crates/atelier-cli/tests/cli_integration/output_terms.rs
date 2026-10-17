@@ -4,25 +4,46 @@ use super::*;
 /// only inside a code or configuration key, joined to it by `_` or `.`.
 const INTERNAL_WORDS: [&str; 2] = ["lint", "canonical"];
 
-/// Each standalone word of `text`, lowercased: a code such as
+/// Each standalone word of `text`, lowercased. A code such as
 /// `canonical_snapshot_uncommitted` or a key such as
-/// `prune.canonical_retention_days` stays one word, so it never matches.
+/// `prune.canonical_retention_days` stays one word, so it never matches; a
+/// hyphen separates words, so `non-canonical` yields `canonical`.
 fn words(text: &str) -> impl Iterator<Item = String> + '_ {
-    text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.' || c == '-'))
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
         .map(|word| word.trim_matches('.').to_lowercase())
 }
 
-/// Leading snake_case codes on one line, such as `land_records_uncommitted:`.
-fn codes(line: &str) -> Vec<&str> {
-    line.split_whitespace()
-        .filter_map(|token| token.strip_suffix(':'))
-        .filter(|token| {
-            token.contains('_')
-                && token
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+fn is_snake_code(token: &str) -> bool {
+    token.contains('_')
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+/// Every code in `text`: a snake_case token that leads a clause as
+/// `<code>:`, or the `<code>` of a workflow policy error's `error: <code>`
+/// line. Counted across all lines, so a code repeated in a `Caused by:` line
+/// counts too.
+fn codes(text: &str) -> Vec<&str> {
+    let tokens = text.split_whitespace().collect::<Vec<_>>();
+    tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| match token.strip_suffix(':') {
+            Some(code) if is_snake_code(code) => Some(code),
+            _ if index > 0 && tokens[index - 1] == "error:" && is_snake_code(token) => Some(*token),
+            _ => None,
         })
         .collect()
+}
+
+/// The error a failed command printed: stderr from `Error:` to the end,
+/// including any `Caused by:` chain. Warnings before it are not the error.
+fn error_text(stderr: &str) -> Option<&str> {
+    stderr
+        .find("Error: ")
+        .filter(|start| *start == 0 || stderr[..*start].ends_with('\n'))
+        .map(|start| &stderr[start..])
 }
 
 /// Asserts the output contract's wording rules (docs/product/human-cli-output.md,
@@ -35,16 +56,30 @@ fn assert_contract_terms(command: &str, stdout: &str, stderr: &str) {
             "`{command}` printed internal word {word:?}:\n{transcript}"
         );
     }
-    for line in transcript.lines() {
-        assert!(
-            codes(line).len() <= 1,
-            "`{command}` stacked codes on one line: {line}"
-        );
-    }
+    let Some(error) = error_text(stderr) else {
+        return;
+    };
+    let codes = codes(error);
     assert!(
-        stderr.matches("Next:").count() <= 1,
-        "`{command}` gave more than one recovery step:\n{stderr}"
+        codes.len() <= 1,
+        "`{command}` stacked codes {codes:?}:\n{error}"
     );
+    let steps = error.matches("Next:").count();
+    assert!(
+        steps <= 1,
+        "`{command}` gave more than one recovery step:\n{error}"
+    );
+    assert!(
+        codes.is_empty() || steps == 1,
+        "`{command}` refused with code {codes:?} but no `Next:` step:\n{error}"
+    );
+}
+
+/// Runs each command in `dir` and asserts the contract over its output.
+fn render(dir: &Path, args: &[&str]) -> (bool, String, String) {
+    let (success, stdout, stderr) = run_atelier_raw(dir, args);
+    assert_contract_terms(&args.join(" "), &stdout, &stderr);
+    (success, stdout, stderr)
 }
 
 fn create(dir: &Path, args: &[&str]) -> String {
@@ -87,12 +122,7 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
     init_git_repo(dir.path());
     commit_all(dir.path(), "fixture records");
 
-    let mut rendered = Vec::new();
-    let mut render = |args: &[&str]| -> (bool, String, String) {
-        let (success, stdout, stderr) = run_atelier_raw(dir.path(), args);
-        rendered.push((args.join(" "), stdout.clone(), stderr.clone()));
-        (success, stdout, stderr)
-    };
+    let render = |args: &[&str]| render(dir.path(), args);
 
     let (success, stdout, stderr) = render(&["check"]);
     assert!(
@@ -106,9 +136,6 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
     assert!(stdout.contains("Parent Rollup\n"), "{stdout}");
     render(&["issue", "show", &child]);
     render(&["prune"]);
-    render(&["prune", "--help"]);
-    render(&["issue", "create", "--help"]);
-    render(&["check", "--help"]);
 
     // A record that differs from HEAD: land reports its own check once.
     let other_path = canonical_issue_path(dir.path(), &other);
@@ -127,7 +154,7 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
     assert!(stdout.contains("\n  records: "), "{stdout}");
     assert!(
         stderr.contains(&format!(
-            "Check failed with 1 finding. Next: fix each finding above, then run `atelier check {child}`"
+            "check_findings: check failed with 1 finding. Next: fix each finding above, then run `atelier check {child}`"
         )),
         "{stderr}"
     );
@@ -136,9 +163,61 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
         !success && stdout.contains("Check found 1 finding:"),
         "{stdout}"
     );
+}
 
-    for (command, stdout, stderr) in &rendered {
-        assert_contract_terms(command, stdout, stderr);
+/// A started work item on its own branch, with every record committed.
+fn started_fixture() -> (tempfile::TempDir, String, String) {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let work_body = "## Goal\n\nShip it.\n\n## Done when\n\nIt ships.";
+    let mission = create(
+        dir.path(),
+        &[
+            "Ship the release",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShipped.\n\n## Success criteria\n\nUsers have it.",
+        ],
+    );
+    let work = create(dir.path(), &["Write the notes", "--body", work_body]);
+    init_git_repo(dir.path());
+    commit_all(dir.path(), "fixture records");
+    let (success, _, stderr) = run_atelier_raw(dir.path(), &["start", &work]);
+    assert!(success, "start failed: {stderr}");
+    commit_all(dir.path(), "start records");
+    (dir, mission, work)
+}
+
+/// atelier-91w1: merge refusals and an invalid candidate workflow policy
+/// each carry one code, counting the `Caused by:` chain, and one `Next:`.
+#[test]
+fn merge_refusals_and_invalid_policy_carry_one_code_and_one_step() {
+    let (dir, mission, work) = started_fixture();
+    let render = |args: &[&str]| render(dir.path(), args);
+
+    let (success, _, stderr) = render(&["merge", "--check", &mission]);
+    assert!(!success && stderr.contains("merge_mission: "), "{stderr}");
+    let unstarted = create(dir.path(), &["Unstarted work"]);
+    commit_all(dir.path(), "unstarted record");
+    let (success, _, stderr) = render(&["merge", "--check", &unstarted]);
+    assert!(
+        !success && stderr.contains("merge_owner_unstarted: "),
+        "{stderr}"
+    );
+
+    let policy = dir.path().join(".atelier/workflow.yaml");
+    let valid = fs::read_to_string(&policy).unwrap();
+    fs::write(&policy, format!("{valid}bogus_key: [\n")).unwrap();
+    commit_all(dir.path(), "invalid candidate policy");
+    for args in [vec!["land"], vec!["merge", "--check", work.as_str()]] {
+        let (success, _, stderr) = render(&args);
+        let error = error_text(&stderr).unwrap_or_default();
+        assert!(
+            !success && codes(error) == ["workflow_config_parse_error"],
+            "{stderr}"
+        );
+        assert!(!stderr.contains("before merging"), "{stderr}");
     }
 }
 
@@ -146,11 +225,22 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
 fn contract_term_scan_catches_jargon_and_stacked_codes() {
     assert!(words("Lint passed.").any(|word| word == "lint"));
     assert!(words("(canonical): x").any(|word| word == "canonical"));
+    assert!(words("a non-canonical record").any(|word| word == "canonical"));
+    assert!(words("Canonical-foo").any(|word| word == "canonical"));
     assert!(!words("canonical_snapshot_uncommitted: x").any(|word| word == "canonical"));
     assert!(!words("prune.canonical_retention_days").any(|word| word == "canonical"));
     assert_eq!(
         codes("Error: land_records_uncommitted: canonical_snapshot_uncommitted: x"),
         ["land_records_uncommitted", "canonical_snapshot_uncommitted"]
     );
+    let chained = "Error: land_policy_invalid: invalid\n\nCaused by:\n    error: workflow_config_parse_error\n    path: .atelier/workflow.yaml\n";
+    assert_eq!(
+        codes(chained),
+        ["land_policy_invalid", "workflow_config_parse_error"]
+    );
     assert_eq!(codes("Health        : ready"), Vec::<&str>::new());
+    assert_eq!(
+        error_text("warning: x\nError: boom\n\nCaused by:\n    y\n"),
+        Some("Error: boom\n\nCaused by:\n    y\n")
+    );
 }

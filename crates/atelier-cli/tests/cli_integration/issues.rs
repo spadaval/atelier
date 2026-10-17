@@ -26,7 +26,7 @@ fn test_create_issue() {
 
     let (success, lint_out, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "placeholder scaffold should be under-specified");
-    assert!(stderr.contains("Check failed"));
+    assert!(stderr.contains("check_findings: check failed"));
     assert!(lint_out.contains("Issue section Goal must be present and non-empty"));
     assert!(lint_out.contains("Issue section Done when must be present and non-empty"));
     assert!(!lint_out.contains("Issue section Context must be present and non-empty"));

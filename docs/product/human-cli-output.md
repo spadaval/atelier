@@ -234,23 +234,42 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   accepts: `Invalid status 'open'. Valid values: backlog, done, todo, all`.
 - Flags that exclude each other are declared to the argument parser, so a
   conflict is a usage error with exit status 2, never a runtime error.
-- An error leads with a code only when a named check refuses the command: a
-  check of records, Git state, configuration or workflow policy, such as
-  `land_records_uncommitted:`, `merge_diverged:` or
-  `workflow_issue_hierarchy_invalid:`. An error about the command's own
-  input carries no code: a usage error, an unknown reference or an invalid
-  value. Neither does a failure of Git or the filesystem. A code is
-  snake_case and starts with the command or subsystem that owns the check
-  (`start_`, `land_`, `merge_`, `workflow_`, `project_config_`, and so on).
-  It never changes once it ships: gates, tests and agents match on it, and
-  the verdict line lists it.
-- An error carries at most one code. A command that reports a lower-level
-  check under its own check replaces the inner code with its own. `merge`
-  reports a record that differs from HEAD as
-  `canonical_snapshot_uncommitted`, and `land` reports the same failure as
-  `land_records_uncommitted`, not as both.
-- An error states its failure once, then one recovery step:
-  `<code>: <failure>. Next: <step>`.
+- An error carries a code if and only if one of Atelier's checks refuses
+  the command. The checks are:
+  - the gates of `land`, `merge` (and `merge --check`) and `start`, such as
+    `land_records_uncommitted`, `merge_diverged`, `merge_mission`, and the
+    record fences they run, `canonical_snapshot_uncommitted`,
+    `tracked_snapshot_uncommitted` and `review_append_only`;
+  - `check`, `doctor` and `prune` findings, such as `check_findings`;
+  - workflow policy and configuration validation: the `workflow_*` and
+    `project_config_*` codes.
+
+  No other error carries a code: not a usage error, an unknown reference, an
+  invalid value, a failure of Git or the filesystem, a record that fails to
+  parse while loading, or a transition that is not available. Codes that
+  shipped before this rule outside these checks keep their code so that
+  nothing matching them breaks: `bundle_recovery_required`,
+  `bundle_recovery_artifact_unsafe`, `canonical_bulk_concurrent_drift`,
+  `evidence_capture_association_changed`, `evidence_capture_target_changed`,
+  `issue_body_done` and `issue_create_status_invalid`. No new code is added
+  outside the list.
+- A code is snake_case and starts with the command or subsystem that owns
+  the check. It leads the message as `<code>: `, except that workflow policy
+  errors print it as the `error: <code>` line of their field block. It never
+  changes once it ships: gates, tests and agents match on it, and the
+  verdict line lists it.
+- An error carries at most one code, counting every line of it, including
+  `Caused by:` lines. A command that reports a lower-level check under its
+  own check replaces the inner code with its own. `merge` reports a record
+  that differs from HEAD as `canonical_snapshot_uncommitted`, and `land`
+  reports the same failure as `land_records_uncommitted`, not as both. A
+  command that only wraps a coded error, as `land` and `merge` wrap an
+  invalid candidate workflow policy, adds a recovery step but no code.
+- Every error the list covers states its failure once, then gives one
+  recovery step: `<code>: <failure>. Next: <step>`. Errors written before
+  this rule switch over in the items that own their gates: atelier-9jr8 for
+  `land`, atelier-6rh7 for `merge`, atelier-oxnw for `start`, and
+  atelier-kset for `check` findings.
 - Output uses the terms in `CONTEXT.md`: records, check, finding, mission,
   parent. The internal words "lint" and "canonical" appear only inside a
   code, such as `canonical_snapshot_uncommitted`, or a configuration key,

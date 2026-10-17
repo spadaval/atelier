@@ -1236,7 +1236,7 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
         format!("atelier check {id}")
     });
     bail!(
-        "Check failed with {}. Next: fix each finding above, then run `{rerun}`",
+        "check_findings: check failed with {}. Next: fix each finding above, then run `{rerun}`",
         count_noun(view.findings.len(), "finding")
     )
 }

@@ -674,7 +674,7 @@ fn test_lint_rejects_missing_required_issue_section() {
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stderr.contains("Check failed"));
+    assert!(stderr.contains("check_findings: check failed"));
 }
 
 #[test]
@@ -727,7 +727,7 @@ fn test_lint_rejects_missing_outcome_section() {
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing Outcome diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stderr.contains("Check failed"));
+    assert!(stderr.contains("check_findings: check failed"));
 }
 
 #[test]
@@ -1172,7 +1172,7 @@ Lint rejects malformed canonical state.
             && !transcript.contains("canonical-mutation.lock"),
         "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
-    assert!(stderr.contains("Check failed"));
+    assert!(stderr.contains("check_findings: check failed"));
     assert!(!stdout.contains("Check passed."), "{stdout}");
 }
 

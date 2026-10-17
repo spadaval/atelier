@@ -157,7 +157,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     };
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
     atelier_workflow::load(repo).context(
-        "land_policy_invalid: candidate workflow policy is invalid; repair it before landing",
+        "candidate workflow policy is invalid. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier land`",
     )?;
     let id = owner(&index, &branch, requested)?;
     let base_pin = id
