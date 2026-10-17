@@ -52,7 +52,8 @@ Code, policy, acceptance, relationship, metadata, or existing proof/review edits
 make approval stale. Later commits may add new review/evidence files, create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
-Close Reason without changing the approved acceptance. Adding a child to the
+Close Reason, including the implementer report it carries, without changing
+the approved acceptance. Adding a child to the
 owner edits the owner's record, so it does make approval stale. A link is
 stored only on the record that declares it (atelier-ihss), so new work that
 links itself `blocked_by` the owner leaves the owner's record and its approval

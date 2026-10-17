@@ -1471,6 +1471,168 @@ fn review_regression_setup_preserves_foreign_wrappers_and_updates_owned_binary()
         .contains(env!("CARGO_BIN_EXE_atelier")));
 }
 
+/// The starter policy's work `close`, made to require the implementer report.
+fn require_report(dir: &Path) {
+    let path = dir.join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    let close = "        required_fields: [close_reason]\n        description: Done claim;";
+    assert!(policy.contains(close), "{policy}");
+    fs::write(
+        &path,
+        policy.replace(
+            close,
+            "        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]\n        description: Done claim;",
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn report_parts_bind_new_done_claims_and_leave_earlier_claims_valid() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let earlier = ok(f.path(), &["-q", "issue", "create", "Earlier claim"]);
+    f.terminal(&earlier);
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+
+    // A claim the base already holds was made before the report was
+    // required, so it stays valid.
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass, "{output}");
+
+    let newer = ok(f.path(), &["-q", "issue", "create", "Newer claim"]);
+    f.terminal(&newer);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    for part in ["deviations", "decisions", "surprises", "open_items"] {
+        assert!(
+            output.contains(&format!("required_field.report.{part}")),
+            "{output}"
+        );
+    }
+    assert!(
+        output.contains(&format!(
+            "add a `### Open items` subsection to {newer}'s Close Reason"
+        )),
+        "{output}"
+    );
+
+    let mut record = f.store().load_issue_by_id(&newer).unwrap();
+    record.sections.close_reason = Some(
+        "completed claim\n\n### Deviations\nNone.\n\n### Decisions\nNone.\n\n### Surprises\nNone.\n\n### Open items\n".into(),
+    );
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "report without open items");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("required_field.report.open_items"),
+        "{output}"
+    );
+    assert!(
+        !output.contains("required_field.report.deviations\n"),
+        "{output}"
+    );
+
+    record.sections.close_reason = Some(format!(
+        "{}\nNone.",
+        record.sections.close_reason.clone().unwrap()
+    ));
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "complete report");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass, "{output}");
+}
+
+#[test]
+fn report_parts_leave_scoped_claims_made_before_the_policy_valid() {
+    let f = Fixture::new();
+    let child = |title: &str| {
+        let child = ok(
+            f.path(),
+            &["-q", "issue", "create", title, "--parent", &f.id],
+        );
+        ok(f.path(), &["issue", "transition", &child, "start"]);
+        child
+    };
+    let earlier = child("Earlier child");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &earlier,
+            "close",
+            "--reason",
+            "Closed before the report.",
+        ],
+    );
+    commit(f.path(), "close a child before the policy");
+    git(f.path(), &["switch", "main"]);
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass, "{output}");
+
+    // A child closed after the policy reached the branch needs the report.
+    let later = child("Later child");
+    commit(f.path(), "start a later child");
+    let mut record = f.store().load_issue_by_id(&later).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("Closed without the report.".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "close a later child without the report");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    assert!(
+        output.contains("required_field.report.deviations"),
+        "{output}"
+    );
+    assert!(output.contains(&later), "{output}");
+}
+
+#[test]
+fn a_branch_cannot_weaken_the_policy_around_a_claim_to_skip_the_report() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let original = fs::read_to_string(&path).unwrap();
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    let required = fs::read_to_string(&path).unwrap();
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &f.id],
+    );
+    ok(f.path(), &["issue", "transition", &child, "start"]);
+    commit(f.path(), "start a child");
+    // Weaken the policy in the commit that makes the claim, then restore it,
+    // so the branch diff shows no policy change.
+    fs::write(&path, &original).unwrap();
+    let mut record = f.store().load_issue_by_id(&child).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("Closed without the report.".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "close beside a weakened policy");
+    fs::write(&path, &required).unwrap();
+    commit(f.path(), "restore the policy");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    assert!(
+        output.contains("required_field.report.deviations"),
+        "{output}"
+    );
+}
+
 #[test]
 fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
     for integration_base in [false, true] {

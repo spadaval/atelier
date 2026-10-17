@@ -49,7 +49,10 @@ mission strategies on the base directly.
 Each issue type selects a workflow with an initial status, terminal statuses,
 and named transitions. A transition declares its accepted source statuses,
 target status, optional description, required fields such as `close_reason`,
-and read-only checks. Categories support queries; the exact status remains the
+and read-only checks. A done-category transition may also require the
+implementer report's parts (`report.deviations`, `report.decisions`,
+`report.surprises`, `report.open_items`), which live in Close Reason, so it
+must require `close_reason` too (see the [work model](work-model.md)). Categories support queries; the exact status remains the
 stored lifecycle state.
 
 The starter policy has draft objectives, someday `backlog` work, todo
