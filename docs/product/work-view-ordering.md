@@ -8,8 +8,8 @@ This contract applies to issue-like row sets in:
 
 - `atelier work ready` and `atelier work blocked`
 - `atelier work mission <mission-id>` and `atelier work parent <parent-id>`
-- `atelier issue show` subissues
-- `atelier issue show <objective-id>`
+- `atelier issue show` children and `--full` subissues
+- `atelier issue show --full <objective-id>` rollups
 - explicit objective browsing views
 - root `atelier status`
 

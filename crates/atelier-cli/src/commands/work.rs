@@ -445,7 +445,8 @@ fn scoped_dashboard(
         metadata.extend([
             (
                 "Mission",
-                containing_mission(index, &id)?.unwrap_or_else(|| "(none)".to_string()),
+                atelier_app::objective_graph::containing_mission(index, &id)?
+                    .unwrap_or_else(|| "(none)".to_string()),
             ),
             ("Proof gaps", proof_gaps.to_string()),
             (
@@ -670,18 +671,6 @@ fn transition_readiness(
                 .unwrap_or_else(|| "blocked".to_string())
         ))
     }
-}
-
-fn containing_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
-    for mission in index.issues() {
-        if mission.issue_type == "mission"
-            && atelier_app::objective_graph::mission_issue_ids(index, &mission.id)?
-                .contains(issue_id)
-        {
-            return Ok(Some(mission.id.clone()));
-        }
-    }
-    Ok(None)
 }
 
 #[cfg(test)]

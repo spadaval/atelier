@@ -459,6 +459,18 @@ impl IssueSections {
         }
     }
 
+    /// The two sections that say what the item is for and what finishes it;
+    /// brief views show these and leave the rest to the full record.
+    pub fn lead_names(&self) -> [IssueSectionName; 2] {
+        match self.body {
+            IssueBody::Issue { .. } => [IssueSectionName::Goal, IssueSectionName::DoneWhen],
+            IssueBody::Mission { .. } => {
+                [IssueSectionName::Outcome, IssueSectionName::SuccessCriteria]
+            }
+            IssueBody::Decision { .. } => [IssueSectionName::Question, IssueSectionName::Decision],
+        }
+    }
+
     /// Append one dated `- YYYY-MM-DD [kind] text` bullet to the Notes
     /// section, creating the section when absent. Continuation lines are
     /// indented so note text cannot open a new record section.

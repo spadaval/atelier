@@ -107,7 +107,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(success, "lint after markdown edit failed: {stderr}");
-    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show.contains("Describe the markdown-first issue."));
     assert!(show.contains("Issue sections are populated by editing canonical Markdown."));
@@ -355,7 +355,8 @@ fn test_configured_custom_issue_link_is_context_only() {
     assert!(mission_markdown.contains("type: \"advances\""));
     assert!(mission_markdown.contains("type: \"informs\""));
 
-    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    let (success, show_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &mission_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(show_out.contains("informs"), "{show_out}");
     assert!(show_out.contains("Context note"), "{show_out}");
@@ -503,7 +504,7 @@ fn test_panel_surfaces_are_complete_without_terminal_color() {
         vec!["status"],
         vec!["work"],
         vec!["work", "ready"],
-        vec!["issue", "show", &issue_id],
+        vec!["issue", "show", &issue_id, "--full"],
     ] {
         let (success, stdout, stderr) =
             run_atelier_with_env(dir.path(), &args, &[("NO_COLOR", "1")]);
@@ -564,7 +565,7 @@ fn test_issue_show_rollup_counts_all_children_and_bounds_only_visible_rows() {
             run_atelier(dir.path(), &["issue", "create", &title, "--parent", &owner]);
         assert!(success, "{stderr}");
     }
-    let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &owner]);
+    let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &owner, "--full"]);
     assert!(success, "{stderr}");
     let rollup = shown.split("Objective Rollup").nth(1).unwrap();
     assert!(rollup.contains("7 scoped issues"), "{rollup}");
@@ -705,7 +706,8 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
         ],
     );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &parent_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     let subissues = stdout.split("Subissues\n").nth(1).expect("Subissues panel");
     let subissues = subissues.split("Impact\n").next().unwrap();
@@ -783,6 +785,356 @@ fn test_list_filter_by_label() {
 
 // ==================== Issue Show Tests ====================
 
+/// A mission, a parent advancing it with two children, and a blocker on the
+/// first child. Returns (mission, parent, first child, second child, blocker).
+fn brief_show_fixture(dir: &std::path::Path) -> (String, String, String, String, String) {
+    let create = |args: &[&str]| {
+        let (success, stdout, stderr) = run_atelier(dir, args);
+        assert!(success, "{args:?} failed: {stderr}");
+        stdout.trim().to_string()
+    };
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Brief mission",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nAgents read one view.\n\n## Success criteria\n\n- S1: brief by default.\n- S2: several IDs.\n\n## Background\n\nTranscripts.",
+    ]);
+    let parent = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Brief parent",
+        "--body",
+        "## Goal\n\nParent goal.\n\n## Done when\n\nParent done.",
+    ]);
+    create(&[
+        "-q", "issue", "link", &parent, &mission, "--role", "advances",
+    ]);
+    let child = create(&[
+        "-q",
+        "issue",
+        "create",
+        "First child",
+        "--parent",
+        &parent,
+        "--body",
+        "## Goal\n\nChild goal.\n\n## Done when\n\nChild done.\n\n## Context\n\nOnly in the full view.",
+    ]);
+    let sibling = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Second child",
+        "--parent",
+        &parent,
+        "--body",
+        "## Goal\n\nSibling goal.\n\n## Done when\n\nSibling done.",
+    ]);
+    let blocker = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Blocker",
+        "--body",
+        "## Goal\n\nBlocker goal.\n\n## Done when\n\nBlocker done.",
+    ]);
+    create(&["-q", "issue", "link", &blocker, &child, "--role", "blocks"]);
+    (mission, parent, child, sibling, blocker)
+}
+
+fn show_ok(dir: &std::path::Path, args: &[&str]) -> String {
+    let (success, stdout, stderr) = run_atelier(dir, args);
+    assert!(success, "{args:?} failed: {stderr}");
+    stdout
+}
+
+#[test]
+fn test_issue_show_is_brief_by_default() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (mission, parent, child, sibling, blocker) = brief_show_fixture(dir.path());
+
+    assert_eq!(
+        show_ok(dir.path(), &["issue", "show", &child]),
+        format!(
+            "{child} [task] todo - First child\n\
+             Mission: {mission} draft - Brief mission\n\
+             Parent: {parent} todo - Brief parent\n\
+             Blocked by: {blocker} todo - Blocker\n\
+             Transitions: block, defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
+             Goal: Child goal.\n\
+             Done when: Child done.\n\
+             More with --full: Context\n"
+        )
+    );
+    assert_eq!(
+        show_ok(dir.path(), &["issue", "show", &parent]),
+        format!(
+            "{parent} [task] todo - Brief parent\n\
+             Mission: {mission} draft - Brief mission\n\
+             Children:\n  \
+             {sibling} ready - Second child\n  \
+             {child} ⚠ blocked - First child\n\
+             Transitions: block, defer, start, supersede --reason\n\
+             Goal: Parent goal.\n\
+             Done when: Parent done.\n"
+        )
+    );
+    // A mission shows its scope counts and its Outcome and Success criteria.
+    assert_eq!(
+        show_ok(dir.path(), &["issue", "show", &mission]),
+        format!(
+            "{mission} [mission] draft - Brief mission\n\
+             Work: 3 issues - ready 1, context 1, blocked 1\n\
+             Transitions: ready, supersede --reason\n\
+             Outcome: Agents read one view.\n\
+             Success criteria:\n  \
+             - S1: brief by default.\n  \
+             - S2: several IDs.\n\
+             More with --full: Background\n"
+        )
+    );
+
+    // A parent's blockers reach its children, and a done blocker is marked.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &blocker, &parent, "--role", "blocks"],
+    );
+    assert!(success, "link failed: {stderr}");
+    edit_canonical_record(dir.path(), "issues", &blocker, |text| {
+        text.replace("status: \"todo\"", "status: \"done\"")
+    });
+    let sibling_view = show_ok(dir.path(), &["issue", "show", &sibling]);
+    assert!(
+        sibling_view.contains(&format!(
+            "\nBlocked via parent {parent}: {blocker} ✓ done - Blocker\n"
+        )),
+        "{sibling_view}"
+    );
+    let child_view = show_ok(dir.path(), &["issue", "show", &child]);
+    assert!(
+        child_view.contains(&format!("\nBlocked by: {blocker} ✓ done - Blocker\n")),
+        "{child_view}"
+    );
+    assert!(
+        child_view.contains("\nTransitions: block, defer, start, supersede --reason\n"),
+        "{child_view}"
+    );
+
+    // A transition that needs an argument and has another gap stays blocked,
+    // with the other gap as its reason: a parent closes after its children.
+    edit_canonical_record(dir.path(), "issues", &parent, |text| {
+        text.replace("status: \"todo\"", "status: \"in_progress\"")
+    });
+    let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
+    assert!(
+        parent_view.contains(
+            "\nTransitions: block, request_review, supersede --reason | blocked: close - validator work.terminal failed: open work: "
+        ),
+        "{parent_view}"
+    );
+
+    for view in [&sibling_view, &child_view] {
+        for full_only in [
+            "Transition Readiness",
+            "Next Commands",
+            "Impact",
+            "Priority:",
+        ] {
+            assert!(!view.contains(full_only), "{full_only} in brief:\n{view}");
+        }
+    }
+}
+
+#[test]
+fn test_issue_show_brief_decision_leads_with_question_and_decision() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let decision = show_ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Pick a format",
+            "--issue-type",
+            "decision",
+            "--body",
+            "## Question\n\nWhich format?\n\n## Options\n\nA or B.\n\n## Decision\n\nA.",
+        ],
+    );
+    let decision = decision.trim();
+    let view = show_ok(dir.path(), &["issue", "show", decision]);
+    assert!(
+        view.ends_with("Question: Which format?\nDecision: A.\nMore with --full: Options\n"),
+        "{view}"
+    );
+
+    // An open decision waits on the human, named the same way as a child row
+    // and in a mission's work counts.
+    let create = |args: &[&str]| show_ok(dir.path(), args).trim().to_string();
+    let parent = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Format parent",
+        "--body",
+        "## Goal\n\nG.\n\n## Done when\n\nD.",
+    ]);
+    let open = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Open format question",
+        "--issue-type",
+        "decision",
+        "--parent",
+        &parent,
+        "--body",
+        "## Question\n\nWhich?",
+    ]);
+    let mission = create(&[
+        "-q",
+        "issue",
+        "create",
+        "Format mission",
+        "--issue-type",
+        "mission",
+        "--body",
+        "## Outcome\n\nO.\n\n## Success criteria\n\nS.",
+    ]);
+    create(&[
+        "-q", "issue", "link", &parent, &mission, "--role", "advances",
+    ]);
+    let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
+    assert!(
+        parent_view.contains(&format!(
+            "\nChildren: {open} needs human - Open format question\n"
+        )),
+        "{parent_view}"
+    );
+    let mission_view = show_ok(dir.path(), &["issue", "show", &mission]);
+    assert!(
+        mission_view.contains("\nWork: 2 issues - needs human 1, context 1\n"),
+        "{mission_view}"
+    );
+}
+
+#[test]
+fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let id = show_ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Finished work",
+            "--body",
+            "## Goal\n\nFinish.\n\n## Done when\n\nFinished.",
+        ],
+    );
+    let id = id.trim();
+    for status in ["done", "superseded"] {
+        edit_canonical_record(dir.path(), "issues", id, |text| {
+            text.lines()
+                .map(|line| {
+                    if line.starts_with("status: ") {
+                        format!("status: \"{status}\"")
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        });
+        assert_eq!(
+            show_ok(dir.path(), &["issue", "show", id]),
+            format!(
+                "{id} [task] ✓ {status} - Finished work\n\
+                 Transitions: none\n\
+                 Goal: Finish.\n\
+                 Done when: Finished.\n"
+            )
+        );
+    }
+
+    // A failure to read the transitions is reported, not shown as none.
+    edit_canonical_record(dir.path(), "issues", id, |text| {
+        text.replacen(
+            "priority:",
+            "workflow_branch:\n  branch_base: gone\n  work_branch: feature/gone\npriority:",
+            1,
+        )
+    });
+    let view = show_ok(dir.path(), &["issue", "show", id]);
+    assert!(
+        view.contains("\nTransitions: unavailable - git rev-parse --verify refs/heads/gone"),
+        "{view}"
+    );
+}
+
+#[test]
+fn test_issue_show_takes_several_ids_and_resolves_all_before_printing() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (mission, parent, child, _, _) = brief_show_fixture(dir.path());
+
+    let brief = |id: &str| show_ok(dir.path(), &["issue", "show", id]);
+    assert_eq!(
+        show_ok(dir.path(), &["issue", "show", &child, &parent, &mission]),
+        format!("{}\n{}\n{}", brief(&child), brief(&parent), brief(&mission))
+    );
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "show", &child, "atelier-zzzz", &parent],
+    );
+    assert!(!success, "an unknown ID should fail the whole show");
+    assert_eq!(stdout, "", "nothing prints before every ID resolves");
+    assert!(
+        stderr.contains("Issue atelier-zzzz was not found"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show"]);
+    assert!(!success, "show needs at least one ID");
+    assert!(stderr.contains("<IDS>..."), "{stderr}");
+}
+
+#[test]
+fn test_issue_show_full_gives_the_whole_record_for_each_id() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (_, parent, child, _, _) = brief_show_fixture(dir.path());
+
+    let full = |id: &str| show_ok(dir.path(), &["issue", "show", id, "--full"]);
+    let child_full = full(&child);
+    for section in [
+        "Priority:",
+        "Hierarchy",
+        "Transition Readiness",
+        "Context\n-------\nOnly in the full view.",
+        "Blocked by",
+        "Next Commands",
+    ] {
+        assert!(
+            child_full.contains(section),
+            "{section} missing:\n{child_full}"
+        );
+    }
+    assert_eq!(
+        show_ok(dir.path(), &["issue", "show", "--full", &child, &parent]),
+        format!("{child_full}\n{}", full(&parent))
+    );
+}
+
 #[test]
 fn test_show_issue() {
     let dir = tempdir().unwrap();
@@ -798,7 +1150,7 @@ fn test_show_issue() {
             )
     });
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(success);
     assert!(stdout.contains("Test issue"));
@@ -942,7 +1294,8 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     assert!(stdout.contains(&parent_id));
     assert!(stdout.contains(&related_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", parent_key]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", parent_key, "--full"]);
     assert!(success, "related by partial key failed: {stderr}");
     assert!(stdout.contains(&related_id));
 
@@ -998,10 +1351,12 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
     assert!(stdout.contains("Bundle applied."));
 
     let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &dependent_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains(&issue_id));
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &dependent_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains("Status:   todo"), "{stdout}");
 }
@@ -1031,7 +1386,8 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
     assert!(success, "custom issue transition failed: {stderr}");
     assert!(stdout.contains("To:       in_progress"), "{stdout}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "custom issue show failed: {stderr}");
     assert!(stdout.contains("Type:     incident"), "{stdout}");
     assert!(stdout.contains("Status:   in_progress"), "{stdout}");
@@ -1105,7 +1461,7 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
         "{issue_text}"
     );
 
-    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "declared mission issue show failed: {stderr}");
     assert!(show.contains("Type:     mission"), "{show}");
     assert!(
@@ -1190,7 +1546,8 @@ fn test_bundle_apply_accepts_configured_custom_issue_type() {
     assert!(stdout.contains("Bundle applied."));
 
     let issue_id = issue_id_by_title(dir.path(), "Bundled incident");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "custom bundled issue show failed: {stderr}");
     assert!(stdout.contains("Type:     incident"), "{stdout}");
 }
@@ -1530,7 +1887,8 @@ fn test_show_issue_rich_human_output() {
     );
     run_atelier(dir.path(), &["issue", "note", &target_id, "Recent note"]);
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &target_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &target_id, "--full"]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
@@ -1565,7 +1923,8 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
         text.replace("Goal was not specified.", "JSON description")
     });
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("JSON issue"));
@@ -1616,7 +1975,8 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit() {
         );
     std::fs::write(&issue_path, issue_text).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains(edited_body), "{stdout}");
     assert!(stdout.contains(edited_outcome), "{stdout}");
@@ -1706,7 +2066,8 @@ fn test_show_closed_issue_includes_close_reason() {
     let issue_id = issue_ref(dir.path(), 1);
     close_issue_with_evidence(dir.path(), &issue_id, Some("Done enough"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains("Closed issue"));
@@ -1757,7 +2118,7 @@ fn test_update_issue_priority() {
         &["issue", "update", &issue_id, "-p", "critical"],
     );
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(show_out.contains("critical"));
 }
 
@@ -1786,7 +2147,7 @@ fn test_update_issue_remove_label_replaces_unlabel_helper() {
     assert!(success, "update label replacement failed: {stderr}");
     assert!(stdout.contains("Updated issue"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     let labels_line = show_out
         .lines()
         .find(|line| line.starts_with("Labels:"))
@@ -1804,7 +2165,7 @@ fn test_close_issue() {
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
     let issue_id = close_issue_with_evidence(dir.path(), "1", Some("done"));
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(show_out.contains("Status:   done"), "{show_out}");
 }
@@ -1827,7 +2188,7 @@ fn test_add_label() {
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(show_out.contains("bug"));
 }
 
@@ -1873,7 +2234,7 @@ fn test_add_comment() {
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(show_out.contains("This is a comment"));
 }
 
@@ -1959,7 +2320,8 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
         .join(format!(".atelier/issues/{issue_id}.activity"))
         .exists());
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Handoff body"), "{stdout}");
     assert!(stdout.contains("Close Reason"), "{stdout}");
@@ -2007,7 +2369,8 @@ fn test_issue_show_reads_notes_and_close_reason_from_the_record() {
     );
     assert!(success, "close failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Canonical close"));
@@ -2034,7 +2397,8 @@ fn test_issue_create_is_durable_from_record_files() {
     assert!(success, "create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Create-only durable");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Create-only durable"));
     assert!(stdout.contains("Created body"));
@@ -2253,7 +2617,7 @@ fn test_unblock_issue() {
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "show", &blocked_id, "--full"]);
     assert!(blocked_out.contains("Blocked by"));
     assert!(blocked_out.contains("(none)"));
 }
@@ -2283,7 +2647,8 @@ fn test_issue_blocker_mutations_are_durable_from_record_files() {
     );
     assert!(success, "issue link failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &blocked_id, "--full"]);
     assert!(success, "issue show after issue link failed: {stderr}");
     assert!(stdout.contains(&blocker_id), "{stdout}");
 
@@ -2300,7 +2665,8 @@ fn test_issue_blocker_mutations_are_durable_from_record_files() {
     );
     assert!(success, "issue unlink failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &blocked_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &blocked_id, "--full"]);
     assert!(success, "issue show after issue unlink failed: {stderr}");
     assert!(
         stdout.contains("Blocked by") && stdout.contains("(none)"),
@@ -2517,7 +2883,8 @@ fn test_issue_update_issue_type_persists() {
     assert!(success, "issue type update failed: {stderr}");
     assert!(stdout.contains("Type:     feature"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Container work"));
     assert!(stdout.contains("Type:     feature"));
@@ -3052,7 +3419,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     assert!(!retired_epic.contains("Ready Work"), "{retired_epic}");
 
     let (success, retired_show, stderr) =
-        run_atelier(dir.path(), &["issue", "show", &retired_epic_id]);
+        run_atelier(dir.path(), &["issue", "show", &retired_epic_id, "--full"]);
     assert!(success, "retired epic issue show failed: {stderr}");
     assert!(
         retired_show.contains("active 0, ready 0, blocked 0, done 2, backlog 2"),
@@ -4126,7 +4493,7 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
     assert_eq!(ready, agent, "{ready}");
     let summary = create(&["--quiet", "work", "mission", &mission]);
     assert!(summary.contains("ready=1 human=1"), "{summary}");
-    let show = create(&["issue", "show", &mission]);
+    let show = create(&["issue", "show", &mission, "--full"]);
     assert!(
         show.contains("needs a human 1") && show.contains("Needs a Human"),
         "{show}"
@@ -4533,7 +4900,7 @@ fn test_missions_and_parents_carry_background_research() {
         &parent,
     ]);
     for (id, expected) in [(&mission, "| EDMC | replace |"), (&parent, "Sender rules:")] {
-        let show = create(&["issue", "show", id]);
+        let show = create(&["issue", "show", id, "--full"]);
         let at = show.find("Background").expect(&show);
         assert!(show[at..].contains(expected), "{show}");
     }
@@ -4544,7 +4911,7 @@ fn test_missions_and_parents_carry_background_research() {
         "issue", "update", &parent, "--body",
         "## Goal\n\nSend to EDDN.\n\n## Done when\n\nChildren done.\n\n## Background\n\nRevised rules.",
     ]);
-    assert!(create(&["issue", "show", &parent]).contains("Revised rules."));
+    assert!(create(&["issue", "show", &parent, "--full"]).contains("Revised rules."));
 }
 
 #[test]
@@ -4602,7 +4969,7 @@ fn test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_contex
         missions.contains("2 issues: 0 active, 1 ready, 1 context,"),
         "{missions}"
     );
-    let show = create(&["issue", "show", &mission]);
+    let show = create(&["issue", "show", &mission, "--full"]);
     assert!(show.contains("ready 1, context 1,"), "{show}");
 
     // A parent whose children are all done is ready to start and close.
@@ -4661,7 +5028,7 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
     let ready = create(&["--quiet", "work", "ready"]);
     assert_eq!(ready, work, "decisions are not agent work: {ready}");
     assert_eq!(create(&["--quiet", "work", "human"]), decision);
-    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &decision]);
+    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &decision, "--full"]);
     assert!(
         show.contains("Question") && show.contains("(a) drop epic"),
         "{show}"
@@ -4913,7 +5280,7 @@ fn test_size_labels_are_validated_shown_and_replaced() {
     );
     assert!(success, "{stderr}");
     let id = id.trim().to_string();
-    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &id]);
+    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &id, "--full"]);
     assert!(show.contains("Size:     M"), "{show}");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &id, "-l", "size-xl"]);
     assert!(success, "{stderr}");

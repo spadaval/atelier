@@ -303,6 +303,19 @@ pub fn mission_issue_ids(index: &RecordIndex, mission_id: &str) -> Result<BTreeS
     issue_descendant_ids(index, mission_id)
 }
 
+/// The first mission, in index order, whose `advances` scope contains
+/// `issue_id`.
+pub fn containing_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
+    for mission in index.issues() {
+        if mission.issue_type == "mission"
+            && mission_issue_ids(index, &mission.id)?.contains(issue_id)
+        {
+            return Ok(Some(mission.id.clone()));
+        }
+    }
+    Ok(None)
+}
+
 pub fn mission_objective_kind(index: &RecordIndex, mission_id: &str) -> Result<&'static str> {
     if index
         .issue_record(mission_id)

@@ -17,9 +17,20 @@ pub struct IssueTransitionOption {
     pub to: String,
     pub allowed: bool,
     pub blockers: Vec<String>,
+    /// Flags for required fields this transition needs, such as `--reason`.
+    /// Each adds one blocker, and those blockers come first in `blockers`.
+    pub missing_arguments: Vec<&'static str>,
     pub validator_results: Vec<ValidatorResult>,
     pub descriptions: Vec<String>,
     pub command: String,
+}
+
+impl IssueTransitionOption {
+    /// Blockers other than missing required arguments; empty when giving the
+    /// arguments would make the transition allowed.
+    pub fn blockers_beyond_arguments(&self) -> &[String] {
+        &self.blockers[self.missing_arguments.len()..]
+    }
 }
 
 /// Applies a workflow transition: checks required fields and read-only
@@ -171,7 +182,10 @@ fn transition_blockers(
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
-    let mut blockers = required_field_failures(transition, close_reason)?;
+    let mut blockers = required_field_failures(transition, close_reason)?
+        .into_iter()
+        .map(|(_, failure)| failure)
+        .collect::<Vec<_>>();
     if policy.status_category(&transition.to) == Some("done") && transition.to != "superseded" {
         if let Some(evidence_id) =
             atelier_app::evidence_freshness::newest_failure(index, repo_root, &issue.id)?
@@ -210,26 +224,51 @@ pub fn issue_transition_options(
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let (blockers, validator_results) =
             transition_blockers(index, &policy, &repo_root, &issue, transition, None)?;
+        let missing_arguments = required_field_failures(transition, None)?
+            .into_iter()
+            .map(|(flag, _)| flag)
+            .collect();
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
             to: transition.to.clone(),
             allowed: blockers.is_empty(),
             blockers,
+            missing_arguments,
             validator_results,
             descriptions: transition_descriptions(transition),
             command: transition_command(&issue.id, name, transition),
         });
     }
     if options.is_empty() {
-        bail!(
-            "Issue {} has no configured transitions from status '{}'",
-            issue.id,
-            issue.status
-        );
+        return Err(NoTransitions {
+            issue_id: issue.id.clone(),
+            status: issue.status.clone(),
+        }
+        .into());
     }
     Ok(options)
 }
+
+/// The workflow configures no transitions out of the issue's status, as for
+/// most done statuses.
+#[derive(Debug)]
+pub struct NoTransitions {
+    issue_id: String,
+    status: String,
+}
+
+impl std::fmt::Display for NoTransitions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Issue {} has no configured transitions from status '{}'",
+            self.issue_id, self.status
+        )
+    }
+}
+
+impl std::error::Error for NoTransitions {}
 
 fn active_transition_ancestor_blocker(
     index: &RecordIndex,
@@ -481,19 +520,21 @@ fn ensure_transitionable_status(policy: &WorkflowPolicy, issue: &Issue) -> Resul
     )
 }
 
+/// Each required field the caller has not given, as its flag and the failure.
 fn required_field_failures(
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
-) -> Result<Vec<String>> {
+) -> Result<Vec<(&'static str, String)>> {
     let mut failures = Vec::new();
     for field in &transition.required_fields {
         match field.as_str() {
             "close_reason" => {
                 if close_reason.is_none_or(|value| value.trim().is_empty()) {
-                    failures.push(
+                    failures.push((
+                        "--reason",
                         "missing required field close_reason; rerun with `--reason \"...\"`"
                             .to_string(),
-                    );
+                    ));
                 }
             }
             other => {
@@ -589,6 +630,7 @@ mod tests {
             to: "in_progress".to_string(),
             allowed,
             blockers: Vec::new(),
+            missing_arguments: Vec::new(),
             validator_results: vec![ValidatorResult {
                 validator: "issue.sections_parseable".to_string(),
                 passed,

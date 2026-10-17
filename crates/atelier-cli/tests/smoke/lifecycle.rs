@@ -70,7 +70,7 @@ fn test_issue_status_reports_sibling_children() {
         "spike",
     ]);
 
-    let status = h.run_ok(&["issue", "show", &parent_id]);
+    let status = h.run_ok(&["issue", "show", &parent_id, "--full"]);
     assert!(status.stdout.contains("Todo child"));
     assert!(status.stdout_contains("Sibling child"));
     assert!(status.stdout.contains("Ready Work"));

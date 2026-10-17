@@ -147,7 +147,7 @@ fn test_related_no_relations() {
     run_atelier(dir.path(), &["issue", "create", "Solo issue"]);
     let issue_id = issue_ref(dir.path(), 1);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(success);
     assert!(
@@ -679,7 +679,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
         run_atelier(dir.path(), &["issue", "note", &task_id, "handoff note"]);
     assert!(success, "issue note failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
@@ -716,7 +716,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains(&blocker_id));
 
@@ -797,7 +797,8 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
     let evidence_id = record_id_by_title(dir.path(), "evidence", "wrong-kind fixture evidence");
     let evidence_id = evidence_id.as_str();
 
-    let (success, mission_show, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    let (success, mission_show, stderr) =
+        run_atelier(dir.path(), &["issue", "show", mission_id, "--full"]);
     assert!(
         success,
         "mission ID should resolve through issue show: {stderr}"
@@ -893,7 +894,8 @@ fn test_mission_unlink_removes_added_work() {
     assert!(success, "mission add-work failed: {stderr}");
     assert!(add_out.contains(&format!("Linked {mission_id} -> {issue_id} (advances)")));
 
-    let (success, linked_out, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    let (success, linked_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", mission_id, "--full"]);
     assert!(success, "mission status after add-work failed: {stderr}");
     assert!(linked_out.contains("Accidental work"));
 
@@ -902,7 +904,8 @@ fn test_mission_unlink_removes_added_work() {
     assert!(success, "mission unlink failed: {stderr}");
     assert!(unlink_out.contains(&format!("Unlinked {mission_id} -> {issue_id} (advances)")));
 
-    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    let (success, show_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", mission_id, "--full"]);
     assert!(success, "mission status after unlink failed: {stderr}");
     assert!(!show_out.contains("Accidental work"));
     assert!(show_out.contains("Scope         : 0 scoped issues"));

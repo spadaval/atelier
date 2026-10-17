@@ -71,7 +71,7 @@ fn test_boundary_label_exact_128() {
     let label = "a".repeat(128);
     h.run_ok(&["issue", "update", &issue_id, "--label", &label]);
 
-    let show = h.run_ok(&["issue", "show", &issue_id]);
+    let show = h.run_ok(&["issue", "show", &issue_id, "--full"]);
     assert!(show.stdout.contains(&label));
 }
 
@@ -84,7 +84,7 @@ fn test_boundary_label_over_129() {
     let label = "a".repeat(129);
     let result = h.run(&["issue", "update", &issue_id, "--label", &label]);
     if result.success {
-        let show = h.run_ok(&["issue", "show", &issue_id]);
+        let show = h.run_ok(&["issue", "show", &issue_id, "--full"]);
         assert!(show.stdout.contains(&label[..50]));
     } else {
         assert!(
@@ -235,11 +235,11 @@ fn test_inject_sql_label() {
     let payload = "'; DELETE FROM labels; --";
     h.run_ok(&["issue", "update", &issue_id, "--label", payload]);
 
-    let show = h.run_ok(&["issue", "show", &issue_id]);
+    let show = h.run_ok(&["issue", "show", &issue_id, "--full"]);
     assert_stdout_contains(&show, payload);
 
     h.run_ok(&["issue", "update", &issue_id, "--label", "safe-label"]);
-    let show2 = h.run_ok(&["issue", "show", &issue_id]);
+    let show2 = h.run_ok(&["issue", "show", &issue_id, "--full"]);
     assert_stdout_contains(&show2, "safe-label");
 }
 
@@ -252,7 +252,7 @@ fn test_inject_sql_comment() {
     let payload = "comment'); DELETE FROM comments; --";
     h.run_ok(&["issue", "note", &issue_id, payload]);
 
-    let show = h.run_ok(&["issue", "show", &issue_id]);
+    let show = h.run_ok(&["issue", "show", &issue_id, "--full"]);
     assert_stdout_contains(&show, payload);
 }
 
@@ -282,7 +282,7 @@ fn test_inject_shell_comment() {
     let payload = "Running $(rm -rf /) and `cat /etc/shadow` for $USER";
     h.run_ok(&["issue", "note", &issue_id, payload]);
 
-    let show = h.run_ok(&["issue", "show", &issue_id]);
+    let show = h.run_ok(&["issue", "show", &issue_id, "--full"]);
     assert_stdout_contains(&show, "$(rm -rf /)");
 }
 

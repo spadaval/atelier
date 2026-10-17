@@ -9,6 +9,32 @@ proof, and ownership. Queues use compact rows with an ID, title, one state cue,
 and a blocker count when needed. Rollups can use workflow categories; rows
 should not repeat redundant category/status tokens.
 
+`issue show` is brief by default, and `--full` prints the whole record. The
+brief view gives one line per fact and leaves out empty facts:
+
+- the title line: ID, type, status, and title;
+- `Mission:` for work in a mission's scope, or for a mission `Strategy:` and
+  `Work:` with its scope counts by work state;
+- `Parent:`, then `Children:` in work order, each with its work state;
+- `Blocked by:`, and `Blocked via parent <id>:` for blockers a child inherits;
+- `Transitions:`, which names the allowed transitions, then each group of
+  blocked transitions with the reason they share, separated by `|`. A
+  transition whose only gap is a required argument is allowed and shows its
+  flag, as in `supersede --reason`;
+- the two lead sections of the record's body shape: Goal and Done when for
+  work items, Outcome and Success criteria for missions, and Question and
+  Decision for decisions. These say what the item is for and what finishes
+  it. A one-line section follows its label, and a longer one is indented
+  under it;
+- `More with --full:`, which names the record's other sections.
+
+Related items are `<id> <status> - <title>`. A done status is marked ✓, and a
+blocked status or work state is marked ⚠. A list with one item stays on its
+label's line, and a longer list is indented under it. `issue show <id> <id>...`
+resolves every ID before printing anything, so one unknown ID prints nothing,
+and then prints each brief view, separated by a blank line. With `--full`, it
+prints each full record the same way.
+
 Use specific labels for evidence, reviews, hierarchy, blockers, and Git facts.
 Never present an attached receipt as passing proof without checking its result
 and freshness. Branch summaries must name the branch and remain separate from
