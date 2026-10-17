@@ -5,8 +5,9 @@ The default limit is 50; output reports omitted matches. Inventory uses neutral
 ID ordering and does not pretend every row is actionable work.
 
 `atelier work missions` lists flat mission summaries with complete scope counts,
-open blockers, and a command to inspect each mission; `--all` includes terminal
-missions. Human output shows at most 20 missions and reports omissions. Quiet
+open blockers, and a command to inspect each mission. Human output shows at
+most 20 missions and reports omissions; `--all` shows the whole overview: done
+missions too, and every mission and unassigned item past the limits. Quiet
 output includes every matching mission ID in the same status, priority, and ID
 order. `atelier work mission <id>` shows one mission's outcome, scope,
 blockers, and operational work. `atelier work parent <id>` focuses on a parent
@@ -30,7 +31,8 @@ with that label; the unassigned total counts each issue once. Groups run
 largest first, then by label, with unlabelled work last under `no label`.
 Each group shows at most 5 items, one [item line](human-cli-output.md#item-line)
 each, with a blocker count when blocked, in the
-[work order](work-view-ordering.md), then `... N more`. A line too wide for
+[work order](work-view-ordering.md), then ``... N more items omitted; see
+`atelier work missions --all` ``; `--all` shows every item. A line too wide for
 the terminal continues indented past the item lines. `status` shows the same groups (see
 [sessions and hooks](sessions-and-hooks.md)).
 

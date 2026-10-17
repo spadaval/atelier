@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Set SO_NOSIGPIPE on the cat-file socket on Apple"
-updated_at: "2026-10-17T09:02:27.670226390+00:00"
+updated_at: "2026-10-17T09:11:02.010654394+00:00"
 ---
 
 ## Goal

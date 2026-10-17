@@ -1212,6 +1212,41 @@ fn test_issue_show_full_gives_the_whole_record_for_each_id() {
 }
 
 #[test]
+fn test_issue_show_full_lists_every_downstream_issue_in_impact() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Impact root"]);
+    assert!(success, "{stderr}");
+    let root = issue_id_by_title(dir.path(), "Impact root");
+    let mut children = Vec::new();
+    for n in 0..10 {
+        let title = format!("Impact child {n:02}");
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "create", &title, "--parent", &root]);
+        assert!(success, "{stderr}");
+        children.push(issue_id_by_title(dir.path(), &title));
+    }
+    let full = show_ok(dir.path(), &["issue", "show", &root, "--full"]);
+    let impact = full
+        .split("\nImpact\n------\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_else(|| panic!("no Impact section:\n{full}"));
+    assert!(
+        impact.starts_with("10 downstream issues may need review"),
+        "{impact}"
+    );
+    // The full view is the whole record, so Impact is not cut.
+    assert!(
+        children
+            .iter()
+            .all(|id| impact.contains(&format!("  {id} "))),
+        "{impact}"
+    );
+    assert!(!impact.contains("more"), "{impact}");
+}
+
+#[test]
 fn test_show_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

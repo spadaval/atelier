@@ -521,8 +521,16 @@ fn test_quiet_work_missions_is_complete_beyond_the_human_display_limit() {
     assert_eq!(quiet.lines().collect::<Vec<_>>(), expected);
     let (success, human, stderr) = run_atelier(dir.path(), &["work", "missions"]);
     assert!(success, "human mission listing failed: {stderr}");
-    assert!(human.contains("3 more missions omitted"), "{human}");
+    assert!(
+        human.contains("3 more missions omitted; see `atelier work missions --all`"),
+        "{human}"
+    );
     assert!(!human.contains(expected.last().unwrap()), "{human}");
+    // The flag the omitted line names shows every mission.
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "work missions --all failed: {stderr}");
+    assert!(expected.iter().all(|id| all.contains(id.as_str())), "{all}");
+    assert!(!all.contains("omitted"), "{all}");
 }
 
 #[test]
@@ -3322,7 +3330,10 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         lines[3..6].iter().all(|line| line.contains("Cli work")),
         "{unassigned}"
     );
-    assert_eq!(lines[6], "  ... 3 more", "{unassigned}");
+    assert_eq!(
+        lines[6], "  ... 3 more items omitted; see `atelier work missions --all`",
+        "{unassigned}"
+    );
     let headings = lines
         .iter()
         .filter(|line| !line.starts_with(' '))
@@ -3336,7 +3347,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
             "beta (1)",
             "delta (1)",
             "gamma (1)",
-            "... 2 more labels: atelier work missions"
+            "... 2 more labels omitted; see `atelier work missions`"
         ],
         "{unassigned}"
     );
@@ -3368,6 +3379,20 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         overview.contains(&format!("    {scoped} todo medium Scoped later\n")),
         "{overview}"
     );
+    assert!(
+        overview.contains("    ... 3 more items omitted; see `atelier work missions --all`\n"),
+        "{overview}"
+    );
+    // `--all` shows every item in each group.
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "work missions --all failed: {stderr}");
+    assert!(
+        cli_titles
+            .iter()
+            .all(|title| all.contains(&format!(" todo medium {title}\n"))),
+        "{all}"
+    );
+    assert!(!all.contains("omitted"), "{all}");
 
     // With an open mission, its scope leaves the unassigned groups, which
     // still follow it.
