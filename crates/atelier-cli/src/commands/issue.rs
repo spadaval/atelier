@@ -567,7 +567,7 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
                 {
                     lines.push(format!("    Hint: {help}"));
                 } else {
-                    lines.push(format!("    {}", option.command));
+                    lines.push(format!("    Command: {}", option.command));
                 }
             }
         }

@@ -203,7 +203,9 @@ current-checkout state.
 Next actions come from actual state: inspect a blocker, select ready work,
 record proof, resolve a finding, or commit record changes. Avoid generic command
 menus in every row. Errors name the failed invariant or path and give a useful
-recovery step. Optional verbosity may show check details and command context.
+recovery step. The recovery step is an inline sentence in the error,
+`Next: <command>`, not a `Next` footer. Optional verbosity may show check
+details and command context.
 
 `--quiet` limits output to essential IDs, counts, and result tokens. It does not
 hide failures or change behavior. Diagnostic logging uses `--log-level` and

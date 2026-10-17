@@ -388,6 +388,7 @@ fn render_issue_transition_options(
         ));
         lines.push(format!("  From: {}", option.from.join(", ")));
         lines.push(format!("  To:   {}", option.to));
+        lines.push(format!("  Command: {}", option.command));
         if option.allowed {
             lines.push("  Requirements: satisfied".to_string());
         } else {
@@ -416,7 +417,6 @@ fn render_issue_transition_options(
             ));
             lines.extend(render_text_list("Description", &option.descriptions));
         }
-        lines.push(format!("  Command: {}", option.command));
     }
     lines.join("\n")
 }

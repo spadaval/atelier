@@ -2914,4 +2914,46 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
         )),
         "{blocked_start}"
     );
+    let output_of = |wanted: String| {
+        &outputs
+            .iter()
+            .find(|(command, _)| *command == wanted)
+            .unwrap_or_else(|| panic!("no output for `{wanted}`"))
+            .1
+    };
+    let full = output_of(format!("issue show {work_id} --full"));
+    let readiness = full
+        .split_once("Transition Readiness\n")
+        .map(|(_, rest)| rest.split("\n\n").next().unwrap())
+        .unwrap_or_else(|| panic!("no Transition Readiness:\n{full}"));
+    assert!(
+        readiness.contains(&format!(
+            "\n    Command: atelier issue transition {work_id} block\n"
+        )),
+        "{readiness}"
+    );
+    assert!(
+        !readiness
+            .lines()
+            .any(|line| line.starts_with("    atelier ")),
+        "bare command line in Transition Readiness:\n{readiness}"
+    );
+    // A transition's command sits among its own fields, never after the
+    // Failed Requirements list, where it would read as another requirement.
+    let options = output_of(format!("issue transition {work_id}"));
+    assert!(
+        options.contains(&format!(
+            "start: blocked\n  From: todo, blocked\n  To:   in_progress\n  Command: atelier issue transition {work_id} start\n"
+        )),
+        "{options}"
+    );
+    let lines = options.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if line.starts_with("  Command: ") {
+            assert!(
+                lines[index - 1].starts_with("  To:"),
+                "Command: line is not among its option's fields:\n{options}"
+            );
+        }
+    }
 }
