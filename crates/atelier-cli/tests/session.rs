@@ -980,6 +980,68 @@ fn start_child_installs_owner_metadata_and_child_transition_together() {
     assert_eq!(git(f.path(), &["status", "--porcelain"]).lines().count(), 2);
 }
 #[test]
+fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.path().join("docs/strategies")).unwrap();
+    fs::write(
+        f.path().join("docs/strategies/plan.md"),
+        "---\nstatus: draft\n---\n\n# Plan\n",
+    )
+    .unwrap();
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Ship sessions",
+            "--issue-type",
+            "mission",
+            "--strategy",
+            "docs/strategies/plan.md",
+        ],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &f.id, &mission, "--role", "advances"],
+    );
+    commit(f.path(), "mission with a strategy");
+    for n in 0..10 {
+        ok(
+            f.path(),
+            &[
+                "review",
+                "record",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                &format!("Checked pass {n}"),
+            ],
+        );
+    }
+    commit(f.path(), "ten reviews");
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(field(&status, "Integration base"), Some("main"), "{status}");
+    assert!(
+        field(&status, "Mission")
+            .is_some_and(|row| row == format!("{mission} [draft] Ship sessions")),
+        "{status}"
+    );
+    assert_eq!(
+        field(&status, "Strategy"),
+        Some("docs/strategies/plan.md"),
+        "{status}"
+    );
+    let reviews = section(&status, "Reviews");
+    assert_eq!(reviews.len(), 8, "{status}");
+    for (row, n) in reviews.iter().zip((2..10).rev()) {
+        assert!(
+            row.contains(&format!("for {}", f.id)) && row.ends_with(&format!("Checked pass {n}")),
+            "{status}"
+        );
+    }
+}
+#[test]
 fn status_branch_row_shows_upstream_divergence_only_when_it_differs() {
     let f = Fixture::new();
     let branch_row = |f: &Fixture| {
