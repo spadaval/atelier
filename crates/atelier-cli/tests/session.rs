@@ -1547,6 +1547,56 @@ fn report_parts_bind_new_done_claims_and_leave_earlier_claims_valid() {
 }
 
 #[test]
+fn report_parts_leave_scoped_claims_made_before_the_policy_valid() {
+    let f = Fixture::new();
+    let child = |title: &str| {
+        let child = ok(
+            f.path(),
+            &["-q", "issue", "create", title, "--parent", &f.id],
+        );
+        ok(f.path(), &["issue", "transition", &child, "start"]);
+        child
+    };
+    let earlier = child("Earlier child");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &earlier,
+            "close",
+            "--reason",
+            "Closed before the report.",
+        ],
+    );
+    commit(f.path(), "close a child before the policy");
+    git(f.path(), &["switch", "main"]);
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass, "{output}");
+
+    // A child closed after the policy reached the branch needs the report.
+    let later = child("Later child");
+    commit(f.path(), "start a later child");
+    let mut record = f.store().load_issue_by_id(&later).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("Closed without the report.".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "close a later child without the report");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    assert!(
+        output.contains("required_field.report.deviations"),
+        "{output}"
+    );
+    assert!(output.contains(&later), "{output}");
+}
+
+#[test]
 fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
     for integration_base in [false, true] {
         let f = Fixture::new();

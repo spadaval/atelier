@@ -32,9 +32,10 @@ requires with the `report.deviations`, `report.decisions`,
 must be present and non-empty; write `None.` when there is nothing to report.
 The close transition reads Close Reason from the record body when it is
 already written there, or from `--reason-file <file>`; `--reason` replaces
-the Outcome and keeps the parts. `land` checks required parts on new done
-claims only, so done records from before a policy required a part stay
-valid. Like the rest of Close Reason, the report can be written after
+the Outcome and keeps the parts. `land` and `merge` check a required part
+only on a done claim committed beside a policy that required it, so done
+records from before the policy required a part stay valid, including a
+child closed on its parent's branch before the base's policy changed. Like the rest of Close Reason, the report can be written after
 approval without making the approval stale. This repository's policy
 requires all four parts on the work `close` transition; `supersede` needs
 only the Outcome.

@@ -52,7 +52,9 @@ drill-down commands:
   actions with `atelier issue transition <id>`;
 - enter active work and close it by executing the configured transitions shown
   by that command, such as `atelier issue transition <id> start` and
-  `atelier issue transition <id> close --reason "..."` in this repository;
+  `atelier issue transition <id> close` in this repository, with the
+  implementer report written in the record's Close Reason or passed with
+  `--reason-file <file>`;
 - manage blockers with
   `atelier issue link <blocked-id> <blocker-id> --role blocked_by` and
   `atelier issue unlink <blocked-id> <blocker-id> --role blocked_by`;
