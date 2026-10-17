@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Show the current decisions on an item in status and issue show"
-updated_at: "2026-10-17T18:18:11.657503828+00:00"
+updated_at: "2026-10-17T18:45:56.454120088+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,11 @@ S6 of docs/strategies/review-and-introspection.md. An agent working an item shou
 ## Unknowns
 
 How much this adds to `status` output on a mission with many decisions (ADR 0022's density rules apply).
+
+## Notes
+
+- 2026-10-17 [decision] Bring in the notes on the item, its parent and its mission, and the current decision records across the mission's scope; leave out sibling items' notes
+  Reason: Sibling notes are local to other work and would drown the brief view; decision records are mission-wide choices that bind every item
+  Rejected: every decision note in the mission's scope
+- 2026-10-17 [decision] Move decision row rendering into human_output so work decisions, issue show and status share one row shape
+  Reason: Three views showing the same rows must not drift apart
