@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "help"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-od8b
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rebuild root help: generated list, lifecycle-ordered common commands"
-updated_at: "2026-10-17T07:46:48.317951608+00:00"
+updated_at: "2026-10-17T07:46:49.793804938+00:00"
 ---
 
 ## Goal
