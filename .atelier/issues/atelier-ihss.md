@@ -4,6 +4,9 @@ id: "atelier-ihss"
 issue_type: "feature"
 labels:
 - "schema"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ihss
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Store each link only on the record that declares it"
-updated_at: "2026-10-17T05:22:38.461791576+00:00"
+updated_at: "2026-10-17T05:22:52.888330580+00:00"
 ---
 
 ## Goal
