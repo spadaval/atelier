@@ -26,9 +26,8 @@ Switch this repository from `fast_forward_only` to `merge_strategy: merge_commit
 
 ## Done when
 
-- `.atelier/workflow.yaml` sets `merge_strategy: merge_commit` and `merge_checks` runs, on the merged tree: `cargo fmt -- --check`, `cargo metadata --locked`, `cargo nextest run`, and `cargo nextest run --features test-hooks`, with TMPDIR inside the temporary checkout (not the quota-limited /tmp).
-- The checks leave the temporary checkout clean (build output stays in the ignored `target/`).
-- `atelier merge <id> --check` passes this policy on a real branch.
+- `.atelier/workflow.yaml` sets `merge_strategy: merge_commit` and `merge_checks` runs, on the merged tree: `cargo fmt -- --check`, `cargo metadata --locked`, `cargo nextest run`, and `cargo nextest run --features test-hooks`, with each suite's TMPDIR a fresh directory outside the checkout (not inside a repository, and not the quota-limited /tmp).
+- Run as merge runs them (`sh -c` each command in a detached checkout of the commit), the checks pass and leave the checkout clean. Merge reads the base's policy, so the first merge after this lands is the first to use it.
 
 ## Context
 
