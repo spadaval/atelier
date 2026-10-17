@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Date notes in the same timezone as other timestamps"
-updated_at: "2026-10-17T01:10:57.991130940+00:00"
+updated_at: "2026-10-17T06:27:39.272051458+00:00"
 ---
 
 ## Goal
