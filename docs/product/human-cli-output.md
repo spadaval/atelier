@@ -177,8 +177,8 @@ one sentence after `Hint:` that names its command in backticks, such as
 second prefix.
 
 Every next step, hint and error recovery step names the real ID when the
-command knows it: the top ready item in `status`, the top mission in `work`,
-the first row of `issue list`, each runnable transition's command in `issue
+command knows it: the top ready item in `status`, the first row of `issue
+list`, each runnable transition's command in `issue
 show --full`'s Transition Readiness, and the issue, mission or owner an error
 is about, as in
 ``link mission work with `atelier issue link atelier-xmtr atelier-1w8c --role
@@ -242,6 +242,13 @@ with a fixed set of values lists them as `[possible values: ...]`; the status
 and category options of `issue list` and `issue create --status` list the
 repository workflow's values, read when help is shown. Global options, such as
 `--quiet`, follow the command's own options.
+
+Every command's description is its one-line `about`, and help lists are
+generated from it, so no list is written by hand. Root help lists every
+command that is not hidden, then `Common commands` in lifecycle order: orient,
+pick work, start it, record proof, close it, review, land and check the merge.
+Bare `atelier work` prints `atelier work --help`, and with `--quiet` the view
+names.
 
 ## Views
 
