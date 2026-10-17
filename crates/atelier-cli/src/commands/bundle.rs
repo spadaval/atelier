@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::human_output::local_date;
 use atelier_app::record_index::RecordIndex;
 use atelier_core::{EvidenceRecordData, Issue};
 use atelier_records::{
@@ -957,7 +958,7 @@ fn apply_bundle_to_state(
         let mut record = store.load_issue_by_id(&target.id)?;
         record
             .sections
-            .append_note(chrono::Utc::now().date_naive(), "note", &body);
+            .append_note(local_date(chrono::Utc::now()), "note", &body);
         store.write_issue_atomic(&record)?;
     }
 

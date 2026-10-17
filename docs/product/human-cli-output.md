@@ -82,7 +82,8 @@ their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
   `--resolution-commit`.
 - A timestamp is shown in one form, local time `YYYY-MM-DD HH:MM ±hh:mm`, as
   in `2026-10-16 20:31 -04:00`. Records keep RFC 3339; a date alone is
-  `YYYY-MM-DD`.
+  `YYYY-MM-DD` and is the local day that form shows, as in note bullets and
+  the `prune` cutoff.
 
 ### Headings
 

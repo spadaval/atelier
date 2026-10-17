@@ -5559,3 +5559,35 @@ fn test_size_labels_are_validated_shown_and_replaced() {
         "{output}"
     );
 }
+
+/// A note is dated by the local day that `Created`/`Updated` show, not the
+/// UTC day. UTC-12 and UTC+14 are always on different days, so at least one
+/// of them differs from the UTC day.
+#[test]
+fn notes_are_dated_by_the_local_day() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    run_atelier(dir.path(), &["issue", "create", "Dated work"]);
+    let issue_id = issue_id_by_title(dir.path(), "Dated work");
+
+    // POSIX TZ offsets are west-positive: `UTC+12` is twelve hours behind.
+    for (tz, east_seconds) in [("UTC+12", -12 * 3600), ("UTC-14", 14 * 3600)] {
+        let zone = chrono::FixedOffset::east_opt(east_seconds).unwrap();
+        let local_day = || chrono::Utc::now().with_timezone(&zone).date_naive();
+        let before = local_day();
+        let text = format!("note in {tz}");
+        let (success, _, stderr) = run_atelier_with_env(
+            dir.path(),
+            &["issue", "note", &issue_id, &text],
+            &[("TZ", tz)],
+        );
+        assert!(success, "note in {tz} failed: {stderr}");
+        let after = local_day();
+        let record = read_canonical_record(dir.path(), "issues", &issue_id);
+        let dated = |day: chrono::NaiveDate| record.contains(&format!("- {day} [note] {text}\n"));
+        assert!(
+            dated(before) || dated(after),
+            "note in {tz} should be dated {before}: {record}"
+        );
+    }
+}
