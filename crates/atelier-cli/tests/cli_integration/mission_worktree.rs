@@ -476,6 +476,18 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         narrow.contains("Unassigned: 2 nonterminal issues"),
         "{narrow}"
     );
+    // A wrapped unassigned row continues past the row indent, so the
+    // continuation does not read as another item.
+    let unassigned_id = issue_id_by_title(dir.path(), "Unassigned work");
+    let row = narrow
+        .lines()
+        .position(|line| line.starts_with(&format!("    {unassigned_id} [todo]")))
+        .unwrap_or_else(|| panic!("no unassigned row:\n{narrow}"));
+    let continuation = narrow.lines().nth(row + 1).unwrap();
+    assert!(
+        continuation.starts_with("        ") && !continuation.trim().starts_with("atelier-"),
+        "{narrow}"
+    );
     assert!(!narrow.contains(&epic_id), "{narrow}");
     assert!(!narrow.contains("Collapsed epic child"), "{narrow}");
     assert!(!narrow.contains('\u{1b}'), "{narrow:?}");
@@ -565,12 +577,14 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     );
     assert_eq!(default.matches(&mission_id).count(), 1, "{default}");
     assert!(!default.contains("Scope:"), "{default}");
-    assert!(
-        !default.contains("Work linked only to done mission"),
-        "{default}"
+    // The mission closed with its scope open, so that work is unassigned
+    // and named, not just counted.
+    let leftover = format!(
+        "Unassigned: 1 nonterminal issues\n  no label (1)\n    {work_id} [todo] medium - Work linked only to done mission\n"
     );
+    assert!(default.contains(&leftover), "{default}");
     assert!(
-        default.contains("Linked only to done missions: 1 nonterminal issue"),
+        !default.contains("Linked only to done missions"),
         "{default}"
     );
 
@@ -588,7 +602,10 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
         "{all}"
     );
     assert!(all.contains("Scope: 1 issues: 0 active, 1 ready"), "{all}");
-    assert!(!all.contains("Work linked only to done mission"), "{all}");
+    // --all summarizes the done mission without expanding its rows; its
+    // open work is still unassigned.
+    assert!(all.contains(&leftover), "{all}");
+    assert_eq!(all.matches(&work_id).count(), 1, "{all}");
     assert!(!all.contains("Outside visible missions"), "{all}");
 
     let (success, all_quiet, stderr) =
@@ -3087,7 +3104,23 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let finished = create_mission_fixture(dir.path(), "Finished objective");
+    // The mission closes with open scope; that leftover work is unassigned.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Leftover work",
+            "--priority",
+            "high",
+            "--label",
+            "cli",
+        ],
+    );
+    assert!(success, "leftover fixture failed: {stderr}");
+    let leftover = issue_id_by_title(dir.path(), "Leftover work");
     for args in [
+        vec!["issue", "link", &finished, &leftover, "--role", "advances"],
         vec!["issue", "transition", &finished, "start"],
         vec![
             "issue",
@@ -3142,22 +3175,26 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         "{status}"
     );
     let unassigned = status
-        .split("Unassigned Work (13)\n--------------------\n")
+        .split("Unassigned Work (14)\n--------------------\n")
         .nth(1)
         .and_then(|rest| rest.split("\n\n").next())
         .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
     let lines = unassigned.lines().collect::<Vec<_>>();
-    assert_eq!(lines[0], "cli (7)", "{unassigned}");
-    assert_eq!(
-        lines[1],
+    assert_eq!(lines[0], "cli (8)", "{unassigned}");
+    // High priority first: the shared work and the closed mission's leftover.
+    let mut high = lines[1..3].to_vec();
+    high.sort();
+    let mut expected = vec![
         format!("  {shared} [todo] high - Shared work"),
-        "{unassigned}"
-    );
+        format!("  {leftover} [todo] high - Leftover work"),
+    ];
+    expected.sort();
+    assert_eq!(high, expected, "{unassigned}");
     assert!(
-        lines[2..6].iter().all(|line| line.contains("Cli work")),
+        lines[3..6].iter().all(|line| line.contains("Cli work")),
         "{unassigned}"
     );
-    assert_eq!(lines[6], "  ... 2 more", "{unassigned}");
+    assert_eq!(lines[6], "  ... 3 more", "{unassigned}");
     let headings = lines
         .iter()
         .filter(|line| !line.starts_with(' '))
@@ -3166,7 +3203,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert_eq!(
         headings,
         [
-            "cli (7)",
+            "cli (8)",
             "alpha (1)",
             "beta (1)",
             "delta (1)",
@@ -3184,9 +3221,8 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     );
     assert!(!overview.contains("No missions match"), "{overview}");
     assert!(
-        overview.contains(&format!(
-            "Unassigned: 13 nonterminal issues\n  cli (7)\n    {shared} [todo] high - Shared work\n"
-        )),
+        overview.contains(&format!("Unassigned: 14 nonterminal issues\n  cli (8)\n"))
+            && overview.contains(&format!("    {leftover} [todo] high - Leftover work\n")),
         "{overview}"
     );
     assert!(
@@ -3217,7 +3253,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert!(success, "work missions failed: {stderr}");
     assert!(!overview.contains("last closed"), "{overview}");
     let (missions, unassigned) = overview
-        .split_once("Unassigned: 12 nonterminal issues\n")
+        .split_once("Unassigned: 13 nonterminal issues\n")
         .unwrap_or_else(|| panic!("no unassigned groups:\n{overview}"));
     assert!(missions.contains(&format!("{open}  todo")), "{overview}");
     assert!(
@@ -3231,12 +3267,12 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert!(success, "status failed: {stderr}");
     assert!(status.contains("Current missions: 1\n"), "{status}");
     let unassigned = status
-        .split("Unassigned Work (12)\n")
+        .split("Unassigned Work (13)\n")
         .nth(1)
         .and_then(|rest| rest.split("\n\n").next())
         .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
     assert!(
-        unassigned.starts_with("--------------------\ncli (7)\n"),
+        unassigned.starts_with("--------------------\ncli (8)\n"),
         "{status}"
     );
     assert!(!unassigned.contains(&scoped), "{status}");

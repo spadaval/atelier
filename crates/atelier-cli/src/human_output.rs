@@ -242,7 +242,7 @@ pub(crate) fn render_wrapped_lines(
         .collect()
 }
 
-pub(crate) fn wrap_words(text: &str, width: usize) -> Vec<String> {
+fn wrap_words(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
@@ -355,19 +355,15 @@ impl IssueListPanel {
         for row in self.rows.iter().take(limit) {
             let indent = "  ".repeat(row.depth.max(1));
             let role = row.role.render(context.style_policy());
-            let status = row
-                .status
-                .as_deref()
-                .map(|status| format!(" [{status}]"))
-                .unwrap_or_default();
-            let blockers = if row.blockers == 0 {
-                String::new()
-            } else {
-                format!(" | {} blocker{}", row.blockers, plural_suffix(row.blockers))
-            };
             lines.push(format!(
-                "{indent}{role} {}{} {} - {}{}",
-                row.id, status, row.priority, row.title, blockers
+                "{indent}{role} {}",
+                issue_row_text(
+                    &row.id,
+                    row.status.as_deref(),
+                    &row.priority,
+                    &row.title,
+                    row.blockers
+                )
             ));
         }
         let omitted = self.rows.len().saturating_sub(limit);
@@ -380,6 +376,107 @@ impl IssueListPanel {
         }
         lines
     }
+}
+
+/// `<id> [<status>] <priority> - <title>`, with a blocker count when there
+/// are blockers: the issue row of issue lists and unassigned work.
+fn issue_row_text(
+    id: &str,
+    status: Option<&str>,
+    priority: &str,
+    title: &str,
+    blockers: usize,
+) -> String {
+    let status = status
+        .map(|status| format!(" [{status}]"))
+        .unwrap_or_default();
+    let blockers = if blockers == 0 {
+        String::new()
+    } else {
+        format!(" | {blockers} blocker{}", plural_suffix(blockers))
+    };
+    format!("{id}{status} {priority} - {title}{blockers}")
+}
+
+/// Items shown in each label group of unassigned work.
+const UNASSIGNED_SHOWN: usize = 5;
+
+/// `<id> [<status>] <close date> - <title>` for the most recently closed
+/// mission, named by `status` and `work missions` between missions.
+pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
+    format!(
+        "{} [{}] {} - {}",
+        mission.id,
+        mission.status,
+        mission
+            .closed_at
+            .unwrap_or(mission.updated_at)
+            .with_timezone(&chrono::Local)
+            .format("%Y-%m-%d"),
+        mission.title
+    )
+}
+
+/// Unassigned open work by label, for both `status` and `work missions`: a
+/// `<label> (<count>)` line per group, then up to [`UNASSIGNED_SHOWN`] issue
+/// rows in the shared work order and a count of the rest. A row too wide for
+/// the terminal continues on lines indented past the rows, so it never reads
+/// as a new item. Groups past `group_limit` are counted, not shown.
+pub(crate) fn render_unassigned_groups(
+    groups: &[atelier_app::mission_overview::UnassignedGroup],
+    indent: &str,
+    group_limit: usize,
+    context: RenderContext,
+) -> Vec<String> {
+    let row_indent = format!("{indent}  ");
+    let continuation_indent = format!("{row_indent}    ");
+    let mut lines = Vec::new();
+    for group in groups.iter().take(group_limit) {
+        lines.push(format!(
+            "{indent}{} ({})",
+            group.label.as_deref().unwrap_or("no label"),
+            group.work.len()
+        ));
+        for index in crate::commands::work_order::ordered_work_indices(&group.work)
+            .into_iter()
+            .take(UNASSIGNED_SHOWN)
+        {
+            let (issue, work) = &group.work[index];
+            let row = issue_row_text(
+                &issue.id,
+                Some(&issue.status),
+                &issue.priority,
+                &issue.title,
+                work.open_blockers.len(),
+            );
+            let width = context
+                .width()
+                .saturating_sub(visible_width(&continuation_indent))
+                .max(1);
+            for (number, line) in wrap_words(&row, width).into_iter().enumerate() {
+                let indent = if number == 0 {
+                    &row_indent
+                } else {
+                    &continuation_indent
+                };
+                lines.push(format!("{indent}{line}"));
+            }
+        }
+        if group.work.len() > UNASSIGNED_SHOWN {
+            lines.push(format!(
+                "{row_indent}... {} more",
+                group.work.len() - UNASSIGNED_SHOWN
+            ));
+        }
+    }
+    let hidden = groups.len().saturating_sub(group_limit);
+    if hidden > 0 {
+        lines.push(format!(
+            "{indent}... {hidden} more label{}: atelier work missions",
+            plural_suffix(hidden)
+        ));
+    }
+    lines
 }
 
 pub(crate) fn render_issue_inventory(

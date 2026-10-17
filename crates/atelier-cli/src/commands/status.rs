@@ -498,7 +498,7 @@ fn current_missions(view: &StatusView, overview: &MissionOverview) -> String {
     match &overview.last_closed_mission {
         Some(mission) if view.current_mission_count == 0 => format!(
             "Current missions: 0; last closed {}",
-            crate::commands::work::last_closed_mission(mission)
+            crate::human_output::last_closed_mission(mission)
         ),
         _ => format!("Current missions: {}", view.current_mission_count),
     }
@@ -516,6 +516,11 @@ fn unassigned_panel(
     }
     render_lines_section(
         &format!("Unassigned Work ({})", overview.unassigned_nonterminal),
-        crate::commands::work::unassigned_lines(overview, "", UNASSIGNED_GROUPS_SHOWN, context),
+        crate::human_output::render_unassigned_groups(
+            &overview.unassigned,
+            "",
+            UNASSIGNED_GROUPS_SHOWN,
+            context,
+        ),
     )
 }

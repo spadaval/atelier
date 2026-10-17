@@ -3,14 +3,14 @@ use atelier_app::record_index::RecordIndex;
 use std::collections::BTreeSet;
 
 use atelier_app::issue_read::ObjectiveBucketTotals;
-use atelier_app::mission_overview::{mission_overview, MissionOverview};
+use atelier_app::mission_overview::mission_overview;
 use atelier_app::work_classification::{ClassifiedWork, WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
 
 use crate::human_output::{
-    print_page, render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
-    wrap_words, DisplayRole, FooterAction, IssueHeadingRow, IssueListPanel, IssueListRow,
-    RenderContext, TextStyle,
+    last_closed_mission, print_page, render_footer_section, render_labeled_lines,
+    render_lines_section, render_metadata, render_unassigned_groups, DisplayRole, FooterAction,
+    IssueHeadingRow, IssueListPanel, IssueListRow, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -277,7 +277,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             overview.missions.len() - 20
         ));
     }
-    if overview.unassigned_nonterminal > 0 || overview.linked_only_to_hidden_done_missions > 0 {
+    if overview.unassigned_nonterminal > 0 {
         lines.push(String::new());
         lines.extend(render_labeled_lines(
             context,
@@ -286,16 +286,11 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             &format!("{} nonterminal issues", overview.unassigned_nonterminal),
             TextStyle::Secondary,
         ));
-        lines.extend(unassigned_lines(&overview, "  ", usize::MAX, context));
-        lines.extend(render_labeled_lines(
+        lines.extend(render_unassigned_groups(
+            &overview.unassigned,
+            "  ",
+            usize::MAX,
             context,
-            "",
-            "Linked only to done missions",
-            &format!(
-                "{} nonterminal issues",
-                overview.linked_only_to_hidden_done_missions
-            ),
-            TextStyle::Secondary,
         ));
     }
     lines.extend(render_labeled_lines(
@@ -311,80 +306,6 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
         context,
     );
     Ok(())
-}
-
-/// Items shown in each label group of unassigned work.
-const UNASSIGNED_SHOWN: usize = 5;
-
-/// `<id> [<status>] <close date> - <title>` for the most recently closed mission.
-pub(crate) fn last_closed_mission(mission: &Issue) -> String {
-    format!(
-        "{} [{}] {} - {}",
-        mission.id,
-        mission.status,
-        mission
-            .closed_at
-            .unwrap_or(mission.updated_at)
-            .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d"),
-        mission.title
-    )
-}
-
-/// Unassigned open work by label, for both `status` and `work missions`: a
-/// `<label> (<count>)` line per group, then up to [`UNASSIGNED_SHOWN`] items
-/// in the shared work order and a count of the rest. Groups past
-/// `group_limit` are counted, not shown.
-pub(crate) fn unassigned_lines(
-    overview: &MissionOverview,
-    indent: &str,
-    group_limit: usize,
-    context: RenderContext,
-) -> Vec<String> {
-    let item_indent = format!("{indent}  ");
-    let mut lines = Vec::new();
-    for group in overview.unassigned.iter().take(group_limit) {
-        lines.push(format!(
-            "{indent}{} ({})",
-            group.label.as_deref().unwrap_or("no label"),
-            group.work.len()
-        ));
-        for index in crate::commands::work_order::ordered_work_indices(&group.work)
-            .into_iter()
-            .take(UNASSIGNED_SHOWN)
-        {
-            let (issue, work) = &group.work[index];
-            let blockers = match work.open_blockers.len() {
-                0 => String::new(),
-                1 => " | 1 blocker".to_string(),
-                count => format!(" | {count} blockers"),
-            };
-            let item = format!(
-                "{} [{}] {} - {}{blockers}",
-                issue.id, issue.status, issue.priority, issue.title
-            );
-            let width = context.width().saturating_sub(item_indent.len()).max(1);
-            lines.extend(
-                wrap_words(&item, width)
-                    .into_iter()
-                    .map(|line| format!("{item_indent}{line}")),
-            );
-        }
-        if group.work.len() > UNASSIGNED_SHOWN {
-            lines.push(format!(
-                "{item_indent}... {} more",
-                group.work.len() - UNASSIGNED_SHOWN
-            ));
-        }
-    }
-    let hidden = overview.unassigned.len().saturating_sub(group_limit);
-    if hidden > 0 {
-        lines.push(format!(
-            "{indent}... {hidden} more label{}: atelier work missions",
-            if hidden == 1 { "" } else { "s" }
-        ));
-    }
-    lines
 }
 
 fn print_quiet(bucket: &str, buckets: &WorkBuckets) {

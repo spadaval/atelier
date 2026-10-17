@@ -30,12 +30,12 @@ pub struct UnassignedGroup {
 #[derive(Debug, Default)]
 pub struct MissionOverview {
     pub missions: Vec<MissionOverviewMission>,
-    /// Distinct open non-mission issues outside every mission's scope.
+    /// Distinct open non-mission issues outside every open mission's scope,
+    /// including work a done mission left open.
     pub unassigned_nonterminal: usize,
     /// The same issues by label, each under every label it carries: largest
     /// group first, then by label, with unlabelled work last.
     pub unassigned: Vec<UnassignedGroup>,
-    pub linked_only_to_hidden_done_missions: usize,
     /// The done mission closed most recently, by `closed_at` (else
     /// `updated_at`), so a view can say what finished between missions.
     pub last_closed_mission: Option<Issue>,
@@ -53,8 +53,7 @@ pub fn mission_overview(
         .map(|issue| Ok((issue.id.clone(), classify_issue(index, policy, issue)?)))
         .collect::<Result<BTreeMap<_, _>>>()?;
     let mut overview = MissionOverview::default();
-    let mut all_scope = BTreeSet::new();
-    let mut visible_scope = BTreeSet::new();
+    let mut open_scope = BTreeSet::new();
     for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
         let mut scope_ids = BTreeSet::new();
         for link in index.record_links().iter().filter(|link| {
@@ -72,11 +71,13 @@ pub fn mission_overview(
                 &link.target_id,
             )?);
         }
-        all_scope.extend(scope_ids.iter().cloned());
-        if !include_done && classified[&mission.id].classification == WorkClassification::Done {
+        let done = classified[&mission.id].classification == WorkClassification::Done;
+        if !done {
+            open_scope.extend(scope_ids.iter().cloned());
+        }
+        if done && !include_done {
             continue;
         }
-        visible_scope.extend(scope_ids.iter().cloned());
         let mut totals = ObjectiveBucketTotals::default();
         let mut open_blockers = classified[&mission.id]
             .open_blockers
@@ -128,7 +129,7 @@ pub fn mission_overview(
         if classified[&issue.id].classification == WorkClassification::Done {
             continue;
         }
-        if !all_scope.contains(&issue.id) {
+        if !open_scope.contains(&issue.id) {
             overview.unassigned_nonterminal += 1;
             let mut labels = index
                 .issue_record(&issue.id)
@@ -150,8 +151,6 @@ pub fn mission_overview(
                     .or_default()
                     .push((issue.clone(), classified[&issue.id].clone()));
             }
-        } else if !visible_scope.contains(&issue.id) {
-            overview.linked_only_to_hidden_done_missions += 1;
         }
     }
     overview.unassigned = by_label
@@ -249,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_missions_hide_scope_only_until_all_is_requested() {
+    fn terminal_missions_hide_scope_only_until_all_is_requested_and_leave_open_work_unassigned() {
         let mut records = Records::default();
         records.issue("mission-active", "mission", "in_progress");
         records.issue("mission-done", "mission", "done");
@@ -263,11 +262,13 @@ mod tests {
         let policy = policy();
         let visible = mission_overview(&index, Some(&policy), false).unwrap();
         assert_eq!(visible.missions.len(), 1);
-        assert_eq!(visible.linked_only_to_hidden_done_missions, 1);
         let all = mission_overview(&index, Some(&policy), true).unwrap();
         assert_eq!(all.missions.len(), 3);
-        assert_eq!(all.linked_only_to_hidden_done_missions, 0);
-        assert_eq!(all.unassigned_nonterminal, 0);
+        // Work a done mission left open is unassigned with or without --all.
+        for overview in [visible, all] {
+            assert_eq!(overview.unassigned_nonterminal, 1);
+            assert_eq!(overview.unassigned[0].work[0].0.id, "hidden");
+        }
     }
 
     #[test]
