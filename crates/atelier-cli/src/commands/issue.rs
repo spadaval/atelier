@@ -931,22 +931,30 @@ pub fn create_lifecycle(
             FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
             FooterAction::new("Validate this issue", format!("atelier check {id}")),
             FooterAction::new("Inspect this issue", format!("atelier issue show {id}")),
-            create_next_step(&record.issue),
+            create_next_step(&load_repo_policy(state_dir)?, &record.issue)?,
         ],
     ));
     Ok(())
 }
 
-/// Work starts with `atelier start`; missions and decisions have no branch to
-/// start, so they move by transition instead.
-fn create_next_step(issue: &Issue) -> FooterAction {
-    match issue.issue_type.as_str() {
-        "mission" | "decision" => FooterAction::new(
+/// Work starts with `atelier start` when its workflow has a `start`
+/// transition from the status it was created in. Otherwise, as for backlog
+/// work or for missions and decisions, which have no branch to start, it
+/// moves by transition first.
+fn create_next_step(policy: &WorkflowPolicy, issue: &Issue) -> Result<FooterAction> {
+    let startable = !matches!(issue.issue_type.as_str(), "mission" | "decision")
+        && policy
+            .transitions_from_status(&issue.issue_type, &issue.status)?
+            .iter()
+            .any(|(name, _)| *name == "start");
+    Ok(if startable {
+        FooterAction::new("Start this work", format!("atelier start {}", issue.id))
+    } else {
+        FooterAction::new(
             "Show transition options",
             format!("atelier issue transition {}", issue.id),
-        ),
-        _ => FooterAction::new("Start this work", format!("atelier start {}", issue.id)),
-    }
+        )
+    })
 }
 
 fn lifecycle_issue_sections(input: &LifecycleCreateInput<'_>) -> Result<IssueSections> {

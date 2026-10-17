@@ -4559,3 +4559,95 @@ fn landing_reads_git_objects_through_one_batch_not_per_record_processes() {
         small.len()
     );
 }
+
+/// Two IDs ordered so the first sorts before the second.
+fn sorted_pair(dir: &Path, titles: [&str; 2]) -> (String, String) {
+    let mut ids = titles.map(|title| ok(dir, &["-q", "issue", "create", title]));
+    ids.sort();
+    let [first, second] = ids;
+    (first, second)
+}
+
+#[test]
+fn scoped_views_offer_the_top_ready_item_in_work_order_that_no_branch_started() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Ordered mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    // The higher-priority item has the later ID, so ID order would pick the
+    // other one.
+    let (earlier, later) = sorted_pair(f.path(), ["Ready one", "Ready two"]);
+    ok(
+        f.path(),
+        &["issue", "update", &earlier, "--priority", "low"],
+    );
+    ok(f.path(), &["issue", "update", &later, "--priority", "high"]);
+    let elsewhere = ok(f.path(), &["-q", "issue", "create", "Started elsewhere"]);
+    ok(
+        f.path(),
+        &["issue", "update", &elsewhere, "--priority", "critical"],
+    );
+    for id in [&earlier, &later, &elsewhere] {
+        ok(
+            f.path(),
+            &["issue", "link", &mission, id, "--role", "advances"],
+        );
+    }
+    let parent = ok(f.path(), &["-q", "issue", "create", "Ordered parent"]);
+    let (first_child, second_child) = sorted_pair(f.path(), ["Child one", "Child two"]);
+    for (child, priority) in [(&first_child, "low"), (&second_child, "high")] {
+        ok(
+            f.path(),
+            &[
+                "issue",
+                "update",
+                child,
+                "--parent",
+                &parent,
+                "--priority",
+                priority,
+            ],
+        );
+    }
+    commit(f.path(), "plan ordered work");
+    ok(f.path(), &["start", &elsewhere]);
+    commit(f.path(), "started elsewhere");
+    git(f.path(), &["switch", "-q", "main"]);
+
+    let view = ok(f.path(), &["work", "mission", &mission]);
+    let ready = section(&view, "Ready Work");
+    let row = |id: &str| {
+        ready
+            .iter()
+            .position(|line| line.contains(&format!(" {id} todo")))
+            .unwrap_or_else(|| panic!("{id} is not ready: {view}"))
+    };
+    assert!(
+        row(&elsewhere) < row(&later) && row(&later) < row(&earlier),
+        "{view}"
+    );
+    assert!(ready[row(&elsewhere) + 1].contains('↳'), "{view}");
+    assert!(
+        view.ends_with(&format!("Start the top ready item: atelier start {later}")),
+        "{view}"
+    );
+
+    let view = ok(f.path(), &["work", "parent", &parent]);
+    let ready = section(&view, "Ready Work");
+    assert!(ready[0].contains(&second_child), "{view}");
+    assert!(
+        view.ends_with(&format!(
+            "Start the top ready item: atelier start {second_child}"
+        )),
+        "{view}"
+    );
+}

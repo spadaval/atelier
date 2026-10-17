@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use atelier_app::record_index::RecordIndex;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::mission_overview::mission_overview;
@@ -431,14 +431,27 @@ fn scoped_dashboard(
         .state(category.as_deref(), None)
         .text()
     };
+    // Ready work another local branch already started is marked, as in
+    // `work ready`, and is not the one the footer offers to start.
+    let in_flight = if work.top_ready(&BTreeMap::new()).is_some() {
+        in_flight_marks(index).unwrap_or_else(|error| InFlight {
+            notices: vec![format!("In-flight marks unavailable: {error:#}")],
+            ..InFlight::default()
+        })
+    } else {
+        InFlight::default()
+    };
     let context = RenderContext::for_stdout();
     let mut panels = vec![render_metadata(None, &metadata)];
     panels.extend(
-        work.panels(&issue, filter)
+        work.panels(&issue, filter, &in_flight.marks)
             .into_iter()
             .map(|panel| panel.render(context)),
     );
-    panels.push(objective_footer(context, &issue, &work)?);
+    if !in_flight.notices.is_empty() {
+        panels.push(render_lines_section("", in_flight.notices.clone()));
+    }
+    panels.push(objective_footer(context, &issue, &work, &in_flight.marks)?);
     print_page(&title, panels, context);
     Ok(())
 }
@@ -496,10 +509,33 @@ impl ScopedWork {
             }
             rows.push((issue, classified));
         }
+        // The scope in the shared work order, as `status` and `work ready`
+        // list it; a parent's own row stays first.
+        let own = usize::from(objective.issue_type != "mission");
+        let scope = rows.split_off(own);
+        let order = crate::commands::work_order::ordered_work_indices(&scope);
+        let mut scope = scope.into_iter().map(Some).collect::<Vec<_>>();
+        rows.extend(order.into_iter().filter_map(|index| scope[index].take()));
         Ok(Self { rows, size, totals })
     }
 
-    fn panels(&self, objective: &Issue, filter: DashboardFilter) -> Vec<IssueListPanel> {
+    /// The first ready item in work order that no other branch has started.
+    fn top_ready(&self, in_flight: &BTreeMap<String, String>) -> Option<&Issue> {
+        self.rows
+            .iter()
+            .find(|(issue, work)| {
+                work.classification == WorkClassification::Ready
+                    && !in_flight.contains_key(&issue.id)
+            })
+            .map(|(issue, _)| issue)
+    }
+
+    fn panels(
+        &self,
+        objective: &Issue,
+        filter: DashboardFilter,
+        in_flight: &BTreeMap<String, String>,
+    ) -> Vec<IssueListPanel> {
         let groups: &[(Option<WorkClassification>, &str)] = match filter {
             DashboardFilter::Summary => &[
                 (Some(WorkClassification::Active), "Active Work"),
@@ -551,6 +587,11 @@ impl ScopedWork {
                 } else {
                     panel
                 };
+                let panel = if *state == Some(WorkClassification::Ready) {
+                    panel.marks(in_flight)
+                } else {
+                    panel
+                };
                 // Only the unfiltered list mixes work states.
                 Some(if state.is_none() {
                     panel.row_states()
@@ -589,12 +630,13 @@ pub(crate) fn scoped_view_command(objective: &Issue, state: Option<WorkClassific
 }
 
 /// Steps from the objective's state: its record, its transitions while it
-/// has any, and starting the top ready item. The views of other work states
+/// has any, and starting the top ready item no other branch has started. The views of other work states
 /// are named where rows are omitted, so the footer does not repeat them.
 fn objective_footer(
     context: RenderContext,
     issue: &Issue,
     work: &ScopedWork,
+    in_flight: &BTreeMap<String, String>,
 ) -> Result<Vec<String>> {
     let id = &issue.id;
     let mut actions = vec![FooterAction::new(
@@ -608,11 +650,7 @@ fn objective_footer(
             format!("atelier issue transition {id}"),
         ));
     }
-    if let Some((top, _)) = work
-        .rows
-        .iter()
-        .find(|(_, work)| work.classification == WorkClassification::Ready)
-    {
+    if let Some(top) = work.top_ready(in_flight) {
         actions.push(FooterAction::new(
             "Start the top ready item",
             format!("atelier start {}", top.id),

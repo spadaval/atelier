@@ -5947,6 +5947,20 @@ fn test_issue_create_footer_offers_start_for_work_and_transitions_for_missions()
     );
     assert!(!next.contains("issue transition"), "{created}");
 
+    // Backlog work has no start transition; it is planned first.
+    let (success, created, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Someday work", "--status", "backlog"],
+    );
+    assert!(success, "{stderr}");
+    let someday = issue_id_by_title(dir.path(), "Someday work");
+    let next = next_section(&created);
+    assert!(
+        next.contains(&format!("atelier issue transition {someday}\n")),
+        "{created}"
+    );
+    assert!(!next.contains("atelier start"), "{created}");
+
     let (success, created, stderr) = run_atelier(
         dir.path(),
         &["issue", "create", "New mission", "--issue-type", "mission"],
