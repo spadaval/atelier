@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Exit cleanly when piped output is closed early"
-updated_at: "2026-10-17T01:10:57.988977601+00:00"
+updated_at: "2026-10-17T06:14:10.544747886+00:00"
 ---
 
 ## Goal
