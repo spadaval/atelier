@@ -15,7 +15,7 @@ relationships:
     id: "atelier-cisa"
     type: "related"
   - kind: "issue"
-    id: "atelier-o3lm"
+    id: "atelier-k8h8"
     type: "advances"
   - kind: "issue"
     id: "atelier-w56o"

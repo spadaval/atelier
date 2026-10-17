@@ -11,7 +11,7 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-o3lm"
+    id: "atelier-k8h8"
     type: "advances"
   - kind: "issue"
     id: "atelier-tciw"

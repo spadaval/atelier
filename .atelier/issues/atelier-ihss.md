@@ -14,7 +14,7 @@ relationships:
     id: "atelier-dmh5"
     type: "related"
   - kind: "issue"
-    id: "atelier-o3lm"
+    id: "atelier-k8h8"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2

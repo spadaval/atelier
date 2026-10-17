@@ -35,7 +35,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Orient a session from one view: ADR 0022 follow-ups"
-updated_at: "2026-10-17T00:31:28.515786218+00:00"
+updated_at: "2026-10-17T01:45:16.350031541+00:00"
 ---
 
 ## Outcome
@@ -54,3 +54,7 @@ An agent starting a session runs `atelier status` and nothing else to learn wher
 ## Background
 
 ADR 0022 (atelier-bw0b, on branch task/atelier-bw0b, proposed) is the governing decision and must be accepted before this mission leaves draft. atelier-bw0b itself is not linked here because its record is being edited on its branch. Deferred from this cycle: text search (atelier-fpxc) and unblock ranking (atelier-fdxj), which change no view a human or agent reads before, during, or after a mission. Recent-activity at session start (atelier-majk) waits on the shared record-history query atelier-r6bt builds, and is linked here in backlog.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-16: atelier-o3lm was split by surface; the status-page and work-view items it held now sit in atelier-4pzj, which follows this mission.
