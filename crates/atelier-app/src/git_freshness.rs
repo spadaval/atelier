@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdout, Command, Stdio},
     rc::Rc,
 };
 
@@ -33,8 +33,51 @@ pub struct ReadContext<'a> {
 
 struct ObjectReader {
     child: Child,
-    stdin: Option<ChildStdin>,
+    stdin: Option<Requests>,
     stdout: BufReader<ChildStdout>,
+}
+
+/// The request end of the `git cat-file --batch` child's input.
+///
+/// atelier keeps the default SIGPIPE disposition so that a closed stdout ends
+/// it quietly (atelier-5rs0). A pipe write to a child that has exited would
+/// then kill atelier too. On Unix the child reads a socket instead, and
+/// requests are sent with `MSG_NOSIGNAL`, so a write after the child is gone
+/// fails with `EPIPE` however late the child went. Checking `try_wait` before
+/// the write could not promise that (atelier-bsyn).
+#[cfg(unix)]
+struct Requests(std::os::unix::net::UnixStream);
+#[cfg(not(unix))]
+type Requests = std::process::ChildStdin;
+
+#[cfg(unix)]
+impl Requests {
+    fn pair() -> Result<(Self, Stdio)> {
+        let (requests, input) = std::os::unix::net::UnixStream::pair()
+            .context("cannot create git cat-file --batch input")?;
+        Ok((Self(requests), std::os::fd::OwnedFd::from(input).into()))
+    }
+}
+
+#[cfg(unix)]
+impl Write for Requests {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use std::os::fd::AsRawFd;
+        // SAFETY: the descriptor stays open while `self.0` lives, and `buf`
+        // is valid for `buf.len()` bytes.
+        let sent = unsafe {
+            libc::send(
+                self.0.as_raw_fd(),
+                buf.as_ptr().cast(),
+                buf.len(),
+                libc::MSG_NOSIGNAL,
+            )
+        };
+        usize::try_from(sent).map_err(|_| std::io::Error::last_os_error())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 struct Object {
@@ -51,18 +94,25 @@ struct TreeEntry {
 
 impl ObjectReader {
     fn spawn(repo: &Path) -> Result<Self> {
+        #[cfg(unix)]
+        let (requests, input) = Requests::pair()?;
+        #[cfg(not(unix))]
+        let input = Stdio::piped();
+        // The command, and with it the parent's copy of the child's input,
+        // is dropped here, so the child alone holds that end.
         let mut child = command(repo)
             .args(["cat-file", "--batch"])
-            .stdin(Stdio::piped())
+            .stdin(input)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
             .context("cannot start git cat-file --batch")?;
-        let stdin = child.stdin.take().context("git cat-file stdin")?;
+        #[cfg(not(unix))]
+        let requests = child.stdin.take().context("git cat-file stdin")?;
         let stdout = BufReader::new(child.stdout.take().context("git cat-file stdout")?);
         Ok(Self {
             child,
-            stdin: Some(stdin),
+            stdin: Some(requests),
             stdout,
         })
     }
@@ -72,9 +122,9 @@ impl ObjectReader {
             bail!("Git object expression contains a line break");
         }
         let stdin = self.stdin.as_mut().context("git cat-file is closed")?;
-        stdin.write_all(expression.as_bytes())?;
-        stdin.write_all(b"\n")?;
-        stdin.flush()?;
+        stdin
+            .write_all(format!("{expression}\n").as_bytes())
+            .context("git cat-file --batch exited")?;
         let mut header = String::new();
         if self.stdout.read_line(&mut header)? == 0 {
             bail!("git cat-file --batch exited");
