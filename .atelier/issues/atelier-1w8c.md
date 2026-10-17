@@ -33,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Orient a session from one view: ADR 0022 follow-ups"
-updated_at: "2026-10-17T01:45:16.350031541+00:00"
+updated_at: "2026-10-17T02:21:36.549562785+00:00"
 ---
 
 ## Outcome
@@ -58,3 +58,4 @@ ADR 0022 (atelier-bw0b, on branch task/atelier-bw0b, proposed) is the governing 
 ## Notes
 
 - 2026-10-17 [note] 2026-10-16: atelier-o3lm was split by surface; the status-page and work-view items it held now sit in atelier-4pzj, which follows this mission.
+- 2026-10-17 [note] 2026-10-16: Activated. ADR 0022 was accepted and atelier-bw0b merged to master, so the Background's 'proposed, on branch task/atelier-bw0b' no longer holds. Plan: sdb0 and 7u4o in parallel (disjoint surfaces), then 7n5u, ihns, deyy in sequence; jjvc stays in backlog until adopters' hooks stop calling prime.
