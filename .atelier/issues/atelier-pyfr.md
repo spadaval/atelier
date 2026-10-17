@@ -4,6 +4,9 @@ id: "atelier-pyfr"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-pyfr
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give every invalid-value error the shared form"
-updated_at: "2026-10-17T09:36:28.307299116+00:00"
+updated_at: "2026-10-17T09:36:37.248771510+00:00"
 ---
 
 ## Goal
