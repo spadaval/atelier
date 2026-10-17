@@ -32,7 +32,10 @@ pub struct ItemReview {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Deviation {
     /// Linked to the mission after it started.
-    ScopeAdded { id: String, date: String },
+    ScopeAdded {
+        id: String,
+        time: chrono::DateTime<chrono::Utc>,
+    },
     /// Retired with `supersede`; the reason is its Close Reason.
     ScopeDropped { id: String, reason: String },
     /// A finding deferred to a follow-up.
@@ -56,7 +59,10 @@ pub enum Deviation {
         summary: String,
     },
     /// A done claim later withdrawn.
-    Reopened { id: String, date: String },
+    Reopened {
+        id: String,
+        time: chrono::DateTime<chrono::Utc>,
+    },
     /// A proven criterion whose deciding proof predates code that landed
     /// before the mission closed (or before HEAD while it is open).
     AgedProof {
@@ -73,7 +79,7 @@ pub struct MissionEvent {
     pub event: &'static str,
     pub identity: String,
     pub commit: String,
-    pub date: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
     pub summary: String,
 }
 
@@ -123,7 +129,14 @@ pub fn debrief(
         })
         .cloned()
         .collect::<BTreeSet<_>>();
-    let timeline = mission_timeline(read, policy, mission_id, &scope, &linked)?;
+    let children = scope
+        .iter()
+        .filter_map(|id| {
+            let parent = index.issue_record(id)?.issue.parent_id.clone()?;
+            scope.contains(&parent).then(|| (id.clone(), parent))
+        })
+        .collect::<Vec<_>>();
+    let timeline = mission_timeline(read, policy, mission_id, &scope, &linked, &children)?;
     let generated_from = read.pinned("HEAD").ok();
     let criteria = mission_proof_until(
         index,
@@ -152,7 +165,7 @@ pub fn debrief(
     for (id, moment) in &timeline.added_after_start {
         deviations.push(Deviation::ScopeAdded {
             id: id.clone(),
-            date: moment.time.format("%Y-%m-%d").to_string(),
+            time: moment.time,
         });
     }
     for item in &items {
@@ -232,7 +245,7 @@ pub fn debrief(
     for (id, moment) in &timeline.reopened {
         deviations.push(Deviation::Reopened {
             id: id.clone(),
-            date: moment.time.format("%Y-%m-%d").to_string(),
+            time: moment.time,
         });
     }
 
@@ -349,11 +362,11 @@ pub fn mission_events(index: &RecordIndex, mission_id: &str) -> Vec<MissionEvent
             event: event_name(&review.event),
             identity: review.identity.clone(),
             commit: review.commit.clone(),
-            date: review.header.created_at.format("%Y-%m-%d").to_string(),
+            created_at: review.header.created_at,
             summary: review.summary.clone(),
         })
         .collect::<Vec<_>>();
-    events.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
+    events.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));
     events
 }
 

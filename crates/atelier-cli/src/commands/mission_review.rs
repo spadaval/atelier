@@ -11,8 +11,8 @@ use atelier_app::record_index::RecordIndex;
 use atelier_core::{CloseReport, ReportPart};
 
 use crate::human_output::{
-    decision_full_rows, print_page, render_footer_section, render_lines_section, render_metadata,
-    render_row_wrapped, short_commit, FooterAction, ItemLine, RenderContext,
+    decision_sections, local_date, print_page, render_footer_section, render_lines_section,
+    render_metadata, render_row_wrapped, short_commit, FooterAction, ItemLine, RenderContext,
 };
 use crate::review_page::{self, badge, escape, inline, prose, section, tile, Tone};
 
@@ -116,7 +116,9 @@ fn criterion_mark(mark: CriterionMark) -> &'static str {
     }
 }
 
-fn criterion_proof_cue(proof: &CriterionProof) -> Option<String> {
+/// The deciding receipt and its age: code commits up to the mission's close,
+/// or since the receipt while the mission is open.
+fn criterion_proof_cue(proof: &CriterionProof, closed: bool) -> Option<String> {
     let receipt = proof.deciding()?;
     let mut cue = format!(
         "{} {} at {}",
@@ -124,18 +126,22 @@ fn criterion_proof_cue(proof: &CriterionProof) -> Option<String> {
         receipt.result.as_str(),
         short_commit(&receipt.commit)
     );
-    match receipt.code_commits_since {
-        Some(0) | None => {}
-        Some(1) => cue.push_str(" | 1 code commit before close"),
-        Some(count) => cue.push_str(&format!(" | {count} code commits before close")),
+    if let Some(count) = receipt.code_commits_since.filter(|count| *count > 0) {
+        cue.push_str(&format!(
+            " | {} {}",
+            atelier_core::count_noun(count, "code commit"),
+            if closed { "before close" } else { "since" }
+        ));
     }
     Some(cue)
 }
 
 /// Each deviation as one line of the Markdown form.
-pub(crate) fn deviation_line(deviation: &Deviation) -> String {
+pub(crate) fn deviation_line(deviation: &Deviation, closed: bool) -> String {
     match deviation {
-        Deviation::ScopeAdded { id, date } => format!("scope added {id} after the start, {date}"),
+        Deviation::ScopeAdded { id, time } => {
+            format!("scope added {id} after the start, {}", local_date(*time))
+        }
         Deviation::ScopeDropped { id, reason } => format!("scope dropped {id} | {reason}"),
         Deviation::DeferredFinding {
             finding,
@@ -157,14 +163,15 @@ pub(crate) fn deviation_line(deviation: &Deviation) -> String {
             target,
             summary,
         } => format!("trivial exemption {review} on {target} | {summary}"),
-        Deviation::Reopened { id, date } => format!("reopened {id}, {date}"),
+        Deviation::Reopened { id, time } => format!("reopened {id}, {}", local_date(*time)),
         Deviation::AgedProof {
             slug,
             evidence,
             commits,
         } => format!(
-            "aged proof {slug} by {evidence} | {} after it before close",
-            atelier_core::count_noun(*commits, "code commit")
+            "aged proof {slug} by {evidence} | {} after it{}",
+            atelier_core::count_noun(*commits, "code commit"),
+            if closed { " before close" } else { "" }
         ),
     }
 }
@@ -195,7 +202,7 @@ fn render_markdown(
             "Started",
             format!(
                 "{} at {}",
-                started.time.format("%Y-%m-%d"),
+                local_date(started.time),
                 short_commit(&started.commit)
             ),
         ));
@@ -205,7 +212,7 @@ fn render_markdown(
             "Closed",
             format!(
                 "{} at {}",
-                closed.time.format("%Y-%m-%d"),
+                local_date(closed.time),
                 short_commit(&closed.commit)
             ),
         ));
@@ -222,7 +229,7 @@ fn render_markdown(
             criterion_mark(proof.mark),
             proof.criterion.text
         );
-        if let Some(cue) = criterion_proof_cue(proof) {
+        if let Some(cue) = criterion_proof_cue(proof, view.timeline.closed.is_some()) {
             row.push_str(&format!(" | {cue}"));
         }
         criteria.extend(render_row_wrapped(context, &row));
@@ -248,7 +255,12 @@ fn render_markdown(
     let deviations = view
         .deviations
         .iter()
-        .flat_map(|deviation| render_row_wrapped(context, &deviation_line(deviation)))
+        .flat_map(|deviation| {
+            render_row_wrapped(
+                context,
+                &deviation_line(deviation, view.timeline.closed.is_some()),
+            )
+        })
         .collect::<Vec<_>>();
     let events = view
         .mission_events
@@ -260,7 +272,7 @@ fn render_markdown(
                     "{} {} {} by {} at {} | {}",
                     event.event,
                     event.id,
-                    event.date,
+                    local_date(event.created_at),
                     event.identity,
                     short_commit(&event.commit),
                     event.summary
@@ -285,14 +297,13 @@ fn render_markdown(
             render_lines_section(title, lines)
         }
     };
-    vec![
+    let mut panels = vec![
         render_metadata(None, &metadata),
         optional("Success Criteria", criteria),
         render_lines_section("Items", items),
-        optional(
-            "Decisions",
-            decision_full_rows(context, policy, &view.decisions),
-        ),
+    ];
+    panels.extend(decision_sections(context, policy, &view.decisions));
+    panels.extend([
         render_lines_section("Deviations", deviations),
         optional("Mission Reviews", events),
         render_lines_section("Follow-ups", follow_ups),
@@ -312,7 +323,8 @@ fn render_markdown(
                 ),
             ],
         ),
-    ]
+    ]);
+    panels
 }
 
 fn item_line(item: &ItemReview) -> ItemLine<'_> {
@@ -337,6 +349,60 @@ fn mark_badge(mark: CriterionMark) -> String {
         CriterionMark::Proven => badge("proven", Tone::Good),
         CriterionMark::Failing => badge("failing", Tone::Bad),
         CriterionMark::Unproven => badge("unproven", Tone::Warn),
+    }
+}
+
+fn decision_html_row(
+    row: atelier_app::decisions::DecisionRow<'_>,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+) -> String {
+    use atelier_app::decisions::DecisionRow;
+    match row {
+        DecisionRow::Note(note) => format!(
+            "<tr><td class=\"id\">{} <span class=\"muted\">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td></tr>",
+            escape(&note.issue_id),
+            escape(&note.decision.date),
+            if note.decision.one_way {
+                format!("{} ", badge("one-way", Tone::Warn))
+            } else {
+                String::new()
+            },
+            escape(&note.decision.choice),
+            escape(&note.decision.reason),
+            escape(&note.decision.rejected.join("; "))
+        ),
+        DecisionRow::Record(record) => {
+            let issue = &record.issue;
+            let mut cues = Vec::new();
+            if let Some(adr) = &issue.adr {
+                cues.push(format!("ADR <code>{}</code>", escape(&adr.path)));
+            }
+            if !record.supersedes.is_empty() {
+                cues.push(format!("supersedes {}", escape(&record.supersedes.join(", "))));
+            }
+            if !record.superseded_by.is_empty() {
+                cues.push(format!(
+                    "superseded by {}",
+                    escape(&record.superseded_by.join(", "))
+                ));
+            }
+            let category = policy.and_then(|policy| policy.status_category(&issue.status));
+            format!(
+                "<tr><td class=\"id\">{}</td><td>{} {}</td><td colspan=\"2\">{}</td></tr>",
+                escape(&issue.id),
+                badge(&issue.status, status_tone(category, &issue.status)),
+                escape(&issue.title),
+                cues.join(" · ")
+            )
+        }
+        DecisionRow::Malformed(note) => format!(
+            "<tr><td class=\"id\">{} <span class=\"muted\">{}</span></td><td colspan=\"3\">{} decision note {} {}</td></tr>",
+            escape(&note.issue_id),
+            escape(&note.date),
+            badge("malformed", Tone::Bad),
+            note.number,
+            escape(&note.defect)
+        ),
     }
 }
 
@@ -378,10 +444,10 @@ fn render_html(
         facts.push(format!("Strategy <code>{}</code>", escape(strategy)));
     }
     if let Some(started) = &view.timeline.started {
-        facts.push(format!("started {}", started.time.format("%Y-%m-%d")));
+        facts.push(format!("started {}", local_date(started.time)));
     }
     if let Some(closed) = &view.timeline.closed {
-        facts.push(format!("closed {}", closed.time.format("%Y-%m-%d")));
+        facts.push(format!("closed {}", local_date(closed.time)));
     }
     if let Some(commit) = &view.generated_from {
         facts.push(format!(
@@ -464,7 +530,7 @@ fn render_html(
             escape(&proof.criterion.slug),
             mark_badge(proof.mark),
             inline(&proof.criterion.text),
-            criterion_proof_cue(proof)
+            criterion_proof_cue(proof, view.timeline.closed.is_some())
                 .map(|cue| escape(&cue))
                 .unwrap_or_else(|| "<span class=\"muted\">none</span>".into())
         ));
@@ -509,70 +575,21 @@ fn render_html(
     }
     body.push_str(&section("items", "Items", &items));
 
-    // Decisions
+    // Decisions, in the same groups and order as the Markdown.
     let mut decisions = String::from(
         "<table><thead><tr><th>Where</th><th>Decision</th><th>Why</th><th>Rejected</th></tr></thead><tbody>",
     );
-    let note_row = |note: &atelier_app::decisions::NoteDecision| {
-        format!(
-            "<tr><td class=\"id\">{} <span class=\"muted\">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td></tr>",
-            escape(&note.issue_id),
-            escape(&note.decision.date),
-            if note.decision.one_way {
-                format!("{} ", badge("one-way", Tone::Warn))
-            } else {
-                String::new()
-            },
-            escape(&note.decision.choice),
-            escape(&note.decision.reason),
-            escape(&note.decision.rejected.join("; "))
-        )
-    };
-    for note in view
-        .decisions
-        .notes
-        .iter()
-        .filter(|note| note.decision.one_way)
-    {
-        decisions.push_str(&note_row(note));
-    }
-    for record in &view.decisions.records {
-        let issue = &record.issue;
-        let mut cues = Vec::new();
-        if let Some(adr) = &issue.adr {
-            cues.push(format!("ADR <code>{}</code>", escape(&adr.path)));
-        }
-        if !record.supersedes.is_empty() {
-            cues.push(format!(
-                "supersedes {}",
-                escape(&record.supersedes.join(", "))
-            ));
-        }
-        if !record.superseded_by.is_empty() {
-            cues.push(format!(
-                "superseded by {}",
-                escape(&record.superseded_by.join(", "))
-            ));
-        }
-        let category = policy.and_then(|policy| policy.status_category(&issue.status));
+    for (title, rows) in view.decisions.groups() {
         decisions.push_str(&format!(
-            "<tr><td class=\"id\">{}</td><td>{} {}</td><td colspan=\"2\">{}</td></tr>",
-            escape(&issue.id),
-            badge(&issue.status, status_tone(category, &issue.status)),
-            escape(&issue.title),
-            cues.join(" · ")
+            "<tr><th colspan=\"4\">{}</th></tr>",
+            escape(title)
         ));
-    }
-    for note in view
-        .decisions
-        .notes
-        .iter()
-        .filter(|note| !note.decision.one_way)
-    {
-        decisions.push_str(&note_row(note));
+        for row in rows {
+            decisions.push_str(&decision_html_row(row, policy));
+        }
     }
     decisions.push_str("</tbody></table>");
-    if view.decisions.notes.is_empty() && view.decisions.records.is_empty() {
+    if view.decisions.groups().is_empty() {
         decisions = "<p class=\"muted\">None recorded.</p>".to_string();
     }
     body.push_str(&section("decisions", "Decisions", &decisions));
@@ -594,7 +611,12 @@ fn render_html(
     body.push_str(&section(
         "deviations",
         "Deviations",
-        &list(view.deviations.iter().map(deviation_line).collect()),
+        &list(
+            view.deviations
+                .iter()
+                .map(|deviation| deviation_line(deviation, view.timeline.closed.is_some()))
+                .collect(),
+        ),
     ));
     body.push_str(&section(
         "reviews",
@@ -607,7 +629,7 @@ fn render_html(
                         "{} {} {} by {} at {}: {}",
                         event.event,
                         event.id,
-                        event.date,
+                        local_date(event.created_at),
                         event.identity,
                         short_commit(&event.commit),
                         event.summary
@@ -786,7 +808,7 @@ pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) ->
                     "{} {} {} by {} at {} | {}",
                     event.event,
                     event.id,
-                    event.date,
+                    local_date(event.created_at),
                     event.identity,
                     short_commit(&event.commit),
                     event.summary
@@ -1009,7 +1031,7 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
             format!(
                 "<li>{} {} by {} at <code>{}</code>: {}</li>",
                 escape(event.event),
-                escape(&event.date),
+                escape(&local_date(event.created_at).to_string()),
                 escape(&event.identity),
                 escape(short_commit(&event.commit)),
                 escape(&event.summary)

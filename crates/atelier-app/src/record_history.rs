@@ -15,9 +15,11 @@ use crate::git_freshness::ReadContext;
 use crate::workflow_policy::WorkflowPolicy;
 
 /// One committed version of an issue record; `record` is `None` where the
-/// commit deleted the file or left it unreadable.
+/// commit deleted the file or left it unreadable. `position` orders versions
+/// along HEAD's first-parent history.
 #[derive(Debug, Clone)]
 pub struct RecordVersion {
+    pub position: usize,
     pub commit: String,
     pub time: DateTime<Utc>,
     pub record: Option<CanonicalIssueRecord>,
@@ -35,8 +37,11 @@ impl RecordHistory {
     }
 }
 
-/// Every commit in HEAD's history that touched one of the records, read as
-/// that commit left it. Empty without a commit to read.
+/// Every commit on HEAD's first-parent history that changed one of the
+/// records, read as that commit left it. A merge counts as the change it
+/// made to its first parent, so work merged from a branch appears when it
+/// reached this history, and branch-local states never interleave by date.
+/// Empty without a commit to read.
 pub fn issue_histories(
     read: &mut ReadContext<'_>,
     ids: &BTreeSet<String>,
@@ -60,7 +65,8 @@ pub fn issue_histories(
     let mut args = vec![
         "log",
         "--reverse",
-        "--date-order",
+        "--first-parent",
+        "--diff-merges=first-parent",
         "--format=%x00%H %ct",
         "--name-only",
         head.as_str(),
@@ -68,7 +74,8 @@ pub fn issue_histories(
     ];
     args.extend(paths.iter().map(String::as_str));
     let output = read.history(&args)?;
-    for entry in output.split('\0').filter(|entry| !entry.trim().is_empty()) {
+    let entries = output.split('\0').filter(|entry| !entry.trim().is_empty());
+    for (position, entry) in entries.enumerate() {
         let mut lines = entry.lines();
         let Some((commit, seconds)) = lines.next().and_then(|line| line.split_once(' ')) else {
             continue;
@@ -87,12 +94,16 @@ pub fn issue_histories(
             else {
                 continue;
             };
-            let record = read.issue_at(commit, id).ok();
+            let record = read
+                .issue_at(commit, id)
+                .ok()
+                .or_else(|| retired_epic_at(read, commit, id));
             history
                 .versions
                 .entry(id.to_string())
                 .or_default()
                 .push(RecordVersion {
+                    position,
                     commit: commit.to_string(),
                     time,
                     record,
@@ -102,9 +113,28 @@ pub fn issue_histories(
     Ok(history)
 }
 
+/// A version in the retired epic shape, read as the parent issue it became,
+/// so the history before `atelier migrate epics` still shows its links and
+/// status.
+fn retired_epic_at(
+    read: &mut ReadContext<'_>,
+    commit: &str,
+    id: &str,
+) -> Option<CanonicalIssueRecord> {
+    let relative = issue_record_path(id);
+    let text = read
+        .blob(commit, &Path::new(".atelier").join(&relative))
+        .ok()?;
+    let migrated = crate::epic_migration::migrate_epic_text(&text, "task", "draft")
+        .ok()
+        .flatten()?;
+    atelier_records::parse_issue_record(&migrated.text, &relative).ok()
+}
+
 /// A dated moment in a record's history.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Moment {
+    pub position: usize,
     pub commit: String,
     pub time: DateTime<Utc>,
 }
@@ -112,6 +142,7 @@ pub struct Moment {
 impl From<&RecordVersion> for Moment {
     fn from(version: &RecordVersion) -> Self {
         Self {
+            position: version.position,
             commit: version.commit.clone(),
             time: version.time,
         }
@@ -139,6 +170,7 @@ pub fn mission_timeline(
     mission_id: &str,
     scope: &BTreeSet<String>,
     linked: &BTreeSet<String>,
+    children: &[(String, String)],
 ) -> Result<MissionTimeline> {
     let mut ids = scope.clone();
     ids.insert(mission_id.to_string());
@@ -169,29 +201,52 @@ pub fn mission_timeline(
         closed,
         ..MissionTimeline::default()
     };
+    let first = |versions: &[RecordVersion], test: &dyn Fn(&CanonicalIssueRecord) -> bool| {
+        versions
+            .iter()
+            .find(|version| version.record.as_ref().is_some_and(test))
+            .map(Moment::from)
+    };
+    let earlier = |a: Option<Moment>, b: Option<Moment>| match (a, b) {
+        (Some(a), Some(b)) => Some(if a.position <= b.position { a } else { b }),
+        (a, b) => a.or(b),
+    };
+    let mut joined_at = std::collections::BTreeMap::new();
     for id in linked {
         // The link may live on either record, and older records stored it on
         // the mission's side, so the item joined at the earlier of the two.
-        let on_item = history.of(id).iter().find(|version| {
-            version
-                .record
-                .as_ref()
-                .is_some_and(|record| advances(record, mission_id))
-        });
-        let on_mission = mission.iter().find(|version| {
-            version
-                .record
-                .as_ref()
-                .is_some_and(|record| advances(record, id))
-        });
-        let joined = match (on_item, on_mission) {
-            (Some(a), Some(b)) => Some(if a.time <= b.time { a } else { b }),
-            (a, b) => a.or(b),
+        let joined = earlier(
+            first(history.of(id), &|record| advances(record, mission_id)),
+            first(mission, &|record| advances(record, id)),
+        );
+        if let Some(joined) = joined {
+            joined_at.insert(id.clone(), joined);
         }
-        .map(Moment::from);
-        if let (Some(joined), Some(started)) = (joined, &timeline.started) {
-            if joined.time > started.time {
-                timeline.added_after_start.push((id.clone(), joined));
+    }
+    let started_at = timeline.started.as_ref().map(|moment| moment.position);
+    for (id, joined) in &joined_at {
+        if started_at.is_some_and(|started| joined.position > started) {
+            timeline
+                .added_after_start
+                .push((id.clone(), joined.clone()));
+        }
+    }
+    // A child joined when its parent's record first listed it; it is new
+    // scope only when its parent was already in scope at the start.
+    for (child, parent) in children {
+        let parent_joined = joined_at.get(parent).map(|moment| moment.position);
+        let Some(joined) = first(history.of(parent), &|record| {
+            record
+                .relationships
+                .children
+                .iter()
+                .any(|link| &link.id == child)
+        }) else {
+            continue;
+        };
+        if let Some(started) = started_at {
+            if joined.position > started && parent_joined.is_none_or(|at| at <= started) {
+                timeline.added_after_start.push((child.clone(), joined));
             }
         }
     }
@@ -211,10 +266,10 @@ pub fn mission_timeline(
     }
     timeline
         .added_after_start
-        .sort_by(|(a, x), (b, y)| (x.time, a).cmp(&(y.time, b)));
+        .sort_by(|(a, x), (b, y)| (x.position, a).cmp(&(y.position, b)));
     timeline
         .reopened
-        .sort_by(|(a, x), (b, y)| (x.time, a).cmp(&(y.time, b)));
+        .sort_by(|(a, x), (b, y)| (x.position, a).cmp(&(y.position, b)));
     Ok(timeline)
 }
 

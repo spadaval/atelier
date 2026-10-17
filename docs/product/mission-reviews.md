@@ -19,8 +19,9 @@ its plan before work starts.
 - each scoped item with its implementer report (Outcome, Deviations,
   Decisions, Surprises, Open items), or for older records the Close Reason
   alone; children are indented under their parent;
-- the decision log: one-way decision notes, decision records, reversible
-  notes;
+- the decision log in the order `work decisions` uses: one-way decision
+  notes, current decision records, reversible notes, open decision records,
+  superseded records, and malformed notes;
 - derived deviations: scope added after the mission started, scope dropped
   (superseded items with their reason), findings deferred to a follow-up,
   non-pass evidence that is still the newest on an item, trivial exemptions,
@@ -39,10 +40,13 @@ file panel or any browser and gives direction in conversation, and the agent
 records that direction as ordinary review events, decisions, notes, and
 issues. The page is never committed; regenerate it when the records change.
 
-Every fact is derived from records and Git: one history query over the
-mission's issue records finds the mission's start (its first version out of
-`draft`), its close, when each item was first linked to it (on either
-record), and done claims later withdrawn. Nothing new is stored.
+Every fact is derived from records and Git: one history query walks HEAD's
+first-parent history over the mission's issue records, reading a merge as
+the change it made to the base, and finds the mission's start (its first
+version out of `draft`), its close, when each item was first linked to it
+(on either record, and for a child when its parent first listed it), and
+done claims later withdrawn. Versions in the retired epic shape are read as
+the parent issues they became. Nothing new is stored. Dates are local days.
 
 The Markdown and HTML forms come from one view model, and a test checks that
 every item, criterion mark, and decision in one appears in the other.
