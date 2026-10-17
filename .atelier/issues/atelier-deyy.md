@@ -29,9 +29,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-10-17T03:46:51.324326246+00:00"
+status: "done"
 title: "Tighten work views to one dense line per item"
-updated_at: "2026-10-17T03:46:16.502816302+00:00"
+updated_at: "2026-10-17T03:46:51.324326246+00:00"
 ---
 
 ## Goal
@@ -50,3 +51,7 @@ Work-view rendering, its tests, and `human-cli-output.md`. No change to classifi
 ## Context
 
 ADR 0022; output observed on master 2026-10-16.
+
+## Close Reason
+
+work mission, work parent, work all and status render one dense line per item with ✓/⚠ beside the status word and no tokens the heading states; human-cli-output.md states the dense-output and piping rules.
