@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T06:35:12.482646557+00:00"
+status: "done"
 title: "Remove or implement --log-level and --log-format"
-updated_at: "2026-10-17T06:29:35.185163574+00:00"
+updated_at: "2026-10-17T06:35:12.482646557+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ In both cases, an invalid value exits 2 with the allowed list (clap `value_parse
 ## Unknowns
 
 Whether anything (scripts, hooks, `ATELIER_LOG` in adopters' environments) relies on the flags. Grep `scripts/` and astromech before removing them.
+
+## Close Reason
+
+Removed the global --log-level/--log-format flags (and ATELIER_LOG/ATELIER_LOG_FORMAT), the tracing subscriber and the tracing dependencies; the two bundle cleanup warnings now print plain stderr. Passing either flag is a clap usage error exiting 2, covered by test_removed_log_flags_are_rejected_and_absent_from_help, which also checks help no longer lists them. human-cli-output.md and development-setup.md state the options were removed. Proof: atelier-b5xa (cargo nextest run), atelier-bfev (cargo fmt --check), atelier-jfmv (git diff --check).
