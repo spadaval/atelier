@@ -4,6 +4,9 @@ id: "atelier-4775"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-4775
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Agree on close readiness in brief and full issue show"
-updated_at: "2026-10-17T09:36:28.855906025+00:00"
+updated_at: "2026-10-17T09:43:02.916960683+00:00"
 ---
 
 ## Goal
