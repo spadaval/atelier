@@ -7,7 +7,9 @@ labels:
 - "status"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-tciw"
   children: []
   attachments: []
   relates:
