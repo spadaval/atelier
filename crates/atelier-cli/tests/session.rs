@@ -3996,6 +3996,24 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
 }
 #[test]
+fn status_current_work_row_reads_like_its_owner_row() {
+    let f = Fixture::new();
+    let status = ok(f.path(), &["status"]);
+    let owner = field(&status, "Owner").unwrap_or_else(|| panic!("no owner: {status}"));
+    assert!(
+        owner.starts_with(&format!("{} in_progress ", f.id)),
+        "{status}"
+    );
+    assert_eq!(
+        section(&status, "Current Work")
+            .iter()
+            .map(|row| row.trim())
+            .collect::<Vec<_>>(),
+        [owner],
+        "{status}"
+    );
+}
+#[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
     f.terminal(&f.id);

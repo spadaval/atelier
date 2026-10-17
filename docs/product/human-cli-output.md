@@ -68,8 +68,12 @@ Every view that lists items uses this line: the `work` views, `status`
 other-branch rows), `work missions`, `issue list`, and `issue show` (title
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the objective rollup). So the Current Work row and the Owner
-row in `status` read alike. Records that are not issues use the same order
-without a priority: `atelier-waj0 evidence recorded <title>`.
+row in `status` read alike. A record that is not an issue uses the same
+order without a priority, as `evidence show` titles it: `atelier-waj0
+evidence recorded <title>`. The other review and evidence views adopt it in
+their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
+`review list` in atelier-h6o4, `review show` in atelier-3u2u, and
+`evidence list` in atelier-u0ig.
 
 ### Commits and Timestamps
 

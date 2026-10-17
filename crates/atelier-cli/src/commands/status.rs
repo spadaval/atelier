@@ -362,7 +362,7 @@ fn evidence(
             "{} — recorded {:?} @ {} ({})",
             evidence.header.id,
             evidence.data.result,
-            &evidence.data.commit[..8.min(evidence.data.commit.len())],
+            short_commit(&evidence.data.commit),
             if fresh {
                 "fresh"
             } else {
