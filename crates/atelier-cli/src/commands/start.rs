@@ -21,7 +21,8 @@ use atelier_records::CanonicalIssueRecord;
 
 const START_TRANSITION: &str = "start";
 
-pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()> {
+/// Quiet output is the branch name alone; notes about human work go to stderr.
+pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let repo_root = workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -213,9 +214,11 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
             Some(_) => vec!["switch", &branch],
             None => vec!["switch", "-c", &branch],
         };
-        println!("git {}", args.join(" "));
+        if !quiet {
+            println!("git {}", args.join(" "));
+        }
         checkout(&repo_root, &args)?;
-    } else {
+    } else if !quiet {
         println!("Already on branch {branch}; no git operations.");
     }
     let install = (|| -> Result<()> {
@@ -250,6 +253,19 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
         return Err(error).context("start record transaction failed; prior records restored. Inspect git status before retrying; a newly created local branch may remain.");
     }
 
+    let notes = start_notes(
+        &issue_id,
+        human_work,
+        &work_branch.owner_id,
+        &human_children,
+    );
+    if quiet {
+        println!("{branch}");
+        for note in notes {
+            eprintln!("{note}");
+        }
+        return Ok(());
+    }
     if record_branch {
         println!(
             "Recorded {WORKFLOW_BRANCH_FIELD} on {}: {branch} (base {base})",
@@ -270,22 +286,33 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     }
     println!("Branch:   {branch} (owner {})", work_branch.owner_id);
     println!("Base:     {base}");
-    if human_work {
-        println!(
-            "Note:     {issue_id} is labelled needs-human; it is work for the human, not an agent."
-        );
-    }
-    if !human_children.is_empty() {
-        println!(
-            "Note:     {}",
-            atelier_app::work_classification::human_children_note(
-                &work_branch.owner_id,
-                &human_children
-            )
-        );
+    for note in notes {
+        println!("Note:     {note}");
     }
     println!("Commit the record changes with the work they describe.");
     Ok(())
+}
+
+/// Notes that `start` is starting work for the human.
+fn start_notes(
+    issue_id: &str,
+    human_work: bool,
+    owner_id: &str,
+    human_children: &[String],
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    if human_work {
+        notes.push(format!(
+            "{issue_id} is labelled needs-human; it is work for the human, not an agent."
+        ));
+    }
+    if !human_children.is_empty() {
+        notes.push(atelier_app::work_classification::human_children_note(
+            owner_id,
+            human_children,
+        ));
+    }
+    notes
 }
 
 fn checkout(repo: &Path, args: &[&str]) -> Result<String> {

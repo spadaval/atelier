@@ -48,7 +48,8 @@ fn canonical_issue_path(issue_id: &str) -> Result<Option<PathBuf>> {
 
 /// Shows each issue in turn, brief unless `full`. Every reference resolves
 /// before anything prints, so one unknown ID prints nothing.
-pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool) -> Result<()> {
+/// Quiet output is `<id> <status>`, one line per issue.
+pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool, quiet: bool) -> Result<()> {
     let records = issue_refs
         .iter()
         .map(|issue_ref| {
@@ -58,6 +59,12 @@ pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool) -> Result<()
                 .ok_or_else(|| index.not_found(RecordKind::Issue, &id))
         })
         .collect::<Result<Vec<_>>>()?;
+    if quiet {
+        for record in records {
+            println!("{} {}", record.issue.id, record.issue.status);
+        }
+        return Ok(());
+    }
     if full {
         for (position, record) in records.into_iter().enumerate() {
             if position > 0 {
@@ -489,10 +496,25 @@ fn render_issue_link_section(index: &RecordIndex, issue_id: &str) -> Result<()> 
     Ok(())
 }
 
-pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -> Result<()> {
+/// Quiet output names the allowed transitions, one per line, counting one
+/// whose only gap is a required argument as allowed, as `issue show` does.
+pub fn transition_options(
+    index: &RecordIndex,
+    issue_ref: &str,
+    verbose: bool,
+    quiet: bool,
+) -> Result<()> {
     let id = resolve_id(index, issue_ref)?;
     let issue = index.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(index, issue_ref)?;
+    if quiet {
+        for option in &options {
+            if option.blockers_beyond_arguments().is_empty() {
+                println!("{}", option.name);
+            }
+        }
+        return Ok(());
+    }
     crate::commands::workflow::print_issue_transition_options(&issue, &options, verbose);
     Ok(())
 }
@@ -1021,6 +1043,8 @@ pub struct UpdateInput<'a> {
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
+    /// Print only the issue ID.
+    pub quiet: bool,
 }
 
 pub fn update_lifecycle(
@@ -1164,6 +1188,10 @@ pub fn update_lifecycle(
 
     changed_fields.sort_unstable();
     changed_fields.dedup();
+    if input.quiet {
+        println!("{}", record.issue.id);
+        return Ok(());
+    }
     println!(
         "Updated issue {} ({})",
         record.issue.id,
@@ -1186,7 +1214,13 @@ pub fn update_lifecycle(
 }
 
 /// Append a dated note to the issue record's Notes section.
-pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> Result<()> {
+pub fn append_note(
+    state_dir: &Path,
+    issue_id: &str,
+    kind: &str,
+    text: &str,
+    quiet: bool,
+) -> Result<()> {
     if !ISSUE_NOTE_KINDS.contains(&kind) {
         bail!(atelier_core::invalid_value_message(
             "note kind",
@@ -1206,7 +1240,11 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     record.sections.append_note(local_date(now), kind, text);
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
-    println!("Added note to issue {}", issue_id);
+    if quiet {
+        println!("{issue_id}");
+    } else {
+        println!("Added note to issue {}", issue_id);
+    }
     Ok(())
 }
 
@@ -1216,21 +1254,28 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
-pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
+/// Quiet output is `passed`; findings still print, on stderr, so a failure
+/// leaves stdout empty.
+pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()> {
     let view = atelier_app::lint::lint(atelier_app::lint::LintRequest {
         state_dir,
         issue_ref,
     })?;
     if view.findings.is_empty() {
-        println!("Check passed.");
+        println!("{}", if quiet { "passed" } else { "Check passed." });
         return Ok(());
     }
-    println!(
+    let mut report = format!(
         "Check found {}:",
         count_noun(view.findings.len(), "finding")
     );
     for finding in &view.findings {
-        println!("  {}: {}", finding.id, finding.message);
+        report.push_str(&format!("\n  {}: {}", finding.id, finding.message));
+    }
+    if quiet {
+        eprintln!("{report}");
+    } else {
+        println!("{report}");
     }
     let rerun = view.scoped_id.map_or("atelier check".to_string(), |id| {
         format!("atelier check {id}")
@@ -1320,6 +1365,7 @@ mod tests {
                             "atelier-note",
                             "note",
                             &format!("writer {writer} note {index}"),
+                            true,
                         )
                         .unwrap();
                     }

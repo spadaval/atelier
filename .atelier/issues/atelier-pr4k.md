@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-pr4k
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T08:23:57.425765555+00:00"
+status: "done"
 title: "Make --quiet print one documented token on every command"
-updated_at: "2026-10-17T06:27:40.279114098+00:00"
+updated_at: "2026-10-17T08:23:57.425765555+00:00"
 ---
 
 ## Goal
@@ -46,3 +50,7 @@ Agents work around this: `start | grep Branch` 29 times and `start | tail -N` 43
 ## Context
 
 `main.rs` does not pass `quiet` to start, merge, check, bundle, init, or review list/show. The table lives in the doc written by the output-contract item in this mission.
+
+## Close Reason
+
+Every command honours --quiet with the token in the Quiet Tokens table of human-cli-output.md, which this change completes (setup, issue list, evidence/review list and show, merge, bundle, migrate, prune added; status values all numbers; work mission/parent counts without the leading ID). quiet_tokens.rs runs every command in the help tree with -q against one fixture repository and checks each token.

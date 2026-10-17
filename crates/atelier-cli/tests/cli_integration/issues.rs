@@ -4451,11 +4451,11 @@ fn test_issue_options_do_what_their_help_says() {
         "{stderr}"
     );
 
-    // blocks is the inverse of blocked_by, and -q prints nothing extra.
+    // blocks is the inverse of blocked_by, and -q prints the first ID given.
     let waiting = create(&["-q", "issue", "create", "Waits"]);
     assert_eq!(
         create(&["-q", "issue", "link", &task, &waiting, "--role", "blocks"]),
-        ""
+        task
     );
     let ready = run_atelier(dir.path(), &["--quiet", "work", "ready"]).1;
     assert!(!ready.lines().any(|line| line == waiting), "{ready}");
@@ -4806,6 +4806,11 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
         !success && format!("{stdout}{stderr}").contains("atelier migrate epics"),
         "{stdout}{stderr}"
     );
+
+    // Quiet output is the IDs a dry run would retype.
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "migrate", "epics"]);
+    assert!(success, "{stderr}");
+    assert_eq!(quiet, format!("{epic}\n"));
 
     let (success, preview, stderr) = run_atelier(dir.path(), &["migrate", "epics"]);
     assert!(success, "{stderr}");

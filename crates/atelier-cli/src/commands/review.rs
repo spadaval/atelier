@@ -98,7 +98,8 @@ pub fn disposition(
     append(&original.target, identity, None, summary, event, quiet)
 }
 
-pub fn list(owner: Option<&str>, json: bool) -> Result<()> {
+/// Quiet output is the event IDs, one per line.
+pub fn list(owner: Option<&str>, json: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let owner = owner
@@ -110,6 +111,10 @@ pub fn list(owner: Option<&str>, json: bool) -> Result<()> {
         .collect::<Vec<_>>();
     if json {
         println!("{}", serde_json::to_string_pretty(&records)?);
+    } else if quiet {
+        for record in records {
+            println!("{}", record.header.id);
+        }
     } else {
         for record in records {
             println!(
@@ -121,14 +126,26 @@ pub fn list(owner: Option<&str>, json: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn show(id: &str) -> Result<()> {
+/// Quiet output is `<id> <event>`, the event as the record stores it.
+pub fn show(id: &str, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    println!(
-        "{}",
-        serde_json::to_string_pretty(
-            index.require_review(&index.resolve(RecordKind::Review, id)?)?
-        )?
-    );
+    let record = index.require_review(&index.resolve(RecordKind::Review, id)?)?;
+    if quiet {
+        println!("{} {}", record.header.id, event_name(&record.event));
+        return Ok(());
+    }
+    println!("{}", serde_json::to_string_pretty(record)?);
     Ok(())
+}
+
+/// The event's stored name, as in the record's `event` field.
+fn event_name(event: &ReviewEvent) -> &'static str {
+    match event {
+        ReviewEvent::Review => "review",
+        ReviewEvent::Approval => "approval",
+        ReviewEvent::Finding { .. } => "finding",
+        ReviewEvent::Disposition { .. } => "disposition",
+        ReviewEvent::TrivialExemption => "trivial_exemption",
+    }
 }

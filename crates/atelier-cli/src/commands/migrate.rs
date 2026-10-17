@@ -22,7 +22,9 @@ struct Plan {
     status_change: Option<(String, String)>,
 }
 
-pub fn epics(to: &str, apply: bool) -> Result<()> {
+/// Quiet output is the IDs of the epic records retyped, or that a dry run
+/// would retype, one per line; the close-check note goes to stderr.
+pub fn epics(to: &str, apply: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let policy_path = repo.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
@@ -97,6 +99,10 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
     }
 
     for plan in &plans {
+        if quiet {
+            println!("{}", plan.id);
+            continue;
+        }
         let change = plan
             .status_change
             .as_ref()
@@ -105,7 +111,7 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
         println!("{}: epic -> {to}{change}", plan.id);
     }
     let policy_changed = new_policy != policy_text;
-    if policy_changed {
+    if policy_changed && !quiet {
         println!(
             "{}: remove the epic issue type{}",
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
@@ -117,16 +123,26 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
         );
     }
     if !close_has_check {
-        println!(
+        let note = format!(
             "Note: the {to} workflow's close transition has no work.terminal check, so a parent could close before its children. Add `- work.terminal` to its validators in {}.",
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
         );
+        if quiet {
+            eprintln!("{note}");
+        } else {
+            println!("{note}");
+        }
     }
     if plans.is_empty() && !policy_changed {
-        println!("No epic records or epic policy entries to migrate.");
+        if !quiet {
+            println!("No epic records or epic policy entries to migrate.");
+        }
         return Ok(());
     }
     if !apply {
+        if quiet {
+            return Ok(());
+        }
         println!(
             "Dry run: rerun with --apply to write these changes, then review and commit them."
         );
@@ -138,6 +154,9 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
     }
     if policy_changed {
         fs::write(&policy_path, new_policy)?;
+    }
+    if quiet {
+        return Ok(());
     }
     println!(
         "Migrated {}. Run atelier check, review the Done when sections, and commit.",

@@ -225,7 +225,9 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
-pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
+/// Quiet output is `passed` once the gates pass (and, without `--check`, the
+/// merge is done); a failed gate's line goes to stderr instead.
+pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let head = git::head_commit(repo)?;
@@ -378,6 +380,10 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
+    } else if quiet {
+        for node in nodes.iter().filter(|node| !node.passed) {
+            eprintln!("FAIL {}: {}", node.check, node.reason);
+        }
     } else {
         for node in &nodes {
             println!(
@@ -451,6 +457,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         bail!("merge blocked: {}", failed.join(", "));
     }
     if check_only {
+        if quiet {
+            println!("passed");
+        }
         return Ok(());
     }
     let landed = match merge {
@@ -463,7 +472,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     // A separately checked-out base can be updated without touching it from
     // this worktree. Detach the source so its now-integrated branch can go.
     let target = base_tree.as_deref().unwrap_or(repo);
-    println!("Git hooks are disabled during gated integration and cleanup; put required read-only checks in the base policy's merge_checks.");
+    if !quiet {
+        println!("Git hooks are disabled during gated integration and cleanup; put required read-only checks in the base policy's merge_checks.");
+    }
     if base_tree.is_none() {
         git::git_output(repo, &["-c", "core.hooksPath=/dev/null", "switch", base])?;
     }
@@ -521,6 +532,13 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     clean(target)?;
     clean(repo)?;
+    if quiet {
+        println!("passed");
+        if base_tree.is_some() {
+            eprintln!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
+        }
+        return Ok(());
+    }
     match &landed {
         Some(commit) => println!("Merged {branch} into {base} with merge commit {}; deleted local work branch. No other commits or tracker records were created.", crate::human_output::short_commit(commit)),
         None => println!("Merged {branch} into {base} at {}; deleted local work branch. No commits or tracker records were created.", crate::human_output::short_commit(&head)),
