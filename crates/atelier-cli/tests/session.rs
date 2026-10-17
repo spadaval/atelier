@@ -4655,3 +4655,99 @@ fn scoped_views_offer_the_top_ready_item_in_work_order_that_no_branch_started() 
         "{view}"
     );
 }
+
+/// An item whose only blocker is closed but itself waits on open work fails
+/// `start`'s readiness gate, so no view lists it as ready or offers to start
+/// it, however high its priority.
+#[test]
+fn scoped_views_offer_start_only_for_work_that_passes_the_readiness_gates() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Gated mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    let parent = ok(f.path(), &["-q", "issue", "create", "Gated parent"]);
+    let gated = ok(f.path(), &["-q", "issue", "create", "Gated work"]);
+    let tail = ok(f.path(), &["-q", "issue", "create", "Open tail"]);
+    let closed = ok(f.path(), &["-q", "issue", "create", "Closed blocker"]);
+    for (child, priority) in [(&gated, "critical"), (&tail, "low")] {
+        ok(
+            f.path(),
+            &[
+                "issue",
+                "update",
+                child,
+                "--parent",
+                &parent,
+                "--priority",
+                priority,
+            ],
+        );
+    }
+    ok(
+        f.path(),
+        &["issue", "link", &mission, &parent, "--role", "advances"],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &gated, &closed, "--role", "blocked_by"],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &closed, &tail, "--role", "blocked_by"],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &closed,
+            "supersede",
+            "--reason",
+            "folded into the tail",
+        ],
+    );
+    commit(f.path(), "plan gated work");
+
+    for view in [
+        ok(f.path(), &["work", "mission", &mission]),
+        ok(f.path(), &["work", "parent", &parent]),
+    ] {
+        let ready = section(&view, "Ready Work");
+        assert!(
+            ready.iter().any(|line| line.contains(&tail)),
+            "{tail} is not ready: {view}"
+        );
+        assert!(
+            !ready.iter().any(|line| line.contains(&gated)),
+            "{gated} is ready: {view}"
+        );
+        assert!(
+            section(&view, "Blocked Work")
+                .iter()
+                .any(|line| line.contains(&gated) && line.contains(&tail)),
+            "{gated} is not blocked by {tail}: {view}"
+        );
+        assert!(
+            view.ends_with(&format!("Start the top ready item: atelier start {tail}")),
+            "{view}"
+        );
+    }
+    let view = ok(f.path(), &["work", "ready"]);
+    assert!(!section(&view, "Ready Work")
+        .iter()
+        .any(|line| line.contains(&gated)));
+    let (started, out) = cli(f.path(), &["start", &gated]);
+    assert!(
+        !started && out.contains(&format!("{gated} -> {closed} -> {tail}")),
+        "{out}"
+    );
+}

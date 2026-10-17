@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Use the right article for configured issue types in wrong-kind errors"
-updated_at: "2026-10-17T07:17:24.325142041+00:00"
+updated_at: "2026-10-17T08:50:18.404272846+00:00"
 ---
 
 ## Goal
