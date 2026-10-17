@@ -201,6 +201,85 @@ fn unknown_ids_give_one_not_found_message_and_exit_1_everywhere() {
     );
 }
 
+/// Writes a bundle with one evidence entry that validates the record `id`
+/// names, and returns its path.
+fn validates_bundle(dir: &Path, id: &str) -> String {
+    let path = dir.join("validates-bundle.json");
+    std::fs::write(
+        &path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 2,
+  "title": "Bundle reference",
+  "resources": {{
+    "evidence": [
+      {{
+        "client_ref": "evidence.ref",
+        "title": "Bundle reference evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "validates": [{{ "id": "{id}" }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    path.to_str().unwrap().to_string()
+}
+
+#[test]
+fn bundle_ids_resolve_and_fail_like_command_arguments() {
+    let f = fixture();
+    let dir = f.dir.path();
+
+    let short = issue_key(&f.evidence).to_ascii_uppercase();
+    let bundle = validates_bundle(dir, &short);
+    let (success, stdout, stderr) = run_atelier(dir, &["bundle", "apply", &bundle, "--yes"]);
+    assert!(
+        success,
+        "bundle apply by short evidence id failed: {stderr}"
+    );
+    assert!(stdout.contains("Bundle applied."), "{stdout}");
+    let created = record_id_by_title(dir, "evidence", "Bundle reference evidence");
+    let record =
+        std::fs::read_to_string(dir.join(format!(".atelier/evidence/{created}.md"))).unwrap();
+    assert!(record.contains(&f.evidence), "{record}");
+
+    let key = issue_key(&f.evidence);
+    let last = if key.ends_with('0') { '1' } else { '0' };
+    let typo = format!("{}{last}", &key[..key.len() - 1]);
+    for (id, message) in [
+        (
+            "qqqqqqqq".to_string(),
+            "issue qqqqqqqq not found. Next: atelier issue list".to_string(),
+        ),
+        (
+            typo.clone(),
+            format!(
+                "evidence record {typo} not found. Did you mean {}?",
+                f.evidence
+            ),
+        ),
+        (
+            issue_key(&f.review).to_string(),
+            format!(
+                "{0} is a review, not an issue. Use `atelier review show {0}`.",
+                f.review
+            ),
+        ),
+    ] {
+        let bundle = validates_bundle(dir, &id);
+        let (code, stderr) = exit_code(dir, &["bundle", "preview", &bundle]);
+        assert_eq!(code, Some(1), "{id}: {stderr}");
+        assert!(stderr.contains(&message), "{id}: {stderr}");
+        assert!(!stderr.contains("Record id"), "{id}: {stderr}");
+    }
+}
+
 #[test]
 fn wrong_kind_short_ids_name_the_actual_kind_and_its_show_command() {
     let f = fixture();

@@ -977,14 +977,37 @@ impl RecordIndex {
     /// another kind gets a hint naming its own show command; an unknown id
     /// gets the shared not-found message.
     pub fn resolve(&self, kind: RecordKind, reference: &str) -> Result<String> {
-        if let Some(id) = record_ref::match_id(kind, reference, self.ids(kind))? {
-            return Ok(id);
-        }
-        for other in RecordKind::ALL.into_iter().filter(|other| *other != kind) {
-            if let Ok(Some(id)) = record_ref::match_id(other, reference, self.ids(other)) {
-                return Err(record_ref::wrong_kind(kind, other, &id));
+        self.resolve_any(&[kind], reference).map(|(_, id)| id)
+    }
+
+    /// Resolves a reference that may name a record of any of `kinds`, tried
+    /// in order, as [`Self::resolve`] does for one kind. A record of another
+    /// kind is reported against the first of `kinds`; an unknown reference
+    /// against the first kind with near matches, or else the first.
+    pub fn resolve_any(
+        &self,
+        kinds: &[RecordKind],
+        reference: &str,
+    ) -> Result<(RecordKind, String)> {
+        let expected = kinds[0];
+        for &kind in kinds {
+            if let Some(id) = record_ref::match_id(kind, reference, self.ids(kind))? {
+                return Ok((kind, id));
             }
         }
+        for other in RecordKind::ALL
+            .into_iter()
+            .filter(|other| !kinds.contains(other))
+        {
+            if let Ok(Some(id)) = record_ref::match_id(other, reference, self.ids(other)) {
+                return Err(record_ref::wrong_kind(expected, other, &id));
+            }
+        }
+        let kind = kinds
+            .iter()
+            .copied()
+            .find(|&kind| record_ref::has_near_match(reference, self.ids(kind)))
+            .unwrap_or(expected);
         Err(self.not_found(kind, reference))
     }
 
