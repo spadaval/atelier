@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-onwh
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Use one footer heading and hint format across views"
-updated_at: "2026-10-17T06:27:39.819258968+00:00"
+updated_at: "2026-10-17T06:29:36.741779740+00:00"
 ---
 
 ## Goal
