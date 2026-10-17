@@ -126,4 +126,7 @@ elsewhere: in `status`'s ready items and in `work ready` and `work all`, an
 item that owns another local branch gets a `↳` line under its row with its
 state there, `<status> on <branch>`, plus `, not merged` or `, merged into
 <base>` for a done claim. The item stays listed and classified from the
-current checkout's records. If the summaries cannot be read, the page says so.
+current checkout's records. When an owner's branch cannot be read, its row
+says `↳ state unknown on <branch>: <reason>`; when the branch's owner cannot be
+found either, the page names the branch instead, and if no summaries can be
+read at all, the page says so.
