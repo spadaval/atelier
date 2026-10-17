@@ -2,13 +2,15 @@
 //! stdout: the Quiet Tokens table in `docs/product/human-cli-output.md`
 //! (atelier-pr4k). One fixture repository walks the lifecycle, running every
 //! command with `-q`, and a final check fails when a command in the help tree
-//! was not run.
+//! was not run. Each command is also refused once, and a quiet refusal leaves
+//! stdout empty and says why on stderr (atelier-fnak).
 use super::*;
 use std::collections::BTreeSet;
 
 struct Quiet<'a> {
     dir: &'a Path,
     covered: BTreeSet<String>,
+    refusals: BTreeSet<String>,
 }
 
 impl<'a> Quiet<'a> {
@@ -16,15 +18,20 @@ impl<'a> Quiet<'a> {
         Self {
             dir,
             covered: BTreeSet::new(),
+            refusals: BTreeSet::new(),
         }
     }
 
     fn output(&mut self, command: &str, args: &[&str]) -> (bool, String, String) {
+        self.output_in(self.dir, command, args)
+    }
+
+    fn output_in(&mut self, dir: &Path, command: &str, args: &[&str]) -> (bool, String, String) {
         self.covered.insert(command.to_string());
         let mut full = vec!["-q"];
         full.extend(command.split(' '));
         full.extend(args);
-        run_atelier_raw(self.dir, &full)
+        run_atelier_raw(dir, &full)
     }
 
     /// Stdout of a command that must succeed.
@@ -36,9 +43,22 @@ impl<'a> Quiet<'a> {
 
     /// Stderr of a command that must fail with nothing on stdout.
     fn refused(&mut self, command: &str, args: &[&str]) -> String {
-        let (success, stdout, stderr) = self.output(command, args);
+        self.refused_in(self.dir, command, args)
+    }
+
+    /// `refused`, run in another directory, such as one Atelier is not in.
+    fn refused_in(&mut self, dir: &Path, command: &str, args: &[&str]) -> String {
+        self.refusals.insert(command.to_string());
+        let (success, stdout, stderr) = self.output_in(dir, command, args);
         assert!(!success, "atelier -q {command} {args:?} passed: {stdout}");
-        assert_eq!(stdout, "", "a quiet refusal prints nothing on stdout");
+        assert_eq!(
+            stdout, "",
+            "quiet refusal of {command} {args:?} printed on stdout"
+        );
+        assert!(
+            !stderr.trim().is_empty(),
+            "{command} {args:?} refused silently"
+        );
         stderr
     }
 }
@@ -96,9 +116,20 @@ fn every_command_prints_its_documented_quiet_token() {
     let dir = dir.path();
     init_git_repo(dir);
     let mut q = Quiet::new(dir);
+    // A repository Atelier is not initialized in, for commands that take no
+    // record to refuse.
+    let outside = tempdir().unwrap();
+    let outside = outside.path();
+    init_git_repo(outside);
+    let not_atelier = |stderr: String| {
+        assert!(stderr.contains("Not an Atelier repository"), "{stderr}");
+    };
 
     assert_eq!(q.ok("init", &["--slug", "atelier"]), "atelier\n");
     assert_eq!(q.ok("init", &["--force"]), "atelier\n");
+    let reslug = q.refused("init", &["--slug", "other"]);
+    assert!(reslug.contains("already sets project_slug"), "{reslug}");
+    not_atelier(q.refused_in(outside, "setup", &["claude"]));
     let settings = q.ok("setup", &["claude"]);
     assert!(
         settings.trim_end().ends_with(".claude/settings.json"),
@@ -128,6 +159,64 @@ fn every_command_prints_its_documented_quiet_token() {
     let parent = create(&mut q, &["Parent", "--body", BODY]);
     let child = create(&mut q, &["Child", "--parent", &parent, "--body", BODY]);
     let bare = create(&mut q, &["No sections"]);
+    let invalid = q.refused("issue create", &["Bad", "--priority", "urgent"]);
+    assert!(invalid.contains("Invalid priority 'urgent'"), "{invalid}");
+
+    // Each command given a record reference refuses an unknown one.
+    let unknown = |stderr: String| {
+        assert!(stderr.contains("zzzz not found"), "{stderr}");
+    };
+    unknown(q.refused("issue show", &["zzzz"]));
+    unknown(q.refused("issue update", &["zzzz", "--priority", "high"]));
+    unknown(q.refused("issue note", &["zzzz", "A note"]));
+    unknown(q.refused("issue link", &["zzzz", &owner, "--role", "blocks"]));
+    unknown(q.refused("issue unlink", &["zzzz", &owner, "--role", "blocks"]));
+    unknown(q.refused("issue transition", &["zzzz"]));
+    unknown(q.refused("work mission", &["zzzz"]));
+    unknown(q.refused("work parent", &["zzzz"]));
+    unknown(q.refused(
+        "evidence record",
+        &[
+            "--target",
+            "issue/zzzz",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "s",
+        ],
+    ));
+    unknown(q.refused("evidence show", &["zzzz"]));
+    unknown(q.refused("evidence attach", &["zzzz", "issue", &owner]));
+    for command in ["review record", "review approve", "review trivial"] {
+        unknown(q.refused(command, &["zzzz", "--identity", "Reviewer", "s"]));
+    }
+    unknown(q.refused(
+        "review finding",
+        &[
+            "zzzz",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "s",
+        ],
+    ));
+    unknown(q.refused(
+        "review disposition",
+        &[
+            "zzzz",
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "s",
+        ],
+    ));
+    unknown(q.refused("review list", &["zzzz"]));
+    unknown(q.refused("review show", &["zzzz"]));
+    let status = q.refused("issue list", &["--status", "bogus"]);
+    assert!(status.contains("Invalid status 'bogus'"), "{status}");
 
     // Mutations print the ID they were given first, whichever record holds
     // the link.
@@ -191,7 +280,9 @@ fn every_command_prints_its_documented_quiet_token() {
     for view in ["ready", "blocked", "human", "active", "all", "missions"] {
         let path = format!("work {view}");
         assert_ids(&q.ok(&path, &[]));
+        not_atelier(q.refused_in(outside, &path, &[]));
     }
+    not_atelier(q.refused_in(outside, "status", &[]));
     assert!(q.ok("work ready", &[]).lines().any(|id| id == owner));
     assert!(q.ok("work missions", &[]).lines().any(|id| id == mission));
     let counts = [
@@ -205,6 +296,14 @@ fn every_command_prints_its_documented_quiet_token() {
 
     // Lifecycle on the owner's branch.
     commit_all(dir, "plan");
+    // A refused transition leaves out its report (atelier-fnak); the error
+    // names the blocker.
+    let blocker = format!("blocker path {other} -> {owner}");
+    let start = q.refused("start", &[&other]);
+    assert!(start.contains(&blocker), "{start}");
+    let transition = q.refused("issue transition", &[&other, "start"]);
+    assert!(transition.contains(&blocker), "{transition}");
+    assert_eq!(git_current_branch(dir), "main");
     assert_eq!(q.ok("start", &[&owner]), format!("task/{owner}\n"));
     assert_eq!(git_current_branch(dir), format!("task/{owner}"));
     let target = format!("issue/{owner}");
@@ -241,7 +340,13 @@ fn every_command_prints_its_documented_quiet_token() {
     let evidence_ids = q.ok("evidence list", &[]);
     assert_ids(&evidence_ids);
     assert_eq!(evidence_ids.lines().count(), 2, "{evidence_ids}");
+    not_atelier(q.refused_in(outside, "evidence list", &[]));
     commit_all(dir, "implementation and proof");
+    let reason = q.refused("issue transition", &[&owner, "close"]);
+    assert!(
+        reason.contains("missing required field close_reason"),
+        "{reason}"
+    );
     assert_eq!(
         q.ok("issue transition", &[&owner, "close", "--reason", "done"]),
         "done\n"
@@ -327,21 +432,38 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_eq!(q.ok("merge", &[&owner]), "passed\n");
     assert_eq!(git_current_branch(dir), "main");
 
+    not_atelier(q.refused_in(outside, "doctor", &[]));
     let pruned = q.ok("prune", &[]);
     assert!(pruned.starts_with("mode=dry-run eligible="), "{pruned}");
+    not_atelier(q.refused_in(outside, "prune", &[]));
     // Nothing to migrate prints nothing; issues.rs pins a migrated ID.
     assert_eq!(q.ok("migrate epics", &[]), "");
+    let undeclared = q.refused("migrate epics", &["--to", "nonexistent"]);
+    assert!(undeclared.contains("is not declared"), "{undeclared}");
 
     let fixture = workspace_root().join("docs/spec/bundle/fixtures/valid-bundle.json");
     let fixture = fixture.to_str().unwrap();
+    let missing_file = q.refused("bundle preview", &["missing.json"]);
+    assert!(missing_file.contains("missing.json"), "{missing_file}");
+    let unconfirmed = q.refused("bundle apply", &[fixture]);
+    assert!(unconfirmed.contains("requires --yes"), "{unconfirmed}");
     assert_eq!(q.ok("bundle preview", &[fixture]), "passed\n");
     let applied = q.ok("bundle apply", &[fixture, "--yes"]);
     assert_ids(&applied);
     assert_eq!(applied.lines().count(), 5, "{applied}");
 
-    let missing: Vec<String> = leaf_commands(dir, &[])
-        .into_iter()
-        .filter(|command| !q.covered.contains(command))
+    let leaves = leaf_commands(dir, &[]);
+    let missing: Vec<&String> = leaves
+        .iter()
+        .filter(|command| !q.covered.contains(*command))
         .collect();
     assert!(missing.is_empty(), "no quiet token checked for {missing:?}");
+    let unrefused: Vec<&String> = leaves
+        .iter()
+        .filter(|command| !q.refusals.contains(*command))
+        .collect();
+    assert!(
+        unrefused.is_empty(),
+        "no quiet refusal checked for {unrefused:?}"
+    );
 }

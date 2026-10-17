@@ -69,6 +69,7 @@ pub fn transition_issue(
         transition_name,
         transition,
         close_reason,
+        quiet,
     )?;
 
     let mut record = RecordStore::new(state_dir).load_issue_by_id(&before.id)?;
@@ -123,8 +124,10 @@ pub(crate) fn print_applied_transition(
     println!("To:       {to}");
 }
 
-/// Fails with the full transition report when required fields, ancestry, or
-/// validators block the transition.
+/// Fails when required fields, ancestry, or validators block the transition.
+/// The error names every blocker; the full transition report precedes it on
+/// stdout unless `quiet`, whose refusal leaves stdout empty.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ensure_transition_allowed(
     index: &RecordIndex,
     policy: &WorkflowPolicy,
@@ -133,21 +136,24 @@ pub(crate) fn ensure_transition_allowed(
     transition_name: &str,
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
+    quiet: bool,
 ) -> Result<()> {
     let (blockers, validator_results) =
         transition_blockers(index, policy, repo_root, issue, transition, close_reason)?;
     if blockers.is_empty() {
         return Ok(());
     }
-    print_transition_attempt(
-        issue,
-        transition_name,
-        &transition.to,
-        &validator_results,
-        &blockers,
-        &transition_descriptions(transition),
-        &transition_command(&issue.id, transition_name, transition),
-    );
+    if !quiet {
+        print_transition_attempt(
+            issue,
+            transition_name,
+            &transition.to,
+            &validator_results,
+            &blockers,
+            &transition_descriptions(transition),
+            &transition_command(&issue.id, transition_name, transition),
+        );
+    }
     bail!(
         "Transition '{}' is blocked for issue {}: {}",
         transition_name,
