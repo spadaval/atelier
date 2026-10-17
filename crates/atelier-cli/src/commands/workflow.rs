@@ -668,6 +668,7 @@ mod tests {
             priority: "medium".to_string(),
             issue_type: "mission".to_string(),
             strategy: None,
+            adr: None,
             workflow_branch: None,
             parent_id: None,
             created_at: Utc::now(),

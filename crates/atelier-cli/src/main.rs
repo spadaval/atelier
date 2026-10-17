@@ -278,6 +278,12 @@ enum WorkCommands {
         #[arg(long)]
         all: bool,
     },
+    /// Show the decisions across a mission's scope: one-way decision notes
+    /// first, then decision records, then reversible notes
+    Decisions {
+        /// Mission ID
+        id: String,
+    },
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
     Ready,
@@ -424,17 +430,32 @@ enum IssueCommands {
         /// Clear a mission's strategy link
         #[arg(long)]
         no_strategy: bool,
+        /// Set the repository-relative ADR a decision record produced
+        #[arg(long, conflicts_with = "no_adr")]
+        adr: Option<String>,
+        /// Clear a decision record's ADR link
+        #[arg(long)]
+        no_adr: bool,
     },
 
     /// Append a dated note to the issue record's Notes section
     Note {
         /// Issue ID
         id: String,
-        /// Note text
+        /// Note text; for a decision, the choice
         text: String,
-        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
+        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human, decision)
         #[arg(long, default_value = "note")]
         kind: String,
+        /// Why the decision was made; required with --kind decision
+        #[arg(long)]
+        reason: Option<String>,
+        /// An alternative the decision rejected; repeat for several
+        #[arg(long)]
+        rejected: Vec<String>,
+        /// Mark the decision one-way: it cannot be reversed cheaply
+        #[arg(long)]
+        one_way: bool,
     },
 
     /// Add a typed link from one issue to another
@@ -701,6 +722,7 @@ fn run() -> Result<()> {
                 WorkCommands::Parent { id, all } => {
                     commands::work::parent_dashboard(&index, &id, all, quiet)
                 }
+                WorkCommands::Decisions { id } => commands::work::decisions(&index, &id, quiet),
                 WorkCommands::Ready => commands::work::list(&index, "ready", quiet),
                 WorkCommands::Blocked => commands::work::list(&index, "blocked", quiet),
                 WorkCommands::Human => commands::work::list(&index, "human", quiet),

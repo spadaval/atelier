@@ -188,6 +188,9 @@ pub struct Issue {
     pub priority: String,
     #[serde(default)]
     pub strategy: Option<IssueStrategy>,
+    /// The ADR a decision record produced (atelier-fip8).
+    #[serde(default)]
+    pub adr: Option<IssueAdr>,
     #[serde(default)]
     pub workflow_branch: Option<WorkflowBranch>,
     pub parent_id: Option<IssueId>,
@@ -208,20 +211,40 @@ pub struct IssueStrategy {
 impl IssueStrategy {
     pub fn new(path: impl Into<String>) -> Result<Self, IssueFieldError> {
         let path = path.into();
-        let parsed = Path::new(&path);
-        if path.trim().is_empty()
-            || parsed.is_absolute()
-            || !parsed
-                .components()
-                .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
-        {
-            return Err(IssueFieldError::InvalidStrategy(
-                "path must be a non-empty repository-relative path without parent traversal"
-                    .to_string(),
-            ));
-        }
+        repository_relative(&path).map_err(IssueFieldError::InvalidStrategy)?;
         Ok(Self { path })
     }
+}
+
+/// A repository-relative link from a decision record to the ADR it produced.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IssueAdr {
+    pub path: String,
+}
+
+impl IssueAdr {
+    pub fn new(path: impl Into<String>) -> Result<Self, IssueFieldError> {
+        let path = path.into();
+        repository_relative(&path).map_err(IssueFieldError::InvalidAdr)?;
+        Ok(Self { path })
+    }
+}
+
+fn repository_relative(path: &str) -> Result<(), String> {
+    let parsed = Path::new(path);
+    if path.trim().is_empty()
+        || parsed.is_absolute()
+        || !parsed
+            .components()
+            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+    {
+        return Err(
+            "path must be a non-empty repository-relative path without parent traversal"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -234,11 +257,13 @@ pub struct WorkflowBranch {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IssueFieldError {
     InvalidStrategy(String),
+    InvalidAdr(String),
 }
 impl fmt::Display for IssueFieldError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidStrategy(detail) => write!(f, "invalid issue strategy: {detail}"),
+            Self::InvalidAdr(detail) => write!(f, "invalid decision ADR: {detail}"),
         }
     }
 }
@@ -421,7 +446,205 @@ pub const ISSUE_NOTE_KINDS: &[&str] = &[
     "result",
     "handoff",
     "human",
+    DECISION_NOTE_KIND,
 ];
+
+/// The note kind for a decision made inside a work item (atelier-fip8). Its
+/// tag is `[decision]`, or `[decision one-way]` when it cannot be reversed.
+pub const DECISION_NOTE_KIND: &str = "decision";
+pub const ONE_WAY_MARK: &str = "one-way";
+const DECISION_REASON_LABEL: &str = "Reason:";
+const DECISION_REJECTED_LABEL: &str = "Rejected:";
+
+/// One dated `- YYYY-MM-DD [tag] text` bullet from a Notes section. `text`
+/// joins the first line and the unindented continuation lines.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IssueNote {
+    pub date: String,
+    pub tag: String,
+    pub text: String,
+}
+
+impl IssueNote {
+    /// The note kind: the first word of the tag.
+    pub fn kind(&self) -> &str {
+        self.tag.split_whitespace().next().unwrap_or_default()
+    }
+}
+
+/// Splits Notes text into its dated bullets. A line that does not open a
+/// bullet continues the one before it; text before the first bullet is not a
+/// note.
+pub fn parse_notes(notes: &str) -> Vec<IssueNote> {
+    let mut parsed: Vec<IssueNote> = Vec::new();
+    for line in notes.lines() {
+        if let Some(note) = note_bullet(line) {
+            parsed.push(note);
+        } else if let Some(note) = parsed.last_mut() {
+            note.text.push('\n');
+            note.text.push_str(line.trim());
+        }
+    }
+    for note in &mut parsed {
+        note.text = note.text.trim_end().to_string();
+    }
+    parsed
+}
+
+fn note_bullet(line: &str) -> Option<IssueNote> {
+    let rest = line.strip_prefix("- ")?;
+    let (date, rest) = rest.split_once(' ')?;
+    NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+    let (tag, text) = rest.strip_prefix('[')?.split_once(']')?;
+    Some(IssueNote {
+        date: date.to_string(),
+        tag: tag.trim().to_string(),
+        text: text.trim().to_string(),
+    })
+}
+
+/// A decision note: the choice and the reason are required, rejected
+/// alternatives are optional, and a decision is reversible unless one-way.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DecisionNote {
+    pub date: String,
+    pub choice: String,
+    pub reason: String,
+    pub rejected: Vec<String>,
+    pub one_way: bool,
+}
+
+impl DecisionNote {
+    /// The note tag and text `append_note` stores for a decision.
+    pub fn note_parts(
+        choice: &str,
+        reason: &str,
+        rejected: &[String],
+        one_way: bool,
+    ) -> (String, String) {
+        let tag = if one_way {
+            format!("{DECISION_NOTE_KIND} {ONE_WAY_MARK}")
+        } else {
+            DECISION_NOTE_KIND.to_string()
+        };
+        let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut text = format!("{}\n{DECISION_REASON_LABEL} {}", flat(choice), flat(reason));
+        for alternative in rejected {
+            text.push_str(&format!(
+                "\n{DECISION_REJECTED_LABEL} {}",
+                flat(alternative)
+            ));
+        }
+        (tag, text)
+    }
+
+    /// Builds the note a decision is stored as and parses it back, so the
+    /// note command never writes a decision `check` would refuse.
+    pub fn checked_note_parts(
+        choice: &str,
+        reason: &str,
+        rejected: &[String],
+        one_way: bool,
+    ) -> Result<(String, String), String> {
+        let starts_with_label = |text: &str| {
+            let text = text.trim_start();
+            text.starts_with(DECISION_REASON_LABEL) || text.starts_with(DECISION_REJECTED_LABEL)
+        };
+        if starts_with_label(choice) || rejected.iter().any(|value| starts_with_label(value)) {
+            return Err(format!(
+                "the choice and rejected alternatives must not start with `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}`"
+            ));
+        }
+        let (tag, text) = Self::note_parts(choice, reason, rejected, one_way);
+        let note = IssueNote {
+            date: String::new(),
+            tag: tag.clone(),
+            text: text.clone(),
+        };
+        match Self::from_note(&note) {
+            Some(Ok(_)) => Ok((tag, text)),
+            Some(Err(defect)) => Err(format!("the decision note {defect}")),
+            None => Err("the note is not a decision".to_string()),
+        }
+    }
+
+    /// Reads a decision from a note; `None` when the note is another kind,
+    /// and an error naming the defect when the decision is malformed.
+    pub fn from_note(note: &IssueNote) -> Option<Result<Self, String>> {
+        (note.kind() == DECISION_NOTE_KIND).then(|| Self::parse(note))
+    }
+
+    fn parse(note: &IssueNote) -> Result<Self, String> {
+        let one_way = match note.tag.split_whitespace().collect::<Vec<_>>()[..] {
+            [_] => false,
+            [_, ONE_WAY_MARK] => true,
+            _ => {
+                return Err(format!(
+                    "tag [{}] is not [decision] or [decision one-way]",
+                    note.tag
+                ))
+            }
+        };
+        let mut choice = Vec::new();
+        let mut reason: Option<Vec<&str>> = None;
+        let mut rejected: Vec<String> = Vec::new();
+        // Lines after a label continue it until the next label.
+        let mut in_reason = false;
+        for line in note.text.lines() {
+            if let Some(value) = line.strip_prefix(DECISION_REASON_LABEL) {
+                if reason.is_some() {
+                    return Err("has more than one Reason: line".to_string());
+                }
+                reason = Some(vec![value.trim()]);
+                in_reason = true;
+            } else if let Some(value) = line.strip_prefix(DECISION_REJECTED_LABEL) {
+                rejected.push(value.trim().to_string());
+                in_reason = false;
+            } else if in_reason {
+                reason.get_or_insert_with(Vec::new).push(line.trim());
+            } else if let Some(last) = rejected.last_mut() {
+                last.push(' ');
+                last.push_str(line.trim());
+            } else {
+                choice.push(line.trim());
+            }
+        }
+        let join = |parts: &[&str]| {
+            parts
+                .iter()
+                .filter(|part| !part.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let choice = join(&choice);
+        if choice.is_empty() {
+            return Err("has no choice; write the choice on the note's first line".to_string());
+        }
+        let reason = reason.map(|parts| join(&parts)).unwrap_or_default();
+        if reason.is_empty() {
+            return Err(format!(
+                "has no reason; add an indented `{DECISION_REASON_LABEL} ...` line"
+            ));
+        }
+        if rejected
+            .iter()
+            .any(|alternative| alternative.trim().is_empty())
+        {
+            return Err(format!("has an empty `{DECISION_REJECTED_LABEL}` line"));
+        }
+        Ok(Self {
+            date: note.date.clone(),
+            choice,
+            reason,
+            rejected: rejected
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .collect(),
+            one_way,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IssueSectionState {
@@ -582,6 +805,19 @@ impl IssueSections {
             Some(existing) if !existing.is_empty() => format!("{existing}\n{bullet}"),
             _ => bullet,
         });
+    }
+
+    /// The dated bullets in the Notes section.
+    pub fn note_entries(&self) -> Vec<IssueNote> {
+        self.notes.as_deref().map(parse_notes).unwrap_or_default()
+    }
+
+    /// Every decision note, in order, each parsed or with its defect.
+    pub fn decision_notes(&self) -> Vec<Result<DecisionNote, String>> {
+        self.note_entries()
+            .iter()
+            .filter_map(DecisionNote::from_note)
+            .collect()
     }
 
     pub fn section(&self, name: IssueSectionName) -> Option<&str> {
@@ -813,6 +1049,84 @@ fn plural_suffix(count: usize) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sections_with_notes(notes: &str) -> IssueSections {
+        let mut sections = IssueSections::for_type("task", Some("Goal"));
+        sections.notes = Some(notes.to_string());
+        sections
+    }
+
+    #[test]
+    fn decision_notes_round_trip_through_append_note() {
+        let mut sections = IssueSections::for_type("task", Some("Goal"));
+        sections.append_note(
+            NaiveDate::from_ymd_opt(2026, 10, 17).unwrap(),
+            "handoff",
+            "Earlier",
+        );
+        let (tag, text) = DecisionNote::note_parts(
+            "Store the report in Close Reason",
+            "Close Reason is\nexempt from approval freshness",
+            &["a new Report section".into(), "a sidecar".into()],
+            true,
+        );
+        sections.append_note(NaiveDate::from_ymd_opt(2026, 10, 18).unwrap(), &tag, &text);
+        assert_eq!(
+            sections.notes.as_deref().unwrap(),
+            "- 2026-10-17 [handoff] Earlier\n- 2026-10-18 [decision one-way] Store the report in Close Reason\n  Reason: Close Reason is exempt from approval freshness\n  Rejected: a new Report section\n  Rejected: a sidecar"
+        );
+        assert_eq!(
+            sections.decision_notes(),
+            vec![Ok(DecisionNote {
+                date: "2026-10-18".into(),
+                choice: "Store the report in Close Reason".into(),
+                reason: "Close Reason is exempt from approval freshness".into(),
+                rejected: vec!["a new Report section".into(), "a sidecar".into()],
+                one_way: true,
+            })]
+        );
+    }
+
+    #[test]
+    fn notes_parse_continuations_and_skip_text_before_the_first_bullet() {
+        let notes = parse_notes(
+            "Loose prose\n- 2026-10-17 [note] First\n  more\n- not a date [x] still the first\n- 2026-10-18 [decision] Use X\n  Reason: Y",
+        );
+        assert_eq!(notes.len(), 2);
+        assert_eq!(
+            notes[0].text,
+            "First\nmore\n- not a date [x] still the first"
+        );
+        assert_eq!(notes[1].kind(), "decision");
+        let decisions =
+            sections_with_notes("- 2026-10-18 [decision] Use X\n  Reason: Y\n  because Z")
+                .decision_notes();
+        assert_eq!(decisions[0].as_ref().unwrap().reason, "Y because Z");
+        assert!(!decisions[0].as_ref().unwrap().one_way);
+    }
+
+    #[test]
+    fn malformed_decision_notes_name_their_defect() {
+        let defect = |notes: &str| {
+            sections_with_notes(notes)
+                .decision_notes()
+                .remove(0)
+                .unwrap_err()
+        };
+        assert!(defect("- 2026-10-18 [decision] Use X").contains("has no reason"));
+        assert!(defect("- 2026-10-18 [decision] Use X\n  Reason:   ").contains("has no reason"));
+        assert!(defect("- 2026-10-18 [decision]\n  Reason: Y").contains("has no choice"));
+        assert!(
+            defect("- 2026-10-18 [decision two-way] X\n  Reason: Y").contains("[decision two-way]")
+        );
+        assert!(
+            defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Reason: Z").contains("more than one")
+        );
+        assert!(defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Rejected:").contains("empty"));
+        assert!(sections_with_notes("- 2026-10-18 [decisions] X")
+            .decision_notes()
+            .is_empty());
+    }
 
     #[test]
     fn counts_read_count_first_with_a_real_plural() {

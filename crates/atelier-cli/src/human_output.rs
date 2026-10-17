@@ -443,6 +443,30 @@ pub(crate) fn render_wrapped_lines(
         .collect()
 }
 
+/// A row that is not an item line, wrapped as an item line wraps: a row
+/// too wide for the terminal continues on lines indented past the rows.
+pub(crate) fn render_row_wrapped(context: RenderContext, text: &str) -> Vec<String> {
+    if display_width(text) <= context.width() {
+        return vec![text.to_string()];
+    }
+    let continuation = "    ";
+    let width = context
+        .width()
+        .saturating_sub(display_width(continuation))
+        .max(1);
+    wrap_words(text, width)
+        .into_iter()
+        .enumerate()
+        .map(|(number, line)| {
+            if number == 0 {
+                line
+            } else {
+                format!("{continuation}{line}")
+            }
+        })
+        .collect()
+}
+
 fn wrap_words(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
@@ -1101,6 +1125,7 @@ mod tests {
                 title: title.to_string(),
                 description: None,
                 strategy: None,
+                adr: None,
                 workflow_branch: None,
                 parent_id: None,
                 created_at: now,

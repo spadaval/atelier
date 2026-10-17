@@ -1341,7 +1341,7 @@ fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
     assert!(success, "quiet bare work failed: {stderr}");
     assert_eq!(
         names,
-        "mission\nparent\nready\nhuman\nblocked\nactive\nall\nmissions\n"
+        "mission\nparent\ndecisions\nready\nhuman\nblocked\nactive\nall\nmissions\n"
     );
 }
 
