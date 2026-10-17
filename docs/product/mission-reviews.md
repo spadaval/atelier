@@ -4,8 +4,8 @@ A mission review turns a mission's records and Git history into one page, so
 a human can make post-mission calls without asking an agent to run more
 commands, and an agent can answer "why is it like this?" from the same facts
 (strategy `docs/strategies/review-and-introspection.md`). `atelier debrief
-<mission>` reviews a mission's outcome; `atelier brief <mission>` will review
-its plan before work starts (atelier-acrt).
+<mission>` reviews a mission's outcome; `atelier brief <mission>` reviews
+its plan before work starts.
 
 ## Debrief
 
@@ -46,3 +46,20 @@ record), and done claims later withdrawn. Nothing new is stored.
 
 The Markdown and HTML forms come from one view model, and a test checks that
 every item, criterion mark, and decision in one appears in the other.
+
+## Brief
+
+`atelier brief <mission>` reviews the plan, so the human can approve or
+change it while changes are cheap. It shows the mission line, Outcome and
+strategy; each success criterion; the scope, one item line each with its
+size (`| size M`, from the `size-*` label), open blockers and needs-human
+cue, children under their parent; the blocked items; the Unknowns of each
+open item; open human decisions (open decision records and needs-human work
+in scope); the strategy's Risks and Unknowns section; and review events on
+the mission. `--html` writes `.atelier/runtime/reviews/<mission>-brief.html`
+with the same facts, under the same rules as the debrief page.
+
+A plan approval is an ordinary review event on the mission:
+`atelier review approve <mission> --identity "<human>" "<summary>"`. The
+brief and the debrief both show it; without one, the brief says no plan
+approval is recorded. Atelier adds no approval gate (ADR 0018).

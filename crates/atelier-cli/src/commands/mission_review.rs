@@ -30,7 +30,12 @@ pub fn debrief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) 
     let mut read = atelier_app::git_freshness::ReadContext::new(&repo_root);
     let view = atelier_app::mission_review::debrief(index, policy.as_ref(), &mut read, &id)?;
     if html {
-        let path = write_page(&repo_root, &id, &render_html(&view, policy.as_ref()))?;
+        let path = write_review_page(
+            &repo_root,
+            &id,
+            "debrief",
+            &render_html(&view, policy.as_ref()),
+        )?;
         if quiet {
             println!("{}", path.display());
         } else {
@@ -89,11 +94,16 @@ fn mission_line(view: &Debrief) -> String {
 }
 
 /// The page under `.atelier/runtime/reviews/`, which is never committed.
-fn write_page(repo_root: &Path, mission_id: &str, html: &str) -> Result<PathBuf> {
+fn write_review_page(
+    repo_root: &Path,
+    mission_id: &str,
+    kind: &str,
+    html: &str,
+) -> Result<PathBuf> {
     let directory = repo_root.join(".atelier/runtime/reviews");
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("cannot create {}", directory.display()))?;
-    let path = directory.join(format!("{mission_id}-debrief.html"));
+    let path = directory.join(format!("{mission_id}-{kind}.html"));
     std::fs::write(&path, html).with_context(|| format!("cannot write {}", path.display()))?;
     Ok(path)
 }
@@ -626,6 +636,401 @@ fn render_html(
                 .as_deref()
                 .map(short_commit)
                 .unwrap_or("an uncommitted checkout")
+        ),
+    )
+}
+
+/// `atelier brief` (atelier-acrt): a mission's plan before work starts, in
+/// the same two forms as `debrief`.
+pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) -> Result<()> {
+    let id = crate::commands::issue::resolve_id(index, mission_ref)?;
+    let issue = index.require_issue(&id)?;
+    if issue.issue_type != "mission" {
+        bail!(
+            "{id} is {}, not a mission; brief reviews a mission",
+            atelier_app::record_ref::with_article(&issue.issue_type)
+        );
+    }
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let repo_root = crate::commands::workflow::repo_root()?;
+    let mut read = atelier_app::git_freshness::ReadContext::new(&repo_root);
+    let view = atelier_app::mission_review::brief(index, policy.as_ref(), &mut read, &id)?;
+    if html {
+        let path = write_review_page(&repo_root, &id, "brief", &render_brief_html(&view))?;
+        if quiet {
+            println!("{}", path.display());
+        } else {
+            println!("Wrote the brief of {id} to {}", path.display());
+            println!("Open it in T3 Code's file panel, or in any browser.");
+        }
+        return Ok(());
+    }
+    let approvals = view
+        .mission_events
+        .iter()
+        .filter(|event| event.event == "approval")
+        .count();
+    if quiet {
+        println!(
+            "criteria={} items={} blocked={} unknowns={} human_decisions={} approvals={approvals}",
+            view.criteria.parse.criteria.len(),
+            view.items.len(),
+            view.blocked().count(),
+            view.items
+                .iter()
+                .filter(|item| item.unknowns.is_some())
+                .count(),
+            view.human_decisions.len()
+        );
+        return Ok(());
+    }
+    let context = RenderContext::for_stdout();
+    let mission = &view.mission;
+    let title = ItemLine::new(
+        &mission.id,
+        &mission.status,
+        &mission.priority,
+        &mission.title,
+    )
+    .issue_type("mission")
+    .state(view.status_category.as_deref(), None)
+    .text();
+    let mut metadata = vec![("Outcome", view.outcome.replace('\n', " "))];
+    if let Some(strategy) = &view.strategy {
+        metadata.push(("Strategy", strategy.clone()));
+    }
+    if let Some(commit) = &view.generated_from {
+        metadata.push(("Generated from", short_commit(commit).to_string()));
+    }
+    let mut criteria = Vec::new();
+    for criterion in &view.criteria.parse.criteria {
+        criteria.extend(render_row_wrapped(
+            context,
+            &format!("{} {}", criterion.slug, criterion.text),
+        ));
+    }
+    for problem in &view.criteria.parse.problems {
+        criteria.extend(render_row_wrapped(context, &format!("⚠ {problem}")));
+    }
+    let mut scope = Vec::new();
+    for item in &view.items {
+        let issue = &item.issue;
+        let mut line = ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+            .issue_type(&issue.issue_type)
+            .state(item.status_category.as_deref(), None);
+        if let Some(size) = &item.size {
+            line = line.cue(format!("size {size}"));
+        }
+        if !item.open_blockers.is_empty() {
+            line = line.cue(format!("blockers: {}", item.open_blockers.join(", ")));
+        }
+        if item.needs_human {
+            line = line.cue("needs a human");
+        }
+        let indent = if item.parent.is_some() { "  " } else { "" };
+        scope.extend(line.render_wrapped(context, indent));
+    }
+    let blocked = view
+        .blocked()
+        .flat_map(|item| {
+            render_row_wrapped(
+                context,
+                &format!(
+                    "{} blocked by {}",
+                    item.issue.id,
+                    item.open_blockers.join(", ")
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    let unknowns = view
+        .items
+        .iter()
+        .filter_map(|item| Some((item, item.unknowns.as_deref()?)))
+        .flat_map(|(item, text)| {
+            render_row_wrapped(
+                context,
+                &format!(
+                    "{}: {}",
+                    item.issue.id,
+                    text.lines().map(str::trim).collect::<Vec<_>>().join(" ")
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    let human = view
+        .human_decisions
+        .iter()
+        .flat_map(|issue| {
+            let category = policy
+                .as_ref()
+                .and_then(|policy| policy.status_category(&issue.status));
+            ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+                .issue_type(&issue.issue_type)
+                .state(category, None)
+                .render_wrapped(context, "")
+        })
+        .collect::<Vec<_>>();
+    let risks = view
+        .risks
+        .as_deref()
+        .map(|text| text.lines().map(str::to_string).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let mut events = view
+        .mission_events
+        .iter()
+        .flat_map(|event| {
+            render_row_wrapped(
+                context,
+                &format!(
+                    "{} {} {} by {} at {} | {}",
+                    event.event,
+                    event.id,
+                    event.date,
+                    event.identity,
+                    short_commit(&event.commit),
+                    event.summary
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    if approvals == 0 {
+        events.push("No plan approval recorded.".to_string());
+    }
+    let optional = |title: &str, lines: Vec<String>| {
+        if lines.is_empty() {
+            Vec::new()
+        } else {
+            render_lines_section(title, lines)
+        }
+    };
+    print_page(
+        &format!("Brief: {title}"),
+        [
+            render_metadata(None, &metadata),
+            optional("Success Criteria", criteria),
+            render_lines_section("Scope", scope),
+            optional("Blockers", blocked),
+            optional("Unknowns", unknowns),
+            optional("Open Human Decisions", human),
+            optional("Risks", risks),
+            render_lines_section("Mission Reviews", events),
+            render_footer_section(
+                context,
+                [
+                    FooterAction::new(
+                        "Write the HTML page",
+                        format!("atelier brief {} --html", mission.id),
+                    ),
+                    FooterAction::new(
+                        "Record the human's plan approval",
+                        format!(
+                            "atelier review approve {} --identity \"<human>\" \"<summary>\"",
+                            mission.id
+                        ),
+                    ),
+                ],
+            ),
+        ],
+        context,
+    );
+    Ok(())
+}
+
+fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
+    let mission = &view.mission;
+    let approvals = view
+        .mission_events
+        .iter()
+        .filter(|event| event.event == "approval")
+        .count();
+    let open = view
+        .items
+        .iter()
+        .filter(|item| item.status_category.as_deref() != Some("done"))
+        .count();
+    let mut body = format!(
+        "<header><p class=\"meta\">Brief · <span class=\"id\">{}</span> · {}</p><h1>{}</h1>",
+        escape(&mission.id),
+        badge(
+            &mission.status,
+            status_tone(view.status_category.as_deref(), &mission.status)
+        ),
+        escape(&mission.title)
+    );
+    let mut facts = Vec::new();
+    if let Some(strategy) = &view.strategy {
+        facts.push(format!("Strategy <code>{}</code>", escape(strategy)));
+    }
+    if let Some(commit) = &view.generated_from {
+        facts.push(format!(
+            "generated from <code>{}</code>",
+            escape(short_commit(commit))
+        ));
+    }
+    body.push_str(&format!("<p class=\"meta\">{}</p>", facts.join(" · ")));
+    body.push_str(&format!(
+        "<div class=\"outcome\">{}</div><div class=\"tiles\">",
+        prose(&view.outcome)
+    ));
+    body.push_str(&tile(
+        view.criteria.parse.criteria.len(),
+        "success criteria",
+        "the claims the mission must show",
+        Tone::Neutral,
+    ));
+    body.push_str(&tile(
+        view.items.len(),
+        "items in scope",
+        &format!("{open} open"),
+        Tone::Neutral,
+    ));
+    let blocked = view.blocked().count();
+    body.push_str(&tile(
+        blocked,
+        "blocked",
+        "items waiting on open blockers",
+        if blocked > 0 { Tone::Warn } else { Tone::Good },
+    ));
+    body.push_str(&tile(
+        view.human_decisions.len(),
+        "human decisions",
+        "open decisions and needs-human work",
+        if view.human_decisions.is_empty() {
+            Tone::Good
+        } else {
+            Tone::Warn
+        },
+    ));
+    body.push_str(&tile(
+        approvals,
+        "plan approvals",
+        "review events on the mission",
+        if approvals > 0 {
+            Tone::Good
+        } else {
+            Tone::Warn
+        },
+    ));
+    body.push_str("</div><nav class=\"toc\"><a href=\"#criteria\">Criteria</a><a href=\"#scope\">Scope</a><a href=\"#unknowns\">Unknowns</a><a href=\"#decisions\">Human decisions</a><a href=\"#risks\">Risks</a><a href=\"#reviews\">Reviews</a></nav></header>");
+
+    let mut criteria =
+        String::from("<table><thead><tr><th>Criterion</th><th>Claim</th></tr></thead><tbody>");
+    for criterion in &view.criteria.parse.criteria {
+        criteria.push_str(&format!(
+            "<tr><td class=\"id\">{}</td><td>{}</td></tr>",
+            escape(&criterion.slug),
+            inline(&criterion.text)
+        ));
+    }
+    criteria.push_str("</tbody></table>");
+    for problem in &view.criteria.parse.problems {
+        criteria.push_str(&format!(
+            "<p>{} {}</p>",
+            badge("problem", Tone::Bad),
+            escape(problem)
+        ));
+    }
+    body.push_str(&section("criteria", "Success Criteria", &criteria));
+
+    let mut scope = String::from("<table><thead><tr><th>Item</th><th>Status</th><th>Size</th><th>Title</th><th>Blocked by</th></tr></thead><tbody>");
+    for item in &view.items {
+        let issue = &item.issue;
+        scope.push_str(&format!(
+            "<tr><td class=\"id\">{}{}</td><td>{}</td><td>{}</td><td>{}{} <span class=\"muted\">{}</span></td><td class=\"id\">{}</td></tr>",
+            if item.parent.is_some() { "↳ " } else { "" },
+            escape(&issue.id),
+            badge(&issue.status, status_tone(item.status_category.as_deref(), &issue.status)),
+            escape(item.size.as_deref().unwrap_or("")),
+            escape(&issue.title),
+            if item.needs_human { format!(" {}", badge("needs a human", Tone::Warn)) } else { String::new() },
+            escape(&issue.issue_type),
+            escape(&item.open_blockers.join(", "))
+        ));
+    }
+    scope.push_str("</tbody></table>");
+    body.push_str(&section("scope", "Scope", &scope));
+
+    let unknowns = view
+        .items
+        .iter()
+        .filter_map(|item| Some((item, item.unknowns.as_deref()?)))
+        .map(|(item, text)| {
+            format!(
+                "<dt class=\"id\">{}</dt><dd>{}</dd>",
+                escape(&item.issue.id),
+                prose(text)
+            )
+        })
+        .collect::<String>();
+    body.push_str(&section(
+        "unknowns",
+        "Unknowns",
+        &if unknowns.is_empty() {
+            "<p class=\"muted\">None recorded.</p>".to_string()
+        } else {
+            format!("<dl>{unknowns}</dl>")
+        },
+    ));
+    let decisions = view
+        .human_decisions
+        .iter()
+        .map(|issue| {
+            format!(
+                "<li><span class=\"id\">{}</span> {} {}</li>",
+                escape(&issue.id),
+                escape(&issue.issue_type),
+                escape(&issue.title)
+            )
+        })
+        .collect::<String>();
+    body.push_str(&section(
+        "decisions",
+        "Open Human Decisions",
+        &if decisions.is_empty() {
+            "<p class=\"muted\">None.</p>".to_string()
+        } else {
+            format!("<ul class=\"facts\">{decisions}</ul>")
+        },
+    ));
+    body.push_str(&section(
+        "risks",
+        "Risks",
+        &view
+            .risks
+            .as_deref()
+            .map(prose)
+            .unwrap_or_else(|| "<p class=\"muted\">The strategy names none.</p>".to_string()),
+    ));
+    let events = view
+        .mission_events
+        .iter()
+        .map(|event| {
+            format!(
+                "<li>{} {} by {} at <code>{}</code>: {}</li>",
+                escape(event.event),
+                escape(&event.date),
+                escape(&event.identity),
+                escape(short_commit(&event.commit)),
+                escape(&event.summary)
+            )
+        })
+        .collect::<String>();
+    body.push_str(&section(
+        "reviews",
+        "Mission Reviews",
+        &if events.is_empty() {
+            "<p class=\"muted\">No plan approval recorded.</p>".to_string()
+        } else {
+            format!("<ul class=\"facts\">{events}</ul>")
+        },
+    ));
+    review_page::page(
+        &format!("Brief: {} {}", mission.id, mission.title),
+        &body,
+        &format!(
+            "Generated by atelier brief {}. A read-only document; record approval with atelier review approve {}.",
+            mission.id, mission.id
         ),
     )
 }

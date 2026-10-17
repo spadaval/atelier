@@ -17,7 +17,8 @@ how agents plan, execute, review, and validate work. See
   policy and read-only transition checks.
 - [Sessions and hooks](sessions-and-hooks.md): status, land, setup, and branch
   orientation.
-- [Mission reviews](mission-reviews.md): `debrief` and its static HTML page.
+- [Mission reviews](mission-reviews.md): `brief`, `debrief` and their static
+  HTML pages.
 - [Human CLI output](human-cli-output.md), [inventory and mission views](issue-inventory-and-mission-overview.md),
   and [work ordering](work-view-ordering.md): reading operational views.
 - [Retention and prune](retention-and-prune.md): explicit cleanup and Git recovery.

@@ -170,18 +170,7 @@ pub fn debrief(
     let mut follow_up_ids = Vec::new();
     let mut reviewed = scope.clone();
     reviewed.insert(mission_id.to_string());
-    let mut mission_events = Vec::new();
     for review in index.reviews() {
-        if review.target == mission_id {
-            mission_events.push(MissionEvent {
-                id: review.header.id.clone(),
-                event: event_name(&review.event),
-                identity: review.identity.clone(),
-                commit: review.commit.clone(),
-                date: review.header.created_at.format("%Y-%m-%d").to_string(),
-                summary: review.summary.clone(),
-            });
-        }
         if !reviewed.contains(&review.target) {
             continue;
         }
@@ -214,7 +203,6 @@ pub fn debrief(
             _ => {}
         }
     }
-    mission_events.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
     for id in &scope {
         if let Some(receipt) = newest_receipt(index, id)? {
             if receipt.1 != EvidenceResult::Pass {
@@ -280,7 +268,7 @@ pub fn debrief(
         items,
         decisions: mission_decisions(index, policy, mission_id)?,
         deviations,
-        mission_events,
+        mission_events: mission_events(index, mission_id),
         follow_ups,
     })
 }
@@ -349,4 +337,164 @@ fn event_name(event: &ReviewEvent) -> &'static str {
         ReviewEvent::Disposition { .. } => "disposition",
         ReviewEvent::TrivialExemption => "trivial",
     }
+}
+
+/// Review events whose target is the mission itself, oldest first.
+pub fn mission_events(index: &RecordIndex, mission_id: &str) -> Vec<MissionEvent> {
+    let mut events = index
+        .reviews()
+        .filter(|review| review.target == mission_id)
+        .map(|review| MissionEvent {
+            id: review.header.id.clone(),
+            event: event_name(&review.event),
+            identity: review.identity.clone(),
+            commit: review.commit.clone(),
+            date: review.header.created_at.format("%Y-%m-%d").to_string(),
+            summary: review.summary.clone(),
+        })
+        .collect::<Vec<_>>();
+    events.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
+    events
+}
+
+/// One scoped item as the brief shows it (atelier-acrt).
+#[derive(Debug, Clone)]
+pub struct BriefItem {
+    pub issue: Issue,
+    pub status_category: Option<String>,
+    pub parent: Option<String>,
+    /// The `size-*` label's size, upper-cased, such as `M`.
+    pub size: Option<String>,
+    /// Blockers that are not done.
+    pub open_blockers: Vec<String>,
+    pub unknowns: Option<String>,
+    /// Labelled `needs-human`.
+    pub needs_human: bool,
+}
+
+/// A mission's plan, for review before work starts.
+#[derive(Debug, Clone)]
+pub struct Brief {
+    pub mission: Issue,
+    pub status_category: Option<String>,
+    pub outcome: String,
+    pub strategy: Option<String>,
+    pub generated_from: Option<String>,
+    pub criteria: crate::criteria::MissionCriteria,
+    pub items: Vec<BriefItem>,
+    /// Open decision records and needs-human items in scope.
+    pub human_decisions: Vec<Issue>,
+    /// The strategy's Risks and Unknowns section.
+    pub risks: Option<String>,
+    pub mission_events: Vec<MissionEvent>,
+}
+
+impl Brief {
+    pub fn blocked(&self) -> impl Iterator<Item = &BriefItem> {
+        self.items
+            .iter()
+            .filter(|item| !item.open_blockers.is_empty())
+    }
+}
+
+pub fn brief(
+    index: &RecordIndex,
+    policy: Option<&WorkflowPolicy>,
+    read: &mut ReadContext<'_>,
+    mission_id: &str,
+) -> Result<Brief> {
+    mission_objective_kind(index, mission_id)?;
+    let record = index
+        .issue_record(mission_id)
+        .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, mission_id))?;
+    let mission = record.issue.clone();
+    let category = |issue: &Issue| {
+        policy
+            .and_then(|policy| policy.status_category(&issue.status))
+            .map(str::to_string)
+    };
+    let done = |id: &str| {
+        index
+            .issue_record(id)
+            .is_some_and(|record| category(&record.issue).as_deref() == Some("done"))
+    };
+    let scope = mission_issue_ids(index, mission_id)?;
+    let linked = scope
+        .iter()
+        .filter(|id| {
+            index
+                .issue_record(id)
+                .and_then(|record| record.issue.parent_id.as_ref())
+                .is_none_or(|parent| !scope.contains(parent))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let brief_item = |issue: &Issue, parent: Option<String>| {
+        let record = index.issue_record(&issue.id);
+        let labels = record.map(|record| record.labels.as_slice()).unwrap_or(&[]);
+        BriefItem {
+            issue: issue.clone(),
+            status_category: category(issue),
+            parent,
+            size: labels
+                .iter()
+                .find_map(|label| label.strip_prefix(crate::lint::SIZE_LABEL_PREFIX))
+                .map(str::to_uppercase),
+            open_blockers: index
+                .get_blockers(&issue.id)
+                .into_iter()
+                .filter(|blocker| !done(blocker))
+                .collect(),
+            // A done item's unknowns are settled.
+            unknowns: record
+                .filter(|_| category(issue).as_deref() != Some("done"))
+                .and_then(|record| record.sections.section(IssueSectionName::Unknowns))
+                .map(str::to_string),
+            needs_human: labels.iter().any(|label| label == "needs-human"),
+        }
+    };
+    let mut items = Vec::new();
+    for id in &linked {
+        let Some(record) = index.issue_record(id) else {
+            continue;
+        };
+        items.push(brief_item(&record.issue, None));
+        for child in index.child_ids(id) {
+            if let Some(child) = index.issue_record(child) {
+                items.push(brief_item(&child.issue, Some(id.clone())));
+            }
+        }
+    }
+    let human_decisions = items
+        .iter()
+        .filter(|item| item.status_category.as_deref() != Some("done"))
+        .filter(|item| item.issue.issue_type == "decision" || item.needs_human)
+        .map(|item| item.issue.clone())
+        .collect();
+    let risks = mission.strategy.as_ref().and_then(|strategy| {
+        std::fs::read_to_string(read.repo.join(&strategy.path))
+            .ok()
+            .and_then(|text| atelier_core::markdown_section(&text, "risks and unknowns"))
+            .map(|section| section.trim().to_string())
+            .filter(|section| !section.is_empty())
+    });
+    Ok(Brief {
+        status_category: category(&mission),
+        outcome: record
+            .sections
+            .section(IssueSectionName::Outcome)
+            .unwrap_or_default()
+            .to_string(),
+        strategy: mission
+            .strategy
+            .as_ref()
+            .map(|strategy| strategy.path.clone()),
+        generated_from: read.pinned("HEAD").ok(),
+        criteria: crate::criteria::mission_criteria(index, read.repo, mission_id)?,
+        items,
+        human_decisions,
+        risks,
+        mission_events: mission_events(index, mission_id),
+        mission,
+    })
 }
