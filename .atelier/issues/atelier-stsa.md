@@ -11,13 +11,16 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-ho7o"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-r6bt"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show a mission's success criteria and their proof in the mission dashboard"
-updated_at: "2026-10-17T15:57:12.202281380+00:00"
+updated_at: "2026-10-17T17:26:01.541129982+00:00"
 ---
 
 ## Goal

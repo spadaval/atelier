@@ -1,7 +1,7 @@
 ---
-status: draft
+status: active
 mission: atelier-r6bt
-last_changed: "2026-10-17: report extends Close Reason, two-field decisions, criterion naming decided first, stsa joins (human direction)"
+last_changed: "2026-10-17: active; Sumeet directed implementation after ADR 0022 was accepted and atelier-et6q decided"
 ---
 
 # Why
@@ -166,9 +166,8 @@ record type or directory, and changes to `PRODUCT_INTENT.md` principles.
 - A debrief of a large mission may still overwhelm. The HTML page may need
   a summary first, with sections that expand; the Markdown form may need a
   summary by default with a full flag.
-- ADR 0022 (atelier-bw0b) is not yet accepted. If it changes the dense-output
-  rule, the agent rendering follows it. The mission does not start until it
-  is accepted.
+- ADR 0022 (atelier-bw0b) was accepted on 2026-10-17; the agent rendering
+  follows its dense-output rule.
 - How evidence and issues name the criterion they prove is the first
   decision of the mission (a decision record blocking S4 and S8); nothing is
   built on criteria until it is made. The default to test: criteria parsed

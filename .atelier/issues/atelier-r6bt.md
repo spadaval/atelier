@@ -26,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Make mission plans and outcomes reviewable by humans and agents"
-updated_at: "2026-10-17T00:31:29.488175930+00:00"
+updated_at: "2026-10-17T17:26:09.858703921+00:00"
 ---
 
 ## Outcome
@@ -44,3 +44,4 @@ Atelier captures proof and review well but almost none of the reasoning: at the 
 - 2026-10-16 [human] Strategy revised by human direction: brief and debrief may use full terminal styling (color, symbols, width-aware layout, links, paging) and emit plain Markdown when redirected. Interactive TUI remains out.
 - 2026-10-17 [human] Strategy revised by human direction: humans read brief/debrief as static self-contained HTML pages under .atelier/runtime/, opened through T3 Code's file panel (no html_render re-emission, no T3 changes); agents get dense Markdown from the same view model per ADR 0022, with no JSON. Terminal-styled Markdown reviews and a T3 fork are dropped; progress views during a mission stay out of scope.
 - 2026-10-17 [human] 2026-10-17 Strategy revised by human direction after a backlog review: the implementer report extends Close Reason (Close Reason stays the required Outcome; other parts are policy-required and get the same approval-freshness exemption; input comes from the record body or a file, not a flag). Decisions need only choice and reason, reversible unless marked one-way, as a typed note. S6 reads status per ADR 0022 and limits the brief view to a count plus one-way decisions. Criterion naming is the mission's first decision (a decision record blocking S4 and S8). atelier-stsa joins the mission as S8. S7's candidate is the new orientation mission. One Git-derived record-history query serves debrief, S8 and atelier-majk. The HTML renderer uses its medium fully; a fixture test keeps the two forms' facts equal. Close Reason's content is now defined in docs/product/work-model.md.
+- 2026-10-17 [plan] 2026-10-17: Sumeet directed implementation. Increments: atelier-fip8 (S1, S3), atelier-sfsq (S2), atelier-ho7o (et6q criteria and receipts) then atelier-stsa (S8), atelier-1mk4 (S6), atelier-rx22 (S4), atelier-acrt (S5), atelier-lfs7 (S7, validation). S7's named candidate atelier-1w8c had 5 of 7 items done before capture could land, so S7 may need a different mission (human's call).
