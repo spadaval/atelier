@@ -265,6 +265,35 @@ fn scoped_views_name_the_view_that_shows_a_refused_issue() {
 }
 
 #[test]
+fn work_mission_gives_a_vowel_initial_issue_type_its_article() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let workflow_path = dir.path().join(".atelier/workflow.yaml");
+    let workflow = std::fs::read_to_string(&workflow_path)
+        .unwrap()
+        .replace(
+            "  validation:\n    label: Validation\n",
+            "  validation:\n    label: Validation\n  incident:\n    label: Incident\n",
+        )
+        .replace("    - task\n", "    - task\n    - incident\n");
+    std::fs::write(&workflow_path, workflow).unwrap();
+    create(
+        dir.path(),
+        &["issue", "create", "Outage", "--issue-type", "incident"],
+    );
+    let incident = issue_id_by_title(dir.path(), "Outage");
+    let (code, stderr) = exit_code(dir.path(), &["work", "mission", &incident]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "{0} is an incident, not a mission. Use `atelier issue show {0}`.",
+            incident
+        )),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn invalid_status_and_category_list_the_workflow_values() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

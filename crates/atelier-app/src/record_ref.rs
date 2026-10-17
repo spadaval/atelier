@@ -26,14 +26,6 @@ impl RecordKind {
         }
     }
 
-    fn with_article(self) -> &'static str {
-        match self {
-            RecordKind::Issue => "an issue",
-            RecordKind::Evidence => "an evidence record",
-            RecordKind::Review => "a review",
-        }
-    }
-
     pub fn show_command(self) -> &'static str {
         match self {
             RecordKind::Issue => "atelier issue show",
@@ -109,10 +101,20 @@ pub fn not_found<'a>(
 pub fn wrong_kind(expected: RecordKind, actual: RecordKind, id: &str) -> Error {
     anyhow!(
         "{id} is {}, not {}. Use `{} {id}`.",
-        actual.with_article(),
-        expected.with_article(),
+        with_article(actual.noun()),
+        with_article(expected.noun()),
         actual.show_command()
     )
+}
+
+/// `noun` after "a", or "an" when it starts with a vowel letter. Record kinds
+/// and workflow issue types are lowercase words, so the letter is the guide.
+pub fn with_article(noun: &str) -> String {
+    let article = match noun.chars().next() {
+        Some(first) if "aeiou".contains(first.to_ascii_lowercase()) => "an",
+        _ => "a",
+    };
+    format!("{article} {noun}")
 }
 
 /// IDs whose short ID starts with the reference's, or is a prefix of it, or
@@ -210,6 +212,14 @@ mod tests {
             not_found(RecordKind::Evidence, "zzzz", ids()).to_string(),
             "evidence record zzzz not found. Next: atelier evidence list"
         );
+    }
+
+    #[test]
+    fn with_article_picks_an_before_a_vowel() {
+        assert_eq!(with_article("incident"), "an incident");
+        assert_eq!(with_article("Epic"), "an Epic");
+        assert_eq!(with_article("feature"), "a feature");
+        assert_eq!(with_article("review"), "a review");
     }
 
     #[test]

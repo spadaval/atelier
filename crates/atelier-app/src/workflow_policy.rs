@@ -57,7 +57,8 @@ pub fn validate_advances_endpoints(
             format!("atelier issue link {source} <mission-id> --role advances")
         };
         return Err(anyhow!(
-            "workflow_issue_link_type_invalid: {source} ({source_type}) cannot advance a {target_type}; advances links one mission to one non-mission issue, e.g. `{example}`"
+            "workflow_issue_link_type_invalid: {source} ({source_type}) cannot advance {}; advances links one mission to one non-mission issue, e.g. `{example}`",
+            crate::record_ref::with_article(target_type)
         ));
     }
     Ok(())
@@ -222,6 +223,17 @@ mod tests {
             statuses: BTreeMap::new(),
             workflows: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn advances_between_non_missions_gives_the_target_type_its_article() {
+        let error = validate_advances_endpoints("atelier-a1b2", "task", "incident")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("atelier-a1b2 (task) cannot advance an incident;"),
+            "{error}"
+        );
     }
 
     #[test]
