@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Close work items with an implementer report in Close Reason"
-updated_at: "2026-10-17T17:42:19.320493222+00:00"
+updated_at: "2026-10-17T17:57:36.918241843+00:00"
 ---
 
 ## Goal
@@ -42,3 +42,17 @@ Close Reason's content is defined in docs/product/work-model.md (atelier-43m1). 
 ## Unknowns
 
 How land tells a claim made before the policy required a part from a new one. The claim's commit and the base policy at that commit are both available.
+
+## Notes
+
+- 2026-10-17 [decision one-way] Store the report as ### Deviations, ### Decisions, ### Surprises and ### Open items subsections of Close Reason
+  Reason: Close Reason is already exempt from approval freshness and checked by land, so the report inherits both without new record shape
+  Rejected: a separate Report section
+  Rejected: typed report notes
+- 2026-10-17 [decision] Check report parts in land only on claims new to the branch, not on claims the base already holds
+  Reason: Done records from before the policy required the report must stay valid, and claim_nodes already separates retained claims from new ones
+  Rejected: store the policy version on each claim
+- 2026-10-17 [decision] With no flag, the close transition uses the Close Reason already in the record body; --reason replaces only the Outcome
+  Reason: Strategy S2 says input comes from the record body or a file, not a flag, and keeping parts lets an agent fix a one-line Outcome without rewriting the report
+- 2026-10-17 [decision] Report all missing parts as one --reason-file blocker
+  Reason: IssueTransitionOption counts one blocker per missing flag, and a report file also carries the Outcome
