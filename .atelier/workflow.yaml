@@ -157,8 +157,9 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
-# Run on the merged tree in a temporary checkout. Tests keep TMPDIR inside its
-# ignored target/, since /tmp on this host is a small tmpfs.
+# Run on the merged tree in a temporary checkout. Tests get a fresh TMPDIR
+# outside that checkout: fixtures under a TMPDIR inside a repository find the
+# enclosing repository, and /tmp on this host is a small tmpfs.
 merge_checks:
   - shell.check:
       command: "git diff --check HEAD^ HEAD -- . ':!.atelier'"
@@ -167,6 +168,6 @@ merge_checks:
   - shell.check:
       command: "cargo metadata --locked --format-version 1 > /dev/null"
   - shell.check:
-      command: "mkdir -p target/tmp && TMPDIR=\"$PWD/target/tmp\" cargo nextest run"
+      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" cargo nextest run; r=$?; rm -rf \"$t\"; exit $r"
   - shell.check:
-      command: "mkdir -p target/tmp && TMPDIR=\"$PWD/target/tmp\" cargo nextest run --features test-hooks"
+      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" cargo nextest run --features test-hooks; r=$?; rm -rf \"$t\"; exit $r"
