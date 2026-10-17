@@ -12,6 +12,7 @@ use crate::human_output::{
     path_summary, render_lines_section, render_metadata, render_page, render_text_section,
     IssueListPanel, IssueListRow, RenderContext,
 };
+use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
 
 const PRIME_DEPRECATION: &str = "`atelier prime` is deprecated: run `atelier status`, and rerun `atelier setup claude` (with your `--binary <path>`, if you installed with one) so the SessionStart hook calls it.";
@@ -19,6 +20,9 @@ const PRIME_DEPRECATION: &str = "`atelier prime` is deprecated: run `atelier sta
 const READY_SHOWN: usize = 5;
 /// Newest reviews and evidence shown for an owner.
 const RECORDS_SHOWN: usize = 8;
+/// Label groups of unassigned work shown when the checkout has no owner;
+/// `work missions` shows them all.
+const UNASSIGNED_GROUPS_SHOWN: usize = 5;
 
 /// `prime` is the deprecated alias: the same view after a deprecation line.
 pub fn run(hook: bool, quiet: bool, prime: bool) -> Result<()> {
@@ -100,7 +104,8 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         }
         _ => Ok(None),
     };
-    let mut page = render_status_page(&view, &diagnostics, &checkout, &owner, context);
+    let overview = atelier_app::mission_overview::mission_overview(&index, policy.as_ref(), false)?;
+    let mut page = render_status_page(&view, &overview, &diagnostics, &checkout, &owner, context);
     let branches = git::branch_lines(repo, &layout.canonical_dir(), &index)
         .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
     if !branches.is_empty() {
@@ -344,6 +349,7 @@ fn evidence(
 
 fn render_status_page(
     view: &StatusView,
+    overview: &MissionOverview,
     diagnostics: &[String],
     checkout: &Checkout,
     owner: &Result<Option<Owner>>,
@@ -358,7 +364,7 @@ fn render_status_page(
         format!("Ready work:    {}", view.work.ready.len()),
         format!("Needs a human: {}", view.work.human.len()),
         format!("Current work:  {current_work}"),
-        format!("Current missions: {}", view.current_mission_count),
+        current_missions(view, overview),
     ];
     let owned = matches!(owner, Ok(Some(_)));
     // Without an owner, the session's next step is choosing ready work.
@@ -472,6 +478,7 @@ fn render_status_page(
         IssueListPanel::new("Current Work", active_rows)
             .limit(8)
             .render(context),
+        unassigned_panel(overview, owned, context),
         render_metadata(Some("Local State"), &local_state),
     ];
     if let Ok(Some(owner)) = owner {
@@ -484,4 +491,31 @@ fn render_status_page(
     }
     panels.push(render_lines_section("Next Actions", next_actions));
     render_page("Atelier Status", panels, context)
+}
+
+/// Between missions, the count alone hides that the last one finished.
+fn current_missions(view: &StatusView, overview: &MissionOverview) -> String {
+    match &overview.last_closed_mission {
+        Some(mission) if view.current_mission_count == 0 => format!(
+            "Current missions: 0; last closed {}",
+            crate::commands::work::last_closed_mission(mission)
+        ),
+        _ => format!("Current missions: {}", view.current_mission_count),
+    }
+}
+
+/// Open work outside every mission, by label. Like the ready list, it helps
+/// choose work, so an owner's session does not show it.
+fn unassigned_panel(
+    overview: &MissionOverview,
+    owned: bool,
+    context: RenderContext,
+) -> Vec<String> {
+    if owned || overview.unassigned.is_empty() {
+        return Vec::new();
+    }
+    render_lines_section(
+        &format!("Unassigned Work ({})", overview.unassigned_nonterminal),
+        crate::commands::work::unassigned_lines(overview, "", UNASSIGNED_GROUPS_SHOWN, context),
+    )
 }

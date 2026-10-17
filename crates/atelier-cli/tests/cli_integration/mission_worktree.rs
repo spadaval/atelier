@@ -556,12 +556,15 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
 
     let (success, default, stderr) = run_atelier(dir.path(), &["work", "missions"]);
     assert!(success, "default Mission Overview failed: {stderr}");
+    // The done mission is named only as the last one closed, not summarized.
     assert!(
-        default.contains("No missions match the current overview."),
+        default.contains(&format!(
+            "No open missions; last closed: {mission_id} [done] "
+        )),
         "{default}"
     );
-    assert!(!default.contains(&mission_id), "{default}");
-    assert!(!default.contains("Published overview mission"), "{default}");
+    assert_eq!(default.matches(&mission_id).count(), 1, "{default}");
+    assert!(!default.contains("Scope:"), "{default}");
     assert!(
         !default.contains("Work linked only to done mission"),
         "{default}"
@@ -3077,4 +3080,164 @@ fn check_reports_every_independent_graph_error_in_one_run() {
     assert!(!success, "{stderr}");
     assert!(!read_canonical_record(dir.path(), "issues", &ids[0]).contains("blocked note"));
     assert!(!before.is_empty());
+}
+
+#[test]
+fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let finished = create_mission_fixture(dir.path(), "Finished objective");
+    for args in [
+        vec!["issue", "transition", &finished, "start"],
+        vec![
+            "issue",
+            "transition",
+            &finished,
+            "close",
+            "--reason",
+            "Shipped",
+        ],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "fixture command {args:?} failed: {stderr}");
+    }
+    let mut fixtures = vec![
+        vec![
+            "issue",
+            "create",
+            "Shared work",
+            "--priority",
+            "high",
+            "--label",
+            "cli",
+            "--label",
+            "review",
+        ],
+        vec!["issue", "create", "Loose work"],
+        vec!["issue", "create", "Scoped later"],
+    ];
+    let cli_titles = (0..6).map(|n| format!("Cli work {n}")).collect::<Vec<_>>();
+    for title in &cli_titles {
+        fixtures.push(vec!["issue", "create", title, "--label", "cli"]);
+    }
+    for label in ["delta", "alpha", "gamma", "beta"] {
+        fixtures.push(vec!["issue", "create", label, "--label", label]);
+    }
+    for args in fixtures {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "fixture command {args:?} failed: {stderr}");
+    }
+    let shared = issue_id_by_title(dir.path(), "Shared work");
+    let loose = issue_id_by_title(dir.path(), "Loose work");
+    let scoped = issue_id_by_title(dir.path(), "Scoped later");
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let last_closed = format!("{finished} [done] {today} - Finished objective");
+
+    // Between missions: both views name the finished mission, and status
+    // shows the largest five label groups, unlabelled last.
+    let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(
+        status.contains(&format!("Current missions: 0; last closed {last_closed}\n")),
+        "{status}"
+    );
+    let unassigned = status
+        .split("Unassigned Work (13)\n--------------------\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
+    let lines = unassigned.lines().collect::<Vec<_>>();
+    assert_eq!(lines[0], "cli (7)", "{unassigned}");
+    assert_eq!(
+        lines[1],
+        format!("  {shared} [todo] high - Shared work"),
+        "{unassigned}"
+    );
+    assert!(
+        lines[2..6].iter().all(|line| line.contains("Cli work")),
+        "{unassigned}"
+    );
+    assert_eq!(lines[6], "  ... 2 more", "{unassigned}");
+    let headings = lines
+        .iter()
+        .filter(|line| !line.starts_with(' '))
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        headings,
+        [
+            "cli (7)",
+            "alpha (1)",
+            "beta (1)",
+            "delta (1)",
+            "gamma (1)",
+            "... 2 more labels: atelier work missions"
+        ],
+        "{unassigned}"
+    );
+
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "work missions failed: {stderr}");
+    assert!(
+        overview.contains(&format!("No open missions; last closed: {last_closed}\n")),
+        "{overview}"
+    );
+    assert!(!overview.contains("No missions match"), "{overview}");
+    assert!(
+        overview.contains(&format!(
+            "Unassigned: 13 nonterminal issues\n  cli (7)\n    {shared} [todo] high - Shared work\n"
+        )),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!("  gamma (1)\n"))
+            && overview.contains(&format!(
+                "  review (1)\n    {shared} [todo] high - Shared work\n  no label (2)\n"
+            )),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!("    {loose} [todo] medium - Loose work\n")),
+        "{overview}"
+    );
+    assert!(
+        overview.contains(&format!("    {scoped} [todo] medium - Scoped later\n")),
+        "{overview}"
+    );
+
+    // With an open mission, its scope leaves the unassigned groups, which
+    // still follow it.
+    let open = create_mission_fixture(dir.path(), "Open objective");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &open, &scoped, "--role", "advances"],
+    );
+    assert!(success, "mission link failed: {stderr}");
+    let (success, overview, stderr) = run_atelier(dir.path(), &["work", "missions"]);
+    assert!(success, "work missions failed: {stderr}");
+    assert!(!overview.contains("last closed"), "{overview}");
+    let (missions, unassigned) = overview
+        .split_once("Unassigned: 12 nonterminal issues\n")
+        .unwrap_or_else(|| panic!("no unassigned groups:\n{overview}"));
+    assert!(missions.contains(&format!("{open}  todo")), "{overview}");
+    assert!(
+        unassigned.contains(&format!(
+            "  no label (1)\n    {loose} [todo] medium - Loose work\n"
+        )),
+        "{overview}"
+    );
+    assert!(!unassigned.contains(&scoped), "{overview}");
+    let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status.contains("Current missions: 1\n"), "{status}");
+    let unassigned = status
+        .split("Unassigned Work (12)\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_else(|| panic!("no unassigned section:\n{status}"));
+    assert!(
+        unassigned.starts_with("--------------------\ncli (7)\n"),
+        "{status}"
+    );
+    assert!(!unassigned.contains(&scoped), "{status}");
 }

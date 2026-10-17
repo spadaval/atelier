@@ -242,7 +242,7 @@ pub(crate) fn render_wrapped_lines(
         .collect()
 }
 
-fn wrap_words(text: &str, width: usize) -> Vec<String> {
+pub(crate) fn wrap_words(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {

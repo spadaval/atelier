@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::issue_read::ObjectiveBucketTotals;
 use crate::record_index::RecordIndex;
-use crate::work_classification::{classify_issue, WorkClassification};
+use crate::work_classification::{classify_issue, ClassifiedWork, WorkClassification};
 use crate::workflow_policy::WorkflowPolicy;
 
 #[derive(Debug)]
@@ -18,11 +18,27 @@ pub struct MissionOverviewMission {
     pub open_blockers: BTreeSet<String>,
 }
 
+/// Unassigned open work that carries one label, or no label.
+#[derive(Debug)]
+pub struct UnassignedGroup {
+    /// `None` collects unlabelled work.
+    pub label: Option<String>,
+    /// In ID order; views apply the shared work order.
+    pub work: Vec<(Issue, ClassifiedWork)>,
+}
+
 #[derive(Debug, Default)]
 pub struct MissionOverview {
     pub missions: Vec<MissionOverviewMission>,
+    /// Distinct open non-mission issues outside every mission's scope.
     pub unassigned_nonterminal: usize,
+    /// The same issues by label, each under every label it carries: largest
+    /// group first, then by label, with unlabelled work last.
+    pub unassigned: Vec<UnassignedGroup>,
     pub linked_only_to_hidden_done_missions: usize,
+    /// The done mission closed most recently, by `closed_at` (else
+    /// `updated_at`), so a view can say what finished between missions.
+    pub last_closed_mission: Option<Issue>,
 }
 
 /// Select all matching missions before the CLI applies its display limit.
@@ -99,16 +115,59 @@ pub fn mission_overview(
             })
             .then_with(|| left.issue.id.cmp(&right.issue.id))
     });
+    overview.last_closed_mission = index
+        .issues()
+        .filter(|issue| {
+            issue.issue_type == "mission"
+                && classified[&issue.id].classification == WorkClassification::Done
+        })
+        .max_by_key(|issue| (issue.closed_at.unwrap_or(issue.updated_at), &issue.id))
+        .cloned();
+    let mut by_label = BTreeMap::<Option<String>, Vec<(Issue, ClassifiedWork)>>::new();
     for issue in index.issues().filter(|issue| issue.issue_type != "mission") {
         if classified[&issue.id].classification == WorkClassification::Done {
             continue;
         }
         if !all_scope.contains(&issue.id) {
             overview.unassigned_nonterminal += 1;
+            let mut labels = index
+                .issue_record(&issue.id)
+                .map(|record| {
+                    record
+                        .labels
+                        .iter()
+                        .cloned()
+                        .map(Some)
+                        .collect::<BTreeSet<_>>()
+                })
+                .unwrap_or_default();
+            if labels.is_empty() {
+                labels.insert(None);
+            }
+            for label in labels {
+                by_label
+                    .entry(label)
+                    .or_default()
+                    .push((issue.clone(), classified[&issue.id].clone()));
+            }
         } else if !visible_scope.contains(&issue.id) {
             overview.linked_only_to_hidden_done_missions += 1;
         }
     }
+    overview.unassigned = by_label
+        .into_iter()
+        .map(|(label, mut work)| {
+            work.sort_by(|left, right| left.0.id.cmp(&right.0.id));
+            UnassignedGroup { label, work }
+        })
+        .collect();
+    overview.unassigned.sort_by(|left, right| {
+        left.label
+            .is_none()
+            .cmp(&right.label.is_none())
+            .then_with(|| right.work.len().cmp(&left.work.len()))
+            .then_with(|| left.label.cmp(&right.label))
+    });
     Ok(overview)
 }
 
@@ -209,6 +268,87 @@ mod tests {
         assert_eq!(all.missions.len(), 3);
         assert_eq!(all.linked_only_to_hidden_done_missions, 0);
         assert_eq!(all.unassigned_nonterminal, 0);
+    }
+
+    #[test]
+    fn unassigned_work_groups_by_every_label_with_unlabelled_last_and_names_the_last_closed_mission(
+    ) {
+        use chrono::TimeZone;
+        let mut records = Records::default();
+        for (id, closed) in [
+            ("mission-old", 1),
+            ("mission-new", 3),
+            ("mission-retired", 2),
+        ] {
+            let status = if id == "mission-retired" {
+                "superseded"
+            } else {
+                "done"
+            };
+            records.issue(id, "mission", status).issue.closed_at = Some(
+                chrono::Utc
+                    .with_ymd_and_hms(2026, 10, closed, 0, 0, 0)
+                    .unwrap(),
+            );
+        }
+        records.issue("mission-open", "mission", "in_progress");
+        records.issue("in-scope", "task", "todo").labels = vec!["cli".into()];
+        records.relate("mission-open", "in-scope", "advances");
+        records.issue("finished", "task", "done").labels = vec!["cli".into()];
+        for (id, labels) in [
+            ("bare-b", &[][..]),
+            ("bare-a", &[][..]),
+            ("both", &["review", "cli"][..]),
+            ("cli-only", &["cli"][..]),
+            ("zeta", &["zeta"][..]),
+            ("alpha", &["alpha"][..]),
+        ] {
+            records.issue(id, "task", "todo").labels =
+                labels.iter().map(|l| l.to_string()).collect();
+        }
+        let index = records.index();
+        let overview = mission_overview(&index, Some(&policy()), false).unwrap();
+        assert_eq!(
+            overview.last_closed_mission.map(|issue| issue.id),
+            Some("mission-new".to_string())
+        );
+        assert_eq!(overview.unassigned_nonterminal, 6);
+        let groups = overview
+            .unassigned
+            .iter()
+            .map(|group| {
+                (
+                    group.label.as_deref(),
+                    group
+                        .work
+                        .iter()
+                        .map(|(issue, _)| issue.id.as_str())
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            groups,
+            vec![
+                (Some("cli"), vec!["both", "cli-only"]),
+                (Some("alpha"), vec!["alpha"]),
+                (Some("review"), vec!["both"]),
+                (Some("zeta"), vec!["zeta"]),
+                (None, vec!["bare-a", "bare-b"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_closed_mission_and_no_unassigned_work_leave_the_section_empty() {
+        let mut records = Records::default();
+        records.issue("mission-open", "mission", "in_progress");
+        records.issue("in-scope", "task", "todo");
+        records.relate("mission-open", "in-scope", "advances");
+        let overview = mission_overview(&records.index(), Some(&policy()), false).unwrap();
+        assert!(overview.last_closed_mission.is_none());
+        assert!(overview.unassigned.is_empty());
+        assert_eq!(overview.unassigned_nonterminal, 0);
     }
 
     #[test]
