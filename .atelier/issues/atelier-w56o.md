@@ -4,6 +4,9 @@ id: "atelier-w56o"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-w56o
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Tell orchestrators to update a waiting branch only when it is next to land"
-updated_at: "2026-10-17T05:22:38.283844875+00:00"
+updated_at: "2026-10-17T05:22:53.478542972+00:00"
 ---
 
 ## Goal
