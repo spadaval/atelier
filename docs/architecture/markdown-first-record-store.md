@@ -36,7 +36,12 @@ current record model.
 `workflow_branch` contains `work_branch` and `branch_base` on the branch owner.
 `strategy` links a path without a revision number. Relationship buckets are
 `blocks`, `children`, `attachments`, and `relates`; indexes derive parent and
-reverse-link views from those stored edges.
+reverse-link views from those stored edges. An issue link is stored once, on
+the record that declares it: a blocked issue stores `blocked_by` in its
+`relates`, a blocker that declares the edge stores it in `blocks`, and an
+`advances` or context link sits on whichever endpoint declared it. Records
+from before atelier-ihss may hold a link on both records; the index reads it
+as one edge.
 
 Work item bodies require Goal and Done when; Scope, Context, Unknowns,
 Design, and Background are optional. Missions carry Outcome and Success
