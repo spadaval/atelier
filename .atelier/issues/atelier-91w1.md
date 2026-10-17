@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Replace internal jargon in output with CONTEXT.md terms"
-updated_at: "2026-10-17T01:10:57.990521803+00:00"
+updated_at: "2026-10-17T07:56:15.929940051+00:00"
 ---
 
 ## Goal
