@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "help"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-7w1g
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Document every argument and flag in subcommand help"
-updated_at: "2026-10-17T07:20:06.440307265+00:00"
+updated_at: "2026-10-17T07:20:07.757917882+00:00"
 ---
 
 ## Goal
