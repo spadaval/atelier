@@ -1,7 +1,7 @@
 //! Flat canonical inventory: validate filters, select once, then limit display.
 
 use anyhow::{anyhow, bail, Result};
-use atelier_core::IssuePriority;
+use atelier_core::{invalid_value_message, IssuePriority};
 use atelier_records::CanonicalIssueRecord;
 
 use crate::record_index::RecordIndex;
@@ -33,31 +33,31 @@ pub fn issue_inventory<'a>(
     if let Some(issue_type) = filters.issue_type {
         let policy = policy.ok_or_else(|| anyhow!("--issue-type requires a workflow policy"))?;
         if !policy.issue_types.contains_key(issue_type) {
-            bail!(
-                "Invalid issue type '{}'. Use an issue type from .atelier/workflow.yaml: {}",
-                issue_type,
-                policy
-                    .issue_types
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+            let valid = policy.issue_types.keys().collect::<Vec<_>>();
+            bail!(invalid_value_message("issue type", issue_type, &valid));
         }
     }
     if let Some(status) = filters.status {
-        if policy.is_some_and(|policy| !policy.statuses.contains_key(status)) {
-            bail!("Invalid issue status '{status}'. Use an exact workflow status or `all`.");
+        if let Some(policy) = policy.filter(|policy| !policy.statuses.contains_key(status)) {
+            let mut valid = policy
+                .statuses
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            valid.push("all");
+            bail!(invalid_value_message("status", status, &valid));
         }
     }
     if let Some(category) = filters.category {
         let policy = policy.ok_or_else(|| anyhow!("--category requires a workflow policy"))?;
-        if !policy
+        let valid = policy
             .statuses
             .values()
-            .any(|status| status.category == category)
-        {
-            bail!("Invalid issue category '{category}'. Use a category from the workflow policy.");
+            .map(|status| status.category.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        if !valid.contains(category) {
+            let valid = valid.into_iter().collect::<Vec<_>>();
+            bail!(invalid_value_message("category", category, &valid));
         }
     }
     if limit == 0 {

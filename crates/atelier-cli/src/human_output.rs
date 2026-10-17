@@ -680,7 +680,7 @@ pub(crate) fn render_issue_inventory(
         [
             render_lines_section("", lines),
             render_footer_section(
-                "Drill Down",
+                context,
                 [FooterAction::new(
                     "Inspect a record",
                     "atelier issue show <issue-id>",
@@ -699,11 +699,12 @@ pub(crate) fn render_issue_inventory_quiet(view: &IssueInventoryView<'_>) -> Str
         .join("\n")
 }
 
+/// The footer as page-panel lines; empty when there is no action to offer.
 pub(crate) fn render_footer_section(
-    title: &str,
+    context: RenderContext,
     actions: impl IntoIterator<Item = FooterAction>,
 ) -> Vec<String> {
-    render_footer(title, actions)
+    render_footer(context, actions)
         .lines()
         .map(str::to_string)
         .collect()
@@ -820,6 +821,7 @@ impl DecisionState {
     }
 }
 
+/// One next step in a footer, rendered `  <label>: <command>`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FooterAction {
     label: String,
@@ -848,18 +850,42 @@ pub(crate) fn print_section_heading(title: &str) {
     println!("{}", section_heading(title));
 }
 
+/// The heading every next-step footer uses.
+pub(crate) const FOOTER_HEADING: &str = "Next";
+
+/// The next-step footer every view ends with: a `Next` section of
+/// `  <label>: <command>` lines, or nothing when there is no action to offer.
+/// A line too wide for the terminal continues indented under its label.
 pub(crate) fn render_footer(
-    title: &str,
+    context: RenderContext,
     actions: impl IntoIterator<Item = FooterAction>,
 ) -> String {
     let mut seen = BTreeSet::new();
-    let mut lines = vec![section_heading(title)];
+    let mut lines = Vec::new();
     for action in actions {
         if seen.insert((action.label.clone(), action.command.clone())) {
-            lines.push(format!("  {}: {}", action.label, action.command));
+            lines.extend(render_labeled_lines(
+                context,
+                "  ",
+                &action.label,
+                &action.command,
+                TextStyle::Secondary,
+            ));
         }
     }
+    if lines.is_empty() {
+        return String::new();
+    }
+    lines.insert(0, section_heading(FOOTER_HEADING));
     lines.join("\n")
+}
+
+/// Prints the footer, preceded by a blank line, when there is an action.
+pub(crate) fn print_footer(actions: impl IntoIterator<Item = FooterAction>) {
+    let footer = render_footer(RenderContext::for_stdout(), actions);
+    if !footer.is_empty() {
+        println!("\n{footer}");
+    }
 }
 
 pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
@@ -1032,7 +1058,7 @@ mod tests {
     #[test]
     fn footer_actions_are_deduplicated() {
         let footer = render_footer(
-            "Next Commands",
+            RenderContext::plain(),
             [
                 FooterAction::new("Inspect", "atelier issue show atelier-1234"),
                 FooterAction::new("Inspect", "atelier issue show atelier-1234"),
@@ -1041,7 +1067,7 @@ mod tests {
         );
         assert_eq!(
             footer,
-            "Next Commands\n-------------\n  Inspect: atelier issue show atelier-1234\n  Validate: atelier check atelier-1234"
+            "Next\n----\n  Inspect: atelier issue show atelier-1234\n  Validate: atelier check atelier-1234"
         );
     }
 
@@ -1074,7 +1100,7 @@ mod tests {
             render_lines_section("Lines", Vec::<String>::new()),
             ["Lines\n-----", "(none)"]
         );
-        assert_eq!(render_footer_section("Footer", []), ["Footer", "------"]);
+        assert!(render_footer_section(RenderContext::plain(), []).is_empty());
         assert_eq!(
             render_text_section("Text", Some(" \nfirst\nsecond\n ")),
             ["Text\n----", "first\nsecond"]
@@ -1095,7 +1121,7 @@ mod tests {
         );
         assert_eq!(
             render_footer_section(
-                "Footer",
+                RenderContext::plain(),
                 [
                     FooterAction::new("Inspect", "first\nsecond"),
                     FooterAction::new("Inspect", "first\nsecond"),
@@ -1103,8 +1129,8 @@ mod tests {
                 ]
             ),
             [
-                "Footer",
-                "------",
+                "Next",
+                "----",
                 "  Inspect: first",
                 "second",
                 "  Other: first",
@@ -1417,8 +1443,7 @@ mod tests {
         assert!(output.contains("\natelier-c task ⚠ blocked medium A linked child record\n"));
         assert!(output.contains("\natelier-d bug ✓ done low A completed standalone record\n"));
         assert!(output.contains("Showing 4 of 4 issues"));
-        assert!(output
-            .contains("Drill Down\n----------\n  Inspect a record: atelier issue show <issue-id>"));
+        assert!(output.contains("Next\n----\n  Inspect a record: atelier issue show <issue-id>"));
         assert!(!output.contains("Standalone"));
         assert!(!output.contains("blocker"));
         assert!(!output.contains("ready"));

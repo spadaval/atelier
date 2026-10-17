@@ -150,7 +150,7 @@ fn issue_sections_parseable(
     let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
     let record = index
         .issue_record(issue_id)
-        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+        .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
     let mut required = record.sections.required_names();
     if record.issue.issue_type == "mission" && record.issue.strategy.is_none() {
         required.push(atelier_core::IssueSectionName::SuccessCriteria);
@@ -197,7 +197,7 @@ fn decision_recorded(
 ) -> Result<(bool, String, Option<String>)> {
     let record = index
         .issue_record(issue_id)
-        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+        .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
     match record
         .sections
         .section(atelier_core::IssueSectionName::Decision)
@@ -245,7 +245,10 @@ fn transitive_blockers_none_open(
         Some(diagnosis) => Ok((
             false,
             diagnosis.summary,
-            Some(format!("Next: {}", diagnosis.next_command)),
+            Some(format!(
+                "Inspect the blocker with `{}`",
+                diagnosis.next_command
+            )),
         )),
         None => Ok((
             true,

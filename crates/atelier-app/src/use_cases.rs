@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, Result};
 use std::path::PathBuf;
 
 use crate::record_index::RecordIndex;
+use crate::record_ref::RecordKind;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceTargetArg {
@@ -22,15 +23,7 @@ pub fn load_repository() -> Result<(PathBuf, RecordIndex)> {
 }
 
 pub fn resolve_issue_ref(index: &RecordIndex, issue_ref: &str) -> Result<String> {
-    if let Some(id) = index.resolve_issue_ref(issue_ref)? {
-        return Ok(id);
-    }
-
-    if let Some(actual_kind) = index.record_kind_for_id(issue_ref) {
-        bail!("{}", wrong_kind_message("issue", actual_kind, issue_ref));
-    }
-
-    bail!("Issue {issue_ref} was not found")
+    index.resolve(RecordKind::Issue, issue_ref)
 }
 
 pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
@@ -46,27 +39,13 @@ pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
     })
 }
 
+/// Resolves an evidence target's id when its kind is one evidence can
+/// target; any other kind is left for target validation to reject.
 pub fn resolve_evidence_target_ref(index: &RecordIndex, kind: &str, id: &str) -> Result<String> {
-    if kind == "issue" {
-        resolve_issue_ref(index, id)
-    } else {
-        Ok(id.to_string())
-    }
-}
-
-fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
-    let suggested = show_command_for_kind(actual_kind)
-        .map(|command| format!(" Use `{command} {id}`."))
-        .unwrap_or_default();
-    format!("{id} is a {actual_kind} record, not a {expected_kind} record.{suggested}")
-}
-
-fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
-        "issue" => Some("atelier issue show"),
-        "mission" => Some("atelier issue show"),
-        "evidence" => Some("atelier evidence show"),
-        _ => None,
+        "issue" => index.resolve(RecordKind::Issue, id),
+        "evidence" => index.resolve(RecordKind::Evidence, id),
+        _ => Ok(id.to_string()),
     }
 }
 

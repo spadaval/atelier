@@ -162,7 +162,11 @@ fn captured_results_pin_commit_and_report_pass_fail_and_blocked() {
             "evidence", "record", "--kind", "test", "--result", "pass", "--", "sh", "-c", "exit 2",
         ],
     );
-    assert!(!ok && error.contains("derives its result"), "{error}");
+    assert!(
+        !ok && error
+            .contains("the argument '--result <RESULT>' cannot be used with '[COMMAND]...'"),
+        "{error}"
+    );
 }
 
 #[test]

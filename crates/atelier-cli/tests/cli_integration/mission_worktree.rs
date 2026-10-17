@@ -432,7 +432,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     );
     assert!(overview.contains("Open blockers: 1"), "{overview}");
     assert!(
-        overview.contains(&format!("Drill down: atelier work mission {mission_id}")),
+        overview.contains(&format!("More info: atelier work mission {mission_id}")),
         "{overview}"
     );
     assert!(
@@ -465,7 +465,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     );
     assert!(
         narrow.contains(&format!(
-            "  Drill down:\n    atelier work mission {mission_id}"
+            "  More info:\n    atelier work mission {mission_id}"
         )),
         "{narrow}"
     );

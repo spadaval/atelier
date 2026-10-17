@@ -7,7 +7,7 @@ use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
 use crate::human_output::{
-    display_timestamp, heading, local_date, plural_suffix, render_footer_section,
+    display_timestamp, heading, local_date, plural_suffix, print_footer, render_footer_section,
     render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
     render_text_section, FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
@@ -15,6 +15,7 @@ use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
 use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
+use atelier_app::record_ref::RecordKind;
 use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
@@ -26,28 +27,7 @@ const MAX_ISSUE_TITLE_LEN: usize = 512;
 const MAX_ISSUE_DESCRIPTION_LEN: usize = 64 * 1024;
 
 pub fn resolve_id(index: &RecordIndex, issue_ref: &str) -> Result<String> {
-    if let Some(id) = index.resolve_issue_ref(issue_ref)? {
-        return Ok(id);
-    }
-
-    if let Some(actual_kind) = index.record_kind_for_id(issue_ref) {
-        bail!(
-            "{} is a {} record, not an issue record. Use `{}`.",
-            issue_ref,
-            actual_kind,
-            show_command_for_kind(actual_kind, issue_ref)
-        );
-    }
-
-    Err(anyhow!("Issue {issue_ref} was not found"))
-}
-
-fn show_command_for_kind(kind: &str, id: &str) -> String {
-    match kind {
-        "mission" => format!("atelier issue show {id}"),
-        "evidence" => format!("atelier evidence show {id}"),
-        _ => format!("atelier {kind} show {id}"),
-    }
+    index.resolve(RecordKind::Issue, issue_ref)
 }
 
 fn label_value(labels: &[String], prefix: &str) -> Option<String> {
@@ -74,7 +54,7 @@ pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool) -> Result<()
             let id = resolve_id(index, issue_ref)?;
             index
                 .issue_record(&id)
-                .ok_or_else(|| anyhow!("Issue {id} not found"))
+                .ok_or_else(|| index.not_found(RecordKind::Issue, &id))
         })
         .collect::<Result<Vec<_>>>()?;
     if full {
@@ -562,9 +542,9 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
                     .find(|result| !result.passed && result.help.is_some())
                     .and_then(|result| result.help.as_deref())
                 {
-                    lines.push(format!("    {help}"));
+                    lines.push(format!("    Hint: {help}"));
                 } else {
-                    lines.push(format!("    {}", option.command));
+                    lines.push(format!("    Command: {}", option.command));
                 }
             }
         }
@@ -780,7 +760,7 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
             format!("atelier issue transition {} <transition>", canonical_id),
         ),
     ]);
-    print_panel(render_footer_section("Next Commands", actions));
+    print_panel(render_footer_section(RenderContext::for_stdout(), actions));
     Ok(())
 }
 
@@ -933,7 +913,7 @@ pub fn create_lifecycle(
     let file_path = canonical_issue_path_from_state(state_dir, &id);
     println!("File: {}", file_path.display());
     print_panel(render_footer_section(
-        "Next Commands",
+        RenderContext::for_stdout(),
         [
             FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
             FooterAction::new("Validate this issue", format!("atelier check {id}")),
@@ -1231,20 +1211,21 @@ pub fn update_lifecycle(
     if let Some(parent) = parent_id {
         println!("Parent:   {}", parent);
     }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {}", record.issue.id);
+    print_footer([FooterAction::new(
+        "Inspect this issue",
+        format!("atelier issue show {}", record.issue.id),
+    )]);
     Ok(())
 }
 
 /// Append a dated note to the issue record's Notes section.
 pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> Result<()> {
     if !ISSUE_NOTE_KINDS.contains(&kind) {
-        bail!(
-            "Invalid note kind '{kind}'. Valid kinds: {}",
-            ISSUE_NOTE_KINDS.join(", ")
-        );
+        bail!(atelier_core::invalid_value_message(
+            "note kind",
+            kind,
+            ISSUE_NOTE_KINDS
+        ));
     }
     if text.trim().is_empty() {
         bail!("Note text for issue {issue_id} must not be empty");

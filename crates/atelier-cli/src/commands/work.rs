@@ -34,15 +34,9 @@ enum DashboardFilter {
 }
 
 impl MissionDashboardOptions {
-    fn filter(self) -> Result<DashboardFilter> {
-        let count = [self.ready, self.blocked, self.active, self.done, self.all]
-            .into_iter()
-            .filter(|flag| *flag)
-            .count();
-        if count > 1 {
-            bail!("choose only one mission work filter");
-        }
-        Ok(if self.ready {
+    /// The one filter chosen; clap rejects more than one.
+    fn filter(self) -> DashboardFilter {
+        if self.ready {
             DashboardFilter::Ready
         } else if self.blocked {
             DashboardFilter::Blocked
@@ -54,7 +48,7 @@ impl MissionDashboardOptions {
             DashboardFilter::All
         } else {
             DashboardFilter::Summary
-        })
+        }
     }
 }
 
@@ -86,7 +80,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
                 ],
             ),
             render_footer_section(
-                "Next Commands",
+                RenderContext::for_stdout(),
                 [
                     FooterAction::new("Browse ready work", "atelier work ready"),
                     FooterAction::new("Triage blockers", "atelier work blocked"),
@@ -272,7 +266,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             ),
             ("Open blockers", mission.open_blockers.len().to_string()),
             (
-                "Drill down",
+                "More info",
                 format!("atelier work mission {}", mission.issue.id),
             ),
         ] {
@@ -321,16 +315,18 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             context,
         ));
     }
-    lines.extend(render_labeled_lines(
-        context,
-        "",
-        "Browse mission records",
-        "atelier issue list --issue-type mission",
-        TextStyle::Secondary,
-    ));
     print_page(
         "Mission Overview",
-        [render_lines_section("", lines)],
+        [
+            render_lines_section("", lines),
+            render_footer_section(
+                context,
+                [FooterAction::new(
+                    "Browse mission records",
+                    "atelier issue list --issue-type mission",
+                )],
+            ),
+        ],
         context,
     );
     Ok(())
@@ -365,11 +361,30 @@ pub fn mission_dashboard(
     options: MissionDashboardOptions,
     quiet: bool,
 ) -> Result<()> {
-    scoped_dashboard(index, mission_ref, "mission", options.filter()?, quiet)
+    scoped_dashboard(index, mission_ref, "mission", options.filter(), quiet)
 }
 
 pub fn parent_dashboard(index: &RecordIndex, parent_ref: &str, quiet: bool) -> Result<()> {
     scoped_dashboard(index, parent_ref, "parent", DashboardFilter::Summary, quiet)
+}
+
+/// The dashboards that do show an issue a scoped view refused: its own
+/// parent view, its parent's, and its mission's, or else `issue show`.
+fn related_dashboards(index: &RecordIndex, issue: &Issue, has_children: bool) -> Result<String> {
+    let mut commands = Vec::new();
+    if has_children {
+        commands.push(format!("`atelier work parent {}`", issue.id));
+    }
+    if let Some(parent) = &issue.parent_id {
+        commands.push(format!("`atelier work parent {parent}`"));
+    }
+    if let Some(mission) = atelier_app::objective_graph::containing_mission(index, &issue.id)? {
+        commands.push(format!("`atelier work mission {mission}`"));
+    }
+    if commands.is_empty() {
+        commands.push(format!("`atelier issue show {}`", issue.id));
+    }
+    Ok(commands.join(" or "))
 }
 
 fn scoped_dashboard(
@@ -381,18 +396,20 @@ fn scoped_dashboard(
 ) -> Result<()> {
     let id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let issue = index.require_issue(&id)?;
+    let has_children = !index.get_subissues(&id).is_empty();
     match issue_type {
         "mission" if issue.issue_type != "mission" => bail!(
-            "{} is issue_type '{}'; work mission requires a mission",
-            issue.id,
-            issue.issue_type
+            "{id} is a {}, not a mission. Use {}.",
+            issue.issue_type,
+            related_dashboards(index, &issue, has_children)?
         ),
-        "parent" if issue.issue_type == "mission" || index.get_subissues(&id).is_empty() => {
-            bail!(
-                "{} has no children; work parent shows an issue with children (use work mission for missions, issue show for other issues)",
-                issue.id
-            )
+        "parent" if issue.issue_type == "mission" => {
+            bail!("{id} is a mission, not a parent. Use `atelier work mission {id}`.")
         }
+        "parent" if !has_children => bail!(
+            "{id} has no children, so it is not a parent. Use {}.",
+            related_dashboards(index, &issue, false)?
+        ),
         _ => {}
     }
     let work = ScopedWork::new(index, &issue)?;
@@ -483,7 +500,7 @@ fn scoped_dashboard(
             .into_iter()
             .map(|panel| panel.render(context)),
     );
-    panels.push(objective_footer(&issue, counts));
+    panels.push(objective_footer(context, &issue, counts));
     print_page(&title, panels, context);
     Ok(())
 }
@@ -605,7 +622,11 @@ fn strip_mission_title_prefix(title: &str) -> &str {
         .unwrap_or(title)
 }
 
-fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> Vec<String> {
+fn objective_footer(
+    context: RenderContext,
+    issue: &Issue,
+    counts: &ObjectiveBucketTotals,
+) -> Vec<String> {
     let mission_id = &issue.id;
     let mut actions = vec![
         FooterAction::new(
@@ -629,7 +650,7 @@ fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> Vec<String
             format!("atelier work mission {mission_id} --blocked"),
         ));
     }
-    render_footer_section("Next Commands", actions)
+    render_footer_section(context, actions)
 }
 
 fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {

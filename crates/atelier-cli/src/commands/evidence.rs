@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeSet;
 use std::fs;
@@ -430,7 +431,8 @@ fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
 }
 
 pub fn show(index: &RecordIndex, id: &str, quiet: bool) -> Result<()> {
-    let record = index.require_evidence(id)?;
+    let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, id)?;
+    let record = index.require_evidence(&id)?;
     print_record(index, record, quiet)
 }
 
@@ -591,12 +593,14 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
             EVIDENCE_LIST_LIMIT
         );
     }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Show proof detail: atelier evidence show <evidence-id>");
-    println!("  Filter by result: atelier evidence list --result <result>");
-    println!("  List matching IDs: atelier --quiet evidence list");
+    print_footer([
+        FooterAction::new("Show proof detail", "atelier evidence show <evidence-id>"),
+        FooterAction::new(
+            "Filter by result",
+            "atelier evidence list --result <result>",
+        ),
+        FooterAction::new("List matching IDs", "atelier --quiet evidence list"),
+    ]);
     Ok(())
 }
 

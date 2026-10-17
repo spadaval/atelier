@@ -127,7 +127,7 @@ fn evaluate_issue_gate(
 ) -> Result<EvidenceGateStatus> {
     let issue = index
         .issue_record(issue_id)
-        .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+        .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
     let mut records = Vec::new();
     for link in index.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
@@ -202,7 +202,7 @@ impl EvidenceReadContext<'_> {
     ) -> Result<Option<NewestFailure>> {
         let issue = index
             .issue_record(issue_id)
-            .ok_or_else(|| anyhow::anyhow!("Issue {issue_id} not found"))?;
+            .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
         let mut newest_fail = None;
         let mut newest_pass = None;
         let mut newest_stale_pass: Option<(_, String, bool)> = None;

@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{anyhow, bail, Result};
 use std::path::Path;
 
@@ -97,19 +98,22 @@ fn validate_issue_link_role(repo_root: &Path, role: &str) -> Result<()> {
 }
 
 fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<String> {
-    if let Some(issue_id) = index.resolve_issue_ref(reference)? {
-        return Ok(issue_id);
-    }
-    if let Some(kind) = index.record_kind_for_id(reference) {
-        bail!("{reference} is a {kind} record, not an issue record");
-    }
-    Err(anyhow!("Issue {reference} was not found"))
+    index.resolve(atelier_app::record_ref::RecordKind::Issue, reference)
 }
 
 fn print_link_next_commands(issue_id: &str, target_id: &str) {
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {issue_id}");
-    println!("  atelier issue transition {issue_id}");
-    println!("  atelier issue show {target_id}");
+    print_footer([
+        FooterAction::new(
+            "Inspect this issue",
+            format!("atelier issue show {issue_id}"),
+        ),
+        FooterAction::new(
+            "Show transition options",
+            format!("atelier issue transition {issue_id}"),
+        ),
+        FooterAction::new(
+            "Inspect the target",
+            format!("atelier issue show {target_id}"),
+        ),
+    ]);
 }

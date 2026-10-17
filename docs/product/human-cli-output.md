@@ -124,6 +124,29 @@ listed. Each command adopts this in its own item (atelier-7ebi for `issue
 update`, `note` and `link`; atelier-8bve for `issue create`; atelier-093h
 for review records; atelier-3ekh for evidence).
 
+### Next Footer
+
+A view that offers next steps ends them in one section, headed `Next`, with
+one step per line:
+
+```
+Next
+----
+  Inspect this issue: atelier issue show atelier-onwh
+  Show transition options: atelier issue transition atelier-onwh
+```
+
+Each line is `  <label>: <command>`: the label says what the step does, and
+the command is what to run. A line too wide for the terminal continues
+indented under its label. A view with no step to offer prints no `Next`
+section. `render_footer` in `human_output.rs` is the one helper that writes
+it; no view prints its own footer heading or line. A pointer on one row reads
+the same way, as `More info: atelier work mission <id>` does in `work
+missions`, and so does a transition's `Command:` line. A validator hint is
+one sentence after `Hint:` that names its command in backticks, such as
+``Hint: Inspect the blocker with `atelier issue show <id>` ``; it carries no
+second prefix.
+
 ### Quiet Tokens
 
 `--quiet` prints one documented token per command, and nothing else on
@@ -141,6 +164,34 @@ stdout. atelier-pr4k makes every command honour this table:
 | `status` | `key=value` pairs whose values are numbers |
 | `work` views | IDs, one per line; `work mission` and `work parent` print their counts as `key=value` |
 | `review` and `evidence` record commands | the new record's ID |
+
+### Errors
+
+Every command takes the same record references and words the same errors
+about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
+`atelier_core::invalid_value_message` implement them.
+
+- A record reference is a full ID or a short ID, the part after the project
+  slug, in any case: `1w8c`, `1W8C` and `atelier-1w8c` all name
+  `atelier-1w8c`. Issues, evidence records and reviews resolve alike.
+- An unknown reference is one message, `<kind> <ref> not found`, followed by
+  up to three IDs it may have meant, or the command that lists the kind, and
+  exits 1:
+
+  ```
+  issue 1w8 not found. Did you mean atelier-1w8c?
+  issue zzzz not found. Next: atelier issue list
+  ```
+
+- A reference to a record of another kind names both kinds and the command
+  that shows it: ``atelier-waj0 is an evidence record, not an issue. Use
+  `atelier evidence show atelier-waj0`.`` A scoped view that refuses an issue
+  names the view that does show it, such as `atelier work mission
+  atelier-1w8c` for a mission given to `work parent`.
+- An invalid value names the field, the value and every value the field
+  accepts: `Invalid status 'open'. Valid values: backlog, done, todo, all`.
+- Flags that exclude each other are declared to the argument parser, so a
+  conflict is a usage error with exit status 2, never a runtime error.
 
 ## Views
 
@@ -181,7 +232,9 @@ current-checkout state.
 Next actions come from actual state: inspect a blocker, select ready work,
 record proof, resolve a finding, or commit record changes. Avoid generic command
 menus in every row. Errors name the failed invariant or path and give a useful
-recovery step. Optional verbosity may show check details and command context.
+recovery step. The recovery step is an inline sentence in the error,
+`Next: <command>`, not a `Next` footer. Optional verbosity may show check
+details and command context.
 
 `--quiet` limits output to essential IDs, counts, and result tokens. It does not
 hide failures or change behavior. Atelier has no diagnostic logging options;
