@@ -42,7 +42,8 @@ pub struct MissionOverview {
 }
 
 /// Select all matching missions before the CLI applies its display limit.
-/// Membership follows outgoing advances links, including each root's children.
+/// Membership follows advances links between the mission and non-mission
+/// work, whichever record stores them, including each root's children.
 pub fn mission_overview(
     index: &RecordIndex,
     policy: Option<&WorkflowPolicy>,
@@ -56,20 +57,25 @@ pub fn mission_overview(
     let mut open_scope = BTreeSet::new();
     for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
         let mut scope_ids = BTreeSet::new();
-        for link in index.record_links().iter().filter(|link| {
-            link.source_kind == "issue"
-                && link.source_id == mission.id
-                && link.target_kind == "issue"
-                && link.relation_type == "advances"
-                && index
-                    .issue_record(&link.target_id)
+        for root in index
+            .get_typed_relations(&mission.id)
+            .into_iter()
+            .filter(|relation| relation.relation_type == "advances")
+            .map(|relation| {
+                if relation.issue_id_1 == mission.id {
+                    relation.issue_id_2
+                } else {
+                    relation.issue_id_1
+                }
+            })
+            .filter(|id| {
+                index
+                    .issue_record(id)
                     .is_some_and(|record| record.issue.issue_type != "mission")
-        }) {
-            scope_ids.insert(link.target_id.clone());
-            scope_ids.extend(crate::objective_graph::issue_descendant_ids(
-                index,
-                &link.target_id,
-            )?);
+            })
+        {
+            scope_ids.extend(crate::objective_graph::issue_descendant_ids(index, &root)?);
+            scope_ids.insert(root);
         }
         let done = classified[&mission.id].classification == WorkClassification::Done;
         if !done {
@@ -204,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn directed_membership_deduplicates_roots_and_preserves_shared_scope_and_blockers() {
+    fn membership_follows_either_side_deduplicates_roots_and_preserves_shared_scope_and_blockers() {
         let mut records = Records::default();
         for (id, kind, status) in [
             ("mission-a", "mission", "in_progress"),
@@ -225,7 +231,10 @@ mod tests {
         records.relate("mission-b", "epic", "advances");
         records.relate("mission-b", "incoming", "advances");
         records.relate("mission-a", "mission-b", "advances");
+        // Work that declares it advances a mission is in scope, and a
+        // link both records store (as before atelier-ihss) counts once.
         records.relate("incoming", "mission-a", "advances");
+        records.relate("epic", "mission-a", "advances");
         records.block("epic", "blocker");
         records.block("mission-a", "blocker");
         let index = records.index();
@@ -234,10 +243,12 @@ mod tests {
         assert_eq!(first.issue.id, "mission-a");
         assert_eq!(
             first.scope_ids,
-            ["child", "direct", "epic"].map(String::from).into()
+            ["child", "direct", "epic", "incoming"]
+                .map(String::from)
+                .into()
         );
         // The child inherits its parent's open blocker.
-        assert_eq!(first.totals.ready, 1);
+        assert_eq!(first.totals.ready, 2);
         assert_eq!(first.totals.blocked, 2);
         assert_eq!(first.open_blockers, ["blocker"].map(String::from).into());
         assert_eq!(
@@ -388,5 +399,74 @@ mod tests {
         );
         assert_eq!(overview.missions[0].scope_ids.len(), 24);
         assert_eq!(overview.missions[0].totals.ready, 24);
+    }
+
+    /// Links stored only on the declaring record (atelier-ihss), on the
+    /// other record (blocker-side `blocks`, mission-side `advances`, as
+    /// before), or on both read as one graph, so blockers, mission scope and
+    /// the approval scope are the same.
+    #[test]
+    fn declared_legacy_and_two_sided_link_storage_read_the_same() {
+        let policy = policy();
+        for advances in ["declared", "mission_side", "both"] {
+            for blocker in ["declared", "blocker_side", "both"] {
+                let mut records = Records::default();
+                records.issue("mission", "mission", "in_progress");
+                records.issue("work", "feature", "todo");
+                records.issue("child", "task", "todo");
+                records.issue("blocker", "task", "todo");
+                records.parent("child", "work");
+                if advances != "mission_side" {
+                    records.relate("work", "mission", "advances");
+                }
+                if advances != "declared" {
+                    records.relate("mission", "work", "advances");
+                }
+                if blocker != "blocker_side" {
+                    records.relate("work", "blocker", atelier_records::BLOCKED_BY);
+                }
+                if blocker != "declared" {
+                    records.block("work", "blocker");
+                }
+                let index = records.index();
+                let case = format!("advances {advances}, blocked_by {blocker}");
+
+                assert_eq!(index.get_blockers("work"), ["blocker"], "{case}");
+                assert_eq!(index.get_blocking("blocker"), ["work"], "{case}");
+                assert_eq!(index.get_typed_relations("mission").len(), 1, "{case}");
+                for id in ["work", "child"] {
+                    let closure =
+                        crate::objective_graph::dependency_closure(&index, &policy, id).unwrap();
+                    assert_eq!(closure.blocking_ids(), ["blocker"], "{case}: {id}");
+                    let issue = index.get_issue(id).unwrap();
+                    assert_eq!(
+                        classify_issue(&index, Some(&policy), &issue)
+                            .unwrap()
+                            .classification,
+                        WorkClassification::Blocked,
+                        "{case}: {id}"
+                    );
+                }
+                assert_eq!(
+                    crate::review_gate::scope(&index, "mission").unwrap(),
+                    ["child", "mission", "work"].map(String::from).into(),
+                    "{case}"
+                );
+                assert_eq!(
+                    crate::objective_graph::containing_mission(&index, "child").unwrap(),
+                    Some("mission".to_string()),
+                    "{case}"
+                );
+                let overview = mission_overview(&index, Some(&policy), false).unwrap();
+                let row = &overview.missions[0];
+                assert_eq!(
+                    row.scope_ids,
+                    ["child", "work"].map(String::from).into(),
+                    "{case}"
+                );
+                assert_eq!(row.totals.blocked, 2, "{case}");
+                assert_eq!(row.open_blockers, ["blocker"].map(String::from).into());
+            }
+        }
     }
 }

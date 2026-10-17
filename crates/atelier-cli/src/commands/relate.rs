@@ -26,7 +26,9 @@ pub fn change_issue_link(
             state_dir.display()
         )
     })?;
-    let (issue_ref, target_ref, role) = if role == BLOCKS_ROLE {
+    // The first record declares the link and is the only one written.
+    let declared_by_blocker = role == BLOCKS_ROLE;
+    let (issue_ref, target_ref, role) = if declared_by_blocker {
         (target_ref, issue_ref, BLOCKED_BY_ROLE)
     } else {
         (issue_ref, target_ref, role)
@@ -43,7 +45,7 @@ pub fn change_issue_link(
     }
     let store = RecordStore::new(state_dir);
     let changed = match (unlink, role == BLOCKED_BY_ROLE) {
-        (false, true) => store.add_issue_block(&source, &target)?,
+        (false, true) => store.add_issue_block(&source, &target, declared_by_blocker)?,
         (false, false) => store.add_issue_relation(&source, &target, role)?,
         (true, true) => store.remove_issue_block(&source, &target)?,
         (true, false) => store.remove_issue_relation(&source, &target, role)?,

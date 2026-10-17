@@ -472,7 +472,8 @@ enum IssueCommands {
         /// readiness: related, part_of, implements, supersedes, duplicates,
         /// derived_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
-        /// record's relates field
+        /// record's relates field. Only the source record is written; the
+        /// target reads the link from it
         #[arg(long, default_value = "advances")]
         role: String,
     },

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
@@ -426,7 +426,7 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         )?;
     }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
-    render_issue_link_section(index, canonical_id, &record.relationships)?;
+    render_issue_link_section(index, canonical_id)?;
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
@@ -530,22 +530,19 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     }
 }
 
-fn render_issue_link_section(
-    index: &RecordIndex,
-    issue_id: &str,
-    relationships: &Relationships,
-) -> Result<()> {
-    let mut seen = BTreeSet::new();
+/// Typed links stored on either record; blockers have their own sections.
+fn render_issue_link_section(index: &RecordIndex, issue_id: &str) -> Result<()> {
     let mut rows = Vec::new();
-    for relation in &relationships.relates {
-        if relation.kind != "issue" || relation.id == issue_id {
+    for relation in index.get_typed_relations(issue_id) {
+        if relation.issue_id_1 == relation.issue_id_2 {
             continue;
         }
-        let key = (relation.relation_type.clone(), relation.id.clone());
-        if !seen.insert(key) {
-            continue;
-        }
-        let other = index.require_issue(&relation.id)?;
+        let other_id = if relation.issue_id_1 == issue_id {
+            &relation.issue_id_2
+        } else {
+            &relation.issue_id_1
+        };
+        let other = index.require_issue(other_id)?;
         rows.push(format!(
             "{} {} [{}] {} - {}",
             relation.relation_type, other.id, other.status, other.priority, other.title

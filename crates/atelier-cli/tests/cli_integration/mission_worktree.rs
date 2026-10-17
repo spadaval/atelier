@@ -1646,7 +1646,9 @@ fn test_bundle_apply_records_links() {
             .join(format!("{blocker_id}.md")),
     )
     .unwrap();
-    assert!(blocker_markdown.contains(&format!("id: \"{work_id}\"")));
+    // Each edge is stored on the record whose entry declared it: the blocker
+    // declares `blocks`, the work declares `blocked_by` (atelier-ihss).
+    assert!(!blocker_markdown.contains(&format!("id: \"{work_id}\"")));
     assert!(blocker_markdown.contains(&format!("id: \"{blocked_id}\"")));
     let note_bodies = std::fs::read_to_string(
         dir.path()
@@ -1654,6 +1656,7 @@ fn test_bundle_apply_records_links() {
             .join(format!("{work_id}.md")),
     )
     .unwrap();
+    assert!(note_bodies.contains(&format!("id: \"{blocker_id}\"\n    type: \"blocked_by\"")));
     assert!(note_bodies.contains("## Notes\n\n- "), "{note_bodies}");
     let first_note = note_bodies.find("Zulu authored first").unwrap();
     let second_note = note_bodies.find("Alpha authored second").unwrap();
