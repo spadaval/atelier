@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T08:54:36.260262076+00:00"
+status: "done"
 title: "Report a dead git cat-file child instead of ending on SIGPIPE"
-updated_at: "2026-10-17T08:41:56.539484184+00:00"
+updated_at: "2026-10-17T08:54:36.260262076+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ atelier-5rs0 restored the default SIGPIPE disposition at start-up, so an early-c
 
 - A dead `cat-file` child is reported as an error naming git, not a silent 141. For example, check `try_wait` before writing, or run the reader with SIGPIPE ignored around its writes.
 - A test with a `cat-file` that exits at once shows the error and no SIGPIPE death.
+
+## Close Reason
+
+ObjectReader sends git cat-file --batch requests over a Unix socket with MSG_NOSIGNAL, so a child that has gone yields EPIPE and the view reports 'git cat-file --batch exited' instead of atelier dying on SIGPIPE; the stdout SIGPIPE behaviour of atelier-5rs0 is unchanged. Proven by piped_output::a_cat_file_child_that_exits_is_reported_instead_of_ending_on_sigpipe (fails with SIGPIPE without the fix) and evidence atelier-usw9, atelier-u6ud, atelier-hdz2.
