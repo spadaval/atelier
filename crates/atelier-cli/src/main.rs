@@ -1060,11 +1060,16 @@ fn invalid_argument_value(error: &clap::Error) -> Option<InvalidValue> {
             let Some(ContextValue::Strings(valid)) = error.get(ContextKind::ValidValue) else {
                 return None;
             };
-            Some(InvalidValue::new(
+            let invalid = InvalidValue::new(
                 &argument_field(string(ContextKind::InvalidArg)?),
                 string(ContextKind::InvalidValue)?,
                 valid,
-            ))
+            );
+            // Keep clap's typo suggestion as the guidance sentence.
+            Some(match string(ContextKind::SuggestedValue) {
+                Some(suggested) => invalid.with_hint(&format!("Did you mean '{suggested}'?")),
+                None => invalid,
+            })
         }
         ErrorKind::ValueValidation => std::error::Error::source(error)?
             .downcast_ref::<InvalidValue>()

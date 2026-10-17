@@ -193,7 +193,10 @@ fn resolve_issue_transition<'a>(
     bail!(if available.is_empty() {
         invalid.with_hint(&format!("No transition leaves status {}.", issue.status))
     } else {
-        invalid
+        invalid.with_hint(&format!(
+            "These are the transitions out of status {}.",
+            issue.status
+        ))
     })
 }
 

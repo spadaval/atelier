@@ -276,14 +276,18 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   atelier-1w8c` for a mission given to `work parent`. A kind or issue type,
   including one the workflow adds, takes "an" before a vowel letter and "a"
   otherwise: `is an incident, not a mission`.
-- An invalid value for a command argument is one message in one form: the
-  field, the value and every value that command accepts there, and nothing
-  it rejects: `Invalid status 'open'. Valid values: backlog, done, todo,
-  all`. The values are the ones that command accepts, so `issue create
-  --status` lists the statuses new work of the issue's type starts in, and
-  `issue transition` lists the transitions out of the issue's status, or
-  `none`. One sentence of guidance may follow, and a code that shipped
-  before the rule, such as `issue_create_status_invalid`, still leads it.
+- An invalid value for a command argument, whether it is outside the set
+  the argument accepts or is not in the argument's form, is one message in
+  one form: the field, the value and every value that command accepts
+  there, and nothing it rejects: `Invalid status 'open'. Valid values:
+  backlog, done, todo, all`. The values are the ones that command accepts,
+  so `issue create --status` lists the statuses new work of the issue's
+  type starts in, and `issue transition` lists the transitions out of the
+  issue's status, or `none`. A malformed value names the accepted forms:
+  `Invalid target 'bad'. Valid values: issue/<id>, evidence/<id>`. One
+  sentence of guidance may follow, such as `Did you mean 'pass'?` for a
+  near miss, and a code that shipped before the rule, such as
+  `issue_create_status_invalid`, still leads the message.
 - An invalid value is a usage error and exits 2, wherever it is checked.
   Values the argument parser knows, such as `evidence list --result`, and
   values the repository's workflow or configuration defines, such as

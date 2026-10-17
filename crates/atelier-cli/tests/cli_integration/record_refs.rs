@@ -450,7 +450,9 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
         ),
         (
             vec!["issue", "transition", &target, "nope"],
-            "Invalid transition 'nope'. Valid values: block, defer, start, supersede".into(),
+            "Invalid transition 'nope'. Valid values: block, defer, start, supersede. These are \
+             the transitions out of status todo."
+                .into(),
         ),
         (
             vec!["issue", "transition", &source, "nope"],
@@ -484,8 +486,23 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
             "Invalid result 'nope'. Valid values: pass, fail, blocked, not-applicable".into(),
         ),
         (
+            vec!["evidence", "list", "--result", "pas"],
+            "Invalid result 'pas'. Valid values: pass, fail, blocked, not-applicable. Did you \
+             mean 'pass'?"
+                .into(),
+        ),
+        (
+            vec![
+                "evidence", "record", "--target", "bad", "--kind", "test", "--result", "pass",
+                "proof",
+            ],
+            "Invalid target 'bad'. Valid values: issue/<id>, evidence/<id>".into(),
+        ),
+        (
             vec!["evidence", "attach", "x", "review", &target],
-            "Invalid target kind 'review'. Valid values: issue, evidence".into(),
+            "Invalid target kind 'review'. Valid values: issue, evidence. Did you mean \
+             'evidence'?"
+                .into(),
         ),
         (
             vec![

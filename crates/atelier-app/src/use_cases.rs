@@ -27,12 +27,14 @@ pub fn resolve_issue_ref(index: &RecordIndex, issue_ref: &str) -> Result<String>
     index.resolve(RecordKind::Issue, issue_ref)
 }
 
+/// Parses `--target <kind>/<id>`; any other shape is an invalid value.
 pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
+    let malformed = || InvalidValue::new("target", target, &["issue/<id>", "evidence/<id>"]);
     let Some((kind, id)) = target.split_once('/') else {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
+        bail!(malformed());
     };
     if kind.trim().is_empty() || id.trim().is_empty() {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
+        bail!(malformed());
     }
     Ok(EvidenceTargetArg {
         kind: kind.to_string(),
@@ -40,8 +42,8 @@ pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
     })
 }
 
-/// Resolves an evidence target's id when its kind is one evidence can
-/// target; any other kind is left for target validation to reject.
+/// Resolves an evidence target's id. Evidence targets issues and evidence
+/// records; any other kind is an invalid value.
 pub fn resolve_evidence_target_ref(index: &RecordIndex, kind: &str, id: &str) -> Result<String> {
     match kind {
         "issue" => index.resolve(RecordKind::Issue, id),
