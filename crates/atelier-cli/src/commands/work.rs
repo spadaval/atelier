@@ -363,7 +363,7 @@ fn scoped_dashboard(
     }
     let work = ScopedWork::new(index, &issue)?;
     let proof_gaps = if issue_type == "parent" {
-        Some(proof_gap_count(index, &work.rows)?)
+        Some(proof_gap_count(index, &id, &work.rows)?)
     } else {
         None
     };
@@ -409,10 +409,13 @@ fn scoped_dashboard(
         if proof_gaps > 0 {
             metadata.push(("Proof gaps", proof_gaps.to_string()));
         }
-        metadata.push((
-            "Transition readiness",
-            transition_readiness(index, &id, "start")?,
-        ));
+        // A done parent has no transitions out, and its title says so.
+        if category.as_deref() != Some("done") {
+            metadata.push((
+                "Transition readiness",
+                transition_readiness(index, &id, "start")?,
+            ));
+        }
         ItemLine::new(&id, &issue.status, &issue.priority, &issue.title)
             .issue_type(&issue.issue_type)
             .state(category.as_deref(), None)
@@ -659,11 +662,17 @@ fn objective_footer(
     Ok(render_footer_section(context, actions))
 }
 
-fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {
+/// Scope items without passing proof; the parent's own row is not its scope,
+/// as the scope size leaves it out.
+fn proof_gap_count(
+    index: &RecordIndex,
+    parent_id: &str,
+    rows: &[(Issue, ClassifiedWork)],
+) -> Result<usize> {
     let layout = atelier_app::storage_layout::StorageLayout::discover()?;
     let mut proofs = atelier_app::evidence_freshness::EvidenceReadContext::new(layout.repo_root());
     let mut count = 0;
-    for (issue, _) in rows {
+    for (issue, _) in rows.iter().filter(|(issue, _)| issue.id != parent_id) {
         if !proofs.issue_gate(index, &issue.id, 1, None)?.passed {
             count += 1;
         }
