@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-6xxb
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name the real ID in every next-step hint and error"
-updated_at: "2026-10-17T07:20:06.156997864+00:00"
+updated_at: "2026-10-17T07:20:06.778603304+00:00"
 ---
 
 ## Goal
