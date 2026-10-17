@@ -23,9 +23,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Make issue show brief by default and accept several IDs"
-updated_at: "2026-10-17T02:21:54.384528199+00:00"
+updated_at: "2026-10-17T02:36:15.483150369+00:00"
 ---
 
 ## Goal
