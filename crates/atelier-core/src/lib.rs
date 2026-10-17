@@ -637,6 +637,8 @@ pub enum EvidenceResult {
     NotApplicable,
 }
 impl EvidenceResult {
+    pub const ALL: [Self; 4] = [Self::Pass, Self::Fail, Self::Blocked, Self::NotApplicable];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pass => "pass",

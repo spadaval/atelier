@@ -193,6 +193,14 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
 - Flags that exclude each other are declared to the argument parser, so a
   conflict is a usage error with exit status 2, never a runtime error.
 
+### Help
+
+Every argument and flag in `--help` has a one-line description. An option
+with a fixed set of values lists them as `[possible values: ...]`; the status
+and category options of `issue list` and `issue create --status` list the
+repository workflow's values, read when help is shown. Global options, such as
+`--quiet`, follow the command's own options.
+
 ## Views
 
 Detail views show the item title, exact configured status, intent, blockers,

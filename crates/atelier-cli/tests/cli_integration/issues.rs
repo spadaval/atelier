@@ -2669,6 +2669,12 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
     }
     assert!(!help.contains("--ready"), "{help}");
     assert!(!help.contains("--blocked"), "{help}");
+    // Help names the repository workflow's categories and statuses.
+    assert!(
+        help.contains("[possible values: active, blocked, done, todo]"),
+        "{help}"
+    );
+    assert!(help.contains("in_progress, review"), "{help}");
 }
 
 #[test]
