@@ -514,7 +514,7 @@ fn test_panel_surfaces_are_complete_without_terminal_color() {
             "NO_COLOR/non-terminal output must not contain ANSI escapes:\n{stdout}"
         );
         assert!(
-            stdout.contains("Next Commands")
+            stdout.contains("\nNext\n----\n")
                 || stdout.contains("Dashboards")
                 || stdout.contains("Ready Work")
                 || stdout.contains("Current Work"),
@@ -752,7 +752,7 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
         "{stdout}"
     );
     assert!(!stdout.contains(&external_blocker_id), "{stdout}");
-    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("\nNext\n----\n"));
 }
 
 #[test]
@@ -951,7 +951,7 @@ fn test_issue_show_is_brief_by_default() {
     for view in [&sibling_view, &child_view] {
         for full_only in [
             "Transition Readiness",
-            "Next Commands",
+            "\nNext\n----\n",
             "Impact",
             "Priority:",
         ] {
@@ -1132,7 +1132,7 @@ fn test_issue_show_full_gives_the_whole_record_for_each_id() {
         "Transition Readiness",
         "Context\n-------\nOnly in the full view.",
         "Blocked by",
-        "Next Commands",
+        "\nNext\n----\n",
     ] {
         assert!(
             child_full.contains(section),
@@ -1922,7 +1922,7 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Downstream issue"));
     assert!(stdout.contains("Notes"));
     assert!(stdout.contains("[note] Recent note"));
-    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("\nNext\n----\n"));
     assert!(stdout.contains("atelier issue note"));
     assert!(!stdout.contains("atelier issue com"));
     assert!(stdout.contains("atelier issue transition"));
@@ -1948,7 +1948,7 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     assert!(stdout.contains("JSON description"));
     assert!(stdout.contains("Blocked by"));
     assert!(stdout.contains("Blocking"));
-    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("\nNext\n----\n"));
 }
 
 #[test]
@@ -3915,13 +3915,21 @@ fn test_status_footer_uses_complete_work_buckets() {
             "blocked",
             "Inspect blocked work (no ready work is available)",
         ),
-        ("done", "No specific next action is available"),
-        ("in_progress", "No specific next action is available"),
+        ("done", ""),
+        ("in_progress", ""),
     ] {
         set_issue_status(dir.path(), &id, status);
         let (success, output, stderr) = run_atelier(dir.path(), &["status"]);
         assert!(success, "{stderr}");
-        assert!(output.contains(expected), "{output}");
+        if expected.is_empty() {
+            // With no action to offer, status prints no footer.
+            assert!(!output.contains("\nNext\n----\n"), "{output}");
+        } else {
+            assert!(
+                output.contains(&format!("\nNext\n----\n  {expected}: ")),
+                "{output}"
+            );
+        }
         if status == "in_progress" {
             assert!(!output.contains("Current work:"), "{output}");
             assert!(

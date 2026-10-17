@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{anyhow, bail, Result};
 use std::path::Path;
 
@@ -107,9 +108,18 @@ fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<String>
 }
 
 fn print_link_next_commands(issue_id: &str, target_id: &str) {
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {issue_id}");
-    println!("  atelier issue transition {issue_id}");
-    println!("  atelier issue show {target_id}");
+    print_footer([
+        FooterAction::new(
+            "Inspect this issue",
+            format!("atelier issue show {issue_id}"),
+        ),
+        FooterAction::new(
+            "Show transition options",
+            format!("atelier issue transition {issue_id}"),
+        ),
+        FooterAction::new(
+            "Inspect the target",
+            format!("atelier issue show {target_id}"),
+        ),
+    ]);
 }
