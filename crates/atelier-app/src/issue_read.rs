@@ -53,10 +53,15 @@ impl ObjectiveScopeSummary {
             "ready"
         } else if !self.work.human.is_empty() {
             "waiting on the human"
-        } else if !self.work.done.is_empty() {
-            "done"
-        } else {
+        } else if self.work.done.is_empty()
+            || !self.work.backlog.is_empty()
+            || !self.work.context.is_empty()
+        {
+            // Open backlog or context work, or an empty scope, holds steady.
             "steady"
+        } else {
+            // Nothing in scope is open.
+            "done"
         }
     }
 }
@@ -259,12 +264,41 @@ fn link_touches_evidence(link: &RecordLink) -> bool {
 mod tests {
     use super::*;
     use crate::test_records::{evidence_record, Records};
+    use crate::work_classification::WorkClassification;
     use crate::workflow_policy::{
         BranchLifecycleConfig, StatusDefinition, TransitionDefinition, WorkflowDefinition,
         WorkflowPolicy,
     };
     use chrono::Utc;
     use std::collections::BTreeMap;
+
+    fn scope_with(done: usize, backlog: usize) -> ObjectiveScopeSummary {
+        let row = |n: usize, classification: WorkClassification| WorkRow {
+            id: format!("atelier-{n}"),
+            title: format!("Row {n}"),
+            status: classification.label().to_string(),
+            status_category: None,
+            priority: "medium".to_string(),
+            open_blockers: Vec::new(),
+            classification,
+        };
+        let mut scope = ObjectiveScopeSummary::default();
+        scope.work.done = (0..done)
+            .map(|n| row(n, WorkClassification::Done))
+            .collect();
+        scope.work.backlog = (done..done + backlog)
+            .map(|n| row(n, WorkClassification::Backlog))
+            .collect();
+        scope
+    }
+
+    #[test]
+    fn health_is_done_only_when_nothing_in_scope_is_open() {
+        assert_eq!(scope_with(5, 2).health(0), "steady");
+        assert_eq!(scope_with(5, 0).health(0), "done");
+        assert_eq!(scope_with(0, 2).health(0), "steady");
+        assert_eq!(scope_with(0, 0).health(0), "steady");
+    }
 
     fn test_policy() -> WorkflowPolicy {
         let mut statuses = BTreeMap::new();

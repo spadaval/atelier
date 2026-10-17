@@ -96,9 +96,11 @@ Counts by work state use the state words in one order: active, ready, needs a
 human (`2 need a human`), context, blocked, done, backlog. A scope's counts
 follow its size, and `work missions`, `work mission`, `work parent` and
 `issue show` all write them alike: `Scope: 3 issues: 1 ready, 2 blocked`.
-Work that is not closed is `open`, and closed work is `closed`, never
-`nonterminal` or `terminal`: `Unassigned: 6 open issues`, `closed ancestor
-<id> retires open descendant <id>`. A status row on another branch drops its
+Text that says whether work is finished calls work that is not closed `open`
+and closed work `closed`, never `nonterminal` or `terminal`: `Unassigned: 6
+open issues`, `closed ancestor <id> retires open descendant <id>`. Workflow
+configuration terms keep their names, such as the `work.terminal` validator
+and "terminal status" in policy errors. A status row on another branch drops its
 `| N active` cue when nothing is active.
 
 A list of counts leaves out its zeros, and a line that would count nothing is
