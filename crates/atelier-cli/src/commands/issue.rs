@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
+use crate::commands::workflow::IssueTransitionOption;
 use crate::human_output::{
     display_timestamp, heading, local_date, plural_suffix, print_footer, render_footer_section,
     render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
@@ -287,7 +288,7 @@ fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
     parts.join(" | ")
 }
 
-fn blocked_transition_reason(option: &crate::commands::workflow::IssueTransitionOption) -> String {
+fn blocked_transition_reason(option: &IssueTransitionOption) -> String {
     option
         .validator_results
         .iter()
@@ -369,7 +370,8 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         println!("File:     {}", path.display());
     }
     render_parent_context(index, canonical_id)?;
-    render_transition_readiness(index, canonical_id)?;
+    let options = crate::commands::workflow::issue_transition_options(index, canonical_id);
+    render_transition_readiness(&options, canonical_id);
 
     for name in IssueSections::ALL_NAMES {
         print_text_section(name.title(), record.sections.section(name));
@@ -391,7 +393,7 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
-    render_command_footer(canonical_id)?;
+    render_command_footer(canonical_id, &options)?;
     Ok(())
 }
 
@@ -524,9 +526,9 @@ pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -
     Ok(())
 }
 
-fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Result<()> {
+fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>, canonical_id: &str) {
     let mut lines = Vec::new();
-    match crate::commands::workflow::issue_transition_options(index, canonical_id) {
+    match options {
         Ok(options) => {
             for option in options {
                 let state = if option.allowed { "allowed" } else { "blocked" };
@@ -556,7 +558,6 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
         "  options: atelier issue transition {canonical_id}"
     ));
     print_panel(render_lines_section("Transition Readiness", lines));
-    Ok(())
 }
 
 fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> {
@@ -734,7 +735,10 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn render_command_footer(canonical_id: &str) -> Result<()> {
+fn render_command_footer(
+    canonical_id: &str,
+    options: &Result<Vec<IssueTransitionOption>>,
+) -> Result<()> {
     let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
         actions.push(FooterAction::new(
@@ -755,11 +759,18 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
             "Show transition options",
             format!("atelier issue transition {}", canonical_id),
         ),
-        FooterAction::new(
-            "Execute a transition",
-            format!("atelier issue transition {} <transition>", canonical_id),
-        ),
     ]);
+    // Each transition that can run now, or once its required flags are
+    // given, by its real name and command.
+    actions.extend(
+        options
+            .iter()
+            .flatten()
+            .filter(|option| option.blockers_beyond_arguments().is_empty())
+            .map(|option| {
+                FooterAction::new(format!("Execute {}", option.name), option.command.clone())
+            }),
+    );
     print_panel(render_footer_section(RenderContext::for_stdout(), actions));
     Ok(())
 }
@@ -1013,7 +1024,7 @@ fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) ->
     let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
     if !allowed.contains(status) {
         bail!(
-            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with atelier issue transition.",
+            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with `atelier issue transition`.",
             allowed.into_iter().collect::<Vec<_>>().join(", ")
         );
     }
@@ -1118,7 +1129,7 @@ pub fn update_lifecycle(
         )
         .context("Invalid sectioned --body")?;
         if parsed.notes.is_some() || parsed.close_reason.is_some() {
-            bail!("--body replaces the typed sections only; add notes with `atelier issue note` and close reasons with `atelier issue transition`");
+            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"` and close reasons with `--reason` on a transition that `atelier issue transition {id}` lists");
         }
         record.sections.body = parsed.body;
         changed_fields.push("body");
@@ -1154,7 +1165,7 @@ pub fn update_lifecycle(
         changed_fields.push("parent");
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --label, --remove-label, or --parent. Use `atelier issue note {id} \"...\"` for notes, or `atelier issue transition {id}` to choose a status change");
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;

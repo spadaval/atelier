@@ -50,8 +50,14 @@ pub fn validate_advances_endpoints(
     target_type: &str,
 ) -> Result<()> {
     if (source_type == "mission") == (target_type == "mission") {
+        // Only the source is known to be wanted; the other endpoint must change.
+        let example = if source_type == "mission" {
+            format!("atelier issue link <issue-id> {source} --role advances")
+        } else {
+            format!("atelier issue link {source} <mission-id> --role advances")
+        };
         return Err(anyhow!(
-            "workflow_issue_link_type_invalid: {source} ({source_type}) cannot advance a {target_type}; advances links one mission to one non-mission issue, e.g. `atelier issue link <issue-id> <mission-id> --role advances`"
+            "workflow_issue_link_type_invalid: {source} ({source_type}) cannot advance a {target_type}; advances links one mission to one non-mission issue, e.g. `{example}`"
         ));
     }
     Ok(())
@@ -62,12 +68,18 @@ pub fn validate_issue_hierarchy(
     issue: &Issue,
     parent_id: Option<&str>,
 ) -> Result<()> {
+    // An issue being created has no ID to link yet: the hint creates it
+    // without the parent first.
+    let (link_id, create_first) = if index.get_issue(&issue.id).is_some() {
+        (issue.id.as_str(), "")
+    } else {
+        ("<new-id>", "create it without --parent, then ")
+    };
     if issue.issue_type == "mission" {
         if let Some(parent_id) = parent_id {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: mission issue {} cannot have parent {}; link mission work with `atelier issue link <issue-id> <mission-id> --role advances`",
-                issue.id,
-                parent_id
+                "workflow_issue_hierarchy_invalid: mission issue {mission} cannot have parent {parent_id}; {create_first}link mission work with `atelier issue link {parent_id} {link_id} --role advances`",
+                mission = issue.id,
             ));
         }
     }
@@ -93,9 +105,9 @@ pub fn validate_issue_hierarchy(
         })?;
         if parent.issue_type == "mission" {
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: issue {} cannot be child of mission {}; link mission work with `atelier issue link <issue-id> <mission-id> --role advances`",
-                issue.id,
-                parent.id
+                "workflow_issue_hierarchy_invalid: issue {child} cannot be child of mission {mission}; {create_first}link mission work with `atelier issue link {link_id} {mission} --role advances`",
+                child = issue.id,
+                mission = parent.id,
             ));
         }
         if let Some(grandparent) = &parent.parent_id {

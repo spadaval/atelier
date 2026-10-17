@@ -291,7 +291,7 @@ pub(crate) fn check_base_commits(
         };
         if let Some(id) = base_done_claim(repo, policy, commit, tip, &upstream, &changed)? {
             bail!(
-                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with git revert {}, or edit {id} back to its earlier status and commit, then run atelier start {id} and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
                 &commit[..8.min(commit.len())],
                 &commit[..8.min(commit.len())],
             );
@@ -302,7 +302,7 @@ pub(crate) fn check_base_commits(
             .collect::<Vec<_>>();
         if let Some(first) = other.first() {
             bail!(
-                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: git switch -c <issue_type>/<id>, git branch -f {base} {base}@{{upstream}}, then atelier start <id> there; get it reviewed and integrate it with atelier merge.",
+                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: `git switch -c <issue_type>/<id>`, `git branch -f {base} {base}@{{upstream}}`, then `atelier start <id>` there; get it reviewed and integrate it with `atelier merge`.",
                 &commit[..8.min(commit.len())],
                 first.display(),
                 match other.len() {

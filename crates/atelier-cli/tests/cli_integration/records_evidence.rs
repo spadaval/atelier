@@ -1214,7 +1214,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(evidence_list.contains(&mission_evidence_id));
     assert!(evidence_list.contains("exit 2"));
     assert!(evidence_list.contains(&format!("target issue/{mission_id}")));
-    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+    assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
+    assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
 
 #[test]
@@ -1558,7 +1559,8 @@ fn test_evidence_list_elides_command_transcripts() {
     assert!(evidence_list.contains("command sh -c 'printf ..."));
     assert!(!evidence_list.contains("proof transcript line one"));
     assert!(!evidence_list.contains("proof transcript line two"));
-    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+    assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
+    assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
 
 #[test]
@@ -1746,7 +1748,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
         ],
     );
     assert!(!success, "invalid evidence record role should fail");
-    assert_corrective_evidence_role_error(&stderr);
+    assert_corrective_evidence_role_error(&stderr, target_id, "<evidence-id>");
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
@@ -1792,7 +1794,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
         ],
     );
     assert!(!success, "invalid evidence attach role should fail");
-    assert_corrective_evidence_role_error(&stderr);
+    assert_corrective_evidence_role_error(&stderr, reuse_id, &evidence_id);
 
     let (success, attach_out, stderr) = run_atelier(
         dir.path(),
@@ -1809,7 +1811,8 @@ fn test_evidence_relation_role_errors_are_corrective() {
     assert!(show_out.contains(&format!("issue/{reuse_id} (validates)")));
 }
 
-fn assert_corrective_evidence_role_error(stderr: &str) {
+/// The recovery commands name the target and evidence the command was given.
+fn assert_corrective_evidence_role_error(stderr: &str, target: &str, evidence: &str) {
     assert!(
         stderr.contains("Invalid evidence relation role 'validation'"),
         "error should name invalid role: {stderr}"
@@ -1823,12 +1826,15 @@ fn assert_corrective_evidence_role_error(stderr: &str) {
         "error should distinguish evidence kind from relation role: {stderr}"
     );
     assert!(
-        stderr
-            .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""),
+        stderr.contains(&format!(
+            "`atelier evidence record --target issue/{target} --kind validation \"summary\"`"
+        )),
         "error should name normal targeted record flow: {stderr}"
     );
     assert!(
-        stderr.contains("atelier evidence attach <evidence-id> issue <issue-id>"),
+        stderr.contains(&format!(
+            "`atelier evidence attach {evidence} issue {target}`"
+        )),
         "error should name existing-proof attach flow: {stderr}"
     );
 }

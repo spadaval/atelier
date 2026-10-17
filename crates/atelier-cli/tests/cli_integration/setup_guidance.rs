@@ -1593,7 +1593,17 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("\nNext\n----\n"));
     assert!(stdout.contains("Choose ready work"));
-    assert!(stdout.contains("Inspect selected work transitions"));
+    let ready_id = issue_out
+        .split_whitespace()
+        .find(|word| word.starts_with("atelier-"))
+        .unwrap();
+    assert!(
+        stdout.contains(&format!(
+            "Inspect the top ready item's transitions: atelier issue transition {ready_id}"
+        )),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("<issue-id>"), "{stdout}");
     assert!(!stdout.contains(
         "Start selected work (ready work exists): atelier issue transition <issue-id> start"
     ));
@@ -1612,6 +1622,136 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(success, "quiet status failed: {stderr}");
     assert!(quiet.contains("work="));
     assert!(quiet.contains("ready="));
+}
+
+/// Placeholders such as `<issue-id>` or `<transition>` in `text`.
+fn id_placeholders(text: &str) -> Vec<String> {
+    text.split('<')
+        .skip(1)
+        .filter_map(|rest| rest.split_once('>'))
+        .map(|(inner, _)| format!("<{inner}>"))
+        .filter(|token| token.ends_with("id>") || token == "<transition>")
+        .collect()
+}
+
+/// Hints name the real ID wherever the view knows it (atelier-6xxb).
+#[test]
+fn test_hints_name_real_ids_instead_of_placeholders() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Hint mission", "--issue-type", "mission"],
+    );
+    assert!(success, "{stderr}");
+    let mission = issue_id_by_title(dir.path(), "Hint mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Hint work"]);
+    assert!(success, "{stderr}");
+    let work = issue_id_by_title(dir.path(), "Hint work");
+
+    let mut views = Vec::new();
+    for args in [&["status"][..], &["prime"], &["work"]] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?}: {stderr}");
+        views.push((args.join(" "), stdout));
+    }
+    assert!(
+        views[0]
+            .1
+            .contains(&format!("atelier issue transition {work}")),
+        "{}",
+        views[0].1
+    );
+    assert!(
+        views[1]
+            .1
+            .contains(&format!("atelier issue transition {work}")),
+        "{}",
+        views[1].1
+    );
+    assert!(
+        views[2]
+            .1
+            .contains(&format!("atelier work mission {mission}")),
+        "{}",
+        views[2].1
+    );
+
+    let (success, list, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(success, "{stderr}");
+    assert!(
+        list.contains("Next\n----\n  Inspect the first record: atelier issue show atelier-"),
+        "{list}"
+    );
+    views.push(("issue list".into(), list));
+    let (success, empty, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
+    assert!(success, "{stderr}");
+    assert!(
+        empty.contains("No issues match the selected filters."),
+        "{empty}"
+    );
+    assert!(
+        !empty.contains("Next"),
+        "an empty list has no step to offer: {empty}"
+    );
+    views.push(("issue list --status done".into(), empty));
+
+    for args in [
+        vec!["issue", "show", &work],
+        vec!["issue", "show", &work, "--full"],
+    ] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "{args:?}: {stderr}");
+        views.push((args.join(" "), stdout));
+    }
+    let full = &views.last().unwrap().1;
+    for step in [
+        format!("  Execute start: atelier issue transition {work} start\n"),
+        format!("  Execute supersede: atelier issue transition {work} supersede --reason"),
+    ] {
+        assert!(full.contains(&step), "{full}");
+    }
+
+    let (success, _, error) = run_atelier(
+        dir.path(),
+        &["issue", "update", &work, "--parent", &mission],
+    );
+    assert!(!success);
+    assert!(
+        error.contains(&format!(
+            "`atelier issue link {work} {mission} --role advances`"
+        )),
+        "{error}"
+    );
+    views.push(("hierarchy error".into(), error));
+    let (success, _, error) = run_atelier(dir.path(), &["issue", "update", &work]);
+    assert!(!success);
+    assert!(
+        error.contains(&format!("`atelier issue note {work} \"...\"`")),
+        "{error}"
+    );
+    views.push(("nothing to update".into(), error));
+
+    for (view, text) in views {
+        assert_eq!(
+            id_placeholders(&text),
+            Vec::<String>::new(),
+            "{view}:\n{text}"
+        );
+    }
+
+    // A new issue has no ID to link yet, so only that slot stays a placeholder.
+    let (success, _, error) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Under the mission", "--parent", &mission],
+    );
+    assert!(!success);
+    assert!(
+        error.contains(&format!(
+            "create it without --parent, then link mission work with `atelier issue link <new-id> {mission} --role advances`"
+        )),
+        "{error}"
+    );
 }
 
 #[test]

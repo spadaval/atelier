@@ -147,6 +147,18 @@ one sentence after `Hint:` that names its command in backticks, such as
 ``Hint: Inspect the blocker with `atelier issue show <id>` ``; it carries no
 second prefix.
 
+Every next step, hint and error recovery step names the real ID when the
+command knows it: the top ready item in `status`, the top mission in `work`,
+the first row of `issue list`, the issue's runnable transitions by name in
+`issue show --full`, and the issue, mission or owner an error is about, as in
+``link mission work with `atelier issue link atelier-xmtr atelier-1w8c --role
+advances` ``. A placeholder such as `<issue-id>` stays only where the command
+cannot know the ID, such as which issue should own an unowned branch. A step
+with no row to point at is left out, so an empty `issue list` has no `Next`
+section. A command inside a sentence is quoted in backticks, never bare or in
+single quotes; a command that is the whole value after a label, as in a `Next`
+line, a `Command:` line or an error's `Next: <command>`, is bare.
+
 ### Quiet Tokens
 
 `--quiet` prints one documented token per command, and nothing else on

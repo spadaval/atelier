@@ -1271,7 +1271,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(transitions.contains("fail  evidence.attached"));
     assert!(transitions.contains("expected at least 1 fresh passing evidence record(s); found 0"));
     assert!(
-        transitions.contains("Hint: Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`"),
+        transitions.contains(&format!("Hint: Record fresh proof with `atelier evidence record --target issue/{issue_id} --kind test -- <command>`")),
         "{transitions}"
     );
 
@@ -5189,19 +5189,19 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
             format!(
                 r###"{{"client_ref":"c","operation":"update","id":"{third}","body":"## Goal\n\nC2.\n\n## Done when\n\nC2."}}"###
             ),
-            "issue_body_done",
+            "issue_body_done".to_string(),
         ),
         (
             format!(
                 r###"{{"client_ref":"k","operation":"update","id":"{child}","parent":{{"id":"{parent}"}}}}"###
             ),
-            "use atelier issue update --parent",
+            format!("use `atelier issue update {child} --parent {parent}`"),
         ),
         (
             format!(
                 r###"{{"client_ref":"s","operation":"update","id":"{second}","parent":{{"id":"{parent}"}}}}"###
             ),
-            "has children of its own",
+            "has children of its own".to_string(),
         ),
     ] {
         fs::write(
@@ -5214,7 +5214,7 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
             &["bundle", "preview", revision.to_str().unwrap()],
         );
         assert!(
-            !success && stderr.contains(expected),
+            !success && stderr.contains(&expected),
             "{expected}: {stderr}"
         );
     }

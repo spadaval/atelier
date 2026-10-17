@@ -705,7 +705,7 @@ fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummar
                 }
             }
             if recovery.is_empty() {
-                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun atelier prune.", display_git_path(&candidate.path));
+                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun `atelier prune --apply`.", display_git_path(&candidate.path));
             }
             let recovery_dir = staged.keep();
             bail!("prune rollback failed: {}. Record backups remain in {}. Next: restore these paths before any tracker command.", recovery.join("; "), recovery_dir.display());

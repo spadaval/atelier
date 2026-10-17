@@ -632,7 +632,7 @@ fn run() -> Result<()> {
         Commands::Work { action } => {
             let (_, index) = load_repository()?;
             match action {
-                None => commands::work::dashboards(quiet),
+                None => commands::work::dashboards(&index, quiet),
                 Some(WorkCommands::Mission {
                     id,
                     ready,

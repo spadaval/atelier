@@ -128,7 +128,11 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     if options.command.is_empty() {
         bail!("evidence capture requires a command after --");
     }
-    validate_evidence_relation_role(options.role)?;
+    validate_evidence_relation_role(
+        options.role,
+        None,
+        options.target_kind.zip(options.target_id),
+    )?;
     if matches!(
         (options.target_kind, options.target_id),
         (Some(_), None) | (None, Some(_))
@@ -478,7 +482,7 @@ fn attach_impl(
     role: &str,
     quiet: Option<bool>,
 ) -> Result<()> {
-    validate_evidence_relation_role(role)?;
+    validate_evidence_relation_role(role, Some(id), Some((target_kind, target_id)))?;
     RecordStore::new(state_dir).load_evidence_by_id(id)?;
     let target = validate_record_ref(index, target_kind, target_id, role)?;
     let inserted = RecordStore::new(state_dir).add_attachment_relationship(
@@ -513,7 +517,7 @@ fn validate_record_ref<'a>(
     id: &'a str,
     role: &'a str,
 ) -> Result<TargetRef<'a>> {
-    validate_evidence_relation_role(role)?;
+    validate_evidence_relation_role(role, None, Some((kind, id)))?;
 
     validate_record_kind(kind)?;
     if kind == "issue" {
@@ -529,12 +533,20 @@ fn validate_record_ref<'a>(
     })
 }
 
-pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
+/// The recovery commands name the evidence and target the caller was given,
+/// keeping placeholders only for what it was not.
+pub fn validate_evidence_relation_role(
+    role: &str,
+    evidence: Option<&str>,
+    target: Option<(&str, &str)>,
+) -> Result<()> {
     if ACCEPTED_EVIDENCE_RELATION_ROLES.contains(&role) {
         return Ok(());
     }
+    let evidence = evidence.unwrap_or("<evidence-id>");
+    let (kind, id) = target.unwrap_or(("issue", "<issue-id>"));
     bail!(
-        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target issue/<id> --kind validation \"summary\"`; reuse existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`.",
+        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target {kind}/{id} --kind validation \"summary\"`; reuse existing proof with `atelier evidence attach {evidence} {kind} {id}`.",
         ACCEPTED_EVIDENCE_RELATION_ROLES.join(", ")
     )
 }
@@ -594,7 +606,10 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
         );
     }
     print_footer([
-        FooterAction::new("Show proof detail", "atelier evidence show <evidence-id>"),
+        FooterAction::new(
+            "Show the newest proof's detail",
+            format!("atelier evidence show {}", records[0].header.id),
+        ),
         FooterAction::new(
             "Filter by result",
             "atelier evidence list --result <result>",
