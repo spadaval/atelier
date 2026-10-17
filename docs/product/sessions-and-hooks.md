@@ -69,10 +69,10 @@ and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
 Landing also checks completed claims elsewhere in the checkout that a change
-since a trusted point can affect. The trusted point is the branch base on a work
-branch, and otherwise the merge base with the base's upstream (the local base
-can hold commits no land has checked); without an upstream, every claim is
-checked. Every change that reaches the base had its own claims checked when it
+since a trusted point can affect. The trusted point is the merge base of the
+base's upstream with the branch base on a work branch, or with HEAD otherwise:
+the local base can hold commits no land has checked, so it is not trusted.
+Without an upstream, every claim is checked. Every change that reaches the base had its own claims checked when it
 landed, so earlier history holds by induction. A claim is checked when its
 record changed; when a changed issue record reaches it through blocked,
 parent, child, or advances links, directly or along a chain, before or after the change; when a review or evidence record about it

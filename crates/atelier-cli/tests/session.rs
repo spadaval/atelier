@@ -3759,6 +3759,26 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
         !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
         "{output}"
     );
+
+    // So is an owner's branch started from that local base commit.
+    git(f.path(), &["switch", "-q", "main"]);
+    let owner = ok(f.path(), &["-q", "issue", "create", "Started from main"]);
+    commit(f.path(), "plan owned work");
+    ok(f.path(), &["start", &owner]);
+    commit(f.path(), "start owned work");
+    let (pass, output) = cli(f.path(), &["land", &owner]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
+
+    // Without an upstream, nothing is trusted.
+    git(f.path(), &["branch", "--unset-upstream", "main"]);
+    let (pass, output) = cli(f.path(), &["land", &owner]);
+    assert!(
+        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        "{output}"
+    );
 }
 #[test]
 fn land_checks_a_mission_whose_advancing_work_reopens() {
