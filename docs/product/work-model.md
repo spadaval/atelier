@@ -21,6 +21,12 @@ result against Done when, or for `supersede` why the work will not happen.
 Test names, measurements, and review status belong in evidence and review
 records, not here.
 
+Priority has two spellings for four values: records store `P0`, `P1`, `P2`
+and `P3`, which views print as `critical`, `high`, `medium` and `low`. The
+`-p`/`--priority` flags on `issue create`, `issue update` and `issue list`
+accept either spelling; bundles take the word. `check` rejects a record that
+stores the word, and names the stored token it needs.
+
 Any work item can be a parent: it may own direct children, one level deep, so a
 child has no children of its own (atelier-9vq3, decided by Sumeet 2026-10-15;
 this replaced the epic type, because elsewhere "epic" usually means a theme and
@@ -152,8 +158,9 @@ against which commit, and whether it passed. Independent review examines the
 implementation and the done claim together.
 
 `atelier merge <id>` checks the base branch's policy and review gates, then
-fast-forwards the base to the committed work. It creates no commit and changes
-no records. The base therefore shows the item done together with its code.
+fast-forwards the base to the committed work, or under `merge_commit` adds one
+merge commit whose tree passed `merge_checks`. It creates no other commit and
+changes no records. The base therefore shows the item done together with its code.
 See [reviews and merge](reviews-and-merge.md) for approval freshness and findings.
 
 The done claim comes before review on purpose (atelier-9k7o, decided by

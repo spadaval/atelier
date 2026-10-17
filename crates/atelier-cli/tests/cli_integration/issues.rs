@@ -50,6 +50,69 @@ fn test_create_issue_with_priority() {
 }
 
 #[test]
+fn test_priority_flags_accept_stored_tokens_and_words_alike() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Token priority", "-p", "P1"],
+    );
+    assert!(success, "-p P1 should create an issue: {stderr}");
+    let token_id = issue_ref(dir.path(), 1);
+    let markdown = read_canonical_record(dir.path(), "issues", &token_id);
+    assert!(
+        markdown.contains("priority: \"P1\"\n"),
+        "-p P1 should store P1:\n{markdown}"
+    );
+    let (_, show, _) = run_atelier(dir.path(), &["issue", "show", &token_id]);
+    assert!(
+        show.lines()
+            .next()
+            .unwrap()
+            .contains(" high Token priority"),
+        "views print the word:\n{show}"
+    );
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Word priority", "-p", "high"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Low priority", "-p", "low"],
+    );
+    let low_id = issue_ref(dir.path(), 3);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &low_id, "--priority", "P0"],
+    );
+    assert!(success, "--priority P0 should update: {stderr}");
+    let markdown = read_canonical_record(dir.path(), "issues", &low_id);
+    assert!(
+        markdown.contains("priority: \"P0\"\n"),
+        "--priority P0 should store P0:\n{markdown}"
+    );
+
+    let (success, by_word, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--priority", "high"]);
+    assert!(success, "{stderr}");
+    let (success, by_token, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--priority", "P1"]);
+    assert!(success, "{stderr}");
+    assert_eq!(by_word, by_token);
+    assert!(by_token.contains("Token priority") && by_token.contains("Word priority"));
+    assert!(!by_token.contains("Low priority"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Bad", "-p", "P4"]);
+    assert!(!success);
+    assert!(
+        stderr.contains("Invalid priority 'P4'. Valid values: P0 or critical, P1 or high, P2 or medium, P3 or low"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn test_create_issue_with_description_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1110,10 +1173,7 @@ fn test_issue_show_takes_several_ids_and_resolves_all_before_printing() {
     );
     assert!(!success, "an unknown ID should fail the whole show");
     assert_eq!(stdout, "", "nothing prints before every ID resolves");
-    assert!(
-        stderr.contains("Issue atelier-zzzz was not found"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("issue atelier-zzzz not found"), "{stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show"]);
     assert!(!success, "show needs at least one ID");
@@ -2569,7 +2629,12 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
         &["issue", "list", "--category", "does-not-exist"],
     );
     assert!(!success, "unknown category unexpectedly succeeded");
-    assert!(stderr.contains("Invalid issue category"), "{stderr}");
+    assert!(
+        stderr.contains(
+            "Invalid category 'does-not-exist'. Valid values: active, blocked, done, todo"
+        ),
+        "{stderr}"
+    );
 
     let (success, quiet, stderr) = run_atelier(
         dir.path(),

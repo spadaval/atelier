@@ -452,14 +452,17 @@ fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool
     read.ancestor(earlier, later).unwrap_or(false)
 }
 
+/// Merge gates; the policy's `merge_checks` run in `checks_root`, the
+/// checkout of the tree that merging would put on the base.
 pub fn evaluate(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
+    checks_root: &Path,
 ) -> Result<Vec<GateNode>> {
-    evaluate_inner(index, read, policy, owner, base_commit, true)
+    evaluate_inner(index, read, policy, owner, base_commit, Some(checks_root))
 }
 
 /// Active handoffs check committed completion claims, not merge readiness.
@@ -472,7 +475,15 @@ pub fn evaluate_session(
 ) -> Result<Vec<GateNode>> {
     let issue = index.require_issue(owner)?;
     let complete = policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?;
-    evaluate_inner(index, read, policy, owner, base_commit, complete)
+    let repo = read.repo;
+    evaluate_inner(
+        index,
+        read,
+        policy,
+        owner,
+        base_commit,
+        complete.then_some(repo),
+    )
 }
 
 fn evaluate_inner(
@@ -481,7 +492,7 @@ fn evaluate_inner(
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
-    complete: bool,
+    checks_root: Option<&Path>,
 ) -> Result<Vec<GateNode>> {
     evaluate_scope(
         index,
@@ -489,10 +500,9 @@ fn evaluate_inner(
         policy,
         owner,
         base_commit,
-        if complete {
-            EvaluationKind::Merge
-        } else {
-            EvaluationKind::Session
+        match checks_root {
+            Some(root) => EvaluationKind::Merge(root),
+            None => EvaluationKind::Session,
         },
         scope(index, owner)?,
     )
@@ -523,8 +533,8 @@ pub fn evaluate_claims(
         ids,
     )
 }
-enum EvaluationKind {
-    Merge,
+enum EvaluationKind<'p> {
+    Merge(&'p Path),
     Session,
     CurrentClaims,
     Historical,
@@ -535,10 +545,10 @@ fn evaluate_scope(
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
-    kind: EvaluationKind,
+    kind: EvaluationKind<'_>,
     ids: BTreeSet<String>,
 ) -> Result<Vec<GateNode>> {
-    let complete = matches!(kind, EvaluationKind::Merge);
+    let complete = matches!(kind, EvaluationKind::Merge(_));
     let historical = matches!(kind, EvaluationKind::Historical);
     let global = matches!(
         kind,
@@ -811,11 +821,11 @@ fn evaluate_scope(
     nodes.extend(completion_claims(
         index, read, policy, &claimed, historical,
     )?);
-    let checks = if complete {
+    let checks = if let EvaluationKind::Merge(checks_root) = kind {
         crate::workflow_validation::evaluate_policy_transition(
             crate::workflow_validation::ValidatorRequest {
                 index,
-                repo_root: read.repo,
+                repo_root: checks_root,
                 policy,
                 issue_id: owner,
                 validators: &policy.merge_checks,

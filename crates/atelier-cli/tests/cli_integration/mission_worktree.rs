@@ -1326,8 +1326,16 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         "Invalid priority fixture",
         |markdown, _issue_id| markdown.replace("priority: \"P2\"", "priority: \"urgent\""),
         &[
-            "Invalid priority",
-            "Invalid priority 'urgent'. Valid values: critical, high, medium, low",
+            "priority 'urgent' in .atelier/issues/",
+            ".md: records store P0 (critical), P1 (high), P2 (medium) or P3 (low)",
+        ],
+    );
+    assert_lint_rejects_issue_edit(
+        "Word priority fixture",
+        |markdown, _issue_id| markdown.replace("priority: \"P2\"", "priority: \"low\""),
+        &[
+            "priority 'low' in .atelier/issues/",
+            ".md: records store P0 (critical), P1 (high), P2 (medium) or P3 (low)",
         ],
     );
     assert_lint_rejects_issue_edit(

@@ -26,8 +26,9 @@ nodes; it is not a persistent record or link target kind.
 Issue kinds include missions and work items; any work item can parent others. IDs are project-scoped
 random IDs such as `atelier-z1p8`, independent of record type: the configured
 `project_slug`, a hyphen, and a random base36 suffix. Any valid slug prefix is
-accepted when reading, so records minted under another slug stay valid. Priority is stored as `P0`–`P3`; the CLI, bundles and human output use the
-labels `critical`, `high`, `medium` and `low` for the same values. YAML front matter
+accepted when reading, so records minted under another slug stay valid. Priority is stored as `P0`–`P3`; the
+[work model](../product/work-model.md#records-and-relationships) maps them to
+the words commands and views use. YAML front matter
 holds typed identity, lifecycle state, timestamps, relationships, strategy path,
 and owner branch metadata. The Markdown body is human-readable intent and
 proof. Generic extension maps and historical issue section schemas are not the
@@ -72,14 +73,14 @@ before installing its issue and evidence directories; see the
 [bundle input contract](../spec/bundle/schema.md).
 
 Transitions write records and run read-only checks. `start` explicitly prepares
-a branch. `merge` explicitly checks gates and fast-forwards; it writes no
-tracker records and creates no commits. Agents commit record mutations with
+a branch. `merge` explicitly checks gates and fast-forwards (or, under `merge_commit`,
+creates only the merge commit); it writes no tracker records. Agents commit record mutations with
 the implementation. Active work must resolve to a recorded owner branch.
 
 ## Git and policy
 
 A work branch carries its own graph and done claim. The base branch obtains
-those records with the same fast-forward that integrates code. Integration
+those records with the same fast-forward or merge that integrates code. Integration
 facts and author identities come from Git.
 
 Merge policy is read from the base branch's `.atelier/workflow.yaml`, so a work

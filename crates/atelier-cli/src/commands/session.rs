@@ -10,9 +10,7 @@ use std::{io::Read, path::Path};
 
 fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<Option<String>> {
     if let Some(reference) = requested {
-        let id = index
-            .resolve_issue_ref(reference)?
-            .context("landing issue not found")?;
+        let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, reference)?;
         let issue = index.require_issue(&id)?;
         return Ok(Some(issue.parent_id.clone().unwrap_or(id)));
     }
@@ -254,24 +252,10 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             )
             .all(|commit| at(&commit) == trusted_policy)
     };
-    // Lint reads every record, so under a policy that gates on it any record
-    // change can affect every claim.
-    let lints = source
-        .policy
-        .workflows
-        .values()
-        .flat_map(|workflow| workflow.transitions.values())
-        .flat_map(|transition| &transition.validators)
-        .any(|validator| validator.builtin == "lint.none_blocking");
-    let records_unchanged = |point: &str| {
-        git::text(
-            repo,
-            &["diff", "--name-only", point, &head, "--", ".atelier"],
-        )
-        .is_ok_and(|changed| changed.trim().is_empty())
-    };
     let claims_trusted = trusted.as_deref().filter(|point| {
-        touched.is_some() && policy_unchanged(point) && (!lints || records_unchanged(point))
+        touched.is_some()
+            && policy_unchanged(point)
+            && lint_trusts(repo, &source.policy, point, &head)
     });
     let mut nodes = claim_nodes(
         repo,
@@ -467,6 +451,62 @@ pub fn land(requested: Option<&str>, hook: bool, install: bool, quiet: bool) -> 
     };
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+/// Lint reads every record, so under a policy that gates on it any record
+/// change since `point` can affect every claim.
+fn lint_trusts(
+    repo: &Path,
+    policy: &atelier_workflow::WorkflowPolicy,
+    point: &str,
+    head: &str,
+) -> bool {
+    !policy
+        .workflows
+        .values()
+        .flat_map(|workflow| workflow.transitions.values())
+        .flat_map(|transition| &transition.validators)
+        .any(|validator| validator.builtin == "lint.none_blocking")
+        || git::text(
+            repo,
+            &["diff", "--name-only", point, head, "--", ".atelier"],
+        )
+        .is_ok_and(|changed| changed.trim().is_empty())
+}
+
+/// Gate nodes for the done claims outside the owner's scope that the merge
+/// commit `commit` can affect, judged in its records `index`. `base_head`
+/// passed these checks when it reached the base, so it is the trusted point,
+/// as for land; a policy change or lint gate checks every claim.
+pub(crate) fn merge_claim_nodes(
+    repo: &Path,
+    read: &mut git_freshness::ReadContext<'_>,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    owner: &str,
+    base_head: &str,
+    commit: &str,
+) -> Result<Vec<review_gate::GateNode>> {
+    let owned = review_gate::scope(index, owner)?;
+    let touched = touched_claims(repo, read, index, base_head, commit)?;
+    let policy_at = |at: &str| {
+        git_freshness::blob(repo, at, Path::new(workflow_policy::WORKFLOW_POLICY_PATH)).ok()
+    };
+    let trusted = (touched.is_some()
+        && policy_at(base_head) == policy_at(commit)
+        && lint_trusts(repo, policy, base_head, commit))
+    .then_some(base_head);
+    claim_nodes(
+        repo,
+        read,
+        index,
+        policy,
+        &owned,
+        Some(base_head),
+        commit,
+        trusted,
+        &touched.unwrap_or_default(),
+    )
 }
 
 /// Gate nodes for the done claims outside the owner's scope. Claims unchanged

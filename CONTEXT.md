@@ -25,7 +25,7 @@ Use these terms for the verified repo-native tracker defined by
 | Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |
 | Freshness | Whether later commits changed material relevant to the proof or approval. |
 | Done claim | A terminal status committed on the work branch, before integration. |
-| Integration | A gated fast-forward of the base branch; it creates no commit and writes no tracker state. |
+| Integration | A gated fast-forward of the base branch, or under `merge_commit` a gated merge commit whose merged tree passed `merge_checks`; it creates no other commit and writes no tracker state. |
 | Status | Session orientation from records, Git state, proof, and review; `prime` is its deprecated alias. |
 | Land | A session handoff check of committed records and tracker invariants. |
 | Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |

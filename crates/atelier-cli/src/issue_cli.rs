@@ -1,6 +1,5 @@
 use anyhow::Result;
 use atelier_app::use_cases::load_repository;
-use atelier_core::IssuePriority;
 
 use crate::commands;
 
@@ -17,7 +16,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             strategy,
         } => {
             let (state_dir, index) = load_repository()?;
-            IssuePriority::from_cli_input(&priority)?;
             commands::issue::create_lifecycle(
                 &index,
                 &state_dir,
@@ -123,7 +121,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 
         super::IssueCommands::Note { id, text, kind } => {
             let (state_dir, index) = load_repository()?;
-            let id = super::resolve_issue_arg(&index, &id)?;
+            let id = commands::issue::resolve_id(&index, &id)?;
             commands::issue::append_note(&state_dir, &id, &kind, &text)
         }
 

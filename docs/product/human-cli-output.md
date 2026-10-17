@@ -190,6 +190,34 @@ stdout. atelier-pr4k makes every command honour this table:
 | `work` views | IDs, one per line; `work mission` and `work parent` print their counts as `key=value` |
 | `review` and `evidence` record commands | the new record's ID |
 
+### Errors
+
+Every command takes the same record references and words the same errors
+about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
+`atelier_core::invalid_value_message` implement them.
+
+- A record reference is a full ID or a short ID, the part after the project
+  slug, in any case: `1w8c`, `1W8C` and `atelier-1w8c` all name
+  `atelier-1w8c`. Issues, evidence records and reviews resolve alike.
+- An unknown reference is one message, `<kind> <ref> not found`, followed by
+  up to three IDs it may have meant, or the command that lists the kind, and
+  exits 1:
+
+  ```
+  issue 1w8 not found. Did you mean atelier-1w8c?
+  issue zzzz not found. Next: atelier issue list
+  ```
+
+- A reference to a record of another kind names both kinds and the command
+  that shows it: ``atelier-waj0 is an evidence record, not an issue. Use
+  `atelier evidence show atelier-waj0`.`` A scoped view that refuses an issue
+  names the view that does show it, such as `atelier work mission
+  atelier-1w8c` for a mission given to `work parent`.
+- An invalid value names the field, the value and every value the field
+  accepts: `Invalid status 'open'. Valid values: backlog, done, todo, all`.
+- Flags that exclude each other are declared to the argument parser, so a
+  conflict is a usage error with exit status 2, never a runtime error.
+
 ## Views
 
 Detail views show the item title, exact configured status, intent, blockers,

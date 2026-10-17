@@ -78,8 +78,9 @@ what each record contains.
   the strategy files linked from missions (filing, grooming, decisions,
   strategy edits) may go on the base branch directly; everything else goes
   through a work branch and `atelier merge`.
-- Atelier never creates commits. Commit records with the implementation, and
-  commit the done claim on the work branch so it is reviewed with the code.
+- Atelier creates no commits except the merge commit described below.
+  Commit records with the implementation, and commit the done claim on the
+  work branch so it is reviewed with the code.
 - Record review against the branch owner with `atelier review record`,
   `approve`, `finding`, and `trivial`, each with an explicit `--identity` and
   summary. Approval must come from an identity other than the code's Git
@@ -93,9 +94,14 @@ what each record contains.
   do not.
 - Integrate only with `atelier merge`, never a plain `git merge` into the
   base branch, which skips every gate. `atelier merge <id> --check` evaluates
-  the gates without integrating; `atelier merge <id>` fast-forwards the
-  policy's base branch to the reviewed work and deletes the local work
-  branch. Gates come from the base branch's
+  the gates without integrating; `atelier merge <id>` integrates the
+  reviewed work and deletes the local work branch. Under the default
+  `branch_policy.merge_strategy: fast_forward_only` it fast-forwards the
+  base, so the branch must already contain it. Under `merge_commit` it
+  always creates a merge commit of the branch into the current base, runs the
+  policy's `merge_checks` on that merged tree, and moves the base to it only
+  when every gate passes, so a branch behind the base lands without a
+  catch-up merge when the merge is clean. Gates come from the base branch's
   committed policy. Merge writes no records and does not push; pushing
   follows repository policy.
 - Merge integrates only into the base branch named in
