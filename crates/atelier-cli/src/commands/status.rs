@@ -14,7 +14,7 @@ use crate::human_output::{
 };
 use atelier_app::work_classification::StatusView;
 
-const PRIME_DEPRECATION: &str = "`atelier prime` is deprecated: run `atelier status`, and rerun `atelier setup claude` so the SessionStart hook calls it.";
+const PRIME_DEPRECATION: &str = "`atelier prime` is deprecated: run `atelier status`, and rerun `atelier setup claude` (with your `--binary <path>`, if you installed with one) so the SessionStart hook calls it.";
 /// Ready items listed under the ready count when the checkout has no owner.
 const READY_SHOWN: usize = 5;
 /// Newest reviews and evidence shown for an owner.
