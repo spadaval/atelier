@@ -4,6 +4,9 @@ id: "atelier-0sia"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-0sia
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T09:03:04.809004435+00:00"
+status: "done"
 title: "Leave the parent out of work parent proof gaps, and drop stale done-record hints"
-updated_at: "2026-10-17T08:57:23.877310906+00:00"
+updated_at: "2026-10-17T09:03:04.809004435+00:00"
 ---
 
 ## Goal
@@ -32,3 +36,7 @@ Found while implementing atelier-ksx6:
 - Proof gaps count the parent's scope consistently with the scope size.
 - Done records get no transition steps from `issue link`, and the brief view does not offer the Close Reason it already summarized.
 - Tests cover each.
+
+## Close Reason
+
+work parent's Proof gaps now count only the parent's scope, matching its size; a done parent shows no Transition readiness line; issue link offers transition options only when the source has transitions out; the brief issue show of a done record leaves a one-line Close Reason out of More with --full. Tests cover each.

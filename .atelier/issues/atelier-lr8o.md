@@ -4,6 +4,9 @@ id: "atelier-lr8o"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-lr8o
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T09:02:22.401806546+00:00"
+status: "done"
 title: "Resolve short evidence IDs in bundle files like command arguments"
-updated_at: "2026-10-17T08:57:24.195389303+00:00"
+updated_at: "2026-10-17T09:02:22.401806546+00:00"
 ---
 
 ## Goal
@@ -28,3 +32,7 @@ Bundle files resolve existing issue IDs through the shared short, case-insensiti
 
 - Bundle references to existing evidence and reviews resolve like command arguments, and an unknown one uses the shared not-found message.
 - A bundle test covers a short evidence ID and an unknown one.
+
+## Close Reason
+
+Bundle id references resolve existing issues and evidence through RecordIndex::resolve_any (shared short, case-insensitive matcher) and report unknown and wrong-kind references with the shared messages; covered by record_refs::bundle_ids_resolve_and_fail_like_command_arguments.

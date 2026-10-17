@@ -117,6 +117,11 @@ pub fn with_article(noun: &str) -> String {
     format!("{article} {noun}")
 }
 
+/// Whether any of `ids` is one [`not_found`] would name for `reference`.
+pub fn has_near_match<'a>(reference: &str, ids: impl IntoIterator<Item = &'a str>) -> bool {
+    !near_matches(reference, ids).is_empty()
+}
+
 /// IDs whose short ID starts with the reference's, or is a prefix of it, or
 /// differs from it in one character.
 fn near_matches<'a>(reference: &str, ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {

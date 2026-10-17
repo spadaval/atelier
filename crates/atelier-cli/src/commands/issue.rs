@@ -140,7 +140,21 @@ fn render_issue_brief(
             brief_issue_rows(index, workflow_policy, inherited)?,
         );
     }
-    lines.push(match closed_line(workflow_policy, record) {
+    let closed = closed_line(workflow_policy, record);
+    // The Closed line shows the Close Reason's first line, so --full adds
+    // nothing for a one-line reason.
+    let reason_shown = closed.is_some()
+        && record
+            .sections
+            .section(atelier_records::IssueSectionName::CloseReason)
+            .is_some_and(|reason| {
+                reason
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .count()
+                    <= 1
+            });
+    lines.push(match closed {
         Some(closed) => closed,
         None => format!("Transitions: {}", transition_summary(index, issue)),
     });
@@ -154,6 +168,7 @@ fn render_issue_brief(
     let more = IssueSections::ALL_NAMES
         .into_iter()
         .filter(|name| !lead.contains(name) && record.sections.section(*name).is_some())
+        .filter(|name| !(reason_shown && *name == atelier_records::IssueSectionName::CloseReason))
         .map(|name| name.title())
         .collect::<Vec<_>>();
     if !more.is_empty() {

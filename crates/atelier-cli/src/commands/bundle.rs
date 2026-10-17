@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use crate::human_output::local_date;
 use atelier_app::record_index::RecordIndex;
+use atelier_app::record_ref::RecordKind;
 use atelier_core::{EvidenceRecordData, Issue};
 use atelier_records::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status,
@@ -1341,20 +1342,19 @@ fn validate_ref_exists(
     Ok(())
 }
 
+/// The existing issue or evidence record an `id` reference names, resolved
+/// and reported as a command argument is.
 fn resolve_existing_ref(index: &RecordIndex, id: &str) -> Result<ResolvedRef> {
-    if let Some(issue_id) = index.resolve_issue_ref(id)? {
-        return Ok(ResolvedRef {
-            kind: "issue".to_string(),
-            id: issue_id,
-        });
-    }
-    if index.evidence(id).is_some() {
-        return Ok(ResolvedRef {
-            kind: "evidence".to_string(),
-            id: id.to_string(),
-        });
-    }
-    bail!("Record id '{}' not found", id)
+    let (kind, id) = index.resolve_any(&[RecordKind::Issue, RecordKind::Evidence], id)?;
+    let kind = if kind == RecordKind::Issue {
+        "issue"
+    } else {
+        "evidence"
+    };
+    Ok(ResolvedRef {
+        kind: kind.to_string(),
+        id,
+    })
 }
 
 fn planned_client_ref(bundle: &BundleFile, client_ref: &str) -> Result<PlannedRef> {

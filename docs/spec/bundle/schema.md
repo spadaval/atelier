@@ -38,7 +38,10 @@ Each resource has a unique ASCII `client_ref`, matching
 { "id": "atelier-z1p8" }
 ```
 
-Client references resolve inside the same file; IDs resolve to existing records.
+Client references resolve inside the same file. IDs resolve to existing issues
+and evidence records as command arguments do: a full or short ID in any case,
+with the same not-found and wrong-kind errors (see
+[Errors](../../product/human-cli-output.md#errors)).
 Client references never become canonical record IDs.
 
 ## Issues
