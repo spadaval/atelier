@@ -13,6 +13,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-43m1"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-bw0b"
     type: "related"
   - kind: "issue"
