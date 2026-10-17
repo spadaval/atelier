@@ -483,6 +483,36 @@ pub(crate) fn decision_record_rows(
     line.render_wrapped(context, "")
 }
 
+/// A decision log as Markdown sections, in [`Decisions::groups`] order.
+pub(crate) fn decision_sections(
+    context: RenderContext,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    decisions: &atelier_app::decisions::Decisions,
+) -> Vec<Vec<String>> {
+    use atelier_app::decisions::DecisionRow;
+    decisions
+        .groups()
+        .into_iter()
+        .map(|(title, rows)| {
+            let lines = rows
+                .into_iter()
+                .flat_map(|row| match row {
+                    DecisionRow::Note(note) => decision_note_rows(context, note),
+                    DecisionRow::Record(record) => decision_record_rows(context, policy, record),
+                    DecisionRow::Malformed(note) => render_row_wrapped(
+                        context,
+                        &format!(
+                            "⚠ {} decision note {} ({}) {}",
+                            note.issue_id, note.number, note.date, note.defect
+                        ),
+                    ),
+                })
+                .collect::<Vec<_>>();
+            render_lines_section(title, lines)
+        })
+        .collect()
+}
+
 /// The brief form of an item's current decisions: a count, then the one-way
 /// decisions, the ones a reader must not reverse casually. Empty when there
 /// are none.

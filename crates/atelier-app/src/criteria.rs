@@ -279,11 +279,10 @@ pub fn mission_proof_until(
             };
             // Only the deciding receipt's age is shown, so only it is counted.
             let end = until.or(head.as_deref());
+            // The range counts code in `end` the receipt never saw, even
+            // when the receipt was recorded on a branch merged later.
             let code_commits_since = match (end, in_history && !decided) {
-                (Some(end), true) if read.ancestor(&record.data.commit, end)? => {
-                    Some(code_commits_between(read, &record.data.commit, end)?)
-                }
-                (Some(_), true) => Some(0),
+                (Some(end), true) => Some(code_commits_between(read, &record.data.commit, end)?),
                 _ => None,
             };
             decided |= in_history;
