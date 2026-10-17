@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make detail-view footers and readiness depend on record state"
-updated_at: "2026-10-17T01:10:57.992665485+00:00"
+updated_at: "2026-10-17T08:04:32.298013267+00:00"
 ---
 
 ## Goal
