@@ -479,6 +479,12 @@ pub fn is_criterion_slug(slug: &str) -> bool {
 /// The body of a strategy's success criteria heading (any level, any case),
 /// up to the next heading of the same or a higher level.
 pub fn strategy_criteria_section(markdown: &str) -> Option<String> {
+    markdown_section(markdown, "success criteria")
+}
+
+/// The body of the first heading (any level) whose text is `title`, any
+/// case, up to the next heading of the same or a higher level.
+pub fn markdown_section(markdown: &str, title: &str) -> Option<String> {
     let heading_level = |line: &str| {
         let level = line.chars().take_while(|c| *c == '#').count();
         (level > 0 && line[level..].starts_with(' ')).then_some(level)
@@ -488,7 +494,7 @@ pub fn strategy_criteria_section(markdown: &str) -> Option<String> {
         let level = heading_level(line)?;
         line[level..]
             .trim()
-            .eq_ignore_ascii_case("success criteria")
+            .eq_ignore_ascii_case(title)
             .then_some(level)
     })?;
     let body = lines

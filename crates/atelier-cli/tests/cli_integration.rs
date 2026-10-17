@@ -786,6 +786,8 @@ fn is_record_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
+#[path = "cli_integration/brief.rs"]
+mod brief;
 #[path = "cli_integration/criteria.rs"]
 mod criteria;
 #[path = "cli_integration/debrief.rs"]

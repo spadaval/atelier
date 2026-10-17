@@ -16,6 +16,11 @@ what each record contains.
 
 - Start a fresh session with `atelier status`: checkout and owner context,
   ready and active work, and labeled summaries of other local work branches.
+- Review a mission with the human through `atelier brief <mission> --html`
+  before work starts and `atelier debrief <mission> --html` after it ends:
+  link the printed page in your reply (do not paste or re-render it), and
+  record the human's direction as review events, decisions, notes, and
+  issues. A plan approval is `atelier review approve <mission>`.
 - Use `atelier work ready`, `blocked`, `active`, `all`, or `missions` for
   operational views, and `atelier work mission <id>`, `atelier work parent <id>`,
   or `atelier issue show <id>` for focused context.

@@ -186,6 +186,7 @@ fn every_command_prints_its_documented_quiet_token() {
     unknown(q.refused("work parent", &["zzzz"]));
     unknown(q.refused("work decisions", &["zzzz"]));
     unknown(q.refused("debrief", &["zzzz"]));
+    unknown(q.refused("brief", &["zzzz"]));
     unknown(q.refused(
         "evidence record",
         &[
@@ -303,6 +304,17 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_counts(&q.ok("work mission", &[&mission]), &counts);
     assert_eq!(q.ok("work mission", &[&mission, "--ready"]), line(&owner));
     assert_eq!(q.ok("work decisions", &[&mission]), "");
+    assert_counts(
+        &q.ok("brief", &[&mission]),
+        &[
+            "criteria",
+            "items",
+            "blocked",
+            "unknowns",
+            "human_decisions",
+            "approvals",
+        ],
+    );
     assert_counts(
         &q.ok("debrief", &[&mission]),
         &[

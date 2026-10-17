@@ -209,6 +209,17 @@ enum Commands {
     /// `land` checks only what changed since the base.
     Doctor,
 
+    /// Review a mission's plan before work starts: outcome, criteria, scope
+    /// with sizes, blockers, unknowns, human decisions, risks and approvals
+    Brief {
+        /// Mission ID
+        id: String,
+        /// Write a self-contained HTML page under .atelier/runtime/reviews/
+        /// instead of printing Markdown
+        #[arg(long)]
+        html: bool,
+    },
+
     /// Review a finished mission: criteria and proof, each item's report,
     /// decisions, derived deviations and follow-ups
     Debrief {
@@ -714,6 +725,10 @@ fn run() -> Result<()> {
         }
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
+        Commands::Brief { id, html } => {
+            let (_, index) = load_repository()?;
+            commands::mission_review::brief(&index, &id, html, quiet)
+        }
         Commands::Debrief { id, html } => {
             let (_, index) = load_repository()?;
             commands::mission_review::debrief(&index, &id, html, quiet)
