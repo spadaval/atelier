@@ -268,7 +268,9 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   that shows it: ``atelier-waj0 is an evidence record, not an issue. Use
   `atelier evidence show atelier-waj0`.`` A scoped view that refuses an issue
   names the view that does show it, such as `atelier work mission
-  atelier-1w8c` for a mission given to `work parent`.
+  atelier-1w8c` for a mission given to `work parent`. A kind or issue type,
+  including one the workflow adds, takes "an" before a vowel letter and "a"
+  otherwise: `is an incident, not a mission`.
 - An invalid value names the field, the value and every value the field
   accepts: `Invalid status 'open'. Valid values: backlog, done, todo, all`.
 - Flags that exclude each other are declared to the argument parser, so a
