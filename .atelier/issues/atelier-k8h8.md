@@ -24,6 +24,9 @@ relationships:
   - kind: "issue"
     id: "atelier-ydv0"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-zqee"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
