@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T18:08:36.047288819+00:00"
+status: "done"
 title: "Close work items with an implementer report in Close Reason"
-updated_at: "2026-10-17T17:57:36.918241843+00:00"
+updated_at: "2026-10-17T18:08:36.047288819+00:00"
 ---
 
 ## Goal
@@ -56,3 +57,20 @@ How land tells a claim made before the policy required a part from a new one. Th
   Reason: Strategy S2 says input comes from the record body or a file, not a flag, and keeping parts lets an agent fix a one-line Outcome without rewriting the report
 - 2026-10-17 [decision] Report all missing parts as one --reason-file blocker
   Reason: IssueTransitionOption counts one blocker per missing flag, and a report file also carries the Outcome
+
+## Close Reason
+
+Work items close with an implementer report in Close Reason: policy can require its Deviations, Decisions, Surprises and Open items parts, the close transition reads them from the record body or --reason-file, land judges each claim by the policy committed beside it, and this repository requires all four on work close.
+
+### Deviations
+The issue named a land rule for claims made before the policy; review atelier-tqgi showed that exempting only claims the base holds misses a child closed on its parent's branch, so land now reads the policy committed beside each claim, the route the issue's Unknowns named.
+
+### Decisions
+See this item's decision notes: Close Reason subsections (one-way), the record body as the default source with --reason replacing only the Outcome, and one --reason-file blocker for all missing parts.
+
+### Surprises
+Transition options count one blocker per missing flag, which shaped how missing parts are reported. Writing the report needed no approval-freshness change, because the whole Close Reason was already exempt.
+
+### Open items
+- atelier-ypks: a reopened item closed again reuses its old Close Reason.
+- The installed atelier binary cannot read this repository's policy once this merges; reinstall it from master.
