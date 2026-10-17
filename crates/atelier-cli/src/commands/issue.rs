@@ -1253,7 +1253,7 @@ pub fn update_lifecycle(
         )
         .context("Invalid sectioned --body")?;
         if parsed.notes.is_some() || parsed.close_reason.is_some() {
-            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"` and close reasons with `--reason` on a transition that `atelier issue transition {id}` lists");
+            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"`, and give a Close Reason (with any implementer report) by editing the record's Close Reason or with `--reason` or `--reason-file` on a transition that `atelier issue transition {id}` lists");
         }
         record.sections.body = parsed.body;
         changed_fields.push("body");

@@ -4,6 +4,9 @@ id: "atelier-sfsq"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-sfsq
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T18:08:36.047288819+00:00"
+status: "done"
 title: "Close work items with an implementer report in Close Reason"
-updated_at: "2026-10-17T17:25:59.016985931+00:00"
+updated_at: "2026-10-17T18:08:36.047288819+00:00"
 ---
 
 ## Goal
@@ -39,3 +43,34 @@ Close Reason's content is defined in docs/product/work-model.md (atelier-43m1). 
 ## Unknowns
 
 How land tells a claim made before the policy required a part from a new one. The claim's commit and the base policy at that commit are both available.
+
+## Notes
+
+- 2026-10-17 [decision one-way] Store the report as ### Deviations, ### Decisions, ### Surprises and ### Open items subsections of Close Reason
+  Reason: Close Reason is already exempt from approval freshness and checked by land, so the report inherits both without new record shape
+  Rejected: a separate Report section
+  Rejected: typed report notes
+- 2026-10-17 [decision] Check report parts in land only on claims new to the branch, not on claims the base already holds
+  Reason: Done records from before the policy required the report must stay valid, and claim_nodes already separates retained claims from new ones
+  Rejected: store the policy version on each claim
+- 2026-10-17 [decision] With no flag, the close transition uses the Close Reason already in the record body; --reason replaces only the Outcome
+  Reason: Strategy S2 says input comes from the record body or a file, not a flag, and keeping parts lets an agent fix a one-line Outcome without rewriting the report
+- 2026-10-17 [decision] Report all missing parts as one --reason-file blocker
+  Reason: IssueTransitionOption counts one blocker per missing flag, and a report file also carries the Outcome
+
+## Close Reason
+
+Work items close with an implementer report in Close Reason: policy can require its Deviations, Decisions, Surprises and Open items parts, the close transition reads them from the record body or --reason-file, land judges each claim by the policy committed beside it, and this repository requires all four on work close.
+
+### Deviations
+The issue named a land rule for claims made before the policy; review atelier-tqgi showed that exempting only claims the base holds misses a child closed on its parent's branch, so land now reads the policy committed beside each claim, the route the issue's Unknowns named.
+
+### Decisions
+See this item's decision notes: Close Reason subsections (one-way), the record body as the default source with --reason replacing only the Outcome, and one --reason-file blocker for all missing parts.
+
+### Surprises
+Transition options count one blocker per missing flag, which shaped how missing parts are reported. Writing the report needed no approval-freshness change, because the whole Close Reason was already exempt.
+
+### Open items
+- atelier-ypks: a reopened item closed again reuses its old Close Reason.
+- The installed atelier binary cannot read this repository's policy once this merges; reinstall it from master.

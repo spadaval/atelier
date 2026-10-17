@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
@@ -40,6 +40,38 @@ impl IssueTransitionOption {
     }
 }
 
+/// Where a transition's Close Reason comes from: `--reason` sets the
+/// Outcome, `--reason-file` gives the whole report.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CloseReasonInput<'a> {
+    pub reason: Option<&'a str>,
+    pub reason_file: Option<&'a Path>,
+}
+
+/// The Close Reason a transition checks and stores (atelier-sfsq): a
+/// `--reason-file`'s whole text, a `--reason` Outcome over the report parts
+/// the record already holds, or, with neither, the record's own Close
+/// Reason, so a report written in the record body needs no flag.
+fn effective_close_reason(
+    existing: Option<&str>,
+    input: CloseReasonInput<'_>,
+) -> Result<Option<String>> {
+    let existing = existing.map(str::trim).filter(|text| !text.is_empty());
+    Ok(match (input.reason, input.reason_file) {
+        (Some(_), Some(_)) => bail!("give --reason or --reason-file, not both"),
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("cannot read --reason-file {}", path.display()))?;
+            Some(text.trim().to_string())
+        }
+        (Some(outcome), None) => Some(match existing {
+            Some(existing) => atelier_core::CloseReport::with_outcome(existing, outcome),
+            None => outcome.trim().to_string(),
+        }),
+        (None, None) => existing.map(str::to_string),
+    })
+}
+
 /// Applies a workflow transition: checks required fields and read-only
 /// validators, then writes the issue record. Never touches Git.
 pub fn transition_issue(
@@ -47,10 +79,15 @@ pub fn transition_issue(
     state_dir: &Path,
     issue_ref: &str,
     transition_name: &str,
-    close_reason: Option<&str>,
+    reason: CloseReasonInput<'_>,
     quiet: bool,
 ) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
+    let existing = index
+        .issue_record(&issue_id)
+        .and_then(|record| record.sections.close_reason.as_deref());
+    let close_reason = effective_close_reason(existing, reason)?;
+    let close_reason = close_reason.as_deref();
     if let Some(reason) = close_reason {
         atelier_records::validate_issue_section_text(
             &issue_id,
@@ -160,7 +197,14 @@ pub(crate) fn ensure_transition_allowed(
             &validator_results,
             &blockers,
             &transition_descriptions(transition),
-            &transition_command(&issue.id, transition_name, transition),
+            &transition_command(
+                &issue.id,
+                transition_name,
+                &required_field_failures(transition, close_reason)?
+                    .into_iter()
+                    .map(|(flag, _)| flag)
+                    .collect::<Vec<_>>(),
+            ),
         );
     }
     let blockers = blockers.join("; ");
@@ -269,14 +313,18 @@ pub fn issue_transition_options(
     let policy = source.policy;
     let issue = index.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
+    let existing = index
+        .issue_record(&issue_id)
+        .and_then(|record| record.sections.close_reason.as_deref());
     let mut options = Vec::new();
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let (blockers, validator_results) =
-            transition_blockers(index, &policy, &repo_root, &issue, transition, None)?;
-        let missing_arguments = required_field_failures(transition, None)?
+            transition_blockers(index, &policy, &repo_root, &issue, transition, existing)?;
+        let missing_arguments = required_field_failures(transition, existing)?
             .into_iter()
             .map(|(flag, _)| flag)
-            .collect();
+            .collect::<Vec<_>>();
+        let command = transition_command(&issue.id, name, &missing_arguments);
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -286,7 +334,7 @@ pub fn issue_transition_options(
             missing_arguments,
             validator_results,
             descriptions: transition_descriptions(transition),
-            command: transition_command(&issue.id, name, transition),
+            command,
         });
     }
     if options.is_empty() {
@@ -578,14 +626,22 @@ fn required_field_failures(
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<Vec<(&'static str, String)>> {
+    let report = atelier_core::CloseReport::parse(close_reason.unwrap_or_default());
     let mut failures = Vec::new();
+    let mut missing_parts = Vec::new();
     for field in &transition.required_fields {
+        if let Some(part) = atelier_core::ReportPart::from_field(field) {
+            if report.part(part).is_none() {
+                missing_parts.push(part);
+            }
+            continue;
+        }
         match field.as_str() {
             "close_reason" => {
-                if close_reason.is_none_or(|value| value.trim().is_empty()) {
+                if report.outcome.is_empty() {
                     failures.push((
                         "--reason",
-                        "missing required field close_reason; rerun with `--reason \"...\"`"
+                        "missing required field close_reason; rerun with `--reason \"...\"`, or write the Outcome at the top of the record's Close Reason"
                             .to_string(),
                     ));
                 }
@@ -595,20 +651,49 @@ fn required_field_failures(
             }
         }
     }
+    // One failure names every missing part, so each flag adds one blocker. A
+    // report file also carries the Outcome, so it stands in for `--reason`.
+    if !missing_parts.is_empty() {
+        let outcome_missing = failures.iter().any(|(flag, _)| *flag == "--reason");
+        failures.retain(|(flag, _)| *flag != "--reason");
+        let titles = missing_parts
+            .iter()
+            .map(|part| part.title())
+            .collect::<Vec<_>>();
+        let headings = missing_parts
+            .iter()
+            .map(|part| format!("`### {}`", part.title()))
+            .collect::<Vec<_>>();
+        failures.push((
+            "--reason-file",
+            format!(
+                "missing {}report {} {}; add {} to the record's Close Reason (write `None.` when there is nothing to report), or pass the whole report with `--reason-file <file>`",
+                if outcome_missing {
+                    "required field close_reason and "
+                } else {
+                    ""
+                },
+                if titles.len() == 1 { "part" } else { "parts" },
+                titles.join(", "),
+                if outcome_missing {
+                    format!("the Outcome and {}", headings.join(", "))
+                } else {
+                    headings.join(", ")
+                }
+            ),
+        ));
+    }
     Ok(failures)
 }
 
-fn transition_command(
-    issue_id: &str,
-    transition_name: &str,
-    transition: &TransitionDefinition,
-) -> String {
+/// The command that runs the transition, with the flags its missing
+/// required fields need. A report file carries the Outcome too, so it
+/// stands in for `--reason`.
+fn transition_command(issue_id: &str, transition_name: &str, missing: &[&str]) -> String {
     let mut command = format!("atelier issue transition {issue_id} {transition_name}");
-    if transition
-        .required_fields
-        .iter()
-        .any(|field| field == "close_reason")
-    {
+    if missing.contains(&"--reason-file") {
+        command.push_str(" --reason-file <file>");
+    } else if missing.contains(&"--reason") {
         command.push_str(" --reason \"...\"");
     }
     command
