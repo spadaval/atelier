@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-pr4k
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make --quiet print one documented token on every command"
-updated_at: "2026-10-17T06:27:40.279114098+00:00"
+updated_at: "2026-10-17T08:04:34.173127562+00:00"
 ---
 
 ## Goal
