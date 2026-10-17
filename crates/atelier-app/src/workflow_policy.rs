@@ -77,8 +77,14 @@ pub fn validate_issue_hierarchy(
     };
     if issue.issue_type == "mission" {
         if let Some(parent_id) = parent_id {
+            // A mission parent cannot advance a mission either, so only
+            // non-mission work fills the source slot.
+            let work = match index.get_issue(parent_id) {
+                Some(parent) if parent.issue_type != "mission" => parent_id,
+                _ => "<issue-id>",
+            };
             return Err(anyhow!(
-                "workflow_issue_hierarchy_invalid: mission issue {mission} cannot have parent {parent_id}; {create_first}link mission work with `atelier issue link {parent_id} {link_id} --role advances`",
+                "workflow_issue_hierarchy_invalid: mission issue {mission} cannot have parent {parent_id}; {create_first}link mission work with `atelier issue link {work} {link_id} --role advances`",
                 mission = issue.id,
             ));
         }

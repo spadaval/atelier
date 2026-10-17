@@ -1648,6 +1648,24 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Hint work"]);
     assert!(success, "{stderr}");
     let work = issue_id_by_title(dir.path(), "Hint work");
+    // A second ready candidate, ranked first by priority, so the views must
+    // pick the top one rather than the only one.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Urgent work", "-p", "high"],
+    );
+    assert!(success, "{stderr}");
+    let urgent = issue_id_by_title(dir.path(), "Urgent work");
+    let first_listed = [&mission, &work, &urgent]
+        .into_iter()
+        .min()
+        .unwrap()
+        .clone();
+    let not_first = [&mission, &work, &urgent]
+        .into_iter()
+        .filter(|id| **id != first_listed)
+        .cloned()
+        .collect::<Vec<_>>();
 
     let mut views = Vec::new();
     for args in [&["status"][..], &["prime"], &["work"]] {
@@ -1655,20 +1673,18 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
         assert!(success, "{args:?}: {stderr}");
         views.push((args.join(" "), stdout));
     }
-    assert!(
-        views[0]
-            .1
-            .contains(&format!("atelier issue transition {work}")),
-        "{}",
-        views[0].1
-    );
-    assert!(
-        views[1]
-            .1
-            .contains(&format!("atelier issue transition {work}")),
-        "{}",
-        views[1].1
-    );
+    for (_, status) in &views[..2] {
+        assert!(
+            status.contains(&format!(
+                "Inspect the top ready item's transitions: atelier issue transition {urgent}\n"
+            )),
+            "{status}"
+        );
+        assert!(
+            !status.contains(&format!("atelier issue transition {work}")),
+            "{status}"
+        );
+    }
     assert!(
         views[2]
             .1
@@ -1679,10 +1695,19 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
 
     let (success, list, stderr) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success, "{stderr}");
+    // Inventory lists in ID order.
     assert!(
-        list.contains("Next\n----\n  Inspect the first record: atelier issue show atelier-"),
+        list.contains(&format!(
+            "Next\n----\n  Inspect the first record: atelier issue show {first_listed}\n"
+        )),
         "{list}"
     );
+    for id in &not_first {
+        assert!(
+            !list.contains(&format!("atelier issue show {id}")),
+            "{list}"
+        );
+    }
     views.push(("issue list".into(), list));
     let (success, empty, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
     assert!(success, "{stderr}");
@@ -1704,13 +1729,16 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
         assert!(success, "{args:?}: {stderr}");
         views.push((args.join(" "), stdout));
     }
+    // Transition Readiness names each runnable transition's command once;
+    // the footer does not repeat them.
     let full = &views.last().unwrap().1;
-    for step in [
-        format!("  Execute start: atelier issue transition {work} start\n"),
-        format!("  Execute supersede: atelier issue transition {work} supersede --reason"),
-    ] {
-        assert!(full.contains(&step), "{full}");
-    }
+    assert_eq!(
+        full.matches(&format!("atelier issue transition {work} start\n"))
+            .count(),
+        1,
+        "{full}"
+    );
+    assert!(!full.contains("Execute"), "{full}");
 
     let (success, _, error) = run_atelier(
         dir.path(),
@@ -1724,6 +1752,41 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
         "{error}"
     );
     views.push(("hierarchy error".into(), error));
+    // A mission given a mission parent: that parent cannot advance it, so
+    // only the source slot stays a placeholder.
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Other mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let other = issue_id_by_title(dir.path(), "Other mission");
+    let (success, _, error) = run_atelier(
+        dir.path(),
+        &["issue", "update", &other, "--parent", &mission],
+    );
+    assert!(!success);
+    assert!(
+        error.contains(&format!(
+            "`atelier issue link <issue-id> {other} --role advances`"
+        )),
+        "{error}"
+    );
+    // A mission given a work parent: that work advances it.
+    let (success, _, error) =
+        run_atelier(dir.path(), &["issue", "update", &other, "--parent", &work]);
+    assert!(!success);
+    assert!(
+        error.contains(&format!(
+            "`atelier issue link {work} {other} --role advances`"
+        )),
+        "{error}"
+    );
     let (success, _, error) = run_atelier(dir.path(), &["issue", "update", &work]);
     assert!(!success);
     assert!(

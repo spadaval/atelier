@@ -149,8 +149,9 @@ second prefix.
 
 Every next step, hint and error recovery step names the real ID when the
 command knows it: the top ready item in `status`, the top mission in `work`,
-the first row of `issue list`, the issue's runnable transitions by name in
-`issue show --full`, and the issue, mission or owner an error is about, as in
+the first row of `issue list`, each runnable transition's command in `issue
+show --full`'s Transition Readiness, and the issue, mission or owner an error
+is about, as in
 ``link mission work with `atelier issue link atelier-xmtr atelier-1w8c --role
 advances` ``. A placeholder such as `<issue-id>` stays only where the command
 cannot know the ID, such as which issue should own an unowned branch. A step

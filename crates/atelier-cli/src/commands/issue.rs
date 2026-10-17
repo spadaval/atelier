@@ -393,7 +393,7 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
-    render_command_footer(canonical_id, &options)?;
+    render_command_footer(canonical_id)?;
     Ok(())
 }
 
@@ -735,10 +735,7 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
-fn render_command_footer(
-    canonical_id: &str,
-    options: &Result<Vec<IssueTransitionOption>>,
-) -> Result<()> {
+fn render_command_footer(canonical_id: &str) -> Result<()> {
     let mut actions = Vec::new();
     if let Some(path) = canonical_issue_path(canonical_id)? {
         actions.push(FooterAction::new(
@@ -760,17 +757,6 @@ fn render_command_footer(
             format!("atelier issue transition {}", canonical_id),
         ),
     ]);
-    // Each transition that can run now, or once its required flags are
-    // given, by its real name and command.
-    actions.extend(
-        options
-            .iter()
-            .flatten()
-            .filter(|option| option.blockers_beyond_arguments().is_empty())
-            .map(|option| {
-                FooterAction::new(format!("Execute {}", option.name), option.command.clone())
-            }),
-    );
     print_panel(render_footer_section(RenderContext::for_stdout(), actions));
     Ok(())
 }
