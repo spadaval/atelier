@@ -26,8 +26,9 @@ nodes; it is not a persistent record or link target kind.
 Issue kinds include missions and work items; any work item can parent others. IDs are project-scoped
 random IDs such as `atelier-z1p8`, independent of record type: the configured
 `project_slug`, a hyphen, and a random base36 suffix. Any valid slug prefix is
-accepted when reading, so records minted under another slug stay valid. Priority is stored as `P0`–`P3`; the CLI, bundles and human output use the
-labels `critical`, `high`, `medium` and `low` for the same values. YAML front matter
+accepted when reading, so records minted under another slug stay valid. Priority is stored as `P0`–`P3`; the
+[work model](../product/work-model.md#records-and-relationships) maps them to
+the words commands and views use. YAML front matter
 holds typed identity, lifecycle state, timestamps, relationships, strategy path,
 and owner branch metadata. The Markdown body is human-readable intent and
 proof. Generic extension maps and historical issue section schemas are not the

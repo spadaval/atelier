@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Document every argument and flag in subcommand help"
-updated_at: "2026-10-17T01:10:57.988678443+00:00"
+updated_at: "2026-10-17T07:20:06.440307265+00:00"
 ---
 
 ## Goal

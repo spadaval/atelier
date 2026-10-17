@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Name the real ID in every next-step hint and error"
-updated_at: "2026-10-17T01:10:57.990209220+00:00"
+updated_at: "2026-10-17T07:20:06.156997864+00:00"
 ---
 
 ## Goal

@@ -326,7 +326,7 @@ enum IssueCommands {
         /// the Goal, Outcome, or Question
         #[arg(long)]
         body: Option<String>,
-        /// Priority (low, medium, high, critical)
+        /// Priority: P0-P3 or critical, high, medium, low
         #[arg(short, long, default_value = "medium")]
         priority: String,
         /// Add labels to the issue
@@ -373,7 +373,7 @@ enum IssueCommands {
         /// Filter by label
         #[arg(short, long)]
         label: Option<String>,
-        /// Filter by priority
+        /// Filter by priority: P0-P3 or critical, high, medium, low
         #[arg(short, long)]
         priority: Option<String>,
         /// Maximum number of matching records to show
@@ -404,7 +404,7 @@ enum IssueCommands {
         /// New title
         #[arg(short, long)]
         title: Option<String>,
-        /// New priority
+        /// New priority: P0-P3 or critical, high, medium, low
         #[arg(short, long)]
         priority: Option<String>,
         /// New issue type from .atelier/workflow.yaml issue_types

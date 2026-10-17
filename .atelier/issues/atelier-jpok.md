@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-jpok
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T07:14:18.880149998+00:00"
+status: "done"
 title: "Accept P0-P3 and priority words alike, and name stored tokens in errors"
-updated_at: "2026-10-17T07:06:55.053544876+00:00"
+updated_at: "2026-10-17T07:14:18.880149998+00:00"
 ---
 
 ## Goal
@@ -39,3 +43,7 @@ An agent that reads record files, which are the durable boundary, gets refused b
 ## Context
 
 `crates/atelier-core/src/lib.rs:54-97` (parsers and error Display). `work_classification.rs:385` already ranks both forms.
+
+## Close Reason
+
+Priority flags on issue create, update and list accept P0-P3 and the words alike, a record storing a word fails parsing with the stored tokens it needs, views still print the word, and the work model states the mapping.
