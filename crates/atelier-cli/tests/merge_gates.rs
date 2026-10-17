@@ -2380,3 +2380,75 @@ fn merge_commit_strategy_proves_the_merged_tree_only_when_every_shell_check_pass
     );
     assert_eq!(worktrees(fixture.path()), 1);
 }
+
+#[test]
+fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed() {
+    // The base closes a mission after the branch reopened its advancing work;
+    // no checkout holds both until the merge commit, so merge must check the
+    // done claims the merged records affect.
+    let fixture = Fixture::new();
+    merge_commit_policy(&fixture, &["true"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let policy = fixture.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    let objective = text.find("  objective:").unwrap();
+    let close = objective
+        + text[objective..]
+            .find("        - blockers.none_open\n")
+            .unwrap();
+    let mut revised = text.clone();
+    revised.insert_str(close, "        - work.terminal\n");
+    fs::write(&policy, revised).unwrap();
+    let mission = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShipped.\n\n## Success criteria\n\nIt ships.",
+            "Mission",
+        ],
+    );
+    let work = ok(fixture.path(), &["-q", "issue", "create", "Advancing work"]);
+    ok(fixture.path(), &["issue", "link", &work, &mission]);
+    commit(fixture.path(), "plan the mission");
+    ok(fixture.path(), &["issue", "transition", &work, "start"]);
+    ok(
+        fixture.path(),
+        &["issue", "transition", &work, "close", "--reason", "done"],
+    );
+    for transition in ["ready", "start"] {
+        ok(
+            fixture.path(),
+            &["issue", "transition", &mission, transition],
+        );
+    }
+    commit(fixture.path(), "the work is done; the mission is underway");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    let path = fixture.path().join(format!(".atelier/issues/{work}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("status: \"done\""), "{text}");
+    fs::write(&path, text.replace("status: \"done\"", "status: \"todo\"")).unwrap();
+    commit(fixture.path(), "reopen the advancing work");
+    fixture.approval("Reviewer");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    ok(
+        fixture.path(),
+        &["issue", "transition", &mission, "close", "--reason", "done"],
+    );
+    commit(fixture.path(), "close the mission");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+
+    fixture.refusal(&format!("{mission} work.terminal"));
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        output.contains(&format!("FAIL work.terminal: open work: {work}"))
+            && output.contains(&format!("merge blocked: {mission} work.terminal")),
+        "{output}"
+    );
+    assert_eq!(worktrees(fixture.path()), 1);
+}

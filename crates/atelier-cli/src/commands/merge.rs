@@ -335,7 +335,18 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             .as_ref()
             .map_or(repo, |(_, _, checkout, _)| checkout.path.as_path()),
     )?;
-    if let Some((tree, _, _, _)) = &merge {
+    if let Some((tree, commit, _, merged)) = &merge {
+        // The merged records can break a done claim the base completed after
+        // the fork point, which no checkout held before (atelier-m4gv).
+        nodes.extend(crate::commands::session::merge_claim_nodes(
+            repo,
+            &mut read,
+            merged,
+            &source.policy,
+            owner,
+            &base_head,
+            commit,
+        )?);
         // Only the shell checks examined the merged tree; it is proven when
         // at least one ran there and every one passed.
         let shell = nodes
@@ -371,10 +382,14 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             );
         }
     }
+    // A failed check about another item names it.
     let failed = nodes
         .iter()
         .filter(|node| !node.passed)
-        .map(|node| node.check.as_str())
+        .map(|node| match node.target.as_str() {
+            target if target == owner => node.check.clone(),
+            target => format!("{target} {}", node.check),
+        })
         .collect::<Vec<_>>();
     // Fence cooperative writers only after arbitrary checks have returned.
     // Lock both checkouts in path order to avoid cross-worktree lock inversion.
