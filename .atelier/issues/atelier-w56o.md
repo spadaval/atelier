@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Tell orchestrators to update a waiting branch only when it is next to land"
-updated_at: "2026-10-17T05:22:53.478542972+00:00"
+updated_at: "2026-10-17T05:28:32.716906908+00:00"
 ---
 
 ## Goal
@@ -41,9 +41,12 @@ The vendored `.agents/skills/agent-factory` orchestrate procedure, and the upstr
   - rerun proof;
   - get the merge reviewed if it needed resolving;
   - then run `atelier merge`.
-- Land branches that touch the same files back to back. Use the merge-readiness view in `status` once it exists.
 - Put generated-file consistency checks in required proof or `merge_checks`, so a merged but broken lock is caught mechanically. For a Rust workspace that means `cargo metadata --locked` for every lockfile.
 
 ## Context
 
 This is a guidance-only change. Together with the merge-readiness view it removes most catch-up churn without changing the merge model. From the 2026-10-16 transcript retrospective.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-17: dropped the done-when line 'Land branches that touch the same files back to back' after review finding R2: once each branch merges the base only when it is next to land, landing order does not change how many conflicted merges or resolution reviews there are (for branches sharing a file, all but the first conflict in any order). Merges that regenerate generated files now also need review (R1). Mission S2 is unaffected.
