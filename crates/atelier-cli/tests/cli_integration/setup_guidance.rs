@@ -1501,7 +1501,7 @@ fn test_root_status_lists_the_top_five_ready_items_without_an_owner() {
     }
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(stdout.contains("Ready work:    7"), "{stdout}");
+    assert!(stdout.contains("Ready work:       7"), "{stdout}");
     let ready = stdout
         .split("Ready Work\n----------\n")
         .nth(1)
