@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T08:49:39.474812809+00:00"
+status: "done"
 title: "Offer start only for work mission rows that pass the readiness gates"
-updated_at: "2026-10-17T08:41:51.953391626+00:00"
+updated_at: "2026-10-17T08:49:39.474812809+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-17T08:41:51.953391626+00:00"
 
 - `work mission` and `work parent` classify Ready Work with the same gates as `work ready`, or offer start only for an item that passes them.
 - A test covers an item with an unmet readiness gate.
+
+## Close Reason
+
+Not reproducible as filed: work mission and work parent already classify Ready Work through dependency_closure, the same transitive check as start's blockers.transitive_none_open, and it agrees with work ready's dependency_readiness_batch gate on every acyclic graph (cycles are rejected at load). Added a session test covering an item whose closed blocker waits on open work across work mission, work parent, work ready and start, shown to fail when classification checks only direct blockers, and stated the transitive rule in docs/product/work-view-ordering.md.
