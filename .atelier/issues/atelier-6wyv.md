@@ -4,6 +4,9 @@ id: "atelier-6wyv"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-6wyv
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Offer start only for work mission rows that pass the readiness gates"
-updated_at: "2026-10-17T08:41:50.487189145+00:00"
+updated_at: "2026-10-17T08:41:51.953391626+00:00"
 ---
 
 ## Goal
