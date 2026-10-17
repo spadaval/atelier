@@ -60,7 +60,55 @@ pub struct Decisions {
     pub malformed: Vec<MalformedDecision>,
 }
 
+/// One row of a decision log.
+#[derive(Debug, Clone, Copy)]
+pub enum DecisionRow<'a> {
+    Note(&'a NoteDecision),
+    Record(&'a RecordDecision),
+    Malformed(&'a MalformedDecision),
+}
+
 impl Decisions {
+    /// The decision log in its fixed order, empty groups left out: one-way
+    /// notes, current records, reversible notes, open records, superseded
+    /// records, and malformed notes. Every view of a log uses this order.
+    pub fn groups(&self) -> Vec<(&'static str, Vec<DecisionRow<'_>>)> {
+        let notes = |one_way: bool| {
+            self.notes
+                .iter()
+                .filter(|note| note.decision.one_way == one_way)
+                .map(DecisionRow::Note)
+                .collect::<Vec<_>>()
+        };
+        let records = |keep: &dyn Fn(&RecordDecision) -> bool| {
+            self.records
+                .iter()
+                .filter(|record| keep(record))
+                .map(DecisionRow::Record)
+                .collect::<Vec<_>>()
+        };
+        [
+            ("One-way Decisions", notes(true)),
+            ("Decision Records", records(&|record| record.is_current())),
+            ("Reversible Decisions", notes(false)),
+            (
+                "Open Decision Records",
+                records(&|record| !record.decided && !record.is_superseded()),
+            ),
+            (
+                "Superseded Decisions",
+                records(&|record| record.is_superseded()),
+            ),
+            (
+                "Malformed Decision Notes",
+                self.malformed.iter().map(DecisionRow::Malformed).collect(),
+            ),
+        ]
+        .into_iter()
+        .filter(|(_, rows)| !rows.is_empty())
+        .collect()
+    }
+
     /// One-way notes, then reversible ones, each in record order.
     pub fn notes_one_way_first(&self) -> impl Iterator<Item = &NoteDecision> {
         let one_way = self.notes.iter().filter(|note| note.decision.one_way);

@@ -25,7 +25,9 @@ mechanical guards at the point of action. The governing decision is
 - Evaluate merge gates from the base branch's reviewed policy.
 - Keep review and evidence append-only and tied to full Git commit identities.
 - Prefer concise command output and inspectable Markdown to a second UI or an
-  external review service.
+  external review service. A static HTML review page, such as `debrief
+  --html` writes, is a document a human reads, not a second UI: it holds no
+  controls, and decisions are recorded with ordinary commands.
 
 ## Work and proof
 

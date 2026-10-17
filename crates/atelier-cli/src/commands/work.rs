@@ -9,10 +9,10 @@ use atelier_core::Issue;
 
 use crate::commands::git::InFlight;
 use crate::human_output::{
-    count_noun, decision_note_rows, decision_record_rows, last_closed_mission, print_page,
-    render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
-    render_row_wrapped, render_unassigned_groups, scope_counts, FooterAction, IssueListPanel,
-    IssueListRow, ItemLine, RenderContext, TextStyle,
+    count_noun, decision_sections, last_closed_mission, print_page, render_footer_section,
+    render_labeled_lines, render_lines_section, render_metadata, render_row_wrapped,
+    render_unassigned_groups, scope_counts, FooterAction, IssueListPanel, IssueListRow, ItemLine,
+    RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -895,42 +895,6 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
         return Ok(());
     }
     let context = RenderContext::for_stdout();
-    let note_lines = |one_way: bool| {
-        decisions
-            .notes
-            .iter()
-            .filter(|note| note.decision.one_way == one_way)
-            .flat_map(|note| decision_note_rows(context, note))
-            .collect::<Vec<_>>()
-    };
-    let record_lines = |keep: &dyn Fn(&atelier_app::decisions::RecordDecision) -> bool| {
-        decisions
-            .records
-            .iter()
-            .filter(|record| keep(record))
-            .flat_map(|record| decision_record_rows(context, policy.as_ref(), record))
-            .collect::<Vec<_>>()
-    };
-    let section = |title: &str, lines: Vec<String>| {
-        if lines.is_empty() {
-            Vec::new()
-        } else {
-            render_lines_section(title, lines)
-        }
-    };
-    let malformed = decisions
-        .malformed
-        .iter()
-        .flat_map(|note| {
-            render_row_wrapped(
-                context,
-                &format!(
-                    "⚠ {} decision note {} ({}) {}",
-                    note.issue_id, note.number, note.date, note.defect
-                ),
-            )
-        })
-        .collect::<Vec<_>>();
     let summary = if decisions.notes.is_empty()
         && decisions.records.is_empty()
         && decisions.malformed.is_empty()
@@ -947,38 +911,19 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
     )
     .issue_type(&mission.issue_type)
     .text();
-    print_page(
-        &format!("Decisions: {title}"),
-        [
-            summary,
-            section("One-way Decisions", note_lines(true)),
-            section(
-                "Decision Records",
-                record_lines(&|record| record.is_current()),
-            ),
-            section("Reversible Decisions", note_lines(false)),
-            section(
-                "Open Decision Records",
-                record_lines(&|record| !record.decided && !record.is_superseded()),
-            ),
-            section(
-                "Superseded Decisions",
-                record_lines(&|record| record.is_superseded()),
-            ),
-            section("Malformed Decision Notes", malformed),
-            render_footer_section(
-                context,
-                [
-                    FooterAction::new(
-                        "Record a decision",
-                        "atelier issue note <id> --kind decision \"<choice>\" --reason \"<why>\"",
-                    ),
-                    FooterAction::new("Show the mission", format!("atelier work mission {id}")),
-                ],
-            ),
-        ],
+    let mut panels = vec![summary];
+    panels.extend(decision_sections(context, policy.as_ref(), &decisions));
+    panels.push(render_footer_section(
         context,
-    );
+        [
+            FooterAction::new(
+                "Record a decision",
+                "atelier issue note <id> --kind decision \"<choice>\" --reason \"<why>\"",
+            ),
+            FooterAction::new("Show the mission", format!("atelier work mission {id}")),
+        ],
+    ));
+    print_page(&format!("Decisions: {title}"), panels, context);
     Ok(())
 }
 

@@ -14,6 +14,7 @@ pub mod workflow;
 
 pub mod merge;
 pub mod migrate;
+pub mod mission_review;
 pub mod review;
 
 pub(crate) mod git;

@@ -788,6 +788,8 @@ fn is_record_id(value: &str) -> bool {
 
 #[path = "cli_integration/criteria.rs"]
 mod criteria;
+#[path = "cli_integration/debrief.rs"]
+mod debrief;
 #[path = "cli_integration/decisions.rs"]
 mod decisions;
 #[path = "cli_integration/issues.rs"]
