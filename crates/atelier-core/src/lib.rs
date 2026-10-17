@@ -11,14 +11,56 @@ pub type IssueId = String;
 
 /// The one form of an invalid-value error: the field, the rejected value and
 /// every value the field accepts, as in `Invalid status 'open'. Valid values:
-/// backlog, done, todo`.
+/// backlog, done, todo`, or `none` when it accepts no value.
 pub fn invalid_value_message<S: AsRef<str>>(field: &str, value: &str, valid: &[S]) -> String {
     let valid = valid.iter().map(AsRef::as_ref).collect::<Vec<_>>();
-    format!(
-        "Invalid {field} '{value}'. Valid values: {}",
+    let valid = if valid.is_empty() {
+        "none".to_string()
+    } else {
         valid.join(", ")
-    )
+    };
+    format!("Invalid {field} '{value}'. Valid values: {valid}")
 }
+
+/// A command argument whose value is outside the set its field accepts.
+///
+/// It reads in the one form [`invalid_value_message`] writes, optionally led
+/// by a code and followed by one sentence of guidance. The CLI exits 2 for
+/// it, as for every usage error, wherever the value is checked.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct InvalidValue {
+    message: String,
+}
+
+impl InvalidValue {
+    pub fn new<S: AsRef<str>>(field: &str, value: &str, valid: &[S]) -> Self {
+        Self {
+            message: invalid_value_message(field, value, valid),
+        }
+    }
+
+    /// Leads the message with the code of a check that shipped with one.
+    pub fn with_code(self, code: &str) -> Self {
+        Self {
+            message: format!("{code}: {}", self.message),
+        }
+    }
+
+    /// Follows the valid values with one sentence of guidance.
+    pub fn with_hint(self, hint: &str) -> Self {
+        Self {
+            message: format!("{}. {hint}", self.message),
+        }
+    }
+}
+
+impl fmt::Display for InvalidValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for InvalidValue {}
 
 pub const ISSUE_PRIORITY_LABELS: &[&str] = &["critical", "high", "medium", "low"];
 
@@ -83,10 +125,16 @@ impl IssuePriority {
     }
 
     /// Parses command input, which accepts the stored form and the word alike.
-    pub fn from_cli_input(value: &str) -> Result<Self, ParseIssuePriorityError> {
+    pub fn from_cli_input(value: &str) -> Result<Self, InvalidValue> {
         Self::from_canonical_token(value)
             .or_else(|_| Self::from_label(value))
-            .map_err(|_| ParseIssuePriorityError::new(value, PriorityForm::Either))
+            .map_err(|_| {
+                InvalidValue::new(
+                    "priority",
+                    value,
+                    &["P0 or critical", "P1 or high", "P2 or medium", "P3 or low"],
+                )
+            })
     }
 }
 
@@ -97,7 +145,6 @@ pub const ISSUE_PRIORITY_STORED_FORMS: &str = "P0 (critical), P1 (high), P2 (med
 enum PriorityForm {
     Stored,
     Label,
-    Either,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -120,7 +167,6 @@ impl fmt::Display for ParseIssuePriorityError {
         let valid = match self.expected {
             PriorityForm::Stored => "P0, P1, P2, P3",
             PriorityForm::Label => "critical, high, medium, low",
-            PriorityForm::Either => "P0 or critical, P1 or high, P2 or medium, P3 or low",
         };
         write!(
             f,

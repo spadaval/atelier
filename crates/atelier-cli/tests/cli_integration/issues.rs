@@ -465,8 +465,8 @@ fn test_unconfigured_custom_issue_link_is_rejected() {
 
     assert!(!success, "unconfigured custom role should be rejected");
     assert!(
-        stderr.contains("Invalid issue link role 'informs'")
-            && stderr.contains("Configured custom context-only roles: (none)")
+        stderr.contains("Invalid role 'informs'. Valid values: advances, ")
+            && stderr.contains(", supersedes. Custom roles are configured")
             && stderr.contains("[issue_links].custom_context_types"),
         "{stderr}"
     );
@@ -1675,7 +1675,7 @@ fn test_unregistered_issue_type_reports_configured_values() {
     );
     assert!(!success, "unregistered issue type should fail");
     assert!(
-        stderr.contains("must declare issue_type 'ghost'"),
+        stderr.contains("Invalid issue type 'ghost'. Valid values: "),
         "{stderr}"
     );
     assert!(stderr.contains("incident"), "{stderr}");
@@ -3047,7 +3047,9 @@ fn test_removed_issue_type_is_rejected() {
             "removed issue type {removed_type} should be rejected"
         );
         assert!(
-            stderr.contains(&format!("must declare issue_type '{removed_type}'")),
+            stderr.contains(&format!(
+                "Invalid issue type '{removed_type}'. Valid values: "
+            )),
             "{stderr}"
         );
 
@@ -3061,7 +3063,9 @@ fn test_removed_issue_type_is_rejected() {
             "removed issue type {removed_type} should be rejected on update"
         );
         assert!(
-            stderr.contains(&format!("must declare issue_type '{removed_type}'")),
+            stderr.contains(&format!(
+                "Invalid issue type '{removed_type}'. Valid values: "
+            )),
             "{stderr}"
         );
     }
@@ -4404,7 +4408,7 @@ fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
             ],
         );
         assert!(!success, "{issue_type}: {stdout}");
-        assert!(stderr.contains("use one of: draft."), "{stderr}");
+        assert!(stderr.contains("Valid values: draft."), "{stderr}");
     }
     for refused in ["in_progress", "done", "nonsense"] {
         let (success, stdout, stderr) = run_atelier(

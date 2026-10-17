@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use atelier_core::Issue;
+use atelier_core::{InvalidValue, Issue};
 
 use crate::record_index::RecordIndex;
 
@@ -10,6 +10,14 @@ pub use atelier_workflow::{
     WorkflowDefinition, WorkflowPolicy, STARTER_POLICY_YAML, WORKFLOW_BRANCH_FIELD,
     WORKFLOW_POLICY_PATH,
 };
+
+/// An issue type argument the workflow does not declare.
+pub fn invalid_issue_type(policy: &WorkflowPolicy, issue_type: &str) -> InvalidValue {
+    let valid = policy.issue_types.keys().collect::<Vec<_>>();
+    InvalidValue::new("issue type", issue_type, &valid).with_hint(&format!(
+        "Issue types are declared under issue_types in {WORKFLOW_POLICY_PATH}."
+    ))
+}
 
 /// Statuses new work may be created in: the workflow's initial status, or a
 /// todo-category status one unchecked transition away from it, such as

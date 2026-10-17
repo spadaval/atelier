@@ -4,9 +4,8 @@ use std::path::Path;
 
 use atelier_app::project_config::ProjectConfig;
 use atelier_app::record_index::{built_in_issue_link_types, RecordIndex};
-use atelier_records::{
-    validate_relation_type, RecordStore, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
-};
+use atelier_core::InvalidValue;
+use atelier_records::RecordStore;
 
 const BLOCKED_BY_ROLE: &str = "blocked_by";
 /// The inverse of `blocked_by`: the target waits for the source.
@@ -77,36 +76,40 @@ pub fn change_issue_link(
     Ok(())
 }
 
+/// Proof roles name evidence links, which `evidence record` and `evidence
+/// attach` write; an issue link never takes one.
+const PROOF_ROLES: [&str; 2] = ["validates", "evidenced_by"];
+
 fn validate_issue_link_role(repo_root: &Path, role: &str, source: &str) -> Result<()> {
-    if matches!(role, "validates" | "evidenced_by") {
-        bail!(
-            "Invalid issue link role '{role}'. Proof roles are reserved for evidence links; use `atelier evidence record --target issue/{source} --kind validation \"...\"` or `atelier evidence attach <evidence-id> issue {source}`."
-        );
-    }
-    if WELL_KNOWN_LINK_TYPES.contains(&role) || WELL_KNOWN_RELATION_TYPES.contains(&role) {
+    let builtin = || {
+        built_in_issue_link_types()
+            .into_iter()
+            .filter(|known| !PROOF_ROLES.contains(known))
+    };
+    if builtin().any(|known| known == role) {
         return Ok(());
     }
-    validate_relation_type(role)?;
     let config = ProjectConfig::load(repo_root)?;
-    if config
+    let custom = config
         .issue_links
         .custom_context_types
         .iter()
-        .any(|configured| configured == role)
-    {
+        .map(String::as_str)
+        .filter(|configured| !PROOF_ROLES.contains(configured));
+    if custom.clone().any(|configured| configured == role) {
         return Ok(());
     }
-    let configured = if config.issue_links.custom_context_types.is_empty() {
-        "(none)".to_string()
+    let mut valid = builtin().chain([BLOCKS_ROLE]).collect::<Vec<_>>();
+    valid.sort_unstable();
+    valid.extend(custom);
+    let invalid = InvalidValue::new("role", role, &valid);
+    bail!(if PROOF_ROLES.contains(&role) {
+        invalid.with_hint(&format!(
+            "Proof roles are reserved for evidence links; use `atelier evidence record --target issue/{source} --kind validation \"...\"` or `atelier evidence attach <evidence-id> issue {source}`."
+        ))
     } else {
-        config.issue_links.custom_context_types.join(", ")
-    };
-    bail!(
-        "Invalid issue link role '{}'. Built-in workflow roles: {}. Configured custom context-only roles: {}. Configure custom issue links in .atelier/config.toml [issue_links].custom_context_types.",
-        role,
-        built_in_issue_link_types().join(", "),
-        configured
-    )
+        invalid.with_hint("Custom roles are configured in .atelier/config.toml [issue_links].custom_context_types.")
+    })
 }
 
 fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<String> {

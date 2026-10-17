@@ -1808,12 +1808,8 @@ fn test_evidence_relation_role_errors_are_corrective() {
 
 fn assert_corrective_evidence_role_error(stderr: &str) {
     assert!(
-        stderr.contains("invalid value 'validation' for '--role <ROLE>'"),
-        "error should name invalid role: {stderr}"
-    );
-    assert!(
-        stderr.contains("[possible values: validates]"),
-        "error should name accepted relation vocabulary: {stderr}"
+        stderr.contains("Invalid role 'validation'. Valid values: validates"),
+        "error should name the invalid role and the accepted vocabulary: {stderr}"
     );
 }
 

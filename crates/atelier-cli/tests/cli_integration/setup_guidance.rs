@@ -2380,9 +2380,8 @@ fn test_issue_transition_rejects_unknown_transition_name() {
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "ship_it"]);
     assert!(!success, "unknown transition should fail");
-    assert!(stderr.contains("Unknown transition 'ship_it'"), "{stderr}");
     assert!(
-        stderr.contains("available from 'todo' are: block, defer, start"),
+        stderr.contains("Invalid transition 'ship_it'. Valid values: block, defer, start"),
         "{stderr}"
     );
 }

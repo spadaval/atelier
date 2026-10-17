@@ -20,8 +20,7 @@ use atelier_app::record_index::RecordIndex;
 use atelier_app::record_ref::RecordKind;
 use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
-use atelier_records::validate_issue_type;
+use atelier_core::{InvalidValue, Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
@@ -1020,17 +1019,13 @@ fn has_level_two_heading(body: &str) -> bool {
 }
 
 fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {
-    validate_issue_type(issue_type)?;
     let policy = load_repo_policy(state_dir)?;
     if policy.issue_types.contains_key(issue_type) {
         Ok(())
     } else {
-        bail!(
-            "workflow policy at {} must declare issue_type '{}' in issue_types and cover it exactly once in workflows.*.applies_to; valid values: {}",
-            atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
-            issue_type,
-            configured_issue_type_names(&policy).join(", ")
-        )
+        bail!(atelier_app::workflow_policy::invalid_issue_type(
+            &policy, issue_type
+        ))
     }
 }
 
@@ -1056,10 +1051,6 @@ fn load_repo_policy(state_dir: &Path) -> Result<WorkflowPolicy> {
     atelier_app::workflow_policy::load(repo_root)
 }
 
-fn configured_issue_type_names(policy: &WorkflowPolicy) -> Vec<String> {
-    policy.issue_types.keys().cloned().collect()
-}
-
 fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
@@ -1082,10 +1073,12 @@ fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) ->
     let policy = load_repo_policy(state_dir)?;
     let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
     if !allowed.contains(status) {
-        bail!(
-            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with `atelier issue transition`.",
-            allowed.into_iter().collect::<Vec<_>>().join(", ")
-        );
+        let allowed = allowed.into_iter().collect::<Vec<_>>();
+        bail!(InvalidValue::new("status", status, &allowed)
+            .with_code("issue_create_status_invalid")
+            .with_hint(&format!(
+                "New {issue_type} work starts in one of these; other statuses are reached with `atelier issue transition`."
+            )));
     }
     Ok(status.to_string())
 }
@@ -1303,11 +1296,7 @@ pub fn append_note(
     quiet: bool,
 ) -> Result<()> {
     if !ISSUE_NOTE_KINDS.contains(&kind) {
-        bail!(atelier_core::invalid_value_message(
-            "note kind",
-            kind,
-            ISSUE_NOTE_KINDS
-        ));
+        bail!(InvalidValue::new("note kind", kind, ISSUE_NOTE_KINDS));
     }
     if text.trim().is_empty() {
         bail!("Note text for issue {issue_id} must not be empty");

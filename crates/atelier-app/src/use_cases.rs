@@ -1,6 +1,7 @@
 //! App-layer use-case entrypoints for command families that still render in CLI.
 
 use anyhow::{anyhow, bail, Result};
+use atelier_core::InvalidValue;
 use std::path::PathBuf;
 
 use crate::record_index::RecordIndex;
@@ -45,7 +46,7 @@ pub fn resolve_evidence_target_ref(index: &RecordIndex, kind: &str, id: &str) ->
     match kind {
         "issue" => index.resolve(RecordKind::Issue, id),
         "evidence" => index.resolve(RecordKind::Evidence, id),
-        _ => Ok(id.to_string()),
+        _ => Err(InvalidValue::new("target kind", kind, &["issue", "evidence"]).into()),
     }
 }
 

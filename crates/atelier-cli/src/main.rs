@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use atelier::commands;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
-use atelier_core::{EvidenceResult, FindingDecision};
+use atelier_core::{EvidenceResult, FindingDecision, InvalidValue};
 use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
 use std::env;
@@ -324,7 +324,8 @@ enum IssueCommands {
         #[arg(long)]
         parent: Option<String>,
         /// Initial status for work not yet started, such as backlog for
-        /// someday work; defaults to the workflow's initial status
+        /// someday work; which statuses are allowed depends on the issue
+        /// type. Defaults to the workflow's initial status
         #[arg(long)]
         status: Option<String>,
         /// Repository-relative strategy file a mission links; this path,
@@ -362,7 +363,11 @@ enum IssueCommands {
         #[arg(short, long)]
         priority: Option<String>,
         /// Maximum number of matching records to show
-        #[arg(long, default_value_t = 50)]
+        #[arg(
+            long,
+            default_value_t = 50,
+            value_parser = atelier_app::issue_inventory::parse_limit
+        )]
         limit: usize,
     },
 
@@ -579,10 +584,20 @@ where
 // Main
 // ============================================================================
 
-fn main() -> Result<()> {
+/// The exit status of a usage error, which clap also uses.
+const USAGE_ERROR: u8 = 2;
+
+fn main() -> std::process::ExitCode {
     restore_default_sigpipe();
-    load_dotenv()?;
-    run()
+    match load_dotenv().and_then(|()| run()) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Error: {error:?}");
+            // An invalid value is a usage error wherever it is checked.
+            let invalid_value = error.chain().any(|cause| cause.is::<InvalidValue>());
+            std::process::ExitCode::from(if invalid_value { USAGE_ERROR } else { 1 })
+        }
+    }
 }
 
 /// Rust ignores SIGPIPE, so a write to a reader that closed early, as `head`
@@ -1017,6 +1032,10 @@ fn parse_cli_or_exit() -> Cli {
     match Cli::try_parse().and_then(reject_quiet_json) {
         Ok(cli) => cli,
         Err(error) => {
+            if let Some(invalid) = invalid_argument_value(&error) {
+                eprintln!("Error: {invalid}");
+                std::process::exit(error.exit_code());
+            }
             let error = workflow_help::with_workflow_values(error);
             let exit_code = error.exit_code();
             if let Err(print_error) = error.print() {
@@ -1025,6 +1044,43 @@ fn parse_cli_or_exit() -> Cli {
             std::process::exit(exit_code);
         }
     }
+}
+
+/// Words a value the parser rejects in the form every invalid value takes:
+/// one outside an option's possible values, or one a value parser refused
+/// with an [`InvalidValue`].
+fn invalid_argument_value(error: &clap::Error) -> Option<InvalidValue> {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    match error.kind() {
+        ErrorKind::InvalidValue => {
+            let string = |kind| match error.get(kind) {
+                Some(ContextValue::String(value)) => Some(value.as_str()),
+                _ => None,
+            };
+            let Some(ContextValue::Strings(valid)) = error.get(ContextKind::ValidValue) else {
+                return None;
+            };
+            Some(InvalidValue::new(
+                &argument_field(string(ContextKind::InvalidArg)?),
+                string(ContextKind::InvalidValue)?,
+                valid,
+            ))
+        }
+        ErrorKind::ValueValidation => std::error::Error::source(error)?
+            .downcast_ref::<InvalidValue>()
+            .cloned(),
+        _ => None,
+    }
+}
+
+/// The field an argument names, as `issue type` for `--issue-type
+/// <ISSUE_TYPE>` and `target kind` for `<TARGET_KIND>`.
+fn argument_field(argument: &str) -> String {
+    let name = argument.trim_start_matches('-');
+    let name = name.split([' ', '=']).next().unwrap_or(name);
+    name.trim_matches(['<', '>', '[', ']', '.'])
+        .to_lowercase()
+        .replace(['-', '_'], " ")
 }
 
 #[cfg(test)]

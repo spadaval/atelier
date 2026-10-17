@@ -377,7 +377,7 @@ fn invalid_status_and_category_list_the_workflow_values() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (code, stderr) = exit_code(dir.path(), &["issue", "list", "--status", "bogus"]);
-    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(code, Some(2), "{stderr}");
     assert!(
         stderr.contains("Invalid status 'bogus'. Valid values: ")
             && stderr.contains("backlog")
@@ -386,11 +386,120 @@ fn invalid_status_and_category_list_the_workflow_values() {
         "{stderr}"
     );
     let (code, stderr) = exit_code(dir.path(), &["issue", "list", "--category", "open"]);
-    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(code, Some(2), "{stderr}");
     assert!(
         stderr.contains("Invalid category 'open'. Valid values: active, blocked, done, todo"),
         "{stderr}"
     );
+}
+
+/// Every invalid argument value, whether the parser, the workflow or the
+/// configuration defines what the argument accepts, is one line in the
+/// shared form naming only what that command accepts, and exits 2.
+#[test]
+fn every_invalid_value_takes_the_shared_form_and_exits_2() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    append_custom_issue_links(dir.path(), &["inspired_by"]);
+    create(dir.path(), &["issue", "create", "Source"]);
+    create(dir.path(), &["issue", "create", "Target"]);
+    let source = issue_id_by_title(dir.path(), "Source");
+    let target = issue_id_by_title(dir.path(), "Target");
+    create(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &source,
+            "supersede",
+            "--reason",
+            "gone",
+        ],
+    );
+    let issue_types = "bug, decision, feature, mission, spike, task, validation. Issue types \
+        are declared under issue_types in .atelier/workflow.yaml.";
+    let link_roles = "advances, assumption, blocked_by, blocks, contributes_to, derived, \
+        derived_from, duplicates, falsifies, implements, part_of, related, supersedes, inspired_by";
+    let cases: Vec<(Vec<&str>, String)> = vec![
+        (
+            vec!["issue", "link", &target, &source, "--role", "nope"],
+            format!(
+                "Invalid role 'nope'. Valid values: {link_roles}. Custom roles are configured \
+                 in .atelier/config.toml [issue_links].custom_context_types."
+            ),
+        ),
+        (
+            vec!["issue", "unlink", &target, &source, "--role", "validates"],
+            format!(
+                "Invalid role 'validates'. Valid values: {link_roles}. Proof roles are reserved \
+                 for evidence links; use `atelier evidence record --target issue/{target} --kind \
+                 validation \"...\"` or `atelier evidence attach <evidence-id> issue {target}`."
+            ),
+        ),
+        (
+            vec!["issue", "create", "New", "--issue-type", "nope"],
+            format!("Invalid issue type 'nope'. Valid values: {issue_types}"),
+        ),
+        (
+            vec!["issue", "update", &target, "--issue-type", "Nope"],
+            format!("Invalid issue type 'Nope'. Valid values: {issue_types}"),
+        ),
+        (
+            vec!["issue", "list", "--issue-type", "nope"],
+            format!("Invalid issue type 'nope'. Valid values: {issue_types}"),
+        ),
+        (
+            vec!["issue", "transition", &target, "nope"],
+            "Invalid transition 'nope'. Valid values: block, defer, start, supersede".into(),
+        ),
+        (
+            vec!["issue", "transition", &source, "nope"],
+            "Invalid transition 'nope'. Valid values: none. No transition leaves status \
+             superseded."
+                .into(),
+        ),
+        (
+            vec!["issue", "list", "--limit", "0"],
+            "Invalid limit '0'. Valid values: positive integers".into(),
+        ),
+        (
+            vec!["issue", "list", "--limit", "many"],
+            "Invalid limit 'many'. Valid values: positive integers".into(),
+        ),
+        (
+            vec!["issue", "create", "New", "--status", "done"],
+            "issue_create_status_invalid: Invalid status 'done'. Valid values: backlog, todo. \
+             New task work starts in one of these; other statuses are reached with \
+             `atelier issue transition`."
+                .into(),
+        ),
+        (
+            vec!["issue", "create", "New", "--priority", "urgent"],
+            "Invalid priority 'urgent'. Valid values: P0 or critical, P1 or high, P2 or medium, \
+             P3 or low"
+                .into(),
+        ),
+        (
+            vec!["evidence", "list", "--result", "nope"],
+            "Invalid result 'nope'. Valid values: pass, fail, blocked, not-applicable".into(),
+        ),
+        (
+            vec!["evidence", "attach", "x", "review", &target],
+            "Invalid target kind 'review'. Valid values: issue, evidence".into(),
+        ),
+        (
+            vec![
+                "evidence", "record", "--target", "review/x", "--kind", "test", "--result", "pass",
+                "proof",
+            ],
+            "Invalid target kind 'review'. Valid values: issue, evidence".into(),
+        ),
+    ];
+    for (args, message) in cases {
+        let (code, stderr) = exit_code(dir.path(), &args);
+        assert_eq!(code, Some(2), "{args:?}: {stderr}");
+        assert_eq!(stderr, format!("Error: {message}\n"), "{args:?}");
+    }
 }
 
 #[test]

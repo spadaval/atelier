@@ -1,7 +1,7 @@
 //! Flat canonical inventory: validate filters, select once, then limit display.
 
 use anyhow::{anyhow, bail, Result};
-use atelier_core::{invalid_value_message, IssuePriority};
+use atelier_core::{InvalidValue, IssuePriority};
 use atelier_records::CanonicalIssueRecord;
 
 use crate::record_index::RecordIndex;
@@ -16,6 +16,19 @@ pub struct IssueInventoryFilters<'a> {
     pub issue_type: Option<&'a str>,
     pub label: Option<&'a str>,
     pub priority: Option<&'a str>,
+}
+
+/// Parses a `--limit` argument: a positive number of records.
+pub fn parse_limit(value: &str) -> Result<usize, InvalidValue> {
+    value
+        .parse()
+        .ok()
+        .filter(|limit| *limit > 0)
+        .ok_or_else(|| invalid_limit(value))
+}
+
+fn invalid_limit(value: &str) -> InvalidValue {
+    InvalidValue::new("limit", value, &["positive integers"])
 }
 
 pub struct IssueInventoryView<'a> {
@@ -33,8 +46,9 @@ pub fn issue_inventory<'a>(
     if let Some(issue_type) = filters.issue_type {
         let policy = policy.ok_or_else(|| anyhow!("--issue-type requires a workflow policy"))?;
         if !policy.issue_types.contains_key(issue_type) {
-            let valid = policy.issue_types.keys().collect::<Vec<_>>();
-            bail!(invalid_value_message("issue type", issue_type, &valid));
+            bail!(crate::workflow_policy::invalid_issue_type(
+                policy, issue_type
+            ));
         }
     }
     if let Some(status) = filters.status {
@@ -45,7 +59,7 @@ pub fn issue_inventory<'a>(
                 .map(String::as_str)
                 .collect::<Vec<_>>();
             valid.push("all");
-            bail!(invalid_value_message("status", status, &valid));
+            bail!(InvalidValue::new("status", status, &valid));
         }
     }
     if let Some(category) = filters.category {
@@ -57,11 +71,11 @@ pub fn issue_inventory<'a>(
             .collect::<std::collections::BTreeSet<_>>();
         if !valid.contains(category) {
             let valid = valid.into_iter().collect::<Vec<_>>();
-            bail!(invalid_value_message("category", category, &valid));
+            bail!(InvalidValue::new("category", category, &valid));
         }
     }
     if limit == 0 {
-        bail!("issue inventory limit must be a positive integer");
+        bail!(invalid_limit("0"));
     }
     let priority = filters
         .priority
@@ -215,7 +229,7 @@ mod tests {
                 .err()
                 .unwrap()
                 .to_string(),
-            "issue inventory limit must be a positive integer"
+            "Invalid limit '0'. Valid values: positive integers"
         );
         for filters in [
             IssueInventoryFilters {

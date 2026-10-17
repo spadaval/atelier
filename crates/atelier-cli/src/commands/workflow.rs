@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::human_output::{self, DecisionState, FooterAction, StylePolicy};
 use atelier_app::workflow_policy::{TransitionDefinition, WorkflowPolicy};
-use atelier_core::Issue;
+use atelier_core::{InvalidValue, Issue};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 
 pub use atelier_app::workflow_validation::ValidatorResult;
@@ -169,21 +169,12 @@ fn resolve_issue_transition<'a>(
         .into_iter()
         .map(|(name, _)| name)
         .collect::<Vec<_>>();
-    if available.is_empty() {
-        bail!(
-            "Unknown transition '{}' for issue {}; no transitions are configured from status '{}'",
-            transition_name,
-            issue.id,
-            issue.status
-        );
-    }
-    bail!(
-        "Unknown transition '{}' for issue {}; available from '{}' are: {}",
-        transition_name,
-        issue.id,
-        issue.status,
-        available.join(", ")
-    )
+    let invalid = InvalidValue::new("transition", transition_name, &available);
+    bail!(if available.is_empty() {
+        invalid.with_hint(&format!("No transition leaves status {}.", issue.status))
+    } else {
+        invalid
+    })
 }
 
 fn ensure_transition_available(
