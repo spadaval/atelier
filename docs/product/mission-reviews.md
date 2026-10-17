@@ -20,16 +20,25 @@ same order:
   it, and its deciding receipt with its age (code commits up to the mission's
   close, or since the receipt while the mission is open). An item delivers a
   criterion when its Goal's first sentence names it outside parentheses, when
-  the criterion's text names the item, or when it holds the deciding receipt.
+  the criterion's text names the item, or when it holds the deciding receipt
+  and that receipt passes. A one-word slug such as `fast` counts as named only
+  when written as code.
 - **Work:** the done items linked to the mission, in the order they closed,
   each with its children, its outcome, what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn, failing
   newest proof, a trivial exemption, joining after the start), what surprised
   the implementer, the decisions made in it (one-way first), how review went,
   and the follow-ups its review filed.
-- **Open work:** planned work not done, follow-ups with the item whose review
-  filed them, and dropped items with why.
+- **Open work:** planned work not done, follow-ups with the item (or the
+  mission review) whose review filed them, and dropped items with why. A done
+  child of a parent that is not done is listed under Work on its own, naming
+  its parent.
 - **Decisions:** the mission's decision log, in `work decisions` order.
+- **Mission reviews:** review events on the mission itself, such as plan
+  approval.
+
+Planned work, which the sidebar's progress counts, is the work linked to the
+mission by its start and not filed by review.
 
 The Markdown form keeps record IDs, for agents. `--html` writes the same review
 to `.atelier/runtime/reviews/<mission>-debrief.html` and prints its path. The

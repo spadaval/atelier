@@ -84,6 +84,8 @@ pub struct ReviewSummary {
 #[derive(Debug, Clone)]
 pub struct WorkEntry {
     pub id: String,
+    /// The parent, when the parent itself is not done.
+    pub parent: Option<String>,
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// The Close Reason read as the implementer report.
     pub report: Option<CloseReport>,
@@ -148,8 +150,8 @@ pub struct Debrief {
     pub refs: BTreeMap<String, IssueRef>,
     /// Reviews and receipts on the mission and its scope, for mentions.
     pub record_refs: BTreeMap<String, RecordRef>,
-    /// Planned items (linked to the mission, not filed by review), done and
-    /// in total, superseded ones left out.
+    /// Planned items (linked to the mission by its start, not filed by
+    /// review), done and in total, superseded ones left out.
     pub planned_done: usize,
     pub planned_total: usize,
 }
@@ -157,16 +159,6 @@ pub struct Debrief {
 impl Debrief {
     pub fn title_of<'a>(&'a self, id: &'a str) -> &'a str {
         self.refs.get(id).map_or(id, |issue| issue.title.as_str())
-    }
-
-    pub fn is_follow_up(&self, id: &str) -> bool {
-        self.open
-            .iter()
-            .any(|entry| entry.id == id && entry.from.is_some())
-            || self
-                .work
-                .iter()
-                .any(|entry| entry.follow_ups.iter().any(|f| f == id))
     }
 }
 
@@ -223,10 +215,19 @@ pub fn debrief(
     let mut follow_ups_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut trivial: BTreeMap<String, String> = BTreeMap::new();
     let mut findings: BTreeMap<String, String> = BTreeMap::new();
-    let mut dispositions: BTreeMap<String, (chrono::DateTime<chrono::Utc>, FindingDecision)> =
-        BTreeMap::new();
+    // Each finding's latest disposition, with where it was deferred to.
+    #[allow(clippy::type_complexity)]
+    let mut dispositions: BTreeMap<
+        String,
+        (
+            chrono::DateTime<chrono::Utc>,
+            FindingDecision,
+            Option<String>,
+            String,
+        ),
+    > = BTreeMap::new();
     for review in index.reviews() {
-        if !scope.contains(&review.target) {
+        if !scope.contains(&review.target) && review.target != mission_id {
             continue;
         }
         let summary = reviews.entry(review.target.clone()).or_default();
@@ -248,26 +249,36 @@ pub fn debrief(
             } => {
                 let newer = dispositions
                     .get(finding)
-                    .is_none_or(|(at, _)| review.header.created_at >= *at);
+                    .is_none_or(|(at, ..)| review.header.created_at >= *at);
                 if newer {
-                    dispositions.insert(finding.clone(), (review.header.created_at, *decision));
-                }
-                if let (FindingDecision::Defer, Some(follow_up)) = (decision, follow_up) {
-                    follow_up_source
-                        .entry(follow_up.clone())
-                        .or_insert_with(|| review.target.clone());
-                    let list = follow_ups_of.entry(review.target.clone()).or_default();
-                    if !list.contains(follow_up) {
-                        list.push(follow_up.clone());
-                    }
+                    dispositions.insert(
+                        finding.clone(),
+                        (
+                            review.header.created_at,
+                            *decision,
+                            follow_up.clone(),
+                            review.target.clone(),
+                        ),
+                    );
                 }
             }
             ReviewEvent::Review => {}
         }
     }
+    for (_, decision, follow_up, target) in dispositions.values() {
+        if let (FindingDecision::Defer, Some(follow_up)) = (decision, follow_up) {
+            follow_up_source
+                .entry(follow_up.clone())
+                .or_insert_with(|| target.clone());
+            let list = follow_ups_of.entry(target.clone()).or_default();
+            if !list.contains(follow_up) {
+                list.push(follow_up.clone());
+            }
+        }
+    }
     for (finding, target) in &findings {
         let summary = reviews.entry(target.clone()).or_default();
-        match dispositions.get(finding).map(|(_, decision)| *decision) {
+        match dispositions.get(finding).map(|(_, decision, ..)| *decision) {
             Some(FindingDecision::FixNow) => summary.fixed += 1,
             Some(FindingDecision::Defer) => summary.deferred += 1,
             Some(FindingDecision::NoAction) => summary.no_action += 1,
@@ -294,11 +305,11 @@ pub fn debrief(
                 .sections
                 .section(IssueSectionName::Goal)
                 .map(|text| outside_parentheses(&first_sentence(text)))
-                .is_some_and(|text| names_word(&text, slug));
+                .is_some_and(|text| names_criterion(&text, slug));
             let named = names_word(&proof.criterion.text, id);
-            let proved = proof
-                .deciding()
-                .is_some_and(|receipt| &receipt.target_id == id);
+            let proved = proof.deciding().is_some_and(|receipt| {
+                &receipt.target_id == id && receipt.result == EvidenceResult::Pass
+            });
             if goal || named || proved {
                 by.push(id.clone());
             }
@@ -350,39 +361,15 @@ pub fn debrief(
     let mut work = Vec::new();
     let mut open = Vec::new();
     let mut dropped = Vec::new();
-    for id in &linked {
-        let Some(item) = index.issue_record(id) else {
-            continue;
-        };
-        let kids = index
-            .child_ids(id)
-            .iter()
-            .filter(|child| scope.contains(*child))
-            .cloned()
-            .collect::<Vec<_>>();
-        if item.issue.status == "superseded" {
-            let mut entry = open_entry(id, None)?;
-            entry.reason = Some(close_outcome(index, id));
-            dropped.push(entry);
-            continue;
-        }
-        if !done(&item.issue) {
-            open.push(open_entry(id, None)?);
-            for kid in &kids {
-                if index
-                    .issue_record(kid)
-                    .is_some_and(|child| !done(&child.issue))
-                {
-                    open.push(open_entry(kid, Some(id.clone()))?);
-                }
-            }
-            continue;
-        }
+    let work_entry = |id: &str, parent: Option<String>, kids: Vec<String>| -> Result<WorkEntry> {
+        let item = index
+            .issue_record(id)
+            .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, id))?;
         let mut changes = Vec::new();
         let mut decisions = Vec::new();
         let mut review = ReviewSummary::default();
         let mut follow_ups = Vec::new();
-        for member in std::iter::once(id).chain(kids.iter()) {
+        for member in std::iter::once(&id.to_string()).chain(kids.iter()) {
             changes.extend(changes_of(member)?);
             if let Some(record) = index.issue_record(member) {
                 decisions.extend(record.sections.decision_notes().into_iter().flatten().map(
@@ -413,8 +400,9 @@ pub fn debrief(
             .filter(|(_, by)| by.iter().any(|by| by == id || kids.contains(by)))
             .map(|(slug, _)| slug.clone())
             .collect::<Vec<_>>();
-        work.push(WorkEntry {
-            id: id.clone(),
+        Ok(WorkEntry {
+            id: id.to_string(),
+            parent,
             closed_at: item.issue.closed_at,
             report: item
                 .sections
@@ -428,7 +416,45 @@ pub fn debrief(
             decisions,
             review,
             follow_ups,
-        });
+        })
+    };
+    let dropped_entry = |id: &str, parent: Option<String>| -> Result<OpenEntry> {
+        let mut entry = open_entry(id, parent)?;
+        entry.reason = Some(close_outcome(index, id));
+        Ok(entry)
+    };
+    for id in &linked {
+        let Some(item) = index.issue_record(id) else {
+            continue;
+        };
+        let kids = index
+            .child_ids(id)
+            .iter()
+            .filter(|child| scope.contains(*child))
+            .cloned()
+            .collect::<Vec<_>>();
+        if done(&item.issue) {
+            work.push(work_entry(id, None, kids)?);
+            continue;
+        }
+        if item.issue.status == "superseded" {
+            dropped.push(dropped_entry(id, None)?);
+        } else {
+            open.push(open_entry(id, None)?);
+        }
+        // Children of a parent that is not done stand on their own.
+        for kid in &kids {
+            let Some(child) = index.issue_record(kid) else {
+                continue;
+            };
+            if done(&child.issue) {
+                work.push(work_entry(kid, Some(id.clone()), Vec::new())?);
+            } else if child.issue.status == "superseded" {
+                dropped.push(dropped_entry(kid, Some(id.clone()))?);
+            } else {
+                open.push(open_entry(kid, Some(id.clone()))?);
+            }
+        }
     }
     work.sort_by(|a, b| {
         (a.closed_at.is_none(), a.closed_at, &a.id).cmp(&(
@@ -449,9 +475,10 @@ pub fn debrief(
             open.push(entry);
         }
     }
+    // Planned work: linked by the start and not filed by review.
     let planned = linked
         .iter()
-        .filter(|id| !follow_up_source.contains_key(*id))
+        .filter(|id| !follow_up_source.contains_key(*id) && !added.contains(*id))
         .filter_map(|id| index.issue_record(id))
         .filter(|record| record.issue.status != "superseded")
         .collect::<Vec<_>>();
@@ -491,7 +518,7 @@ pub fn debrief(
         .iter()
         .filter(|proof| proof.mark == CriterionMark::Unproven)
         .map(|proof| proof.criterion.slug.clone())
-        .filter(|slug| !asked_goals.iter().any(|goal| names_word(goal, slug)))
+        .filter(|slug| !asked_goals.iter().any(|goal| names_criterion(goal, slug)))
         .collect::<Vec<_>>();
     if !unproven.is_empty() {
         asks.push(Ask::Unproven(unproven));
@@ -590,6 +617,18 @@ fn names_word(text: &str, word: &str) -> bool {
         let after = text[at + word.len()..].chars().next();
         before.is_none_or(|c| !part(c)) && after.is_none_or(|c| !part(c))
     })
+}
+
+/// Whether `text` names the criterion: `S<n>` and hyphenated slugs as whole
+/// words, a one-word slug such as `fast` only as code, since as a plain
+/// word it is ordinary English.
+fn names_criterion(text: &str, slug: &str) -> bool {
+    let distinctive = slug.contains('-') || slug.chars().any(|c| c.is_ascii_digit());
+    if distinctive {
+        names_word(text, slug)
+    } else {
+        text.contains(&format!("`{slug}`"))
+    }
 }
 
 /// The text with every parenthesised aside removed.

@@ -443,6 +443,9 @@ fn render_markdown(
         if !entry.criteria.is_empty() {
             head.push_str(&format!(" | {}", entry.criteria.join(", ")));
         }
+        if let Some(parent) = &entry.parent {
+            head.push_str(&format!(" | under {parent}"));
+        }
         if entry.added_after_start {
             head.push_str(" | added after the start");
         }
@@ -499,11 +502,21 @@ fn render_markdown(
     }
 
     let mut open = Vec::new();
-    for entry in &view.open {
+    // Planned work first, then review's follow-ups, then dropped work.
+    let ordered = view
+        .open
+        .iter()
+        .filter(|entry| entry.from.is_none())
+        .chain(view.open.iter().filter(|entry| entry.from.is_some()));
+    for entry in ordered {
         let indent = if entry.parent.is_some() { "  " } else { "" };
         let mut row = format!("{indent}{}", item(&entry.id));
         if let Some(from) = &entry.from {
-            row.push_str(&format!(" | from {from}"));
+            if from == &view.mission.id {
+                row.push_str(" | from review of the mission");
+            } else {
+                row.push_str(&format!(" | from {from}"));
+            }
         }
         if entry.added_after_start {
             row.push_str(" | added after the start");
@@ -543,9 +556,9 @@ fn render_markdown(
         optional("Success Criteria", criteria),
         optional("Work", work),
         optional("Open Work", open),
-        optional("Mission Reviews", events),
     ];
     panels.extend(decision_sections(context, policy, &view.decisions));
+    panels.push(optional("Mission Reviews", events));
     panels.push(render_footer_section(
         context,
         [
@@ -931,12 +944,21 @@ fn render_html(view: &Debrief) -> String {
             rows.push_str("<div class=\"sub\">From review</div>");
             for entry in from_review {
                 let from = entry.from.as_deref().unwrap_or_default();
+                let source = if from == view.mission.id {
+                    "review of the mission".to_string()
+                } else if view.work.iter().any(|work| work.id == from) {
+                    format!(
+                        "<a href=\"#{}\">{}</a>",
+                        escape(from),
+                        escape(view.title_of(from))
+                    )
+                } else {
+                    issue_ref(view, from, None)
+                };
                 rows.push_str(&format!(
-                    "<div class=\"row\"><span class=\"dot {}\"></span><span>{}</span><span class=\"from\"><a href=\"#{}\">{}</a></span></div>",
+                    "<div class=\"row\"><span class=\"dot {}\"></span><span>{}</span><span class=\"from\">{source}</span></div>",
                     dot(view, &entry.id),
-                    issue_ref(view, &entry.id, None),
-                    escape(from),
-                    escape(view.title_of(from))
+                    issue_ref(view, &entry.id, None)
                 ));
             }
         }
@@ -1058,6 +1080,9 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
         .unwrap_or_default()];
     if !entry.criteria.is_empty() {
         meta.push(entry.criteria.join(", "));
+    }
+    if let Some(parent) = &entry.parent {
+        meta.push(format!("part of {}", view.title_of(parent)));
     }
     if entry.added_after_start {
         meta.push("added after the start".into());
