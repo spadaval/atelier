@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Accept P0-P3 and priority words alike, and name stored tokens in errors"
-updated_at: "2026-10-17T01:10:57.991754064+00:00"
+updated_at: "2026-10-17T07:06:55.053544876+00:00"
 ---
 
 ## Goal

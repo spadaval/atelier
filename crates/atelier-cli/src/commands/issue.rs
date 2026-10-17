@@ -7,9 +7,9 @@ use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
 use crate::human_output::{
-    display_timestamp, heading, plural_suffix, render_footer_section, render_issue_inventory,
-    render_issue_inventory_quiet, render_lines_section, render_metadata, render_text_section,
-    FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
+    display_timestamp, heading, local_date, plural_suffix, render_footer_section,
+    render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
+    render_text_section, FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
@@ -1256,7 +1256,7 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(issue_id)?;
     let now = Utc::now();
-    record.sections.append_note(now.date_naive(), kind, text);
+    record.sections.append_note(local_date(now), kind, text);
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
     println!("Added note to issue {}", issue_id);
