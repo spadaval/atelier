@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-krf4
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Phrase counts as plain words in one order"
-updated_at: "2026-10-17T07:15:49.737164867+00:00"
+updated_at: "2026-10-17T07:15:51.322088093+00:00"
 ---
 
 ## Goal
