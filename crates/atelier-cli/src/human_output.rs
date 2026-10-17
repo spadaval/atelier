@@ -231,44 +231,19 @@ impl<'a> ItemLine<'a> {
     }
 
     pub(crate) fn render(&self, context: RenderContext) -> String {
-        let mut line = String::new();
-        match self.lead {
-            Some(Lead::State(state)) => {
-                line.push_str(&context.paint(classification_style(state), state.label()));
-                line.push(' ');
-            }
-            Some(Lead::Role(role)) => {
-                line.push_str(role);
-                line.push(' ');
-            }
-            None => {}
-        }
-        line.push_str(self.id);
-        if let Some(issue_type) = self.issue_type {
-            line.push(' ');
-            line.push_str(issue_type);
-        }
-        let status = status_cue(&self.status, self.category, self.classification);
-        let style = match (self.category, self.classification) {
-            (Some(category), _) => status_style(category),
-            (None, Some(state)) => classification_style(state),
-            (None, None) => TextStyle::Secondary,
-        };
-        line.push(' ');
-        line.push_str(&context.paint(style, status));
-        line.push(' ');
-        line.push_str(&context.paint(priority_style(self.priority), self.priority));
-        line.push(' ');
-        line.push_str(self.title);
-        for cue in &self.cues {
-            line.push_str(" | ");
-            line.push_str(cue);
-        }
-        line
+        self.fields()
+            .iter()
+            .map(|field| field.paint(context, &field.text))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// The line at `indent`. A line too wide for the terminal continues on
-    /// lines indented past the rows, so it never reads as a new item.
+    /// lines indented past the rows, so it never reads as a new item. It
+    /// breaks only between fields or title words, so a marked status and
+    /// each `| <cue>` stay whole unless one alone is wider than the
+    /// terminal, and each piece keeps the colour [`ItemLine::render`] gives
+    /// it.
     pub(crate) fn render_wrapped(&self, context: RenderContext, indent: &str) -> Vec<String> {
         let text = self.text();
         if display_width(indent) + display_width(&text) <= context.width() {
@@ -279,14 +254,114 @@ impl<'a> ItemLine<'a> {
             .width()
             .saturating_sub(display_width(&continuation))
             .max(1);
-        wrap_words(&text, width)
+        let fields = self.fields();
+        let mut pieces = Vec::new();
+        for field in &fields {
+            let tokens = if field.breakable {
+                field.text.split_whitespace().map(str::to_owned).collect()
+            } else {
+                vec![field.text.clone()]
+            };
+            for token in tokens {
+                if display_width(&token) > width {
+                    pieces.extend(
+                        wrap_words(&token, width)
+                            .into_iter()
+                            .map(|part| (field, part)),
+                    );
+                } else {
+                    pieces.push((field, token));
+                }
+            }
+        }
+        let mut lines: Vec<(usize, String)> = Vec::new();
+        for (field, piece) in pieces {
+            let piece_width = display_width(&piece);
+            let painted = field.paint(context, &piece);
+            match lines.last_mut() {
+                Some((used, line)) if *used + 1 + piece_width <= width => {
+                    *used += 1 + piece_width;
+                    line.push(' ');
+                    line.push_str(&painted);
+                }
+                _ => lines.push((piece_width, painted)),
+            }
+        }
+        lines
             .into_iter()
             .enumerate()
-            .map(|(number, line)| {
+            .map(|(number, (_, line))| {
                 let indent = if number == 0 { indent } else { &continuation };
                 format!("{indent}{line}")
             })
             .collect()
+    }
+
+    /// The line's fields in order, each with the style it is painted in.
+    fn fields(&self) -> Vec<ItemField> {
+        let mut fields = Vec::new();
+        match self.lead {
+            Some(Lead::State(state)) => {
+                fields.push(ItemField::new(
+                    state.label(),
+                    Some(classification_style(state)),
+                ));
+            }
+            Some(Lead::Role(role)) => fields.push(ItemField::new(role, None)),
+            None => {}
+        }
+        fields.push(ItemField::new(self.id, None));
+        if let Some(issue_type) = self.issue_type {
+            fields.push(ItemField::new(issue_type, None));
+        }
+        let status_style = match (self.category, self.classification) {
+            (Some(category), _) => status_style(category),
+            (None, Some(state)) => classification_style(state),
+            (None, None) => TextStyle::Secondary,
+        };
+        fields.push(ItemField::new(
+            status_cue(&self.status, self.category, self.classification),
+            Some(status_style),
+        ));
+        fields.push(ItemField::new(
+            self.priority,
+            Some(priority_style(self.priority)),
+        ));
+        fields.push(ItemField {
+            breakable: true,
+            ..ItemField::new(self.title, None)
+        });
+        fields.extend(
+            self.cues
+                .iter()
+                .map(|cue| ItemField::new(format!("| {cue}"), None)),
+        );
+        fields
+    }
+}
+
+/// One field of an [`ItemLine`]: its text, the style it is painted in, and
+/// whether a wrap may break it between words, as it may the title.
+struct ItemField {
+    text: String,
+    style: Option<TextStyle>,
+    breakable: bool,
+}
+
+impl ItemField {
+    fn new(text: impl Into<String>, style: Option<TextStyle>) -> Self {
+        Self {
+            text: text.into(),
+            style,
+            breakable: false,
+        }
+    }
+
+    fn paint(&self, context: RenderContext, text: &str) -> String {
+        match self.style {
+            Some(style) => context.paint(style, text),
+            None => text.to_owned(),
+        }
     }
 }
 
@@ -1350,6 +1425,76 @@ mod tests {
             ]
         );
         assert!(narrow.iter().all(|line| line.chars().count() <= 40));
+    }
+
+    #[test]
+    fn narrow_coloured_item_lines_keep_colour_and_whole_tokens() {
+        let line = ItemLine::new("atelier-4fip", "todo", "high", "Build the Mission Overview")
+            .state(Some("todo"), Some(WorkClassification::Blocked))
+            .blockers(1)
+            .cue("not merged into master");
+        let colour =
+            |width| RenderContext::from_parts_with_width(ColorChoice::Always, true, false, width);
+
+        // Each field keeps its colour, and `⚠ todo` and each `| <cue>` stay
+        // whole, wherever the line breaks.
+        for width in 12..=80 {
+            let lines = line.render_wrapped(colour(width), "  ");
+            let plain = lines
+                .iter()
+                .map(|line| strip_test_ansi(line))
+                .collect::<Vec<_>>();
+            assert!(
+                lines
+                    .iter()
+                    .any(|line| line.contains("\u{1b}[33m⚠ todo\u{1b}[0m")),
+                "width {width}: {lines:?}"
+            );
+            assert!(
+                lines
+                    .iter()
+                    .any(|line| line.contains("\u{1b}[31mhigh\u{1b}[0m")),
+                "width {width}: {lines:?}"
+            );
+            if width >= 30 {
+                for token in ["| 1 blocker", "| not merged into master"] {
+                    assert!(
+                        plain.iter().any(|line| line.contains(token)),
+                        "width {width}: {plain:?}"
+                    );
+                }
+            }
+            assert!(
+                plain.iter().all(|line| line.chars().count() <= width),
+                "width {width}: {plain:?}"
+            );
+            // Nothing is lost: a hard-wrapped token only gains a break.
+            let characters = |text: &str| {
+                text.chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>()
+            };
+            assert_eq!(characters(&plain.concat()), characters(&line.text()));
+        }
+
+        assert_eq!(
+            line.render_wrapped(colour(40), "  "),
+            [
+                "  atelier-4fip \u{1b}[33m⚠ todo\u{1b}[0m \u{1b}[31mhigh\u{1b}[0m Build the",
+                "      Mission Overview | 1 blocker",
+                "      | not merged into master",
+            ]
+        );
+
+        // A cue wider than the terminal alone breaks between its words.
+        let narrow = line.render_wrapped(
+            RenderContext::from_parts_with_width(ColorChoice::Never, false, false, 24),
+            "",
+        );
+        assert!(
+            narrow.contains(&"    | not merged into".to_string()),
+            "{narrow:?}"
+        );
     }
 
     #[test]
