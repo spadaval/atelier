@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Phrase counts as plain words in one order"
-updated_at: "2026-10-17T01:10:57.989276399+00:00"
+updated_at: "2026-10-17T07:15:49.737164867+00:00"
 ---
 
 ## Goal
