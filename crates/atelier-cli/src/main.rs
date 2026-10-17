@@ -357,10 +357,15 @@ enum IssueCommands {
         strategy: Option<String>,
     },
 
-    /// Show issue details
+    /// Show a brief view of one or more issues; --full shows the whole record
     Show {
-        /// Issue ID
-        id: String,
+        /// Issue IDs, each shown in turn
+        #[arg(required = true)]
+        ids: Vec<String>,
+        /// Show the full record: metadata, every section, links, rollups, and
+        /// transition commands
+        #[arg(long)]
+        full: bool,
     },
 
     /// List issue records as generic inventory

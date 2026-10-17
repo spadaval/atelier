@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_status_category, issue_status_label,
+    format_status_with_category, issue_is_done, issue_status_category, issue_status_label,
     load_issue_workflow_policy,
 };
 use crate::human_output::{
@@ -65,12 +65,288 @@ fn canonical_issue_path(issue_id: &str) -> Result<Option<PathBuf>> {
         .map(|state_dir| canonical_issue_path_from_state(&state_dir, issue_id)))
 }
 
-pub fn show(index: &RecordIndex, issue_ref: &str) -> Result<()> {
-    let id = resolve_id(index, issue_ref)?;
-    let record = index
-        .issue_record(&id)
-        .ok_or_else(|| anyhow!("Issue {id} not found"))?;
-    render_issue_show_human(index, record)
+/// Shows each issue in turn, brief unless `full`. Every reference resolves
+/// before anything prints, so one unknown ID prints nothing.
+pub fn show(index: &RecordIndex, issue_refs: &[String], full: bool) -> Result<()> {
+    let records = issue_refs
+        .iter()
+        .map(|issue_ref| {
+            let id = resolve_id(index, issue_ref)?;
+            index
+                .issue_record(&id)
+                .ok_or_else(|| anyhow!("Issue {id} not found"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if full {
+        for (position, record) in records.into_iter().enumerate() {
+            if position > 0 {
+                println!();
+            }
+            render_issue_show_human(index, record)?;
+        }
+        return Ok(());
+    }
+    let workflow_policy = load_issue_workflow_policy()?;
+    let briefs = records
+        .into_iter()
+        .map(|record| render_issue_brief(index, workflow_policy.as_ref(), record))
+        .collect::<Result<Vec<_>>>()?;
+    println!(
+        "{}",
+        briefs
+            .iter()
+            .map(|lines| lines.join("\n"))
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    );
+    Ok(())
+}
+
+/// The brief view: one line per fact, then the item's lead sections.
+fn render_issue_brief(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    record: &CanonicalIssueRecord,
+) -> Result<Vec<String>> {
+    let issue = &record.issue;
+    let id = &issue.id;
+    let mut lines = vec![format!(
+        "{} [{}] {} - {}",
+        id,
+        issue.issue_type,
+        status_cue(workflow_policy, &issue.status),
+        issue.title
+    )];
+    if issue.issue_type == "mission" {
+        if let Some(strategy) = issue.strategy()? {
+            lines.push(format!("Strategy: {}", strategy.path));
+        }
+        if let Some(summary) =
+            atelier_app::issue_read::objective_read_summary(index, id, workflow_policy)?
+        {
+            lines.push(format!("Work: {}", work_counts(&summary)));
+        }
+    } else if let Some(mission_id) = atelier_app::objective_graph::containing_mission(index, id)? {
+        lines.push(format!(
+            "Mission: {}",
+            brief_issue_row(index, workflow_policy, &mission_id)?
+        ));
+    }
+    if let Some(parent_id) = &issue.parent_id {
+        lines.push(format!(
+            "Parent: {}",
+            brief_issue_row(index, workflow_policy, parent_id)?
+        ));
+    }
+    push_brief_rows(
+        &mut lines,
+        "Children",
+        brief_child_rows(index, workflow_policy, id)?,
+    );
+    push_brief_rows(
+        &mut lines,
+        "Blocked by",
+        brief_issue_rows(index, workflow_policy, index.get_blockers(id))?,
+    );
+    if let Some((parent, inherited)) = atelier_app::objective_graph::inherited_blockers(index, id) {
+        push_brief_rows(
+            &mut lines,
+            &format!("Blocked via parent {parent}"),
+            brief_issue_rows(index, workflow_policy, inherited)?,
+        );
+    }
+    lines.push(format!(
+        "Transitions: {}",
+        transition_summary(index, workflow_policy, issue)
+    ));
+
+    let lead = record.sections.lead_names();
+    for name in lead {
+        if let Some(body) = record.sections.section(name) {
+            push_brief_section(&mut lines, name.title(), body);
+        }
+    }
+    let more = IssueSections::ALL_NAMES
+        .into_iter()
+        .filter(|name| !lead.contains(name) && record.sections.section(*name).is_some())
+        .map(|name| name.title())
+        .collect::<Vec<_>>();
+    if !more.is_empty() {
+        lines.push(format!("More with --full: {}", more.join(", ")));
+    }
+    Ok(lines)
+}
+
+/// The status word, marked ✓ when its category is done and ⚠ when blocked.
+fn status_cue(workflow_policy: Option<&WorkflowPolicy>, status: &str) -> String {
+    let category = issue_status_category(workflow_policy, status);
+    let label = format_status_with_category(category.as_deref(), status);
+    marked(category.as_deref(), label)
+}
+
+fn marked(category: Option<&str>, label: String) -> String {
+    match category {
+        Some("done") => format!("✓ {label}"),
+        Some("blocked") => format!("⚠ {label}"),
+        _ => label,
+    }
+}
+
+fn brief_issue_row(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    id: &str,
+) -> Result<String> {
+    let issue = index.require_issue(id)?;
+    Ok(format!(
+        "{} {} - {}",
+        issue.id,
+        status_cue(workflow_policy, &issue.status),
+        issue.title
+    ))
+}
+
+fn brief_issue_rows(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    ids: Vec<String>,
+) -> Result<Vec<String>> {
+    ids.iter()
+        .map(|id| brief_issue_row(index, workflow_policy, id))
+        .collect()
+}
+
+/// Children in work order, each with its work classification rather than its
+/// raw status, as the work views show them.
+fn brief_child_rows(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    parent_id: &str,
+) -> Result<Vec<String>> {
+    let children = index
+        .get_subissues(parent_id)
+        .into_iter()
+        .map(|child| {
+            let classified =
+                atelier_app::work_classification::classify_issue(index, workflow_policy, &child)?;
+            Ok((child, classified))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(crate::commands::work_order::ordered_work_indices(&children)
+        .into_iter()
+        .map(|position| {
+            let (child, classified) = &children[position];
+            let label = classified.classification.label();
+            format!(
+                "{} {} - {}",
+                child.id,
+                marked(Some(label), label.to_string()),
+                child.title
+            )
+        })
+        .collect())
+}
+
+fn push_brief_rows(lines: &mut Vec<String>, label: &str, rows: Vec<String>) {
+    match rows.as_slice() {
+        [] => {}
+        [row] => lines.push(format!("{label}: {row}")),
+        _ => {
+            lines.push(format!("{label}:"));
+            lines.extend(rows.iter().map(|row| format!("  {row}")));
+        }
+    }
+}
+
+fn push_brief_section(lines: &mut Vec<String>, title: &str, body: &str) {
+    let body = body.trim();
+    if !body.contains('\n') {
+        lines.push(format!("{title}: {body}"));
+        return;
+    }
+    lines.push(format!("{title}:"));
+    lines.extend(body.lines().map(|line| {
+        if line.trim().is_empty() {
+            String::new()
+        } else {
+            format!("  {line}")
+        }
+    }));
+}
+
+/// Allowed transitions by name, then blocked ones grouped by their reason. A
+/// done item with no configured transitions has none to offer.
+fn transition_summary(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> String {
+    let options = match crate::commands::workflow::issue_transition_options(index, &issue.id) {
+        Ok(options) => options,
+        Err(_) if issue_is_done(workflow_policy, issue) => return "none".to_string(),
+        Err(error) => return format!("unavailable - {error}"),
+    };
+    let allowed = options
+        .iter()
+        .filter(|option| option.allowed)
+        .map(|option| option.name.as_str())
+        .collect::<Vec<_>>();
+    let mut blocked: Vec<(String, Vec<&str>)> = Vec::new();
+    for option in options.iter().filter(|option| !option.allowed) {
+        let reason = blocked_transition_reason(option);
+        match blocked.iter_mut().find(|(existing, _)| *existing == reason) {
+            Some((_, names)) => names.push(&option.name),
+            None => blocked.push((reason, vec![&option.name])),
+        }
+    }
+    let mut parts = vec![if allowed.is_empty() {
+        "none allowed".to_string()
+    } else {
+        allowed.join(", ")
+    }];
+    parts.extend(
+        blocked
+            .into_iter()
+            .map(|(reason, names)| format!("blocked: {} - {reason}", names.join(", "))),
+    );
+    parts.join(" | ")
+}
+
+fn blocked_transition_reason(option: &crate::commands::workflow::IssueTransitionOption) -> String {
+    option
+        .validator_results
+        .iter()
+        .find(|result| !result.passed && result.help.is_some())
+        .map(|result| result.reason.clone())
+        .or_else(|| option.blockers.first().cloned())
+        .unwrap_or_else(|| format!("to {}", option.to))
+}
+
+fn work_counts(summary: &ObjectiveReadSummary) -> String {
+    let work = &summary.scope.work;
+    let counts = [
+        ("active", work.active.len()),
+        ("ready", work.ready.len()),
+        ("needs a human", work.human.len()),
+        ("context", work.context.len()),
+        ("blocked", work.blocked.len()),
+        ("done", work.done.len()),
+        ("backlog", work.backlog.len()),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count > 0)
+    .map(|(label, count)| format!("{label} {count}"))
+    .collect::<Vec<_>>();
+    let total = summary.scope.total();
+    if counts.is_empty() {
+        format!("{total} issue{}", plural_suffix(total))
+    } else {
+        format!(
+            "{total} issue{} - {}",
+            plural_suffix(total),
+            counts.join(", ")
+        )
+    }
 }
 
 fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -> Result<()> {
@@ -290,13 +566,7 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
                 let summary = if option.allowed {
                     format!("to {}", option.to)
                 } else {
-                    option
-                        .validator_results
-                        .iter()
-                        .find(|result| !result.passed && result.help.is_some())
-                        .map(|result| result.reason.clone())
-                        .or_else(|| option.blockers.first().cloned())
-                        .unwrap_or_else(|| format!("to {}", option.to))
+                    blocked_transition_reason(&option)
                 };
                 lines.push(format!("  {}: {} - {}", option.name, state, summary));
                 if let Some(help) = option

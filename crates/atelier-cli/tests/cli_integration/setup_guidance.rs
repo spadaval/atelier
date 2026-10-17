@@ -2363,12 +2363,14 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
             &source_id,
         ],
     );
-    let (success, impact_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
+    let (success, impact_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &source_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(impact_out.contains("Impact"));
     assert!(impact_out.contains("Target graph item"));
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
+    let (success, status_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &source_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(status_out.contains("Source graph item"));
     assert!(status_out.contains("Target graph item"));
@@ -2386,7 +2388,8 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     );
     assert!(success, "issue note failed: {stderr}");
     assert!(note_out.contains("Added note to issue"));
-    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
+    let (success, show_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &source_id, "--full"]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Explicit note body"));
 }
@@ -2432,7 +2435,8 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
     );
     assert!(success, "issue link failed: {stderr}");
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "show", objective_id]);
+    let (success, status_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", objective_id, "--full"]);
     assert!(success, "issue status failed: {stderr}");
     assert!(status_out.contains("Objective Rollup"));
     assert!(status_out.contains("Relationship Objective"));

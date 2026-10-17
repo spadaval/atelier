@@ -1599,7 +1599,8 @@ fn test_bundle_apply_records_links() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "query after bundle apply failed: {stderr}");
 
-    let (success, view_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    let (success, view_out, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &mission_id, "--full"]);
     assert!(success, "mission show after bundle apply failed: {stderr}");
     assert!(view_out.contains("Type:     mission"));
     let mission_markdown = std::fs::read_to_string(
@@ -2523,7 +2524,8 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(stdout.contains("Type:     validation"));
     let issue_id = issue_id_by_title(dir.path(), "Typed issue");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Typed issue"));
     assert!(stdout.contains("Category: todo"));

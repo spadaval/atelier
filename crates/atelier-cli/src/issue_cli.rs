@@ -35,9 +35,9 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             )
         }
 
-        super::IssueCommands::Show { id } => {
+        super::IssueCommands::Show { ids, full } => {
             let (_, index) = load_repository()?;
-            commands::issue::show(&index, &id)
+            commands::issue::show(&index, &ids, full)
         }
 
         super::IssueCommands::List {
