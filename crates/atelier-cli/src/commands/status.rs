@@ -496,7 +496,7 @@ fn render_status_page(
         IssueListPanel::new("Current Work", active_rows)
             .limit(8)
             .render(context),
-        unassigned_panel(overview, owned, context),
+        unassigned_panel(overview, owned, in_flight, context),
         render_metadata(Some("Local State"), &local_state),
     ];
     if let Ok(Some(owner)) = owner {
@@ -522,11 +522,13 @@ fn current_missions(view: &StatusView, overview: &MissionOverview) -> String {
     }
 }
 
-/// Open work outside every mission, by label. Like the ready list, it helps
-/// choose work, so an owner's session does not show it.
+/// Open work outside every open mission, by label, with the same in-flight
+/// marks as the ready list. Like the ready list, it helps choose work, so an
+/// owner's session does not show it.
 fn unassigned_panel(
     overview: &MissionOverview,
     owned: bool,
+    in_flight: &BTreeMap<String, String>,
     context: RenderContext,
 ) -> Vec<String> {
     if owned || overview.unassigned.is_empty() {
@@ -536,6 +538,7 @@ fn unassigned_panel(
         &format!("Unassigned Work ({})", overview.unassigned_nonterminal),
         crate::human_output::render_unassigned_groups(
             &overview.unassigned,
+            in_flight,
             "",
             UNASSIGNED_GROUPS_SHOWN,
             context,

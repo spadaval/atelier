@@ -379,7 +379,7 @@ impl IssueListPanel {
                 )
             ));
             if let Some(mark) = self.marks.get(&row.id) {
-                lines.push(format!("{indent}  ↳ {mark}"));
+                lines.push(mark_line(&indent, mark));
             }
         }
         let omitted = self.rows.len().saturating_sub(limit);
@@ -392,6 +392,11 @@ impl IssueListPanel {
         }
         lines
     }
+}
+
+/// A note under the row at `indent`, such as another branch's state.
+fn mark_line(indent: &str, mark: &str) -> String {
+    format!("{indent}  ↳ {mark}")
 }
 
 /// `<id> [<status>] <priority> - <title>`, with a blocker count when there
@@ -437,9 +442,12 @@ pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
 /// `<label> (<count>)` line per group, then up to [`UNASSIGNED_SHOWN`] issue
 /// rows in the shared work order and a count of the rest. A row too wide for
 /// the terminal continues on lines indented past the rows, so it never reads
-/// as a new item. Groups past `group_limit` are counted, not shown.
+/// as a new item. A row with an entry in `marks` (another branch's state)
+/// gets the same `↳` line as issue lists. Groups past `group_limit` are
+/// counted, not shown.
 pub(crate) fn render_unassigned_groups(
     groups: &[atelier_app::mission_overview::UnassignedGroup],
+    marks: &BTreeMap<String, String>,
     indent: &str,
     group_limit: usize,
     context: RenderContext,
@@ -476,6 +484,9 @@ pub(crate) fn render_unassigned_groups(
                     &continuation_indent
                 };
                 lines.push(format!("{indent}{line}"));
+            }
+            if let Some(mark) = marks.get(&issue.id) {
+                lines.push(mark_line(&row_indent, mark));
             }
         }
         if group.work.len() > UNASSIGNED_SHOWN {

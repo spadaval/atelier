@@ -4061,6 +4061,56 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     );
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
 }
+#[test]
+fn unassigned_work_in_flight_on_another_branch_is_marked_past_the_ready_list() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    // Five higher-priority items fill the ready list, so the owner's item is
+    // listed only under unassigned work.
+    for n in 0..5 {
+        let title = format!("Filler {n}");
+        ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                &title,
+                "--priority",
+                "high",
+                "--label",
+                "filler",
+            ],
+        );
+    }
+    commit(f.path(), "plan fillers");
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        !section(&status, "Ready Work")
+            .iter()
+            .any(|line| line.contains(&f.id)),
+        "{status}"
+    );
+    let unassigned = section(&status, "Unassigned Work (6)");
+    let row = unassigned
+        .iter()
+        .position(|line| line.starts_with(&format!("  {} [todo]", f.id)))
+        .unwrap_or_else(|| panic!("owner is listed as unassigned: {status}"));
+    assert_eq!(
+        unassigned.get(row + 1),
+        Some(&format!("    ↳ in_progress on {}", f.branch).as_str()),
+        "{status}"
+    );
+    assert!(
+        unassigned
+            .iter()
+            .filter(|line| line.contains("Filler"))
+            .count()
+            == 5
+            && unassigned.iter().filter(|line| line.contains('↳')).count() == 1,
+        "{status}"
+    );
+}
 /// The `↳` line under a ready row, if any.
 fn ready_mark<'a>(output: &'a str, id: &str) -> Option<&'a str> {
     let ready = section(output, "Ready Work");

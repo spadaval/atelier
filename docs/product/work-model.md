@@ -89,7 +89,7 @@ again, to be started and closed.
 
 Records are branch-local, so work another session has started on its own
 branch still reads as ready on the base. `work ready`, the ready section of
-`work all`, and the ready items `status` lists stay classified from the
+`work all`, and the ready and unassigned items `status` lists stay classified from the
 checkout's records, but an item that owns another local branch carries its
 committed state there on a `↳` line under its row, such as `↳ in_progress on
 bug/atelier-j48s` or `↳ done on bug/atelier-fj1t, not merged` (see

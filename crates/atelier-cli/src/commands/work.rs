@@ -316,6 +316,8 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
         ));
         lines.extend(render_unassigned_groups(
             &overview.unassigned,
+            // Branch summaries are status's; this view stays branch-local.
+            &Default::default(),
             "  ",
             usize::MAX,
             context,
