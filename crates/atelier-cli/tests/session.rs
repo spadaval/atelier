@@ -43,6 +43,18 @@ fn commit(dir: &Path, message: &str) {
     git(dir, &["add", "."]);
     git(dir, &["commit", "-qm", message]);
 }
+/// A `Label: value` row of the status Local State, whatever its padding.
+fn field<'a>(output: &'a str, label: &str) -> Option<&'a str> {
+    output.lines().find_map(|line| {
+        let (name, value) = line.split_once(": ")?;
+        (name.trim_end() == label).then_some(value)
+    })
+}
+/// The rows of a status section, between its underline and the next blank line.
+fn section<'a>(output: &'a str, title: &str) -> Vec<&'a str> {
+    let mut lines = output.lines().skip_while(|line| *line != title).skip(2);
+    std::iter::from_fn(|| lines.next().filter(|line| !line.is_empty())).collect()
+}
 struct Fixture {
     dir: TempDir,
     id: String,
@@ -98,25 +110,35 @@ impl Fixture {
     }
 }
 #[test]
-fn prime_and_active_landing_are_fresh_and_read_only() {
+fn status_and_active_landing_are_fresh_and_read_only() {
     let f = Fixture::new();
     let head = git(f.path(), &["rev-parse", "HEAD"]);
-    let prime = ok(f.path(), &["prime"]);
+    let status = ok(f.path(), &["status"]);
     assert!(
-        prime.contains(&f.id)
-            && prime.contains("Ship session behavior")
-            && prime.contains("AGENTS.md"),
-        "{prime}"
+        status.contains(&f.id) && status.contains("Ship session behavior"),
+        "{status}"
     );
+    // An owner's session continues the owner instead of choosing ready work.
+    assert!(!status.contains("Ready Work\n"), "{status}");
+    // Static guidance stays out of the view (ADR 0022 Decision 2).
+    assert!(
+        !status.contains("Guidance:") && !status.contains("Before handing off"),
+        "{status}"
+    );
+    // The deprecated alias prints the same view after one deprecation line.
+    let prime = ok(f.path(), &["prime"]);
+    let (note, rest) = prime.split_once('\n').unwrap();
+    assert!(note.contains("`atelier prime` is deprecated"), "{prime}");
+    assert_eq!(rest, status);
     ok(f.path(), &["land"]);
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
     ok(f.path(), &["issue", "note", &f.id, "Fresh handoff marker"]);
     commit(f.path(), "handoff");
-    assert!(ok(f.path(), &["prime"]).contains("Fresh handoff marker"));
+    assert!(ok(f.path(), &["status"]).contains("Fresh handoff marker"));
 }
 #[test]
-fn prime_preserves_native_branch_trimming_for_header_owner_and_orientation() {
+fn status_preserves_native_branch_trimming_for_header_owner_and_orientation() {
     for whitespace in ['\u{a0}', '\u{2003}'] {
         for trailing in [true, false] {
             let f = Fixture::new();
@@ -138,24 +160,25 @@ fn prime_preserves_native_branch_trimming_for_header_owner_and_orientation() {
             let native = git(f.path(), &["symbolic-ref", "--quiet", "HEAD"]);
             let normalized = native.strip_prefix("refs/heads/").unwrap();
             let stored = f.store().load_issue_by_id(&f.id).unwrap();
-            let prime = ok(f.path(), &["prime"]);
+            let status = ok(f.path(), &["status"]);
             assert_eq!(
-                prime.lines().find(|line| line.starts_with("Branch: ")),
-                Some(format!("Branch: {normalized} @ {}", &head[..8]).as_str())
+                field(&status, "Branch"),
+                Some(format!("{normalized} @ {}", &head[..8]).as_str())
             );
+            let owner = field(&status, "Owner").unwrap();
             if stored.issue.workflow_branch.unwrap().work_branch == normalized {
-                assert!(prime.contains(&format!("Owner: {}", f.id)), "{prime}");
+                assert!(owner.starts_with(&f.id), "{status}");
             } else {
-                assert!(prime.contains("Owner: none on this checkout"), "{prime}");
+                assert_eq!(owner, "none", "{status}");
             }
-            let unstarted = prime
+            let unstarted = status
                 .lines()
                 .find_map(|line| line.strip_prefix("No started work on: "))
                 .unwrap_or_default();
             assert_eq!(
                 unstarted.split(", ").any(|listed| listed == branch),
                 trailing,
-                "{prime}"
+                "{status}"
             );
         }
     }
@@ -214,17 +237,17 @@ fn done_owner_requires_approval_and_active_failures_can_handoff() {
         ],
     );
     commit(f.path(), "unfinished findings and proof");
-    let prime = ok(f.path(), &["prime"]);
-    assert!(prime.contains("Pending active triage"), "{prime}");
+    let status = ok(f.path(), &["status"]);
+    assert!(status.contains("Pending active triage"), "{status}");
     ok(f.path(), &["land"]);
     f.terminal(&f.id);
     f.refusal("review.current");
 }
 
-fn hook(dir: &Path, landing: bool, payload: serde_json::Value) -> serde_json::Value {
+fn hook(dir: &Path, command: &str, payload: serde_json::Value) -> serde_json::Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
-        .args([if landing { "land" } else { "prime" }, "--hook", "claude"])
+        .args([command, "--hook", "claude"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -253,7 +276,7 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
     for source in ["startup", "resume", "clear", "compact", "fork"] {
         let result = hook(
             unrelated.path(),
-            false,
+            "status",
             serde_json::json!({"session_id":"session", "transcript_path":"unused", "cwd":nested, "hook_event_name":"SessionStart", "source":source}),
         );
         assert_eq!(
@@ -267,11 +290,11 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
     }
     let input = serde_json::json!({"session_id":"session", "cwd":nested, "hook_event_name":"Stop", "stop_hook_active":false, "last_assistant_message":"Work handoff"});
     assert_eq!(
-        hook(unrelated.path(), true, input.clone()),
+        hook(unrelated.path(), "land", input.clone()),
         serde_json::json!({})
     );
     ok(f.path(), &["issue", "note", &f.id, "Uncommitted handoff"]);
-    let result = hook(unrelated.path(), true, input.clone());
+    let result = hook(unrelated.path(), "land", input.clone());
     assert_eq!(result["decision"], "block");
     assert!(result["reason"]
         .as_str()
@@ -279,7 +302,7 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         .contains("land_records_uncommitted"));
     let mut repeated = input;
     repeated["stop_hook_active"] = true.into();
-    let result = hook(unrelated.path(), true, repeated);
+    let result = hook(unrelated.path(), "land", repeated);
     assert!(result.get("decision").is_none());
     assert!(result["systemMessage"]
         .as_str()
@@ -287,13 +310,90 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         .contains("still fails"));
     let invalid = hook(
         unrelated.path(),
-        false,
+        "status",
         serde_json::json!({"cwd":nested, "hook_event_name":"Stop"}),
     );
     assert!(invalid["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .unwrap()
         .contains("unavailable"));
+    // Adopters' installed hooks still call the deprecated alias.
+    let alias = hook(
+        unrelated.path(),
+        "prime",
+        serde_json::json!({"cwd":nested, "hook_event_name":"SessionStart", "source":"startup"}),
+    );
+    let context = alias["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        context.starts_with("`atelier prime` is deprecated") && context.contains(&f.id),
+        "{context}"
+    );
+}
+#[test]
+fn status_shows_policy_fallback_diagnostics_in_the_page_and_hook_context() {
+    let f = Fixture::new();
+    let mut policy = fs::OpenOptions::new()
+        .append(true)
+        .open(f.path().join(".atelier/workflow.yaml"))
+        .unwrap();
+    policy.write_all(b"garbage: [\n").unwrap();
+    let context = hook(
+        f.path(),
+        "status",
+        serde_json::json!({"cwd":f.path(), "hook_event_name":"SessionStart", "source":"startup"}),
+    );
+    let context = context["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        context.contains("Invalid working policy")
+            && context.contains("Using last valid policy from")
+            && context.contains(&f.id),
+        "{context}"
+    );
+    // Plain status prints them once, in the page rather than also on stderr.
+    let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .arg("status")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("Policy Diagnostics"),
+        "{stdout}"
+    );
+    assert_eq!(
+        stdout.matches("Invalid working policy").count(),
+        1,
+        "{stdout}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("Invalid working policy"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Quiet status keeps stdout to the summary and reports the fallback on stderr.
+    for command in ["status", "prime"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(f.path())
+            .args(["-q", command])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{command}: {stderr}");
+        assert!(
+            stdout.trim().starts_with("work=") && stdout.trim().lines().count() == 1,
+            "{command}: {stdout}"
+        );
+        assert!(
+            stderr.contains("Invalid working policy")
+                && stderr.contains("Using last valid policy from"),
+            "{command}: {stderr}"
+        );
+    }
 }
 #[test]
 fn land_and_merge_refuse_a_project_config_that_differs_from_head() {
@@ -361,6 +461,52 @@ fn setup_keeps_an_existing_settings_mode_and_creates_new_ones_readable() {
     assert_eq!(mode(&settings), 0o664);
 }
 #[test]
+fn setup_warns_when_claude_md_keeps_agents_md_from_loading() {
+    let f = Fixture::new();
+    let warning = "Warning: CLAUDE.md does not import @AGENTS.md";
+    // Without a CLAUDE.md, Claude Code reads AGENTS.md itself.
+    fs::write(f.path().join("AGENTS.md"), "Use Atelier.\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(!out.contains(warning), "{out}");
+    fs::write(f.path().join("CLAUDE.md"), "Project notes.\n").unwrap();
+    let (pass, out) = cli(f.path(), &["setup", "claude"]);
+    assert!(
+        pass && out.contains(warning)
+            && out.contains("Add a line containing @AGENTS.md to CLAUDE.md"),
+        "{out}"
+    );
+    // Warnings go to stderr, so quiet output stays the settings path.
+    let quiet = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .args(["-q", "setup", "claude"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&quiet.stderr).contains(warning));
+    assert!(!String::from_utf8_lossy(&quiet.stdout).contains(warning));
+    fs::write(f.path().join("CLAUDE.md"), "Project notes.\n\n@AGENTS.md\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(!out.contains(warning), "{out}");
+    // Claude Code loads every project memory file, so one import suffices.
+    fs::write(f.path().join(".claude/CLAUDE.md"), "Project notes.\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(!out.contains("does not import"), "{out}");
+    // The project memory may also live only in .claude/CLAUDE.md.
+    fs::remove_file(f.path().join("CLAUDE.md")).unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(
+        out.contains("Warning: .claude/CLAUDE.md does not import @AGENTS.md"),
+        "{out}"
+    );
+    // Neither memory file importing it names both.
+    fs::write(f.path().join("CLAUDE.md"), "Project notes.\n").unwrap();
+    let out = ok(f.path(), &["setup", "claude"]);
+    assert!(
+        out.contains("Warning: CLAUDE.md and .claude/CLAUDE.md do not import @AGENTS.md")
+            && out.contains("Add a line containing @AGENTS.md to CLAUDE.md."),
+        "{out}"
+    );
+}
+#[test]
 fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
     let f = Fixture::new();
     let directory = f.path().join(".claude");
@@ -389,7 +535,7 @@ fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
         parsed["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
         "guard"
     );
-    for (event, action) in [("SessionStart", "prime"), ("Stop", "land")] {
+    for (event, action) in [("SessionStart", "status"), ("Stop", "land")] {
         let groups = parsed["hooks"][event].as_array().unwrap();
         let handler = groups.last().unwrap();
         assert!(handler.get("matcher").is_none());
@@ -854,14 +1000,119 @@ fn start_child_installs_owner_metadata_and_child_transition_together() {
     assert_eq!(git(f.path(), &["status", "--porcelain"]).lines().count(), 2);
 }
 #[test]
+fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.path().join("docs/strategies")).unwrap();
+    fs::write(
+        f.path().join("docs/strategies/plan.md"),
+        "---\nstatus: draft\n---\n\n# Plan\n",
+    )
+    .unwrap();
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Ship sessions",
+            "--issue-type",
+            "mission",
+            "--strategy",
+            "docs/strategies/plan.md",
+        ],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &f.id, &mission, "--role", "advances"],
+    );
+    commit(f.path(), "mission with a strategy");
+    for n in 0..10 {
+        ok(
+            f.path(),
+            &[
+                "review",
+                "record",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                &format!("Checked pass {n}"),
+            ],
+        );
+    }
+    commit(f.path(), "ten reviews");
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(field(&status, "Integration base"), Some("main"), "{status}");
+    assert!(
+        field(&status, "Mission")
+            .is_some_and(|row| row == format!("{mission} [draft] Ship sessions")),
+        "{status}"
+    );
+    assert_eq!(
+        field(&status, "Strategy"),
+        Some("docs/strategies/plan.md"),
+        "{status}"
+    );
+    let reviews = section(&status, "Reviews");
+    assert_eq!(reviews.len(), 8, "{status}");
+    for (row, n) in reviews.iter().zip((2..10).rev()) {
+        assert!(
+            row.contains(&format!("for {}", f.id)) && row.ends_with(&format!("Checked pass {n}")),
+            "{status}"
+        );
+    }
+}
+#[test]
+fn status_branch_row_shows_upstream_divergence_only_when_it_differs() {
+    let f = Fixture::new();
+    let branch_row = |f: &Fixture| {
+        field(&ok(f.path(), &["status"]), "Branch")
+            .unwrap()
+            .to_owned()
+    };
+    let short = |f: &Fixture| git(f.path(), &["rev-parse", "--short=8", "HEAD"]);
+    // No upstream: no marker.
+    assert_eq!(branch_row(&f), format!("{} @ {}", f.branch, short(&f)));
+    let remote = tempdir().unwrap();
+    git(remote.path(), &["init", "--bare", "-q"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", remote.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", &f.branch]);
+    // An upstream that matches: still no marker.
+    assert_eq!(branch_row(&f), format!("{} @ {}", f.branch, short(&f)));
+    fs::write(f.path().join("code"), "more code\n").unwrap();
+    commit(f.path(), "ahead of upstream");
+    assert_eq!(
+        branch_row(&f),
+        format!(
+            "{} @ {} (ahead 1 of origin/{})",
+            f.branch,
+            short(&f),
+            f.branch
+        )
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~2"]);
+    assert_eq!(
+        branch_row(&f),
+        format!(
+            "{} @ {} (behind 1 of origin/{})",
+            f.branch,
+            short(&f),
+            f.branch
+        )
+    );
+}
+#[test]
 fn literal_checkout_branch_is_not_confused_with_same_named_tags() {
     let f = Fixture::new();
     git(f.path(), &["tag", &f.branch, "main"]);
     git(f.path(), &["tag", "main", "HEAD"]);
-    let prime = ok(f.path(), &["prime"]);
+    let status = ok(f.path(), &["status"]);
     assert!(
-        prime.contains(&format!("Branch: {} @", f.branch)),
-        "{prime}"
+        field(&status, "Branch")
+            .is_some_and(|branch| branch.starts_with(&format!("{} @", f.branch))),
+        "{status}"
     );
     ok(f.path(), &["start", &f.id]);
     ok(f.path(), &["land"]);
@@ -2061,7 +2312,7 @@ fn valid_independent_review_survives_merge_after_reviewer_authored_prior_base_wo
 }
 
 #[test]
-fn prime_keeps_eight_newest_scoped_proofs_and_fresh_hidden_dirt() {
+fn status_keeps_eight_newest_scoped_proofs_and_fresh_hidden_dirt() {
     let f = Fixture::new();
     let mut ids = Vec::new();
     for n in 0..10 {
@@ -2095,28 +2346,29 @@ fn prime_keeps_eight_newest_scoped_proofs_and_fresh_hidden_dirt() {
         .take(8)
         .map(|(_, id)| id.as_str())
         .collect::<Vec<_>>();
-    let prime = ok(f.path(), &["prime"]);
-    let actual = prime
-        .lines()
-        .filter_map(|line| {
-            line.strip_prefix("Evidence: ")
-                .and_then(|line| line.split_once(" — ").map(|(id, _)| id))
-        })
+    let status = ok(f.path(), &["status"]);
+    let actual = section(&status, "Evidence")
+        .into_iter()
+        .filter_map(|line| line.split_once(" — ").map(|(id, _)| id))
         .collect::<Vec<_>>();
     assert_eq!(actual, expected);
-    assert_eq!(prime.matches("(fresh)").count(), 8);
+    assert_eq!(status.matches("(fresh)").count(), 8);
     git(f.path(), &["update-index", "--skip-worktree", "code"]);
     fs::write(f.path().join("code"), "hidden dirty bytes\n").unwrap();
-    let prime = ok(f.path(), &["prime"]);
-    assert!(prime.contains("Checkout: uncommitted changes"));
-    assert_eq!(prime.matches("(stale against current work)").count(), 8);
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        field(&status, "Checkout"),
+        Some("dirty (1 path: code)"),
+        "{status}"
+    );
+    assert_eq!(status.matches("(stale against current work)").count(), 8);
     fs::write(f.path().join("code"), "tested code\n").unwrap();
     let mut record = f.store().load_evidence_by_id(expected[0]).unwrap();
     record.data.commit = "f".repeat(40);
     f.store().write_evidence_atomic(&record).unwrap();
-    let prime = ok(f.path(), &["prime"]);
-    assert_eq!(prime.matches("(stale against current work)").count(), 1);
-    assert_eq!(prime.matches("(fresh)").count(), 7);
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(status.matches("(stale against current work)").count(), 1);
+    assert_eq!(status.matches("(fresh)").count(), 7);
 }
 #[test]
 fn unowned_branch_lands_unless_it_changes_records() {
@@ -2132,7 +2384,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     );
     let stop =
         serde_json::json!({"cwd":f.path(), "hook_event_name":"Stop", "stop_hook_active":false});
-    assert_eq!(hook(f.path(), true, stop.clone()), serde_json::json!({}));
+    assert_eq!(hook(f.path(), "land", stop.clone()), serde_json::json!({}));
 
     let filed = ok(
         f.path(),
@@ -2149,7 +2401,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
         "{output}"
     );
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
-    assert_eq!(hook(f.path(), true, stop)["decision"], "block");
+    assert_eq!(hook(f.path(), "land", stop)["decision"], "block");
 }
 #[test]
 fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelated_history() {
@@ -3074,11 +3326,11 @@ fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
             "claimed",
         ],
     );
-    let output = ok(f.path(), &["prime"]);
+    let output = ok(f.path(), &["status"]);
     assert!(output.contains("not merged into main"), "{output}");
 }
 #[test]
-fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
+fn start_and_status_warn_when_a_branch_owner_has_a_needs_human_child() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
     let parent = ok(f.path(), &["-q", "issue", "create", "Feature"]);
@@ -3106,7 +3358,7 @@ fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
         "{output}"
     );
     commit(f.path(), "start the feature");
-    let output = ok(f.path(), &["prime"]);
+    let output = ok(f.path(), &["status"]);
     assert!(
         output.contains(&format!(
             "Needs a human: {check} labelled needs-human is a child of {parent}"
@@ -3121,7 +3373,7 @@ fn start_and_prime_warn_when_a_branch_owner_has_a_needs_human_child() {
         &["issue", "link", &check, &parent, "--role", "blocked_by"],
     );
     commit(f.path(), "make the check a standalone validation");
-    let output = ok(f.path(), &["prime"]);
+    let output = ok(f.path(), &["status"]);
     assert!(
         !output.contains("labelled needs-human is a child"),
         "{output}"
@@ -3721,13 +3973,12 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
     f.terminal(&f.id);
     let unmerged = format!("[done on branch {}, not merged into main]", f.branch);
-    let prime = ok(f.path(), &["prime"]);
-    assert!(
-        prime.contains(&format!("Owner: {} {unmerged}", f.id)),
-        "{prime}"
-    );
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains(&unmerged), "{status}");
+    assert!(
+        field(&status, "Owner")
+            .is_some_and(|owner| owner.starts_with(&format!("{} {unmerged}", f.id))),
+        "{status}"
+    );
 
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
@@ -3753,12 +4004,12 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
             "Claimed",
         ],
     );
-    let prime = ok(f.path(), &["prime"]);
+    let status = ok(f.path(), &["status"]);
     assert!(
-        prime.contains(&format!(
-            "Owner: {fresh} [done on branch task/{fresh}, not merged into main]"
-        )),
-        "{prime}"
+        field(&status, "Owner").is_some_and(|owner| owner.starts_with(&format!(
+            "{fresh} [done on branch task/{fresh}, not merged into main]"
+        ))),
+        "{status}"
     );
 }
 #[test]

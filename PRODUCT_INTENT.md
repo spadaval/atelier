@@ -40,7 +40,7 @@ prove success. Reviews record who examined which commit, their findings,
 dispositions, and approval. Identity is self-declared; the guards prevent
 routine mistakes rather than defend against malicious actors.
 
-`prime` restores context for a fresh session; `land` checks that the session can
+`status` orients a fresh session; `land` checks that the session can
 be handed off with committed records and intact invariants. Harness hooks call
 these commands. Cross-branch status makes in-flight work visible while keeping
 each branch's records distinct.

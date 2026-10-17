@@ -4501,11 +4501,21 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
 
     init_git_repo(dir.path());
     ensure_initial_git_commit(dir.path());
-    let (success, prime, stderr) = run_atelier(dir.path(), &["prime"]);
+    let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "{stderr}");
+    // The human's item is counted apart and not offered as ready work.
     assert!(
-        prime.contains("Needs a human: 1 ready item(s) labelled needs-human"),
-        "{prime}"
+        status.contains("Needs a human: 1") && status.contains("Ready work:    1"),
+        "{status}"
+    );
+    let ready = status
+        .split("Ready Work\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_default();
+    assert!(
+        ready.contains(&agent) && !ready.contains(&human),
+        "{status}"
     );
     commit_all(dir.path(), "plan");
     let (success, started, stderr) = run_atelier(dir.path(), &["start", &human]);

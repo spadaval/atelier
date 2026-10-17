@@ -17,7 +17,7 @@ rebuilt model.
 - Agent Factory skill: `.agents/skills/agent-factory/SKILL.md`
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
-- Start a session with `atelier prime`; before handoff commit canonical
+- Start a session with `atelier status`; before handoff commit canonical
   records and run `atelier land`. Active work may remain open, with unfinished
   code handed off honestly.
 - `.claude/settings.json` runs these through the installed CLI's Claude Code

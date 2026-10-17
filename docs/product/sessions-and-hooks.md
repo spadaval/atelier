@@ -1,7 +1,7 @@
 # Sessions and Hooks
 
 ```text
-atelier prime
+atelier status
 atelier land
 atelier land <owner-or-child-id>
 atelier land --install
@@ -9,10 +9,25 @@ atelier setup claude
 atelier setup claude --binary <path-to-atelier>
 ```
 
-`prime` reads fresh checkout, owner, mission, blockers, evidence, review, and
-repository guidance. It creates no session record. `land` checks a handoff
-without writing records, committing, switching, or merging; a failed plain
-command exits nonzero with the failed invariant and recovery step.
+`status` is the one orientation view (ADR 0022). It reads the checkout's
+branch, owner, and dirty paths, the ready, needs-a-human, and active counts,
+current missions, and the other local work branches. On an owner's branch it
+adds the owner's record body, integration base, mission and strategy path,
+scoped work, the 8 newest reviews, and the 8 newest evidence receipts with
+their freshness; without an owner it lists up to 5 ready items under the ready
+count. It creates no session record and prints state and next actions, not
+instructions. `prime` is a deprecated alias that prints the same view after a
+deprecation line, kept while adopters' installed hooks still call it.
+
+A session's repository instructions come from AGENTS.md, which the harness
+loads, not from `status`. Claude Code reads AGENTS.md only when the repository
+has no `CLAUDE.md`, or through an `@AGENTS.md` import in it, so `atelier setup
+claude` warns, with that fix, when AGENTS.md exists and the repository has a
+`CLAUDE.md` or `.claude/CLAUDE.md` but neither imports `@AGENTS.md`.
+
+`land` checks a handoff without writing records, committing, switching, or
+merging; a failed plain command exits nonzero with the failed invariant and
+recovery step.
 
 Canonical records and policy must match committed HEAD, including ignored
 canonical paths and files hidden by Git index flags. Active work must have a
@@ -82,8 +97,9 @@ installed binary still has the old model. Commit shared settings deliberately
 and restart Claude Code to load them. Existing disabled-hook settings are
 preserved and reported.
 
-Installed commands are `atelier prime --hook claude` and
-`atelier land --hook claude`, with the selected executable. The adapters read
+Installed commands are `atelier status --hook claude` and
+`atelier land --hook claude`, with the selected executable. Rerunning setup
+replaces an earlier managed `prime --hook claude` handler. The adapters read
 JSON stdin and use its `cwd` to find the checkout. SessionStart returns context
 through `hookSpecificOutput.additionalContext`. A failed Stop returns
 `decision: "block"` and a reason at exit 0. When `stop_hook_active` signals a

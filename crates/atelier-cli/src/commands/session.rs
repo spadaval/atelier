@@ -1,4 +1,4 @@
-//! Fresh session context and read-only landing; no durable session state.
+//! Read-only landing and Claude Code hook input; no durable session state.
 use crate::commands::git;
 use anyhow::{bail, Context, Result};
 use atelier_app::{
@@ -16,16 +16,7 @@ fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<O
         let issue = index.require_issue(&id)?;
         return Ok(Some(issue.parent_id.clone().unwrap_or(id)));
     }
-    let owners = index
-        .issues()
-        .filter(|issue| {
-            issue
-                .workflow_branch
-                .as_ref()
-                .is_some_and(|owner| owner.work_branch == branch)
-        })
-        .map(|issue| issue.id.clone())
-        .collect::<Vec<_>>();
+    let owners = branch_owners(index, branch);
     match owners.as_slice() {
         [] => Ok(None),
         [id] => Ok(Some(id.clone())),
@@ -35,180 +26,26 @@ fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<O
         ),
     }
 }
+/// The issues whose recorded work branch is `branch`; more than one is a
+/// recording error that each caller reports in its own terms.
+pub(crate) fn branch_owners(index: &RecordIndex, branch: &str) -> Vec<String> {
+    index
+        .issues()
+        .filter(|issue| {
+            issue
+                .workflow_branch
+                .as_ref()
+                .is_some_and(|owner| owner.work_branch == branch)
+        })
+        .map(|issue| issue.id.clone())
+        .collect()
+}
 fn check_records(
     repo: &Path,
     snapshot: &atelier_app::committed_snapshot::CommittedSnapshot,
 ) -> Result<Vec<std::path::PathBuf>> {
     snapshot.verified_working_paths(repo)
         .map_err(|error| anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry."))
-}
-fn prime_text() -> Result<String> {
-    let layout = StorageLayout::discover()?;
-    let repo = layout.repo_root();
-    let _lock =
-        atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-    let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let branch = git::current_branch(repo)?.unwrap_or_else(|| "detached HEAD".into());
-    let source = base_policy::working(repo)?;
-    index.validate_policy(&source.policy, repo)?;
-    let owner = owner(&index, &branch, None)?
-        .map(|id| review_gate::scope(&index, &id).map(|scope| (id, scope)))
-        .transpose()?;
-    let work = atelier_app::work_classification::work_buckets_for(
-        &index,
-        Some(&source.policy),
-        index.issues().filter(|issue| match &owner {
-            Some((_, scope)) => scope.contains(&issue.id),
-            None => source.policy.status_category(&issue.status) == Some("active"),
-        }),
-    )?;
-    let head = git_freshness::head_commit(repo)?;
-    let dirty = git_freshness::working_paths(repo)?;
-    let mut proof = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &dirty);
-    let mut lines = vec![
-        format!("Atelier session: {}", repo.display()),
-        format!("Branch: {branch} @ {}", &head[..8]),
-        format!(
-            "Checkout: {}",
-            if dirty.is_empty() { "clean" } else { "uncommitted changes" }
-        ),
-        "Guidance: read AGENTS.md, the repository strategy, and .agents/skills/agent-factory/SKILL.md. Agent Factory owns process; commit records with code. Atelier never creates commits.".into(),
-    ];
-    lines.extend(source.diagnostics);
-    if let Some((id, scope)) = owner {
-        let record = index.issue_record(&id).context("owner missing")?;
-        let status = if source.policy.status_category(&record.issue.status) == Some("done") {
-            git::unmerged_done_label(
-                repo,
-                &id,
-                &record.issue.status,
-                &branch,
-                &source.policy.branch_policy.base_branch,
-            )
-        } else {
-            record.issue.status.clone()
-        };
-        lines.push(format!("Owner: {id} [{status}] {}", record.issue.title));
-        if let Some(ownership) = &record.issue.workflow_branch {
-            lines.push(format!("Integration base: {}", ownership.branch_base));
-        }
-        let content = atelier_records::render_issue_record(record)?;
-        let (_, body) =
-            atelier_records::split_document(&content).context("owner has no record body")?;
-        lines.push(crate::utils::truncate(body, 3000));
-        for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
-            if atelier_app::objective_graph::mission_issue_ids(&index, &mission.id)?.contains(&id) {
-                lines.push(format!(
-                    "Mission: {} [{}] {}",
-                    mission.id, mission.status, mission.title
-                ));
-                if let Some(strategy) = &mission.strategy {
-                    lines.push(format!("Strategy: {}", strategy.path));
-                }
-            }
-        }
-        let human_children =
-            atelier_app::work_classification::open_human_children(&index, &source.policy, &id);
-        if !human_children.is_empty() {
-            lines.push(format!(
-                "Needs a human: {}",
-                atelier_app::work_classification::human_children_note(&id, &human_children)
-            ));
-        }
-        for row in work.active.iter().chain(&work.blocked).take(8) {
-            lines.push(format!(
-                "Work: {} [{}] {} — blockers: {}",
-                row.id,
-                row.status,
-                row.title,
-                row.open_blockers.join(", ")
-            ));
-        }
-        let mut reviews = index
-            .reviews()
-            .filter(|review| scope.contains(&review.target))
-            .collect::<Vec<_>>();
-        reviews.sort_by_key(|review| {
-            std::cmp::Reverse((review.header.created_at, review.header.id.clone()))
-        });
-        for review in reviews.into_iter().take(8) {
-            lines.push(format!(
-                "Review: {} for {} — {:?}: {}",
-                review.header.id, review.target, review.event, review.summary
-            ));
-        }
-        let mut evidence_records = index.evidence_records();
-        evidence_records.sort_by_key(|record| {
-            std::cmp::Reverse((record.data.captured_at, record.header.id.clone()))
-        });
-        let evidence_records = evidence_records
-            .into_iter()
-            .filter(|evidence| {
-                index
-                    .list_record_links("evidence", &evidence.header.id)
-                    .is_ok_and(|links| {
-                        links.iter().any(|link| {
-                            scope.contains(&link.source_id) || scope.contains(&link.target_id)
-                        })
-                    })
-            })
-            .take(8)
-            .collect::<Vec<_>>();
-        for evidence in evidence_records {
-            let targets = index
-                .list_record_links("evidence", &evidence.header.id)?
-                .into_iter()
-                .flat_map(|link| [link.source_id, link.target_id])
-                .filter(|id| scope.contains(id))
-                .collect::<Vec<_>>();
-            let fresh = targets.iter().all(|id| {
-                index
-                    .issue_record(id)
-                    .is_some_and(|issue| proof.evidence_is_fresh(issue, evidence).unwrap_or(false))
-            });
-            lines.push(format!(
-                "Evidence: {} — recorded {:?} @ {} ({})",
-                evidence.header.id,
-                evidence.data.result,
-                &evidence.data.commit[..8.min(evidence.data.commit.len())],
-                if fresh {
-                    "fresh"
-                } else {
-                    "stale against current work"
-                }
-            ));
-        }
-        let inspect = if !index.get_subissues(&id).is_empty() {
-            format!("atelier work parent {id}")
-        } else {
-            format!("atelier issue show {id}")
-        };
-        lines.push(format!("Next: {inspect}; atelier land {id}; use atelier merge {id} --check for completed-owner merge readiness."));
-    } else {
-        lines.push("Owner: none on this checkout. Select ready work with atelier work ready, then atelier start <id>.".into());
-        for row in work.active.iter().take(8) {
-            lines.push(format!("Active: {} [{}] {}", row.id, row.status, row.title));
-        }
-    }
-    let waiting = atelier_app::work_classification::work_buckets(&index, Some(&source.policy))?
-        .human
-        .len();
-    if waiting > 0 {
-        lines.push(format!("Needs a human: {waiting} ready item(s) labelled needs-human wait for the human; agents should not start them. List them with atelier work human."));
-    }
-    lines.extend(
-        git::branch_lines_for(
-            repo,
-            &layout.canonical_dir(),
-            &index,
-            &branch,
-            &source.policy.branch_policy.base_branch,
-        )?
-        .into_iter()
-        .take(8),
-    );
-    lines.push("Before handing off: record findings and honest proof, commit records with the code, then run atelier land. In-progress work may remain open.".into());
-    Ok(lines.join("\n"))
 }
 fn check_traceability(
     repo: &Path,
@@ -484,7 +321,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         )?);
         lines.push(format!("Owner: {id} [{}]. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
         if !initial_paths.is_empty() {
-            lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier prime for current findings and proof.", initial_paths.len()));
+            lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier status for current findings and proof.", initial_paths.len()));
         }
     } else if branch == source.policy.branch_policy.base_branch {
         lines.push("No work owner on the integration base.".into());
@@ -586,64 +423,44 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     Ok(lines.join("\n"))
 }
 
-pub fn run(
-    landing: bool,
-    requested: Option<&str>,
-    hook: bool,
-    install: bool,
-    quiet: bool,
-) -> Result<()> {
-    let mut repeated = false;
-    let input = if hook {
-        let mut bytes = String::new();
-        std::io::stdin().read_to_string(&mut bytes)?;
-        let parsed = (|| -> Result<()> {
-            let payload: Value = serde_json::from_str(&bytes)?;
-            let expected = if landing { "Stop" } else { "SessionStart" };
-            if payload["hook_event_name"] != expected {
-                bail!("expected {expected} hook payload");
-            }
-            repeated = payload["stop_hook_active"].as_bool().unwrap_or(false);
-            std::env::set_current_dir(
-                payload["cwd"]
-                    .as_str()
-                    .context("hook payload requires cwd")?,
-            )?;
-            Ok(())
-        })();
-        parsed
-    } else {
-        Ok(())
-    };
-    let result = input.and_then(|()| {
-        if landing {
-            land_text(requested, install, false)
-        } else {
-            prime_text()
-        }
-    });
-    if hook {
-        let output = match (landing, result) {
-            (false, result) => {
-                json!({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": result.unwrap_or_else(|error| format!("Atelier context unavailable: {error:#}. Run atelier check and repair the named records."))}})
-            }
-            (true, Ok(_)) => json!({}),
-            (true, Err(error)) if repeated => {
-                json!({"systemMessage": format!("Atelier landing still fails: {error:#}. Stopping to avoid a hook loop; unfinished work must be handed off honestly.")})
-            }
-            (true, Err(error)) => {
-                json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named invariant or hand off unfinished work honestly; Atelier never creates commits.")})
-            }
-        };
-        println!("{}", serde_json::to_string(&output)?);
-    } else {
-        let output = result?;
-        if quiet && landing {
-            println!("passed");
-        } else {
-            println!("{output}");
-        }
+/// Reads a Claude Code hook payload for `event` from stdin and enters its
+/// `cwd`. Returns whether a Stop hook is already active.
+pub(crate) fn read_hook_payload(event: &str) -> Result<bool> {
+    let mut bytes = String::new();
+    std::io::stdin().read_to_string(&mut bytes)?;
+    let payload: Value = serde_json::from_str(&bytes)?;
+    if payload["hook_event_name"] != event {
+        bail!("expected {event} hook payload");
     }
+    std::env::set_current_dir(
+        payload["cwd"]
+            .as_str()
+            .context("hook payload requires cwd")?,
+    )?;
+    Ok(payload["stop_hook_active"].as_bool().unwrap_or(false))
+}
+
+pub fn land(requested: Option<&str>, hook: bool, install: bool, quiet: bool) -> Result<()> {
+    if !hook {
+        let output = land_text(requested, install, false)?;
+        println!("{}", if quiet { "passed" } else { &output });
+        return Ok(());
+    }
+    let mut repeated = false;
+    let result = read_hook_payload("Stop").and_then(|active| {
+        repeated = active;
+        land_text(requested, install, false)
+    });
+    let output = match result {
+        Ok(_) => json!({}),
+        Err(error) if repeated => {
+            json!({"systemMessage": format!("Atelier landing still fails: {error:#}. Stopping to avoid a hook loop; unfinished work must be handed off honestly.")})
+        }
+        Err(error) => {
+            json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named invariant or hand off unfinished work honestly; Atelier never creates commits.")})
+        }
+    };
+    println!("{}", serde_json::to_string(&output)?);
     Ok(())
 }
 

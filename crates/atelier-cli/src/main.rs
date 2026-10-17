@@ -17,9 +17,8 @@ mod issue_cli;
   setup         Install supported harness hooks (claude)
 
 Orientation:
-  prime         Load fresh session context
+  status        Orient a session: checkout, owner, work, missions, branches
   land          Check committed records and completion invariants
-  status        Show checkout, mission, work, and tracker signposts
   work          Show operational views, including the plural Mission Overview
 
 Issues:
@@ -160,10 +159,15 @@ enum Commands {
         slug: Option<String>,
     },
 
-    /// Show checkout, mission, work, and tracker signposts
-    Status,
+    /// Orient a session: checkout, owner, work, missions, and other branches
+    Status {
+        /// Consume Claude Code SessionStart JSON and emit hook context
+        #[arg(long, value_parser = ["claude"])]
+        hook: Option<String>,
+    },
 
-    /// Load fresh checkout and work context without writing session state
+    /// Deprecated alias for status
+    #[command(hide = true)]
     Prime {
         /// Consume Claude Code SessionStart JSON and emit hook context
         #[arg(long, value_parser = ["claude"])]
@@ -645,7 +649,11 @@ fn run() -> Result<()> {
     };
     let quiet = cli.quiet;
 
-    if !matches!(&cli.command, Commands::Init { .. }) {
+    // Status renders policy diagnostics in its own page.
+    if !matches!(
+        &cli.command,
+        Commands::Init { .. } | Commands::Status { .. } | Commands::Prime { .. }
+    ) {
         if let Ok(layout) = StorageLayout::discover() {
             if let Ok(source) = atelier_app::base_policy::working(layout.repo_root()) {
                 for diagnostic in source.diagnostics {
@@ -660,19 +668,13 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force, slug)
         }
 
-        Commands::Prime { hook } => {
-            commands::session::run(false, None, hook.is_some(), false, quiet)
-        }
+        Commands::Status { hook } => commands::status::run(hook.is_some(), quiet, false),
+        Commands::Prime { hook } => commands::status::run(hook.is_some(), quiet, true),
         Commands::Land { id, hook, install } => {
-            commands::session::run(true, id.as_deref(), hook.is_some(), install, quiet)
+            commands::session::land(id.as_deref(), hook.is_some(), install, quiet)
         }
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
-
-        Commands::Status => {
-            let (_, index) = load_repository()?;
-            commands::status::run(&index, quiet)
-        }
 
         Commands::Work { action } => {
             let (_, index) = load_repository()?;
@@ -968,8 +970,10 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
                 | ReviewCommands::Disposition { .. },
         } => CanonicalTransactionMode::Exclusive,
         // Shell checks may run Atelier read commands; revalidate snapshots
-        // rather than hold a lock across arbitrary child execution.
+        // rather than hold a lock across arbitrary child execution. Status
+        // locks for itself once a hook payload has named the checkout.
         Commands::Merge { .. }
+        | Commands::Status { .. }
         | Commands::Prime { .. }
         | Commands::Land { .. }
         | Commands::Doctor

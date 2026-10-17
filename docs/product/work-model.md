@@ -68,16 +68,15 @@ account approval, or a judgement call, carries the reserved `needs-human`
 label. Ready work with that label is classified "needs a human" instead of
 ready: `atelier work ready`, mission and parent views, and `status` count and
 list it separately, and `--quiet` ready lists leave it out, so agents choosing
-ready work do not start it. `atelier work human` lists it, `atelier prime`
-says how many such items are waiting, and `atelier start` notes the label when
-someone starts one.
+ready work do not start it. `atelier work human` lists it, and `atelier start`
+notes the label when someone starts one.
 
 Do not make a `needs-human` check a child of a branch owner when the check runs
 after the merge, such as a game, headset or Windows check on the released
 build. `atelier merge` needs every child terminal, so the owner's branch could
 not integrate until the human acts. Model the check as a standalone
 validation `blocked_by` the parent instead (and `advances` the mission, if
-any). `atelier start` and `atelier prime` warn when a branch owner has an open
+any). `atelier start` and `atelier status` warn when a branch owner has an open
 `needs-human` child and give the two commands that detach it (atelier-1jll).
 A `needs-human` child that must finish before the merge, such as an account
 approval the code depends on, can stay a child.
@@ -153,7 +152,7 @@ Sumeet 2026-10-15): the reviewer sees the claim together with the code. A
 review that finds problems leaves the claim in place: the author fixes the
 findings on the work branch, and the merge waits for fresh approval. Until the
 merge, though, that branch says done for work the base does not have. So
-`prime`, `status`, and the other-branch rows in `status` show a done owner as
+`status`, in its owner row and its other-branch rows, shows a done owner as
 `done on branch <work-branch>, not merged into <base>`, or as
 `done, merged into <base>` once the base branch's own copy of the record is
 done.

@@ -46,7 +46,7 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
         ),
         None => "atelier".into(),
     };
-    for (event, action) in [("SessionStart", "prime"), ("Stop", "land")] {
+    for (event, action) in [("SessionStart", "status"), ("Stop", "land")] {
         let marker = format!(" # atelier-managed:{event}");
         let groups = hooks
             .entry(event)
@@ -96,10 +96,42 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
     if quiet {
         println!("{}", path.display());
     } else {
-        println!("Installed Claude Code SessionStart and Stop hooks in {}. Commit shared settings with the change. Hooks run prime on session start and land at Stop; repeated failures warn instead of looping. Restart Claude Code to load the settings.", path.display());
+        println!("Installed Claude Code SessionStart and Stop hooks in {}. Commit shared settings with the change. Hooks run status on session start and land at Stop; repeated failures warn instead of looping. Restart Claude Code to load the settings.", path.display());
         if settings["disableAllHooks"] == true {
             println!("Hooks are disabled by existing settings; enable them in Claude Code before dogfooding.");
         }
     }
+    let memories = memory_without_agents_import(layout.repo_root());
+    if let Some(first) = memories.first() {
+        eprintln!(
+            "Warning: {} {} not import @AGENTS.md, so Claude Code will not load AGENTS.md and sessions miss the repository's instructions. Add a line containing @AGENTS.md to {first}.",
+            memories.join(" and "),
+            if memories.len() == 1 { "does" } else { "do" },
+        );
+    }
     Ok(())
+}
+
+/// The project `CLAUDE.md` files that keep AGENTS.md from loading. Claude
+/// Code reads AGENTS.md only when there is no `CLAUDE.md`, or through an
+/// `@AGENTS.md` import, and it loads every project memory file, so one
+/// import suffices (ADR 0022). Empty when nothing needs fixing.
+fn memory_without_agents_import(repo: &Path) -> Vec<&'static str> {
+    if !repo.join("AGENTS.md").is_file() {
+        return Vec::new();
+    }
+    let mut memories = Vec::new();
+    for relative in ["CLAUDE.md", ".claude/CLAUDE.md"] {
+        let Ok(text) = fs::read_to_string(repo.join(relative)) else {
+            continue;
+        };
+        if text
+            .split_whitespace()
+            .any(|token| matches!(token, "@AGENTS.md" | "@./AGENTS.md"))
+        {
+            return Vec::new();
+        }
+        memories.push(relative);
+    }
+    memories
 }

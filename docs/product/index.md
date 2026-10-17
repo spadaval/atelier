@@ -15,7 +15,7 @@ how agents plan, execute, review, and validate work. See
   and fast-forward integration.
 - [Workflow configuration](workflow-configuration.md): reviewed repository
   policy and read-only transition checks.
-- [Sessions and hooks](sessions-and-hooks.md): prime, land, setup, and branch
+- [Sessions and hooks](sessions-and-hooks.md): status, land, setup, and branch
   orientation.
 - [Human CLI output](human-cli-output.md), [inventory and mission views](issue-inventory-and-mission-overview.md),
   and [work ordering](work-view-ordering.md): reading operational views.
