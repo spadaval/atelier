@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-sa0w
+title: 'Approve atelier-onwh at d8710202. Reviewed fix commit ab0b9724 against findings atelier-i5n2, atelier-7ifl and atelier-j9k4. issue show --full Transition Readiness now prints ''    Command: <cmd>''. issue transition options print Command: directly after To:, ahead of Readiness, Hint and the Failed Requirements list. human-cli-output.md says an error''s recovery step is an inline Next: sentence. I confirmed all three by running both views in a fixture repo. The fixture test now pins both command lines and fails on a bare ''    atelier '' line or on a Command: line that does not follow To:. Reviewed merge c42c2470 with git show --cc. The issue.rs and prune.rs import unions are correct and complete. In setup_guidance.rs both appended tests are kept intact: this branch''s footer test and master''s test_removed_log_flags_are_rejected_and_absent_from_help. A post-merge grep finds no retired heading or bare-command line in the source. At HEAD I ran the full cargo nextest run -j 4 (688 passed) and cargo fmt -- --check (pass); evidence atelier-437y and atelier-6ool agree. Non-blocking: the doc writes the error form as ''Next: <command>'', but most errors give prose there, such as ''Next: fix the filesystem failure and rerun atelier prune.''; ''Next: <step>'' would describe it more exactly.'
+target: atelier-onwh
+identity: Independent reviewer (Claude subagent)
+commit: d871020272da3e5a8febf0a4d8c4912437d32740
+created_at: 2026-10-17T07:15:19.965925568Z
+event:
+  event: approval
+---
+
+Approve atelier-onwh at d8710202. Reviewed fix commit ab0b9724 against findings atelier-i5n2, atelier-7ifl and atelier-j9k4. issue show --full Transition Readiness now prints '    Command: <cmd>'. issue transition options print Command: directly after To:, ahead of Readiness, Hint and the Failed Requirements list. human-cli-output.md says an error's recovery step is an inline Next: sentence. I confirmed all three by running both views in a fixture repo. The fixture test now pins both command lines and fails on a bare '    atelier ' line or on a Command: line that does not follow To:. Reviewed merge c42c2470 with git show --cc. The issue.rs and prune.rs import unions are correct and complete. In setup_guidance.rs both appended tests are kept intact: this branch's footer test and master's test_removed_log_flags_are_rejected_and_absent_from_help. A post-merge grep finds no retired heading or bare-command line in the source. At HEAD I ran the full cargo nextest run -j 4 (688 passed) and cargo fmt -- --check (pass); evidence atelier-437y and atelier-6ool agree. Non-blocking: the doc writes the error form as 'Next: <command>', but most errors give prose there, such as 'Next: fix the filesystem failure and rerun atelier prune.'; 'Next: <step>' would describe it more exactly.
