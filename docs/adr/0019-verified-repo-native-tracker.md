@@ -72,9 +72,9 @@ remain valuable and are not available in hosted trackers.
    clean merge of the base into the branch does not (atelier-n7g1). Every
    change is checked when it lands, so history that passed the gates holds by
    induction: `land` checks only the claims and review history that a change
-   since the branch base or the base's upstream can affect, or every claim
-   after a policy change, and `atelier doctor` checks everything
-   (atelier-37uq).
+   since the merge base with the base's upstream can affect, or every claim
+   after a policy change or without an upstream, and `atelier doctor` checks
+   everything (atelier-37uq, atelier-kops).
 
 5. **Policy is code.** `.atelier/workflow.yaml` is reviewed like any other
    change. Gates are evaluated from the base branch's policy, so a branch
