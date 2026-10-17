@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Order work mission and work parent rows by the shared work order"
-updated_at: "2026-10-17T06:22:17.873203992+00:00"
+updated_at: "2026-10-17T08:41:50.273867789+00:00"
 ---
 
 ## Goal
@@ -28,3 +28,7 @@ updated_at: "2026-10-17T06:22:17.873203992+00:00"
 
 - `work mission <id>` and `work parent <id>`, with and without `--all`, list each section in `work_order::ordered_work_indices` order.
 - A CLI test pins the order of a mixed `--all` list.
+
+## Notes
+
+- 2026-10-17 [note] atelier-ksx6 (merged 7e3339d8) now lists work mission and work parent rows in the shared work order, parent row first, and its session test pins the order of ready items. Check the remaining Done when (a CLI test pinning a mixed --all list) before closing or superseding this.

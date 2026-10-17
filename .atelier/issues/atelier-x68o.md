@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Say a bad record's path once in record-load errors"
-updated_at: "2026-10-17T07:19:08.756123072+00:00"
+updated_at: "2026-10-17T08:41:50.703070286+00:00"
 ---
 
 ## Goal

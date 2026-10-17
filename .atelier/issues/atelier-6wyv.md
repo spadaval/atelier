@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Offer start only for work mission rows that pass the readiness gates"
-updated_at: "2026-10-17T08:19:41.002938778+00:00"
+updated_at: "2026-10-17T08:41:50.487189145+00:00"
 ---
 
 ## Goal

@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Report a dead git cat-file child instead of ending on SIGPIPE"
-updated_at: "2026-10-17T06:31:32.769643923+00:00"
+updated_at: "2026-10-17T08:41:51.157406002+00:00"
 ---
 
 ## Goal
