@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T15:48:16.070527696+00:00"
+status: "done"
 title: "Integrate this repository's work with merge_commit and the full suite on the merged tree"
-updated_at: "2026-10-17T15:43:44.306340755+00:00"
+updated_at: "2026-10-17T15:48:16.070527696+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ Switch this repository from `fast_forward_only` to `merge_strategy: merge_commit
 ## Context
 
 Under `merge_commit`, evidence at the branch head does not prove the merged tree, so the policy must carry a `shell.check` that runs real proof (docs/product/reviews-and-merge.md). Each merge does a cold build in a fresh checkout; that cost is accepted in exchange for no catch-up churn.
+
+## Close Reason
+
+The policy now sets merge_commit, and its five merge_checks (whitespace, fmt, locked metadata, both nextest runs with TMPDIR outside the checkout) pass in a detached checkout of the branch head and leave it clean.
