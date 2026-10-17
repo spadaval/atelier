@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show a mission's success criteria and their proof in the mission dashboard"
-updated_at: "2026-10-16T23:04:58.690777933+00:00"
+updated_at: "2026-10-17T15:57:12.202281380+00:00"
 ---
 
 ## Goal
@@ -31,3 +31,7 @@ updated_at: "2026-10-16T23:04:58.690777933+00:00"
 ## Unknowns
 
 How evidence or issues name the criterion they support (a `criteria` field, an `S3`-style tag in the summary, or a link); how criteria are parsed from free-form strategy Markdown. Needs a decision before planning.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-17: atelier-et6q decided. Criteria are '- <slug>: <text>' bullets (S<n> still accepted) from the strategy or the mission's Success criteria section; receipts carry --criterion <slug>=<result>; check refuses unknown criteria. This item and debrief (S4) share one parser.
