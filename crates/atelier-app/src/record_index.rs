@@ -187,6 +187,17 @@ fn display_state_path(relative: &Path) -> String {
     format!(".atelier/{}", relative.to_string_lossy().replace('\\', "/"))
 }
 
+/// The `.atelier/<path>` of a stored record of `kind` (`issue`, `evidence`
+/// or `review`), which load-time errors about the record name.
+pub(crate) fn record_file(kind: &str, id: &str) -> PathBuf {
+    let dir = match kind {
+        "evidence" => "evidence",
+        "review" => "reviews",
+        _ => "issues",
+    };
+    PathBuf::from(display_state_path(&Path::new(dir).join(format!("{id}.md"))))
+}
+
 /// Queryable graph of every issue and evidence record.
 #[derive(Debug, Default)]
 pub struct RecordIndex {
@@ -404,7 +415,7 @@ impl RecordIndex {
             crate::workflow_policy::validate_issue_against_policy(
                 policy,
                 &record.issue,
-                &repo.join(WORKFLOW_POLICY_PATH),
+                &record_file("issue", &record.issue.id),
             )?;
         }
         self.validate_mission_dependencies(policy)
@@ -426,7 +437,7 @@ impl RecordIndex {
         let mut roots = BTreeSet::new();
         for record in self.reviews.values() {
             if let Err(error) =
-                self.validate_review(record, &mut successors, &mut chains, &mut roots)
+                self.validate_review(record, &mut successors, &mut chains, &mut roots, errors)
             {
                 errors.push(error);
             }
@@ -442,8 +453,16 @@ impl RecordIndex {
         successors: &mut BTreeMap<&'a String, &'a String>,
         chains: &mut BTreeMap<String, Vec<String>>,
         roots: &mut BTreeSet<&'a String>,
+        errors: &mut Vec<anyhow::Error>,
     ) -> Result<()> {
-        self.ensure_issue(&record.target, "review target", &record.header.id)?;
+        // Each missing reference is reported here, and checks that need the
+        // referenced record are skipped.
+        let mut exists = |relation: &str, kind: &str, id: &str| {
+            self.ensure_reference(("review", &record.header.id), relation, kind, id)
+                .map_err(|error| errors.push(error))
+                .is_ok()
+        };
+        exists("review target", "issue", &record.target);
         if let ReviewEvent::Disposition {
             finding,
             supersedes,
@@ -451,7 +470,13 @@ impl RecordIndex {
             ..
         } = &record.event
         {
-            let original = self.require_review(finding)?;
+            if let Some(issue) = follow_up {
+                exists("follow-up", "issue", issue);
+            }
+            if !exists("finding", "review", finding) {
+                return Ok(());
+            }
+            let original = &self.reviews[finding];
             if !matches!(original.event, ReviewEvent::Finding { .. })
                 || original.target != record.target
             {
@@ -460,11 +485,11 @@ impl RecordIndex {
                     record.header.id
                 );
             }
-            if let Some(issue) = follow_up {
-                self.ensure_issue(issue, "follow-up", &record.header.id)?;
-            }
             if let Some(previous) = supersedes {
-                let previous_record = self.require_review(previous)?;
+                if !exists("supersedes", "review", previous) {
+                    return Ok(());
+                }
+                let previous_record = &self.reviews[previous];
                 if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
                 {
                     bail!("disposition supersedes a decision for another finding");
@@ -504,7 +529,9 @@ impl RecordIndex {
                     ));
                     continue;
                 }
-                if let Err(error) = self.ensure_issue(&blocked.id, "blocks", id) {
+                if let Err(error) =
+                    self.ensure_reference(("issue", id), "blocks", "issue", &blocked.id)
+                {
                     errors.push(error);
                     continue;
                 }
@@ -528,7 +555,9 @@ impl RecordIndex {
                     ));
                     continue;
                 }
-                if let Err(error) = self.ensure_issue(&child.id, "children", id) {
+                if let Err(error) =
+                    self.ensure_reference(("issue", id), "children", "issue", &child.id)
+                {
                     errors.push(error);
                     continue;
                 }
@@ -551,9 +580,12 @@ impl RecordIndex {
                 parents.insert(child.id.clone(), id.clone());
             }
             for relation in &record.relationships.relates {
-                if let Err(error) =
-                    self.ensure_record(&relation.kind, &relation.id, &relation.relation_type, id)
-                {
+                if let Err(error) = self.ensure_reference(
+                    ("issue", id),
+                    &relation.relation_type,
+                    &relation.kind,
+                    &relation.id,
+                ) {
                     errors.push(error);
                     continue;
                 }
@@ -705,10 +737,14 @@ impl RecordIndex {
             Ok(())
         };
         let checked_by_issue_graph = source_kind == "issue";
-        // A missing target is reported once, here or by `index_issue_graph`.
+        // A review's attachments mirror its typed references, which
+        // `validate_reviews` checks.
+        let checked_by_reviews = source_kind == "review";
+        // A missing target is reported once, here, by `index_issue_graph` or
+        // by `validate_reviews`.
         let exists =
             |kind: &str, id: &str, relation: &str, checked: bool, errors: &mut Vec<_>| match self
-                .ensure_record(kind, id, relation, source_id)
+                .ensure_reference((source_kind, source_id), relation, kind, id)
             {
                 Ok(()) => true,
                 Err(error) => {
@@ -737,7 +773,7 @@ impl RecordIndex {
                 &attachment.kind,
                 &attachment.id,
                 &attachment.role,
-                false,
+                checked_by_reviews,
                 errors,
             ) {
                 if let Err(error) = push(
@@ -775,20 +811,27 @@ impl RecordIndex {
         }
     }
 
-    fn ensure_issue(&self, id: &str, relation: &str, source_id: &str) -> Result<()> {
-        if self.issues.contains_key(id) {
-            Ok(())
-        } else {
-            bail!("Issue {source_id} has {relation} reference to missing issue {id}")
-        }
-    }
-
-    fn ensure_record(&self, kind: &str, id: &str, relation: &str, source_id: &str) -> Result<()> {
+    /// Fails when `source`'s `relation` names a missing record, naming the
+    /// source by its kind and record file.
+    fn ensure_reference(
+        &self,
+        (source_kind, source_id): (&str, &str),
+        relation: &str,
+        kind: &str,
+        id: &str,
+    ) -> Result<()> {
         if self.record_exists(kind, id) {
-            Ok(())
-        } else {
-            bail!("{source_id} has {relation} reference to missing {kind} {id}")
+            return Ok(());
         }
+        let source = match source_kind {
+            "evidence" => "Evidence record",
+            "review" => "Review",
+            _ => "Issue",
+        };
+        bail!(
+            "{source} {source_id} in {} has {relation} reference to missing {kind} {id}",
+            record_file(source_kind, source_id).display()
+        )
     }
 
     fn validate_hierarchy_shapes(&self, errors: &mut Vec<anyhow::Error>) {
@@ -905,7 +948,7 @@ impl RecordIndex {
             if let Err(error) = crate::workflow_policy::validate_issue_against_policy(
                 &policy,
                 &record.issue,
-                &policy_path,
+                &record_file("issue", &record.issue.id),
             ) {
                 errors.push(error);
             }
@@ -1633,7 +1676,7 @@ mod tests {
             errors,
             [
                 "Duplicate record ID in record files: atelier-twin",
-                "atelier-ref has related reference to missing issue atelier-twin",
+                "Evidence record atelier-ref in .atelier/evidence/atelier-ref.md has related reference to missing issue atelier-twin",
             ]
         );
     }
