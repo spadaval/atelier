@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Parse mission criteria and let evidence receipts name the criteria they judge"
-updated_at: "2026-10-17T18:04:48.912369448+00:00"
+updated_at: "2026-10-17T18:15:35.742557703+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,16 @@ Implement decision atelier-et6q so `work mission` (atelier-stsa, S8) and `debrie
 ## Context
 
 The decision record atelier-et6q holds the rules. Evidence record shape: docs/product/validation.md and crates/atelier-records. Freshness: crates/atelier-app/src/evidence_freshness.rs.
+
+## Notes
+
+- 2026-10-17 [decision one-way] Store a receipt's criteria as a front-matter list of slug and result pairs, slug first
+  Reason: One validation run can pass some criteria and fail others, as et6q decided, and older binaries ignore the unknown key
+  Rejected: a criteria body section
+- 2026-10-17 [decision] For command capture, a bare --criterion <slug> takes the command's result and slug=result is refused
+  Reason: A captured receipt's result comes from the exit status; letting a caller set a different per-criterion result would make the receipt claim what the command did not show
+- 2026-10-17 [decision] Mark a criterion from the newest receipt whose commit is in HEAD's history, and report code commits since the proof instead of applying item-level freshness
+  Reason: Item freshness fails on any later code commit, so every mission criterion would read unproven soon after its proof; the count keeps the age visible
+  Rejected: apply evidence_is_fresh per receipt
+- 2026-10-17 [decision] Show strategy criteria parse problems in views, not as check findings
+  Reason: Existing missions may hold prose bullets in Success criteria, and check failing on them would block unrelated work; receipts naming undefined criteria are still check findings
