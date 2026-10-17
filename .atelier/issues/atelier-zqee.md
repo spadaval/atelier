@@ -3,6 +3,9 @@ created_at: "2026-10-17T07:17:41.053385208+00:00"
 id: "atelier-zqee"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-zqee
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Describe the merge_commit strategy in the Agent Factory skill"
-updated_at: "2026-10-17T07:17:41.053385208+00:00"
+updated_at: "2026-10-17T07:17:50.561093450+00:00"
 ---
 
 ## Goal
