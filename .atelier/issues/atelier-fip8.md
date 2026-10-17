@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T17:47:49.851185883+00:00"
+status: "done"
 title: "Record decisions as typed notes and show which decision records are current"
-updated_at: "2026-10-17T17:37:55.843715712+00:00"
+updated_at: "2026-10-17T17:47:49.851185883+00:00"
 ---
 
 ## Goal
@@ -64,3 +65,7 @@ The tag is `decision` or `decision one-way`. One parser in atelier-records turns
   Reason: An open proposal to replace a decision does not change what is in force
 - 2026-10-17 [decision] Leave decision notes without supersession; only decision records supersede
   Reason: S3 names decision records, and reversing an item-level choice is a new decision note or record; add note supersession when a view shows the need
+
+## Close Reason
+
+Agents record decisions as typed notes that check validates, decision records link their ADR and supersede earlier ones, and work decisions lists a mission's decisions with one-way first and only decided, unsuperseded records as current.
