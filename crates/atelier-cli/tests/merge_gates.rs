@@ -2364,3 +2364,19 @@ fn merge_commit_strategy_needs_a_shell_check_to_prove_the_merged_tree() {
     fixture.refusal("merge_unproven");
     assert_eq!(worktrees(fixture.path()), 1);
 }
+
+#[test]
+fn merge_commit_strategy_proves_the_merged_tree_only_when_every_shell_check_passed() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &["true", "echo broken; false"]);
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        !passed
+            && output.contains("FAIL shell.check")
+            && output.contains("FAIL merge.merged_tree")
+            && !output.contains("and passed:"),
+        "{output}"
+    );
+    assert_eq!(worktrees(fixture.path()), 1);
+}

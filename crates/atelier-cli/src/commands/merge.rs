@@ -337,10 +337,12 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     )?;
     if let Some((tree, _, _, _)) = &merge {
         // Only the shell checks examined the merged tree; it is proven when
-        // they passed there.
-        let passed = nodes
+        // at least one ran there and every one passed.
+        let shell = nodes
             .iter()
-            .any(|node| node.check == "shell.check" && node.passed);
+            .filter(|node| node.check == "shell.check")
+            .collect::<Vec<_>>();
+        let passed = !shell.is_empty() && shell.iter().all(|node| node.passed);
         let commands = tree_checks(&source.policy).collect::<Vec<_>>().join("; ");
         nodes.push(review_gate::GateNode {
             kind: "workflow_validator",
@@ -351,7 +353,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             reason: if passed {
                 format!("merge_checks ran on merged tree {tree} of {branch} into {base} at {base_head} and passed: {commands}; evidence at the branch head does not prove it")
             } else {
-                format!("merged tree {tree} of {branch} into {base} at {base_head} is unproven: shell.check failed on it: {commands}")
+                format!("merged tree {tree} of {branch} into {base} at {base_head} is unproven: not every shell.check passed on it; shell.check names the failure")
             },
             supports: Vec::new(),
             stale_from_checkout: false,
