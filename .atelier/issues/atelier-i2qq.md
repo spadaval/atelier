@@ -21,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Write one item-line, verdict, confirmation and quiet contract for all views"
-updated_at: "2026-10-17T05:23:12.456760326+00:00"
+updated_at: "2026-10-17T06:12:55.699919252+00:00"
 ---
 
 ## Goal
