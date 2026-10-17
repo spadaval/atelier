@@ -2061,3 +2061,239 @@ fn evidence_capture_follows_core_filemode_for_execute_bits() {
         );
     }
 }
+
+/// Commit `merge_strategy: merge_commit` with `checks` to the base, then
+/// return to the work branch without merging the base in.
+fn merge_commit_policy(fixture: &Fixture, checks: &[&str]) {
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap().replace(
+        "merge_strategy: fast_forward_only",
+        "merge_strategy: merge_commit",
+    );
+    let checks = checks
+        .iter()
+        .map(|command| format!("  - shell.check: {{ command: '{command}' }}\n"))
+        .collect::<String>();
+    let checks = if checks.is_empty() {
+        " []\n".to_owned()
+    } else {
+        format!("\n{checks}")
+    };
+    fs::write(&path, format!("{policy}\nmerge_checks:{checks}")).unwrap();
+    commit(fixture.path(), "base merges with a merge commit");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+}
+fn worktrees(dir: &Path) -> usize {
+    git(dir, &["worktree", "list", "--porcelain"])
+        .lines()
+        .filter(|line| line.starts_with("worktree "))
+        .count()
+}
+
+#[test]
+fn merge_commit_strategy_lands_a_clean_branch_on_a_moved_base_and_land_accepts_it() {
+    let fixture = Fixture::new();
+    // A file both sides edit, on separate lines, so Git merges it cleanly.
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("shared.txt"), "1\n2\n3\n4\n5\n").unwrap();
+    commit(fixture.path(), "shared file");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    fs::write(fixture.path().join("shared.txt"), "1\n2\n3\n4\nbranch\n").unwrap();
+    commit(fixture.path(), "branch edits the shared file");
+    fixture.approval("Reviewer");
+    // Neither the branch head nor the base alone has both files; only the
+    // merged tree passes this check.
+    merge_commit_policy(
+        &fixture,
+        &["test -f src.rs && test -f other.rs && grep -qx base shared.txt && grep -qx branch shared.txt"],
+    );
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("other.rs"), "landed on the base\n").unwrap();
+    fs::write(fixture.path().join("shared.txt"), "base\n2\n3\n4\n5\n").unwrap();
+    commit(fixture.path(), "other work landed on the base");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        fixture.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(fixture.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let base = git(fixture.path(), &["rev-parse", "main"]);
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+
+    let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        output.contains("pass review.current")
+            && output.contains("pass shell.check")
+            && output.contains("pass merge.merged_tree: merge_checks ran on merged tree"),
+        "{output}"
+    );
+    assert_eq!(git(fixture.path(), &["rev-parse", "main"]), base);
+    assert_eq!(worktrees(fixture.path()), 1);
+
+    let output = ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(output.contains("with merge commit"), "{output}");
+    let merged = git(fixture.path(), &["rev-parse", "main"]);
+    assert_eq!(
+        git(fixture.path(), &["rev-list", "--parents", "-n1", "main"]),
+        format!("{merged} {base} {head}")
+    );
+    assert_eq!(
+        git(fixture.path(), &["show", "main:shared.txt"]),
+        "base\n2\n3\n4\nbranch"
+    );
+    assert!(git(fixture.path(), &["log", "-1", "--format=%B", "main"])
+        .contains("merge_checks passed on this tree"));
+    // The merge commit is the only commit merge creates.
+    assert_eq!(
+        git(
+            fixture.path(),
+            &["rev-list", "--count", &format!("{base}..main")]
+        ),
+        git(
+            fixture.path(),
+            &["rev-list", "--count", &format!("{base}..{head}")]
+        )
+        .parse::<usize>()
+        .map(|count| (count + 1).to_string())
+        .unwrap()
+    );
+    assert!(git(fixture.path(), &["branch", "--list", &fixture.branch]).is_empty());
+    assert_eq!(worktrees(fixture.path()), 1);
+    assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+    // A clean merge of approved work needs no new review to push.
+    ok(fixture.path(), &["land"]);
+}
+
+#[test]
+fn merge_commit_strategy_refuses_conflicts_naming_the_files() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &["true"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("src.rs"), "base code\n").unwrap();
+    commit(fixture.path(), "conflicting base work");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    fixture.refusal("merge_conflict: ");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(output.contains("conflicts in src.rs."), "{output}");
+    assert_eq!(worktrees(fixture.path()), 1);
+}
+
+#[test]
+fn merge_commit_strategy_runs_merge_checks_on_the_merged_tree_and_refuses_a_broken_lockfile() {
+    // `cargo metadata --locked` needs a registry to resolve real
+    // dependencies, so a script stands in for it: every dependency a manifest
+    // names must be a package in Cargo.lock.
+    let fixture = Fixture::new();
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[workspace]\nmembers = []\n\n[package]\nname = \"app\"\n\n[dependencies]\nlog = \"0.4\"\nrand = \"0.8\"\n",
+    )
+    .unwrap();
+    fs::write(
+        fixture.path().join("Cargo.lock"),
+        "[[package]]\nname = \"app\"\n\n[[package]]\nname = \"log\"\n\n[[package]]\nname = \"rand\"\n",
+    )
+    .unwrap();
+    fs::write(
+        fixture.path().join("check-lock.sh"),
+        "for manifest in $(git ls-files \"*Cargo.toml\"); do\n  for dep in $(sed -n '/^\\[dependencies\\]/,/^\\[/s/^\\([a-z_-]*\\) = .*/\\1/p' \"$manifest\"); do\n    grep -qx \"name = \\\"$dep\\\"\" Cargo.lock || { echo \"Cargo.lock lacks $dep needed by $manifest\"; exit 1; }\n  done\ndone\n",
+    )
+    .unwrap();
+    commit(fixture.path(), "manifest, lockfile and lock check");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    // The branch stops using log and drops it from the lockfile.
+    for (file, from, to) in [
+        ("Cargo.toml", "log = \"0.4\"\n", ""),
+        ("Cargo.lock", "[[package]]\nname = \"log\"\n\n", ""),
+    ] {
+        let path = fixture.path().join(file);
+        let text = fs::read_to_string(&path).unwrap().replace(from, to);
+        fs::write(path, text).unwrap();
+    }
+    commit(fixture.path(), "branch drops log");
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &["sh check-lock.sh"]);
+    // The base adds a member that uses log; the lockfile already has it.
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let manifest = fixture.path().join("Cargo.toml");
+    let text = fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("members = []", "members = [\"tools\"]");
+    fs::write(&manifest, text).unwrap();
+    fs::create_dir(fixture.path().join("tools")).unwrap();
+    fs::write(
+        fixture.path().join("tools/Cargo.toml"),
+        "[package]\nname = \"tools\"\n\n[dependencies]\nlog = \"0.4\"\n",
+    )
+    .unwrap();
+    commit(fixture.path(), "tools member uses log");
+    assert!(Command::new("sh")
+        .arg("check-lock.sh")
+        .current_dir(fixture.path())
+        .status()
+        .unwrap()
+        .success());
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    // Git merges both sides cleanly, but the merged lockfile lacks log.
+    let base = git(fixture.path(), &["rev-parse", "main"]);
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+    assert!(
+        git(
+            fixture.path(),
+            &["merge-tree", "--write-tree", &base, &head]
+        )
+        .lines()
+        .count()
+            == 1
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        !passed
+            && output.contains("FAIL shell.check")
+            && output.contains("Cargo.lock lacks log needed by tools/Cargo.toml")
+            && output.contains("merge blocked: shell.check"),
+        "{output}"
+    );
+    assert_eq!(git(fixture.path(), &["rev-parse", "main"]), base);
+    assert_eq!(
+        git(fixture.path(), &["branch", "--show-current"]),
+        fixture.branch
+    );
+    assert_eq!(worktrees(fixture.path()), 1);
+}
+
+#[test]
+fn merge_commit_strategy_refuses_when_the_base_moves_during_checks() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(
+        &fixture,
+        &["git update-ref refs/heads/main $(git commit-tree HEAD^1^{tree} -p HEAD^1 -m moved)"],
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        !passed && output.contains("merge_snapshot_changed"),
+        "{output}"
+    );
+    assert_eq!(
+        git(fixture.path(), &["log", "-1", "--format=%s", "main"]),
+        "moved"
+    );
+    assert!(git(fixture.path(), &["branch", "--list", &fixture.branch]).contains(&fixture.branch));
+    assert_eq!(worktrees(fixture.path()), 1);
+}
+
+#[test]
+fn merge_commit_strategy_needs_merge_checks_to_prove_the_merged_tree() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &[]);
+    fixture.refusal("merge_unproven");
+}

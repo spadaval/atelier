@@ -1,11 +1,122 @@
-//! Gated fast-forward integration. Creates no commits or tracker records.
+//! Gated integration: a fast-forward, or under `merge_strategy:
+//! merge_commit` a merge commit whose tree passed `merge_checks`. Creates no
+//! other commits and no tracker records.
 use crate::commands::git::text;
 use anyhow::{bail, Context, Result};
 use atelier_app::{
     base_policy, committed_snapshot, git_freshness as git, review_gate,
     storage_layout::StorageLayout,
+    workflow_policy::{MergeStrategy, ValidatorParams, WorkflowPolicy},
 };
 use std::path::{Path, PathBuf};
+
+/// A detached checkout of the merge commit, outside every working tree, so
+/// `merge_checks` run on exactly the tree merging would put on the base.
+struct MergedCheckout {
+    repo: PathBuf,
+    path: PathBuf,
+    _dir: tempfile::TempDir,
+}
+impl MergedCheckout {
+    fn add(repo: &Path, commit: &str) -> Result<Self> {
+        let common = text(
+            repo,
+            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        )?;
+        let dir = tempfile::Builder::new()
+            .prefix("atelier-merge-")
+            .tempdir_in(common)?;
+        let path = dir.path().join("tree");
+        git::command(repo)
+            .args([
+                "-c",
+                "core.hooksPath=/dev/null",
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+            ])
+            .arg(&path)
+            .arg(commit)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .context("could not check out the merged tree for merge_checks")?;
+        Ok(Self {
+            repo: repo.to_owned(),
+            path,
+            _dir: dir,
+        })
+    }
+}
+impl Drop for MergedCheckout {
+    fn drop(&mut self) {
+        let _ = git::command(&self.repo)
+            .args(["worktree", "remove", "--force"])
+            .arg(&self.path)
+            .output();
+    }
+}
+
+/// Git's merge of the work branch into the base, refused on any conflict.
+fn merged_tree(
+    repo: &Path,
+    base: &str,
+    base_head: &str,
+    branch: &str,
+    head: &str,
+) -> Result<String> {
+    let (tree, conflicted) = git::merge_tree(repo, base_head, head)?
+        .with_context(|| format!("git merge-tree could not merge {branch} into {base}"))?;
+    if !conflicted.is_empty() {
+        bail!(
+            "merge_conflict: {branch} does not merge cleanly into {base}; conflicts in {}. Merge it in with `git merge {base}` on {branch}, resolve the conflicts, record fresh proof and get the resolution reviewed, then retry.",
+            conflicted
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    Ok(tree)
+}
+
+/// The merge commit object; it reaches the base only if its tree passes.
+fn merge_commit(
+    repo: &Path,
+    policy: &WorkflowPolicy,
+    tree: &str,
+    (base, base_head): (&str, &str),
+    (branch, head): (&str, &str),
+) -> Result<String> {
+    let checks = policy
+        .merge_checks
+        .iter()
+        .map(|check| match &check.params {
+            Some(ValidatorParams::ShellCheck { command }) => {
+                format!("- {}: {command}", check.builtin)
+            }
+            _ => format!("- {}", check.builtin),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let message = format!(
+        "Merge {branch} into {base}\n\nThe base policy's merge_checks passed on this tree before atelier merge\nput it on {base}:\n{checks}\n"
+    );
+    text(
+        repo,
+        &[
+            "commit-tree",
+            tree,
+            "-p",
+            base_head,
+            "-p",
+            head,
+            "-m",
+            &message,
+        ],
+    )
+}
 
 fn clean(repo: &Path) -> Result<()> {
     let dirty = text(repo, &["status", "--porcelain", "--untracked-files=all"])?;
@@ -69,23 +180,38 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let base_ref = format!("refs/heads/{base}");
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     let base_head = crate::commands::git::resolve(repo, &base_ref)?;
-    git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin."))?;
     let source = base_policy::from_captured(&mut read, &base_head)?;
     for diagnostic in &source.diagnostics {
         eprintln!("{diagnostic}");
     }
+    let strategy = source.policy.branch_policy.merge_strategy;
     if source.policy.branch_policy.base_branch != *base
-        || source.policy.branch_policy.merge_strategy
-            != atelier_app::workflow_policy::MergeStrategy::FastForwardOnly
+        || !matches!(
+            strategy,
+            MergeStrategy::FastForwardOnly | MergeStrategy::MergeCommit
+        )
     {
-        bail!("merge requires base policy for {base} with merge_strategy: fast_forward_only; review the policy change first");
+        bail!("merge requires base policy for {base} with merge_strategy: fast_forward_only or merge_commit; review the policy change first");
     }
+    let tree = if strategy == MergeStrategy::MergeCommit {
+        // Evidence at the branch head does not prove a tree the base has
+        // changed; only checks run on the merged tree can.
+        if source.policy.merge_checks.is_empty() {
+            bail!("merge_unproven: merge_strategy merge_commit needs merge_checks in the base policy for {base}; they run on the merged tree, which evidence at the branch head does not prove");
+        }
+        Some(merged_tree(repo, base, &base_head, &branch, &head)?)
+    } else {
+        git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin."))?;
+        None
+    };
+    // Where the branch left the base; the base itself under fast-forward.
+    let fork_point = text(repo, &["merge-base", &base_head, &head])?;
     // Candidate syntax is checked only after trusted base resolution, so an
     // invalid branch cannot prevent a visible fallback or become base policy.
     atelier_workflow::load(repo)
         .context("candidate workflow policy is invalid; fix it before merging")?;
     index.validate_policy(&source.policy, repo)?;
-    review_gate::append_only(&mut read, &base_head)?;
+    review_gate::append_only(&mut read, &fork_point)?;
     let base_tree = base_checkout(repo, base)?;
     let base_snapshot = base_tree
         .as_ref()
@@ -98,7 +224,41 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             .require_clean(path)?;
     }
     crate::commands::git::require_committed_config(repo, &head, "merge")?;
-    let nodes = review_gate::evaluate(&index, &mut read, &source.policy, owner, &base_head)?;
+    let merge = tree
+        .map(|tree| -> Result<_> {
+            let commit = merge_commit(
+                repo,
+                &source.policy,
+                &tree,
+                (base, &base_head),
+                (&branch, &head),
+            )?;
+            let checkout = MergedCheckout::add(repo, &commit)?;
+            Ok((tree, commit, checkout))
+        })
+        .transpose()?;
+    let mut nodes = review_gate::evaluate(
+        &index,
+        &mut read,
+        &source.policy,
+        owner,
+        &fork_point,
+        merge
+            .as_ref()
+            .map_or(repo, |(_, _, checkout)| checkout.path.as_path()),
+    )?;
+    if let Some((tree, _, _)) = &merge {
+        nodes.push(review_gate::GateNode {
+            kind: "workflow_validator",
+            id: format!("{owner}/merge.merged_tree"),
+            target: owner.into(),
+            check: "merge.merged_tree".into(),
+            passed: true,
+            reason: format!("merge_checks ran on merged tree {tree} of {branch} into {base} at {base_head}; evidence at the branch head does not prove it"),
+            supports: Vec::new(),
+            stale_from_checkout: false,
+        });
+    }
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
     } else {
@@ -155,12 +315,30 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             bail!("base checkout changed while checks ran");
         }
     }
+    if let Some((_, commit, checkout)) = &merge {
+        if !text(
+            &checkout.path,
+            &["status", "--porcelain", "--untracked-files=all"],
+        )?
+        .is_empty()
+            || git::head_commit(&checkout.path)? != *commit
+        {
+            bail!("merge_checkout_dirty: merge_checks changed the merged checkout; checks must be read-only");
+        }
+    }
     if !failed.is_empty() {
         bail!("merge blocked: {}", failed.join(", "));
     }
     if check_only {
         return Ok(());
     }
+    let landed = match merge {
+        Some((_, commit, checkout)) => {
+            drop(checkout);
+            Some(commit)
+        }
+        None => None,
+    };
     // A separately checked-out base can be updated without touching it from
     // this worktree. Detach the source so its now-integrated branch can go.
     let target = base_tree.as_deref().unwrap_or(repo);
@@ -175,7 +353,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             "core.hooksPath=/dev/null",
             "merge",
             "--ff-only",
-            &head,
+            landed.as_deref().unwrap_or(&head),
         ],
     )
     .context("fast-forward failed; no tracker state was written")?;
@@ -222,7 +400,10 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     clean(target)?;
     clean(repo)?;
-    println!("Merged {branch} into {base} at {head}; deleted local work branch. No commits or tracker records were created.");
+    match &landed {
+        Some(commit) => println!("Merged {branch} into {base} with merge commit {commit}; deleted local work branch. No other commits or tracker records were created."),
+        None => println!("Merged {branch} into {base} at {head}; deleted local work branch. No commits or tracker records were created."),
+    }
     if base_tree.is_some() {
         println!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
     }
