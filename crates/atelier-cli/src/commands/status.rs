@@ -9,8 +9,9 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::{self, git};
 use crate::human_output::{
-    path_summary, render_lines_section, render_metadata, render_page, render_text_section,
-    short_commit, IssueListPanel, IssueListRow, ItemLine, RenderContext,
+    path_summary, render_footer_section, render_lines_section, render_metadata, render_page,
+    render_text_section, short_commit, FooterAction, IssueListPanel, IssueListRow, ItemLine,
+    RenderContext,
 };
 use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
@@ -469,29 +470,39 @@ fn render_status_page(
     let ready = view.work.ready.len();
     let next_actions = if let Ok(Some(owner)) = owner {
         vec![
-            format!("  Inspect owner work: {}", owner.inspect),
-            format!("  Check handoff: atelier land {}", owner.id),
-            format!(
-                "  Check completed-owner merge readiness: atelier merge {} --check",
-                owner.id
+            FooterAction::new("Inspect owner work", owner.inspect.clone()),
+            FooterAction::new("Check handoff", format!("atelier land {}", owner.id)),
+            FooterAction::new(
+                "Check completed-owner merge readiness",
+                format!("atelier merge {} --check", owner.id),
             ),
         ]
     } else if ready > 0 {
         vec![
-            format!("  Choose ready work ({ready} ready issue(s) available): atelier work ready"),
-            "  Inspect selected work transitions: atelier issue transition <issue-id>".to_string(),
+            FooterAction::new(
+                format!("Choose ready work ({ready} ready issue(s) available)"),
+                "atelier work ready",
+            ),
+            FooterAction::new(
+                "Inspect selected work transitions",
+                "atelier issue transition <issue-id>",
+            ),
         ]
     } else if !view.work.human.is_empty() {
-        vec![format!(
-            "  Only work for the human is ready ({} item(s)): atelier work human",
-            view.work.human.len()
+        vec![FooterAction::new(
+            format!(
+                "Only work for the human is ready ({} item(s))",
+                view.work.human.len()
+            ),
+            "atelier work human",
         )]
     } else if !view.work.blocked.is_empty() {
-        vec![
-            "  Inspect blocked work (no ready work is available): atelier work blocked".to_string(),
-        ]
+        vec![FooterAction::new(
+            "Inspect blocked work (no ready work is available)",
+            "atelier work blocked",
+        )]
     } else {
-        vec!["  No specific next action is available from checkout state.".to_string()]
+        Vec::new()
     };
 
     let mut panels = vec![
@@ -516,7 +527,7 @@ fn render_status_page(
         panels.push(render_lines_section("Reviews", owner.reviews.clone()));
         panels.push(render_lines_section("Evidence", owner.evidence.clone()));
     }
-    panels.push(render_lines_section("Next Actions", next_actions));
+    panels.push(render_footer_section(context, next_actions));
     render_page("Atelier Status", panels, context)
 }
 

@@ -152,8 +152,9 @@ against which commit, and whether it passed. Independent review examines the
 implementation and the done claim together.
 
 `atelier merge <id>` checks the base branch's policy and review gates, then
-fast-forwards the base to the committed work. It creates no commit and changes
-no records. The base therefore shows the item done together with its code.
+fast-forwards the base to the committed work, or under `merge_commit` adds one
+merge commit whose tree passed `merge_checks`. It creates no other commit and
+changes no records. The base therefore shows the item done together with its code.
 See [reviews and merge](reviews-and-merge.md) for approval freshness and findings.
 
 The done claim comes before review on purpose (atelier-9k7o, decided by

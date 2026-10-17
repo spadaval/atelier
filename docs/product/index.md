@@ -12,7 +12,7 @@ how agents plan, execute, review, and validate work. See
 - [Evidence and validation](validation.md): honest results, commit identity,
   freshness, and proof limits.
 - [Reviews and merge](reviews-and-merge.md): approvals, findings, exemptions,
-  and fast-forward integration.
+  and gated integration.
 - [Workflow configuration](workflow-configuration.md): reviewed repository
   policy and read-only transition checks.
 - [Sessions and hooks](sessions-and-hooks.md): status, land, setup, and branch

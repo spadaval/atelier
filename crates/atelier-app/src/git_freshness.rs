@@ -792,37 +792,9 @@ pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolut
     let [_, first, second] = parts.as_slice() else {
         return Ok(None);
     };
-    // Exit status 1 reports conflicts; the tree and conflicted paths still
-    // follow, NUL-terminated.
-    let output = command(repo)
-        .args([
-            "merge-tree",
-            "--write-tree",
-            "--no-messages",
-            "--name-only",
-            "-z",
-            first,
-            second,
-        ])
-        .stderr(Stdio::null())
-        .output()?;
-    if !matches!(output.status.code(), Some(0 | 1)) {
-        return Ok(None);
-    }
-    let paths = |bytes: &[u8]| {
-        bytes
-            .split(|byte| *byte == 0)
-            .filter(|field| !field.is_empty())
-            .map(|path| PathBuf::from(String::from_utf8_lossy(path).into_owned()))
-            .collect::<Vec<_>>()
-    };
-    let Some(end) = output.stdout.iter().position(|byte| *byte == 0) else {
+    let Some((merged, conflicted)) = merge_tree(repo, first, second)? else {
         return Ok(None);
     };
-    let merged = std::str::from_utf8(&output.stdout[..end])?.to_owned();
-    let mut conflicted = paths(&output.stdout[end..]);
-    conflicted.sort();
-    conflicted.dedup();
     if conflicted.iter().any(|path| !is_record_path(path)) {
         return Ok(None);
     }
@@ -830,7 +802,7 @@ pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolut
         repo,
         &["rev-parse", &format!("{commit}^{{tree}}")],
     )?)?;
-    let differing = paths(&git_output(
+    let differing = nul_paths(&git_output(
         repo,
         &[
             "diff-tree",
@@ -859,6 +831,48 @@ pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolut
         conflicted,
         merge_base,
     }))
+}
+
+/// Git's own merge of two commits, with the repository's configuration and
+/// attributes: the merged tree and the sorted paths that conflicted. `None`
+/// when Git cannot compute it.
+pub fn merge_tree(
+    repo: &Path,
+    first: &str,
+    second: &str,
+) -> Result<Option<(String, Vec<PathBuf>)>> {
+    // Exit status 1 reports conflicts; the tree and conflicted paths still
+    // follow, NUL-terminated.
+    let output = command(repo)
+        .args([
+            "merge-tree",
+            "--write-tree",
+            "--no-messages",
+            "--name-only",
+            "-z",
+            first,
+            second,
+        ])
+        .stderr(Stdio::null())
+        .output()?;
+    if !matches!(output.status.code(), Some(0 | 1)) {
+        return Ok(None);
+    }
+    let Some(end) = output.stdout.iter().position(|byte| *byte == 0) else {
+        return Ok(None);
+    };
+    let merged = std::str::from_utf8(&output.stdout[..end])?.to_owned();
+    let mut conflicted = nul_paths(&output.stdout[end..]);
+    conflicted.sort();
+    conflicted.dedup();
+    Ok(Some((merged, conflicted)))
+}
+fn nul_paths(bytes: &[u8]) -> Vec<PathBuf> {
+    bytes
+        .split(|byte| *byte == 0)
+        .filter(|field| !field.is_empty())
+        .map(|path| PathBuf::from(String::from_utf8_lossy(path).into_owned()))
+        .collect()
 }
 
 pub fn blob(repo: &Path, commit: &str, path: &Path) -> Result<String> {

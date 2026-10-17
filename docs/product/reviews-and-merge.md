@@ -110,9 +110,44 @@ an uncommitted change. Checks
 cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
-Merge uses the base branch's committed policy and fast-forwards only. If the
-base has moved on, merge it into the work branch, record fresh proof, and renew
-review only if the merge needed resolving (see approval freshness). Rebase only
+Merge uses the base branch's committed policy and its
+`branch_policy.merge_strategy`. Under `fast_forward_only`, the default, merge
+fast-forwards only. If the base has moved on, merge it into the work branch,
+record fresh proof, and renew review only if the merge needed resolving (see
+approval freshness).
+
+Under `merge_commit`, a branch that is behind the base can land without
+catching up. Merge builds Git's merge of the work branch into the current base
+with `git merge-tree --write-tree` and refuses with `merge_conflict`, naming
+the files, if any path conflicts; resolve those on the work branch as above.
+Evidence at the branch head does not prove the merged tree, so `merge_checks`
+must include a `shell.check` (otherwise `merge_unproven`); record checks such
+as `lint.none_blocking` read records and prove nothing about the tree. The
+checks run in a temporary detached checkout of the merge commit instead of the
+work checkout. The gate output adds `merge.merged_tree`, which passes only when
+the shell checks passed there and names the tree, base commit, and commands,
+and the merge commit's message lists those commands.
+
+The gates read the records of the merge commit, which is what the base would
+get, so a blocker the base added or reopened holds the merge. Review and
+evidence pins are judged only along the work branch, though, so merge refuses
+with `merge_base_records`, naming the files, when the base changed an in-scope
+issue, or a review or evidence record about one, since the branch left it:
+merge the base into the work branch so the gates judge them, then retry. Other
+base records do not touch the approval, which is judged on the work branch's
+history: it carries over, because a clean merge combines two reviewed changes
+and nobody edited the result. No checkout holds the merged records before they
+reach the base, so merge also checks the done claims outside the item that
+they affect, as `land` does, trusting the base head. For example, if the base
+closed a mission after the fork point and the branch reopens work that mission
+depends on, merge refuses, naming the claim (`merge blocked: <mission>
+work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
+claim the base completed and reviewed after the fork point is judged against
+the base commits its reviews pin (atelier-goom). The merge commit reaches the
+base only when every gate passes and the base has not moved during the checks
+(`merge_snapshot_changed`). A lockfile that merges cleanly but is
+inconsistent is caught only by a `merge_checks` command that validates it, such
+as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
 approvals pin, and `merge` then refuses with "pins a commit outside the work
 branch". To recover: reset the branch to its pre-rebase tip (from `git
@@ -126,7 +161,8 @@ Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).
 
-Atelier creates no commit, writes no tracker state, and does not push. Git hooks
+Merge creates the merge commit under `merge_commit` and no other commit, writes
+no tracker state, and does not push. Git hooks
 are disabled during gated integration and cleanup, with an explicit notice.
 Put required read-only checks in the reviewed base policy's `merge_checks`.
 

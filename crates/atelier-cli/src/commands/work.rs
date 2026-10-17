@@ -80,7 +80,7 @@ pub fn dashboards(quiet: bool) -> Result<()> {
                 ],
             ),
             render_footer_section(
-                "Next Commands",
+                RenderContext::for_stdout(),
                 [
                     FooterAction::new("Browse ready work", "atelier work ready"),
                     FooterAction::new("Triage blockers", "atelier work blocked"),
@@ -266,7 +266,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             ),
             ("Open blockers", mission.open_blockers.len().to_string()),
             (
-                "Drill down",
+                "More info",
                 format!("atelier work mission {}", mission.issue.id),
             ),
         ] {
@@ -315,16 +315,18 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             context,
         ));
     }
-    lines.extend(render_labeled_lines(
-        context,
-        "",
-        "Browse mission records",
-        "atelier issue list --issue-type mission",
-        TextStyle::Secondary,
-    ));
     print_page(
         "Mission Overview",
-        [render_lines_section("", lines)],
+        [
+            render_lines_section("", lines),
+            render_footer_section(
+                context,
+                [FooterAction::new(
+                    "Browse mission records",
+                    "atelier issue list --issue-type mission",
+                )],
+            ),
+        ],
         context,
     );
     Ok(())
@@ -498,7 +500,7 @@ fn scoped_dashboard(
             .into_iter()
             .map(|panel| panel.render(context)),
     );
-    panels.push(objective_footer(&issue, counts));
+    panels.push(objective_footer(context, &issue, counts));
     print_page(&title, panels, context);
     Ok(())
 }
@@ -620,7 +622,11 @@ fn strip_mission_title_prefix(title: &str) -> &str {
         .unwrap_or(title)
 }
 
-fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> Vec<String> {
+fn objective_footer(
+    context: RenderContext,
+    issue: &Issue,
+    counts: &ObjectiveBucketTotals,
+) -> Vec<String> {
     let mission_id = &issue.id;
     let mut actions = vec![
         FooterAction::new(
@@ -644,7 +650,7 @@ fn objective_footer(issue: &Issue, counts: &ObjectiveBucketTotals) -> Vec<String
             format!("atelier work mission {mission_id} --blocked"),
         ));
     }
-    render_footer_section("Next Commands", actions)
+    render_footer_section(context, actions)
 }
 
 fn proof_gap_count(index: &RecordIndex, rows: &[(Issue, ClassifiedWork)]) -> Result<usize> {
