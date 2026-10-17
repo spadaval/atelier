@@ -3,6 +3,9 @@ created_at: "2026-10-16T23:43:33.771473753+00:00"
 id: "atelier-kops"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-kops
 priority: "P3"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Owned branches trust a local base that may hold unchecked commits"
-updated_at: "2026-10-17T05:22:38.347395833+00:00"
+updated_at: "2026-10-17T05:22:51.315113418+00:00"
 ---
 
 ## Goal
