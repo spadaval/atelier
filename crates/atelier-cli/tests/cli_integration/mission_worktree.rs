@@ -1147,6 +1147,92 @@ fn test_check_reports_every_invalid_record_file() {
 }
 
 #[test]
+fn test_policy_invalid_issue_names_its_record_file() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Policy broken"]);
+    assert!(success, "issue create failed: {stderr}");
+    let id = issue_id_by_title(dir.path(), "Policy broken");
+    let path = format!(".atelier/issues/{id}.md");
+    let original = read_canonical_record(dir.path(), "issues", &id);
+
+    for (field, from, to, code) in [
+        (
+            "status",
+            "status: \"todo\"",
+            "status: \"bogus\"",
+            "workflow_issue_status_invalid",
+        ),
+        (
+            "issue_type",
+            "issue_type: \"task\"",
+            "issue_type: \"weird\"",
+            "workflow_issue_type_unknown",
+        ),
+    ] {
+        assert!(original.contains(from), "{original}");
+        write_canonical_record(dir.path(), "issues", &id, original.replace(from, to));
+
+        let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+        assert!(
+            !success,
+            "an invalid {field} should block issue list: {stdout}"
+        );
+        assert!(
+            stderr.contains(code) && stderr.matches(&path).count() == 1,
+            "an invalid {field} should name {path} once: {stderr}"
+        );
+        assert!(
+            !stderr.contains("workflow.yaml"),
+            "an invalid {field} is about the issue, not the workflow: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn test_missing_review_target_names_the_review_once() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let review_id = "atelier-rv01";
+    let review_path = format!(".atelier/reviews/{review_id}.md");
+    std::fs::create_dir_all(dir.path().join(".atelier/reviews")).unwrap();
+    write_canonical_record(
+        dir.path(),
+        "reviews",
+        review_id,
+        format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: {review_id}\ntitle: checked\ntarget: atelier-gone\nidentity: reviewer\ncommit: {}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: review\n---\n\nchecked\n",
+            "a".repeat(40)
+        ),
+    );
+    let failure =
+        format!("Review {review_id} in {review_path} has review target reference to missing issue atelier-gone");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(
+        !success,
+        "a missing review target should block issue list: {stdout}"
+    );
+    assert!(
+        stderr.contains(&failure) && stderr.matches(&review_path).count() == 1,
+        "issue list should name the review once: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "check must fail: {stdout}");
+    assert!(
+        stdout.contains("Check found 1 finding"),
+        "{stdout}\n{stderr}"
+    );
+    assert_eq!(
+        stdout.matches("atelier-gone").count(),
+        1,
+        "check should report the missing target once: {stdout}"
+    );
+    assert!(stdout.contains(&failure), "{stdout}");
+}
+
+#[test]
 fn test_lint_validates_record_markdown_and_ignores_local_artifacts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

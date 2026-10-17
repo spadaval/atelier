@@ -187,6 +187,17 @@ fn display_state_path(relative: &Path) -> String {
     format!(".atelier/{}", relative.to_string_lossy().replace('\\', "/"))
 }
 
+/// The `.atelier/<path>` of a stored record of `kind` (`issue`, `evidence`
+/// or `review`), which load-time errors about the record name.
+pub(crate) fn record_file(kind: &str, id: &str) -> PathBuf {
+    let dir = match kind {
+        "evidence" => "evidence",
+        "review" => "reviews",
+        _ => "issues",
+    };
+    PathBuf::from(display_state_path(&Path::new(dir).join(format!("{id}.md"))))
+}
+
 /// Queryable graph of every issue and evidence record.
 #[derive(Debug, Default)]
 pub struct RecordIndex {
@@ -404,7 +415,7 @@ impl RecordIndex {
             crate::workflow_policy::validate_issue_against_policy(
                 policy,
                 &record.issue,
-                &repo.join(WORKFLOW_POLICY_PATH),
+                &record_file("issue", &record.issue.id),
             )?;
         }
         self.validate_mission_dependencies(policy)
@@ -426,7 +437,7 @@ impl RecordIndex {
         let mut roots = BTreeSet::new();
         for record in self.reviews.values() {
             if let Err(error) =
-                self.validate_review(record, &mut successors, &mut chains, &mut roots)
+                self.validate_review(record, &mut successors, &mut chains, &mut roots, errors)
             {
                 errors.push(error);
             }
@@ -442,8 +453,16 @@ impl RecordIndex {
         successors: &mut BTreeMap<&'a String, &'a String>,
         chains: &mut BTreeMap<String, Vec<String>>,
         roots: &mut BTreeSet<&'a String>,
+        errors: &mut Vec<anyhow::Error>,
     ) -> Result<()> {
-        self.ensure_issue(&record.target, "review target", &record.header.id)?;
+        // Every missing reference is reported here before any other check,
+        // and checks that need a missing record are skipped.
+        let mut exists = |relation: &str, kind: &str, id: &str| {
+            self.ensure_reference(("review", &record.header.id), relation, kind, id)
+                .map_err(|error| errors.push(error))
+                .is_ok()
+        };
+        exists("review target", "issue", &record.target);
         if let ReviewEvent::Disposition {
             finding,
             supersedes,
@@ -451,7 +470,17 @@ impl RecordIndex {
             ..
         } = &record.event
         {
-            let original = self.require_review(finding)?;
+            if let Some(issue) = follow_up {
+                exists("follow-up", "issue", issue);
+            }
+            let finding_exists = exists("finding", "review", finding);
+            let supersedes_exists = supersedes
+                .as_ref()
+                .is_none_or(|previous| exists("supersedes", "review", previous));
+            if !finding_exists || !supersedes_exists {
+                return Ok(());
+            }
+            let original = &self.reviews[finding];
             if !matches!(original.event, ReviewEvent::Finding { .. })
                 || original.target != record.target
             {
@@ -460,11 +489,8 @@ impl RecordIndex {
                     record.header.id
                 );
             }
-            if let Some(issue) = follow_up {
-                self.ensure_issue(issue, "follow-up", &record.header.id)?;
-            }
             if let Some(previous) = supersedes {
-                let previous_record = self.require_review(previous)?;
+                let previous_record = &self.reviews[previous];
                 if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
                 {
                     bail!("disposition supersedes a decision for another finding");
@@ -504,7 +530,9 @@ impl RecordIndex {
                     ));
                     continue;
                 }
-                if let Err(error) = self.ensure_issue(&blocked.id, "blocks", id) {
+                if let Err(error) =
+                    self.ensure_reference(("issue", id), "blocks", "issue", &blocked.id)
+                {
                     errors.push(error);
                     continue;
                 }
@@ -528,7 +556,9 @@ impl RecordIndex {
                     ));
                     continue;
                 }
-                if let Err(error) = self.ensure_issue(&child.id, "children", id) {
+                if let Err(error) =
+                    self.ensure_reference(("issue", id), "children", "issue", &child.id)
+                {
                     errors.push(error);
                     continue;
                 }
@@ -551,9 +581,12 @@ impl RecordIndex {
                 parents.insert(child.id.clone(), id.clone());
             }
             for relation in &record.relationships.relates {
-                if let Err(error) =
-                    self.ensure_record(&relation.kind, &relation.id, &relation.relation_type, id)
-                {
+                if let Err(error) = self.ensure_reference(
+                    ("issue", id),
+                    &relation.relation_type,
+                    &relation.kind,
+                    &relation.id,
+                ) {
                     errors.push(error);
                     continue;
                 }
@@ -705,10 +738,14 @@ impl RecordIndex {
             Ok(())
         };
         let checked_by_issue_graph = source_kind == "issue";
-        // A missing target is reported once, here or by `index_issue_graph`.
+        // A review's attachments mirror its typed references, which
+        // `validate_reviews` checks.
+        let checked_by_reviews = source_kind == "review";
+        // A missing target is reported once, here, by `index_issue_graph` or
+        // by `validate_reviews`.
         let exists =
             |kind: &str, id: &str, relation: &str, checked: bool, errors: &mut Vec<_>| match self
-                .ensure_record(kind, id, relation, source_id)
+                .ensure_reference((source_kind, source_id), relation, kind, id)
             {
                 Ok(()) => true,
                 Err(error) => {
@@ -737,7 +774,7 @@ impl RecordIndex {
                 &attachment.kind,
                 &attachment.id,
                 &attachment.role,
-                false,
+                checked_by_reviews,
                 errors,
             ) {
                 if let Err(error) = push(
@@ -775,20 +812,27 @@ impl RecordIndex {
         }
     }
 
-    fn ensure_issue(&self, id: &str, relation: &str, source_id: &str) -> Result<()> {
-        if self.issues.contains_key(id) {
-            Ok(())
-        } else {
-            bail!("Issue {source_id} has {relation} reference to missing issue {id}")
-        }
-    }
-
-    fn ensure_record(&self, kind: &str, id: &str, relation: &str, source_id: &str) -> Result<()> {
+    /// Fails when `source`'s `relation` names a missing record, naming the
+    /// source by its kind and record file.
+    fn ensure_reference(
+        &self,
+        (source_kind, source_id): (&str, &str),
+        relation: &str,
+        kind: &str,
+        id: &str,
+    ) -> Result<()> {
         if self.record_exists(kind, id) {
-            Ok(())
-        } else {
-            bail!("{source_id} has {relation} reference to missing {kind} {id}")
+            return Ok(());
         }
+        let source = match source_kind {
+            "evidence" => "Evidence record",
+            "review" => "Review",
+            _ => "Issue",
+        };
+        bail!(
+            "{source} {source_id} in {} has {relation} reference to missing {kind} {id}",
+            record_file(source_kind, source_id).display()
+        )
     }
 
     fn validate_hierarchy_shapes(&self, errors: &mut Vec<anyhow::Error>) {
@@ -905,7 +949,7 @@ impl RecordIndex {
             if let Err(error) = crate::workflow_policy::validate_issue_against_policy(
                 &policy,
                 &record.issue,
-                &policy_path,
+                &record_file("issue", &record.issue.id),
             ) {
                 errors.push(error);
             }
@@ -1592,6 +1636,74 @@ mod tests {
         );
     }
 
+    fn disposition(
+        id: &str,
+        target: &str,
+        finding: &str,
+        supersedes: &str,
+        follow_up: &str,
+    ) -> ReviewRecord {
+        let commit = "a".repeat(40);
+        let text = format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: decided\ntarget: {target}\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: disposition\n  finding: {finding}\n  decision: fix_now\n  supersedes: {supersedes}\n  resolution_commit: {commit}\n  follow_up: {follow_up}\n---\n\ndecided\n"
+        );
+        atelier_records::review::parse_review_record(&text, Path::new(&format!("reviews/{id}.md")))
+            .unwrap()
+    }
+
+    fn review_validation_errors(reviews: Vec<ReviewRecord>) -> Vec<String> {
+        let dir = tempdir().unwrap();
+        RecordIndex::validation_errors(
+            &dir.path().join(".atelier"),
+            vec![issue_record("atelier-real", "task", "todo")],
+            Vec::new(),
+            reviews,
+        )
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+    }
+
+    #[test]
+    fn disposition_missing_finding_and_supersedes_reports_each_once() {
+        let errors = review_validation_errors(vec![disposition(
+            "atelier-dsp1",
+            "atelier-real",
+            "atelier-nofi",
+            "atelier-nosu",
+            "null",
+        )]);
+        let path = ".atelier/reviews/atelier-dsp1.md";
+        assert_eq!(
+            errors,
+            [
+                format!("Review atelier-dsp1 in {path} has finding reference to missing review atelier-nofi"),
+                format!("Review atelier-dsp1 in {path} has supersedes reference to missing review atelier-nosu"),
+            ]
+        );
+    }
+
+    #[test]
+    fn review_with_every_reference_missing_reports_each_once() {
+        let errors = review_validation_errors(vec![disposition(
+            "atelier-dsp2",
+            "atelier-gone",
+            "atelier-nofi",
+            "atelier-nosu",
+            "atelier-nofu",
+        )]);
+        let path = ".atelier/reviews/atelier-dsp2.md";
+        assert_eq!(
+            errors,
+            [
+                format!("Review atelier-dsp2 in {path} has review target reference to missing issue atelier-gone"),
+                format!("Review atelier-dsp2 in {path} has follow-up reference to missing issue atelier-nofu"),
+                format!("Review atelier-dsp2 in {path} has finding reference to missing review atelier-nofi"),
+                format!("Review atelier-dsp2 in {path} has supersedes reference to missing review atelier-nosu"),
+            ]
+        );
+    }
+
     #[test]
     fn duplicate_id_is_reported_once_without_missing_reference_cascade() {
         let dir = tempdir().unwrap();
@@ -1656,7 +1768,7 @@ mod tests {
             errors,
             [
                 "Duplicate record ID in record files: atelier-twin",
-                "atelier-ref has related reference to missing issue atelier-twin",
+                "Evidence record atelier-ref in .atelier/evidence/atelier-ref.md has related reference to missing issue atelier-twin",
             ]
         );
     }

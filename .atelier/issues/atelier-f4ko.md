@@ -4,6 +4,9 @@ id: "atelier-f4ko"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-f4ko
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T09:06:35.032097305+00:00"
+status: "done"
 title: "Name the record a load-time policy or reference error is about"
-updated_at: "2026-10-17T08:57:24.590052777+00:00"
+updated_at: "2026-10-17T09:06:35.032097305+00:00"
 ---
 
 ## Goal
@@ -31,3 +35,7 @@ Found in review of atelier-x68o:
 - Each error names the record file it is about, once, with the right record kind.
 - `check` reports a broken review target once.
 - Tests cover an invalid status, an invalid issue type and a missing review target.
+
+## Close Reason
+
+Load-time policy errors about an issue now name its .atelier/issues/<id>.md instead of workflow.yaml; missing-reference errors name the source record by kind and file, so a broken review target reads 'Review <id> in .atelier/reviews/<id>.md has review target reference ...' and check reports it once. Covered by CLI tests for invalid status, invalid issue_type and a missing review target.

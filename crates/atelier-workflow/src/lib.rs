@@ -1483,15 +1483,18 @@ fn validate_transition_statuses(
     Ok(())
 }
 
+/// Checks one issue against the policy. Errors about the issue itself name
+/// `report_path`: the issue's record file when validating stored records.
+/// Errors about a missing workflow mapping name the workflow file.
 pub fn validate_issue_against_policy(
     policy: &WorkflowPolicy,
     issue: &Issue,
-    policy_path: &Path,
+    report_path: &Path,
 ) -> Result<()> {
     if !policy.issue_types.contains_key(&issue.issue_type) {
         return Err(WorkflowPolicyError {
             code: "workflow_issue_type_unknown",
-            path: policy_path.display().to_string(),
+            path: report_path.display().to_string(),
             message: format!(
                 "issue {} has issue_type '{}' which is not registered in issue_types",
                 issue.id, issue.issue_type
@@ -1535,7 +1538,7 @@ pub fn validate_issue_against_policy(
         allowed.sort();
         return Err(WorkflowPolicyError {
             code: "workflow_issue_status_invalid",
-            path: policy_path.display().to_string(),
+            path: report_path.display().to_string(),
             message: format!(
                 "issue {} has status '{}' which is not valid for workflow '{}' selected by issue_type '{}'; allowed statuses: {}",
                 issue.id,
@@ -1551,20 +1554,20 @@ pub fn validate_issue_against_policy(
         }
         .into());
     }
-    validate_issue_fields_against_policy(policy, issue, policy_path)?;
+    validate_issue_fields_against_policy(policy, issue, report_path)?;
     Ok(())
 }
 
 fn validate_issue_fields_against_policy(
     _policy: &WorkflowPolicy,
     issue: &Issue,
-    policy_path: &Path,
+    report_path: &Path,
 ) -> Result<()> {
     if let Some(strategy) = &issue.strategy {
         if issue.issue_type != "mission" {
             return invalid_strategy_field(
                 issue,
-                policy_path,
+                report_path,
                 "strategy is only valid on issue_type 'mission'",
             );
         }
@@ -1577,7 +1580,7 @@ fn validate_issue_fields_against_policy(
         ] {
             validate_branch_value(
                 value,
-                &policy_path.display().to_string(),
+                &report_path.display().to_string(),
                 &format!("workflow_branch.{key}"),
                 "workflow branch",
             )?;
@@ -1586,10 +1589,10 @@ fn validate_issue_fields_against_policy(
     Ok(())
 }
 
-fn invalid_strategy_field(issue: &Issue, policy_path: &Path, reason: &str) -> Result<()> {
+fn invalid_strategy_field(issue: &Issue, report_path: &Path, reason: &str) -> Result<()> {
     Err(WorkflowPolicyError {
         code: "workflow_issue_field_invalid",
-        path: policy_path.display().to_string(),
+        path: report_path.display().to_string(),
         message: format!("issue {} field 'strategy' is invalid: {}", issue.id, reason),
         field: Some(ISSUE_STRATEGY_FIELD.to_string()),
         reference: Some(issue.id.clone()),
