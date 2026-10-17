@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-91w1
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Replace internal jargon in output with CONTEXT.md terms"
-updated_at: "2026-10-17T07:56:15.929940051+00:00"
+updated_at: "2026-10-17T07:56:16.485566411+00:00"
 ---
 
 ## Goal
