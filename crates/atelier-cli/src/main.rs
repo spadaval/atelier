@@ -31,7 +31,7 @@ Planning:
 Records:
   evidence      Capture validation evidence
   review        Record independent reviews, findings, and decisions
-  merge         Check gates and fast-forward a reviewed work branch
+  merge         Check gates and integrate a reviewed work branch
 
 Maintenance:
   check         Validate every tracker record
@@ -220,7 +220,7 @@ enum Commands {
         #[command(subcommand)]
         action: ReviewCommands,
     },
-    /// Check merge gates and fast-forward without creating commits
+    /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
     Merge {
         id: String,
         #[arg(long)]

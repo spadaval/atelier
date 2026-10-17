@@ -97,7 +97,8 @@ merge_checks:
 
 This is a fragment of the full workflow schema, not a complete policy.
 `shell.check` is accepted only in `merge_checks`, never in transition validators.
-It runs in the work checkout; a zero exit status passes and output explains the
+It runs in the work checkout, or under `merge_commit` in a temporary checkout of
+the merged tree; a zero exit status passes and output explains the
 result. Checks must preserve the pinned checkout and records. Git hooks are
 disabled during integration and cleanup, so put mandatory checks in this
 reviewed policy surface.
@@ -113,9 +114,13 @@ be valid; fallback does not excuse an invalid candidate. Ordinary commands can
 read working policy and visibly fall back to committed history when it is
 malformed. Fix policy through reviewed work.
 
-The supported gated integration strategy is `fast_forward_only`. Atelier never creates
-commits. If the base has moved on, merge it into the work branch with ordinary
-Git and renew any proof or approval made stale by the merge. Rebase only before
+The supported gated integration strategies are `fast_forward_only`, the
+default, and `merge_commit`. Under `fast_forward_only`, Atelier creates no
+commit: if the base has moved on, merge it into the work branch with ordinary
+Git and renew any proof or approval made stale by the merge. Under
+`merge_commit`, a branch that merges cleanly into the current base lands as a
+merge commit, the only commit Atelier creates, after `merge_checks` (required)
+pass on the merged tree; see [reviews and merge](reviews-and-merge.md). Rebase only before
 any review is recorded: rebasing rewrites the commits review records pin.
 
 Consult the workflow parser and command help for exact schema fields. See

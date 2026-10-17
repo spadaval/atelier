@@ -67,14 +67,14 @@ before installing its issue and evidence directories; see the
 [bundle input contract](../spec/bundle/schema.md).
 
 Transitions write records and run read-only checks. `start` explicitly prepares
-a branch. `merge` explicitly checks gates and fast-forwards; it writes no
-tracker records and creates no commits. Agents commit record mutations with
+a branch. `merge` explicitly checks gates and fast-forwards (or, under `merge_commit`,
+creates only the merge commit); it writes no tracker records. Agents commit record mutations with
 the implementation. Active work must resolve to a recorded owner branch.
 
 ## Git and policy
 
 A work branch carries its own graph and done claim. The base branch obtains
-those records with the same fast-forward that integrates code. Integration
+those records with the same fast-forward or merge that integrates code. Integration
 facts and author identities come from Git.
 
 Merge policy is read from the base branch's `.atelier/workflow.yaml`, so a work

@@ -12,7 +12,8 @@ locally and push it, including `master` after a gated merge, under repository
 policy; force-pushing `master` or deleting remote branches requires the human.
 
 Atelier's merge command checks the reviewed base policy and fast-forwards
-committed work. It never commits or pushes. GitHub collaboration surfaces may
+committed work, or creates only a merge commit under `merge_commit`. It never
+pushes. GitHub collaboration surfaces may
 support discussion and dependency updates, but do not create a second tracker
 or substitute for in-repo approval and evidence.
 

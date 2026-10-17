@@ -14,7 +14,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `bundle` | Preview and apply one-shot graph input. |
 | `evidence` | Record, show, list, and attach commit-bound proof. |
 | `review` | Append approvals, findings, dispositions, and explicit trivial exemptions. |
-| `merge` | Check base policy and fast-forward reviewed work. |
+| `merge` | Check base policy and fast-forward reviewed work, or merge it under `merge_commit`. |
 | `land` | Check handoff invariants and committed records. |
 | `doctor` | Check every done claim and the whole review history. |
 | `setup` | Install supported harness hooks. |
@@ -63,7 +63,7 @@ Commit code and related tracker records yourself. Record focused proof and
 independent review before `merge`; see [evidence](validation.md) and
 [reviews and merge](reviews-and-merge.md). Done claims belong in committed work
 branch records. Run `atelier land` before a session handoff and
-`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never commits, pushes, squashes, or creates merge commits.
+`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never pushes or squashes, and commits only the merge commit that `merge` creates under `merge_strategy: merge_commit`.
 
 ## Review and session commands
 

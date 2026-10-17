@@ -105,9 +105,27 @@ an uncommitted change. Checks
 cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
-Merge uses the base branch's committed policy and fast-forwards only. If the
-base has moved on, merge it into the work branch, record fresh proof, and renew
-review only if the merge needed resolving (see approval freshness). Rebase only
+Merge uses the base branch's committed policy and its
+`branch_policy.merge_strategy`. Under `fast_forward_only`, the default, merge
+fast-forwards only. If the base has moved on, merge it into the work branch,
+record fresh proof, and renew review only if the merge needed resolving (see
+approval freshness).
+
+Under `merge_commit`, a branch that is behind the base can land without
+catching up. Merge builds Git's merge of the work branch into the current base
+with `git merge-tree --write-tree` and refuses with `merge_conflict`, naming
+the files, if any path conflicts; resolve those on the work branch as above.
+Evidence at the branch head does not prove the merged tree, so the policy must
+have `merge_checks` (otherwise `merge_unproven`), and they run in a temporary
+detached checkout of the merge commit instead of the work checkout. The gate
+output adds `merge.merged_tree`, naming the tree and base commit the checks ran
+on, and the merge commit's message lists the checks that passed on its tree.
+The merge commit reaches the base only when every gate passes and the base has
+not moved during the checks (`merge_snapshot_changed`). The approval of the
+branch head carries over, because a clean merge combines two reviewed changes
+and nobody edited the result. A lockfile that merges cleanly but is
+inconsistent is caught only by a `merge_checks` command that validates it, such
+as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
 approvals pin, and `merge` then refuses with "pins a commit outside the work
 branch". To recover: reset the branch to its pre-rebase tip (from `git
@@ -121,7 +139,8 @@ Bootstrap a valid committed policy on the base before starting governed work;
 a work branch cannot weaken its own merge policy. See
 [workflow configuration](workflow-configuration.md).
 
-Atelier creates no commit, writes no tracker state, and does not push. Git hooks
+Merge creates the merge commit under `merge_commit` and no other commit, writes
+no tracker state, and does not push. Git hooks
 are disabled during gated integration and cleanup, with an explicit notice.
 Put required read-only checks in the reviewed base policy's `merge_checks`.
 
