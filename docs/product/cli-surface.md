@@ -7,7 +7,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | Surface | Purpose |
 | --- | --- |
 | `init` | Initialize repository records and policy. |
-| `status` | Orient in the checkout and inspect labeled branch summaries. |
+| `status` | Orient a session: checkout, owner, work, missions, and labeled branch summaries. |
 | `work` | Ready, blocked, active, all, and mission views. |
 | `issue` | Create, list, show, update, transition, note, link, and unlink work. |
 | `start` | Prepare the branch owner and start selected work. |
@@ -15,7 +15,6 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `evidence` | Record, show, list, and attach commit-bound proof. |
 | `review` | Append approvals, findings, dispositions, and explicit trivial exemptions. |
 | `merge` | Check base policy and fast-forward reviewed work. |
-| `prime` | Restore session context. |
 | `land` | Check handoff invariants and committed records. |
 | `doctor` | Check every done claim and the whole review history. |
 | `setup` | Install supported harness hooks. |
@@ -25,7 +24,6 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 ## Orientation and ordinary work
 
 ```text
-atelier prime
 atelier status
 atelier work ready
 atelier work human
@@ -73,8 +71,9 @@ branch records. Run `atelier land` before a session handoff and
 `--identity`, and summary. `review disposition` appends a finding decision.
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
-`prime` restores context; `land [id] [--install]` checks committed records and
-the claims that changed since the base; `doctor` checks every claim.
+`status` orients a session; `land [id] [--install]` checks committed records and
+the claims that changed since the base; `doctor` checks every claim. `prime` is
+a deprecated alias for `status`, kept for installed hooks.
 `setup claude [--binary <path>]` installs the supported hooks. See
 [sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
 
