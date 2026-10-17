@@ -72,16 +72,18 @@ Landing also checks completed claims elsewhere in the checkout that a change
 since a trusted point can affect. The trusted point is the merge base of the
 base's upstream with the branch base on a work branch, or with HEAD otherwise:
 the local base can hold commits no land has checked, so it is not trusted.
-Without an upstream, every claim is checked. Every change that reaches the base had its own claims checked when it
-landed, so earlier history holds by induction. A claim is checked when its
-record changed; when a changed issue record reaches it through blocked,
-parent, child, or advances links, directly or along a chain, before or after the change; when a review or evidence record about it
-was added, removed, or retargeted; when the workflow policy at HEAD or on
-the base differs from the trusted point; or, under a policy that gates on
-`lint.none_blocking`, which reads every record, when any record changed. Review history is checked for
-append-only edits from the same point. `atelier doctor` checks every completed
-claim and the whole review history, for history that reached the base without
-the gates, such as a direct push (atelier-37uq).
+Without an upstream, every claim is checked. Every change that reaches the
+base had its own claims checked when it landed, so earlier history holds by
+induction. A claim is checked when its record changed; when a changed issue
+record reaches it through blocked, parent, child, or advances links, directly
+or along a chain, before or after the change; when a review or evidence record
+about it was added, removed, or retargeted; when the workflow policy at HEAD
+or on the base differs from the trusted point; or, under a policy that gates
+on `lint.none_blocking`, which reads every record, when any record changed.
+Review history is checked for append-only edits from the same point.
+`atelier doctor` checks every completed claim and the whole review history,
+for history that reached the base without the gates, such as a direct push
+(atelier-37uq).
 
 Checked integrated claims retain proof and independent acceptance that were
 valid when completion was claimed. Historical acceptance preserves the original work's
