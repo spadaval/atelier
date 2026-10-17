@@ -10,8 +10,8 @@ use atelier_core::Issue;
 use crate::commands::git::InFlight;
 use crate::human_output::{
     last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_unassigned_groups, DisplayRole, FooterAction,
-    IssueHeadingRow, IssueListPanel, IssueListRow, RenderContext, TextStyle,
+    render_lines_section, render_metadata, render_unassigned_groups, FooterAction, IssueHeadingRow,
+    IssueListPanel, IssueListRow, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -433,22 +433,21 @@ fn scoped_dashboard(
         return Ok(());
     }
     let counts = &work.totals;
-    let mut metadata = vec![
-        ("Status", issue.status.clone()),
-        (
-            "Work",
-            format!(
-                "active {}, ready {},{} blocked {}, done {}, backlog {}",
-                counts.active,
-                counts.ready,
-                human_count(counts),
-                counts.blocked,
-                counts.done,
-                counts.backlog
-            ),
+    let mut metadata = vec![(
+        "Work",
+        format!(
+            "active {}, ready {},{} blocked {}, done {}, backlog {}",
+            counts.active,
+            counts.ready,
+            human_count(counts),
+            counts.blocked,
+            counts.done,
+            counts.backlog
         ),
-    ];
+    )];
     let title = if let Some(proof_gaps) = proof_gaps {
+        // The parent's title line has no status; a mission's names it.
+        metadata.insert(0, ("Status", issue.status.clone()));
         metadata.extend([
             (
                 "Mission",
@@ -555,9 +554,10 @@ impl ScopedWork {
                     .iter()
                     .filter(|(_, work)| state.is_none_or(|state| state == work.classification))
                     .map(|(issue, work)| IssueListRow {
-                        role: DisplayRole::for_work(work.classification.label()),
                         id: issue.id.clone(),
-                        status: Some(issue.status.clone()),
+                        status: issue.status.clone(),
+                        status_category: work.status_category.clone(),
+                        classification: work.classification,
                         priority: issue.priority.clone(),
                         title: if work.open_blockers.is_empty() {
                             issue.title.clone()
@@ -575,13 +575,19 @@ impl ScopedWork {
                 if rows.is_empty() && filter == DashboardFilter::Summary {
                     return None;
                 }
-                Some(IssueListPanel::new(*title, rows).limit(
+                let panel = IssueListPanel::new(*title, rows).limit(
                     if filter == DashboardFilter::Summary {
                         8
                     } else {
                         usize::MAX
                     },
-                ))
+                );
+                // Only the unfiltered list mixes work states.
+                Some(if state.is_none() {
+                    panel.row_states()
+                } else {
+                    panel
+                })
             })
             .collect()
     }

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::commands::{self, git};
 use crate::human_output::{
     path_summary, render_lines_section, render_metadata, render_page, render_text_section,
-    IssueListPanel, IssueListRow, RenderContext,
+    status_cue, IssueListPanel, IssueListRow, RenderContext,
 };
 use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
@@ -209,7 +209,8 @@ impl Owner {
     ) -> Result<Self> {
         let record = index.issue_record(id).context("owner record missing")?;
         let scope = atelier_app::review_gate::scope(index, id)?;
-        let status = if policy.status_category(&record.issue.status) == Some("done") {
+        let category = policy.status_category(&record.issue.status);
+        let status = if category == Some("done") {
             git::unmerged_done_label(
                 repo,
                 id,
@@ -220,14 +221,20 @@ impl Owner {
         } else {
             record.issue.status.clone()
         };
+        let status = status_cue(&status, category, None);
         let content = atelier_records::render_issue_record(record)?;
         let (_, body) =
             atelier_records::split_document(&content).context("owner has no record body")?;
         let mut missions = Vec::new();
         for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
             if atelier_app::objective_graph::mission_issue_ids(index, &mission.id)?.contains(id) {
+                let status = status_cue(
+                    &mission.status,
+                    policy.status_category(&mission.status),
+                    None,
+                );
                 missions.push((
-                    format!("{} [{}] {}", mission.id, mission.status, mission.title),
+                    format!("{} [{status}] {}", mission.id, mission.title),
                     mission
                         .strategy
                         .as_ref()
@@ -256,13 +263,16 @@ impl Owner {
                 .chain(&buckets.blocked)
                 .take(RECORDS_SHOWN)
                 .map(|row| {
-                    format!(
-                        "{} [{}] {} — blockers: {}",
-                        row.id,
-                        row.status,
-                        row.title,
-                        row.open_blockers.join(", ")
-                    )
+                    let cue = status_cue(
+                        &row.status,
+                        row.status_category.as_deref(),
+                        Some(row.classification),
+                    );
+                    let mut line = format!("{} [{cue}] {}", row.id, row.title);
+                    if !row.open_blockers.is_empty() {
+                        line.push_str(&format!(" — blockers: {}", row.open_blockers.join(", ")));
+                    }
+                    line
                 }),
         );
         Ok(Self {
@@ -399,9 +409,11 @@ fn render_status_page(
         .active
         .iter()
         .map(|issue| IssueListRow {
-            role: crate::human_output::DisplayRole::Executable,
             id: issue.id.clone(),
-            status: issue.status_category.clone(),
+            // The heading names the active category; the row keeps the status.
+            status: issue.status.clone(),
+            status_category: issue.status_category.clone(),
+            classification: issue.classification,
             priority: issue.priority.clone(),
             title: issue.title.clone(),
             blockers: 0,

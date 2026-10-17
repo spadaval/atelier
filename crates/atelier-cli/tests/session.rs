@@ -1054,6 +1054,12 @@ fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
         Some("docs/strategies/plan.md"),
         "{status}"
     );
+    // A row without blockers names none.
+    assert_eq!(
+        section(&status, "Owner Work"),
+        [format!("{} [in_progress] Session owner", f.id)],
+        "{status}"
+    );
     let reviews = section(&status, "Reviews");
     assert_eq!(reviews.len(), 8, "{status}");
     for (row, n) in reviews.iter().zip((2..10).rev()) {
@@ -3307,7 +3313,7 @@ fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
     for command in ["prime", "status"] {
         let output = ok(f.path(), &[command]);
         assert!(
-            output.contains(&format!("{} [done, merged into main]", f.id)),
+            output.contains(&format!("{} [✓ done, merged into main]", f.id)),
             "{command}: {output}"
         );
     }
@@ -3411,7 +3417,7 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     // The kept branch's row on the base reads its committed records.
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} [done, merged into main]", f.id)),
+        output.contains(&format!("{} [✓ done, merged into main]", f.id)),
         "{output}"
     );
 
@@ -3424,7 +3430,7 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     let output = ok(f.path(), &["status"]);
     assert!(
         output.contains(&format!(
-            "{} [superseded on branch {}, not merged into main]",
+            "{} [✓ superseded on branch {}, not merged into main]",
             f.id, f.branch
         )),
         "{output}"
@@ -3974,7 +3980,7 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
     f.terminal(&f.id);
-    let unmerged = format!("[done on branch {}, not merged into main]", f.branch);
+    let unmerged = format!("[✓ done on branch {}, not merged into main]", f.branch);
     let status = ok(f.path(), &["status"]);
     assert!(
         field(&status, "Owner")
@@ -3988,7 +3994,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains("[done, merged into main]"), "{status}");
+    assert!(status.contains("[✓ done, merged into main]"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4009,7 +4015,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     let status = ok(f.path(), &["status"]);
     assert!(
         field(&status, "Owner").is_some_and(|owner| owner.starts_with(&format!(
-            "{fresh} [done on branch task/{fresh}, not merged into main]"
+            "{fresh} [✓ done on branch task/{fresh}, not merged into main]"
         ))),
         "{status}"
     );
@@ -4028,7 +4034,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
         (&f.id, format!("    ↳ in_progress on {}", f.branch)),
         (
             &finished,
-            format!("    ↳ done on task/{finished}, not merged"),
+            format!("    ↳ ✓ done on task/{finished}, not merged"),
         ),
     ];
     for args in [&["work", "ready"][..], &["work", "all"], &["status"]] {

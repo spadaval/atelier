@@ -502,9 +502,9 @@ impl BranchSummaries {
             .map(|owner| match owner {
                 Ok(owner) => {
                     let status = match owner.merged {
-                        Some(true) => format!("{}, merged into {base}", owner.status),
+                        Some(true) => format!("✓ {}, merged into {base}", owner.status),
                         Some(false) => format!(
-                            "{} on branch {}, not merged into {base}",
+                            "✓ {} on branch {}, not merged into {base}",
                             owner.status, owner.branch
                         ),
                         None => owner.status.clone(),
@@ -557,10 +557,12 @@ impl BranchSummaries {
                     &owner.id,
                     match owner.merged {
                         Some(true) => format!(
-                            "{} on {}, merged into {}",
+                            "✓ {} on {}, merged into {}",
                             owner.status, owner.branch, self.base_branch
                         ),
-                        Some(false) => format!("{} on {}, not merged", owner.status, owner.branch),
+                        Some(false) => {
+                            format!("✓ {} on {}, not merged", owner.status, owner.branch)
+                        }
                         None => format!("{} on {}", owner.status, owner.branch),
                     },
                 ),

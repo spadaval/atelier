@@ -727,18 +727,28 @@ fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
         contract_pos < implementation_pos,
         "visible blocker child should appear before dependent child:\n{stdout}"
     );
+    // Subissues show each child's work state, marked ⚠ when blocked.
     assert!(
-        stdout.contains(&format!("ready {contract_id} [todo]")),
-        "{stdout}"
+        subissues.contains(&format!("\n  {contract_id} [ready] medium")),
+        "{subissues}"
     );
     assert!(
-        stdout.contains(&format!("blocked {implementation_id} [todo]")),
-        "{stdout}"
+        subissues.contains(&format!("\n  {implementation_id} [⚠ blocked] medium")),
+        "{subissues}"
     );
     assert!(
-        stdout.contains(&format!(
-            "blocked {external_child_id} [todo] medium - External blocked child | 1 blocker"
+        subissues.contains(&format!(
+            "\n  {external_child_id} [⚠ blocked] medium - External blocked child | 1 blocker"
         )),
+        "{subissues}"
+    );
+    // The rollup's state panels leave the state to their heading.
+    let blocked = stdout
+        .split("Blocked Work\n")
+        .nth(1)
+        .expect("Blocked Work panel");
+    assert!(
+        blocked.contains(&format!("\n  {implementation_id} [⚠ todo] medium")),
         "{stdout}"
     );
     assert!(!stdout.contains(&external_blocker_id), "{stdout}");
@@ -2458,9 +2468,12 @@ fn test_work_blocked_lists_directly_blocked_issues() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "blocked"]);
     assert!(success, "work blocked failed: {stderr}");
-    assert!(stdout.contains("Blocked issue"));
-    assert!(stdout.contains("blocked"));
-    assert!(stdout.contains("1 blocker"));
+    assert!(
+        stdout.contains(&format!(
+            "Blocked Work\n------------\n  {blocked_id} [⚠ todo] medium - Blocked issue | 1 blocker\n"
+        )),
+        "{stdout}"
+    );
     assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", "blocked"]);
@@ -3090,6 +3103,199 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
     assert!(verbose.contains("Description"), "{verbose}");
 }
 
+/// ADR 0022: one line per item, no state the section heading already names,
+/// ✓ and ⚠ next to the status word, and a leading state only where a list
+/// mixes states.
+#[test]
+fn test_work_views_render_one_dense_line_per_item() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let create = |args: &[&str]| {
+        let mut command = vec!["--quiet", "issue", "create"];
+        command.extend_from_slice(args);
+        let (success, stdout, stderr) = run_atelier(dir.path(), &command);
+        assert!(success, "create {args:?} failed: {stderr}");
+        stdout.trim().to_string()
+    };
+    let mission = create(&["Dense mission", "--issue-type", "mission"]);
+    let active = create(&["Active item"]);
+    let ready = create(&["Ready item"]);
+    let blocked = create(&["Blocked item"]);
+    let done = create(&["Done item"]);
+    let backlog = create(&["Backlog item", "--status", "backlog"]);
+    let human = create(&["Human item", "--label", "needs-human"]);
+    let parent = create(&["Parent feature", "--issue-type", "feature"]);
+    let child = create(&["Child task", "--parent", &parent]);
+    let unassigned = create(&["Unassigned blocked", "--label", "dense"]);
+    for id in [&active, &ready, &blocked, &done, &backlog, &human, &parent] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", &mission, id, "--role", "advances"],
+        );
+        assert!(success, "advances link failed: {stderr}");
+    }
+    for (id, blocker) in [(&blocked, &ready), (&unassigned, &ready)] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "link", id, blocker, "--role", "blocked_by"],
+        );
+        assert!(success, "blocker link failed: {stderr}");
+    }
+    set_issue_status(dir.path(), &active, "in_progress");
+    set_issue_status(dir.path(), &done, "done");
+    let section = |output: &str, title: &str| -> Vec<String> {
+        output
+            .split(&format!("\n{title}\n{}\n", "-".repeat(title.len())))
+            .nth(1)
+            .unwrap_or_else(|| panic!("no {title} section:\n{output}"))
+            .split("\n\n")
+            .next()
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let row = |id: &str, status: &str, title: &str| format!("  {id} [{status}] medium - {title}");
+    let blocked_row = format!(
+        "{} | blockers: {ready} | 1 blocker",
+        row(&blocked, "⚠ todo", "Blocked item")
+    );
+
+    let (success, summary, stderr) = run_atelier(dir.path(), &["work", "mission", &mission]);
+    assert!(success, "work mission failed: {stderr}");
+    assert!(
+        summary.starts_with(&format!("{mission} [mission] draft - Dense mission\n")),
+        "{summary}"
+    );
+    // The title line names the status, so no Status line repeats it.
+    assert!(!summary.contains("Status:"), "{summary}");
+    assert!(!summary.contains("shown for context"), "{summary}");
+    assert_eq!(
+        section(&summary, "Active Work"),
+        [row(&active, "in_progress", "Active item")]
+    );
+    let mut ready_rows = section(&summary, "Ready Work");
+    ready_rows.sort();
+    let mut expected_ready = vec![
+        row(&ready, "todo", "Ready item"),
+        row(&child, "todo", "Child task"),
+    ];
+    expected_ready.sort();
+    assert_eq!(ready_rows, expected_ready);
+    assert_eq!(
+        section(&summary, "Needs a Human"),
+        [row(&human, "todo", "Human item")]
+    );
+    assert_eq!(
+        section(&summary, "Parents and Missions"),
+        [row(&parent, "todo", "Parent feature")]
+    );
+    assert_eq!(
+        section(&summary, "Blocked Work"),
+        std::slice::from_ref(&blocked_row)
+    );
+    assert_eq!(
+        section(&summary, "Backlog Work"),
+        [row(&backlog, "backlog", "Backlog item")]
+    );
+    assert_eq!(
+        section(&summary, "Done Work"),
+        [row(&done, "✓ done", "Done item")]
+    );
+
+    // Unfiltered, the list mixes states, so a row leads with its state when
+    // its status word does not already say it.
+    let (success, scoped, stderr) =
+        run_atelier(dir.path(), &["work", "mission", &mission, "--all"]);
+    assert!(success, "work mission --all failed: {stderr}");
+    let mut scoped_rows = section(&scoped, "Scoped Work");
+    scoped_rows.sort();
+    let mut expected_scoped = vec![
+        format!(
+            "  active{}",
+            &row(&active, "in_progress", "Active item")[1..]
+        ),
+        format!("  ready{}", &row(&ready, "todo", "Ready item")[1..]),
+        format!("  ready{}", &row(&child, "todo", "Child task")[1..]),
+        format!("  needs human{}", &row(&human, "todo", "Human item")[1..]),
+        format!("  context{}", &row(&parent, "todo", "Parent feature")[1..]),
+        format!("  blocked{}", &blocked_row[1..]),
+        row(&backlog, "backlog", "Backlog item"),
+        row(&done, "✓ done", "Done item"),
+    ];
+    expected_scoped.sort();
+    assert_eq!(scoped_rows, expected_scoped, "{scoped}");
+
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "all"]);
+    assert!(success, "work all failed: {stderr}");
+    assert!(!all.contains("shown for context"), "{all}");
+    assert_eq!(
+        section(&all, "Active Work"),
+        [row(&active, "in_progress", "Active item")]
+    );
+    assert_eq!(
+        section(&all, "Needs a Human"),
+        [row(&human, "todo", "Human item")]
+    );
+    // A draft mission is backlog, not context.
+    assert_eq!(
+        section(&all, "Parents and Missions (context)"),
+        [row(&parent, "todo", "Parent feature")]
+    );
+    let mut blocked_rows = section(&all, "Blocked Work");
+    blocked_rows.sort();
+    let mut expected_blocked = vec![
+        row(&blocked, "⚠ todo", "Blocked item") + " | 1 blocker",
+        row(&unassigned, "⚠ todo", "Unassigned blocked") + " | 1 blocker",
+    ];
+    expected_blocked.sort();
+    assert_eq!(blocked_rows, expected_blocked, "{all}");
+    let backlog_rows = section(&all, "Backlog Work");
+    assert!(
+        backlog_rows.contains(&row(&backlog, "backlog", "Backlog item")),
+        "{all}"
+    );
+    assert!(
+        backlog_rows.contains(&row(&mission, "draft", "Dense mission")),
+        "{all}"
+    );
+
+    let (success, parent_view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "work parent failed: {stderr}");
+    // A parent's title line has no status, so its Status line stays.
+    assert!(
+        parent_view.contains("\nStatus              : todo\n"),
+        "{parent_view}"
+    );
+    assert_eq!(
+        section(&parent_view, "Ready Work"),
+        [row(&child, "todo", "Child task")]
+    );
+    assert_eq!(
+        section(&parent_view, "Parents and Missions"),
+        [row(&parent, "todo", "Parent feature")]
+    );
+
+    let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    // The heading names the active category; the row keeps the status.
+    assert_eq!(
+        section(&status, "Current Work"),
+        [row(&active, "in_progress", "Active item")]
+    );
+    assert!(
+        section(&status, "Ready Work").contains(&row(&ready, "todo", "Ready item")),
+        "{status}"
+    );
+    assert!(
+        status.contains(&format!(
+            "\n  {unassigned} [⚠ todo] medium - Unassigned blocked | 1 blocker\n"
+        )),
+        "{status}"
+    );
+    assert!(!status.contains("shown for context"), "{status}");
+}
+
 #[test]
 fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
     let dir = tempdir().unwrap();
@@ -3443,7 +3649,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         "{subissues}"
     );
     assert!(
-        subissues.contains(&format!("shown for context {retired_blocked_id} [backlog]")),
+        subissues.contains(&format!("\n  {retired_blocked_id} [backlog]")),
         "{subissues}"
     );
     assert!(!subissues.contains("[blocked]"), "{subissues}");

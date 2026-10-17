@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::IsTerminal;
 
 use atelier_app::issue_inventory::IssueInventoryView;
+use atelier_app::work_classification::{WorkClassification, WorkRow};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RenderContext {
@@ -46,10 +47,6 @@ impl RenderContext {
             style_policy: StylePolicy::from_context(choice, is_terminal, no_color),
             width,
         }
-    }
-
-    pub(crate) fn style_policy(self) -> StylePolicy {
-        self.style_policy
     }
 
     pub(crate) fn paint(self, style: TextStyle, text: impl AsRef<str>) -> String {
@@ -131,9 +128,10 @@ pub(crate) fn render_lines_section(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct IssueListRow {
-    pub role: DisplayRole,
     pub id: String,
-    pub status: Option<String>,
+    pub status: String,
+    pub status_category: Option<String>,
+    pub classification: WorkClassification,
     pub priority: String,
     pub title: String,
     pub blockers: usize,
@@ -308,22 +306,23 @@ pub(crate) struct IssueListPanel {
     title: String,
     rows: Vec<IssueListRow>,
     limit: usize,
+    /// Rows lead with their work state, for panels whose title does not
+    /// name one state.
+    row_states: bool,
     /// A `↳` continuation under a row, keyed by issue ID.
     marks: BTreeMap<String, String>,
 }
 
 impl IssueListPanel {
-    pub(crate) fn from_work_rows(
-        title: impl Into<String>,
-        rows: &[atelier_app::work_classification::WorkRow],
-    ) -> Self {
+    pub(crate) fn from_work_rows(title: impl Into<String>, rows: &[WorkRow]) -> Self {
         Self::new(
             title,
             rows.iter()
                 .map(|row| IssueListRow {
-                    role: DisplayRole::for_work(row.state_label()),
                     id: row.id.clone(),
-                    status: Some(row.status.clone()),
+                    status: row.status.clone(),
+                    status_category: row.status_category.clone(),
+                    classification: row.classification,
                     priority: row.priority.clone(),
                     title: row.title.clone(),
                     blockers: row.open_blockers.len(),
@@ -332,17 +331,28 @@ impl IssueListPanel {
                 .collect(),
         )
     }
+
+    /// A panel titled by one work state, such as Ready Work, so its rows do
+    /// not repeat the state; see [`Self::row_states`] for mixed panels.
     pub(crate) fn new(title: impl Into<String>, rows: Vec<IssueListRow>) -> Self {
         Self {
             title: title.into(),
             rows,
             limit: 20,
+            row_states: false,
             marks: BTreeMap::new(),
         }
     }
 
     pub(crate) fn limit(mut self, limit: usize) -> Self {
         self.limit = limit;
+        self
+    }
+
+    /// Lead each row with its work state, unless its status word already
+    /// says it: for panels that mix states.
+    pub(crate) fn row_states(mut self) -> Self {
+        self.row_states = true;
         self
     }
 
@@ -367,16 +377,26 @@ impl IssueListPanel {
         let limit = self.limit.min(self.rows.len());
         for row in self.rows.iter().take(limit) {
             let indent = "  ".repeat(row.depth.max(1));
-            let role = row.role.render(context.style_policy());
-            lines.push(format!(
-                "{indent}{role} {}",
-                issue_row_text(
-                    &row.id,
-                    row.status.as_deref(),
-                    &row.priority,
-                    &row.title,
-                    row.blockers
+            let label = row.classification.label();
+            let state = if self.row_states && label != row.status {
+                format!(
+                    "{} ",
+                    context.paint(classification_style(row.classification), label)
                 )
+            } else {
+                String::new()
+            };
+            let cue = context.paint(
+                status_style(row.status_category.as_deref().unwrap_or_default()),
+                status_cue(
+                    &row.status,
+                    row.status_category.as_deref(),
+                    Some(row.classification),
+                ),
+            );
+            lines.push(format!(
+                "{indent}{state}{}",
+                issue_row_text(&row.id, &cue, &row.priority, &row.title, row.blockers)
             ));
             if let Some(mark) = self.marks.get(&row.id) {
                 lines.push(mark_line(&indent, mark));
@@ -394,29 +414,54 @@ impl IssueListPanel {
     }
 }
 
+/// The mark before a status word that reads without a legend: ✓ when its
+/// category is done, ⚠ when its category or work state is blocked.
+fn state_symbol(
+    category: Option<&str>,
+    classification: Option<WorkClassification>,
+) -> Option<char> {
+    match (category, classification) {
+        (Some("done"), _) | (_, Some(WorkClassification::Done)) => Some('✓'),
+        (Some("blocked"), _) | (_, Some(WorkClassification::Blocked)) => Some('⚠'),
+        _ => None,
+    }
+}
+
+/// `word`, with its [`state_symbol`] before it when it has one.
+pub(crate) fn status_cue(
+    word: &str,
+    category: Option<&str>,
+    classification: Option<WorkClassification>,
+) -> String {
+    match state_symbol(category, classification) {
+        Some(symbol) => format!("{symbol} {word}"),
+        None => word.to_string(),
+    }
+}
+
+fn classification_style(classification: WorkClassification) -> TextStyle {
+    match classification {
+        WorkClassification::Active => TextStyle::Active,
+        WorkClassification::Ready => TextStyle::Success,
+        WorkClassification::Blocked => TextStyle::Danger,
+        _ => TextStyle::Secondary,
+    }
+}
+
 /// A note under the row at `indent`, such as another branch's state.
 fn mark_line(indent: &str, mark: &str) -> String {
     format!("{indent}  ↳ {mark}")
 }
 
-/// `<id> [<status>] <priority> - <title>`, with a blocker count when there
-/// are blockers: the issue row of issue lists and unassigned work.
-fn issue_row_text(
-    id: &str,
-    status: Option<&str>,
-    priority: &str,
-    title: &str,
-    blockers: usize,
-) -> String {
-    let status = status
-        .map(|status| format!(" [{status}]"))
-        .unwrap_or_default();
+/// `<id> [<status cue>] <priority> - <title>`, with a blocker count when
+/// there are blockers: the issue row of issue lists and unassigned work.
+fn issue_row_text(id: &str, cue: &str, priority: &str, title: &str, blockers: usize) -> String {
     let blockers = if blockers == 0 {
         String::new()
     } else {
         format!(" | {blockers} blocker{}", plural_suffix(blockers))
     };
-    format!("{id}{status} {priority} - {title}{blockers}")
+    format!("{id} [{cue}] {priority} - {title}{blockers}")
 }
 
 /// Items shown in each label group of unassigned work.
@@ -468,7 +513,11 @@ pub(crate) fn render_unassigned_groups(
             let (issue, work) = &group.work[index];
             let row = issue_row_text(
                 &issue.id,
-                Some(&issue.status),
+                &status_cue(
+                    &issue.status,
+                    work.status_category.as_deref(),
+                    Some(work.classification),
+                ),
                 &issue.priority,
                 &issue.title,
                 work.open_blockers.len(),
@@ -706,48 +755,6 @@ impl DecisionState {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplayRole {
-    Executable,
-    Selectable,
-    Blocked,
-    ContextOnly,
-}
-
-impl DisplayRole {
-    pub(crate) fn for_work(label: &str) -> Self {
-        match label {
-            "active" => Self::Executable,
-            "ready" => Self::Selectable,
-            "blocked" => Self::Blocked,
-            _ => Self::ContextOnly,
-        }
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            DisplayRole::Executable => "active",
-            DisplayRole::Selectable => "ready",
-            DisplayRole::Blocked => "blocked",
-            DisplayRole::ContextOnly => "shown for context",
-        }
-    }
-
-    pub(crate) fn style(self) -> TextStyle {
-        match self {
-            DisplayRole::Executable => TextStyle::Active,
-            DisplayRole::Selectable => TextStyle::Success,
-            DisplayRole::Blocked => TextStyle::Danger,
-            DisplayRole::ContextOnly => TextStyle::Secondary,
-        }
-    }
-
-    pub(crate) fn render(self, policy: StylePolicy) -> String {
-        policy.paint(self.style(), self.label())
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FooterAction {
     label: String,
@@ -914,20 +921,46 @@ mod tests {
     }
 
     #[test]
-    fn colorless_display_roles_keep_text_meaning() {
-        let policy = StylePolicy::plain();
-        assert_eq!(DisplayRole::Selectable.render(policy), "ready");
-        assert_eq!(DisplayRole::Blocked.render(policy), "blocked");
-        assert_eq!(DisplayRole::ContextOnly.render(policy), "shown for context");
-    }
-
-    #[test]
-    fn colored_display_roles_wrap_text_with_ansi() {
-        let policy = StylePolicy::from_context(ColorChoice::Always, false, false);
+    fn status_cues_mark_done_and_blocked_next_to_the_status_word() {
         assert_eq!(
-            DisplayRole::Blocked.render(policy),
-            "\u{1b}[31mblocked\u{1b}[0m"
+            status_cue("done", Some("done"), Some(WorkClassification::Done)),
+            "✓ done"
         );
+        assert_eq!(status_cue("superseded", Some("done"), None), "✓ superseded");
+        assert_eq!(
+            status_cue(
+                "blocked",
+                Some("blocked"),
+                Some(WorkClassification::Blocked)
+            ),
+            "⚠ blocked"
+        );
+        // A todo item held by blockers is marked by its work state.
+        assert_eq!(
+            status_cue("todo", Some("todo"), Some(WorkClassification::Blocked)),
+            "⚠ todo"
+        );
+        // A blocked status keeps its mark under a parked ancestor.
+        assert_eq!(
+            status_cue(
+                "blocked",
+                Some("blocked"),
+                Some(WorkClassification::Backlog)
+            ),
+            "⚠ blocked"
+        );
+        for classification in [
+            WorkClassification::Active,
+            WorkClassification::Ready,
+            WorkClassification::NeedsHuman,
+            WorkClassification::Context,
+            WorkClassification::Backlog,
+        ] {
+            assert_eq!(
+                status_cue("todo", Some("todo"), Some(classification)),
+                "todo"
+            );
+        }
     }
 
     #[test]
@@ -1085,35 +1118,119 @@ mod tests {
         );
     }
 
+    fn list_row(
+        id: &str,
+        status: &str,
+        category: &str,
+        classification: WorkClassification,
+        blockers: usize,
+    ) -> IssueListRow {
+        IssueListRow {
+            id: id.to_string(),
+            status: status.to_string(),
+            status_category: Some(category.to_string()),
+            classification,
+            priority: "medium".to_string(),
+            title: id.to_uppercase(),
+            blockers,
+            depth: 1,
+        }
+    }
+
     #[test]
-    fn issue_list_panel_bounds_rows_and_keeps_colorless_roles() {
-        let mut rows = vec![
-            IssueListRow {
-                role: DisplayRole::Selectable,
-                id: "atelier-a".to_string(),
-                status: Some("todo".to_string()),
-                priority: "high".to_string(),
-                title: "A".to_string(),
-                blockers: 0,
-                depth: 1,
-            },
-            IssueListRow {
-                role: DisplayRole::Blocked,
-                id: "atelier-b".to_string(),
-                status: Some("blocked".to_string()),
-                priority: "medium".to_string(),
-                title: "B".to_string(),
-                blockers: 2,
-                depth: 1,
-            },
+    fn issue_list_panel_bounds_rows_and_leaves_the_state_to_its_title() {
+        let rows = vec![
+            list_row("atelier-a", "todo", "todo", WorkClassification::Ready, 0),
+            list_row("atelier-b", "todo", "todo", WorkClassification::Ready, 0),
+            list_row("atelier-c", "todo", "todo", WorkClassification::Ready, 0),
         ];
-        let mut third = rows[1].clone();
-        third.id = "atelier-c".into();
-        rows.push(third);
         let panel = IssueListPanel::new("Ready Work", rows).limit(1);
         assert_eq!(
             panel.render(RenderContext::plain()).join("\n"),
-            "Ready Work\n----------\n  ready atelier-a [todo] high - A\n  ... 2 more ready work items omitted"
+            "Ready Work\n----------\n  atelier-a [todo] medium - ATELIER-A\n  ... 2 more ready work items omitted"
+        );
+    }
+
+    #[test]
+    fn issue_list_panel_marks_done_and_blocked_rows_by_their_status_word() {
+        let rows = vec![
+            list_row("atelier-a", "done", "done", WorkClassification::Done, 0),
+            list_row("atelier-b", "todo", "todo", WorkClassification::Blocked, 2),
+            list_row(
+                "atelier-c",
+                "blocked",
+                "blocked",
+                WorkClassification::Blocked,
+                1,
+            ),
+        ];
+        assert_eq!(
+            IssueListPanel::new("Work", rows).render(RenderContext::plain()),
+            [
+                "Work\n----",
+                "  atelier-a [✓ done] medium - ATELIER-A",
+                "  atelier-b [⚠ todo] medium - ATELIER-B | 2 blockers",
+                "  atelier-c [⚠ blocked] medium - ATELIER-C | 1 blocker",
+            ]
+        );
+    }
+
+    #[test]
+    fn mixed_issue_list_panels_lead_with_a_state_the_status_word_does_not_say() {
+        let rows = vec![
+            list_row(
+                "atelier-a",
+                "in_progress",
+                "active",
+                WorkClassification::Active,
+                0,
+            ),
+            list_row("atelier-b", "todo", "todo", WorkClassification::Ready, 0),
+            list_row(
+                "atelier-c",
+                "todo",
+                "todo",
+                WorkClassification::NeedsHuman,
+                0,
+            ),
+            list_row(
+                "atelier-d",
+                "backlog",
+                "todo",
+                WorkClassification::Backlog,
+                0,
+            ),
+            list_row("atelier-e", "done", "done", WorkClassification::Done, 0),
+            list_row(
+                "atelier-f",
+                "blocked",
+                "blocked",
+                WorkClassification::Blocked,
+                1,
+            ),
+        ];
+        let panel = IssueListPanel::new("Scoped Work", rows).row_states();
+        assert_eq!(
+            panel.render(RenderContext::plain()),
+            [
+                "Scoped Work\n-----------",
+                "  active atelier-a [in_progress] medium - ATELIER-A",
+                "  ready atelier-b [todo] medium - ATELIER-B",
+                "  needs human atelier-c [todo] medium - ATELIER-C",
+                "  atelier-d [backlog] medium - ATELIER-D",
+                "  atelier-e [✓ done] medium - ATELIER-E",
+                "  atelier-f [⚠ blocked] medium - ATELIER-F | 1 blocker",
+            ]
+        );
+        let colored = panel.render(RenderContext::from_parts(ColorChoice::Always, true, false));
+        assert!(colored[1].contains("\u{1b}[36mactive\u{1b}[0m"));
+        assert!(colored[5].contains("[\u{1b}[32m✓ done\u{1b}[0m]"));
+        assert_eq!(
+            colored
+                .iter()
+                .map(|line| strip_test_ansi(line))
+                .collect::<Vec<_>>(),
+            panel.render(RenderContext::plain())
         );
     }
 

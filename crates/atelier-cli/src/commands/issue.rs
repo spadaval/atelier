@@ -9,8 +9,8 @@ use crate::commands::issue_workflow::{
 };
 use crate::human_output::{
     plural_suffix, render_footer_section, render_issue_inventory, render_issue_inventory_quiet,
-    render_lines_section, render_metadata, render_text_section, DisplayRole, FooterAction,
-    IssueListPanel, IssueListRow, RenderContext,
+    render_lines_section, render_metadata, render_text_section, FooterAction, IssueListPanel,
+    IssueListRow, RenderContext,
 };
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
@@ -183,21 +183,12 @@ fn status_cue(workflow_policy: Option<&WorkflowPolicy>, status: &str) -> String 
 }
 
 fn marked(category: Option<&str>, label: String) -> String {
-    match category {
-        Some("done") => format!("✓ {label}"),
-        Some("blocked") => format!("⚠ {label}"),
-        _ => label,
-    }
+    crate::human_output::status_cue(&label, category, None)
 }
 
 /// The work state, marked ✓ when done and ⚠ when blocked.
 fn work_cue(classification: WorkClassification) -> String {
-    let label = classification.label();
-    match classification {
-        WorkClassification::Done => format!("✓ {label}"),
-        WorkClassification::Blocked => format!("⚠ {label}"),
-        _ => label.to_string(),
-    }
+    crate::human_output::status_cue(classification.label(), None, Some(classification))
 }
 
 fn brief_issue_row(
@@ -704,10 +695,13 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
         .into_iter()
         .map(|index| {
             let (subissue, classified) = &classified_subissues[index];
+            // The work state stands in for the status, and alone sets its
+            // mark, as in the brief view's children.
             IssueListRow {
-                role: DisplayRole::for_work(classified.classification.label()),
                 id: subissue.id.clone(),
-                status: Some(classified.classification.label().to_string()),
+                status: classified.classification.label().to_string(),
+                status_category: None,
+                classification: classified.classification,
                 priority: subissue.priority.clone(),
                 title: subissue.title.clone(),
                 blockers: classified.open_blockers.len(),
