@@ -1686,15 +1686,12 @@ fn test_evidence_quiet_output_is_a_stable_id_composition_path() {
     );
     assert!(success, "quiet evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "quiet proof");
-    assert_eq!(
-        record_out.trim(),
-        format!("{evidence_id} recorded validation exit=(none) target=issue/{issue_id}(validates)")
-    );
+    assert_eq!(record_out, format!("{evidence_id}\n"));
 
     let (success, show_out, stderr) =
         run_atelier(dir.path(), &["--quiet", "evidence", "show", &evidence_id]);
     assert!(success, "quiet evidence show failed: {stderr}");
-    assert_eq!(show_out, record_out);
+    assert_eq!(show_out, format!("{evidence_id} pass\n"));
 
     let (success, list_out, stderr) = run_atelier(dir.path(), &["--quiet", "evidence", "list"]);
     assert!(success, "quiet evidence list failed: {stderr}");

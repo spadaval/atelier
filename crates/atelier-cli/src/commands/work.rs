@@ -371,7 +371,7 @@ fn scoped_dashboard(
         if filter == DashboardFilter::Summary {
             let counts = &work.totals;
             let mut summary = format!(
-                "{id} active={} ready={} human={} context={} blocked={} done={} backlog={}",
+                "active={} ready={} human={} context={} blocked={} done={} backlog={}",
                 counts.active,
                 counts.ready,
                 counts.human,

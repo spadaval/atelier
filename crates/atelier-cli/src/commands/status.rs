@@ -79,11 +79,7 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         }
         return Ok(format!(
             "work={} current_missions={} ready={} human={}",
-            if view.work.active.is_empty() {
-                "none".to_string()
-            } else {
-                view.work.active.len().to_string()
-            },
+            view.work.active.len(),
             view.current_mission_count,
             view.work.ready.len(),
             view.work.human.len(),

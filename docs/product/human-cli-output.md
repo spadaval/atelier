@@ -213,20 +213,38 @@ line, a `Command:` line or an error's `Next: <command>`, is bare.
 ### Quiet Tokens
 
 `--quiet` prints one documented token per command, and nothing else on
-stdout. atelier-pr4k makes every command honour this table:
+stdout. Every command honours this table, and one integration test runs each
+command in the help tree with `-q` and checks its token:
 
 | Command | `--quiet` output |
 | --- | --- |
-| `start` | the branch name |
-| `issue show` | `<id> <status>` |
-| `issue transition <id>` (options) | the allowed transition names, one per line |
+| `init` | the project slug, new or already configured |
+| `setup claude` | the settings file path |
+| `status` (and its alias `prime`) | `work=<n> current_missions=<n> ready=<n> human=<n>`, where `work` counts active work |
+| `work` | the view names, one per line |
+| `work ready`, `blocked`, `human`, `active`, `all`, `missions` | IDs, one per line |
+| `work mission`, `work parent` | their counts as `key=value` numbers, `active=<n> ready=<n> human=<n> context=<n> blocked=<n> done=<n> backlog=<n>`, with `proof_gaps=<n>` for a parent; with a filter such as `--ready`, its IDs |
+| `issue create`, `update`, `note`, `link`, `unlink` | the ID; for `link` and `unlink`, the first ID given |
+| `issue show` | `<id> <status>`, one line per ID |
+| `issue list` | IDs, one per line |
+| `issue transition <id>` | the allowed transition names, one per line, counting one that needs only a flag such as `--reason` |
 | `issue transition <id> <name>` | the new status |
-| `issue create`, `update`, `note`, `link`, `unlink` | the ID |
-| `check`, `land`, `doctor` | `passed`, or nothing and a non-zero exit |
-| `init` | the ID prefix (slug) |
-| `status` | `key=value` pairs whose values are numbers |
-| `work` views | IDs, one per line; `work mission` and `work parent` print their counts as `key=value` |
-| `review` and `evidence` record commands | the new record's ID |
+| `start` | the branch name |
+| `evidence record`, `attach` | the record's ID |
+| `evidence show` | `<id> <result>` |
+| `evidence list`, `review list` | IDs, one per line |
+| `review record`, `approve`, `finding`, `trivial`, `disposition` | the new event's ID |
+| `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
+| `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit |
+| `bundle apply` | the IDs of the records it created or updated, one per line |
+| `migrate epics` | the IDs of the epic records it retypes, or would retype in a dry run |
+| `prune` | `mode=<dry-run or apply> eligible=<n> protected=<n> removed=<n> failures=<n>` |
+
+Values are numbers except `prune`'s `mode`. A failure still exits non-zero
+and says why on stderr: `check` prints its findings there, and `merge` its
+failed gates. Notes that would otherwise follow the token, such as `start`'s
+needs-human note, also go to stderr. `--quiet` with `--json` is a usage
+error, since they are two script formats.
 
 ### Errors
 
