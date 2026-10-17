@@ -169,6 +169,9 @@ enum Commands {
         #[arg(long, value_parser = ["claude"])]
         hook: Option<String>,
     },
+    /// Check every done claim and the whole review history; land checks only
+    /// what changed since the base
+    Doctor,
     /// Verify committed records and applicable completion invariants
     Land {
         /// Issue or branch owner (otherwise inferred from the checkout)
@@ -659,6 +662,7 @@ fn run() -> Result<()> {
             commands::session::run(true, id.as_deref(), hook.is_some(), install, quiet)
         }
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
+        Commands::Doctor => commands::session::doctor(quiet),
 
         Commands::Status => {
             let (_, index) = load_repository()?;
@@ -963,6 +967,7 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Merge { .. }
         | Commands::Prime { .. }
         | Commands::Land { .. }
+        | Commands::Doctor
         | Commands::Setup { .. } => CanonicalTransactionMode::None,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical
@@ -1029,6 +1034,16 @@ mod transaction_tests {
         ])
         .expect("manual evidence CLI");
         assert!(command_uses_canonical_transaction(&manual.command));
+    }
+
+    #[test]
+    fn doctor_takes_no_transaction_like_land() {
+        // A passing land fences its result with an exclusive transaction,
+        // which a shared one held around it cannot upgrade to (atelier-37uq).
+        for command in [["atelier", "land"], ["atelier", "doctor"]] {
+            let cli = Cli::try_parse_from(command).expect("landing CLI");
+            assert!(!command_uses_canonical_transaction(&cli.command));
+        }
     }
 
     #[test]

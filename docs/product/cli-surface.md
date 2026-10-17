@@ -17,6 +17,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `merge` | Check base policy and fast-forward reviewed work. |
 | `prime` | Restore session context. |
 | `land` | Check handoff invariants and committed records. |
+| `doctor` | Check every done claim and the whole review history. |
 | `setup` | Install supported harness hooks. |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
@@ -72,8 +73,9 @@ branch records. Run `atelier land` before a session handoff and
 `--identity`, and summary. `review disposition` appends a finding decision.
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
-`prime` restores context; `land [id] [--install]` checks committed records and applicable
-claims. `setup claude [--binary <path>]` installs the supported hooks. See
+`prime` restores context; `land [id] [--install]` checks committed records and
+the claims that changed since the base; `doctor` checks every claim.
+`setup claude [--binary <path>]` installs the supported hooks. See
 [sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
 
 ## Bulk input and maintenance

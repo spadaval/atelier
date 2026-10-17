@@ -69,7 +69,12 @@ remain valuable and are not available in hosted trackers.
    Merge-time facts are derived from Git. Post-approval commits that only add
    review or evidence records or change in-scope statuses do not make an
    approval stale; changes to code, policy, or acceptance criteria do. A
-   clean merge of the base into the branch does not (atelier-n7g1).
+   clean merge of the base into the branch does not (atelier-n7g1). Every
+   change is checked when it lands, so history that passed the gates holds by
+   induction: `land` checks only the claims and review history that a change
+   since the branch base or the base's upstream can affect, or every claim
+   after a policy change, and `atelier doctor` checks everything
+   (atelier-37uq).
 
 5. **Policy is code.** `.atelier/workflow.yaml` is reviewed like any other
    change. Gates are evaluated from the base branch's policy, so a branch

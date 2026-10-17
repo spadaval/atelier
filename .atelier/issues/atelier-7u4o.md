@@ -6,10 +6,15 @@ labels:
 - "orientation"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-jcki"
   children: []
   attachments: []
   relates:
+  - kind: "issue"
+    id: "atelier-1w8c"
+    type: "advances"
   - kind: "issue"
     id: "atelier-deyy"
     type: "related"

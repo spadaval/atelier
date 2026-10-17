@@ -18,7 +18,10 @@ relationships:
     id: "atelier-sdb0"
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-r6bt"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
