@@ -42,7 +42,7 @@ fn load_bundle(index: &RecordIndex, input: &str) -> Result<BundleFile> {
         let renamed = error
             .to_string()
             .contains("unknown field `depends_on`")
-            .then_some("; the issue field depends_on is now blocked_by, matching atelier issue link --role blocked_by")
+            .then_some("; the issue field depends_on is now blocked_by, matching `atelier issue link --role blocked_by`")
             .unwrap_or_default();
         anyhow::anyhow!("Failed to parse bundle {input} as JSON: {error}{renamed}")
     };
@@ -106,7 +106,7 @@ fn fill_update_from_record(
         .issue_record(&id)
         .with_context(|| format!("Update {client_ref} names missing issue {id}"))?;
     if object.contains_key("status") {
-        bail!("Update {client_ref} cannot set status; change {id}'s status with atelier issue transition");
+        bail!("Update {client_ref} cannot set status; change {id}'s status with `atelier issue transition {id}`");
     }
     let repo_root = atelier_app::storage_layout::find_repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -121,17 +121,17 @@ fn fill_update_from_record(
             bail!("Update {client_ref} cannot give {id} a parent: it has children of its own, and parents are one level deep");
         }
         if let Some(current) = &record.issue.parent_id {
-            let same =
-                parent_ref_id(index, bundle_issues, parent).as_deref() == Some(current.as_str());
-            if !same {
-                bail!("Update {client_ref} cannot move {id} from parent {current}; use atelier issue update --parent");
+            let wanted = parent_ref_id(index, bundle_issues, parent);
+            if wanted.as_deref() != Some(current.as_str()) {
+                let wanted = wanted.as_deref().unwrap_or("<parent-id>");
+                bail!("Update {client_ref} cannot move {id} from parent {current}; use `atelier issue update {id} --parent {wanted}`");
             }
         }
     }
     if let Some(issue_type) = object.get("issue_type").and_then(Value::as_str) {
         if issue_type != record.issue.issue_type {
             bail!(
-                "Update {client_ref} cannot change {id} from {} to {issue_type}; use atelier issue update --issue-type",
+                "Update {client_ref} cannot change {id} from {} to {issue_type}; use `atelier issue update {id} --issue-type {issue_type}`",
                 record.issue.issue_type
             );
         }
@@ -712,7 +712,7 @@ fn validate_bundle_issue_status(issue_type: &str, status: &str) -> Result<()> {
     let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
     if !allowed.contains(status) {
         bail!(
-            "Invalid bundle issue status '{status}'; {issue_type} work cannot be created in it; use one of: {}. Other statuses are reached with atelier issue transition after the bundle is applied.",
+            "Invalid bundle issue status '{status}'; {issue_type} work cannot be created in it; use one of: {}. Other statuses are reached with `atelier issue transition` after the bundle is applied.",
             allowed.into_iter().collect::<Vec<_>>().join(", ")
         )
     }

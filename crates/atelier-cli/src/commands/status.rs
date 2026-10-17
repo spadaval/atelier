@@ -32,7 +32,7 @@ pub fn run(hook: bool, quiet: bool, prime: bool) -> Result<()> {
         let context = commands::session::read_hook_payload("SessionStart")
             .and_then(|_| text(false, RenderContext::plain()))
             .unwrap_or_else(|error| {
-                format!("Atelier context unavailable: {error:#}. Run atelier check and repair the named records.")
+                format!("Atelier context unavailable: {error:#}. Run `atelier check` and repair the named records.")
             });
         let context = match note {
             Some(note) => format!("{note}\n{context}"),
@@ -482,7 +482,7 @@ fn render_status_page(
                 format!("atelier merge {} --check", owner.id),
             ),
         ]
-    } else if ready > 0 {
+    } else if let Some(top) = view.work.ready.first() {
         vec![
             FooterAction::new(
                 format!(
@@ -492,8 +492,8 @@ fn render_status_page(
                 "atelier work ready",
             ),
             FooterAction::new(
-                "Inspect selected work transitions",
-                "atelier issue transition <issue-id>",
+                "Inspect the top ready item's transitions",
+                format!("atelier issue transition {}", top.id),
             ),
         ]
     } else if !view.work.human.is_empty() {

@@ -1214,7 +1214,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(evidence_list.contains(&mission_evidence_id));
     assert!(evidence_list.contains("exit 2"));
     assert!(evidence_list.contains(&format!("target issue/{mission_id}")));
-    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+    assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
+    assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
 
 #[test]
@@ -1558,7 +1559,8 @@ fn test_evidence_list_elides_command_transcripts() {
     assert!(evidence_list.contains("command sh -c 'printf ..."));
     assert!(!evidence_list.contains("proof transcript line one"));
     assert!(!evidence_list.contains("proof transcript line two"));
-    assert!(evidence_list.contains("Show proof detail: atelier evidence show <evidence-id>"));
+    assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
+    assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
 
 #[test]

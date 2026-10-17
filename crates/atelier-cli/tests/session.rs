@@ -3940,7 +3940,7 @@ fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     commit(dir.path(), "start owned work");
     let (pass, output) = cli(dir.path(), &["land", "--install"]);
     assert!(
-        !pass && output.contains("rerun atelier land without --install"),
+        !pass && output.contains("rerun `atelier land` without --install"),
         "{output}"
     );
 }
@@ -4333,7 +4333,7 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     commit(dir.path(), "records on an unowned branch");
     let (pass, output) = cli(dir.path(), &["land"]);
     assert!(
-        !pass && output.contains(" and 2 more; run atelier start"),
+        !pass && output.contains(" and 2 more; run `atelier start <id>`"),
         "{output}"
     );
 }

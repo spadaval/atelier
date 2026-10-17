@@ -60,7 +60,7 @@ fn check_traceability(
         let work = workflow_policy::resolve_work_branch(policy, index, &issue.id)?;
         let owner = index.require_issue(&work.owner_id)?;
         if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
-            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run atelier start {} and commit its records", issue.id, issue.id);
+            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run `atelier start {}` and commit its records", issue.id, issue.id);
         }
     }
     Ok(())
@@ -90,7 +90,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         })
         .collect::<Vec<_>>();
     if refs.is_empty() {
-        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base} or run atelier start <id>");
+        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base} or run `atelier start <id>`");
     }
     // No copy of the base has a workflow policy yet, so there are no gates on
     // the base to land through; the caller says whether this is an install.
@@ -126,7 +126,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         });
     }
     changed.map(Some).with_context(|| {
-        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run atelier start <id> from {base}")
+        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run `atelier start <id>` from {base}")
     })
 }
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
@@ -171,16 +171,15 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     // against where it left the base, and say to merge the base in before
     // integrating (atelier-qz9x).
     let mut behind = None;
-    let branch_base = match &base_pin {
-        Some((reference, tip))
+    let branch_base = match (&base_pin, &id) {
+        (Some((reference, tip)), Some(id))
             if git_freshness::git_output(repo, &["merge-base", "--is-ancestor", tip, &head])
                 .is_err() =>
         {
             let name = reference.trim_start_matches("refs/heads/");
             let Ok(fork) = git::text(repo, &["merge-base", tip, &head]) else {
                 bail!(
-                    "land_base_unrelated: {name} shares no history with this checkout, so the work cannot be checked against it; switch to the owner's work branch, or start the work again from {name} with atelier start {}",
-                    id.as_deref().unwrap_or("<id>")
+                    "land_base_unrelated: {name} shares no history with this checkout, so the work cannot be checked against it; switch to the owner's work branch, or start the work again from {name} with `atelier start {id}`"
                 );
             };
             let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?
@@ -190,8 +189,8 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             behind = Some((name.to_owned(), count));
             Some(fork)
         }
-        Some((_, tip)) => Some(tip.clone()),
-        None => None,
+        (Some((_, tip)), _) => Some(tip.clone()),
+        (None, _) => None,
     };
     let behind_note = behind.map(|(base, count)| format!(
         "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval.",
@@ -269,11 +268,11 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         &touched.unwrap_or_default(),
     )?;
     if install && (id.is_some() || branch == source.policy.branch_policy.base_branch) {
-        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base; rerun atelier land without --install");
+        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base; rerun `atelier land` without --install");
     }
     if let Some(id) = id {
         let issue = index.require_issue(&id)?;
-        let ownership = issue.workflow_branch.as_ref().context("land_work_untraceable: owner has no committed branch metadata; run atelier start and commit the record")?;
+        let ownership = issue.workflow_branch.as_ref().with_context(|| format!("land_work_untraceable: owner {id} has no committed branch metadata; run `atelier start {id}` and commit the record"))?;
         if ownership.work_branch != branch || ownership.branch_base == branch {
             bail!(
                 "land_branch_mismatch: owner {id} requires {} with distinct base {}",
@@ -332,13 +331,13 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         // (atelier-bibd).
         match tracker_changes_since(repo, base)? {
             None if install => lines.push(format!(
-                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or git merge --no-ff), then start further work with atelier start <id>."
+                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or `git merge --no-ff`), then start further work with `atelier start <id>`."
             )),
             None => bail!(
-                "land_install_unconfirmed: {base} has no workflow policy yet, so atelier merge cannot gate {label}. If this branch installs Atelier, rerun atelier land --install; otherwise run atelier start <id> to give the work an owner branch."
+                "land_install_unconfirmed: {base} has no workflow policy yet, so atelier merge cannot gate {label}. If this branch installs Atelier, rerun `atelier land --install`; otherwise run `atelier start <id>` to give the work an owner branch."
             ),
             Some(_) if install => bail!(
-                "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; run atelier start <id> to give the work an owner branch"
+                "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; run `atelier start <id>` to give the work an owner branch"
             ),
             Some(changed) if !changed.is_empty() => {
                 const SHOWN: usize = 5;
@@ -352,7 +351,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
                     listed.push_str(&format!(" and {} more", changed.len() - SHOWN));
                 }
                 bail!(
-                    "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; run atelier start <id> to give the work an owner branch, or move the tracker changes onto one"
+                    "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; run `atelier start <id>` to give the work an owner branch, or move the tracker changes onto one"
                 );
             }
             Some(_) => lines.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
@@ -382,7 +381,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             format!("Uncommitted changes make passing proof stale: {listed}. Commit or remove them, or rerun the check after committing.")
         });
         bail!(
-            "land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun atelier land.{}",
+            "land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun `atelier land`.{}",
             failed.join("\n"),
             [dirty_note, behind_note]
                 .into_iter()

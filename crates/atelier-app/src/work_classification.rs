@@ -95,7 +95,7 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
     let commands = children
         .iter()
         .map(|child| {
-            format!("atelier issue update {child} --no-parent, then atelier issue link {child} {owner} --role blocked_by")
+            format!("`atelier issue update {child} --no-parent`, then `atelier issue link {child} {owner} --role blocked_by`")
         })
         .collect::<Vec<_>>()
         .join("; ");

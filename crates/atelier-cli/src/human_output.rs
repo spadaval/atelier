@@ -681,10 +681,12 @@ pub(crate) fn render_issue_inventory(
             render_lines_section("", lines),
             render_footer_section(
                 context,
-                [FooterAction::new(
-                    "Inspect a record",
-                    "atelier issue show <issue-id>",
-                )],
+                view.rows.first().map(|record| {
+                    FooterAction::new(
+                        "Inspect the first record",
+                        format!("atelier issue show {}", record.issue.id),
+                    )
+                }),
             ),
         ],
         context,
@@ -1571,7 +1573,9 @@ mod tests {
         assert!(output.contains("\natelier-c task ⚠ blocked medium A linked child record\n"));
         assert!(output.contains("\natelier-d bug ✓ done low A completed standalone record\n"));
         assert!(output.contains("Showing 4 of 4 issues"));
-        assert!(output.contains("Next\n----\n  Inspect a record: atelier issue show <issue-id>"));
+        assert!(
+            output.contains("Next\n----\n  Inspect the first record: atelier issue show atelier-a")
+        );
         assert!(!output.contains("Standalone"));
         assert!(!output.contains("blocker"));
         assert!(!output.contains("ready"));
@@ -1611,6 +1615,7 @@ mod tests {
         let human = render_issue_inventory(&view.view(), RenderContext::plain());
         assert!(human.contains("No issues match the selected filters."));
         assert!(!human.contains("Showing 0 of 0 issues"));
+        assert!(!human.contains("Next"), "{human}");
         assert_eq!(render_issue_inventory_quiet(&view.view()), "");
     }
 

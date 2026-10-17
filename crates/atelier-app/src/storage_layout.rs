@@ -43,7 +43,7 @@ pub fn find_repo_root() -> Result<PathBuf> {
     find_canonical_dir_from_cwd()?
         .and_then(|directory| directory.parent().map(Path::to_path_buf))
         .ok_or_else(|| {
-            anyhow!("Not an Atelier repository (or any parent). Run 'atelier init' first.")
+            anyhow!("Not an Atelier repository (or any parent). Run `atelier init` first.")
         })
 }
 

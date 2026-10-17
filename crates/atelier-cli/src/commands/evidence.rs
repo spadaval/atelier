@@ -582,7 +582,10 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
         );
     }
     print_footer([
-        FooterAction::new("Show proof detail", "atelier evidence show <evidence-id>"),
+        FooterAction::new(
+            "Show the newest proof's detail",
+            format!("atelier evidence show {}", records[0].header.id),
+        ),
         FooterAction::new(
             "Filter by result",
             "atelier evidence list --result <result>",
