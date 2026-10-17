@@ -18,7 +18,9 @@ brief view gives one line per fact and leaves out empty facts:
 - `Parent:`, then `Children:` in work order, each with its work state;
 - `Blocked by:`, and `Blocked via parent <id>:` for blockers a child inherits;
 - `Transitions:`, which names the allowed transitions, then each group of
-  blocked transitions with the reason they share, separated by `|`;
+  blocked transitions with the reason they share, separated by `|`. A
+  transition whose only gap is a required argument is allowed and shows its
+  flag, as in `supersede --reason`;
 - the two lead sections of the record's body shape: Goal and Done when for
   work items, Outcome and Success criteria for missions, and Question and
   Decision for decisions. These say what the item is for and what finishes

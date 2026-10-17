@@ -281,7 +281,8 @@ fn push_brief_section(lines: &mut Vec<String>, title: &str, body: &str) {
     }));
 }
 
-/// Allowed transitions by name, then blocked ones grouped by their reason. A
+/// Allowed transitions by name, with the flags any required fields need, then
+/// blocked ones grouped by their reason. A
 /// status with no configured transitions, as most done statuses have, shows
 /// none; any other failure shows why the options are unavailable.
 fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
@@ -292,17 +293,29 @@ fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
         }
         Err(error) => return format!("unavailable - {error}"),
     };
-    let allowed = options
-        .iter()
-        .filter(|option| option.allowed)
-        .map(|option| option.name.as_str())
-        .collect::<Vec<_>>();
+    let mut allowed = Vec::new();
     let mut blocked: Vec<(String, Vec<&str>)> = Vec::new();
-    for option in options.iter().filter(|option| !option.allowed) {
-        let reason = blocked_transition_reason(option);
-        match blocked.iter_mut().find(|(existing, _)| *existing == reason) {
-            Some((_, names)) => names.push(&option.name),
-            None => blocked.push((reason, vec![&option.name])),
+    for option in &options {
+        if option.allowed {
+            allowed.push(option.name.clone());
+        } else if option.blockers_beyond_arguments().is_empty() {
+            allowed.push(format!(
+                "{} {}",
+                option.name,
+                option.missing_arguments.join(" ")
+            ));
+        } else {
+            let reason = option
+                .validator_results
+                .iter()
+                .find(|result| !result.passed && result.help.is_some())
+                .map(|result| result.reason.clone())
+                .or_else(|| option.blockers_beyond_arguments().first().cloned())
+                .unwrap_or_else(|| format!("to {}", option.to));
+            match blocked.iter_mut().find(|(existing, _)| *existing == reason) {
+                Some((_, names)) => names.push(&option.name),
+                None => blocked.push((reason, vec![&option.name])),
+            }
         }
     }
     let mut parts = vec![if allowed.is_empty() {

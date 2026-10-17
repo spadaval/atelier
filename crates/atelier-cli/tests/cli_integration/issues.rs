@@ -857,8 +857,6 @@ fn test_issue_show_is_brief_by_default() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (mission, parent, child, sibling, blocker) = brief_show_fixture(dir.path());
-    let close_blocked =
-        "blocked: supersede - missing required field close_reason; rerun with `--reason \"...\"`";
 
     assert_eq!(
         show_ok(dir.path(), &["issue", "show", &child]),
@@ -867,7 +865,7 @@ fn test_issue_show_is_brief_by_default() {
              Mission: {mission} draft - Brief mission\n\
              Parent: {parent} todo - Brief parent\n\
              Blocked by: {blocker} todo - Blocker\n\
-             Transitions: block, defer | blocked: start - task {child} has direct blocker path {child} -> {blocker} | {close_blocked}\n\
+             Transitions: block, defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
              Goal: Child goal.\n\
              Done when: Child done.\n\
              More with --full: Context\n"
@@ -881,7 +879,7 @@ fn test_issue_show_is_brief_by_default() {
              Children:\n  \
              {sibling} ready - Second child\n  \
              {child} ⚠ blocked - First child\n\
-             Transitions: block, defer, start | {close_blocked}\n\
+             Transitions: block, defer, start, supersede --reason\n\
              Goal: Parent goal.\n\
              Done when: Parent done.\n"
         )
@@ -892,7 +890,7 @@ fn test_issue_show_is_brief_by_default() {
         format!(
             "{mission} [mission] draft - Brief mission\n\
              Work: 3 issues - ready 1, context 1, blocked 1\n\
-             Transitions: ready | {close_blocked}\n\
+             Transitions: ready, supersede --reason\n\
              Outcome: Agents read one view.\n\
              Success criteria:\n  \
              - S1: brief by default.\n  \
@@ -923,8 +921,21 @@ fn test_issue_show_is_brief_by_default() {
         "{child_view}"
     );
     assert!(
-        child_view.contains("\nTransitions: block, defer, start | "),
+        child_view.contains("\nTransitions: block, defer, start, supersede --reason\n"),
         "{child_view}"
+    );
+
+    // A transition that needs an argument and has another gap stays blocked,
+    // with the other gap as its reason: a parent closes after its children.
+    edit_canonical_record(dir.path(), "issues", &parent, |text| {
+        text.replace("status: \"todo\"", "status: \"in_progress\"")
+    });
+    let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
+    assert!(
+        parent_view.contains(
+            "\nTransitions: block, request_review, supersede --reason | blocked: close - validator work.terminal failed: open work: "
+        ),
+        "{parent_view}"
     );
 
     for view in [&sibling_view, &child_view] {
