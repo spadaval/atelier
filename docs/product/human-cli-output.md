@@ -9,11 +9,10 @@ boundary; human output is a focused view over them.
 Output is dense Markdown for every reader (ADR 0022). Agents read redirected
 output as plain text, so every token they read should carry a fact:
 
-- One line per item: `<id> [<status>] <priority> - <title>`, with a blocker
-  count when there are blockers.
-- Symbols that read without a legend go before the status word, never in
-  place of it: ✓ for a done status, ⚠ for a blocked status or work state, as
-  in `[✓ done]` or `[⚠ todo]`.
+- One line per item.
+- A symbol that reads without a legend goes beside the status word, never in
+  place of it: ✓ for done, ⚠ for an item that needs attention, such as
+  blocked work.
 - No token a heading already states. A section named for a work state, such
   as Ready Work or Done Work, leaves the state off its rows; only a list that
   mixes states leads a row with its state, and not when the status word
@@ -22,6 +21,12 @@ output as plain text, so every token they read should carry a fact:
   whole record.
 - Views gain no JSON or YAML mode. `--quiet` and the `--json` flags on
   `review list` and `merge --check` are the interfaces for scripts.
+
+Today's work-view item line is `<id> [<status>] <priority> - <title>`, with a
+`| N blocker(s)` count when there are blockers, and ⚠ marks a blocked status
+or work state, as in `[✓ done]` or `[⚠ todo]`. atelier-i2qq replaces this
+with one item-line contract for every view, and atelier-tf9n replaces the
+blocker count with the direct blockers.
 
 When agents routinely pipe atelier output through `head`, `grep`, `sed`, or
 loops to find what they need, that is a missing view: file it as a defect in

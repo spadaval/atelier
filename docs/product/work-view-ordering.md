@@ -70,10 +70,12 @@ Work views use one readable row state label:
 
 A work view's sections are named by row state (Ready Work, Blocked Work, Done
 Work), so their rows carry the exact configured workflow status and not the
-state: `atelier-x [⚠ todo] medium - Title | 1 blocker` under Blocked Work. A
+state; today a todo item under Blocked Work reads `atelier-x [⚠ todo] medium -
+Title | 1 blocker` (see [Human CLI Output](human-cli-output.md) for the item
+line and the changes atelier-i2qq and atelier-tf9n plan for it). A
 list that mixes states, such as `work mission --all`, leads each row with its
 state unless the status word already says it. Rows should not print duplicate
 category/status tokens such as `todo/todo` or `active/in_progress`; categories
 belong in rollups, filters, and explicit metadata. Blocked rows carry a compact
-blocker count or drill-down cue by default, while detail surfaces preserve
-exact blocker IDs for repair.
+blocker cue, today a count, while detail surfaces preserve exact blocker IDs
+for repair.
