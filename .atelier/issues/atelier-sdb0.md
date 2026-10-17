@@ -4,6 +4,9 @@ id: "atelier-sdb0"
 issue_type: "feature"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-sdb0
 priority: "P1"
 relationships:
   blocks:
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make status the session-start view and retire prime"
-updated_at: "2026-10-16T23:43:13.832974939+00:00"
+updated_at: "2026-10-17T02:21:43.908405570+00:00"
 ---
 
 ## Goal
