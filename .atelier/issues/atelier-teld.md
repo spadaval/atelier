@@ -4,6 +4,9 @@ id: "atelier-teld"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-teld
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep colour and whole tokens when an item line wraps"
-updated_at: "2026-10-17T09:06:10.808633104+00:00"
+updated_at: "2026-10-17T09:06:12.318771550+00:00"
 ---
 
 ## Goal
