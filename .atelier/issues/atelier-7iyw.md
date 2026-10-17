@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T06:58:59.803494328+00:00"
+status: "done"
 title: "Date notes in the same timezone as other timestamps"
-updated_at: "2026-10-17T06:29:33.355234335+00:00"
+updated_at: "2026-10-17T06:58:59.803494328+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ updated_at: "2026-10-17T06:29:33.355234335+00:00"
 ## Context
 
 Display format rule: see the output-contract item in this mission.
+
+## Close Reason
+
+Notes (issue note, bundle apply) and prune's retention cutoff, record comparisons and candidate 'latest' dates now use human_output::local_date, the local day display_timestamp shows; last_closed_mission reuses it and docs/product/human-cli-output.md states that a bare date is the local day. Proven by a fixed-clock unit test (2026-10-17T00:31Z at -04:00 dates the note 2026-10-16), an integration test that fails on the UTC-dated build and passes now (issue note under TZ=UTC+12 and UTC-14), and passing nextest atelier-wylr, fmt atelier-f3vi and diff-check atelier-xq2r.
