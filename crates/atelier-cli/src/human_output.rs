@@ -1101,6 +1101,7 @@ mod tests {
                 title: title.to_string(),
                 description: None,
                 strategy: None,
+                adr: None,
                 workflow_branch: None,
                 parent_id: None,
                 created_at: now,

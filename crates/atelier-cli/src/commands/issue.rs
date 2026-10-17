@@ -20,7 +20,9 @@ use atelier_app::record_index::RecordIndex;
 use atelier_app::record_ref::RecordKind;
 use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{InvalidValue, Issue, IssuePriority, ISSUE_NOTE_KINDS};
+use atelier_core::{
+    DecisionNote, InvalidValue, Issue, IssuePriority, DECISION_NOTE_KIND, ISSUE_NOTE_KINDS,
+};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const OBJECTIVE_ROLLUP_LIMIT: usize = 5;
@@ -122,6 +124,7 @@ fn render_issue_brief(
             brief_issue_row(index, workflow_policy, parent_id)?
         ));
     }
+    lines.extend(decision_record_lines(index, workflow_policy, issue)?);
     push_brief_rows(
         &mut lines,
         "Children",
@@ -257,6 +260,34 @@ fn brief_child_rows(
         .collect())
 }
 
+/// A decision record's ADR and the decision records it supersedes or that
+/// supersede it (atelier-fip8); nothing for other records.
+fn decision_record_lines(
+    index: &RecordIndex,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<Vec<String>> {
+    let mut lines = Vec::new();
+    if issue.issue_type != "decision" {
+        return Ok(lines);
+    }
+    if let Some(adr) = &issue.adr {
+        lines.push(format!("ADR: {}", adr.path));
+    }
+    let record = atelier_app::decisions::record_decision(index, workflow_policy, issue);
+    push_brief_rows(
+        &mut lines,
+        "Supersedes",
+        brief_issue_rows(index, workflow_policy, record.supersedes)?,
+    );
+    push_brief_rows(
+        &mut lines,
+        "Superseded by",
+        brief_issue_rows(index, workflow_policy, record.superseded_by)?,
+    );
+    Ok(lines)
+}
+
 fn push_brief_rows(lines: &mut Vec<String>, label: &str, rows: Vec<String>) {
     match rows.as_slice() {
         [] => {}
@@ -390,6 +421,9 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     }
     if let Some(path) = canonical_issue_path(canonical_id)? {
         println!("File:     {}", path.display());
+    }
+    for line in decision_record_lines(index, workflow_policy.as_ref(), issue)? {
+        println!("{line}");
     }
     render_parent_context(index, canonical_id)?;
     let done = crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), issue);
@@ -924,6 +958,7 @@ pub fn create_lifecycle(
                 .strategy
                 .map(|path| mission_strategy(state_dir, input.issue_type, path))
                 .transpose()?,
+            adr: None,
             workflow_branch: None,
             parent_id: None,
             created_at: now,
@@ -1107,6 +1142,24 @@ fn mission_strategy(
     Ok(strategy)
 }
 
+/// Only decision records link an ADR, and the file must exist.
+fn decision_adr(state_dir: &Path, issue_type: &str, path: &str) -> Result<atelier_core::IssueAdr> {
+    if issue_type != "decision" {
+        bail!("--adr applies to decision records; {issue_type} records do not link an ADR");
+    }
+    let adr = atelier_core::IssueAdr::new(path)?;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    if !repo_root.join(&adr.path).is_file() {
+        bail!("ADR file {path} does not exist; write the ADR first, then link it");
+    }
+    Ok(adr)
+}
+
 pub struct UpdateInput<'a> {
     pub issue_ref: &'a str,
     pub title: Option<&'a str>,
@@ -1115,6 +1168,8 @@ pub struct UpdateInput<'a> {
     pub body: Option<&'a str>,
     /// `Some(None)` clears a mission's strategy link.
     pub strategy: Option<Option<&'a str>>,
+    /// `Some(None)` clears a decision record's ADR link.
+    pub adr: Option<Option<&'a str>>,
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
@@ -1201,6 +1256,20 @@ pub fn update_lifecycle(
         }
         None => {}
     }
+    match input.adr {
+        Some(Some(path)) => {
+            record.issue.adr = Some(decision_adr(state_dir, &record.issue.issue_type, path)?);
+            changed_fields.push("adr");
+        }
+        Some(None) => {
+            record.issue.adr = None;
+            changed_fields.push("adr");
+        }
+        None => {}
+    }
+    if record.issue.adr.is_some() && record.issue.issue_type != "decision" {
+        bail!("{id} links an ADR, and only decision records link one; clear it with --no-adr to change the type");
+    }
     let added_labels = atelier_app::lint::size_labels(input.labels)?;
     for label in &added_labels {
         // A record has one size; a new size label replaces the old one.
@@ -1220,7 +1289,7 @@ pub fn update_lifecycle(
         changed_fields.push("parent");
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --label, --remove-label, or --parent. Use `atelier issue note {id} \"...\"` for notes, or `atelier issue transition {id}` to choose a status change");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --adr, --no-adr, --label, --remove-label, or --parent. Use `atelier issue note {id} \"...\"` for notes, or `atelier issue transition {id}` to choose a status change");
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;
@@ -1288,12 +1357,21 @@ pub fn update_lifecycle(
     Ok(())
 }
 
+/// The flags only a decision note takes.
+#[derive(Clone, Copy, Default)]
+pub struct DecisionFlags<'a> {
+    pub reason: Option<&'a str>,
+    pub rejected: &'a [String],
+    pub one_way: bool,
+}
+
 /// Append a dated note to the issue record's Notes section.
 pub fn append_note(
     state_dir: &Path,
     issue_id: &str,
     kind: &str,
     text: &str,
+    decision: DecisionFlags<'_>,
     quiet: bool,
 ) -> Result<()> {
     if !ISSUE_NOTE_KINDS.contains(&kind) {
@@ -1302,6 +1380,28 @@ pub fn append_note(
     if text.trim().is_empty() {
         bail!("Note text for issue {issue_id} must not be empty");
     }
+    let (tag, text) = if kind == DECISION_NOTE_KIND {
+        let reason = decision
+            .reason
+            .filter(|reason| !reason.trim().is_empty())
+            .ok_or_else(|| {
+                anyhow!("A decision note needs its reason; rerun with `--reason \"...\"`")
+            })?;
+        if decision
+            .rejected
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
+            bail!("--rejected must name an alternative");
+        }
+        DecisionNote::note_parts(text, reason, decision.rejected, decision.one_way)
+    } else {
+        if decision.reason.is_some() || !decision.rejected.is_empty() || decision.one_way {
+            bail!("--reason, --rejected and --one-way apply only to `--kind decision`");
+        }
+        (kind.to_string(), text.to_string())
+    };
+    let (kind, text) = (tag.as_str(), text.as_str());
     // Hold the exclusive transaction across read and write so concurrent
     // notes cannot overwrite each other's appended bullets.
     let _transaction = atelier_records::mutation_lock::CanonicalMutationLock::exclusive(state_dir)?;
@@ -1374,6 +1474,7 @@ mod tests {
                 issue_type: "task".to_string(),
                 priority: priority.to_string(),
                 strategy: None,
+                adr: None,
                 workflow_branch: None,
                 parent_id: None,
                 created_at: now,
@@ -1406,6 +1507,7 @@ mod tests {
                     issue_type: "task".to_string(),
                     priority: "medium".to_string(),
                     strategy: None,
+                    adr: None,
                     workflow_branch: None,
                     parent_id: None,
                     created_at: now,
@@ -1436,6 +1538,7 @@ mod tests {
                             "atelier-note",
                             "note",
                             &format!("writer {writer} note {index}"),
+                            DecisionFlags::default(),
                             true,
                         )
                         .unwrap();

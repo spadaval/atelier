@@ -226,6 +226,7 @@ refusal of it leaves stdout empty:
 | `status` (and its alias `prime`) | `work=<n> current_missions=<n> ready=<n> human=<n>`, where `work` counts active work |
 | `work` | the view names, one per line |
 | `work ready`, `blocked`, `human`, `active`, `all`, `missions` | IDs, one per line |
+| `work decisions` | the IDs of the items holding current decisions, one per line |
 | `work mission`, `work parent` | their counts as `key=value` numbers, `active=<n> ready=<n> human=<n> context=<n> blocked=<n> done=<n> backlog=<n>`, with `proof_gaps=<n>` for a parent; with a filter such as `--ready`, its IDs |
 | `issue create`, `update`, `note`, `link`, `unlink` | the ID; for `link` and `unlink`, the first ID given |
 | `issue show` | `<id> <status>`, one line per ID |

@@ -9,7 +9,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | --- | --- |
 | `init` | Initialize repository records and policy. |
 | `status` | Orient a session: checkout, owner, work, missions, and labeled branch summaries. |
-| `work` | Ready, human, blocked, active, all, mission, parent, and mission overview views; bare `work` lists them. |
+| `work` | Ready, human, blocked, active, all, mission, decisions, parent, and mission overview views; bare `work` lists them. |
 | `issue` | Create, list, show, update, transition, note, link, and unlink work. |
 | `start` | Prepare the branch owner and start selected work. |
 | `bundle` | Preview and apply one-shot graph input. |
@@ -32,6 +32,7 @@ atelier work human
 atelier work blocked
 atelier work missions
 atelier work mission <mission-id>
+atelier work decisions <mission-id>
 atelier work parent <parent-id> [--all]
 atelier issue show <id>... [--full]
 atelier issue transition <id>
@@ -63,6 +64,7 @@ atelier issue create "Implement the slice" --parent <parent-id>
 atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff
+atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--rejected "Alternative"] [--one-way]
 atelier issue transition <id> close --reason "Acceptance shown"
 ```
 

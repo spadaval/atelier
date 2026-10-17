@@ -196,6 +196,24 @@ pub fn issue_findings<'a>(
                 findings.push(finding(error.to_string()));
             }
         }
+        if let Some(adr) = &issue.adr {
+            if !repo_root.join(&adr.path).is_file() {
+                findings.push(finding(format!("Decision ADR {} does not exist", adr.path)));
+            }
+        }
+        let notes = record.sections.note_entries();
+        let decisions = notes
+            .iter()
+            .filter_map(|note| Some((note, atelier_core::DecisionNote::from_note(note)?)));
+        for (number, (note, decision)) in decisions.enumerate() {
+            if let Err(defect) = decision {
+                findings.push(finding(format!(
+                    "Decision note {} ({}) {defect}",
+                    number + 1,
+                    note.date
+                )));
+            }
+        }
         for state in record.sections.section_states() {
             if state.required && (!state.present || state.empty) {
                 findings.push(finding(format!(

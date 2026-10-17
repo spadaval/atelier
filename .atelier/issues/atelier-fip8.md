@@ -4,6 +4,9 @@ id: "atelier-fip8"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-fip8
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Record decisions as typed notes and show which decision records are current"
-updated_at: "2026-10-17T17:25:58.881272712+00:00"
+updated_at: "2026-10-17T17:37:55.843715712+00:00"
 ---
 
 ## Goal
@@ -47,3 +50,17 @@ Store a decision note as an ordinary dated note with structured continuation lin
 ```
 
 The tag is `decision` or `decision one-way`. One parser in atelier-records turns notes into typed entries; `check`, `work decisions` and later views share it.
+
+## Notes
+
+- 2026-10-17 [decision one-way] Store decision notes as ordinary dated notes tagged [decision] or [decision one-way], with indented Reason: and Rejected: lines
+  Reason: Existing note parsing, approval freshness and record validation apply unchanged, and the stored text reads well without a tool
+  Rejected: a new Decisions section in the issue body
+  Rejected: a structured YAML list in front matter
+- 2026-10-17 [decision one-way] Link a decision record's ADR with a typed adr front matter field, checked like a mission's strategy path
+  Reason: check can refuse a missing file, and views read the link without parsing prose
+  Rejected: an ADR line inside the Decision section
+- 2026-10-17 [decision] Treat a decision record as superseded only once the record superseding it is decided
+  Reason: An open proposal to replace a decision does not change what is in force
+- 2026-10-17 [decision] Leave decision notes without supersession; only decision records supersede
+  Reason: S3 names decision records, and reversing an item-level choice is a new decision note or record; add note supersession when a view shows the need

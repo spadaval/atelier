@@ -765,3 +765,141 @@ fn policy_category(status: &str) -> Result<Option<String>> {
             .and_then(|policy| policy.status_category(status).map(str::to_owned)),
     )
 }
+
+/// `work decisions <mission>`: the decisions made across a mission's scope,
+/// one-way decision notes first, then decision records, then reversible
+/// notes. Superseded decision records follow, and malformed notes last.
+pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<()> {
+    let id = crate::commands::issue::resolve_id(index, mission_ref)?;
+    let mission = index.require_issue(&id)?;
+    if mission.issue_type != "mission" {
+        bail!(
+            "{id} is {}, not a mission. Its decisions show in `atelier issue show {id} --full`.",
+            atelier_app::record_ref::with_article(&mission.issue_type)
+        );
+    }
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let decisions = atelier_app::decisions::mission_decisions(index, policy.as_ref(), &id)?;
+    if quiet {
+        // The items holding current decisions, each once.
+        let mut ids: Vec<&String> = Vec::new();
+        let current = decisions
+            .notes_one_way_first()
+            .map(|note| &note.issue_id)
+            .chain(
+                decisions
+                    .records
+                    .iter()
+                    .filter(|record| record.is_current())
+                    .map(|record| &record.issue.id),
+            );
+        for id in current {
+            if !ids.contains(&id) {
+                println!("{id}");
+                ids.push(id);
+            }
+        }
+        return Ok(());
+    }
+    let context = RenderContext::for_stdout();
+    let note_line = |note: &atelier_app::decisions::NoteDecision| {
+        let decision = &note.decision;
+        let mut line = format!(
+            "{} {} {} | because {}",
+            note.issue_id, decision.date, decision.choice, decision.reason
+        );
+        if !decision.rejected.is_empty() {
+            line.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
+        }
+        line
+    };
+    let record_line = |record: &atelier_app::decisions::RecordDecision| {
+        let issue = &record.issue;
+        let category = policy
+            .as_ref()
+            .and_then(|policy| policy.status_category(&issue.status));
+        let mut line = ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+            .state(category, None);
+        if let Some(adr) = &issue.adr {
+            line = line.cue(format!("ADR {}", adr.path));
+        }
+        if !record.supersedes.is_empty() {
+            line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
+        }
+        if !record.superseded_by.is_empty() {
+            line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
+        }
+        line.render_wrapped(context, "")
+    };
+    let one_way = decisions
+        .notes
+        .iter()
+        .filter(|note| note.decision.one_way)
+        .map(note_line)
+        .collect::<Vec<_>>();
+    let reversible = decisions
+        .notes
+        .iter()
+        .filter(|note| !note.decision.one_way)
+        .map(note_line)
+        .collect::<Vec<_>>();
+    let (current, superseded): (Vec<_>, Vec<_>) = decisions
+        .records
+        .iter()
+        .partition(|record| record.is_current());
+    let section = |title: &str, lines: Vec<String>| {
+        if lines.is_empty() {
+            Vec::new()
+        } else {
+            render_lines_section(title, lines)
+        }
+    };
+    let malformed = decisions
+        .malformed
+        .iter()
+        .map(|note| format!("⚠ {} {} {}", note.issue_id, note.date, note.defect))
+        .collect::<Vec<_>>();
+    let total = decisions.notes.len() + decisions.records.len();
+    let summary = if total == 0 && malformed.is_empty() {
+        vec!["No decisions recorded in this mission's scope.".to_string()]
+    } else {
+        Vec::new()
+    };
+    let title = ItemLine::new(
+        &mission.id,
+        &mission.status,
+        &mission.priority,
+        &mission.title,
+    )
+    .issue_type(&mission.issue_type)
+    .text();
+    print_page(
+        &format!("Decisions: {title}"),
+        [
+            summary,
+            section("One-way Decisions", one_way),
+            section(
+                "Decision Records",
+                current.into_iter().flat_map(record_line).collect(),
+            ),
+            section("Reversible Decisions", reversible),
+            section(
+                "Superseded Decisions",
+                superseded.into_iter().flat_map(record_line).collect(),
+            ),
+            section("Malformed Decision Notes", malformed),
+            render_footer_section(
+                context,
+                [
+                    FooterAction::new(
+                        "Record a decision",
+                        "atelier issue note <id> --kind decision \"<choice>\" --reason \"<why>\"",
+                    ),
+                    FooterAction::new("Show the mission", format!("atelier work mission {id}")),
+                ],
+            ),
+        ],
+        context,
+    );
+    Ok(())
+}
