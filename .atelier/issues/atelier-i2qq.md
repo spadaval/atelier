@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Write one item-line, verdict, confirmation and quiet contract for all views"
-updated_at: "2026-10-17T03:52:32.829313536+00:00"
+updated_at: "2026-10-17T05:23:01.403764581+00:00"
 ---
 
 ## Goal
