@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Mark ready work that is already in flight on another local branch"
-updated_at: "2026-10-17T02:56:43.823215543+00:00"
+updated_at: "2026-10-17T03:07:39.761133657+00:00"
 ---
 
 ## Goal
