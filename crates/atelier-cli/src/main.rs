@@ -16,56 +16,17 @@ const GLOBAL_OPTION_ORDER: usize = 1000;
 #[derive(Parser)]
 #[command(name = "atelier")]
 #[command(about = "Mission and proof oriented work coordination for agents")]
-#[command(help_template = "{about-section}\nUsage: {usage}\n\n{after-help}\nOptions:\n{options}")]
-#[command(after_help = "Setup:
-  init          Initialize Atelier in the current repository
-  setup         Install supported harness hooks (claude)
-
-Orientation:
-  status        Orient a session: checkout, owner, work, missions, branches
-  land          Check committed records and completion invariants
-  work          Show operational views, including the plural Mission Overview
-
-Issues:
-  issue         Create, list, show, update, transition, note, and manage links
-  start         Check out an issue's owner branch and start it
-
-Planning:
-  bundle        Preview and apply one-shot graph bundle files
-
-Records:
-  evidence      Capture validation evidence
-  review        Record independent reviews, findings, and decisions
-  merge         Check gates and integrate a reviewed work branch
-
-Maintenance:
-  check         Validate every tracker record
-  prune         Prune accumulated artifacts safely
-
-Common commands:
+#[command(after_help = "Common commands:
   atelier status
   atelier work ready
-  atelier work blocked
-  atelier work missions
-  atelier issue list
-  atelier work mission <mission-id>
-  atelier work parent <parent-id>
+  atelier work mission <id>
   atelier issue show <id>
-  atelier issue link <blocked-id> <blocker-id> --role blocked_by
-  atelier issue unlink <blocked-id> <blocker-id> --role blocked_by
-  atelier issue create \"...\" --issue-type mission
-  atelier issue show <mission-id>
-  atelier bundle preview <file>
-  atelier bundle apply <file> --yes
-  atelier issue transition <issue-id>
-  atelier start <issue-id>
-  atelier issue transition <issue-id> close --reason \"...\"
-  atelier check
-  atelier check <issue-id>
-  atelier prune
-  atelier prune --apply
-  atelier help <command>
-")]
+  atelier start <id>
+  atelier evidence record --target issue/<id> --kind test -- <command>
+  atelier issue transition <id> close --reason \"...\"
+  atelier review approve <id> --identity <name> \"...\"
+  atelier land
+  atelier merge <id> --check")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
@@ -151,6 +112,16 @@ enum Commands {
         slug: Option<String>,
     },
 
+    /// Install supported harness session hooks
+    Setup {
+        /// Harness whose hooks to install
+        #[arg(value_parser = ["claude"])]
+        harness: String,
+        /// Explicit executable for local dogfooding; otherwise use atelier on PATH
+        #[arg(long)]
+        binary: Option<std::path::PathBuf>,
+    },
+
     /// Orient a session: checkout, owner, work, missions, and other branches
     Status {
         /// Consume Claude Code SessionStart JSON and emit hook context
@@ -164,30 +135,6 @@ enum Commands {
         /// Consume Claude Code SessionStart JSON and emit hook context
         #[arg(long, value_parser = ["claude"])]
         hook: Option<String>,
-    },
-    /// Check every done claim and the whole review history; land checks only
-    /// what changed since the base
-    Doctor,
-    /// Verify committed records and applicable completion invariants
-    Land {
-        /// Issue or branch owner (otherwise inferred from the checkout)
-        id: Option<String>,
-        /// Consume Claude Code Stop JSON and emit its decision
-        #[arg(long, value_parser = ["claude"])]
-        hook: Option<String>,
-        /// Confirm that this unowned branch installs Atelier: the base has no
-        /// workflow policy yet, so it lands through the repository's usual review
-        #[arg(long)]
-        install: bool,
-    },
-    /// Install supported harness session hooks
-    Setup {
-        /// Harness whose hooks to install
-        #[arg(value_parser = ["claude"])]
-        harness: String,
-        /// Explicit executable for local dogfooding; otherwise use atelier on PATH
-        #[arg(long)]
-        binary: Option<std::path::PathBuf>,
     },
 
     /// Operational multi-issue work views
@@ -208,11 +155,31 @@ enum Commands {
         id: String,
     },
 
+    /// First-class evidence records
+    Evidence {
+        #[command(subcommand)]
+        action: EvidenceCommands,
+    },
+
     /// Append-only in-repository review events
     Review {
         #[command(subcommand)]
         action: ReviewCommands,
     },
+
+    /// Verify committed records and applicable completion invariants
+    Land {
+        /// Issue or branch owner (otherwise inferred from the checkout)
+        id: Option<String>,
+        /// Consume Claude Code Stop JSON and emit its decision
+        #[arg(long, value_parser = ["claude"])]
+        hook: Option<String>,
+        /// Confirm that this unowned branch installs Atelier: the base has no
+        /// workflow policy yet, so it lands through the repository's usual review
+        #[arg(long)]
+        install: bool,
+    },
+
     /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
     Merge {
         /// Issue, or child of the parent, that owns the checked-out work branch
@@ -224,17 +191,23 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+
     /// One-shot graph bundle files
     Bundle {
         #[command(subcommand)]
         action: BundleCommands,
     },
 
-    /// First-class evidence records
-    Evidence {
-        #[command(subcommand)]
-        action: EvidenceCommands,
+    /// Validate tracker records and their graph
+    Check {
+        /// Optional issue ID
+        id: Option<String>,
     },
+
+    /// Check every done claim and the whole review history
+    ///
+    /// `land` checks only what changed since the base.
+    Doctor,
 
     /// Prune accumulated artifacts safely
     Prune {
@@ -251,20 +224,15 @@ enum Commands {
         #[command(subcommand)]
         action: MigrateCommands,
     },
-
-    /// Validate tracker records and their graph
-    Check {
-        /// Optional issue ID
-        id: Option<String>,
-    },
 }
 
 #[derive(Subcommand)]
 enum MigrateCommands {
-    /// Retype retired epic records as parent issues: Outcome becomes Goal,
-    /// Proof and Delivers become Done when, draft becomes backlog (or the
-    /// type's initial status), and the policy loses the epic type. Dry run
-    /// unless --apply
+    /// Retype retired epic records as parent issues; dry run unless --apply
+    ///
+    /// Outcome becomes Goal, Proof and Delivers become Done when, draft
+    /// becomes backlog (or the type's initial status), and the policy loses
+    /// the epic type.
     Epics {
         /// Issue type for migrated epics
         #[arg(long, default_value = "feature")]
@@ -684,18 +652,23 @@ fn run() -> Result<()> {
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
 
-        Commands::Work { action } => {
+        Commands::Work { action: None } => {
+            work_index(quiet);
+            Ok(())
+        }
+        Commands::Work {
+            action: Some(action),
+        } => {
             let (_, index) = load_repository()?;
             match action {
-                None => commands::work::dashboards(quiet),
-                Some(WorkCommands::Mission {
+                WorkCommands::Mission {
                     id,
                     ready,
                     blocked,
                     active,
                     done,
                     all,
-                }) => commands::work::mission_dashboard(
+                } => commands::work::mission_dashboard(
                     &index,
                     &id,
                     commands::work::MissionDashboardOptions {
@@ -707,17 +680,13 @@ fn run() -> Result<()> {
                     },
                     quiet,
                 ),
-                Some(WorkCommands::Parent { id }) => {
-                    commands::work::parent_dashboard(&index, &id, quiet)
-                }
-                Some(WorkCommands::Ready) => commands::work::list(&index, "ready", quiet),
-                Some(WorkCommands::Blocked) => commands::work::list(&index, "blocked", quiet),
-                Some(WorkCommands::Human) => commands::work::list(&index, "human", quiet),
-                Some(WorkCommands::Active) => commands::work::list(&index, "active", quiet),
-                Some(WorkCommands::All) => commands::work::list(&index, "all", quiet),
-                Some(WorkCommands::Missions { all }) => {
-                    commands::work::missions(&index, all, quiet)
-                }
+                WorkCommands::Parent { id } => commands::work::parent_dashboard(&index, &id, quiet),
+                WorkCommands::Ready => commands::work::list(&index, "ready", quiet),
+                WorkCommands::Blocked => commands::work::list(&index, "blocked", quiet),
+                WorkCommands::Human => commands::work::list(&index, "human", quiet),
+                WorkCommands::Active => commands::work::list(&index, "active", quiet),
+                WorkCommands::All => commands::work::list(&index, "all", quiet),
+                WorkCommands::Missions { all } => commands::work::missions(&index, all, quiet),
             }
         }
 
@@ -936,6 +905,8 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
             CanonicalTransactionMode::Exclusive
         }
         Commands::Init { .. } => CanonicalTransactionMode::None,
+        // Bare `work` only lists the work views.
+        Commands::Work { action: None } => CanonicalTransactionMode::None,
         Commands::Bundle {
             action: BundleCommands::Apply { .. },
         } => CanonicalTransactionMode::Exclusive,
@@ -994,6 +965,25 @@ fn command_uses_canonical_transaction(command: &Commands) -> bool {
     canonical_transaction_mode(command) != CanonicalTransactionMode::None
 }
 
+/// Bare `atelier work` lists the work views from the command tree, as
+/// `atelier work --help` does; `--quiet` prints only their names.
+fn work_index(quiet: bool) {
+    use clap::CommandFactory;
+    if quiet {
+        let root = Cli::command();
+        let work = root.find_subcommand("work").expect("work subcommand");
+        for view in work.get_subcommands().filter(|view| !view.is_hide_set()) {
+            if view.get_name() != "help" {
+                println!("{}", view.get_name());
+            }
+        }
+        return;
+    }
+    if let Err(help) = Cli::command().try_get_matches_from(["atelier", "work", "--help"]) {
+        let _ = help.print();
+    }
+}
+
 fn parse_cli_or_exit() -> Cli {
     match Cli::try_parse() {
         Ok(cli) => cli,
@@ -1046,6 +1036,44 @@ mod help_tests {
             }
         }
         assert!(missing.is_empty(), "arguments without help: {missing:?}");
+    }
+
+    #[test]
+    fn every_visible_subcommand_is_listed_in_its_parent_help() {
+        let mut missing = Vec::new();
+        for (path, mut command) in commands() {
+            let help = command.render_help().to_string();
+            for sub in command.get_subcommands().filter(|sub| !sub.is_hide_set()) {
+                let about = sub.get_about().map(ToString::to_string).unwrap_or_default();
+                let listed = help.lines().any(|line| {
+                    let line = line.trim_start();
+                    line.strip_prefix(sub.get_name())
+                        .is_some_and(|rest| rest.trim_start() == about)
+                });
+                if !listed {
+                    missing.push(format!("{path} {}", sub.get_name()));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "subcommands missing from help: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn migrate_epics_summary_fits_one_line() {
+        let root = Cli::command();
+        let epics = root
+            .find_subcommand("migrate")
+            .and_then(|migrate| migrate.find_subcommand("epics"))
+            .expect("migrate epics");
+        let about = epics.get_about().expect("about").to_string();
+        assert!(about.chars().count() <= 80, "{about}");
+        assert!(
+            epics.get_long_about().is_some(),
+            "detail moved to long help"
+        );
     }
 
     #[test]

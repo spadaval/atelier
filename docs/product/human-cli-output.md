@@ -201,6 +201,13 @@ and category options of `issue list` and `issue create --status` list the
 repository workflow's values, read when help is shown. Global options, such as
 `--quiet`, follow the command's own options.
 
+Every command's description is its one-line `about`, and help lists are
+generated from it, so no list is written by hand. Root help lists every
+command that is not hidden, then `Common commands` in lifecycle order: orient,
+pick work, start it, record proof, close it, review, land and check the merge.
+Bare `atelier work` prints `atelier work --help`, and with `--quiet` the view
+names.
+
 ## Views
 
 Detail views show the item title, exact configured status, intent, blockers,

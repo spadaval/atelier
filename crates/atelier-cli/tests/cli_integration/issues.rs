@@ -578,7 +578,7 @@ fn test_panel_surfaces_are_complete_without_terminal_color() {
         );
         assert!(
             stdout.contains("\nNext\n----\n")
-                || stdout.contains("Dashboards")
+                || stdout.contains("\nCommands:\n")
                 || stdout.contains("Ready Work")
                 || stdout.contains("Current Work"),
             "colorless output must retain structural text:\n{stdout}"

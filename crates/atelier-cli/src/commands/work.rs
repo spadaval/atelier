@@ -52,51 +52,6 @@ impl MissionDashboardOptions {
     }
 }
 
-pub fn dashboards(quiet: bool) -> Result<()> {
-    if quiet {
-        println!("ready");
-        println!("human");
-        println!("blocked");
-        println!("active");
-        println!("all");
-        println!("missions");
-        println!("mission");
-        println!("parent");
-        return Ok(());
-    }
-
-    print_page(
-        "Atelier Work",
-        [
-            render_lines_section(
-                "Dashboards",
-                [
-                    "ready    Small top-level executable work picker",
-                    "human    Ready work only the human can do (needs-human)",
-                    "blocked  Repo-wide blocker triage",
-                    "missions Flat mission summaries with complete scope counts",
-                    "mission  Live mission orchestration dashboard",
-                    "parent   A parent issue and its children",
-                ],
-            ),
-            render_footer_section(
-                RenderContext::for_stdout(),
-                [
-                    FooterAction::new("Browse ready work", "atelier work ready"),
-                    FooterAction::new("Triage blockers", "atelier work blocked"),
-                    FooterAction::new("Compare missions", "atelier work missions"),
-                    FooterAction::new(
-                        "Open mission dashboard",
-                        "atelier work mission <mission-id>",
-                    ),
-                ],
-            ),
-        ],
-        RenderContext::for_stdout(),
-    );
-    Ok(())
-}
-
 pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut buckets = atelier_app::work_classification::work_buckets(index, policy.as_ref())?;
