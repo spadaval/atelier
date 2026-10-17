@@ -301,20 +301,14 @@ fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
     for option in &options {
         if option.allowed {
             allowed.push(option.name.clone());
-        } else if option.blockers_beyond_arguments().is_empty() {
+        } else if option.allowed_with_arguments() {
             allowed.push(format!(
                 "{} {}",
                 option.name,
                 option.missing_arguments.join(" ")
             ));
         } else {
-            let reason = option
-                .validator_results
-                .iter()
-                .find(|result| !result.passed && result.help.is_some())
-                .map(|result| result.reason.clone())
-                .or_else(|| option.blockers_beyond_arguments().first().cloned())
-                .unwrap_or_else(|| format!("to {}", option.to));
+            let reason = blocked_transition_reason(option);
             match blocked.iter_mut().find(|(existing, _)| *existing == reason) {
                 Some((_, names)) => names.push(&option.name),
                 None => blocked.push((reason, vec![&option.name])),
@@ -334,13 +328,15 @@ fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
     parts.join(" | ")
 }
 
+/// Why a transition is blocked: a failed validator with a hint, else its first
+/// gap other than a missing argument, the same reason in every view.
 fn blocked_transition_reason(option: &IssueTransitionOption) -> String {
     option
         .validator_results
         .iter()
         .find(|result| !result.passed && result.help.is_some())
         .map(|result| result.reason.clone())
-        .or_else(|| option.blockers.first().cloned())
+        .or_else(|| option.blockers_beyond_arguments().first().cloned())
         .unwrap_or_else(|| format!("to {}", option.to))
 }
 
@@ -569,7 +565,7 @@ pub fn transition_options(
     let options = crate::commands::workflow::issue_transition_options(index, issue_ref)?;
     if quiet {
         for option in &options {
-            if option.blockers_beyond_arguments().is_empty() {
+            if option.allowed_with_arguments() {
                 println!("{}", option.name);
             }
         }
@@ -586,13 +582,18 @@ fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>) {
     match options {
         Ok(options) => {
             for option in options {
-                let state = if option.allowed { "allowed" } else { "blocked" };
                 let summary = if option.allowed {
-                    format!("to {}", option.to)
+                    format!("allowed - to {}", option.to)
+                } else if option.allowed_with_arguments() {
+                    format!(
+                        "allowed - to {}, needs {}",
+                        option.to,
+                        option.missing_arguments.join(" ")
+                    )
                 } else {
-                    blocked_transition_reason(&option)
+                    format!("blocked - {}", blocked_transition_reason(option))
                 };
-                lines.push(format!("  {}: {} - {}", option.name, state, summary));
+                lines.push(format!("  {}: {summary}", option.name));
                 if let Some(help) = option
                     .validator_results
                     .iter()

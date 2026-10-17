@@ -31,6 +31,13 @@ impl IssueTransitionOption {
     pub fn blockers_beyond_arguments(&self) -> &[String] {
         &self.blockers[self.missing_arguments.len()..]
     }
+
+    /// Whether the transition runs once the caller gives the flags in
+    /// `missing_arguments`. Every view reports such a transition as allowed,
+    /// with its flags.
+    pub fn allowed_with_arguments(&self) -> bool {
+        self.blockers_beyond_arguments().is_empty()
+    }
 }
 
 /// Applies a workflow transition: checks required fields and read-only
@@ -410,7 +417,7 @@ fn render_issue_transition_options(
         format!("Options:  {}", options.len()),
     ];
     for option in options {
-        let decision = if option.allowed {
+        let decision = if option.allowed_with_arguments() {
             DecisionState::Allowed
         } else {
             DecisionState::Blocked
@@ -426,6 +433,11 @@ fn render_issue_transition_options(
         lines.push(format!("  Command: {}", option.command));
         if option.allowed {
             lines.push("  Requirements: satisfied".to_string());
+        } else if option.allowed_with_arguments() {
+            lines.push(format!(
+                "  Requirements: needs {}",
+                option.missing_arguments.join(" ")
+            ));
         } else {
             if let Some(result) = option
                 .validator_results
@@ -670,7 +682,13 @@ mod tests {
             from: vec!["todo".to_string()],
             to: "in_progress".to_string(),
             allowed,
-            blockers: Vec::new(),
+            blockers: if allowed {
+                Vec::new()
+            } else {
+                vec![
+                    "validator issue.sections_parseable failed: sections are parseable".to_string(),
+                ]
+            },
             missing_arguments: Vec::new(),
             validator_results: vec![ValidatorResult {
                 validator: "issue.sections_parseable".to_string(),
