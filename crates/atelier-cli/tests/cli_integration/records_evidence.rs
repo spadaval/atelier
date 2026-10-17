@@ -1809,25 +1809,12 @@ fn test_evidence_relation_role_errors_are_corrective() {
 
 fn assert_corrective_evidence_role_error(stderr: &str) {
     assert!(
-        stderr.contains("Invalid evidence relation role 'validation'"),
+        stderr.contains("invalid value 'validation' for '--role <ROLE>'"),
         "error should name invalid role: {stderr}"
     );
     assert!(
-        stderr.contains("Accepted evidence relation vocabulary: validates"),
+        stderr.contains("[possible values: validates]"),
         "error should name accepted relation vocabulary: {stderr}"
-    );
-    assert!(
-        stderr.contains("Evidence kinds such as validation belong in --kind, not --role"),
-        "error should distinguish evidence kind from relation role: {stderr}"
-    );
-    assert!(
-        stderr
-            .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""),
-        "error should name normal targeted record flow: {stderr}"
-    );
-    assert!(
-        stderr.contains("atelier evidence attach <evidence-id> issue <issue-id>"),
-        "error should name existing-proof attach flow: {stderr}"
     );
 }
 

@@ -2,10 +2,16 @@ use anyhow::{Context, Result};
 use atelier::commands;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
+use atelier_core::{EvidenceResult, FindingDecision};
+use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
 use std::env;
 
 mod issue_cli;
+mod workflow_help;
+
+/// Help lists global options after every command's own options.
+const GLOBAL_OPTION_ORDER: usize = 1000;
 
 #[derive(Parser)]
 #[command(name = "atelier")]
@@ -63,7 +69,7 @@ Common commands:
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, display_order = GLOBAL_OPTION_ORDER)]
     quiet: bool,
 
     #[command(subcommand)]
@@ -93,9 +99,9 @@ enum ReviewCommands {
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
-        /// Recommended decision: fix_now, defer or no_action
-        #[arg(long)]
-        recommendation: String,
+        /// Recommended decision
+        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
+        recommendation: FindingDecision,
     },
     /// Record an explicit trivial exemption, with why correctness is evident
     Trivial(ReviewArgs),
@@ -106,9 +112,9 @@ enum ReviewCommands {
         /// Who decides; defer and no_action need a non-author identity
         #[arg(long)]
         identity: String,
-        /// fix_now, defer or no_action
-        #[arg(long)]
-        decision: String,
+        /// The decision on the finding
+        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
+        decision: FindingDecision,
         /// For fix_now: the full commit that resolves the finding, later than its pin
         #[arg(long)]
         resolution_commit: Option<String>,
@@ -176,6 +182,7 @@ enum Commands {
     },
     /// Install supported harness session hooks
     Setup {
+        /// Harness whose hooks to install
         #[arg(value_parser = ["claude"])]
         harness: String,
         /// Explicit executable for local dogfooding; otherwise use atelier on PATH
@@ -208,9 +215,12 @@ enum Commands {
     },
     /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
     Merge {
+        /// Issue, or child of the parent, that owns the checked-out work branch
         id: String,
+        /// Check the merge gates only; merge nothing
         #[arg(long)]
         check: bool,
+        /// Print the gate results as JSON
         #[arg(long)]
         json: bool,
     },
@@ -274,6 +284,7 @@ enum WorkCommands {
     /// Show one mission dashboard
     #[command(group(clap::ArgGroup::new("filter").multiple(false)))]
     Mission {
+        /// Mission ID
         id: String,
         /// Show mission-scoped ready work only
         #[arg(long, group = "filter")]
@@ -292,7 +303,10 @@ enum WorkCommands {
         all: bool,
     },
     /// Show one parent issue's dashboard: the parent and its children
-    Parent { id: String },
+    Parent {
+        /// Parent issue ID
+        id: String,
+    },
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
     Ready,
@@ -486,10 +500,15 @@ enum IssueCommands {
 #[derive(Subcommand)]
 enum BundleCommands {
     /// Preview an authored bundle JSON file without mutating tracker state
-    Preview { input: String },
+    Preview {
+        /// Path to the bundle JSON file
+        input: String,
+    },
     /// Apply an authored bundle JSON file
     Apply {
+        /// Path to the bundle JSON file
         input: String,
+        /// Confirm the apply; without it the command refuses
         #[arg(long)]
         yes: bool,
     },
@@ -505,49 +524,85 @@ enum EvidenceCommands {
 Use `evidence attach` only when you need to reuse an existing evidence record on
 another target.")]
     Record {
+        /// Kind of proof, such as test or validation
         #[arg(long = "kind")]
         evidence_kind: String,
-        /// Explicit manual result; command capture derives it from the exit status.
-        #[arg(long, conflicts_with = "command")]
+        /// Explicit manual result; command capture derives it from the exit status
+        #[arg(
+            long,
+            conflicts_with = "command",
+            value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str)
+        )]
         result: Option<atelier_core::EvidenceResult>,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
-        #[arg(long, default_value = "validates")]
+        /// Relation to the target
+        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
         role: String,
+        /// What the evidence shows; the same as the positional summary
         #[arg(long, conflicts_with = "summary_text")]
         summary: Option<String>,
+        /// Path of an artifact the evidence refers to
         #[arg(long)]
         path: Option<String>,
+        /// URI of an artifact the evidence refers to
         #[arg(long)]
         uri: Option<String>,
+        /// Who or what produced the evidence, such as an agent name
         #[arg(long)]
         producer: Option<String>,
-        /// Manual evidence summary. Command-backed evidence should pass commands after `--`.
+        /// Manual evidence summary; command-backed evidence passes its command after `--`
         summary_text: Option<String>,
+        /// Command to run and capture; its exit status sets the result
         #[arg(last = true, num_args = 0..)]
         command: Vec<String>,
     },
     /// Show an evidence record
-    Show { id: String },
+    Show {
+        /// Evidence record ID
+        id: String,
+    },
     /// Reuse an existing evidence record on another target
     Attach {
+        /// Evidence record ID
         id: String,
+        /// Target record kind
+        #[arg(value_parser = ["issue", "evidence"])]
         target_kind: String,
+        /// Target record ID
         target_id: String,
-        #[arg(long, default_value = "validates")]
+        /// Relation to the target
+        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
         role: String,
     },
     /// List evidence records, optionally filtering their explicit result
     List {
-        #[arg(long)]
+        /// Show only records with this result
+        #[arg(long, value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str))]
         result: Option<atelier_core::EvidenceResult>,
     },
 }
 
-// ============================================================================
-// Dispatch helpers for canonical subcommands
-// ============================================================================
+/// The relation roles evidence may have to its target.
+const EVIDENCE_ROLES: [&str; 1] = ["validates"];
+
+/// Lists `values` by name in help and parses a name back to its value, so
+/// any other name is a usage error.
+fn named_values<T, const N: usize>(
+    values: [T; N],
+    name: fn(T) -> &'static str,
+) -> impl TypedValueParser<Value = T>
+where
+    T: Copy + Send + Sync + 'static,
+{
+    clap::builder::PossibleValuesParser::new(values.map(name)).map(move |chosen| {
+        values
+            .into_iter()
+            .find(|value| name(*value) == chosen)
+            .expect("the parser accepts only listed names")
+    })
+}
 
 // ============================================================================
 // Main
@@ -693,12 +748,7 @@ fn run() -> Result<()> {
                 ReviewCommands::Finding {
                     args,
                     recommendation,
-                } => append(
-                    args,
-                    ReviewEvent::Finding {
-                        recommendation: commands::review::decision(&recommendation)?,
-                    },
-                ),
+                } => append(args, ReviewEvent::Finding { recommendation }),
                 ReviewCommands::Disposition {
                     finding,
                     identity,
@@ -709,7 +759,7 @@ fn run() -> Result<()> {
                 } => commands::review::disposition(
                     &finding,
                     &identity,
-                    &decision,
+                    decision,
                     resolution_commit,
                     follow_up,
                     &summary,
@@ -948,11 +998,136 @@ fn parse_cli_or_exit() -> Cli {
     match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
+            let error = workflow_help::with_workflow_values(error);
             let exit_code = error.exit_code();
             if let Err(print_error) = error.print() {
                 eprintln!("{print_error}");
             }
             std::process::exit(exit_code);
+        }
+    }
+}
+
+#[cfg(test)]
+mod help_tests {
+    use super::Cli;
+    use clap::{Command, CommandFactory, Parser};
+
+    /// Every command in the tree, with its path, after globals propagate.
+    /// clap's generated `help` subcommands take no arguments and are skipped.
+    fn commands() -> Vec<(String, Command)> {
+        fn walk(path: String, command: &Command, out: &mut Vec<(String, Command)>) {
+            out.push((path.clone(), command.clone()));
+            for sub in command
+                .get_subcommands()
+                .filter(|sub| sub.get_name() != "help")
+            {
+                walk(format!("{path} {}", sub.get_name()), sub, out);
+            }
+        }
+        let mut root = Cli::command();
+        root.build();
+        let mut out = Vec::new();
+        walk("atelier".into(), &root, &mut out);
+        out
+    }
+
+    #[test]
+    fn every_argument_has_help() {
+        let mut missing = Vec::new();
+        for (path, command) in commands() {
+            for arg in command.get_arguments() {
+                if arg
+                    .get_help()
+                    .is_none_or(|help| help.to_string().trim().is_empty())
+                {
+                    missing.push(format!("{path} {}", arg.get_id()));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "arguments without help: {missing:?}");
+    }
+
+    #[test]
+    fn fixed_values_are_listed_and_others_are_usage_errors() {
+        let cases: [(&[&str], &str); 7] = [
+            (
+                &[
+                    "review",
+                    "finding",
+                    "x",
+                    "s",
+                    "--identity",
+                    "i",
+                    "--recommendation",
+                ],
+                "fix_now, defer, no_action",
+            ),
+            (
+                &[
+                    "review",
+                    "disposition",
+                    "x",
+                    "s",
+                    "--identity",
+                    "i",
+                    "--decision",
+                ],
+                "fix_now, defer, no_action",
+            ),
+            (
+                &["evidence", "record", "--kind", "test", "s", "--result"],
+                "pass, fail, blocked, not-applicable",
+            ),
+            (
+                &["evidence", "list", "--result"],
+                "pass, fail, blocked, not-applicable",
+            ),
+            (
+                &["evidence", "record", "--kind", "test", "s", "--role"],
+                "validates",
+            ),
+            (
+                &["evidence", "attach", "e", "issue", "t", "--role"],
+                "validates",
+            ),
+            (&["evidence", "attach", "e", "t"], "issue, evidence"),
+        ];
+        for (args, values) in cases {
+            let args = std::iter::once("atelier")
+                .chain(args.iter().copied())
+                .chain(["bogus"]);
+            let error = match Cli::try_parse_from(args) {
+                Ok(_) => panic!("an option with values {values} accepted bogus"),
+                Err(error) => error,
+            };
+            assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+            assert_eq!(error.exit_code(), 2);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("[possible values: {values}]")),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn global_options_follow_command_options() {
+        for (path, mut command) in commands() {
+            let help = command.render_help().to_string();
+            let quiet = help
+                .lines()
+                .position(|line| line.trim_start().starts_with("-q, --quiet"))
+                .unwrap_or_else(|| panic!("{path} help lists no --quiet:\n{help}"));
+            let later_option = help
+                .lines()
+                .skip(quiet + 1)
+                .find(|line| line.trim_start().starts_with('-'));
+            assert!(
+                later_option.is_none(),
+                "{path} lists {later_option:?} after the global --quiet:\n{help}"
+            );
         }
     }
 }

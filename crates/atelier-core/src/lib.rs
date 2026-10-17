@@ -279,6 +279,17 @@ pub enum FindingDecision {
     Defer,
     NoAction,
 }
+impl FindingDecision {
+    pub const ALL: [Self; 3] = [Self::FixNow, Self::Defer, Self::NoAction];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FixNow => "fix_now",
+            Self::Defer => "defer",
+            Self::NoAction => "no_action",
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
@@ -637,6 +648,8 @@ pub enum EvidenceResult {
     NotApplicable,
 }
 impl EvidenceResult {
+    pub const ALL: [Self; 4] = [Self::Pass, Self::Fail, Self::Blocked, Self::NotApplicable];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pass => "pass",
@@ -763,6 +776,55 @@ mod tests {
             count_noun(2, "older evidence record"),
             "2 older evidence records"
         );
+    }
+
+    #[test]
+    fn every_evidence_result_is_listed_and_round_trips() {
+        for result in [
+            EvidenceResult::Pass,
+            EvidenceResult::Fail,
+            EvidenceResult::Blocked,
+            EvidenceResult::NotApplicable,
+        ] {
+            // Exhaustive, so a new variant fails to compile until listed above.
+            match result {
+                EvidenceResult::Pass
+                | EvidenceResult::Fail
+                | EvidenceResult::Blocked
+                | EvidenceResult::NotApplicable => {}
+            }
+            assert!(
+                EvidenceResult::ALL.contains(&result),
+                "{result:?} is missing from EvidenceResult::ALL"
+            );
+        }
+        for result in EvidenceResult::ALL {
+            assert_eq!(result.as_str().parse::<EvidenceResult>(), Ok(result));
+        }
+    }
+
+    #[test]
+    fn every_finding_decision_is_listed_and_named_as_serialized() {
+        for decision in [
+            FindingDecision::FixNow,
+            FindingDecision::Defer,
+            FindingDecision::NoAction,
+        ] {
+            // Exhaustive, so a new variant fails to compile until listed above.
+            match decision {
+                FindingDecision::FixNow | FindingDecision::Defer | FindingDecision::NoAction => {}
+            }
+            assert!(
+                FindingDecision::ALL.contains(&decision),
+                "{decision:?} is missing from FindingDecision::ALL"
+            );
+        }
+        for decision in FindingDecision::ALL {
+            assert_eq!(
+                serde_json::to_value(decision).unwrap(),
+                serde_json::Value::from(decision.as_str())
+            );
+        }
     }
 
     #[test]

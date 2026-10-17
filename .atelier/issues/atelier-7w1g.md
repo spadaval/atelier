@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "help"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-7w1g
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T07:27:55.507817337+00:00"
+status: "done"
 title: "Document every argument and flag in subcommand help"
-updated_at: "2026-10-17T07:20:06.440307265+00:00"
+updated_at: "2026-10-17T07:27:55.507817337+00:00"
 ---
 
 ## Goal
@@ -43,3 +47,7 @@ These print with empty descriptions in `--help`:
 ## Context
 
 `crates/atelier-cli/src/main.rs` (derive definitions). atelier-kaor fixed only the `issue` options.
+
+## Close Reason
+
+Every clap argument and flag has a one-line description (unit test walks the tree); evidence results show possible values; issue list --status/--category and issue create --status list the repository workflow's values in help; global --quiet sorts after command options (unit test). Evidence: atelier-yxtx, atelier-z5kr, atelier-6z13.
