@@ -23,9 +23,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-10-17T02:59:43.406116443+00:00"
+status: "done"
 title: "Make issue show brief by default and accept several IDs"
-updated_at: "2026-10-17T02:36:15.483150369+00:00"
+updated_at: "2026-10-17T02:59:43.406116443+00:00"
 ---
 
 ## Goal
@@ -43,3 +44,7 @@ Agents trim `issue show` with `| head`, `| sed -n 1,40p` and section-extracting 
 ## Context
 
 ADR 0022 output principle. Transcript evidence: `issue show ... | sed -n '1,30p'`, `sed -n '/Hierarchy/,/^$/p'` loops.
+
+## Close Reason
+
+issue show is brief by default with --full for the old view and accepts several IDs; independently reviewed in two rounds and approved; suites pass after merging master.
