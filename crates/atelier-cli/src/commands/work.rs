@@ -9,9 +9,10 @@ use atelier_core::Issue;
 
 use crate::commands::git::InFlight;
 use crate::human_output::{
-    count_noun, last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_row_wrapped, render_unassigned_groups,
-    scope_counts, FooterAction, IssueListPanel, IssueListRow, ItemLine, RenderContext, TextStyle,
+    count_noun, decision_note_rows, decision_record_rows, last_closed_mission, print_page,
+    render_footer_section, render_labeled_lines, render_lines_section, render_metadata,
+    render_row_wrapped, render_unassigned_groups, scope_counts, FooterAction, IssueListPanel,
+    IssueListRow, ItemLine, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -785,17 +786,7 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
             .notes
             .iter()
             .filter(|note| note.decision.one_way == one_way)
-            .flat_map(|note| {
-                let decision = &note.decision;
-                let mut row = format!(
-                    "{} {} {} | because {}",
-                    note.issue_id, decision.date, decision.choice, decision.reason
-                );
-                if !decision.rejected.is_empty() {
-                    row.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
-                }
-                render_row_wrapped(context, &row)
-            })
+            .flat_map(|note| decision_note_rows(context, note))
             .collect::<Vec<_>>()
     };
     let record_lines = |keep: &dyn Fn(&atelier_app::decisions::RecordDecision) -> bool| {
@@ -803,25 +794,7 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
             .records
             .iter()
             .filter(|record| keep(record))
-            .flat_map(|record| {
-                let issue = &record.issue;
-                let category = policy
-                    .as_ref()
-                    .and_then(|policy| policy.status_category(&issue.status));
-                let mut line =
-                    ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
-                        .state(category, None);
-                if let Some(adr) = &issue.adr {
-                    line = line.cue(format!("ADR {}", adr.path));
-                }
-                if !record.supersedes.is_empty() {
-                    line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
-                }
-                if !record.superseded_by.is_empty() {
-                    line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
-                }
-                line.render_wrapped(context, "")
-            })
+            .flat_map(|record| decision_record_rows(context, policy.as_ref(), record))
             .collect::<Vec<_>>()
     };
     let section = |title: &str, lines: Vec<String>| {

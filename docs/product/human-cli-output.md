@@ -90,6 +90,18 @@ The second form lists a note `check` refuses, numbered as `check` numbers
 it. Both rows wrap as item lines do, continuing on lines indented past the
 rows.
 
+`issue show` and `status` list the current decisions bearing on an item:
+the decision notes on the item, its parent and its mission, and the decided,
+unsuperseded decision records in its mission's scope. The brief form, in
+`issue show` and `status`, is a count with the one-way decisions beneath it;
+`issue show --full` adds a Decisions section with all of them, one-way notes
+first, then decision records, then reversible notes:
+
+```
+Decisions: 4 current, 1 one-way:
+  atelier-x 2026-10-17 Keep the format | because Readers rely on it
+```
+
 ### Commits and Timestamps
 
 - A commit is shown by its first 8 characters. The full 40 appear only where

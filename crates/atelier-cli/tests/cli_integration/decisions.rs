@@ -421,3 +421,125 @@ fn work_decisions_refuses_items_that_are_not_missions() {
         "empty sections are left out: {view}"
     );
 }
+
+#[test]
+fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
+    let dir = tempdir().unwrap();
+    let (mission, work, old, new) = mission_fixture(dir.path());
+    let parent = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--body",
+            "## Goal\n\nP\n\n## Done when\n\nD",
+            "Parent",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "update", &work, "--parent", &parent]);
+    let unrelated = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--body",
+            "## Goal\n\nU\n\n## Done when\n\nD",
+            "Sibling",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "link", "-q", &unrelated, &mission]);
+    let decide = |id: &str, choice: &str, one_way: bool| {
+        let mut args = vec![
+            "issue", "note", id, "--kind", "decision", choice, "--reason", "because",
+        ];
+        if one_way {
+            args.push("--one-way");
+        }
+        ok(dir.path(), &args);
+    };
+    decide(&work, "Item choice", false);
+    decide(&parent, "Parent choice", true);
+    decide(&mission, "Mission choice", false);
+    decide(&unrelated, "Sibling choice", false);
+    // The old record is decided, then superseded by a decided newer one;
+    // only the newer one is current.
+    ok(
+        dir.path(),
+        &["issue", "link", "-q", &new, &old, "--role", "supersedes"],
+    );
+    ok(
+        dir.path(),
+        &["issue", "transition", &old, "decide", "--reason", "Old"],
+    );
+    ok(
+        dir.path(),
+        &["issue", "transition", &new, "decide", "--reason", "New"],
+    );
+
+    let brief = ok(dir.path(), &["issue", "show", &work]);
+    assert!(
+        brief.contains("Decisions: 4 current, 1 one-way:\n"),
+        "{brief}"
+    );
+    assert!(
+        brief.contains(&format!("\n  {parent} "))
+            && brief.contains("Parent choice | because because"),
+        "{brief}"
+    );
+    assert!(
+        !brief.contains("Item choice"),
+        "brief shows only one-way rows: {brief}"
+    );
+
+    let full = ok(dir.path(), &["issue", "show", &work, "--full"]);
+    let section = full.split("Decisions\n---------\n").nth(1).expect(&full);
+    let rows = section
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 4, "{full}");
+    assert!(rows[0].contains("Parent choice"), "one-way first: {full}");
+    assert!(
+        rows[1].starts_with(&format!("{new} ✓ done medium New decision")),
+        "{full}"
+    );
+    assert!(
+        section.contains("Item choice") && section.contains("Mission choice"),
+        "{full}"
+    );
+    assert!(
+        !section.contains("Sibling choice"),
+        "a sibling's notes do not bear on the item: {full}"
+    );
+    assert!(
+        !section.contains(&format!("{old} ")),
+        "superseded records are not current: {full}"
+    );
+
+    // An item with no decisions shows no Decisions line.
+    let quiet = ok(dir.path(), &["issue", "show", &old]);
+    assert!(
+        quiet.contains("Decisions: 2 current\n"),
+        "the mission's note and the newer record bear on it: {quiet}"
+    );
+    let lone = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--body",
+            "## Goal\n\nL\n\n## Done when\n\nD",
+            "Lone",
+        ],
+    )
+    .trim()
+    .to_string();
+    assert!(!ok(dir.path(), &["issue", "show", &lone]).contains("Decisions"));
+}

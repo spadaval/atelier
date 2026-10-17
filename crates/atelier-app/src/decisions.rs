@@ -81,6 +81,49 @@ pub fn mission_decisions(
     Ok(decisions_in(index, policy, &ids))
 }
 
+/// The current decisions that bear on one item (atelier-1mk4): the decision
+/// notes on the item, its parent and its missions, and the current decision
+/// records in its missions' scope or among those records themselves.
+pub fn item_decisions(
+    index: &RecordIndex,
+    policy: Option<&WorkflowPolicy>,
+    issue_id: &str,
+) -> Result<Decisions> {
+    let issue = index.require_issue(issue_id)?;
+    let missions = if issue.issue_type == "mission" {
+        vec![issue.id.clone()]
+    } else {
+        let mut missions = Vec::new();
+        for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
+            if mission_issue_ids(index, &mission.id)?.contains(issue_id) {
+                missions.push(mission.id.clone());
+            }
+        }
+        missions.sort();
+        missions
+    };
+    let mut ids = vec![issue.id.clone()];
+    ids.extend(issue.parent_id.clone());
+    ids.extend(missions.iter().cloned());
+    let mut decisions = decisions_in(index, policy, &ids);
+    for mission in &missions {
+        for id in mission_issue_ids(index, mission)? {
+            let Some(record) = index.issue_record(&id) else {
+                continue;
+            };
+            if record.issue.issue_type == "decision"
+                && !decisions.records.iter().any(|known| known.issue.id == id)
+            {
+                decisions
+                    .records
+                    .push(record_decision(index, policy, &record.issue));
+            }
+        }
+    }
+    decisions.records.retain(RecordDecision::is_current);
+    Ok(decisions)
+}
+
 /// The decisions recorded on the given issues, in the order given.
 pub fn decisions_in(
     index: &RecordIndex,
