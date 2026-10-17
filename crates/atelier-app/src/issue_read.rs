@@ -19,6 +19,20 @@ pub struct ObjectiveBucketTotals {
     pub backlog: usize,
 }
 
+impl From<&WorkBuckets> for ObjectiveBucketTotals {
+    fn from(work: &WorkBuckets) -> Self {
+        Self {
+            active: work.active.len(),
+            ready: work.ready.len(),
+            human: work.human.len(),
+            context: work.context.len(),
+            blocked: work.blocked.len(),
+            done: work.done.len(),
+            backlog: work.backlog.len(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ObjectiveScopeSummary {
     pub issue_ids: BTreeSet<String>,

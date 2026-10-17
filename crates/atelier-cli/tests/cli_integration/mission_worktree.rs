@@ -427,18 +427,17 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         "{overview}"
     );
     assert!(
-        overview.contains("Scope: 3 issues: 0 active, 1 ready, 2 blocked, 0 done, 0 backlog"),
+        overview.contains("Scope: 3 issues: 1 ready, 2 blocked\n"),
         "{overview}"
     );
     assert!(overview.contains("Open blockers: 1"), "{overview}");
+    // A count line with nothing to count is left out.
+    assert!(!overview.contains("Open blockers: 0"), "{overview}");
     assert!(
         overview.contains(&format!("More info: atelier work mission {mission_id}")),
         "{overview}"
     );
-    assert!(
-        overview.contains("Unassigned: 2 nonterminal issues"),
-        "{overview}"
-    );
+    assert!(overview.contains("Unassigned: 2 open issues"), "{overview}");
     assert!(!overview.contains(&epic_id), "{overview}");
     assert!(!overview.contains("Collapsed epic child"), "{overview}");
     assert!(!overview.contains('\u{1b}'), "{overview:?}");
@@ -470,10 +469,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         "{narrow}"
     );
     assert!(!narrow.contains("Status:"), "{narrow}");
-    assert!(
-        narrow.contains("Unassigned: 2 nonterminal issues"),
-        "{narrow}"
-    );
+    assert!(narrow.contains("Unassigned: 2 open issues"), "{narrow}");
     // A wrapped unassigned row continues past the row indent, so the
     // continuation does not read as another item.
     let unassigned_id = issue_id_by_title(dir.path(), "Unassigned work");
@@ -578,7 +574,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     // The mission closed with its scope open, so that work is unassigned
     // and named, not just counted.
     let leftover = format!(
-        "Unassigned: 1 nonterminal issues\n  no label (1)\n    {work_id} todo medium Work linked only to done mission\n"
+        "Unassigned: 1 open issue\n  no label (1)\n    {work_id} todo medium Work linked only to done mission\n"
     );
     assert!(default.contains(&leftover), "{default}");
     assert!(
@@ -599,7 +595,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
         )),
         "{all}"
     );
-    assert!(all.contains("Scope: 1 issues: 0 active, 1 ready"), "{all}");
+    assert!(all.contains("Scope: 1 issue: 1 ready\n"), "{all}");
     // --all summarizes the done mission without expanding its rows; its
     // open work is still unassigned.
     assert!(all.contains(&leftover), "{all}");
@@ -963,7 +959,8 @@ fn test_root_status_reports_current_mission_counts_without_active_focus() {
     init_atelier(zero.path());
     let (success, zero_out, stderr) = run_atelier(zero.path(), &["status"]);
     assert!(success, "zero mission status failed: {stderr}");
-    assert!(zero_out.contains("Current missions: 0"), "{zero_out}");
+    // With no mission open or closed, status leaves the count out.
+    assert!(!zero_out.contains("Current missions"), "{zero_out}");
     assert!(!zero_out.contains("Active mission:"), "{zero_out}");
 
     let one = tempdir().unwrap();
@@ -1096,7 +1093,7 @@ fn test_check_reports_every_invalid_record_file() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
 
     assert!(!success, "check must fail: {stdout}");
-    assert!(stdout.contains("Lint found 3 issue(s)"), "{stdout}");
+    assert!(stdout.contains("Lint found 3 findings"), "{stdout}");
     for path in [
         format!(".atelier/issues/{}.md", ids[0]),
         format!(".atelier/issues/{}.md", ids[1]),
@@ -3093,7 +3090,7 @@ fn check_reports_every_independent_graph_error_in_one_run() {
             "issue {} has unconfigured context link type 'frobnicates'",
             ids[5]
         ),
-        "Lint found 5 issue(s)",
+        "Lint found 5 findings",
     ] {
         assert!(transcript.contains(expected), "{expected}: {transcript}");
     }
@@ -3226,7 +3223,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     );
     assert!(!overview.contains("No missions match"), "{overview}");
     assert!(
-        overview.contains(&format!("Unassigned: 14 nonterminal issues\n  cli (8)\n"))
+        overview.contains(&format!("Unassigned: 14 open issues\n  cli (8)\n"))
             && overview.contains(&format!("    {leftover} todo high Leftover work\n")),
         "{overview}"
     );
@@ -3258,7 +3255,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert!(success, "work missions failed: {stderr}");
     assert!(!overview.contains("last closed"), "{overview}");
     let (missions, unassigned) = overview
-        .split_once("Unassigned: 13 nonterminal issues\n")
+        .split_once("Unassigned: 13 open issues\n")
         .unwrap_or_else(|| panic!("no unassigned groups:\n{overview}"));
     assert!(missions.contains(&format!("{open} todo ")), "{overview}");
     assert!(

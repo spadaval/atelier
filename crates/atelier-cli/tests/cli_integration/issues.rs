@@ -568,8 +568,10 @@ fn test_issue_show_rollup_counts_all_children_and_bounds_only_visible_rows() {
     let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &owner, "--full"]);
     assert!(success, "{stderr}");
     let rollup = shown.split("Objective Rollup").nth(1).unwrap();
-    assert!(rollup.contains("7 scoped issues"), "{rollup}");
-    assert!(rollup.contains("ready 7"), "{rollup}");
+    assert!(
+        rollup.contains("Scope         : 7 issues: 7 ready\n"),
+        "{rollup}"
+    );
     let ready_rows = rollup
         .split("Ready Work")
         .nth(1)
@@ -899,7 +901,7 @@ fn test_issue_show_is_brief_by_default() {
         show_ok(dir.path(), &["issue", "show", &mission]),
         format!(
             "{mission} mission draft medium Brief mission\n\
-             Work: 3 issues - ready 1, context 1, blocked 1\n\
+             Work: 3 issues: 1 ready, 1 context, 1 blocked\n\
              Transitions: ready, supersede --reason\n\
              Outcome: Agents read one view.\n\
              Success criteria:\n  \
@@ -1029,7 +1031,7 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
     );
     let mission_view = show_ok(dir.path(), &["issue", "show", &mission]);
     assert!(
-        mission_view.contains("\nWork: 2 issues - needs human 1, context 1\n"),
+        mission_view.contains("\nWork: 2 issues: 1 needs a human, 1 context\n"),
         "{mission_view}"
     );
 }
@@ -1209,7 +1211,7 @@ fn test_issue_show_surfaces_evidence_status() {
     );
     assert!(transitions.contains("close"));
     assert!(transitions.contains("fail  evidence.attached"));
-    assert!(transitions.contains("expected at least 1 fresh passing evidence record(s); found 0"));
+    assert!(transitions.contains("expected at least 1 fresh passing evidence record; found 0"));
     assert!(
         transitions.contains("Hint: Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`"),
         "{transitions}"
@@ -3532,7 +3534,8 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
 
     let (success, status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status.contains("Ready work:    0"), "{status}");
+    // A count line with nothing to count is left out.
+    assert!(!status.contains("Ready work:"), "{status}");
     assert!(status.contains("atelier work blocked"), "{status}");
 
     let (success, ready, stderr) = run_atelier(dir.path(), &["--quiet", "work", "ready"]);
@@ -3644,11 +3647,11 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
         run_atelier(dir.path(), &["issue", "show", &retired_epic_id, "--full"]);
     assert!(success, "retired epic issue show failed: {stderr}");
     assert!(
-        retired_show.contains("active 0, ready 0, blocked 0, done 2, backlog 2"),
+        retired_show.contains("Scope         : 4 issues: 2 done, 2 backlog\n"),
         "{retired_show}"
     );
     assert!(
-        retired_show.contains("linked validating evidence 1"),
+        retired_show.contains("Evidence Gates: 1 validating evidence record linked,"),
         "{retired_show}"
     );
     assert!(
@@ -3814,7 +3817,7 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         assert!(quiet.contains("context=1"), "{quiet}");
         let (success, human, stderr) = run_atelier(dir.path(), &["work", kind, id]);
         assert!(success, "{stderr}");
-        assert!(human.contains("ready 24"), "{human}");
+        assert!(human.contains("25 issues: 24 ready, 1 context"), "{human}");
         assert!(human.contains("16 more"), "{human}");
     }
     let (success, quiet, stderr) = run_atelier(
@@ -3910,7 +3913,7 @@ fn test_status_footer_uses_complete_work_buckets() {
     run_atelier(dir.path(), &["issue", "create", "Status guidance"]);
     let id = issue_id_by_title(dir.path(), "Status guidance");
     for (status, expected) in [
-        ("todo", "Choose ready work (1 ready issue(s) available)"),
+        ("todo", "Choose ready work (1 ready issue available)"),
         (
             "blocked",
             "Inspect blocked work (no ready work is available)",
@@ -4819,7 +4822,8 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
     assert!(summary.contains("ready=1 human=1"), "{summary}");
     let show = create(&["issue", "show", &mission, "--full"]);
     assert!(
-        show.contains("needs a human 1") && show.contains("Needs a Human"),
+        show.contains("Scope         : 2 issues: 1 ready, 1 needs a human\n")
+            && show.contains("Needs a Human"),
         "{show}"
     );
 
@@ -5290,11 +5294,14 @@ fn test_work_ready_lists_startable_work_and_shows_parents_and_missions_as_contex
     assert!(summary.contains("ready=1 human=0 context=1"), "{summary}");
     let (_, missions, _) = run_atelier(dir.path(), &["work", "missions"]);
     assert!(
-        missions.contains("2 issues: 0 active, 1 ready, 1 context,"),
+        missions.contains("Scope: 2 issues: 1 ready, 1 context\n"),
         "{missions}"
     );
     let show = create(&["issue", "show", &mission, "--full"]);
-    assert!(show.contains("ready 1, context 1,"), "{show}");
+    assert!(
+        show.contains("Scope         : 2 issues: 1 ready, 1 context\n"),
+        "{show}"
+    );
 
     // A parent whose children are all done is ready to start and close.
     let mut record = fs::read_to_string(canonical_issue_path(dir.path(), &child)).unwrap();

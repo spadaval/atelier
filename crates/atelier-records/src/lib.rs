@@ -1455,9 +1455,10 @@ fn reject_legacy_issue_keys(values: &BTreeMap<String, Value>, relative: &Path) -
         .collect::<Vec<_>>();
     if !keys.is_empty() {
         bail!(
-            "Legacy issue front matter key(s) {} in {}; use issue body sections",
-            keys.join(", "),
-            display_state_path(relative)
+            "{} has {}: {}; use issue body sections",
+            display_state_path(relative),
+            atelier_core::count_noun(keys.len(), "legacy issue front matter key"),
+            keys.join(", ")
         );
     }
     Ok(())

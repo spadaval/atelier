@@ -2496,7 +2496,7 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     commit(f.path(), "file a mission and its strategy on the base");
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 
@@ -2551,7 +2551,7 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     git(f.path(), &["switch", "-q", "main"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 
@@ -3010,7 +3010,7 @@ fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     git(f.path(), &["switch", "-q", "main"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 }
@@ -3039,7 +3039,7 @@ fn base_pull_merge_counts_only_the_paths_it_introduces() {
     git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 2 unpushed record-only commit(s)"),
+        output.contains("Base commits: 2 unpushed record-only commits outside"),
         "{output}"
     );
 }
@@ -3054,7 +3054,7 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     // Active work hands off; the base moving on is not its failure.
     let output = ok(f.path(), &["land", &f.id]);
     assert!(
-        output.contains("Base main has 1 commit(s) this branch does not")
+        output.contains("Base main has 1 commit this branch does not")
             && output.contains("git merge main"),
         "{output}"
     );

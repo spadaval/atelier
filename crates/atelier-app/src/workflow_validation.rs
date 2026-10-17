@@ -137,7 +137,10 @@ fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
     } else {
         (
             false,
-            format!("atelier check failed with {} finding(s)", findings.len()),
+            format!(
+                "atelier check failed with {}",
+                atelier_core::count_noun(findings.len(), "finding")
+            ),
         )
     }
 }

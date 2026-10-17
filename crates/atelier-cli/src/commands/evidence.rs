@@ -587,8 +587,11 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
     }
     if records.len() > EVIDENCE_LIST_LIMIT {
         println!(
-            "Omitted: {} older evidence record(s) hidden by default limit {}",
-            records.len() - EVIDENCE_LIST_LIMIT,
+            "Omitted: {} hidden by default limit {}",
+            crate::human_output::count_noun(
+                records.len() - EVIDENCE_LIST_LIMIT,
+                "older evidence record"
+            ),
             EVIDENCE_LIST_LIMIT
         );
     }

@@ -85,6 +85,31 @@ their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
   `YYYY-MM-DD` and is the local day that form shows, as in note bullets and
   the `prune` cutoff.
 
+### Counts
+
+A count is a plain phrase, count first, with a real plural: `1 blocker`,
+`2 blockers`, never `blocker(s)` or `blockers 2`. A field whose whole value
+is one count keeps its label first, as metadata does: `Open blockers: 1`,
+`Ready work: 9`.
+
+Counts by work state use the state words in one order: active, ready, needs a
+human (`2 need a human`), context, blocked, done, backlog. A scope's counts
+follow its size, and `work missions`, `work mission`, `work parent` and
+`issue show` all write them alike: `Scope: 3 issues: 1 ready, 2 blocked`.
+Work that is not done is `open`, never `nonterminal`: `Unassigned: 6 open
+issues`.
+
+A list of counts leaves out its zeros, and a line that would count nothing is
+left out: `status` prints no `Needs a human: 0`, and `work missions` no `Open
+blockers: 0`. A zero stays only where it carries another fact, as in
+`Current missions: 0; last closed <mission>`.
+
+`count_noun` writes every count phrase. It lives in `atelier-core` so that
+messages from every crate can use it, and `human_output.rs` re-exports it
+beside `work_state_counts`, `scope_counts` and `noun_counts`, which write the
+lists. A source test refuses a plural written as `(s)` anywhere in the
+workspace's Rust.
+
 ### Headings
 
 A command's output has at most one page title, underlined with `=`. Every
@@ -176,7 +201,8 @@ brief view gives one line per fact and leaves out empty facts:
 
 - the title line: the item line with the type;
 - `Mission:` for work in a mission's scope, or for a mission `Strategy:` and
-  `Work:` with its scope counts by work state;
+  `Work:` with its scope counts by work state, as [Counts](#counts) writes
+  them;
 - `Parent:`, then `Children:` in work order, each with its work state;
 - `Blocked by:`, and `Blocked via parent <id>:` for blockers a child inherits;
 - `Transitions:`, which names the allowed transitions, then each group of
@@ -205,7 +231,7 @@ Next actions come from actual state: inspect a blocker, select ready work,
 record proof, resolve a finding, or commit record changes. Avoid generic command
 menus in every row. Errors name the failed invariant or path and give a useful
 recovery step. The recovery step is an inline sentence in the error,
-`Next: <command>`, not a `Next` footer. Optional verbosity may show check
+`Next: <step>`, not a `Next` footer. Optional verbosity may show check
 details and command context.
 
 `--quiet` limits output to essential IDs, counts, and result tokens. It does not

@@ -185,7 +185,10 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
                     id.as_deref().unwrap_or("<id>")
                 );
             };
-            let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?;
+            let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?
+                .trim()
+                .parse::<usize>()
+                .with_context(|| format!("git rev-list --count {head}..{tip} printed no count"))?;
             behind = Some((name.to_owned(), count));
             Some(fork)
         }
@@ -193,7 +196,8 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         None => None,
     };
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {count} commit(s) this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval."
+        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval.",
+        crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, repo)?;
     let mut lines = source.diagnostics;
@@ -322,7 +326,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         )?);
         lines.push(format!("Owner: {id} {}. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
         if !initial_paths.is_empty() {
-            lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier status for current findings and proof.", initial_paths.len()));
+            lines.push(format!("Unfinished checkout: {}; hand off these changes honestly. Run atelier status for current findings and proof.", crate::human_output::count_noun(initial_paths.len(), "uncommitted path")));
         }
     } else if branch == source.policy.branch_policy.base_branch {
         lines.push("No work owner on the integration base.".into());

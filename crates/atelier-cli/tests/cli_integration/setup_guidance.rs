@@ -764,7 +764,7 @@ fn test_prune_uses_configured_canonical_retention_days_by_default() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
     assert!(stdout.contains("Canonical Records"), "{stdout}");
-    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 7 days"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
 }
@@ -787,12 +787,12 @@ fn test_prune_retention_flag_overrides_project_config_for_canonical_records() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
     assert!(stdout.contains("Canonical Records"), "{stdout}");
-    assert!(stdout.contains("Retention: 30 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 30 days"), "{stdout}");
     assert!(stdout.contains("Candidates: none"), "{stdout}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "7"]);
     assert!(success, "prune override dry-run failed: {stderr}");
-    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 7 days"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
 }
@@ -1590,7 +1590,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Ready Work\n----------\n"), "{stdout}");
     assert!(stdout.contains("Ready item"), "{stdout}");
     assert!(stdout.contains("Current Work\n------------\n"));
-    assert!(stdout.contains("Current missions:"));
+    // No mission is open or closed, so no count line names them.
+    assert!(!stdout.contains("Current missions:"), "{stdout}");
     assert!(stdout.contains("\nNext\n----\n"));
     assert!(stdout.contains("Choose ready work"));
     assert!(stdout.contains("Inspect selected work transitions"));

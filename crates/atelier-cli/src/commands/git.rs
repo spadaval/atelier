@@ -307,14 +307,20 @@ pub(crate) fn check_base_commits(
                 first.display(),
                 match other.len() {
                     1 => String::new(),
-                    count => format!(" and {} other path(s)", count - 1),
+                    count => format!(
+                        " and {}",
+                        crate::human_output::count_noun(count - 1, "other path")
+                    ),
                 },
             );
         }
     }
     Ok(match checked {
         0 => "Base commits: none unpushed outside recorded review.".to_owned(),
-        count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
+        count => format!(
+            "Base commits: {} outside review.",
+            crate::human_output::count_noun(count, "unpushed record-only commit")
+        ),
     })
 }
 

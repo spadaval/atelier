@@ -166,11 +166,18 @@ fn evaluate_issue_gate(
         passed,
         reason: if passed {
             format!(
-                "{passing} {} passing evidence record(s) linked",
-                if fresh { "fresh" } else { "valid historical" }
+                "{} linked",
+                atelier_core::count_noun(
+                    passing,
+                    if fresh {
+                        "fresh passing evidence record"
+                    } else {
+                        "valid historical passing evidence record"
+                    }
+                )
             )
         } else {
-            format!("expected at least {} fresh passing evidence record(s); found {passing}; older evidence, blocked/not-applicable results and passes superseded by a newer failure do not satisfy proof", min_count.max(1))
+            format!("expected at least {}; found {passing}; older evidence, blocked/not-applicable results and passes superseded by a newer failure do not satisfy proof", atelier_core::count_noun(min_count.max(1), "fresh passing evidence record"))
         },
     })
 }

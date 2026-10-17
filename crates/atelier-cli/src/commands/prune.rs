@@ -1279,7 +1279,10 @@ fn print_git(summary: &GitPruneSummary, apply: bool) {
 fn print_canonical(summary: &CanonicalPruneSummary) {
     println!("Canonical Records");
     println!("-----------------");
-    println!("Retention: {} day(s)", summary.retention_days);
+    println!(
+        "Retention: {}",
+        crate::human_output::count_noun(summary.retention_days as usize, "day")
+    );
     println!("Cutoff:    before {}", summary.cutoff);
 
     let total_candidates = summary.issues.len() + summary.evidence.len() + summary.reviews.len();
