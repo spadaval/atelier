@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Name the flag that shows the rest on every truncated list"
-updated_at: "2026-10-17T08:19:41.668652659+00:00"
+updated_at: "2026-10-17T09:06:10.579920690+00:00"
 ---
 
 ## Goal

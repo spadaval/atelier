@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Keep colour and whole tokens when an item line wraps"
-updated_at: "2026-10-17T06:22:18.204925402+00:00"
+updated_at: "2026-10-17T09:06:10.808633104+00:00"
 ---
 
 ## Goal
