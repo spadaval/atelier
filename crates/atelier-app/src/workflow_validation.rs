@@ -255,7 +255,7 @@ fn transitive_blockers_none_open(
         )),
         None => Ok((
             true,
-            "declared dependency closure is terminal".to_string(),
+            "every declared dependency is closed".to_string(),
             None,
         )),
     }

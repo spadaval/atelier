@@ -432,7 +432,7 @@ fn scoped_dashboard(
         return Ok(());
     }
     let counts = &work.totals;
-    let mut metadata = vec![("Work", scope_counts(work.rows.len(), counts))];
+    let mut metadata = vec![("Work", scope_counts(work.size, counts))];
     // The title is the item line, so no metadata repeats its status.
     let category = policy_category(&issue.status)?;
     let title = if let Some(proof_gaps) = proof_gaps {
@@ -490,8 +490,12 @@ impl DashboardFilter {
     }
 }
 
+/// An objective's work: its rows, which for a parent include the parent
+/// itself, and the counts of its scope, which never do, so `work parent` and
+/// `issue show` give one parent the same size.
 struct ScopedWork {
     rows: Vec<(Issue, ClassifiedWork)>,
+    size: usize,
     totals: ObjectiveBucketTotals,
 }
 
@@ -507,9 +511,15 @@ impl ScopedWork {
         let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
         let mut rows = Vec::new();
         let mut totals = ObjectiveBucketTotals::default();
+        let mut size = 0;
         for issue in issues {
             let classified =
                 atelier_app::work_classification::classify_issue(index, policy.as_ref(), &issue)?;
+            if issue.id == objective.id {
+                rows.push((issue, classified));
+                continue;
+            }
+            size += 1;
             match classified.classification {
                 WorkClassification::Active => totals.active += 1,
                 WorkClassification::Ready => totals.ready += 1,
@@ -521,7 +531,7 @@ impl ScopedWork {
             }
             rows.push((issue, classified));
         }
-        Ok(Self { rows, totals })
+        Ok(Self { rows, size, totals })
     }
 
     fn panels(&self, filter: DashboardFilter) -> Vec<IssueListPanel> {
@@ -648,7 +658,7 @@ fn transition_readiness(
         Err(error) => {
             let message = error.to_string();
             if message.contains("has no configured transitions") {
-                return Ok("terminal".to_string());
+                return Ok("closed".to_string());
             }
             return Ok(format!("not available: {message}"));
         }

@@ -79,7 +79,7 @@ notes the label when someone starts one.
 
 Do not make a `needs-human` check a child of a branch owner when the check runs
 after the merge, such as a game, headset or Windows check on the released
-build. `atelier merge` needs every child terminal, so the owner's branch could
+build. `atelier merge` needs every child closed, so the owner's branch could
 not integrate until the human acts. Model the check as a standalone
 validation `blocked_by` the parent instead (and `advances` the mission, if
 any). `atelier start` and `atelier status` warn when a branch owner has an open

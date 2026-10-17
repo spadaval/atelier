@@ -54,7 +54,7 @@ impl ObjectiveScopeSummary {
         } else if !self.work.human.is_empty() {
             "waiting on the human"
         } else if !self.work.done.is_empty() {
-            "terminal"
+            "done"
         } else {
             "steady"
         }

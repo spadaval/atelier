@@ -4016,6 +4016,16 @@ fn status_current_work_row_reads_like_its_owner_row() {
 #[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
+    // While the owner is in progress, its branch row counts it as active.
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        status
+            .lines()
+            .any(|line| line.contains(&format!(": {} ", f.id)) && line.ends_with(" | 1 active")),
+        "{status}"
+    );
+    git(f.path(), &["switch", "-q", &f.branch]);
     f.terminal(&f.id);
     let status = ok(f.path(), &["status"]);
     assert!(
@@ -4028,14 +4038,23 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
     assert!(
-        status.contains(&format!(": {} ✓ done ", f.id))
-            && status.contains(" | not merged into main | "),
+        status
+            .lines()
+            .any(|line| line.contains(&format!(": {} ✓ done ", f.id))
+                && line.ends_with(" | not merged into main")),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains(" | merged into main | "), "{status}");
+    // Nothing is active on the branch, so its row has no `| 0 active` cue.
+    assert!(
+        status
+            .lines()
+            .any(|line| line.ends_with(" | merged into main")),
+        "{status}"
+    );
+    assert!(!status.contains("| 0 active"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);

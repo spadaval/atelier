@@ -294,7 +294,7 @@ impl EvidenceReadContext<'_> {
                 break;
             }
         }
-        let claim = claim.ok_or_else(|| anyhow::anyhow!("terminal claim history is missing"))?;
+        let claim = claim.ok_or_else(|| anyhow::anyhow!("done claim history is missing"))?;
         let end = if self.ancestor(claim, pin)? {
             pin
         } else {

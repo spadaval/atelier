@@ -298,7 +298,7 @@ fn test_prune_protects_current_base_and_unowned_git_branches() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("no terminal owner record association"),
+        stdout.contains("no closed owner record association"),
         "{stdout}"
     );
     assert!(
@@ -354,7 +354,7 @@ fn test_prune_protects_active_and_recent_terminal_owner_branches() {
     assert!(
         stdout.contains(&format!("protected branch {recent_branch}"))
             && stdout.contains(&format!(
-                "terminal owner {recent_id} is within retention window"
+                "closed owner {recent_id} is within retention window"
             )),
         "{stdout}"
     );
@@ -980,7 +980,7 @@ fn test_prune_rechecks_late_recorded_owner_association() {
     );
     assert!(stdout.contains("has no upstream"), "{stdout}");
     assert!(
-        !stdout.contains("no terminal owner record association"),
+        !stdout.contains("no closed owner record association"),
         "{stdout}"
     );
 }

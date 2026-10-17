@@ -483,7 +483,8 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch> @ <commit>: <item line> | <merge state> | N active`.
+    /// `<branch> @ <commit>: <item line> | <merge state> | N active`, with
+    /// no active cue when nothing is active.
     fn line(&self, base: &str) -> String {
         let mut line =
             crate::human_output::ItemLine::new(&self.id, &self.status, &self.priority, &self.title)
@@ -493,11 +494,14 @@ impl BranchOwner {
             Some(false) => line = line.cue(format!("not merged into {base}")),
             None => {}
         }
+        if self.active > 0 {
+            line = line.cue(format!("{} active", self.active));
+        }
         format!(
             "{} @ {}: {}",
             self.branch,
             crate::human_output::short_commit(&self.commit),
-            line.cue(format!("{} active", self.active)).text()
+            line.text()
         )
     }
 }

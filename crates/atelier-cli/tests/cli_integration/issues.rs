@@ -3644,7 +3644,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
             run_atelier(dir.path(), &["issue", "transition", issue_id]);
         assert!(success, "retired child transition options failed: {stderr}");
         assert!(options.contains("start: blocked"), "{options}");
-        assert!(options.contains(&format!("terminal ancestor {retired_epic_id}")));
+        assert!(options.contains(&format!("closed ancestor {retired_epic_id}")));
         assert!(options.contains("cannot enter active-category status 'in_progress'"));
         assert!(options.contains(&format!("atelier issue show {retired_epic_id}")));
     }
@@ -3657,7 +3657,7 @@ fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     );
     for output in [&start_out, &stderr] {
         assert!(
-            output.contains(&format!("terminal ancestor {retired_epic_id}")),
+            output.contains(&format!("closed ancestor {retired_epic_id}")),
             "stdout:\n{start_out}\nstderr:\n{stderr}"
         );
     }
@@ -3875,16 +3875,34 @@ fn test_scoped_dashboard_counts_and_quiet_rows_exceed_display_limit() {
         ids.push(issue_id_by_title(dir.path(), &title));
     }
     ids.sort();
-    for (kind, id) in [("mission", &mission), ("parent", &epic)] {
+    // The mission's scope holds the parent; the parent's scope is its
+    // children, though its view still lists the parent as a row.
+    for (kind, id, context, size) in [
+        ("mission", &mission, 1, "25 issues: 24 ready, 1 context"),
+        ("parent", &epic, 0, "24 issues: 24 ready"),
+    ] {
         let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "work", kind, id]);
         assert!(success, "{stderr}");
         assert!(quiet.contains("ready=24"), "{quiet}");
-        assert!(quiet.contains("context=1"), "{quiet}");
+        assert!(quiet.contains(&format!("context={context}")), "{quiet}");
         let (success, human, stderr) = run_atelier(dir.path(), &["work", kind, id]);
         assert!(success, "{stderr}");
-        assert!(human.contains("25 issues: 24 ready, 1 context"), "{human}");
+        assert!(human.contains(&format!(": {size}\n")), "{human}");
         assert!(human.contains("16 more"), "{human}");
+        assert!(
+            human.contains(&format!(
+                "Parents and Missions\n--------------------\n  {epic} "
+            )),
+            "{human}"
+        );
     }
+    // `work parent` and `issue show` give the parent one size.
+    let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &epic, "--full"]);
+    assert!(success, "{stderr}");
+    assert!(
+        shown.contains("Scope         : 24 issues: 24 ready\n"),
+        "{shown}"
+    );
     let (success, quiet, stderr) = run_atelier(
         dir.path(),
         &["--quiet", "work", "mission", &mission, "--ready"],
