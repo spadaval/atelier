@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-5rs0
 priority: "P1"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Exit cleanly when piped output is closed early"
-updated_at: "2026-10-17T06:14:10.544747886+00:00"
+updated_at: "2026-10-17T06:14:22.223581192+00:00"
 ---
 
 ## Goal
