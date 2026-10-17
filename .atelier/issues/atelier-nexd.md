@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Restructure the debrief as a review page: needs-you, why, criteria, work timeline"
-updated_at: "2026-10-17T21:34:49.520110506+00:00"
+updated_at: "2026-10-17T21:52:23.772255229+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,15 @@ The debrief page reads as a dump of everything that happened (human review of at
 ## Context
 
 Approved mockup: .atelier/runtime/reviews/debrief-mockup.html (not committed). Mission atelier-r6bt, S4 and S7.
+
+## Notes
+
+- 2026-10-17 [decision] Attach each derived deviation, decision and follow-up to the item it belongs to, and drop the separate Deviations and Follow-ups lists
+  Reason: The human found the separate lists tacked on; each fact is about one piece of work and reads best beside it
+- 2026-10-17 [decision] Credit a criterion to an item when its Goal's first sentence names it outside parentheses, when the criterion's text names the item, or when it holds the deciding receipt
+  Reason: Goals mention other criteria in passing inside parentheses; the leading clause names what the item delivers
+  Rejected: any mention in Goal or Done when
+- 2026-10-17 [decision] Show each work item's close time, not a start time
+  Reason: Items start on branches, and the first-parent history only sees them when they merge, so a start time would be a guess
+- 2026-10-17 [decision] Name records by title in the HTML, with the ID in a popover, and turn IDs mentioned in record text into the same popovers
+  Reason: The human found bare IDs unhelpful; the Markdown keeps IDs for agents
