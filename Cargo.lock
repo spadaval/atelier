@@ -105,6 +105,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "fs2",
+ "libc",
  "proptest",
  "serde",
  "serde_json",
