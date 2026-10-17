@@ -109,27 +109,19 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         .as_ref()
         .map(|summaries| summaries.in_flight().marks)
         .unwrap_or_default();
-    let mut page = render_status_page(
+    let branches = branches
+        .map(|summaries| summaries.lines())
+        .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
+    Ok(render_status_page(
         &view,
         &overview,
         &diagnostics,
         &checkout,
         &owner,
         &in_flight,
+        branches,
         context,
-    );
-    let branches = branches
-        .map(|summaries| summaries.lines())
-        .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
-    if !branches.is_empty() {
-        // A section of the status page, not a second page title.
-        page.push_str("\n\n");
-        page.push_str(
-            &render_lines_section("Other Local Work Branches (committed records)", branches)
-                .join("\n"),
-        );
-    }
-    Ok(page)
+    ))
 }
 
 /// Git facts about the checkout; each is reported unavailable on its own,
@@ -380,19 +372,29 @@ fn render_status_page(
     checkout: &Checkout,
     owner: &Result<Option<Owner>>,
     in_flight: &BTreeMap<String, String>,
+    branches: Vec<String>,
     context: RenderContext,
 ) -> String {
-    // A count line with nothing to count is left out.
+    let owned = matches!(owner, Ok(Some(_)));
+    // A count line with nothing to count is left out. Unassigned work, like
+    // the ready list, helps choose work, so an owner's session omits it.
     let summary_lines = [
-        ("Ready work:    ", view.work.ready.len()),
-        ("Needs a human: ", view.work.human.len()),
+        ("Ready work:       ", view.work.ready.len()),
+        ("Needs a human:    ", view.work.human.len()),
+        (
+            "Unassigned work:  ",
+            if owned {
+                0
+            } else {
+                overview.unassigned_nonterminal
+            },
+        ),
     ]
     .into_iter()
     .filter(|(_, count)| *count > 0)
     .map(|(label, count)| format!("{label}{count}"))
     .chain(current_missions(view, overview))
     .collect::<Vec<_>>();
-    let owned = matches!(owner, Ok(Some(_)));
     // Without an owner, the session's next step is choosing ready work.
     let ready_panel = if owned || view.work.ready.is_empty() {
         Vec::new()
@@ -535,6 +537,13 @@ fn render_status_page(
         panels.push(render_lines_section("Reviews", owner.reviews.clone()));
         panels.push(render_lines_section("Evidence", owner.evidence.clone()));
     }
+    if !branches.is_empty() {
+        panels.push(render_lines_section(
+            "Other Local Work Branches (committed records)",
+            branches,
+        ));
+    }
+    // The footer is the last section.
     panels.push(render_footer_section(context, next_actions));
     render_page("Atelier Status", panels, context)
 }
@@ -564,8 +573,9 @@ fn unassigned_panel(
     if owned || overview.unassigned.is_empty() {
         return Vec::new();
     }
+    // The summary counts the work; the heading only names it.
     render_lines_section(
-        &format!("Unassigned Work ({})", overview.unassigned_nonterminal),
+        "Unassigned Work",
         crate::human_output::render_unassigned_groups(
             &overview.unassigned,
             in_flight,

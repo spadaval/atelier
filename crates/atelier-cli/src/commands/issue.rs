@@ -109,7 +109,7 @@ fn render_issue_brief(
         if let Some(summary) =
             atelier_app::issue_read::objective_read_summary(index, id, workflow_policy)?
         {
-            lines.push(format!("Work: {}", work_counts(&summary)));
+            lines.push(format!("Scope: {}", work_counts(&summary)));
         }
     } else if let Some(mission_id) = atelier_app::objective_graph::containing_mission(index, id)? {
         lines.push(format!(

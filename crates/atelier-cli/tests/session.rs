@@ -608,6 +608,15 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
             && output.contains("Other Local Work Branches (committed records)"),
         "{output}"
     );
+    // The branch rows come before the footer, which is the last section.
+    let (body, footer) = output
+        .rsplit_once("\n\nNext\n----\n")
+        .unwrap_or_else(|| panic!("no Next section:\n{output}"));
+    assert!(body.contains("Other Local Work Branches"), "{output}");
+    assert!(
+        footer.lines().all(|line| line.starts_with("  ")),
+        "{output}"
+    );
     assert_eq!(
         f.store().load_issue_by_id(&f.id).unwrap().issue.status,
         "todo"
@@ -4174,7 +4183,7 @@ fn unassigned_work_in_flight_on_another_branch_is_marked_past_the_ready_list() {
             .any(|line| line.contains(&f.id)),
         "{status}"
     );
-    let unassigned = section(&status, "Unassigned Work (6)");
+    let unassigned = section(&status, "Unassigned Work");
     let row = unassigned
         .iter()
         .position(|line| line.starts_with(&format!("  {} todo", f.id)))

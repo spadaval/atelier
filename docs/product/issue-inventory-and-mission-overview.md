@@ -25,7 +25,8 @@ Below the missions, `work missions` lists unassigned work: open non-mission
 issues outside the scope (`advances` links and their descendants) of every
 open mission. A mission can close with open scope, so work a done mission left
 open is unassigned and listed, with or without `--all`. Unassigned work is
-grouped by label, one `<label> (<count>)` line per group. An issue with
+grouped by label, one `<label>: <count> open issues` line per group, such as
+`no label: 4 open issues`. An issue with
 several labels is listed under each, so a group holds all unassigned work
 with that label; the unassigned total counts each issue once. Groups run
 largest first, then by label, with unlabelled work last under `no label`.

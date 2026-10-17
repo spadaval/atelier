@@ -344,7 +344,7 @@ brief view gives one line per fact and leaves out empty facts:
 
 - the title line: the item line with the type;
 - `Mission:` for work in a mission's scope, or for a mission `Strategy:` and
-  `Work:` with its scope counts by work state, as [Counts](#counts) writes
+  `Scope:` with its scope counts by work state, as [Counts](#counts) writes
   them;
 - `Parent:`, then `Children:` in work order, each with its work state;
 - `Blocked by:`, and `Blocked via parent <id>:` for blockers a child inherits;

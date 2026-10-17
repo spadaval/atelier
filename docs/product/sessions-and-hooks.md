@@ -15,11 +15,13 @@ current missions, and the other local work branches. On an owner's branch it
 adds the owner's record body, integration base, mission and strategy path,
 scoped work, the 8 newest reviews, and the 8 newest evidence receipts with
 their freshness; without an owner it lists up to 5 ready items under the ready
-count, and unassigned work grouped by label as `work missions` does (see
+count, and an `Unassigned work:` count with that work grouped by label under
+an `Unassigned Work` heading, as `work missions` groups it (see
 [mission views](issue-inventory-and-mission-overview.md)), but only the first
 5 groups, with a count of the rest that names `atelier work missions`, to keep
 the hook context bounded; a group's own count of the rest names `atelier work
-missions --all`. With no
+missions --all`. The other local work branches follow the owner's or the
+unassigned sections, and the `Next` footer is always last. With no
 open mission, the missions line names the most recently closed mission and
 its close date. It creates no session record and prints state and next actions, not
 instructions. `prime` is a deprecated alias that prints the same view after a

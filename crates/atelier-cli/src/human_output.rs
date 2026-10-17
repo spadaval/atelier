@@ -693,9 +693,9 @@ pub(crate) fn render_unassigned_groups(
     let mut lines = Vec::new();
     for group in groups.iter().take(group_limit) {
         lines.push(format!(
-            "{indent}{} ({})",
+            "{indent}{}: {}",
             group.label.as_deref().unwrap_or("no label"),
-            group.work.len()
+            count_noun(group.work.len(), "open issue")
         ));
         for index in crate::commands::work_order::ordered_work_indices(&group.work)
             .into_iter()

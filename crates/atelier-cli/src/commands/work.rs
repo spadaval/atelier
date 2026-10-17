@@ -408,7 +408,7 @@ fn scoped_dashboard(
         return Ok(());
     }
     let counts = &work.totals;
-    let mut metadata = vec![("Work", scope_counts(work.size, counts))];
+    let mut metadata = vec![("Scope", scope_counts(work.size, counts))];
     // The title is the item line, so no metadata repeats its status.
     let category = policy_category(&issue.status)?;
     let title = if let Some(proof_gaps) = proof_gaps {
