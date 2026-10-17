@@ -644,7 +644,11 @@ fn run() -> Result<()> {
     };
     let quiet = cli.quiet;
 
-    if !matches!(&cli.command, Commands::Init { .. }) {
+    // Status renders policy diagnostics in its own page.
+    if !matches!(
+        &cli.command,
+        Commands::Init { .. } | Commands::Status { .. } | Commands::Prime { .. }
+    ) {
         if let Ok(layout) = StorageLayout::discover() {
             if let Ok(source) = atelier_app::base_policy::working(layout.repo_root()) {
                 for diagnostic in source.diagnostics {

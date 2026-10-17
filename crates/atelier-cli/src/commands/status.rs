@@ -54,7 +54,18 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
     let _lock =
         atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
     let (_, index) = atelier_app::use_cases::load_repository()?;
-    let policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let repo = layout.repo_root();
+    // A malformed working policy falls back to the last committed one; the
+    // page says so, because hook context never shows stderr.
+    let (policy, diagnostics) = if repo
+        .join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH)
+        .exists()
+    {
+        let source = atelier_app::base_policy::working(repo)?;
+        (Some(source.policy), source.diagnostics)
+    } else {
+        (None, Vec::new())
+    };
     let view = atelier_app::work_classification::status_view(&index, policy.as_ref())?;
     if quiet {
         return Ok(format!(
@@ -69,7 +80,6 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
             view.work.human.len(),
         ));
     }
-    let repo = layout.repo_root();
     let checkout = Checkout::read(repo);
     let owner = match (&checkout.branch, &policy) {
         (Ok(branch), Some(policy)) => {
@@ -86,7 +96,7 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         }
         _ => Ok(None),
     };
-    let mut page = render_status_page(&view, &checkout, &owner, context);
+    let mut page = render_status_page(&view, &diagnostics, &checkout, &owner, context);
     let branches = git::branch_lines(repo, &layout.canonical_dir(), &index)
         .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
     if !branches.is_empty() {
@@ -301,6 +311,7 @@ fn evidence(
 
 fn render_status_page(
     view: &StatusView,
+    diagnostics: &[String],
     checkout: &Checkout,
     owner: &Result<Option<Owner>>,
     context: RenderContext,
@@ -414,6 +425,11 @@ fn render_status_page(
     };
 
     let mut panels = vec![
+        if diagnostics.is_empty() {
+            Vec::new()
+        } else {
+            render_lines_section("Policy Diagnostics", diagnostics.to_vec())
+        },
         render_lines_section("", summary_lines),
         ready_panel,
         IssueListPanel::new("Current Work", active_rows)

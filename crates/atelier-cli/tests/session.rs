@@ -332,6 +332,50 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
     );
 }
 #[test]
+fn status_shows_policy_fallback_diagnostics_in_the_page_and_hook_context() {
+    let f = Fixture::new();
+    let mut policy = fs::OpenOptions::new()
+        .append(true)
+        .open(f.path().join(".atelier/workflow.yaml"))
+        .unwrap();
+    policy.write_all(b"garbage: [\n").unwrap();
+    let context = hook(
+        f.path(),
+        "status",
+        serde_json::json!({"cwd":f.path(), "hook_event_name":"SessionStart", "source":"startup"}),
+    );
+    let context = context["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        context.contains("Invalid working policy")
+            && context.contains("Using last valid policy from")
+            && context.contains(&f.id),
+        "{context}"
+    );
+    // Plain status prints them once, in the page rather than also on stderr.
+    let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .arg("status")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("Policy Diagnostics"),
+        "{stdout}"
+    );
+    assert_eq!(
+        stdout.matches("Invalid working policy").count(),
+        1,
+        "{stdout}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("Invalid working policy"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+#[test]
 fn land_and_merge_refuse_a_project_config_that_differs_from_head() {
     let f = Fixture::new();
     f.terminal(&f.id);
