@@ -208,15 +208,16 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     // land checks only what changed since then, and atelier doctor checks
     // everything (atelier-37uq).
     let base_name = &source.policy.branch_policy.base_branch;
-    let trusted = match &branch_base {
-        _ if deep => None,
-        Some(fork) => Some(fork.clone()),
-        // The base's upstream, not the local base, which can hold commits that
-        // no land has checked; without an upstream, nothing is trusted.
-        None => git::resolve(repo, &format!("{base_name}@{{upstream}}"))
-            .ok()
-            .and_then(|tip| git::text(repo, &["merge-base", &tip, &head]).ok()),
-    };
+    // Trust stops at the base's upstream, not the local base, which can hold
+    // commits that no land has checked; without an upstream, nothing is
+    // trusted. A work branch trusts no further than its branch base.
+    let trusted = git::resolve(repo, &format!("{base_name}@{{upstream}}"))
+        .ok()
+        .filter(|_| !deep)
+        .and_then(|tip| {
+            let since = branch_base.as_deref().unwrap_or(&head);
+            git::text(repo, &["merge-base", &tip, since]).ok()
+        });
     match &trusted {
         Some(point) => review_gate::append_only(&mut read, point)?,
         None => review_gate::append_only_history(&mut read)?,
@@ -319,7 +320,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             &id,
             base,
         )?);
-        lines.push(format!("Owner: {id} [{}]. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
+        lines.push(format!("Owner: {id} {}. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
         if !initial_paths.is_empty() {
             lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier status for current findings and proof.", initial_paths.len()));
         }

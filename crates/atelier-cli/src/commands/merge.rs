@@ -222,7 +222,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     }
     clean(target)?;
     clean(repo)?;
-    println!("Merged {branch} into {base} at {head}; deleted local work branch. No commits or tracker records were created.");
+    println!("Merged {branch} into {base} at {}; deleted local work branch. No commits or tracker records were created.", crate::human_output::short_commit(&head));
     if base_tree.is_some() {
         println!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
     }

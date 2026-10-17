@@ -29,6 +29,9 @@ relationships:
     id: "atelier-a76d"
     type: "advances"
   - kind: "issue"
+    id: "atelier-bsyn"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-e95f"
     type: "related"
   - kind: "issue"
@@ -55,11 +58,14 @@ relationships:
   - kind: "issue"
     id: "atelier-qrwr"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-teld"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Share one output contract across every Atelier command"
-updated_at: "2026-10-17T01:45:16.218475401+00:00"
+updated_at: "2026-10-17T05:23:01.143453389+00:00"
 ---
 
 ## Outcome

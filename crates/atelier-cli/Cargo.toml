@@ -45,6 +45,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tempfile = "3"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 arbitrary = "1"
 fs2.workspace = true

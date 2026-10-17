@@ -668,16 +668,19 @@ fn print_record_with_targets(
         );
         return Ok(());
     }
-    let identity = format!(
-        "{} [evidence] {} - {}",
-        record.header.id, record.header.status, record.header.title
+    // The title line names the record kind and status, so no line repeats
+    // them.
+    println!(
+        "{}",
+        human_output::heading(&format!(
+            "{} evidence {} {}",
+            record.header.id, record.header.status, record.header.title
+        ))
     );
-    println!("{identity}\n{}", "=".repeat(identity.len()));
-    let captured = data.captured_at.to_rfc3339();
+    let captured = human_output::display_timestamp(data.captured_at);
     for (label, value) in [
-        ("Status:", record.header.status.as_str()),
         ("Result:", data.result.as_str()),
-        ("Commit:", data.commit.as_str()),
+        ("Commit:", human_output::short_commit(&data.commit)),
         ("Kind:", data.evidence_type.as_str()),
         ("Captured:", captured.as_str()),
     ] {
@@ -693,8 +696,8 @@ fn print_record_with_targets(
             println!("{label:<12} {value}");
         }
     }
-    let created = record.header.created_at.to_rfc3339();
-    let updated = record.header.updated_at.to_rfc3339();
+    let created = human_output::display_timestamp(record.header.created_at);
+    let updated = human_output::display_timestamp(record.header.updated_at);
     for (label, value) in [
         (
             "Producer:",

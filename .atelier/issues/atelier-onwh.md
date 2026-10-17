@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Use one footer heading and hint format across views"
-updated_at: "2026-10-17T01:10:57.989900504+00:00"
+updated_at: "2026-10-17T06:27:39.819258968+00:00"
 ---
 
 ## Goal

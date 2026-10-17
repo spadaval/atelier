@@ -40,7 +40,8 @@ rows.
 
 Rows not constrained by visible open blockers use deterministic tie breakers:
 
-1. row state rank: ready, active, blocked, done, not-ready;
+1. row state rank: ready, needs human and context; then active, blocked,
+   done, backlog;
 2. priority rank: critical, high, medium, low, then unknown priorities;
 3. newest updated timestamp first;
 4. issue ID.
@@ -56,6 +57,8 @@ Work views use one readable row state label:
 
 - `ready`: work whose exact configured status exposes a direct transition into
   an active-category status and has no open blockers in the row state context;
+- `needs human`: ready work labelled `needs-human`, and unblocked open
+  decisions, which only the human can do;
 - `blocked`: work with one or more open blockers, including hidden blockers
   outside the visible set;
 - `active`: active-category work, including configured workflow statuses such
@@ -63,18 +66,21 @@ Work views use one readable row state label:
 - `done`: done-category work;
 - `context`: missions, and parents with open children, which are worked
   through their children;
-- `not-ready`: work that is not startable and does not fit a more specific
+- `backlog`: work that is not startable and does not fit a more specific
   work-view state. Draft missions and `backlog` work are the planning
   examples: their status shares the `todo` category, but their next transition
-  refines or plans them rather than entering active execution.
+  refines or plans them rather than entering active execution. Children of a
+  backlog parent are parked with it.
 
 A work view's sections are named by row state (Ready Work, Blocked Work, Done
 Work), so their rows carry the exact configured workflow status and not the
-state; today a todo item under Blocked Work reads `atelier-x [⚠ todo] medium -
-Title | 1 blocker` (see [Human CLI Output](human-cli-output.md) for the item
-line and the changes atelier-i2qq and atelier-tf9n plan for it). A
-list that mixes states, such as `work mission --all`, leads each row with its
-state unless the status word already says it. Rows should not print duplicate
+state: a todo item under Blocked Work reads `atelier-x ⚠ todo medium Title |
+1 blocker` (see the item line in [Human CLI Output](human-cli-output.md);
+atelier-tf9n replaces the count with the direct blockers). A list that mixes
+states, such as `work mission --all`, leads each row with its state unless
+the status word already says it, as in `needs human atelier-x todo medium
+Title` or `backlog atelier-y draft high Title`; a backlog-status row needs no
+lead. Rows should not print duplicate
 category/status tokens such as `todo/todo` or `active/in_progress`; categories
 belong in rollups, filters, and explicit metadata. Blocked rows carry a compact
 blocker cue, today a count, while detail surfaces preserve exact blocker IDs

@@ -69,19 +69,21 @@ and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
 Landing also checks completed claims elsewhere in the checkout that a change
-since a trusted point can affect. The trusted point is the branch base on a work
-branch, and otherwise the merge base with the base's upstream (the local base
-can hold commits no land has checked); without an upstream, every claim is
-checked. Every change that reaches the base had its own claims checked when it
-landed, so earlier history holds by induction. A claim is checked when its
-record changed; when a changed issue record reaches it through blocked,
-parent, child, or advances links, directly or along a chain, before or after the change; when a review or evidence record about it
-was added, removed, or retargeted; when the workflow policy at HEAD or on
-the base differs from the trusted point; or, under a policy that gates on
-`lint.none_blocking`, which reads every record, when any record changed. Review history is checked for
-append-only edits from the same point. `atelier doctor` checks every completed
-claim and the whole review history, for history that reached the base without
-the gates, such as a direct push (atelier-37uq).
+since a trusted point can affect. The trusted point is the merge base of the
+base's upstream with the branch base on a work branch, or with HEAD otherwise:
+the local base can hold commits no land has checked, so it is not trusted.
+Without an upstream, every claim is checked. Every change that reaches the
+base had its own claims checked when it landed, so earlier history holds by
+induction. A claim is checked when its record changed; when a changed issue
+record reaches it through blocked, parent, child, or advances links, directly
+or along a chain, before or after the change; when a review or evidence record
+about it was added, removed, or retargeted; when the workflow policy at HEAD
+or on the base differs from the trusted point; or, under a policy that gates
+on `lint.none_blocking`, which reads every record, when any record changed.
+Review history is checked for append-only edits from the same point.
+`atelier doctor` checks every completed claim and the whole review history,
+for history that reached the base without the gates, such as a direct push
+(atelier-37uq).
 
 Checked integrated claims retain proof and independent acceptance that were
 valid when completion was claimed. Historical acceptance preserves the original work's
@@ -121,9 +123,9 @@ the current checkout uses live records. It does not fetch remote branches or
 overlay another branch's records onto the current graph. Incompatible or
 unavailable snapshots are reported separately. Every compatible owner branch
 remains visible, including branches sharing a tracker tree. A branch's done
-claim is not base completion: a done owner shows as `✓ done on branch <branch>,
-not merged into <base>` until the base branch's own copy of the record is
-done.
+claim is not base completion: a done owner's item line ends `| not merged
+into <base>` until the base branch's own copy of the record is done, and
+`| merged into <base>` after.
 
 The same summaries, read once per command, mark ready work that is in flight
 elsewhere: in `status`'s ready items and unassigned work, and in `work ready`
