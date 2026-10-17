@@ -4,6 +4,9 @@ id: "atelier-lr8o"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-lr8o
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Resolve short evidence IDs in bundle files like command arguments"
-updated_at: "2026-10-17T08:57:24.195389303+00:00"
+updated_at: "2026-10-17T08:57:28.424041999+00:00"
 ---
 
 ## Goal
