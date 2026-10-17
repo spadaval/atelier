@@ -6116,3 +6116,142 @@ fn test_work_parent_all_shows_every_child_its_summary_omits() {
     assert!(!all.contains("omitted"), "{all}");
     assert_eq!(all.matches("Wide child").count(), 10, "{all}");
 }
+
+// ============ Parent proof gaps and done-record hints (atelier-0sia) ============
+
+#[test]
+fn test_work_parent_proof_gaps_count_its_scope_not_the_parent() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Gapped parent"]);
+    assert!(success, "{stderr}");
+    let parent = issue_id_by_title(dir.path(), "Gapped parent");
+    let mut children = Vec::new();
+    for title in ["Gapped child one", "Gapped child two"] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["issue", "create", title, "--parent", &parent]);
+        assert!(success, "{stderr}");
+        children.push(issue_id_by_title(dir.path(), title));
+    }
+
+    let proof_gaps = |view: &str| {
+        view.lines()
+            .find(|line| line.starts_with("Proof gaps"))
+            .map(|line| line.rsplit(": ").next().unwrap().to_string())
+    };
+    let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(view.contains("Work                : 2 issues"), "{view}");
+    assert_eq!(proof_gaps(&view).as_deref(), Some("2"), "{view}");
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(quiet.trim_end().ends_with(" proof_gaps=2"), "{quiet}");
+
+    // Proof on every child closes the gaps, though the parent has none.
+    for child in &children {
+        attach_issue_pass_evidence(dir.path(), child);
+    }
+    let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert_eq!(proof_gaps(&view), None, "{view}");
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(quiet.trim_end().ends_with(" proof_gaps=0"), "{quiet}");
+}
+
+#[test]
+fn test_done_parent_view_offers_no_transition_readiness() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Finished parent"]);
+    assert!(success, "{stderr}");
+    let parent = issue_id_by_title(dir.path(), "Finished parent");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Finished child", "--parent", &parent],
+    );
+    assert!(success, "{stderr}");
+    let child = issue_id_by_title(dir.path(), "Finished child");
+
+    let (success, open, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(open.contains("Transition readiness:"), "{open}");
+
+    for id in [&child, &parent] {
+        set_issue_status(dir.path(), id, "done");
+    }
+    let (success, done, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+    assert!(success, "{stderr}");
+    assert!(!done.contains("Transition readiness"), "{done}");
+}
+
+#[test]
+fn test_issue_link_on_a_done_record_offers_no_transition_options() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    for title in ["Linked done work", "Linked open work"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "{stderr}");
+    }
+    let done = issue_id_by_title(dir.path(), "Linked done work");
+    let open = issue_id_by_title(dir.path(), "Linked open work");
+    close_issue(dir.path(), &done, "Shipped");
+
+    let (success, linked, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &done, &open, "--role", "related"],
+    );
+    assert!(success, "{stderr}");
+    let next = next_section(&linked);
+    assert!(!next.contains("issue transition"), "{linked}");
+    assert!(
+        next.contains(&format!("atelier issue show {done}")),
+        "{next}"
+    );
+    assert!(
+        next.contains(&format!("atelier issue show {open}")),
+        "{next}"
+    );
+
+    let (success, linked, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &open, &done, "--role", "related"],
+    );
+    assert!(success, "{stderr}");
+    assert!(
+        next_section(&linked).contains(&format!("atelier issue transition {open}")),
+        "{linked}"
+    );
+}
+
+#[test]
+fn test_brief_done_issue_offers_no_close_reason_its_closed_line_shows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    for title in ["Briefly closed", "Closed at length"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "{stderr}");
+    }
+    let brief_id = issue_id_by_title(dir.path(), "Briefly closed");
+    let long_id = issue_id_by_title(dir.path(), "Closed at length");
+    close_issue(dir.path(), &brief_id, "Shipped the fix");
+    close_issue(
+        dir.path(),
+        &long_id,
+        "Shipped the fix\n\nWith more detail below.",
+    );
+
+    let (success, brief, stderr) = run_atelier(dir.path(), &["issue", "show", &brief_id]);
+    assert!(success, "{stderr}");
+    assert!(brief.contains(": Shipped the fix\n"), "{brief}");
+    assert!(!brief.contains("Close Reason"), "{brief}");
+
+    // A longer reason than the Closed line shows is still offered.
+    let (success, long, stderr) = run_atelier(dir.path(), &["issue", "show", &long_id]);
+    assert!(success, "{stderr}");
+    let more = long
+        .lines()
+        .find(|line| line.starts_with("More with --full:"))
+        .unwrap_or_else(|| panic!("no More line:\n{long}"));
+    assert!(more.contains("Close Reason"), "{long}");
+}

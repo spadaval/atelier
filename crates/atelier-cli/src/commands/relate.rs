@@ -68,7 +68,12 @@ pub fn change_issue_link(
         (true, true) => println!("Unlinked {source} -> {target} ({role})"),
         (true, false) => println!("No link {source} -> {target} ({role}) exists"),
     }
-    print_link_next_commands(&source, &target);
+    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let has_transitions = crate::commands::issue_workflow::issue_has_transitions(
+        policy.as_ref(),
+        &index.require_issue(&source)?,
+    );
+    print_link_next_commands(&source, &target, has_transitions);
     Ok(())
 }
 
@@ -108,19 +113,22 @@ fn resolve_link_endpoint(index: &RecordIndex, reference: &str) -> Result<String>
     index.resolve(atelier_app::record_ref::RecordKind::Issue, reference)
 }
 
-fn print_link_next_commands(issue_id: &str, target_id: &str) {
-    print_footer([
-        FooterAction::new(
-            "Inspect this issue",
-            format!("atelier issue show {issue_id}"),
-        ),
-        FooterAction::new(
+/// A status with no transitions out, as most done statuses have, offers no
+/// transition options.
+fn print_link_next_commands(issue_id: &str, target_id: &str, has_transitions: bool) {
+    let mut actions = vec![FooterAction::new(
+        "Inspect this issue",
+        format!("atelier issue show {issue_id}"),
+    )];
+    if has_transitions {
+        actions.push(FooterAction::new(
             "Show transition options",
             format!("atelier issue transition {issue_id}"),
-        ),
-        FooterAction::new(
-            "Inspect the target",
-            format!("atelier issue show {target_id}"),
-        ),
-    ]);
+        ));
+    }
+    actions.push(FooterAction::new(
+        "Inspect the target",
+        format!("atelier issue show {target_id}"),
+    ));
+    print_footer(actions);
 }

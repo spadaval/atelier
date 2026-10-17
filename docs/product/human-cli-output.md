@@ -96,6 +96,8 @@ Counts by work state use the state words in one order: active, ready, needs a
 human (`2 need a human`), context, blocked, done, backlog. A scope's counts
 follow its size, and `work missions`, `work mission`, `work parent` and
 `issue show` all write them alike: `Scope: 3 issues: 1 ready, 2 blocked`.
+A parent is not in its own scope, so `work parent`'s `Proof gaps` counts its
+scope items without passing proof and leaves the parent out.
 Text that says whether work is finished calls work that is not closed `open`
 and closed work `closed`, never `nonterminal` or `terminal`: `Unassigned: 6
 open issues`, `closed ancestor <id> retires open descendant <id>`. Workflow
@@ -357,7 +359,8 @@ brief view gives one line per fact and leaves out empty facts:
   Decision for decisions. These say what the item is for and what finishes
   it. A one-line section follows its label, and a longer one is indented
   under it;
-- `More with --full:`, which names the record's other sections.
+- `More with --full:`, which names the record's other sections, leaving out
+  a one-line Close Reason that the `Closed` line already shows.
 
 Related items are item lines. A list with one item stays on its label's line,
 and a longer list is indented under it. `issue show <id> <id>...`
