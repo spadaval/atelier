@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show the current decisions on an item in status and issue show"
-updated_at: "2026-10-17T17:25:59.261604774+00:00"
+updated_at: "2026-10-17T18:17:06.615557096+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,10 @@ S6 of docs/strategies/review-and-introspection.md. An agent working an item shou
 
 ## Done when
 
-`status` (for the owner in progress) and `issue show` list the current decisions on the item, its parent and its mission. The brief view shows the count and the one-way decisions, and the full view shows them all. Covered by CLI tests.
+- `issue show <id>` (brief) prints `Decisions: <n> current` with the one-way decisions as rows beneath, and `issue show <id> --full` prints a Decisions section with every current decision. The decisions are the decision notes on the item, its parent and its mission record, and the current decision records in the item's mission scope; records that are open or superseded are not current.
+- `status` shows the same brief form for the owner it is working on.
+- Rows use the decision row and item line shapes from docs/product/human-cli-output.md, each naming the record it came from.
+- CLI tests cover the brief and full views and `status`, and docs/product/human-cli-output.md and sessions-and-hooks.md describe them.
 
 ## Unknowns
 
