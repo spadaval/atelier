@@ -2297,3 +2297,45 @@ fn merge_commit_strategy_needs_merge_checks_to_prove_the_merged_tree() {
     merge_commit_policy(&fixture, &[]);
     fixture.refusal("merge_unproven");
 }
+
+#[test]
+fn merge_commit_strategy_gates_the_records_the_base_gained_after_the_fork_point() {
+    // The merge commit carries the base's records onto the base too, so a
+    // finding the base recorded against the item must hold the merge.
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &["true"]);
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let finding = fixture.finding();
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    fixture.refusal("merge_base_records");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        output.contains(&format!(".atelier/reviews/{finding}.md")),
+        "{output}"
+    );
+    assert_eq!(worktrees(fixture.path()), 1);
+
+    // Unrelated base records keep the clean merge's approval; an open
+    // blocker the base added holds it, as the merged records say.
+    let other = Fixture::new();
+    other.approval("Reviewer");
+    merge_commit_policy(&other, &["true"]);
+    git(other.path(), &["switch", "-q", "main"]);
+    ok(other.path(), &["-q", "issue", "create", "Unrelated plan"]);
+    commit(other.path(), "unrelated base planning");
+    git(other.path(), &["switch", "-q", &other.branch]);
+    ok(other.path(), &["merge", &other.id, "--check"]);
+    git(other.path(), &["switch", "-q", "main"]);
+    let blocker = ok(other.path(), &["-q", "issue", "create", "Open dependency"]);
+    let store = atelier_records::RecordStore::new(other.path().join(".atelier"));
+    let mut record = store.load_issue_by_id(&blocker).unwrap();
+    record
+        .relationships
+        .blocks
+        .push(atelier_records::issue_relationship_target(&other.id));
+    store.write_issue_atomic(&record).unwrap();
+    commit(other.path(), "base blocks the item");
+    git(other.path(), &["switch", "-q", &other.branch]);
+    other.refusal("blockers.none_open");
+}

@@ -4,7 +4,9 @@
 use crate::commands::git::text;
 use anyhow::{bail, Context, Result};
 use atelier_app::{
-    base_policy, committed_snapshot, git_freshness as git, review_gate,
+    base_policy, committed_snapshot, git_freshness as git,
+    record_index::RecordIndex,
+    review_gate,
     storage_layout::StorageLayout,
     workflow_policy::{MergeStrategy, ValidatorParams, WorkflowPolicy},
 };
@@ -116,6 +118,75 @@ fn merge_commit(
             &message,
         ],
     )
+}
+
+/// Refuse records the base changed since the work branch left it that bear
+/// on the item: in-scope issues, and reviews or evidence about them. The
+/// merge commit would carry them onto the base, but review and evidence pins
+/// are judged only along the work branch, so merging the base into the
+/// branch is what lets the gates judge them. Other base records, such as a
+/// blocker, are judged by the gates reading the merged records.
+fn base_records(
+    repo: &Path,
+    (branch_index, merged): (&RecordIndex, &RecordIndex),
+    owner: &str,
+    (base, branch): (&str, &str),
+    (head, commit): (&str, &str),
+) -> Result<()> {
+    let mut ids = review_gate::scope(branch_index, owner)?;
+    ids.extend(review_gate::scope(merged, owner)?);
+    let bears = |index: &RecordIndex, kind: &str, id: &str| match kind {
+        "issues" => ids.contains(id),
+        "reviews" => index
+            .require_review(id)
+            .is_ok_and(|review| ids.contains(&review.target)),
+        "evidence" => index.list_record_links("evidence", id).is_ok_and(|links| {
+            links
+                .iter()
+                .any(|link| ids.contains(&link.source_id) || ids.contains(&link.target_id))
+        }),
+        _ => false,
+    };
+    // Where the merged records differ from the branch's, the base changed them.
+    let changed = git::git_output(
+        repo,
+        &[
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            head,
+            commit,
+            "--",
+            ".atelier/",
+        ],
+    )?;
+    let relevant = changed
+        .split(|byte| *byte == 0)
+        .filter_map(|path| std::str::from_utf8(path).ok())
+        .filter(|path| {
+            let mut parts = Path::new(path).components().skip(1);
+            let (Some(kind), Some(file)) = (parts.next(), parts.next()) else {
+                return false;
+            };
+            let (Some(kind), Some(id)) = (
+                kind.as_os_str().to_str(),
+                Path::new(file.as_os_str())
+                    .file_stem()
+                    .and_then(|id| id.to_str()),
+            ) else {
+                return false;
+            };
+            parts.next().is_none() && (bears(merged, kind, id) || bears(branch_index, kind, id))
+        })
+        .collect::<Vec<_>>();
+    if !relevant.is_empty() {
+        bail!(
+            "merge_base_records: {base} changed records about {owner} since {branch} left it: {}. The merge commit would carry them onto {base} unchecked. Merge it in with `git merge {base}` on {branch} so the gates judge them, then retry; a clean merge keeps the approval.",
+            relevant.join(", ")
+        );
+    }
+    Ok(())
 }
 
 fn clean(repo: &Path) -> Result<()> {
@@ -234,20 +305,32 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
                 (&branch, &head),
             )?;
             let checkout = MergedCheckout::add(repo, &commit)?;
-            Ok((tree, commit, checkout))
+            let merged = committed_snapshot::CommittedSnapshot::new(&commit)?
+                .read_record_files(&checkout.path, true)?
+                .0
+                .into_index()?;
+            base_records(
+                repo,
+                (&index, &merged),
+                owner,
+                (base, &branch),
+                (&head, &commit),
+            )?;
+            Ok((tree, commit, checkout, merged))
         })
         .transpose()?;
+    // The gates read the records merging would put on the base.
     let mut nodes = review_gate::evaluate(
-        &index,
+        merge.as_ref().map_or(&index, |(_, _, _, merged)| merged),
         &mut read,
         &source.policy,
         owner,
         &fork_point,
         merge
             .as_ref()
-            .map_or(repo, |(_, _, checkout)| checkout.path.as_path()),
+            .map_or(repo, |(_, _, checkout, _)| checkout.path.as_path()),
     )?;
-    if let Some((tree, _, _)) = &merge {
+    if let Some((tree, _, _, _)) = &merge {
         nodes.push(review_gate::GateNode {
             kind: "workflow_validator",
             id: format!("{owner}/merge.merged_tree"),
@@ -315,7 +398,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             bail!("base checkout changed while checks ran");
         }
     }
-    if let Some((_, commit, checkout)) = &merge {
+    if let Some((_, commit, checkout, _)) = &merge {
         if !text(
             &checkout.path,
             &["status", "--porcelain", "--untracked-files=all"],
@@ -333,7 +416,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         return Ok(());
     }
     let landed = match merge {
-        Some((_, commit, checkout)) => {
+        Some((_, commit, checkout, _)) => {
             drop(checkout);
             Some(commit)
         }
