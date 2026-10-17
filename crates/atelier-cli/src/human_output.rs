@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::IsTerminal;
 
 use atelier_app::issue_inventory::IssueInventoryView;
+use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::work_classification::{WorkClassification, WorkRow};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -214,12 +215,12 @@ impl<'a> ItemLine<'a> {
         self
     }
 
-    /// `| N blocker(s)` when there are any.
+    /// `| 1 blocker` or `| N blockers` when there are any.
     pub(crate) fn blockers(self, count: usize) -> Self {
         if count == 0 {
             self
         } else {
-            self.cue(format!("{count} blocker{}", plural_suffix(count)))
+            self.cue(count_noun(count, "blocker"))
         }
     }
 
@@ -520,9 +521,8 @@ impl IssueListPanel {
         let omitted = self.rows.len().saturating_sub(limit);
         if omitted > 0 {
             lines.push(format!(
-                "  ... {omitted} more {} item{} omitted",
-                self.title.to_lowercase(),
-                plural_suffix(omitted)
+                "  ... {} omitted",
+                count_noun(omitted, &format!("more {} item", self.title.to_lowercase()))
             ));
         }
         lines
@@ -636,8 +636,8 @@ pub(crate) fn render_unassigned_groups(
     let hidden = groups.len().saturating_sub(group_limit);
     if hidden > 0 {
         lines.push(format!(
-            "{indent}... {hidden} more label{}: atelier work missions",
-            plural_suffix(hidden)
+            "{indent}... {}: atelier work missions",
+            count_noun(hidden, "more label")
         ));
     }
     lines
@@ -667,9 +667,9 @@ pub(crate) fn render_issue_inventory(
     if view.matching_count > 0 {
         lines.push(String::new());
         lines.push(format!(
-            "Showing {} of {} issues",
+            "Showing {} of {}",
             view.rows.len(),
-            view.matching_count
+            count_noun(view.matching_count, "issue")
         ));
         if view.rows.len() < view.matching_count {
             lines.push("Narrow the metadata filters or raise --limit.".to_string());
@@ -681,10 +681,12 @@ pub(crate) fn render_issue_inventory(
             render_lines_section("", lines),
             render_footer_section(
                 context,
-                [FooterAction::new(
-                    "Inspect a record",
-                    "atelier issue show <issue-id>",
-                )],
+                view.rows.first().map(|record| {
+                    FooterAction::new(
+                        "Inspect the first record",
+                        format!("atelier issue show {}", record.issue.id),
+                    )
+                }),
             ),
         ],
         context,
@@ -895,7 +897,7 @@ pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
     let shown = paths.len().min(sample_limit);
     let sample = &paths[..shown];
     let omitted = paths.len() - shown;
-    let mut summary = format!("{} path{}", paths.len(), plural_suffix(paths.len()));
+    let mut summary = count_noun(paths.len(), "path");
     if !sample.is_empty() {
         summary.push_str(": ");
         summary.push_str(&sample.join(", "));
@@ -906,11 +908,53 @@ pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
     summary
 }
 
-pub(crate) fn plural_suffix(count: usize) -> &'static str {
-    if count == 1 {
-        ""
+pub(crate) use atelier_core::count_noun;
+
+/// Counts of things as one phrase, count first in the order given, leaving
+/// out zeros: `2 open blockers, 1 other link`. Empty when every count is
+/// zero.
+pub(crate) fn noun_counts<'a>(counts: impl IntoIterator<Item = (usize, &'a str)>) -> String {
+    counts
+        .into_iter()
+        .filter(|(count, _)| *count > 0)
+        .map(|(count, noun)| count_noun(count, noun))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Work counts by work state, count first in the shared work order, leaving
+/// out states with none: `1 active, 2 ready, 1 needs a human, 3 backlog`.
+/// Empty when every count is zero.
+pub(crate) fn work_state_counts(counts: &ObjectiveBucketTotals) -> String {
+    let human = if counts.human == 1 {
+        "needs a human"
     } else {
-        "s"
+        "need a human"
+    };
+    [
+        (counts.active, "active"),
+        (counts.ready, "ready"),
+        (counts.human, human),
+        (counts.context, "context"),
+        (counts.blocked, "blocked"),
+        (counts.done, "done"),
+        (counts.backlog, "backlog"),
+    ]
+    .into_iter()
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, state)| format!("{count} {state}"))
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+/// A scope's size and its [`work_state_counts`]: `3 issues: 1 ready,
+/// 2 backlog`, or `0 issues` for an empty scope.
+pub(crate) fn scope_counts(total: usize, counts: &ObjectiveBucketTotals) -> String {
+    let states = work_state_counts(counts);
+    if states.is_empty() {
+        count_noun(total, "issue")
+    } else {
+        format!("{}: {states}", count_noun(total, "issue"))
     }
 }
 
@@ -1053,6 +1097,92 @@ mod tests {
                 "todo"
             );
         }
+    }
+
+    #[test]
+    fn counts_read_count_first_in_one_order_without_zeros() {
+        let counts = ObjectiveBucketTotals {
+            active: 1,
+            ready: 2,
+            human: 1,
+            context: 0,
+            blocked: 0,
+            done: 3,
+            backlog: 1,
+        };
+        assert_eq!(
+            work_state_counts(&counts),
+            "1 active, 2 ready, 1 needs a human, 3 done, 1 backlog"
+        );
+        assert_eq!(
+            scope_counts(8, &counts),
+            "8 issues: 1 active, 2 ready, 1 needs a human, 3 done, 1 backlog"
+        );
+        let two_for_the_human = ObjectiveBucketTotals {
+            human: 2,
+            context: 1,
+            ..Default::default()
+        };
+        assert_eq!(
+            scope_counts(3, &two_for_the_human),
+            "3 issues: 2 need a human, 1 context"
+        );
+        assert_eq!(
+            scope_counts(0, &ObjectiveBucketTotals::default()),
+            "0 issues"
+        );
+        assert_eq!(
+            noun_counts([(0, "advances link"), (2, "open blocker"), (1, "other link")]),
+            "2 open blockers, 1 other link"
+        );
+        assert_eq!(noun_counts([(0, "other link")]), "");
+    }
+
+    /// Every count gets a real plural from `count_noun`, so no source in the
+    /// workspace hedges one with an `s` in parentheses.
+    #[test]
+    fn no_source_hedges_a_plural_in_parentheses() {
+        fn rust_files(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    rust_files(&path, files);
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    files.push(path);
+                }
+            }
+        }
+        let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(&crates).unwrap() {
+            let crate_dir = entry.unwrap().path();
+            for part in ["src", "tests"] {
+                if crate_dir.join(part).is_dir() {
+                    rust_files(&crate_dir.join(part), &mut files);
+                }
+            }
+        }
+        assert!(files.len() > 20, "found too few sources: {files:?}");
+        let mut hedged = Vec::new();
+        for file in &files {
+            let text = std::fs::read_to_string(file).unwrap();
+            for (number, line) in text.lines().enumerate() {
+                let hedges = line.match_indices("(s)").any(|(at, _)| {
+                    line[..at]
+                        .chars()
+                        .next_back()
+                        .is_some_and(char::is_alphabetic)
+                });
+                if hedges {
+                    hedged.push(format!("{}:{}: {line}", file.display(), number + 1));
+                }
+            }
+        }
+        assert!(
+            hedged.is_empty(),
+            "plurals hedged as `(s)`:\n{}",
+            hedged.join("\n")
+        );
     }
 
     #[test]
@@ -1443,7 +1573,9 @@ mod tests {
         assert!(output.contains("\natelier-c task ⚠ blocked medium A linked child record\n"));
         assert!(output.contains("\natelier-d bug ✓ done low A completed standalone record\n"));
         assert!(output.contains("Showing 4 of 4 issues"));
-        assert!(output.contains("Next\n----\n  Inspect a record: atelier issue show <issue-id>"));
+        assert!(
+            output.contains("Next\n----\n  Inspect the first record: atelier issue show atelier-a")
+        );
         assert!(!output.contains("Standalone"));
         assert!(!output.contains("blocker"));
         assert!(!output.contains("ready"));
@@ -1483,6 +1615,7 @@ mod tests {
         let human = render_issue_inventory(&view.view(), RenderContext::plain());
         assert!(human.contains("No issues match the selected filters."));
         assert!(!human.contains("Showing 0 of 0 issues"));
+        assert!(!human.contains("Next"), "{human}");
         assert_eq!(render_issue_inventory_quiet(&view.view()), "");
     }
 

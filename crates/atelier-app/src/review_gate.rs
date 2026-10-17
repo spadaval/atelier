@@ -624,7 +624,7 @@ fn evaluate_scope(
             "work.terminal",
             terminal.is_empty(),
             if terminal.is_empty() {
-                "owner and all scoped work are terminal".into()
+                "owner and all scoped work are closed".into()
             } else {
                 format!("open scoped work: {}", terminal.join(", "))
             },
@@ -930,7 +930,7 @@ fn completion_claims(
                 let present = match field.as_str() {
                     "close_reason" => index
                         .issue_record(id)
-                        .context("terminal issue record missing")?
+                        .context("closed issue record missing")?
                         .sections
                         .close_reason
                         .as_deref()

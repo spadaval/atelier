@@ -798,7 +798,7 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
     );
     commit(fixture.path(), "epic done claim");
     let output = ok(fixture.path(), &["merge", &fixture.id]);
-    assert!(output.contains("owner and all scoped work are terminal"));
+    assert!(output.contains("owner and all scoped work are closed"));
     let index =
         atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
     assert_eq!(index.require_issue(&child).unwrap().status, "done");

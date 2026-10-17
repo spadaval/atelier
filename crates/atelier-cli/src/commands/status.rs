@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::{self, git};
 use crate::human_output::{
-    path_summary, render_footer_section, render_lines_section, render_metadata, render_page,
-    render_text_section, short_commit, FooterAction, IssueListPanel, IssueListRow, ItemLine,
-    RenderContext,
+    count_noun, path_summary, render_footer_section, render_lines_section, render_metadata,
+    render_page, render_text_section, short_commit, FooterAction, IssueListPanel, IssueListRow,
+    ItemLine, RenderContext,
 };
 use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
@@ -32,7 +32,7 @@ pub fn run(hook: bool, quiet: bool, prime: bool) -> Result<()> {
         let context = commands::session::read_hook_payload("SessionStart")
             .and_then(|_| text(false, RenderContext::plain()))
             .unwrap_or_else(|error| {
-                format!("Atelier context unavailable: {error:#}. Run atelier check and repair the named records.")
+                format!("Atelier context unavailable: {error:#}. Run `atelier check` and repair the named records.")
             });
         let context = match note {
             Some(note) => format!("{note}\n{context}"),
@@ -386,11 +386,16 @@ fn render_status_page(
     in_flight: &BTreeMap<String, String>,
     context: RenderContext,
 ) -> String {
-    let summary_lines = vec![
-        format!("Ready work:    {}", view.work.ready.len()),
-        format!("Needs a human: {}", view.work.human.len()),
-        current_missions(view, overview),
-    ];
+    // A count line with nothing to count is left out.
+    let summary_lines = [
+        ("Ready work:    ", view.work.ready.len()),
+        ("Needs a human: ", view.work.human.len()),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count > 0)
+    .map(|(label, count)| format!("{label}{count}"))
+    .chain(current_missions(view, overview))
+    .collect::<Vec<_>>();
     let owned = matches!(owner, Ok(Some(_)));
     // Without an owner, the session's next step is choosing ready work.
     let ready_panel = if owned || view.work.ready.is_empty() {
@@ -477,22 +482,25 @@ fn render_status_page(
                 format!("atelier merge {} --check", owner.id),
             ),
         ]
-    } else if ready > 0 {
+    } else if let Some(top) = view.work.ready.first() {
         vec![
             FooterAction::new(
-                format!("Choose ready work ({ready} ready issue(s) available)"),
+                format!(
+                    "Choose ready work ({} available)",
+                    count_noun(ready, "ready issue")
+                ),
                 "atelier work ready",
             ),
             FooterAction::new(
-                "Inspect selected work transitions",
-                "atelier issue transition <issue-id>",
+                "Inspect the top ready item's transitions",
+                format!("atelier issue transition {}", top.id),
             ),
         ]
     } else if !view.work.human.is_empty() {
         vec![FooterAction::new(
             format!(
-                "Only work for the human is ready ({} item(s))",
-                view.work.human.len()
+                "Only work for the human is ready ({})",
+                count_noun(view.work.human.len(), "item")
             ),
             "atelier work human",
         )]
@@ -511,7 +519,11 @@ fn render_status_page(
         } else {
             render_lines_section("Policy Diagnostics", diagnostics.to_vec())
         },
-        render_lines_section("", summary_lines),
+        if summary_lines.is_empty() {
+            Vec::new()
+        } else {
+            render_lines_section("", summary_lines)
+        },
         ready_panel,
         IssueListPanel::new("Current Work", active_rows)
             .limit(8)
@@ -531,14 +543,16 @@ fn render_status_page(
     render_page("Atelier Status", panels, context)
 }
 
-/// Between missions, the count alone hides that the last one finished.
-fn current_missions(view: &StatusView, overview: &MissionOverview) -> String {
+/// Between missions, the count alone hides that the last one finished;
+/// with no mission open or closed there is nothing to say.
+fn current_missions(view: &StatusView, overview: &MissionOverview) -> Option<String> {
     match &overview.last_closed_mission {
-        Some(mission) if view.current_mission_count == 0 => format!(
+        Some(mission) if view.current_mission_count == 0 => Some(format!(
             "Current missions: 0; last closed {}",
             crate::human_output::last_closed_mission(mission)
-        ),
-        _ => format!("Current missions: {}", view.current_mission_count),
+        )),
+        _ if view.current_mission_count == 0 => None,
+        _ => Some(format!("Current missions: {}", view.current_mission_count)),
     }
 }
 

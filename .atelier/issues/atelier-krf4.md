@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-krf4
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T07:29:05.140339844+00:00"
+status: "done"
 title: "Phrase counts as plain words in one order"
-updated_at: "2026-10-17T07:15:49.737164867+00:00"
+updated_at: "2026-10-17T07:29:05.140339844+00:00"
 ---
 
 ## Goal
@@ -40,3 +44,7 @@ updated_at: "2026-10-17T07:15:49.737164867+00:00"
 ## Context
 
 Extends atelier-deyy (row tokens).
+
+## Close Reason
+
+Counts read count first with real plurals through count_noun everywhere; work-state counts share one order and helper across work missions, work mission/parent and issue show; zero counts and zero-count lines are omitted; nonterminal reads open; a source test refuses (s); human-cli-output.md documents the Counts rule. Evidence atelier-95r7, atelier-jssw, atelier-wh3p.

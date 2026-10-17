@@ -6,17 +6,18 @@ use std::path::{Path, PathBuf};
 use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
+use crate::commands::workflow::IssueTransitionOption;
 use crate::human_output::{
-    display_timestamp, heading, local_date, plural_suffix, print_footer, render_footer_section,
-    render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
-    render_text_section, FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
+    count_noun, display_timestamp, heading, local_date, noun_counts, print_footer,
+    render_footer_section, render_issue_inventory, render_issue_inventory_quiet,
+    render_lines_section, render_metadata, render_text_section, scope_counts, FooterAction,
+    IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
-use atelier_app::issue_read::ObjectiveReadSummary;
+use atelier_app::issue_read::{ObjectiveBucketTotals, ObjectiveReadSummary};
 use atelier_app::objective_graph::issue_blocks_work;
 use atelier_app::record_index::RecordIndex;
 use atelier_app::record_ref::RecordKind;
-use atelier_app::work_classification::WorkClassification;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, ISSUE_NOTE_KINDS};
 use atelier_records::validate_issue_type;
@@ -287,7 +288,7 @@ fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
     parts.join(" | ")
 }
 
-fn blocked_transition_reason(option: &crate::commands::workflow::IssueTransitionOption) -> String {
+fn blocked_transition_reason(option: &IssueTransitionOption) -> String {
     option
         .validator_results
         .iter()
@@ -298,30 +299,10 @@ fn blocked_transition_reason(option: &crate::commands::workflow::IssueTransition
 }
 
 fn work_counts(summary: &ObjectiveReadSummary) -> String {
-    let work = &summary.scope.work;
-    let counts = [
-        (WorkClassification::Active, work.active.len()),
-        (WorkClassification::Ready, work.ready.len()),
-        (WorkClassification::NeedsHuman, work.human.len()),
-        (WorkClassification::Context, work.context.len()),
-        (WorkClassification::Blocked, work.blocked.len()),
-        (WorkClassification::Done, work.done.len()),
-        (WorkClassification::Backlog, work.backlog.len()),
-    ]
-    .into_iter()
-    .filter(|(_, count)| *count > 0)
-    .map(|(state, count)| format!("{} {count}", state.label()))
-    .collect::<Vec<_>>();
-    let total = summary.scope.total();
-    if counts.is_empty() {
-        format!("{total} issue{}", plural_suffix(total))
-    } else {
-        format!(
-            "{total} issue{} - {}",
-            plural_suffix(total),
-            counts.join(", ")
-        )
-    }
+    scope_counts(
+        summary.scope.total(),
+        &ObjectiveBucketTotals::from(&summary.scope.work),
+    )
 }
 
 fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -> Result<()> {
@@ -369,7 +350,8 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         println!("File:     {}", path.display());
     }
     render_parent_context(index, canonical_id)?;
-    render_transition_readiness(index, canonical_id)?;
+    let options = crate::commands::workflow::issue_transition_options(index, canonical_id);
+    render_transition_readiness(&options, canonical_id);
 
     for name in IssueSections::ALL_NAMES {
         print_text_section(name.title(), record.sections.section(name));
@@ -402,57 +384,42 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     let health = summary
         .scope
         .health(summary.relationships.open_blockers.len());
-    print_panel(render_metadata(
-        Some("Objective Rollup"),
-        &[
-            ("Health", health.to_string()),
-            (
-                "Scope",
-                format!(
-                    "{} scoped issue{}",
-                    summary.scope.total(),
-                    plural_suffix(summary.scope.total())
-                ),
-            ),
-            (
-                "Buckets",
-                format!(
-                    "active {}, ready {},{} blocked {}, done {}, backlog {}",
-                    summary.scope.work.active.len(),
-                    summary.scope.work.ready.len(),
-                    [
-                        ("needs a human", summary.scope.work.human.len()),
-                        ("context", summary.scope.work.context.len()),
-                    ]
-                    .into_iter()
-                    .filter(|(_, count)| *count > 0)
-                    .map(|(label, count)| format!(" {label} {count},"))
-                    .collect::<String>(),
-                    summary.scope.work.blocked.len(),
-                    summary.scope.work.done.len(),
-                    summary.scope.work.backlog.len()
-                ),
-            ),
-            (
-                "Relationships",
-                format!(
-                    "advances {}, open blockers {}, validating evidence {}, other {}",
-                    summary.relationships.advances_roots.len(),
-                    summary.relationships.open_blockers.len(),
-                    summary.evidence.linked_validating_evidence,
-                    summary.relationships.other_links
-                ),
-            ),
-            (
-                "Evidence Gates",
-                format!(
-                    "linked validating evidence {}; scoped issues without evidence {}",
-                    summary.evidence.linked_validating_evidence,
-                    summary.evidence.scoped_issues_without_evidence
-                ),
-            ),
-        ],
-    ));
+    let relationships = noun_counts([
+        (summary.relationships.advances_roots.len(), "advances link"),
+        (summary.relationships.open_blockers.len(), "open blocker"),
+        (summary.relationships.other_links, "other link"),
+    ]);
+    let evidence_gates = [
+        (
+            summary.evidence.linked_validating_evidence,
+            "validating evidence record",
+            "linked",
+        ),
+        (
+            summary.evidence.scoped_issues_without_evidence,
+            "scoped issue",
+            "without evidence",
+        ),
+    ]
+    .into_iter()
+    .filter(|(count, _, _)| *count > 0)
+    .map(|(count, noun, state)| format!("{} {state}", count_noun(count, noun)))
+    .collect::<Vec<_>>()
+    .join(", ");
+    let mut rollup = vec![
+        ("Health", health.to_string()),
+        ("Scope", work_counts(&summary)),
+    ];
+    // A count line with nothing to count is left out.
+    for (label, value) in [
+        ("Relationships", relationships),
+        ("Evidence Gates", evidence_gates),
+    ] {
+        if !value.is_empty() {
+            rollup.push((label, value));
+        }
+    }
+    print_panel(render_metadata(Some("Objective Rollup"), &rollup));
 
     for (title, rows) in [
         ("Active Work", &summary.scope.work.active),
@@ -524,9 +491,9 @@ pub fn transition_options(index: &RecordIndex, issue_ref: &str, verbose: bool) -
     Ok(())
 }
 
-fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Result<()> {
+fn render_transition_readiness(options: &Result<Vec<IssueTransitionOption>>, canonical_id: &str) {
     let mut lines = Vec::new();
-    match crate::commands::workflow::issue_transition_options(index, canonical_id) {
+    match options {
         Ok(options) => {
             for option in options {
                 let state = if option.allowed { "allowed" } else { "blocked" };
@@ -556,7 +523,6 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
         "  options: atelier issue transition {canonical_id}"
     ));
     print_panel(render_lines_section("Transition Readiness", lines));
-    Ok(())
 }
 
 fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> {
@@ -685,9 +651,8 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
 
     let workflow_policy = load_issue_workflow_policy()?;
     let mut lines = vec![format!(
-        "{} downstream issue{} may need review before changing or closing this issue.",
-        affected.len(),
-        plural_suffix(affected.len())
+        "{} may need review before changing or closing this issue.",
+        count_noun(affected.len(), "downstream issue")
     )];
     lines.extend(
         affected
@@ -754,10 +719,6 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
         FooterAction::new(
             "Show transition options",
             format!("atelier issue transition {}", canonical_id),
-        ),
-        FooterAction::new(
-            "Execute a transition",
-            format!("atelier issue transition {} <transition>", canonical_id),
         ),
     ]);
     print_panel(render_footer_section(RenderContext::for_stdout(), actions));
@@ -1013,7 +974,7 @@ fn requested_initial_status(state_dir: &Path, issue_type: &str, status: &str) ->
     let allowed = atelier_app::workflow_policy::creatable_statuses(&policy, issue_type)?;
     if !allowed.contains(status) {
         bail!(
-            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with atelier issue transition.",
+            "issue_create_status_invalid: {issue_type} work cannot be created in status '{status}'; use one of: {}. Other statuses are reached with `atelier issue transition`.",
             allowed.into_iter().collect::<Vec<_>>().join(", ")
         );
     }
@@ -1118,7 +1079,7 @@ pub fn update_lifecycle(
         )
         .context("Invalid sectioned --body")?;
         if parsed.notes.is_some() || parsed.close_reason.is_some() {
-            bail!("--body replaces the typed sections only; add notes with `atelier issue note` and close reasons with `atelier issue transition`");
+            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"` and close reasons with `--reason` on a transition that `atelier issue transition {id}` lists");
         }
         record.sections.body = parsed.body;
         changed_fields.push("body");
@@ -1154,7 +1115,7 @@ pub fn update_lifecycle(
         changed_fields.push("parent");
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --body, --strategy, --no-strategy, --label, --remove-label, or --parent. Use `atelier issue note {id} \"...\"` for notes, or `atelier issue transition {id}` to choose a status change");
     }
     record.issue.updated_at = now;
     validate_issue_record_against_workflow(state_dir, &record.issue)?;
@@ -1257,7 +1218,7 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
     if view.findings.is_empty() {
         println!("Lint passed.");
     } else {
-        println!("Lint found {} issue(s):", view.findings.len());
+        println!("Lint found {}:", count_noun(view.findings.len(), "finding"));
         for finding in &view.findings {
             println!("  {}: {}", finding.id, finding.message);
         }
@@ -1265,7 +1226,10 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
     if view.findings.is_empty() {
         Ok(())
     } else {
-        bail!("Lint failed with {} finding(s)", view.findings.len())
+        bail!(
+            "Lint failed with {}",
+            count_noun(view.findings.len(), "finding")
+        )
     }
 }
 

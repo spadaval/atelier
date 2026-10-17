@@ -95,7 +95,7 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
     let commands = children
         .iter()
         .map(|child| {
-            format!("atelier issue update {child} --no-parent, then atelier issue link {child} {owner} --role blocked_by")
+            format!("`atelier issue update {child} --no-parent`, then `atelier issue link {child} {owner} --role blocked_by`")
         })
         .collect::<Vec<_>>()
         .join("; ");
@@ -105,7 +105,7 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
         ("are each", "them", "standalone validations")
     };
     format!(
-        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child terminal, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge (a game, device or release check), make {pronoun} {shape} instead: {commands}.",
+        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge (a game, device or release check), make {pronoun} {shape} instead: {commands}.",
         children.join(", "),
     )
 }

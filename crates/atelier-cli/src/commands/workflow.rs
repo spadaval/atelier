@@ -312,7 +312,7 @@ fn active_transition_ancestor_blocker(
     Ok(
         atelier_app::work_classification::terminal_ancestor(index, Some(policy), issue)?.map(|ancestor_id| {
             format!(
-                "terminal ancestor {ancestor_id} retires nonterminal descendant {}; cannot enter active-category status '{}'; inspect `atelier issue show {ancestor_id}`",
+                "closed ancestor {ancestor_id} retires open descendant {}; cannot enter active-category status '{}'; inspect `atelier issue show {ancestor_id}`",
                 issue.id, transition.to
             )
         }),

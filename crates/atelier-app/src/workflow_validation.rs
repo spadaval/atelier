@@ -127,7 +127,7 @@ fn evidence_attached(
         _ => (1, None),
     };
     let gate = read.issue_gate_with_freshness(index, issue_id, min_count, kind, fresh)?;
-    Ok((gate.passed, gate.reason, (!gate.passed).then(|| "Record fresh proof with `atelier evidence record --target issue/<id> --kind test -- <command>`".to_string())))
+    Ok((gate.passed, gate.reason, (!gate.passed).then(|| format!("Record fresh proof with `atelier evidence record --target issue/{issue_id} --kind {} -- <command>`", kind.unwrap_or("test")))))
 }
 
 fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
@@ -137,7 +137,10 @@ fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
     } else {
         (
             false,
-            format!("atelier check failed with {} finding(s)", findings.len()),
+            format!(
+                "atelier check failed with {}",
+                atelier_core::count_noun(findings.len(), "finding")
+            ),
         )
     }
 }
@@ -252,7 +255,7 @@ fn transitive_blockers_none_open(
         )),
         None => Ok((
             true,
-            "declared dependency closure is terminal".to_string(),
+            "every declared dependency is closed".to_string(),
             None,
         )),
     }

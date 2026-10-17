@@ -181,13 +181,15 @@ impl DependencyClosure {
         let mut reasons = Vec::new();
         if !self.open_paths.is_empty() {
             reasons.push(format!(
-                "incomplete dependency path(s): {}",
+                "{}: {}",
+                atelier_core::count_noun(self.open_paths.len(), "incomplete dependency path"),
                 format_dependency_paths(&self.open_paths)
             ));
         }
         if !self.cycle_paths.is_empty() {
             reasons.push(format!(
-                "dependency cycle(s): {}; repair the declared blocked_by relationships",
+                "{}: {}; repair the declared blocked_by relationships",
+                atelier_core::count_noun(self.cycle_paths.len(), "dependency cycle"),
                 format_dependency_paths(&self.cycle_paths)
             ));
         }
@@ -484,7 +486,7 @@ mod tests {
         assert_eq!(
             closure.failure_reason().as_deref(),
             Some(
-                "dependency cycle(s): consumer -> first -> second -> first; repair the declared blocked_by relationships"
+                "1 dependency cycle: consumer -> first -> second -> first; repair the declared blocked_by relationships"
             )
         );
     }

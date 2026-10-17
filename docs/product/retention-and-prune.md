@@ -14,8 +14,8 @@ Prune is dry-run by default. Inspect candidates and protection reasons before
 apply. The default canonical retention window is seven days; tracked config can
 set `[prune] canonical_retention_days`. A command override affects that run.
 
-Canonical issue and evidence cleanup protects non-terminal work, retained graph
-references, required proof, recent terminal records, uncommitted changes, and
+Canonical issue and evidence cleanup protects open work, retained graph
+references, required proof, recently closed records, uncommitted changes, and
 paths with unmerged history. What pruning keeps follows atelier-r7cd (decided
 by Sumeet 2026-10-15):
 

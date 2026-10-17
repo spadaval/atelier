@@ -34,8 +34,8 @@ pub fn change_issue_link(
     } else {
         (issue_ref, target_ref, role)
     };
-    validate_issue_link_role(repo_root, role)?;
     let source = resolve_link_endpoint(index, issue_ref)?;
+    validate_issue_link_role(repo_root, role, &source)?;
     let target = resolve_link_endpoint(index, target_ref)?;
     if role == "advances" && !unlink {
         atelier_app::workflow_policy::validate_advances_endpoints(
@@ -64,11 +64,10 @@ pub fn change_issue_link(
     Ok(())
 }
 
-fn validate_issue_link_role(repo_root: &Path, role: &str) -> Result<()> {
+fn validate_issue_link_role(repo_root: &Path, role: &str, source: &str) -> Result<()> {
     if matches!(role, "validates" | "evidenced_by") {
         bail!(
-            "Invalid issue link role '{}'. Proof roles are reserved for evidence links; use `atelier evidence record --target issue/<id> --kind validation \"...\"` or `atelier evidence attach <evidence-id> issue <id>`.",
-            role
+            "Invalid issue link role '{role}'. Proof roles are reserved for evidence links; use `atelier evidence record --target issue/{source} --kind validation \"...\"` or `atelier evidence attach <evidence-id> issue {source}`."
         );
     }
     if WELL_KNOWN_LINK_TYPES.contains(&role) || WELL_KNOWN_RELATION_TYPES.contains(&role) {

@@ -291,7 +291,7 @@ pub(crate) fn check_base_commits(
         };
         if let Some(id) = base_done_claim(repo, policy, commit, tip, &upstream, &changed)? {
             bail!(
-                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with git revert {}, or edit {id} back to its earlier status and commit, then run atelier start {id} and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
                 &commit[..8.min(commit.len())],
                 &commit[..8.min(commit.len())],
             );
@@ -302,19 +302,25 @@ pub(crate) fn check_base_commits(
             .collect::<Vec<_>>();
         if let Some(first) = other.first() {
             bail!(
-                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: git switch -c <issue_type>/<id>, git branch -f {base} {base}@{{upstream}}, then atelier start <id> there; get it reviewed and integrate it with atelier merge.",
+                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: `git switch -c <issue_type>/<id>`, `git branch -f {base} {base}@{{upstream}}`, then `atelier start <id>` there; get it reviewed and integrate it with `atelier merge`.",
                 &commit[..8.min(commit.len())],
                 first.display(),
                 match other.len() {
                     1 => String::new(),
-                    count => format!(" and {} other path(s)", count - 1),
+                    count => format!(
+                        " and {}",
+                        crate::human_output::count_noun(count - 1, "other path")
+                    ),
                 },
             );
         }
     }
     Ok(match checked {
         0 => "Base commits: none unpushed outside recorded review.".to_owned(),
-        count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
+        count => format!(
+            "Base commits: {} outside review.",
+            crate::human_output::count_noun(count, "unpushed record-only commit")
+        ),
     })
 }
 
@@ -477,7 +483,8 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch> @ <commit>: <item line> | <merge state> | N active`.
+    /// `<branch> @ <commit>: <item line> | <merge state> | N active`, with
+    /// no active cue when nothing is active.
     fn line(&self, base: &str) -> String {
         let mut line =
             crate::human_output::ItemLine::new(&self.id, &self.status, &self.priority, &self.title)
@@ -487,11 +494,14 @@ impl BranchOwner {
             Some(false) => line = line.cue(format!("not merged into {base}")),
             None => {}
         }
+        if self.active > 0 {
+            line = line.cue(format!("{} active", self.active));
+        }
         format!(
             "{} @ {}: {}",
             self.branch,
             crate::human_output::short_commit(&self.commit),
-            line.cue(format!("{} active", self.active)).text()
+            line.text()
         )
     }
 }

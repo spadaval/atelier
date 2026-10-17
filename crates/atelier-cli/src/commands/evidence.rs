@@ -573,13 +573,19 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
     }
     if records.len() > EVIDENCE_LIST_LIMIT {
         println!(
-            "Omitted: {} older evidence record(s) hidden by default limit {}",
-            records.len() - EVIDENCE_LIST_LIMIT,
+            "Omitted: {} hidden by default limit {}",
+            crate::human_output::count_noun(
+                records.len() - EVIDENCE_LIST_LIMIT,
+                "older evidence record"
+            ),
             EVIDENCE_LIST_LIMIT
         );
     }
     print_footer([
-        FooterAction::new("Show proof detail", "atelier evidence show <evidence-id>"),
+        FooterAction::new(
+            "Show the newest proof's detail",
+            format!("atelier evidence show {}", records[0].header.id),
+        ),
         FooterAction::new(
             "Filter by result",
             "atelier evidence list --result <result>",

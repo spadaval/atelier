@@ -2496,7 +2496,7 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     commit(f.path(), "file a mission and its strategy on the base");
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 
@@ -2551,7 +2551,7 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     git(f.path(), &["switch", "-q", "main"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 
@@ -3010,7 +3010,7 @@ fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     git(f.path(), &["switch", "-q", "main"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 1 unpushed record-only commit(s)"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 }
@@ -3039,7 +3039,7 @@ fn base_pull_merge_counts_only_the_paths_it_introduces() {
     git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 2 unpushed record-only commit(s)"),
+        output.contains("Base commits: 2 unpushed record-only commits outside"),
         "{output}"
     );
 }
@@ -3054,7 +3054,7 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     // Active work hands off; the base moving on is not its failure.
     let output = ok(f.path(), &["land", &f.id]);
     assert!(
-        output.contains("Base main has 1 commit(s) this branch does not")
+        output.contains("Base main has 1 commit this branch does not")
             && output.contains("git merge main"),
         "{output}"
     );
@@ -3940,7 +3940,7 @@ fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     commit(dir.path(), "start owned work");
     let (pass, output) = cli(dir.path(), &["land", "--install"]);
     assert!(
-        !pass && output.contains("rerun atelier land without --install"),
+        !pass && output.contains("rerun `atelier land` without --install"),
         "{output}"
     );
 }
@@ -4016,6 +4016,16 @@ fn status_current_work_row_reads_like_its_owner_row() {
 #[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
+    // While the owner is in progress, its branch row counts it as active.
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        status
+            .lines()
+            .any(|line| line.contains(&format!(": {} ", f.id)) && line.ends_with(" | 1 active")),
+        "{status}"
+    );
+    git(f.path(), &["switch", "-q", &f.branch]);
     f.terminal(&f.id);
     let status = ok(f.path(), &["status"]);
     assert!(
@@ -4028,14 +4038,23 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
     assert!(
-        status.contains(&format!(": {} ✓ done ", f.id))
-            && status.contains(" | not merged into main | "),
+        status
+            .lines()
+            .any(|line| line.contains(&format!(": {} ✓ done ", f.id))
+                && line.ends_with(" | not merged into main")),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains(" | merged into main | "), "{status}");
+    // Nothing is active on the branch, so its row has no `| 0 active` cue.
+    assert!(
+        status
+            .lines()
+            .any(|line| line.ends_with(" | merged into main")),
+        "{status}"
+    );
+    assert!(!status.contains("| 0 active"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4314,7 +4333,7 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     commit(dir.path(), "records on an unowned branch");
     let (pass, output) = cli(dir.path(), &["land"]);
     assert!(
-        !pass && output.contains(" and 2 more; run atelier start"),
+        !pass && output.contains(" and 2 more; run `atelier start <id>`"),
         "{output}"
     );
 }

@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-87sd
+title: 'Re-reviewed git diff 23527f80 HEAD (fix 5927bc00) at 6b4ae1c4. r7zq fixed: on the fixture, work parent prints ''Work : 2 issues: 1 ready, 1 backlog'', matching issue show --full, and quiet prints context=0. Keeping the parent as a row while leaving it out of the size and buckets is sound and consistent with the quiet key=value doc. Proof gaps still counting the parent is pre-existing and acceptable. cbef fixed: the transition refusal now reads ''closed ancestor ... open descendant''. The sweep''s renames are human text only. The prune reasons, merge gate reasons, needs-human note and transition readiness ''closed'' are parsed by nothing I found: no comparisons in the source, scripts/bench_read_commands.py only times merge --check --json, there are no matches under .agents, and the tests were updated. They stay within the Done when''s open-not-nonterminal intent. 4675 fixed: live status branch rows show ''| 1 active'' only when something is active, with a test. New fix_now finding atelier-d7fj: the Health rename to ''done'' now asserts done for a scope with open backlog (atelier-1w8c). Deferred atelier-7eur: the widened doc rule is absolute but the workflow config vocabulary keeps ''terminal''. Not approved. Relied on atelier-39xn for the suite and did not rerun it.'
+target: atelier-krf4
+identity: Independent reviewer (Claude subagent)
+commit: 6b4ae1c4e2f97d5c341a19336a6496db5a49c521
+created_at: 2026-10-17T07:50:30.150193803Z
+event:
+  event: review
+---
+
+Re-reviewed git diff 23527f80 HEAD (fix 5927bc00) at 6b4ae1c4. r7zq fixed: on the fixture, work parent prints 'Work : 2 issues: 1 ready, 1 backlog', matching issue show --full, and quiet prints context=0. Keeping the parent as a row while leaving it out of the size and buckets is sound and consistent with the quiet key=value doc. Proof gaps still counting the parent is pre-existing and acceptable. cbef fixed: the transition refusal now reads 'closed ancestor ... open descendant'. The sweep's renames are human text only. The prune reasons, merge gate reasons, needs-human note and transition readiness 'closed' are parsed by nothing I found: no comparisons in the source, scripts/bench_read_commands.py only times merge --check --json, there are no matches under .agents, and the tests were updated. They stay within the Done when's open-not-nonterminal intent. 4675 fixed: live status branch rows show '| 1 active' only when something is active, with a test. New fix_now finding atelier-d7fj: the Health rename to 'done' now asserts done for a scope with open backlog (atelier-1w8c). Deferred atelier-7eur: the widened doc rule is absolute but the workflow config vocabulary keeps 'terminal'. Not approved. Relied on atelier-39xn for the suite and did not rerun it.
