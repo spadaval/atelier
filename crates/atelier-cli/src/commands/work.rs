@@ -759,25 +759,44 @@ fn transition_readiness(
     }
 }
 
-/// `<n>: <n> proven, <n> failing, <n> unproven`, zeros left out; `None`
-/// when the mission defines no criteria.
+/// `<n> criteria: <n> proven (<n> before later code commits), <n> failing,
+/// <n> unproven`, zeros left out; `None` when the mission defines no
+/// criteria. The parenthesis keeps old proof from reading as current.
 fn criterion_counts(proof: &atelier_app::criteria::MissionProof) -> Option<String> {
     use atelier_app::criteria::CriterionMark;
-    if proof.proofs.is_empty() {
+    let total = proof.proofs.len();
+    if total == 0 {
         return None;
     }
     let count = |mark: CriterionMark| proof.proofs.iter().filter(|p| p.mark == mark).count();
+    let aged = proof
+        .proofs
+        .iter()
+        .filter(|p| p.mark == CriterionMark::Proven)
+        .filter(|p| {
+            p.deciding()
+                .and_then(|receipt| receipt.code_commits_since)
+                .is_some_and(|count| count > 0)
+        })
+        .count();
     let parts = [
         CriterionMark::Proven,
         CriterionMark::Failing,
         CriterionMark::Unproven,
     ]
     .into_iter()
-    .map(|mark| (count(mark), mark.word()))
+    .map(|mark| (count(mark), mark))
     .filter(|(count, _)| *count > 0)
-    .map(|(count, word)| format!("{count} {word}"))
+    .map(|(count, mark)| {
+        if mark == CriterionMark::Proven && aged > 0 {
+            format!("{count} proven ({aged} before later code commits)")
+        } else {
+            format!("{count} {}", mark.word())
+        }
+    })
     .collect::<Vec<_>>();
-    Some(format!("{}: {}", proof.proofs.len(), parts.join(", ")))
+    let noun = if total == 1 { "criterion" } else { "criteria" };
+    Some(format!("{total} {noun}: {}", parts.join(", ")))
 }
 
 /// One row per criterion, `<slug> <mark> <claim> | <deciding receipt>`,

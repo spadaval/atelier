@@ -338,7 +338,7 @@ fn work_mission_marks_each_criterion_from_its_newest_receipt() {
     );
     let view = ok(dir.path(), &["work", "mission", &mission]);
     assert!(
-        view.contains("Criteria: 3: 1 proven, 1 failing, 1 unproven"),
+        view.contains("Criteria: 3 criteria: 1 proven, 1 failing, 1 unproven"),
         "{view}"
     );
     let section = view
@@ -386,6 +386,10 @@ fn work_mission_marks_each_criterion_from_its_newest_receipt() {
         "{view}"
     );
     assert!(view.contains("| 1 code commit since"), "{view}");
+    assert!(
+        view.contains("Criteria: 3 criteria: 2 proven (2 before later code commits), 1 unproven"),
+        "{view}"
+    );
     // Filtered views leave the criteria out.
     let ready = ok(dir.path(), &["work", "mission", &mission, "--ready"]);
     assert!(!ready.contains("Success Criteria"), "{ready}");
@@ -412,7 +416,7 @@ fn work_mission_reads_criteria_from_the_linked_strategy() {
         ],
     );
     let view = ok(dir.path(), &["work", "mission", &mission]);
-    assert!(view.contains("Criteria: 1: 1 unproven"), "{view}");
+    assert!(view.contains("Criteria: 1 criterion: 1 unproven"), "{view}");
     assert!(
         view.contains("fast-start unproven Starts in a second."),
         "{view}"
@@ -428,4 +432,205 @@ fn work_mission_reads_criteria_from_the_linked_strategy() {
     assert!(!view.contains("not-a-criterion"), "{view}");
     record(dir.path(), &work, "pass", &["fast-start=pass"], "Fast");
     assert!(ok(dir.path(), &["work", "mission", &mission]).contains("fast-start ✓ proven"));
+}
+
+#[test]
+fn proof_for_an_item_in_several_missions_counts_toward_none() {
+    let dir = tempdir().unwrap();
+    let (mission, work, _) = fixture(dir.path());
+    let early = record(
+        dir.path(),
+        &work,
+        "pass",
+        &["S3=pass"],
+        "Before the second mission",
+    );
+    let other = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nOther.\n\n## Success criteria\n\n- S3: Another mission's S3.",
+            "Other mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "link", "-q", &work, &other]);
+    let output = refused(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{work}"),
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--criterion",
+            "S3=pass",
+            "Ambiguous",
+        ],
+    );
+    assert!(
+        output.contains("target the mission whose criteria it judges"),
+        "{output}"
+    );
+    for id in [&mission, &other] {
+        let view = ok(dir.path(), &["work", "mission", id]);
+        assert!(view.contains("S3 unproven"), "{id}: {view}");
+        assert!(!view.contains(&early), "{id}: {view}");
+    }
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(
+        !success
+            && format!("{stdout}{stderr}").contains(&format!(
+                "{early}: Evidence names criteria S3, but its target {work} is in missions"
+            )),
+        "{stdout}{stderr}"
+    );
+    // Proof recorded on the mission itself is unambiguous.
+    record(
+        dir.path(),
+        &other,
+        "pass",
+        &["S3=pass"],
+        "On the other mission",
+    );
+    assert!(ok(dir.path(), &["work", "mission", &other]).contains("S3 ✓ proven"));
+}
+
+#[test]
+fn blocked_and_not_applicable_receipts_leave_a_criterion_unproven() {
+    let dir = tempdir().unwrap();
+    let (mission, work, _) = fixture(dir.path());
+    let blocked = record(
+        dir.path(),
+        &work,
+        "blocked",
+        &["pipe-safe=blocked", "S3=not-applicable"],
+        "Could not run",
+    );
+    let view = ok(dir.path(), &["work", "mission", &mission]);
+    assert!(
+        view.contains(&format!(
+            "pipe-safe unproven Redirected output has no styling. | {blocked} blocked at "
+        )),
+        "{view}"
+    );
+    assert!(
+        view.contains(&format!(
+            "S3 unproven Legacy positional criterion. | {blocked} not-applicable at "
+        )),
+        "{view}"
+    );
+    assert!(view.contains("Criteria: 3 criteria: 3 unproven"), "{view}");
+}
+
+#[test]
+fn a_receipt_pinned_outside_head_history_does_not_decide() {
+    let dir = tempdir().unwrap();
+    let (mission, work, _) = fixture(dir.path());
+    let kept = record(dir.path(), &work, "pass", &["pipe-safe=pass"], "On main");
+    commit_all(dir.path(), "record the receipt on main");
+    let git = |args: &[&str]| {
+        let status = Command::new("git")
+            .current_dir(dir.path())
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    let main = String::from_utf8(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["branch", "--show-current"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    git(&["switch", "-q", "-c", "side"]);
+    fs::write(dir.path().join("side.txt"), "side\n").unwrap();
+    commit_all(dir.path(), "side code");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let stray = record(
+        dir.path(),
+        &work,
+        "fail",
+        &["pipe-safe=fail"],
+        "On the side branch",
+    );
+    let path = dir.path().join(format!(".atelier/evidence/{stray}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    git(&["switch", "-q", &main]);
+    fs::write(&path, text).unwrap();
+    commit_all(dir.path(), "bring a receipt pinned on the side branch");
+    let view = ok(dir.path(), &["work", "mission", &mission]);
+    assert!(
+        view.contains(&format!(
+            "pipe-safe ✓ proven Redirected output has no styling. | {kept} pass at "
+        )),
+        "{view}"
+    );
+}
+
+#[test]
+fn scoped_check_of_a_mission_covers_receipts_in_its_scope() {
+    let dir = tempdir().unwrap();
+    let (mission, work, _) = fixture(dir.path());
+    let id = record(dir.path(), &work, "pass", &["S3=pass"], "S3 shown");
+    edit_canonical_issue(dir.path(), &mission, |markdown| {
+        markdown.replace("- S3:", "- legacy:")
+    });
+    // An unrelated issue finding does not hide the receipt's.
+    edit_canonical_issue(dir.path(), &work, |markdown| {
+        markdown.replace("labels: []", "labels:\n- \"size-q\"")
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &mission]);
+    assert!(!success, "{stdout}");
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        output.contains(&format!(
+            "{id}: Evidence names criterion S3, which mission {mission} does not define"
+        )),
+        "{output}"
+    );
+    let (_, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        output.contains("size-q") && output.contains(&format!("{id}: Evidence names criterion S3")),
+        "{output}"
+    );
+}
+
+#[test]
+fn work_mission_needs_no_git_history() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let mission = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO\n\n## Success criteria\n\n- fast: Fast.",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    assert!(!dir.path().join(".git").exists());
+    let view = ok(dir.path(), &["work", "mission", &mission]);
+    assert!(view.contains("fast unproven Fast."), "{view}");
 }

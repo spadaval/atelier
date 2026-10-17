@@ -12,8 +12,9 @@ output includes every matching mission ID in the same status, priority, and ID
 order. `atelier work mission <id>` shows one mission's outcome, scope,
 blockers, success criteria, and operational work. Its summary and `--all`
 views list each criterion as `<slug> <mark> <first sentence> | <receipt>
-<result> at <commit>[ | <n> code commits since]`, with a `Criteria: <n>:
-<n> proven, <n> failing, <n> unproven` metadata line; see
+<result> at <commit>[ | <n> code commits since]`, with a `Criteria: <n>
+criteria: <n> proven (<n> before later code commits), <n> failing, <n>
+unproven` metadata line; see
 [validation](validation.md) for how marks are derived. `atelier work parent <id>` focuses on a parent
 issue and its direct children; `--all` lists them all in one list. `issue
 show` is the record view: brief by default, with `--full` for the whole

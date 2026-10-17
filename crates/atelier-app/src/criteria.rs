@@ -4,10 +4,10 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use atelier_core::{
-    parse_criteria, strategy_criteria_section, CriteriaParse, Criterion, EvidenceRecord,
-    EvidenceResult, IssueSectionName,
+    parse_criteria, strategy_criteria_section, CriteriaParse, Criterion, EvidenceResult,
+    IssueSectionName,
 };
 
 use crate::git_freshness::{git_output, ReadContext};
@@ -94,8 +94,19 @@ pub fn missions_for(index: &RecordIndex, issue_id: &str) -> Result<Vec<String>> 
     Ok(missions)
 }
 
-/// What is wrong with the criteria a receipt names: each slug that no
-/// mission of its target defines, or criteria named with no mission at all.
+/// The one mission whose criteria a receipt on `issue_id` names: the issue
+/// itself when it is a mission, else the single mission whose scope holds
+/// it. An item in several missions has none, so proof never counts toward
+/// a mission it was not meant for; record such criteria on the mission.
+pub fn criteria_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
+    Ok(match missions_for(index, issue_id)?.as_slice() {
+        [mission] => Some(mission.clone()),
+        _ => None,
+    })
+}
+
+/// What is wrong with the criteria a receipt names: each slug its mission
+/// does not define, or criteria named where no single mission owns them.
 pub fn receipt_criteria_problems(
     index: &RecordIndex,
     repo_root: &Path,
@@ -106,29 +117,27 @@ pub fn receipt_criteria_problems(
         return Ok(Vec::new());
     }
     let missions = missions_for(index, target_id)?;
-    if missions.is_empty() {
-        return Ok(vec![format!(
-            "names criteria {}, but its target {target_id} is in no mission, so no criteria are defined for it",
-            slugs.join(", ")
-        )]);
-    }
-    let defined = missions
-        .iter()
-        .map(|mission| mission_criteria(index, repo_root, mission))
-        .collect::<Result<Vec<_>>>()?;
+    let mission = match missions.as_slice() {
+        [] => {
+            return Ok(vec![format!(
+                "names criteria {}, but its target {target_id} is in no mission, so no criteria are defined for it",
+                slugs.join(", ")
+            )])
+        }
+        [mission] => mission,
+        several => {
+            return Ok(vec![format!(
+                "names criteria {}, but its target {target_id} is in missions {}; target the mission whose criteria it judges",
+                slugs.join(", "),
+                several.join(", ")
+            )])
+        }
+    };
+    let criteria = mission_criteria(index, repo_root, mission)?;
     Ok(slugs
         .iter()
-        .filter(|slug| {
-            !defined
-                .iter()
-                .any(|criteria| criteria.parse.get(slug).is_some())
-        })
-        .map(|slug| {
-            format!(
-                "names criterion {slug}, which mission {} does not define",
-                missions.join(" or ")
-            )
-        })
+        .filter(|slug| criteria.parse.get(slug).is_none())
+        .map(|slug| format!("names criterion {slug}, which mission {mission} does not define"))
         .collect())
 }
 
@@ -140,8 +149,11 @@ pub struct CriterionReceipt {
     pub result: EvidenceResult,
     pub commit: String,
     pub captured_at: chrono::DateTime<chrono::Utc>,
-    /// Commits since the pin that change files outside the tracker; `None`
-    /// when the pin is not in HEAD's history.
+    /// Whether the pinned commit is in HEAD's history; only such receipts
+    /// decide a mark.
+    pub in_history: bool,
+    /// Commits since the pin that change files outside the tracker, counted
+    /// for the deciding receipt only.
     pub code_commits_since: Option<usize>,
 }
 
@@ -149,9 +161,10 @@ pub struct CriterionReceipt {
 pub enum CriterionMark {
     /// The newest receipt in HEAD's history passes.
     Proven,
-    /// The newest receipt in HEAD's history fails or is blocked.
+    /// The newest receipt in HEAD's history fails.
     Failing,
-    /// No receipt in HEAD's history, or only a not-applicable one.
+    /// No receipt in HEAD's history, or the newest is blocked or
+    /// not-applicable.
     Unproven,
 }
 
@@ -176,9 +189,7 @@ pub struct CriterionProof {
 impl CriterionProof {
     /// The receipt the mark comes from.
     pub fn deciding(&self) -> Option<&CriterionReceipt> {
-        self.receipts
-            .iter()
-            .find(|receipt| receipt.code_commits_since.is_some())
+        self.receipts.iter().find(|receipt| receipt.in_history)
     }
 }
 
@@ -191,10 +202,12 @@ pub struct MissionProof {
     pub orphaned: Vec<(String, String)>,
 }
 
-/// Every criterion of the mission with the receipts in its scope that name
-/// it. The newest receipt whose pin is in HEAD's history decides the mark;
-/// item-level freshness, which any later code commit breaks, is reported as
-/// a count of code commits since the pin rather than applied.
+/// Every criterion of the mission with the receipts that name it: those
+/// whose own target is the mission, or an item in its scope and in no other
+/// mission. The newest receipt whose pin is in HEAD's history decides the
+/// mark. Item-level freshness, which any later code commit breaks, is
+/// reported for the deciding receipt as a count of code commits since its
+/// pin rather than applied.
 pub fn mission_proof(
     index: &RecordIndex,
     read: &mut ReadContext<'_>,
@@ -202,22 +215,25 @@ pub fn mission_proof(
 ) -> Result<MissionProof> {
     let repo_root = read.repo;
     let criteria = mission_criteria(index, repo_root, mission_id)?;
-    let mut scope = vec![mission_id.to_string()];
-    scope.extend(mission_issue_ids(index, mission_id)?);
-    let mut receipts: Vec<(&EvidenceRecord, String)> = Vec::new();
-    for id in &scope {
-        for evidence_id in validating_evidence(index, id)? {
-            let record = index.require_evidence(&evidence_id)?;
-            if !record.data.criteria.is_empty()
-                && !receipts
-                    .iter()
-                    .any(|(seen, _)| seen.header.id == record.header.id)
-            {
-                receipts.push((record, id.clone()));
-            }
+    let mut scope = mission_issue_ids(index, mission_id)?;
+    scope.insert(mission_id.to_string());
+    let mut receipts = Vec::new();
+    for record in index.evidence_records() {
+        let Some(target) = record
+            .data
+            .target
+            .as_ref()
+            .filter(|target| target.kind == "issue" && scope.contains(&target.id))
+        else {
+            continue;
+        };
+        if !record.data.criteria.is_empty()
+            && criteria_mission(index, &target.id)?.as_deref() == Some(mission_id)
+        {
+            receipts.push(record);
         }
     }
-    receipts.sort_by(|(a, _), (b, _)| {
+    receipts.sort_by(|a, b| {
         (b.data.captured_at, &b.header.id).cmp(&(a.data.captured_at, &a.header.id))
     });
     // Without a commit there is no history, and so no receipt to count.
@@ -228,7 +244,8 @@ pub fn mission_proof(
     let mut proofs = Vec::new();
     for criterion in &criteria.parse.criteria {
         let mut naming = Vec::new();
-        for (record, target_id) in &receipts {
+        let mut decided = false;
+        for record in &receipts {
             let Some(judged) = record
                 .data
                 .criteria
@@ -241,28 +258,38 @@ pub fn mission_proof(
                 Some(head) => read.ancestor(&record.data.commit, head)?,
                 None => false,
             };
+            // Only the deciding receipt's age is shown, so only it is counted.
+            let code_commits_since = match (&head, in_history && !decided) {
+                (Some(head), true) => Some(code_commits_between(read, &record.data.commit, head)?),
+                _ => None,
+            };
+            decided |= in_history;
             naming.push(CriterionReceipt {
                 evidence_id: record.header.id.clone(),
-                target_id: target_id.clone(),
+                target_id: record
+                    .data
+                    .target
+                    .as_ref()
+                    .map(|target| target.id.clone())
+                    .unwrap_or_default(),
                 result: judged.result,
                 commit: record.data.commit.clone(),
                 captured_at: record.data.captured_at,
-                code_commits_since: match (&head, in_history) {
-                    (Some(head), true) => {
-                        Some(code_commits_between(repo_root, &record.data.commit, head)?)
-                    }
-                    _ => None,
-                },
+                in_history,
+                code_commits_since,
             });
         }
         let mark = match naming
             .iter()
-            .find(|receipt| receipt.code_commits_since.is_some())
+            .find(|receipt| receipt.in_history)
             .map(|receipt| receipt.result)
         {
             Some(EvidenceResult::Pass) => CriterionMark::Proven,
-            Some(EvidenceResult::Fail | EvidenceResult::Blocked) => CriterionMark::Failing,
-            Some(EvidenceResult::NotApplicable) | None => CriterionMark::Unproven,
+            Some(EvidenceResult::Fail) => CriterionMark::Failing,
+            // A blocked check did not run, and not-applicable proves nothing.
+            Some(EvidenceResult::Blocked | EvidenceResult::NotApplicable) | None => {
+                CriterionMark::Unproven
+            }
         };
         proofs.push(CriterionProof {
             criterion: criterion.clone(),
@@ -271,7 +298,7 @@ pub fn mission_proof(
         });
     }
     let mut orphaned = Vec::new();
-    for (record, _) in &receipts {
+    for record in &receipts {
         for judged in &record.data.criteria {
             if criteria.parse.get(&judged.slug).is_none() {
                 orphaned.push((record.header.id.clone(), judged.slug.clone()));
@@ -285,38 +312,20 @@ pub fn mission_proof(
     })
 }
 
-/// Evidence attached to the issue with the `validates` role.
-fn validating_evidence(index: &RecordIndex, issue_id: &str) -> Result<Vec<String>> {
-    Ok(index
-        .list_record_links("issue", issue_id)?
-        .into_iter()
-        .filter(|link| link.relation_type == "validates")
-        .filter_map(|link| {
-            if link.source_kind == "evidence" {
-                Some(link.source_id)
-            } else if link.target_kind == "evidence" {
-                Some(link.target_id)
-            } else {
-                None
-            }
-        })
-        .collect())
-}
-
-fn code_commits_between(repo: &Path, from: &str, to: &str) -> Result<usize> {
+fn code_commits_between(read: &mut ReadContext<'_>, from: &str, to: &str) -> Result<usize> {
     let range = format!("{from}..{to}");
-    let count = git_output(
-        repo,
-        &[
-            "rev-list",
-            "--count",
-            &range,
-            "--",
-            ".",
-            ":(exclude).atelier",
-        ],
-    )?;
-    Ok(String::from_utf8(count)?.trim().parse().unwrap_or(0))
+    let count = read.history(&[
+        "rev-list",
+        "--count",
+        &range,
+        "--",
+        ".",
+        ":(exclude).atelier",
+    ])?;
+    count
+        .trim()
+        .parse()
+        .with_context(|| format!("cannot count code commits in {range}: {count}"))
 }
 
 #[cfg(test)]
