@@ -5591,3 +5591,29 @@ fn notes_are_dated_by_the_local_day() {
         );
     }
 }
+
+#[test]
+fn prune_cutoff_is_the_local_day() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    // POSIX TZ offsets are west-positive: `UTC+12` is twelve hours behind.
+    for (tz, east_seconds) in [("UTC+12", -12 * 3600), ("UTC-14", 14 * 3600)] {
+        let zone = chrono::FixedOffset::east_opt(east_seconds).unwrap();
+        let cutoff =
+            || chrono::Utc::now().with_timezone(&zone).date_naive() - chrono::Duration::days(3);
+        let before = cutoff();
+        let (success, stdout, stderr) = run_atelier_with_env(
+            dir.path(),
+            &["prune", "--retention-days", "3"],
+            &[("TZ", tz)],
+        );
+        assert!(success, "prune in {tz} failed: {stderr}");
+        let after = cutoff();
+        let shows = |day: chrono::NaiveDate| stdout.contains(&format!("before {day}\n"));
+        assert!(
+            shows(before) || shows(after),
+            "prune in {tz} should cut off before {before}: {stdout}"
+        );
+    }
+}
