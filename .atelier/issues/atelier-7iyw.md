@@ -5,6 +5,9 @@ issue_type: "bug"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-7iyw
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Date notes in the same timezone as other timestamps"
-updated_at: "2026-10-17T06:27:39.272051458+00:00"
+updated_at: "2026-10-17T06:29:33.355234335+00:00"
 ---
 
 ## Goal
