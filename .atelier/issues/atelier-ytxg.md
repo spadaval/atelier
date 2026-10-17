@@ -4,6 +4,9 @@ id: "atelier-ytxg"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-ytxg
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name the flag that shows the rest on every truncated list"
-updated_at: "2026-10-17T09:06:10.579920690+00:00"
+updated_at: "2026-10-17T09:06:11.230743341+00:00"
 ---
 
 ## Goal
