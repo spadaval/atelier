@@ -374,6 +374,26 @@ fn status_shows_policy_fallback_diagnostics_in_the_page_and_hook_context() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // Quiet status keeps stdout to the summary and reports the fallback on stderr.
+    for command in ["status", "prime"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(f.path())
+            .args(["-q", command])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{command}: {stderr}");
+        assert!(
+            stdout.trim().starts_with("work=") && stdout.trim().lines().count() == 1,
+            "{command}: {stdout}"
+        );
+        assert!(
+            stderr.contains("Invalid working policy")
+                && stderr.contains("Using last valid policy from"),
+            "{command}: {stderr}"
+        );
+    }
 }
 #[test]
 fn land_and_merge_refuse_a_project_config_that_differs_from_head() {

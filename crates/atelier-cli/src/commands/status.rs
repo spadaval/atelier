@@ -68,6 +68,10 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
     };
     let view = atelier_app::work_classification::status_view(&index, policy.as_ref())?;
     if quiet {
+        // Quiet stdout stays the summary; the fallback is still reported.
+        for diagnostic in &diagnostics {
+            eprintln!("{diagnostic}");
+        }
         return Ok(format!(
             "work={} current_missions={} ready={} human={}",
             if view.work.active.is_empty() {
