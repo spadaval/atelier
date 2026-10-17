@@ -390,22 +390,28 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
     render_issue_link_section(index, canonical_id)?;
-    render_objective_rollup_section(objective_summary.as_ref());
+    render_objective_rollup_section(&issue.issue_type, objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
     render_command_footer(canonical_id)?;
     Ok(())
 }
 
-fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
+/// A mission's scope or a parent's children, summarized by work state.
+fn render_objective_rollup_section(issue_type: &str, summary: Option<&ObjectiveReadSummary>) {
     let Some(summary) = summary else {
         return;
+    };
+    let title = if issue_type == "mission" {
+        "Mission Rollup"
+    } else {
+        "Parent Rollup"
     };
     let health = summary
         .scope
         .health(summary.relationships.open_blockers.len());
     print_panel(render_metadata(
-        Some("Objective Rollup"),
+        Some(title),
         &[
             ("Health", health.to_string()),
             (
@@ -475,7 +481,7 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
 
     if !summary.recently_updated.is_empty() {
         print_panel(render_lines_section(
-            "Recent Activity Facts",
+            "Recently Updated",
             summary
                 .recently_updated
                 .iter()
@@ -896,7 +902,7 @@ pub fn create_lifecycle(
         println!("Created subissue {} under {}", record.issue.id, parent_id);
     } else {
         let kind = if record.issue.issue_type == "mission" {
-            "mission objective"
+            "mission"
         } else {
             "issue"
         };
@@ -1252,18 +1258,20 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>) -> Result<()> {
         issue_ref,
     })?;
     if view.findings.is_empty() {
-        println!("Lint passed.");
-    } else {
-        println!("Lint found {} issue(s):", view.findings.len());
-        for finding in &view.findings {
-            println!("  {}: {}", finding.id, finding.message);
-        }
+        println!("Check passed.");
+        return Ok(());
     }
-    if view.findings.is_empty() {
-        Ok(())
-    } else {
-        bail!("Lint failed with {} finding(s)", view.findings.len())
+    println!("Check found {} finding(s):", view.findings.len());
+    for finding in &view.findings {
+        println!("  {}: {}", finding.id, finding.message);
     }
+    let rerun = view.scoped_id.map_or("atelier check".to_string(), |id| {
+        format!("atelier check {id}")
+    });
+    bail!(
+        "Check failed with {} finding(s). Next: fix each finding above, then run `{rerun}`",
+        view.findings.len()
+    )
 }
 
 #[cfg(test)]

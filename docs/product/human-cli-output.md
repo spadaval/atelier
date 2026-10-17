@@ -67,10 +67,10 @@ Every view that lists items uses this line: the `work` views, `status`
 (Current Work, Owner, Mission, Owner Work, Ready Work, unassigned work and the
 other-branch rows), `work missions`, `issue list`, and `issue show` (title
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
-Subissues and the objective rollup). So the Current Work row and the Owner
-row in `status` read alike. A record that is not an issue uses the same
-order without a priority, as `evidence show` titles it: `atelier-waj0
-evidence recorded <title>`. The other review and evidence views adopt it in
+Subissues and the Mission Rollup or Parent Rollup). So the Current Work row
+and the Owner row in `status` read alike. A record that is not an issue uses
+the same order without a priority, as `evidence show` titles it:
+`atelier-waj0 evidence recorded <title>`. The other review and evidence views adopt it in
 their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
 `review list` in atelier-h6o4, `review show` in atelier-3u2u, and
 `evidence list` in atelier-u0ig.
@@ -205,6 +205,27 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   accepts: `Invalid status 'open'. Valid values: backlog, done, todo, all`.
 - Flags that exclude each other are declared to the argument parser, so a
   conflict is a usage error with exit status 2, never a runtime error.
+- An error leads with a code only when a named check refuses the command: a
+  check of records, Git state, configuration or workflow policy, such as
+  `land_records_uncommitted:`, `merge_diverged:` or
+  `workflow_issue_hierarchy_invalid:`. An error about the command's own
+  input carries no code: a usage error, an unknown reference or an invalid
+  value. Neither does a failure of Git or the filesystem. A code is
+  snake_case and starts with the command or subsystem that owns the check
+  (`start_`, `land_`, `merge_`, `workflow_`, `project_config_`, and so on).
+  It never changes once it ships: gates, tests and agents match on it, and
+  the verdict line lists it.
+- An error carries at most one code. A command that reports a lower-level
+  check under its own check replaces the inner code with its own. `merge`
+  reports a record that differs from HEAD as
+  `canonical_snapshot_uncommitted`, and `land` reports the same failure as
+  `land_records_uncommitted`, not as both.
+- An error states its failure once, then one recovery step:
+  `<code>: <failure>. Next: <step>`.
+- Output uses the terms in `CONTEXT.md`: records, check, finding, mission,
+  parent. The internal words "lint" and "canonical" appear only inside a
+  code, such as `canonical_snapshot_uncommitted`, or a configuration key,
+  such as `prune.canonical_retention_days`.
 
 ### Help
 

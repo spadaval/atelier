@@ -210,7 +210,7 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
             .any(|line| line == format!("branch refs/heads/{base}"))
         {
             if block.lines().any(|line| line.starts_with("locked")) {
-                bail!("base worktree is locked; unlock it before merging");
+                bail!("merge_base_locked: base worktree is locked; unlock it before merging");
             }
             return Ok(block
                 .lines()
@@ -225,8 +225,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let head = git::head_commit(repo)?;
-    let branch = crate::commands::git::checkout_branch(repo)?
-        .context("merge requires a local work branch")?;
+    let branch = crate::commands::git::checkout_branch(repo)?.context(
+        "merge_detached_head: merge requires a local work branch; check out the work branch first",
+    )?;
     let snapshot = committed_snapshot::CommittedSnapshot::new(&head)?;
     let index = {
         let _transaction =
@@ -238,10 +239,10 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let owner = issue.parent_id.as_deref().unwrap_or(&id);
     let owner_record = index.require_issue(owner)?;
     if owner_record.issue_type == "mission" {
-        bail!("missions have no work branch; merge one of their issues");
+        bail!("merge_mission: missions have no work branch; merge one of their issues");
     }
     let recorded = owner_record.workflow_branch.as_ref().with_context(|| {
-        format!("merge requires committed branch ownership; owner {owner} has none, so run `atelier start {owner}` and commit its metadata")
+        format!("merge_owner_unstarted: merge requires committed branch ownership; owner {owner} has none, so run `atelier start {owner}` and commit its metadata")
     })?;
     if recorded.work_branch != branch || recorded.branch_base == branch {
         bail!(
@@ -265,7 +266,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             MergeStrategy::FastForwardOnly | MergeStrategy::MergeCommit
         )
     {
-        bail!("merge requires base policy for {base} with merge_strategy: fast_forward_only or merge_commit; review the policy change first");
+        bail!("merge_base_policy_unsupported: merge requires base policy for {base} with merge_strategy: fast_forward_only or merge_commit; review the policy change first");
     }
     let tree = if strategy == MergeStrategy::MergeCommit {
         // Evidence at the branch head does not prove a tree the base has
@@ -282,8 +283,9 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
     let fork_point = text(repo, &["merge-base", &base_head, &head])?;
     // Candidate syntax is checked only after trusted base resolution, so an
     // invalid branch cannot prevent a visible fallback or become base policy.
-    atelier_workflow::load(repo)
-        .context("candidate workflow policy is invalid; fix it before merging")?;
+    atelier_workflow::load(repo).context(
+        "merge_policy_invalid: candidate workflow policy is invalid; fix it before merging",
+    )?;
     index.validate_policy(&source.policy, repo)?;
     review_gate::append_only(&mut read, &fork_point)?;
     let base_tree = base_checkout(repo, base)?;
@@ -417,7 +419,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         bail!("merge_snapshot_changed: Git refs changed while checks ran; retry with fresh proof and review");
     }
     if base_checkout(repo, base)? != base_tree {
-        bail!("base checkout ownership changed while checks ran");
+        bail!("merge_snapshot_changed: base checkout ownership changed while checks ran; retry with fresh proof and review");
     }
     if let Some(path) = &base_tree {
         base_snapshot
@@ -427,7 +429,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
         if git::head_commit(path)? != base_head
             || crate::commands::git::checkout_branch(path)?.as_deref() != Some(base.as_str())
         {
-            bail!("base checkout changed while checks ran");
+            bail!("merge_snapshot_changed: base checkout changed while checks ran; retry with fresh proof and review");
         }
     }
     if let Some((_, commit, checkout, _)) = &merge {

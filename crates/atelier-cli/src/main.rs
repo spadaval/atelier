@@ -241,7 +241,7 @@ enum Commands {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
         apply: bool,
-        /// Override canonical record retention for this prune pass
+        /// Override record retention, in days, for this prune pass
         #[arg(long)]
         retention_days: Option<u64>,
     },
@@ -352,12 +352,12 @@ enum IssueCommands {
         /// Parent issue ID
         #[arg(long)]
         parent: Option<String>,
-        /// Initial todo-category status, such as backlog for someday work;
-        /// defaults to the workflow's initial status
+        /// Initial status for work not yet started, such as backlog for
+        /// someday work; defaults to the workflow's initial status
         #[arg(long)]
         status: Option<String>,
-        /// Repository-relative strategy file a mission links; the mission's
-        /// path is the canonical link
+        /// Repository-relative strategy file a mission links; this path,
+        /// not the strategy's front matter, is the link
         #[arg(long)]
         strategy: Option<String>,
     },

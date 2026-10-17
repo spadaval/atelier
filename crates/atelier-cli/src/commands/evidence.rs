@@ -211,7 +211,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     )?;
     if target_identity != binding.target_identity {
         bail!(
-            "evidence_capture_target_changed: the command replaced the bound target identity {:?} with {:?}; no evidence was written. Inspect the child command's effects and retry against the intended canonical target.",
+            "evidence_capture_target_changed: the command replaced the bound target identity {:?} with {:?}; no evidence was written. Next: inspect the child command's effects, then retry against the intended target.",
             binding.target_identity,
             target_identity
         );
@@ -368,7 +368,7 @@ fn capture_association(layout: &StorageLayout) -> Result<CaptureAssociation> {
     })?;
     let state_dir = fs::canonicalize(layout.canonical_dir()).with_context(|| {
         format!(
-            "failed to resolve evidence canonical state {}",
+            "failed to resolve records directory {}",
             layout.canonical_dir().display()
         )
     })?;

@@ -26,7 +26,7 @@ fn test_create_issue() {
 
     let (success, lint_out, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(!success, "placeholder scaffold should be under-specified");
-    assert!(stderr.contains("Lint failed"));
+    assert!(stderr.contains("Check failed"));
     assert!(lint_out.contains("Issue section Goal must be present and non-empty"));
     assert!(lint_out.contains("Issue section Done when must be present and non-empty"));
     assert!(!lint_out.contains("Issue section Context must be present and non-empty"));
@@ -630,14 +630,14 @@ fn test_issue_show_rollup_counts_all_children_and_bounds_only_visible_rows() {
     }
     let (success, shown, stderr) = run_atelier(dir.path(), &["issue", "show", &owner, "--full"]);
     assert!(success, "{stderr}");
-    let rollup = shown.split("Objective Rollup").nth(1).unwrap();
+    let rollup = shown.split("Mission Rollup").nth(1).unwrap();
     assert!(rollup.contains("7 scoped issues"), "{rollup}");
     assert!(rollup.contains("ready 7"), "{rollup}");
     let ready_rows = rollup
         .split("Ready Work")
         .nth(1)
         .unwrap()
-        .split("Recent Activity Facts")
+        .split("Recently Updated")
         .next()
         .unwrap();
     assert_eq!(
@@ -1514,10 +1514,7 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
         ],
     );
     assert!(success, "declared mission issue create failed: {stderr}");
-    assert!(
-        stdout.contains("Created mission objective atelier-"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("Created mission atelier-"), "{stdout}");
     assert!(stdout.contains("Type:     mission"), "{stdout}");
     assert!(stdout.contains(".atelier/issues/"), "{stdout}");
     assert!(!stdout.contains(".atelier/missions/"), "{stdout}");

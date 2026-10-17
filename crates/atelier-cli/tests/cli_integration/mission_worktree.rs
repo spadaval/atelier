@@ -678,7 +678,7 @@ fn test_lint_rejects_missing_required_issue_section() {
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stderr.contains("Lint failed"));
+    assert!(stderr.contains("Check failed"));
 }
 
 #[test]
@@ -731,7 +731,7 @@ fn test_lint_rejects_missing_outcome_section() {
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing Outcome diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stderr.contains("Lint failed"));
+    assert!(stderr.contains("Check failed"));
 }
 
 #[test]
@@ -803,7 +803,7 @@ fn test_lint_accepts_concrete_evidence_without_optional_notes() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check", &issue_id]);
     assert!(success, "lint should accept concrete Evidence: {stderr}");
-    assert!(stdout.contains("Lint passed."));
+    assert!(stdout.contains("Check passed."));
 }
 
 #[test]
@@ -1005,7 +1005,7 @@ fn test_record_load_rejects_schema_drift() {
         &["issue", "create", "Guard schema", "--issue-type", "mission"],
     );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("mission objective atelier-"));
+    assert!(mission_out.contains("Created mission atelier-"));
     let mission_id = issue_id_by_title(dir.path(), "Guard schema");
     edit_canonical_record(dir.path(), "issues", &mission_id, |markdown| {
         markdown.replace("schema: \"atelier.issue\"", "schema: \"atelier.evidence\"")
@@ -1096,7 +1096,7 @@ fn test_check_reports_every_invalid_record_file() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
 
     assert!(!success, "check must fail: {stdout}");
-    assert!(stdout.contains("Lint found 3 issue(s)"), "{stdout}");
+    assert!(stdout.contains("Check found 3 finding(s)"), "{stdout}");
     for path in [
         format!(".atelier/issues/{}.md", ids[0]),
         format!(".atelier/issues/{}.md", ids[1]),
@@ -1175,8 +1175,8 @@ Lint rejects malformed canonical state.
             && !transcript.contains("canonical-mutation.lock"),
         "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
-    assert!(stderr.contains("Lint failed"));
-    assert!(!stdout.contains("Lint passed."), "{stdout}");
+    assert!(stderr.contains("Check failed"));
+    assert!(!stdout.contains("Check passed."), "{stdout}");
 }
 
 #[test]
@@ -1441,7 +1441,7 @@ fn assert_lint_rejects_canonical_mutation(
     let transcript = format!("{stdout}\n{stderr}");
     assert!(
         transcript.contains("Tracker record files are invalid")
-            || transcript.contains("Lint found"),
+            || transcript.contains("Check found"),
         "lint should identify canonical markdown failure for {title}: {transcript}"
     );
     for needle in expected {
@@ -3101,7 +3101,7 @@ fn check_reports_every_independent_graph_error_in_one_run() {
             "issue {} has unconfigured context link type 'frobnicates'",
             ids[5]
         ),
-        "Lint found 5 issue(s)",
+        "Check found 5 finding(s)",
     ] {
         assert!(transcript.contains(expected), "{expected}: {transcript}");
     }

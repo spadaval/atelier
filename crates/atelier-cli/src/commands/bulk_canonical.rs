@@ -10,7 +10,7 @@ pub(crate) fn canonical_tree_fingerprint(state_dir: &Path) -> Result<String> {
         .with_context(|| format!("Failed to inspect {}", state_dir.display()))?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         bail!(
-            "Canonical state root {} must be a real directory",
+            "Records directory {} must be a real directory",
             state_dir.display()
         );
     }
@@ -46,7 +46,7 @@ fn hash_directory(root: &Path, directory: &Path, hasher: &mut Sha256) -> Result<
             .with_context(|| format!("Failed to inspect {}", path.display()))?;
         if file_type.is_symlink() {
             bail!(
-                "Canonical bulk mutation refuses symbolic link {}",
+                "Bulk record update refuses symbolic link {}",
                 path.display()
             );
         }
@@ -66,7 +66,7 @@ fn hash_directory(root: &Path, directory: &Path, hasher: &mut Sha256) -> Result<
             hasher.update(&bytes);
         } else {
             bail!(
-                "Canonical bulk mutation refuses special filesystem entry {}",
+                "Bulk record update refuses special filesystem entry {}",
                 path.display()
             );
         }
@@ -78,7 +78,7 @@ pub(crate) fn ensure_unchanged(state_dir: &Path, expected: &str) -> Result<()> {
     let actual = canonical_tree_fingerprint(state_dir)?;
     if actual != expected {
         bail!(
-            "canonical_bulk_concurrent_drift: canonical state changed while a bulk mutation was staged; live files were not replaced"
+            "canonical_bulk_concurrent_drift: records changed while a bulk update was staged; live files were not replaced. Next: rerun the command against the current records"
         );
     }
     Ok(())
@@ -87,20 +87,17 @@ pub(crate) fn ensure_unchanged(state_dir: &Path, expected: &str) -> Result<()> {
 pub(crate) fn validate_directory_path(path: &Path, required: bool) -> Result<()> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => bail!(
-            "Canonical bulk mutation refuses symbolic-link directory {}",
+            "Bulk record update refuses symbolic-link directory {}",
             path.display()
         ),
         Ok(metadata) if !metadata.is_dir() => bail!(
-            "Canonical bulk mutation requires a real directory at {}",
+            "Bulk record update requires a real directory at {}",
             path.display()
         ),
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound && !required => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            bail!(
-                "Canonical bulk mutation requires directory {}",
-                path.display()
-            )
+            bail!("Bulk record update requires directory {}", path.display())
         }
         Err(error) => Err(error).with_context(|| format!("Failed to inspect {}", path.display())),
     }

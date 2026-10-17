@@ -42,8 +42,19 @@ fn check_records(
     repo: &Path,
     snapshot: &atelier_app::committed_snapshot::CommittedSnapshot,
 ) -> Result<Vec<std::path::PathBuf>> {
-    snapshot.verified_working_paths(repo)
-        .map_err(|error| anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry."))
+    snapshot
+        .verified_working_paths(repo)
+        .map_err(records_uncommitted)
+}
+/// Land names its own check for records that differ from HEAD: one code,
+/// the failure, and one recovery step.
+fn records_uncommitted(error: anyhow::Error) -> anyhow::Error {
+    let failure = match error.downcast_ref::<atelier_app::committed_snapshot::RecordsUncommitted>()
+    {
+        Some(uncommitted) => uncommitted.detail.clone(),
+        None => format!("{error:#}"),
+    };
+    anyhow::anyhow!("land_records_uncommitted: {failure}. Next: commit records and policy with the work they describe, then rerun `atelier land`")
 }
 fn check_traceability(
     repo: &Path,
@@ -138,15 +149,16 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         let head = git_freshness::head_commit(repo)?;
         let branch = git::checkout_branch(repo)?.unwrap_or_default();
         let snapshot = atelier_app::committed_snapshot::CommittedSnapshot::new(&head)?;
-        let (files, paths) = snapshot.read_record_files(repo, false).map_err(|error| {
-            anyhow::anyhow!("land_records_uncommitted: {error:#}\nCommit canonical records and policy with the work they describe, then retry.")
-        })?;
+        let (files, paths) = snapshot
+            .read_record_files(repo, false)
+            .map_err(records_uncommitted)?;
         git::require_committed_config(repo, &head, "land")?;
         (head, branch, snapshot, paths, files.into_index()?)
     };
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
-    atelier_workflow::load(repo)
-        .context("candidate workflow policy is invalid; repair it before landing")?;
+    atelier_workflow::load(repo).context(
+        "land_policy_invalid: candidate workflow policy is invalid; repair it before landing",
+    )?;
     let id = owner(&index, &branch, requested)?;
     let base_pin = id
         .as_ref()
@@ -441,7 +453,7 @@ pub fn land(requested: Option<&str>, hook: bool, install: bool, quiet: bool) -> 
             json!({"systemMessage": format!("Atelier landing still fails: {error:#}. Stopping to avoid a hook loop; unfinished work must be handed off honestly.")})
         }
         Err(error) => {
-            json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named invariant or hand off unfinished work honestly; Atelier never creates commits.")})
+            json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.")})
         }
     };
     println!("{}", serde_json::to_string(&output)?);

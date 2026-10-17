@@ -705,7 +705,7 @@ fn remove_canonical_records(state_dir: &Path, summary: &mut CanonicalPruneSummar
                 }
             }
             if recovery.is_empty() {
-                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no canonical records removed. Next: fix the filesystem failure and rerun `atelier prune --apply`.", display_git_path(&candidate.path));
+                bail!("prune --apply stopped: failed to remove {}: {error:#}; every staged record was restored; no records removed. Next: fix the filesystem failure and rerun `atelier prune --apply`.", display_git_path(&candidate.path));
             }
             let recovery_dir = staged.keep();
             bail!("prune rollback failed: {}. Record backups remain in {}. Next: restore these paths before any tracker command.", recovery.join("; "), recovery_dir.display());
@@ -1178,9 +1178,9 @@ fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
     let tracked = atelier_app::git_freshness::command(repo_root)
         .args(["status", "--porcelain", "--untracked-files=no"])
         .output()
-        .context("failed to inspect tracked checkout state before canonical prune")?;
+        .context("failed to inspect tracked checkout state before pruning records")?;
     if !tracked.status.success() {
-        bail!("git status failed before canonical prune");
+        bail!("git status failed before pruning records");
     }
     let canonical = atelier_app::git_freshness::command(repo_root)
         .args([
@@ -1191,13 +1191,13 @@ fn ensure_clean_for_canonical_prune(repo_root: &Path) -> Result<()> {
             ".atelier",
         ])
         .output()
-        .context("failed to inspect canonical checkout state before canonical prune")?;
+        .context("failed to inspect .atelier checkout state before pruning records")?;
     if !canonical.status.success() {
-        bail!("git status failed before canonical prune");
+        bail!("git status failed before pruning records");
     }
     if !tracked.stdout.is_empty() || !canonical.stdout.is_empty() {
         bail!(
-            "canonical prune requires a clean tracked checkout and no untracked `.atelier` records; inspect `git status --short --branch`"
+            "prune --apply requires a clean tracked checkout and no untracked `.atelier` records. Next: commit or remove the changes `git status --short --branch` lists"
         );
     }
     Ok(())
@@ -1277,8 +1277,8 @@ fn print_git(summary: &GitPruneSummary, apply: bool) {
 }
 
 fn print_canonical(summary: &CanonicalPruneSummary) {
-    println!("Canonical Records");
-    println!("-----------------");
+    println!("Records");
+    println!("-------");
     println!("Retention: {} day(s)", summary.retention_days);
     println!("Cutoff:    before {}", summary.cutoff);
 
