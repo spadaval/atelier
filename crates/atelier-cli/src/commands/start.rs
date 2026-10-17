@@ -108,6 +108,7 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
             START_TRANSITION,
             transition,
             None,
+            quiet,
         )?;
     }
 

@@ -216,7 +216,8 @@ line, a `Command:` line or an error's `Next: <command>`, is bare.
 
 `--quiet` prints one documented token per command, and nothing else on
 stdout. Every command honours this table, and one integration test runs each
-command in the help tree with `-q` and checks its token:
+command in the help tree with `-q`, checks its token, and checks that a
+refusal of it leaves stdout empty:
 
 | Command | `--quiet` output |
 | --- | --- |
@@ -244,9 +245,11 @@ command in the help tree with `-q` and checks its token:
 
 Values are numbers except `prune`'s `mode`. A failure still exits non-zero
 and says why on stderr: `check` prints its findings there, and `merge` its
-failed gates. Notes that would otherwise follow the token, such as `start`'s
-needs-human note, also go to stderr. `--quiet` with `--json` is a usage
-error, since they are two script formats.
+failed gates. A refused `start` or `issue transition` prints no transition
+report; its error, in every mode, names each blocker and then gives each
+failed validator's hint as its `Next:` step. Notes that would otherwise follow
+the token, such as `start`'s needs-human note, also go to stderr. `--quiet`
+with `--json` is a usage error, since they are two script formats.
 
 ### Errors
 
