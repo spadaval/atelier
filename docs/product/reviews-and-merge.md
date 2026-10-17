@@ -138,11 +138,13 @@ base records do not touch the approval, which is judged on the work branch's
 history: it carries over, because a clean merge combines two reviewed changes
 and nobody edited the result. No checkout holds the merged records before they
 reach the base, so merge also checks the done claims outside the item that
-they affect, as `land` does, trusting the base head: a branch that reopens work
-a mission the base closed since the fork point depends on refuses, naming the
-claim, such as `merge blocked: <mission> work.terminal` (atelier-m4gv). The
-merge commit reaches the base only when every
-gate passes and the base has not moved during the checks
+they affect, as `land` does, trusting the base head. For example, if the base
+closed a mission after the fork point and the branch reopens work that mission
+depends on, merge refuses, naming the claim (`merge blocked: <mission>
+work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
+claim the base completed and reviewed after the fork point is judged against
+the base commits its reviews pin (atelier-goom). The merge commit reaches the
+base only when every gate passes and the base has not moved during the checks
 (`merge_snapshot_changed`). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
