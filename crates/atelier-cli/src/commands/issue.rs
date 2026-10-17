@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_is_done, issue_status_category, issue_status_label,
+    format_status_with_category, issue_status_category, issue_status_label,
     load_issue_workflow_policy,
 };
 use crate::human_output::{
@@ -155,10 +155,7 @@ fn render_issue_brief(
             brief_issue_rows(index, workflow_policy, inherited)?,
         );
     }
-    lines.push(format!(
-        "Transitions: {}",
-        transition_summary(index, workflow_policy, issue)
-    ));
+    lines.push(format!("Transitions: {}", transition_summary(index, issue)));
 
     let lead = record.sections.lead_names();
     for name in lead {
@@ -275,15 +272,14 @@ fn push_brief_section(lines: &mut Vec<String>, title: &str, body: &str) {
 }
 
 /// Allowed transitions by name, then blocked ones grouped by their reason. A
-/// done item with no configured transitions has none to offer.
-fn transition_summary(
-    index: &RecordIndex,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issue: &Issue,
-) -> String {
+/// status with no configured transitions, as most done statuses have, shows
+/// none; any other failure shows why the options are unavailable.
+fn transition_summary(index: &RecordIndex, issue: &Issue) -> String {
     let options = match crate::commands::workflow::issue_transition_options(index, &issue.id) {
         Ok(options) => options,
-        Err(_) if issue_is_done(workflow_policy, issue) => return "none".to_string(),
+        Err(error) if error.is::<crate::commands::workflow::NoTransitions>() => {
+            return "none".to_string()
+        }
         Err(error) => return format!("unavailable - {error}"),
     };
     let allowed = options

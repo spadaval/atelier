@@ -222,14 +222,34 @@ pub fn issue_transition_options(
         });
     }
     if options.is_empty() {
-        bail!(
-            "Issue {} has no configured transitions from status '{}'",
-            issue.id,
-            issue.status
-        );
+        return Err(NoTransitions {
+            issue_id: issue.id.clone(),
+            status: issue.status.clone(),
+        }
+        .into());
     }
     Ok(options)
 }
+
+/// The workflow configures no transitions out of the issue's status, as for
+/// most done statuses.
+#[derive(Debug)]
+pub struct NoTransitions {
+    issue_id: String,
+    status: String,
+}
+
+impl std::fmt::Display for NoTransitions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Issue {} has no configured transitions from status '{}'",
+            self.issue_id, self.status
+        )
+    }
+}
+
+impl std::error::Error for NoTransitions {}
 
 fn active_transition_ancestor_blocker(
     index: &RecordIndex,

@@ -965,6 +965,62 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
 }
 
 #[test]
+fn test_issue_show_brief_done_items_offer_no_transitions_but_report_failures() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let id = show_ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Finished work",
+            "--body",
+            "## Goal\n\nFinish.\n\n## Done when\n\nFinished.",
+        ],
+    );
+    let id = id.trim();
+    for status in ["done", "superseded"] {
+        edit_canonical_record(dir.path(), "issues", id, |text| {
+            text.lines()
+                .map(|line| {
+                    if line.starts_with("status: ") {
+                        format!("status: \"{status}\"")
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        });
+        assert_eq!(
+            show_ok(dir.path(), &["issue", "show", id]),
+            format!(
+                "{id} [task] ✓ {status} - Finished work\n\
+                 Transitions: none\n\
+                 Goal: Finish.\n\
+                 Done when: Finished.\n"
+            )
+        );
+    }
+
+    // A failure to read the transitions is reported, not shown as none.
+    edit_canonical_record(dir.path(), "issues", id, |text| {
+        text.replacen(
+            "priority:",
+            "workflow_branch:\n  branch_base: gone\n  work_branch: feature/gone\npriority:",
+            1,
+        )
+    });
+    let view = show_ok(dir.path(), &["issue", "show", id]);
+    assert!(
+        view.contains("\nTransitions: unavailable - git rev-parse --verify refs/heads/gone"),
+        "{view}"
+    );
+}
+
+#[test]
 fn test_issue_show_takes_several_ids_and_resolves_all_before_printing() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
