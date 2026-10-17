@@ -2459,11 +2459,11 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
             &issue_id,
             "Invalid body",
             "--kind",
-            "decision",
+            "verdict",
         ],
     );
     assert!(!success, "invalid note kind should be rejected");
-    assert!(stderr.contains("Invalid note kind 'decision'"), "{stderr}");
+    assert!(stderr.contains("Invalid note kind 'verdict'"), "{stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", &issue_id, "   "]);
     assert!(!success, "empty note should be rejected");
     assert!(stderr.contains("must not be empty"), "{stderr}");

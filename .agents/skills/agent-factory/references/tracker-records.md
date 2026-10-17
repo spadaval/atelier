@@ -187,7 +187,27 @@ A choice that is waiting on the human is a `decision` record:
 Context and Background are optional. Open decisions are the human's by
 default and never appear as agent-ready work. A decision that outlasts the
 mission also goes in the owning doc or an ADR (see
-[`decide`](../procedures/decide.md#authority-and-recording)).
+[`decide`](../procedures/decide.md#authority-and-recording)); link the ADR
+from the record with `atelier issue update <id> --adr <path>`. A decision
+that replaces an earlier one links it with
+`atelier issue link <new> <old> --role supersedes`.
+
+### Decision Notes
+
+A choice an implementer makes inside a work item, within its authority, is a
+decision note on that item, not a record. Write one when a later reader would
+otherwise ask "why is it like this?": a design choice between credible
+options, a deliberate departure from the plan, or a tradeoff. Keep it short;
+a two-line note that gets written beats a full one that is skipped.
+
+```text
+atelier issue note <id> --kind decision "<the choice>" --reason "<why>" \
+  [--rejected "<alternative>"]... [--one-way]
+```
+
+Mark it `--one-way` when reversing it later would be expensive, such as a
+record format, a public interface, or a data migration. One-way decisions
+lead `atelier work decisions <mission>`, where reviewers look first.
 
 ## Evidence
 

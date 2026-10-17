@@ -96,6 +96,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             no_parent,
             strategy,
             no_strategy,
+            adr,
+            no_adr,
         } => {
             let (state_dir, index) = load_repository()?;
             commands::issue::update_lifecycle(
@@ -112,6 +114,11 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     } else {
                         strategy.as_deref().map(Some)
                     },
+                    adr: if no_adr {
+                        Some(None)
+                    } else {
+                        adr.as_deref().map(Some)
+                    },
                     labels: &label,
                     remove_labels: &remove_label,
                     parent: if no_parent {
@@ -124,10 +131,22 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             )
         }
 
-        super::IssueCommands::Note { id, text, kind } => {
+        super::IssueCommands::Note {
+            id,
+            text,
+            kind,
+            reason,
+            rejected,
+            one_way,
+        } => {
             let (state_dir, index) = load_repository()?;
             let id = commands::issue::resolve_id(&index, &id)?;
-            commands::issue::append_note(&state_dir, &id, &kind, &text, quiet)
+            let decision = commands::issue::DecisionFlags {
+                reason: reason.as_deref(),
+                rejected: &rejected,
+                one_way,
+            };
+            commands::issue::append_note(&state_dir, &id, &kind, &text, decision, quiet)
         }
 
         super::IssueCommands::Link { id, target, role } => {

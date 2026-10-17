@@ -920,6 +920,7 @@ fn apply_bundle_to_state(
                 issue_type: issue.issue_type.clone(),
                 priority: issue.priority.clone(),
                 strategy: issue.strategy.clone(),
+                adr: None,
                 workflow_branch: None,
                 parent_id: None,
                 created_at: now,

@@ -20,6 +20,7 @@ pub fn issue_record(id: &str, issue_type: &str, status: &str) -> CanonicalIssueR
             issue_type: issue_type.to_string(),
             priority: "medium".to_string(),
             strategy: None,
+            adr: None,
             workflow_branch: None,
             parent_id: None,
             created_at: now,

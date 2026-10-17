@@ -60,6 +60,21 @@ Decisions are the human's by default: an open decision is listed under
 "Needs a Human", never as agent-ready work. They need no branch, so they are
 filed, decided, and closed on the base branch as planning changes (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
+A decision record may name the ADR it produced (`issue update --adr <path>`;
+`check` refuses a path that does not exist). A newer decision record replaces
+an older one with a `supersedes` link; once the newer one is decided, views
+mark the older one superseded and no longer count it as current.
+
+Decisions made inside a work item are decision notes, not records:
+`issue note <id> --kind decision "<choice>" --reason "<why>"`, with optional
+`--rejected "<alternative>"` (repeatable) and `--one-way` for a decision that
+cannot be reversed cheaply. The note stores the choice on its first line and
+indented `Reason:` and `Rejected:` lines, tagged `[decision]` or
+`[decision one-way]`. `check` refuses a decision note without a choice or a
+reason. `work decisions <mission>` lists the decisions across a mission's
+scope: one-way notes first, then current decision records (decided and not
+superseded), then reversible notes, then open decision records, which are
+proposals and not yet in force, then superseded records.
 
 Backlog conventions (decision atelier-ermg, under atelier-b7hb):
 

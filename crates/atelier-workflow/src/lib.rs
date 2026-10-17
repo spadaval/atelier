@@ -1828,6 +1828,7 @@ mod tests {
             status: "todo".to_string(),
             priority: "medium".to_string(),
             strategy: None,
+            adr: None,
             workflow_branch: None,
             parent_id: None,
             created_at: now,

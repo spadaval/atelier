@@ -12,7 +12,7 @@ use atelier_core::{
     ISSUE_PRIORITY_STORED_FORMS,
 };
 pub use atelier_core::{
-    EvidenceRecord, EvidenceResult, IssueBody, IssueFieldError, IssueSectionName,
+    EvidenceRecord, EvidenceResult, IssueAdr, IssueBody, IssueFieldError, IssueSectionName,
     IssueSectionState, IssueSections, IssueStrategy, RecordHeader, WorkflowBranch,
 };
 
@@ -665,6 +665,9 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     if let Some(strategy) = &record.issue.strategy {
         write_yaml_value(&mut output, "strategy", &serde_json::to_value(strategy)?)?;
     }
+    if let Some(adr) = &record.issue.adr {
+        write_yaml_value(&mut output, "adr", &serde_json::to_value(adr)?)?;
+    }
     if let Some(branch) = &record.issue.workflow_branch {
         write_yaml_value(
             &mut output,
@@ -743,6 +746,16 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     if let Some(strategy) = &strategy {
         IssueStrategy::new(&strategy.path)?;
     }
+    let adr = optional_yaml_value::<IssueAdr>(&front_matter, "adr", relative)?;
+    if let Some(adr) = &adr {
+        IssueAdr::new(&adr.path)?;
+        if issue_type != "decision" {
+            bail!(
+                "{} links an ADR, but only decision records link one",
+                display_state_path(relative)
+            );
+        }
+    }
     let workflow_branch =
         optional_yaml_value::<WorkflowBranch>(&front_matter, "workflow_branch", relative)?;
     let sections = parse_issue_sections_for_type(body, relative, &issue_type)?;
@@ -758,6 +771,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
             relative,
         )?,
         strategy,
+        adr,
         workflow_branch,
         parent_id: None,
         created_at: require_datetime(&front_matter, "created_at", relative)?,
@@ -2250,6 +2264,7 @@ mod tests {
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
                 strategy: None,
+                adr: None,
                 workflow_branch: None,
                 parent_id: None,
                 created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
