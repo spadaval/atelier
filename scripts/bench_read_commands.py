@@ -339,6 +339,9 @@ def main():
             ["issue", "show", epic],
             ["issue", "show", mission],
             ["issue", "show", "atelier-t000"],
+            ["issue", "show", epic, mission, "atelier-t000"],
+            ["issue", "show", epic, "--full"],
+            ["issue", "show", mission, "--full"],
             ["work", "mission", mission],
             *[["work", "mission", mission, "--" + bucket]
               for bucket in ("ready", "blocked", "active", "done", "all")],

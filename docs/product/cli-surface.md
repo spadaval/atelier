@@ -33,7 +33,7 @@ atelier work blocked
 atelier work missions
 atelier work mission <mission-id>
 atelier work parent <parent-id>
-atelier issue show <id>
+atelier issue show <id>... [--full]
 atelier issue transition <id>
 atelier start <id>
 ```
