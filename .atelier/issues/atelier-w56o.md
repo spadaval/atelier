@@ -39,7 +39,7 @@ The vendored `.agents/skills/agent-factory` orchestrate procedure, and the upstr
   - merge the base into it once;
   - regenerate generated files such as lockfiles in that step;
   - rerun proof;
-  - get the merge reviewed if it needed resolving;
+  - get the merge reviewed if it needed resolving or regenerating anything;
   - then run `atelier merge`.
 - Put generated-file consistency checks in required proof or `merge_checks`, so a merged but broken lock is caught mechanically. For a Rust workspace that means `cargo metadata --locked` for every lockfile.
 
