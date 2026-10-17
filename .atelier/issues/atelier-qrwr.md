@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T07:10:27.279874498+00:00"
+status: "done"
 title: "Make not-found and invalid-value errors consistent, with short IDs everywhere"
-updated_at: "2026-10-17T06:35:44.731133609+00:00"
+updated_at: "2026-10-17T07:10:27.279874498+00:00"
 ---
 
 ## Goal
@@ -44,3 +45,7 @@ updated_at: "2026-10-17T06:35:44.731133609+00:00"
 ## Context
 
 `check atelier-zzzz` claims "Tracker record files are invalid" while `check zzzz` says not found. That is filed as its own check item in this mission; keep the wording here consistent with it. main.rs:497-520 and issue.rs:28-51 hold two copies of the wrong-kind helper.
+
+## Close Reason
+
+One shared resolver (atelier_app::record_ref, RecordIndex::resolve) backs every ID-taking command: case-insensitive short IDs for issues, evidence and reviews; wrong-kind hints naming the show command; one '<kind> <ref> not found' message with up to three near matches or the list command, exit 1. Status, category, issue-type, note-kind and decision errors list valid values. Mutually exclusive flags are clap conflicts (exit 2). work mission/parent name the related view. Rules added to human-cli-output.md. Proven by new record_refs CLI tests and the full suite (evidence atelier-cq4o, atelier-ta09, atelier-14px).
