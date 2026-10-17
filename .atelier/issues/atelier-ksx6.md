@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T08:18:55.137197560+00:00"
+status: "done"
 title: "Make detail-view footers and readiness depend on record state"
-updated_at: "2026-10-17T08:04:33.039988741+00:00"
+updated_at: "2026-10-17T08:18:55.137197560+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,7 @@ updated_at: "2026-10-17T08:04:33.039988741+00:00"
 ## Context
 
 issue.rs:321 (readiness), issue.rs:510-530 (footer), work.rs:563-585 (`objective_footer`), human_output.rs:373 (omitted line). Relates to atelier-7u4o (brief issue show).
+
+## Close Reason
+
+Footers and readiness now follow record state: done records show 'Closed <date>: <reason>' and offer no edit or transition steps; a close offers land and merge --check for the owner; mission and parent views offer atelier start for the top ready item and drop filter steps; issue create offers atelier start; omitted lines name the command that shows the rest, and work parent gains --all.
