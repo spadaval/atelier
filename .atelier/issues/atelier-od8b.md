@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T07:59:15.692127051+00:00"
+status: "done"
 title: "Rebuild root help: generated list, lifecycle-ordered common commands"
-updated_at: "2026-10-17T07:46:49.793804938+00:00"
+updated_at: "2026-10-17T07:59:15.692127051+00:00"
 ---
 
 ## Goal
@@ -50,3 +51,7 @@ Bare `atelier work` prints a third hand-written index (work.rs:73-82). It leaves
 ## Context
 
 atelier-sdb0 replaces `prime` with `status` in this help. Coordinate with it, or land after it.
+
+## Close Reason
+
+Root help is generated from clap about lines and lists every visible command, including doctor and migrate. Common commands are the ten lifecycle steps from status to merge --check. Bare work prints work --help. The migrate epics about is 68 characters, with its detail in long help. cli-surface.md lists migrate and drops doctor from the removed surfaces. Unit and integration tests pin all of this. Evidence: atelier-8xbt (nextest), atelier-g1u0 (fmt), atelier-18ir (diff --check).
