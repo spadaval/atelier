@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-i2qq
 priority: "P2"
 relationships:
   blocks:
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Write one item-line, verdict, confirmation and quiet contract for all views"
-updated_at: "2026-10-17T05:23:01.403764581+00:00"
+updated_at: "2026-10-17T05:23:12.456760326+00:00"
 ---
 
 ## Goal
