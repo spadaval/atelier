@@ -790,6 +790,8 @@ fn is_record_id(value: &str) -> bool {
 mod issues;
 #[path = "cli_integration/mission_worktree.rs"]
 mod mission_worktree;
+#[path = "cli_integration/piped_output.rs"]
+mod piped_output;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
 #[path = "cli_integration/setup_guidance.rs"]

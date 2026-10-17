@@ -614,8 +614,22 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // ============================================================================
 
 fn main() -> Result<()> {
+    restore_default_sigpipe();
     load_dotenv()?;
     run()
+}
+
+/// Rust ignores SIGPIPE, so a write to a reader that closed early, as `head`
+/// does, fails and `println!` panics. Restoring the default ends the process
+/// quietly instead, with the conventional status 141, as other command-line
+/// tools do.
+fn restore_default_sigpipe() {
+    #[cfg(unix)]
+    // SAFETY: called first in `main`, before any thread or I/O exists;
+    // SIG_DFL is a valid disposition for SIGPIPE.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
 }
 
 fn load_dotenv() -> Result<()> {
