@@ -351,7 +351,9 @@ brief view gives one line per fact and leaves out empty facts:
 - `Transitions:`, which names the allowed transitions, then each group of
   blocked transitions with the reason they share, separated by `|`. A
   transition whose only gap is a required argument is allowed and shows its
-  flag, as in `supersede --reason`. A done record shows `Closed <date>: <first
+  flag, as in `supersede --reason`; `--full`'s Transition Readiness and
+  `issue transition <id>` report it the same way, as `supersede: allowed -
+  to superseded, needs --reason`. A done record shows `Closed <date>: <first
   line of its Close Reason>` instead, as `--full`'s Transition Readiness
   does;
 - the two lead sections of the record's body shape: Goal and Done when for

@@ -1012,6 +1012,11 @@ fn test_issue_show_is_brief_by_default() {
         ),
         "{parent_view}"
     );
+    let parent_full = show_ok(dir.path(), &["issue", "show", &parent, "--full"]);
+    assert!(
+        parent_full.contains("\n  close: blocked - validator work.terminal failed: open work: "),
+        "{parent_full}"
+    );
 
     for view in [&sibling_view, &child_view] {
         for full_only in [
@@ -1023,6 +1028,66 @@ fn test_issue_show_is_brief_by_default() {
             assert!(!view.contains(full_only), "{full_only} in brief:\n{view}");
         }
     }
+}
+
+/// A transition whose only gap is a required argument is allowed with its
+/// flag in the brief view, the full view's Transition Readiness, and the
+/// transition options view alike.
+#[test]
+fn test_argument_only_transition_is_allowed_in_every_issue_view() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let id = show_ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Closable work",
+            "--body",
+            "## Goal\n\nClose it.\n\n## Done when\n\nClosed.",
+        ],
+    );
+    let id = id.trim();
+    edit_canonical_record(dir.path(), "issues", id, |text| {
+        text.replace("status: \"todo\"", "status: \"in_progress\"")
+    });
+
+    let brief = show_ok(dir.path(), &["issue", "show", id]);
+    assert!(
+        brief
+            .contains("\nTransitions: block, close --reason, request_review, supersede --reason\n"),
+        "{brief}"
+    );
+
+    let full = show_ok(dir.path(), &["issue", "show", id, "--full"]);
+    let readiness = format!(
+        "Transition Readiness\n--------------------\n  \
+         block: allowed - to blocked\n    \
+         Command: atelier issue transition {id} block\n  \
+         close: allowed - to done, needs --reason\n    \
+         Command: atelier issue transition {id} close --reason \"...\"\n  \
+         request_review: allowed - to review\n    \
+         Command: atelier issue transition {id} request_review\n  \
+         supersede: allowed - to superseded, needs --reason\n    \
+         Command: atelier issue transition {id} supersede --reason \"...\"\n"
+    );
+    assert!(full.contains(&readiness), "{full}");
+
+    let options = show_ok(dir.path(), &["issue", "transition", id]);
+    assert!(
+        options.contains(&format!(
+            "close: allowed\n  From: in_progress, review\n  To:   done\n  \
+             Command: atelier issue transition {id} close --reason \"...\"\n  \
+             Requirements: needs --reason\n"
+        )),
+        "{options}"
+    );
+    assert!(!options.contains(": blocked"), "{options}");
+    assert_eq!(
+        show_ok(dir.path(), &["-q", "issue", "transition", id]),
+        "block\nclose\nrequest_review\nsupersede\n"
+    );
 }
 
 #[test]

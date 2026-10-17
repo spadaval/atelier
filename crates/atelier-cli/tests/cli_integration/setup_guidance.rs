@@ -2468,8 +2468,13 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
-    assert!(options_out.contains("close: blocked"), "{options_out}");
-    assert!(options_out.contains("  Decision: blocked"), "{options_out}");
+    // Close needs only its reason, so it is allowed and names the flag.
+    assert!(options_out.contains("close: allowed"), "{options_out}");
+    assert!(
+        options_out.contains("  Requirements: needs --reason"),
+        "{options_out}"
+    );
+    assert!(options_out.contains("  Decision: allowed"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
         options_out.contains("Done claim; commit it on the work branch before review."),
