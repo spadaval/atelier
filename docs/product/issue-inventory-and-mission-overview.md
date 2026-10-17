@@ -16,6 +16,23 @@ default, with `--full` for the whole record.
 Objective counts use the complete scope. Display limits trim visible rows,
 without changing counts or the underlying scope facts.
 
+Below the missions, `work missions` lists unassigned work: open non-mission
+issues outside the scope (`advances` links and their descendants) of every
+mission, open or done. Open work in the scope of done missions only is counted separately as "Linked only to done missions",
+and `--all` shows those missions. Unassigned work is grouped by label, one
+`<label> (<count>)` line per group. An issue with several labels is listed
+under each, so a group holds all unassigned work with that label; the
+unassigned total counts each issue once. Groups run largest first, then by
+label, with unlabelled work last under `no label`. Each group shows at most 5
+items, one line each (`<id> [<status>] <priority> - <title>`, with a blocker
+count when blocked), in the [work order](work-view-ordering.md), then `... N
+more`. `status` shows the same groups (see
+[sessions and hooks](sessions-and-hooks.md)).
+
+When no mission is open, `work missions` and `status` name the most recently
+closed mission (by close time) and its close date in place of an empty list,
+so a session between missions can see what finished.
+
 Mission membership follows `advances`, not parent hierarchy. An `advances`
 link joins one mission to one non-mission issue; the bundle and
 `atelier issue link <issue-id> <mission-id> --role advances` record the same
