@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::MergeStrategy;
@@ -116,8 +117,10 @@ pub fn run(
     print_deferred_classes();
 
     if !apply {
-        println!();
-        println!("Next: atelier prune --apply");
+        print_footer([FooterAction::new(
+            "Apply the prune",
+            "atelier prune --apply",
+        )]);
     }
 
     Ok(())

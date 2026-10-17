@@ -3,7 +3,7 @@ use atelier_app::record_index::RecordIndex;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 
-use crate::human_output::{self, DecisionState, StylePolicy};
+use crate::human_output::{self, DecisionState, FooterAction, StylePolicy};
 use atelier_app::workflow_policy::{TransitionDefinition, WorkflowPolicy};
 use atelier_core::Issue;
 use atelier_records::{CanonicalIssueRecord, RecordStore};
@@ -78,9 +78,16 @@ pub fn transition_issue(
         return Ok(());
     }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
-    print_heading("Next Commands");
-    println!("  atelier issue show {}", before.id);
-    println!("  atelier issue transition {}", before.id);
+    human_output::print_footer([
+        FooterAction::new(
+            "Inspect this issue",
+            format!("atelier issue show {}", before.id),
+        ),
+        FooterAction::new(
+            "Show transition options",
+            format!("atelier issue transition {}", before.id),
+        ),
+    ]);
     Ok(())
 }
 
@@ -390,7 +397,10 @@ fn render_issue_transition_options(
                 .find(|result| !result.passed && result.help.is_some())
             {
                 lines.push(format!("  Readiness: {}", result.reason));
-                lines.push(format!("  {}", result.help.as_deref().unwrap_or_default()));
+                lines.push(format!(
+                    "  Hint: {}",
+                    result.help.as_deref().unwrap_or_default()
+                ));
             }
             lines.extend(render_text_list(
                 "Failed Requirements",
@@ -406,10 +416,7 @@ fn render_issue_transition_options(
             ));
             lines.extend(render_text_list("Description", &option.descriptions));
         }
-        lines.extend(render_text_list(
-            "Commands",
-            std::slice::from_ref(&option.command),
-        ));
+        lines.push(format!("  Command: {}", option.command));
     }
     lines.join("\n")
 }
@@ -502,10 +509,6 @@ fn render_text_list(title: &str, values: &[String]) -> Vec<String> {
         human_output::render_lines_section("", values.iter().map(|value| format!("  {value}")));
     lines.insert(0, human_output::section_heading(title));
     lines
-}
-
-fn print_heading(title: &str) {
-    human_output::print_section_heading(title);
 }
 
 fn ensure_transitionable_status(policy: &WorkflowPolicy, issue: &Issue) -> Result<()> {

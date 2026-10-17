@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::Result;
 use std::path::Path;
 
@@ -15,9 +16,13 @@ pub fn run(path: &Path, force: bool, project_slug: Option<String>) -> Result<()>
         println!("Project slug: {slug} (from {source}; record IDs look like {slug}-xxxx)");
     }
     println!("Atelier initialized successfully!");
-    println!("\nNext steps:");
-    println!("  atelier check                     # Verify tracker records and workflow setup");
-    println!("  atelier issue create \"Task\"     # Create the first tracked issue");
+    print_footer([
+        FooterAction::new("Verify tracker records and workflow setup", "atelier check"),
+        FooterAction::new(
+            "Create the first tracked issue",
+            "atelier issue create \"Task\"",
+        ),
+    ]);
 
     Ok(())
 }

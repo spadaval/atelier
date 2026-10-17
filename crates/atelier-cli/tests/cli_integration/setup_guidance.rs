@@ -1591,7 +1591,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Ready item"), "{stdout}");
     assert!(stdout.contains("Current Work\n------------\n"));
     assert!(stdout.contains("Current missions:"));
-    assert!(stdout.contains("Next Actions"));
+    assert!(stdout.contains("\nNext\n----\n"));
     assert!(stdout.contains("Choose ready work"));
     assert!(stdout.contains("Inspect selected work transitions"));
     assert!(!stdout.contains(
@@ -1670,7 +1670,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         !transition_out.contains("Planned Actions"),
         "{transition_out}"
     );
-    assert!(transition_out.contains("Commands"), "{transition_out}");
+    assert!(transition_out.contains("  Command: "), "{transition_out}");
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
     let git_after = git_status_short(dir.path());
     assert_eq!(
@@ -2785,4 +2785,133 @@ fn section_rows<'a>(output: &'a str, title: &str) -> Vec<&'a str> {
         .lines()
         .take_while(|line| !line.is_empty())
         .collect()
+}
+
+/// Every view's next-step footer is a `Next` section of `  <label>: <command>`
+/// lines; the headings and hint prefixes it replaced never come back.
+#[test]
+fn rendered_views_use_one_next_footer_and_no_retired_headings() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    let (success, init_out, stderr) = run_atelier(dir.path(), &["init"]);
+    assert!(success, "init failed: {stderr}");
+    let mut outputs = vec![("init".to_string(), init_out)];
+    let mut run = |args: Vec<&str>| {
+        let (_, stdout, stderr) = run_atelier(dir.path(), &args);
+        outputs.push((args.join(" "), format!("{stdout}{stderr}")));
+    };
+    run(vec![
+        "issue",
+        "create",
+        "Footer mission",
+        "--issue-type",
+        "mission",
+    ]);
+    run(vec!["issue", "create", "Footer work"]);
+    run(vec!["issue", "create", "Footer blocker"]);
+    let mission_id = issue_id_by_title(dir.path(), "Footer mission");
+    let work_id = issue_id_by_title(dir.path(), "Footer work");
+    let blocker_id = issue_id_by_title(dir.path(), "Footer blocker");
+    commit_all(dir.path(), "footer fixture");
+    attach_issue_pass_evidence(dir.path(), &blocker_id);
+    run(vec![
+        "issue",
+        "link",
+        &mission_id,
+        &work_id,
+        "--role",
+        "advances",
+    ]);
+    run(vec![
+        "issue",
+        "link",
+        &work_id,
+        &blocker_id,
+        "--role",
+        "blocked_by",
+    ]);
+    run(vec!["issue", "update", &blocker_id, "--priority", "high"]);
+    commit_all(dir.path(), "footer links");
+    run(vec!["issue", "show", &work_id, "--full"]);
+    run(vec!["issue", "list"]);
+    run(vec!["issue", "transition", &work_id]);
+    run(vec!["issue", "transition", &work_id, "start"]);
+    run(vec!["issue", "transition", &blocker_id, "start"]);
+    run(vec!["work"]);
+    run(vec!["work", "missions"]);
+    run(vec!["work", "mission", &mission_id]);
+    run(vec!["status"]);
+    run(vec!["evidence", "list"]);
+    run(vec!["prune"]);
+    let fixture = workspace_root().join("docs/spec/bundle/fixtures/valid-bundle.json");
+    run(vec!["bundle", "apply", fixture.to_str().unwrap(), "--yes"]);
+
+    let started = format!("issue transition {blocker_id} start");
+    let footer_views = [
+        "init",
+        "issue create",
+        "issue link",
+        "issue update",
+        "issue show",
+        "issue list",
+        started.as_str(),
+        "work",
+        "status",
+        "evidence list",
+        "prune",
+        "bundle apply",
+    ];
+    for (command, output) in &outputs {
+        for retired in [
+            "Next Commands",
+            "Next Actions",
+            "Drill Down",
+            "Drill down",
+            "Next steps",
+            "Commands\n--------",
+            "Hint: Next:",
+            "\n  Next:",
+            "     # ",
+        ] {
+            assert!(
+                !output.contains(retired),
+                "`{command}` printed retired {retired:?}:\n{output}"
+            );
+        }
+        if footer_views.iter().any(|view| command.contains(view)) {
+            let footer = output
+                .split_once("\nNext\n----\n")
+                .map(|(_, footer)| footer)
+                .unwrap_or_else(|| panic!("`{command}` has no Next footer:\n{output}"));
+            for line in footer.lines().take_while(|line| !line.is_empty()) {
+                let (label, command_text) = line
+                    .strip_prefix("  ")
+                    .and_then(|line| line.split_once(": "))
+                    .unwrap_or_else(|| {
+                        panic!("`{command}` footer line {line:?} is not `  <label>: <command>`")
+                    });
+                assert!(!label.is_empty() && !command_text.is_empty(), "{line:?}");
+            }
+        }
+    }
+    let missions = &outputs
+        .iter()
+        .find(|(command, _)| command == "work missions")
+        .unwrap()
+        .1;
+    assert!(
+        missions.contains(&format!("  More info: atelier work mission {mission_id}")),
+        "{missions}"
+    );
+    let blocked_start = &outputs
+        .iter()
+        .find(|(command, _)| *command == format!("issue transition {work_id} start"))
+        .unwrap()
+        .1;
+    assert!(
+        blocked_start.contains(&format!(
+            "Hint: Inspect the blocker with `atelier issue show {blocker_id}`"
+        )),
+        "{blocked_start}"
+    );
 }

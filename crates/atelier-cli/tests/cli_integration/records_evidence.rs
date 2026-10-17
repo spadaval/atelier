@@ -648,7 +648,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(success, "create failed: {stderr}");
     assert!(stdout.contains("Created issue atelier-"));
     assert!(stdout.contains("Type:     feature"));
-    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("\nNext\n----\n"));
     let task_id = issue_id_by_title(dir.path(), "Agent Factory task");
 
     for args in [

@@ -245,7 +245,10 @@ fn transitive_blockers_none_open(
         Some(diagnosis) => Ok((
             false,
             diagnosis.summary,
-            Some(format!("Next: {}", diagnosis.next_command)),
+            Some(format!(
+                "Inspect the blocker with `{}`",
+                diagnosis.next_command
+            )),
         )),
         None => Ok((
             true,

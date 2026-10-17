@@ -7,9 +7,9 @@ use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
 use crate::human_output::{
-    display_timestamp, heading, plural_suffix, render_footer_section, render_issue_inventory,
-    render_issue_inventory_quiet, render_lines_section, render_metadata, render_text_section,
-    FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
+    display_timestamp, heading, plural_suffix, print_footer, render_footer_section,
+    render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
+    render_text_section, FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
@@ -565,7 +565,7 @@ fn render_transition_readiness(index: &RecordIndex, canonical_id: &str) -> Resul
                     .find(|result| !result.passed && result.help.is_some())
                     .and_then(|result| result.help.as_deref())
                 {
-                    lines.push(format!("    {help}"));
+                    lines.push(format!("    Hint: {help}"));
                 } else {
                     lines.push(format!("    {}", option.command));
                 }
@@ -783,7 +783,7 @@ fn render_command_footer(canonical_id: &str) -> Result<()> {
             format!("atelier issue transition {} <transition>", canonical_id),
         ),
     ]);
-    print_panel(render_footer_section("Next Commands", actions));
+    print_panel(render_footer_section(RenderContext::for_stdout(), actions));
     Ok(())
 }
 
@@ -936,7 +936,7 @@ pub fn create_lifecycle(
     let file_path = canonical_issue_path_from_state(state_dir, &id);
     println!("File: {}", file_path.display());
     print_panel(render_footer_section(
-        "Next Commands",
+        RenderContext::for_stdout(),
         [
             FooterAction::new("Edit issue Markdown", file_path.display().to_string()),
             FooterAction::new("Validate this issue", format!("atelier check {id}")),
@@ -1235,10 +1235,10 @@ pub fn update_lifecycle(
     if let Some(parent) = parent_id {
         println!("Parent:   {}", parent);
     }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {}", record.issue.id);
+    print_footer([FooterAction::new(
+        "Inspect this issue",
+        format!("atelier issue show {}", record.issue.id),
+    )]);
     Ok(())
 }
 

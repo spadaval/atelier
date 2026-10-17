@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeSet;
 use std::fs;
@@ -591,12 +592,14 @@ pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) ->
             EVIDENCE_LIST_LIMIT
         );
     }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Show proof detail: atelier evidence show <evidence-id>");
-    println!("  Filter by result: atelier evidence list --result <result>");
-    println!("  List matching IDs: atelier --quiet evidence list");
+    print_footer([
+        FooterAction::new("Show proof detail", "atelier evidence show <evidence-id>"),
+        FooterAction::new(
+            "Filter by result",
+            "atelier evidence list --result <result>",
+        ),
+        FooterAction::new("List matching IDs", "atelier --quiet evidence list"),
+    ]);
     Ok(())
 }
 

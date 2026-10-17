@@ -1,3 +1,4 @@
+use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -1552,16 +1553,15 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
     }
 
     if let Some(id) = first_created_id(&summary, "issues") {
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier issue show {id}");
-        println!("  atelier check");
+        print_footer([
+            FooterAction::new(
+                "Inspect the first issue",
+                format!("atelier issue show {id}"),
+            ),
+            FooterAction::new("Validate the records", "atelier check"),
+        ]);
     } else if !preview {
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier check");
+        print_footer([FooterAction::new("Validate the records", "atelier check")]);
     }
     Ok(())
 }

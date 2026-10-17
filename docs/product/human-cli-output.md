@@ -123,6 +123,29 @@ listed. Each command adopts this in its own item (atelier-7ebi for `issue
 update`, `note` and `link`; atelier-8bve for `issue create`; atelier-093h
 for review records; atelier-3ekh for evidence).
 
+### Next Footer
+
+A view that offers next steps ends them in one section, headed `Next`, with
+one step per line:
+
+```
+Next
+----
+  Inspect this issue: atelier issue show atelier-onwh
+  Show transition options: atelier issue transition atelier-onwh
+```
+
+Each line is `  <label>: <command>`: the label says what the step does, and
+the command is what to run. A line too wide for the terminal continues
+indented under its label. A view with no step to offer prints no `Next`
+section. `render_footer` in `human_output.rs` is the one helper that writes
+it; no view prints its own footer heading or line. A pointer on one row reads
+the same way, as `More info: atelier work mission <id>` does in `work
+missions`, and so does a transition's `Command:` line. A validator hint is
+one sentence after `Hint:` that names its command in backticks, such as
+``Hint: Inspect the blocker with `atelier issue show <id>` ``; it carries no
+second prefix.
+
 ### Quiet Tokens
 
 `--quiet` prints one documented token per command, and nothing else on
