@@ -4,6 +4,9 @@ id: "atelier-acrt"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-acrt
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Review a mission before work starts with atelier brief"
-updated_at: "2026-10-17T19:46:56.402751311+00:00"
+updated_at: "2026-10-17T19:47:29.828593808+00:00"
 ---
 
 ## Goal
