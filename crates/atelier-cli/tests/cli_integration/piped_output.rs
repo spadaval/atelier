@@ -53,3 +53,87 @@ fn closing_stdout_after_the_first_line_ends_the_command_quietly() {
         );
     }
 }
+
+/// A `git cat-file --batch` child that has gone must be reported, not end
+/// atelier with SIGPIPE (atelier-bsyn). One fake `cat-file` exits at once, so
+/// atelier's first request races its exit. The other answers one request,
+/// then closes its input and exits, so the next request is always written
+/// after the child is gone; that case failed with SIGPIPE before the fix.
+#[cfg(unix)]
+#[test]
+fn a_cat_file_child_that_exits_is_reported_instead_of_ending_on_sigpipe() {
+    use std::os::unix::{fs::PermissionsExt, process::ExitStatusExt};
+
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, id, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Other branch work",
+            "--body",
+            "## Goal\n\nG.\n\n## Done when\n\nD.",
+        ],
+    );
+    assert!(success, "create failed: {stderr}");
+    commit_all(dir.path(), "records");
+    let branch = format!("task/{}", id.trim());
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", &branch])
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join("git"))
+        .find(|path| path.is_file())
+        .expect("git on PATH");
+    let real = real.display();
+    let exits_at_once = "  exit 128 ;;";
+    let answers_once = format!(
+        "  IFS= read -r line\n  exec 0<&-\n  printf '%s\\n' \"$line\" | '{real}' \"$@\"\n  exit 128 ;;"
+    );
+    for cat_file in [exits_at_once, &answers_once] {
+        let wrapper = tempdir().unwrap();
+        let script = wrapper.path().join("git");
+        fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\ncase \" $* \" in *' cat-file --batch '*)\n{cat_file}\nesac\nexec '{real}' \"$@\"\n"
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        let path = std::env::join_paths(
+            std::iter::once(wrapper.path().to_path_buf())
+                .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+        )
+        .unwrap();
+
+        let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(dir.path())
+            .env("PATH", path)
+            .arg("status")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_ne!(
+            output.status.signal(),
+            Some(libc::SIGPIPE),
+            "{cat_file}\n{stdout}{stderr}"
+        );
+        assert!(output.status.success(), "{cat_file}\n{stdout}{stderr}");
+        assert!(
+            stdout.contains(&format!(
+                "{branch}: unavailable — git cat-file --batch exited"
+            )),
+            "{cat_file}\n{stdout}{stderr}"
+        );
+    }
+}
