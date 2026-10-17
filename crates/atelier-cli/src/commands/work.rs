@@ -7,6 +7,7 @@ use atelier_app::mission_overview::mission_overview;
 use atelier_app::work_classification::{ClassifiedWork, WorkBuckets, WorkClassification, WorkRow};
 use atelier_core::Issue;
 
+use crate::commands::git::InFlight;
 use crate::human_output::{
     last_closed_mission, print_page, render_footer_section, render_labeled_lines,
     render_lines_section, render_metadata, render_unassigned_groups, DisplayRole, FooterAction,
@@ -134,15 +135,42 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
         ],
         other => bail!("unknown work bucket '{other}'"),
     };
+    // Ready work another local branch already started is marked with its
+    // state there; the summaries are read once for the whole page.
+    let in_flight = if matches!(bucket, "ready" | "all") {
+        in_flight_marks(index).unwrap_or_else(|error| InFlight {
+            notices: vec![format!("In-flight marks unavailable: {error:#}")],
+            ..InFlight::default()
+        })
+    } else {
+        InFlight::default()
+    };
     let context = RenderContext::for_stdout();
-    print_page(
-        "Atelier Work",
-        groups
-            .into_iter()
-            .map(|(title, rows)| IssueListPanel::from_work_rows(title, rows).render(context)),
-        context,
-    );
+    let mut panels = groups
+        .into_iter()
+        .map(|(title, rows)| {
+            let panel = IssueListPanel::from_work_rows(title, rows);
+            if title == "Ready Work" {
+                panel.marks(&in_flight.marks)
+            } else {
+                panel
+            }
+            .render(context)
+        })
+        .collect::<Vec<_>>();
+    if !in_flight.notices.is_empty() {
+        panels.push(render_lines_section("", in_flight.notices));
+    }
+    print_page("Atelier Work", panels, context);
     Ok(())
+}
+
+fn in_flight_marks(index: &RecordIndex) -> Result<InFlight> {
+    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    Ok(
+        crate::commands::git::branch_summaries(layout.repo_root(), &layout.canonical_dir(), index)?
+            .in_flight(),
+    )
 }
 
 /// The needs-human and context counts for summaries, shown only when there

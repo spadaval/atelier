@@ -2,7 +2,7 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::{git_freshness, record_index::RecordIndex, workflow_policy};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::Path,
     process::{Command, Stdio},
 };
@@ -421,6 +421,14 @@ pub(crate) fn unmerged_done_label(
     branch: &str,
     base_branch: &str,
 ) -> String {
+    if done_merged(repo, id, status, branch, base_branch) {
+        format!("{status}, merged into {base_branch}")
+    } else {
+        format!("{status} on branch {branch}, not merged into {base_branch}")
+    }
+}
+
+fn done_merged(repo: &Path, id: &str, status: &str, branch: &str, base_branch: &str) -> bool {
     let path = format!(".atelier/issues/{id}.md");
     let status_at = |commit: &str| {
         git_freshness::blob(repo, commit, Path::new(&path))
@@ -435,25 +443,157 @@ pub(crate) fn unmerged_done_label(
             })
     };
     let base = resolve(repo, &format!("refs/heads/{base_branch}")).ok();
-    let merged = base.as_deref().is_some_and(|base| match status_at(base) {
+    base.as_deref().is_some_and(|base| match status_at(base) {
         Some(on_base) => on_base.as_deref() == Some(status),
         None => resolve(repo, &format!("refs/heads/{branch}")).is_ok_and(|tip| {
             status_at(&tip).flatten().as_deref() == Some(status)
                 && git_freshness::git_output(repo, &["merge-base", "--is-ancestor", &tip, base])
                     .is_ok()
         }),
-    });
-    if merged {
-        format!("{status}, merged into {base_branch}")
-    } else {
-        format!("{status} on branch {branch}, not merged into {base_branch}")
+    })
+}
+
+/// An owner as its branch's committed records describe it.
+struct BranchOwner {
+    branch: String,
+    commit: String,
+    id: String,
+    title: String,
+    status: String,
+    /// Set for a done owner: whether its claim is merged into the base.
+    merged: Option<bool>,
+    active: usize,
+}
+
+/// A branch whose committed records could not be summarized.
+struct UnreadableBranch {
+    branch: String,
+    /// Owners found before the failure, so their ready rows can still say so.
+    owners: Vec<String>,
+    error: anyhow::Error,
+}
+
+/// The committed state of the other local work branches, read once per
+/// command and shared by the status branch section and the in-flight marks on
+/// ready work. The current checkout's records are never overlaid.
+pub(crate) struct BranchSummaries {
+    base_branch: String,
+    /// In branch order.
+    entries: Vec<Result<BranchOwner, UnreadableBranch>>,
+    unstarted: Vec<String>,
+    untracked: Vec<String>,
+}
+
+/// Marks for ready rows owned on other branches, and notices for unreadable
+/// branches whose owners are unknown.
+#[derive(Default)]
+pub(crate) struct InFlight {
+    pub(crate) marks: BTreeMap<String, String>,
+    pub(crate) notices: Vec<String>,
+}
+
+impl BranchSummaries {
+    /// The status section's lines.
+    pub(crate) fn lines(&self) -> Vec<String> {
+        let base = &self.base_branch;
+        let mut lines = self
+            .entries
+            .iter()
+            .map(|owner| match owner {
+                Ok(owner) => {
+                    let status = match owner.merged {
+                        Some(true) => format!("{}, merged into {base}", owner.status),
+                        Some(false) => format!(
+                            "{} on branch {}, not merged into {base}",
+                            owner.status, owner.branch
+                        ),
+                        None => owner.status.clone(),
+                    };
+                    format!(
+                        "{} @ {}: {} [{status}] {} — {} active (committed branch records)",
+                        owner.branch,
+                        &owner.commit[..8],
+                        owner.id,
+                        owner.title,
+                        owner.active
+                    )
+                }
+                Err(unreadable) => {
+                    format!(
+                        "{}: unavailable — {:#}",
+                        unreadable.branch, unreadable.error
+                    )
+                }
+            })
+            .collect::<Vec<_>>();
+        if !self.unstarted.is_empty() {
+            lines.push(format!("No started work on: {}", self.unstarted.join(", ")));
+        }
+        if !self.untracked.is_empty() {
+            lines.push(format!("No tracker on: {}", self.untracked.join(", ")));
+        }
+        lines
+    }
+
+    /// Each owner's state on its branches, keyed by ID: `in_progress on
+    /// bug/atelier-j48s`, `done on bug/atelier-fj1t, not merged`, or `state
+    /// unknown on task/x: <reason>` when the branch cannot be read.
+    pub(crate) fn in_flight(&self) -> InFlight {
+        let mut in_flight = InFlight::default();
+        let mut mark = |id: &str, mark: String| {
+            in_flight
+                .marks
+                .entry(id.to_owned())
+                .and_modify(|marks| {
+                    marks.push_str("; ");
+                    marks.push_str(&mark);
+                })
+                .or_insert(mark);
+        };
+        let mut notices = Vec::new();
+        for entry in &self.entries {
+            match entry {
+                Ok(owner) => mark(
+                    &owner.id,
+                    match owner.merged {
+                        Some(true) => format!(
+                            "{} on {}, merged into {}",
+                            owner.status, owner.branch, self.base_branch
+                        ),
+                        Some(false) => format!("{} on {}, not merged", owner.status, owner.branch),
+                        None => format!("{} on {}", owner.status, owner.branch),
+                    },
+                ),
+                Err(unreadable) => {
+                    let reason = short_reason(&unreadable.error);
+                    if unreadable.owners.is_empty() {
+                        notices.push(format!(
+                            "State unknown on {}, owner not found: {reason}",
+                            unreadable.branch
+                        ));
+                    }
+                    for id in &unreadable.owners {
+                        mark(
+                            id,
+                            format!("state unknown on {}: {reason}", unreadable.branch),
+                        );
+                    }
+                }
+            }
+        }
+        in_flight.notices = notices;
+        in_flight
     }
 }
 
-pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Result<Vec<String>> {
+pub(crate) fn branch_summaries(
+    repo: &Path,
+    state: &Path,
+    live: &RecordIndex,
+) -> Result<BranchSummaries> {
     let current = current_branch(repo)?.unwrap_or_default();
     let policy = workflow_policy::load(repo)?;
-    branch_lines_for(
+    branch_summaries_for(
         repo,
         state,
         live,
@@ -462,13 +602,13 @@ pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Res
     )
 }
 
-pub(crate) fn branch_lines_for(
+fn branch_summaries_for(
     repo: &Path,
     state: &Path,
     live: &RecordIndex,
     current: &str,
     base_branch: &str,
-) -> Result<Vec<String>> {
+) -> Result<BranchSummaries> {
     let heads = text(
         repo,
         &[
@@ -477,7 +617,7 @@ pub(crate) fn branch_lines_for(
             "refs/heads/",
         ],
     )?;
-    let mut lines = Vec::new();
+    let mut entries = Vec::new();
     let mut untracked = Vec::new();
     let mut unstarted = Vec::new();
     for head in heads.lines() {
@@ -504,9 +644,11 @@ pub(crate) fn branch_lines_for(
             untracked.push(branch.to_string());
             continue;
         }
-        let view = (|| -> Result<Option<Vec<String>>> {
-            // Legacy branches can contain thousands of obsolete records. Inspect
-            // the small compatibility/owner blobs before materializing any tree.
+        // Legacy branches can contain thousands of obsolete records. Inspect
+        // the small compatibility/owner blobs before materializing any tree.
+        // Owners are found first, so a later failure can still name them.
+        let owners = branch_owner_ids(repo, live, branch, commit);
+        let view = (|| -> Result<Option<Vec<BranchOwner>>> {
             let yaml = git_freshness::blob(
                 repo,
                 commit,
@@ -521,65 +663,11 @@ pub(crate) fn branch_lines_for(
                     Path::new(".atelier/config.toml"),
                 )?;
             }
-            let mut paths = live
-                .issues()
-                .filter(|issue| {
-                    issue
-                        .workflow_branch
-                        .as_ref()
-                        .is_some_and(|owner| owner.work_branch == branch)
-                })
-                .map(|issue| format!(".atelier/issues/{}.md", issue.id))
-                .collect::<BTreeSet<_>>();
-            if let Some(id) = branch
-                .rsplit('/')
-                .next()
-                .filter(|id| atelier_records::validate_record_id(id).is_ok())
-            {
-                paths.insert(format!(".atelier/issues/{id}.md"));
-            }
-            let mut owners = Vec::new();
-            for attempt in 0..2 {
-                for path in &paths {
-                    if let Ok(blob) = git_freshness::blob(repo, commit, Path::new(path)) {
-                        let record = atelier_records::parse_issue_record(
-                            &blob,
-                            Path::new(path).strip_prefix(".atelier")?,
-                        )?;
-                        if record
-                            .issue
-                            .workflow_branch
-                            .as_ref()
-                            .is_some_and(|owner| owner.work_branch == branch)
-                        {
-                            owners.push(record.issue.id);
-                        }
-                    }
-                }
-                if !owners.is_empty() || attempt == 1 {
-                    break;
-                }
-                // A custom branch can introduce its owner only on that branch.
-                let found = text(
-                    repo,
-                    &[
-                        "grep",
-                        "-l",
-                        "^workflow_branch:",
-                        commit,
-                        "--",
-                        ".atelier/issues/",
-                    ],
-                )
-                .unwrap_or_default();
-                paths = found
-                    .lines()
-                    .filter_map(|line| line.split_once(':').map(|(_, path)| path.into()))
-                    .collect();
-            }
-            if owners.is_empty() {
-                return Ok(None);
-            }
+            let owners = match &owners {
+                Ok(owners) if owners.is_empty() => return Ok(None),
+                Ok(owners) => owners.clone(),
+                Err(error) => bail!("{error:#}"),
+            };
             let snapshot = Snapshot::at(repo, state, commit)?;
             snapshot
                 .index
@@ -596,33 +684,109 @@ pub(crate) fn branch_lines_for(
                         })
                     })
                     .count();
-                let status = if branch_policy.status_category(&owner.status) == Some("done") {
-                    unmerged_done_label(repo, &id, &owner.status, branch, base_branch)
-                } else {
-                    owner.status.clone()
-                };
-                rows.push(format!(
-                    "{branch} @ {}: {} [{status}] {} — {active} active (committed branch records)",
-                    &commit[..8],
+                let merged = (branch_policy.status_category(&owner.status) == Some("done"))
+                    .then(|| done_merged(repo, &id, &owner.status, branch, base_branch));
+                rows.push(BranchOwner {
+                    branch: branch.to_owned(),
+                    commit: commit.to_owned(),
+                    title: owner.title.clone(),
+                    status: owner.status.clone(),
                     id,
-                    owner.title
-                ));
+                    merged,
+                    active,
+                });
             }
             Ok(Some(rows))
         })();
         match view {
-            Ok(Some(rows)) => lines.extend(rows),
+            Ok(Some(rows)) => entries.extend(rows.into_iter().map(Ok)),
             Ok(None) => unstarted.push(branch.to_string()),
-            Err(error) => lines.push(format!("{branch}: unavailable — {error:#}")),
+            Err(error) => entries.push(Err(UnreadableBranch {
+                branch: branch.to_string(),
+                owners: owners.unwrap_or_default(),
+                error,
+            })),
         }
     }
-    if !unstarted.is_empty() {
-        lines.push(format!("No started work on: {}", unstarted.join(", ")));
+    Ok(BranchSummaries {
+        base_branch: base_branch.to_owned(),
+        entries,
+        unstarted,
+        untracked,
+    })
+}
+
+/// The issues a branch's committed records say own it, read from their small
+/// record blobs without materializing the tracker.
+fn branch_owner_ids(
+    repo: &Path,
+    live: &RecordIndex,
+    branch: &str,
+    commit: &str,
+) -> Result<Vec<String>> {
+    let mut paths = live
+        .issues()
+        .filter(|issue| {
+            issue
+                .workflow_branch
+                .as_ref()
+                .is_some_and(|owner| owner.work_branch == branch)
+        })
+        .map(|issue| format!(".atelier/issues/{}.md", issue.id))
+        .collect::<BTreeSet<_>>();
+    if let Some(id) = branch
+        .rsplit('/')
+        .next()
+        .filter(|id| atelier_records::validate_record_id(id).is_ok())
+    {
+        paths.insert(format!(".atelier/issues/{id}.md"));
     }
-    if !untracked.is_empty() {
-        lines.push(format!("No tracker on: {}", untracked.join(", ")));
+    let mut owners = Vec::new();
+    for attempt in 0..2 {
+        for path in &paths {
+            if let Ok(blob) = git_freshness::blob(repo, commit, Path::new(path)) {
+                let record = atelier_records::parse_issue_record(
+                    &blob,
+                    Path::new(path).strip_prefix(".atelier")?,
+                )?;
+                if record
+                    .issue
+                    .workflow_branch
+                    .as_ref()
+                    .is_some_and(|owner| owner.work_branch == branch)
+                {
+                    owners.push(record.issue.id);
+                }
+            }
+        }
+        if !owners.is_empty() || attempt == 1 {
+            break;
+        }
+        // A custom branch can introduce its owner only on that branch.
+        let found = text(
+            repo,
+            &[
+                "grep",
+                "-l",
+                "^workflow_branch:",
+                commit,
+                "--",
+                ".atelier/issues/",
+            ],
+        )
+        .unwrap_or_default();
+        paths = found
+            .lines()
+            .filter_map(|line| line.split_once(':').map(|(_, path)| path.into()))
+            .collect();
     }
-    Ok(lines)
+    Ok(owners)
+}
+
+/// The first line of an error's outermost context, for a one-line mark.
+fn short_reason(error: &anyhow::Error) -> String {
+    let reason = error.to_string();
+    crate::utils::truncate(reason.lines().next().unwrap_or_default(), 100)
 }
 
 #[cfg(test)]

@@ -4,6 +4,9 @@ id: "atelier-7n5u"
 issue_type: "bug"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-7n5u
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T03:17:40.978776712+00:00"
+status: "done"
 title: "Mark ready work that is already in flight on another local branch"
-updated_at: "2026-10-16T23:04:58.129176254+00:00"
+updated_at: "2026-10-17T03:17:40.978776712+00:00"
 ---
 
 ## Goal
@@ -35,3 +39,7 @@ Ready-view rendering and the shared branch-summary code. Ready classification do
 ## Context
 
 `git::branch_lines_for` and the `status` "Other local work branches" section; `docs/product/sessions-and-hooks.md#other-branches`.
+
+## Close Reason
+
+work ready, work all and status mark ready items in flight on another local branch (including state-unknown for unreadable branches); independently reviewed; suites pass.

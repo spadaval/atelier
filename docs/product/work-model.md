@@ -87,6 +87,15 @@ them in a separate "Parents and Missions" context panel instead, and `--quiet`
 ready lists leave them out. A parent whose children are all terminal is ready
 again, to be started and closed.
 
+Records are branch-local, so work another session has started on its own
+branch still reads as ready on the base. `work ready`, the ready section of
+`work all`, and the ready items `status` lists stay classified from the
+checkout's records, but an item that owns another local branch carries its
+committed state there on a `↳` line under its row, such as `↳ in_progress on
+bug/atelier-j48s` or `↳ done on bug/atelier-fj1t, not merged` (see
+[Other branches](sessions-and-hooks.md#other-branches)). Choose unmarked work,
+or check with the branch's session before taking marked work.
+
 Work that is recorded but not near-term sits in `backlog` until it is planned;
 parked statuses such as `backlog` and `draft` stay in backlog views even when
 they have open blockers. A parked parent parks its unstarted children too

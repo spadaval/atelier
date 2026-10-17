@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::{self, git};
@@ -105,8 +105,24 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         _ => Ok(None),
     };
     let overview = atelier_app::mission_overview::mission_overview(&index, policy.as_ref(), false)?;
-    let mut page = render_status_page(&view, &overview, &diagnostics, &checkout, &owner, context);
-    let branches = git::branch_lines(repo, &layout.canonical_dir(), &index)
+    let branches = git::branch_summaries(repo, &layout.canonical_dir(), &index);
+    // Unreadable branches without a known owner are already reported in the
+    // branch section below, so only the marks are used here.
+    let in_flight = branches
+        .as_ref()
+        .map(|summaries| summaries.in_flight().marks)
+        .unwrap_or_default();
+    let mut page = render_status_page(
+        &view,
+        &overview,
+        &diagnostics,
+        &checkout,
+        &owner,
+        &in_flight,
+        context,
+    );
+    let branches = branches
+        .map(|summaries| summaries.lines())
         .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
     if !branches.is_empty() {
         page.push_str("\n\n");
@@ -353,6 +369,7 @@ fn render_status_page(
     diagnostics: &[String],
     checkout: &Checkout,
     owner: &Result<Option<Owner>>,
+    in_flight: &BTreeMap<String, String>,
     context: RenderContext,
 ) -> String {
     let current_work = if view.work.active.is_empty() {
@@ -373,6 +390,7 @@ fn render_status_page(
     } else {
         IssueListPanel::from_work_rows("Ready Work", &view.work.ready)
             .limit(READY_SHOWN)
+            .marks(in_flight)
             .render(context)
     };
 
