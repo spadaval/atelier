@@ -127,13 +127,13 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
     assert!(stdout.contains("\n  records: "), "{stdout}");
     assert!(
         stderr.contains(&format!(
-            "Check failed with 1 finding(s). Next: fix each finding above, then run `atelier check {child}`"
+            "Check failed with 1 finding. Next: fix each finding above, then run `atelier check {child}`"
         )),
         "{stderr}"
     );
     let (success, stdout, stderr) = render(&["check"]);
     assert!(
-        !success && stdout.contains("Check found 1 finding(s):"),
+        !success && stdout.contains("Check found 1 finding:"),
         "{stdout}"
     );
 

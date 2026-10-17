@@ -789,7 +789,8 @@ fn ensure_no_bundle_recovery_artifacts(state_dir: &Path) -> Result<()> {
     artifacts.sort();
     if !artifacts.is_empty() {
         bail!(
-            "bundle_recovery_required: leftover bundle recovery artifact(s): {}. Do not retry the bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            "bundle_recovery_required: {}: {}. Do not retry the bundle. Next: run `atelier check`, inspect the live records and each named real directory, then remove the artifact before applying a different bundle",
+            crate::human_output::count_noun(artifacts.len(), "leftover bundle recovery artifact"),
             artifacts
                 .iter()
                 .map(|path| path.display().to_string())

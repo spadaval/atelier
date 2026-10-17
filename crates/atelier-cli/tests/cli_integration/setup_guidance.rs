@@ -298,7 +298,7 @@ fn test_prune_protects_current_base_and_unowned_git_branches() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("no terminal owner record association"),
+        stdout.contains("no closed owner record association"),
         "{stdout}"
     );
     assert!(
@@ -354,7 +354,7 @@ fn test_prune_protects_active_and_recent_terminal_owner_branches() {
     assert!(
         stdout.contains(&format!("protected branch {recent_branch}"))
             && stdout.contains(&format!(
-                "terminal owner {recent_id} is within retention window"
+                "closed owner {recent_id} is within retention window"
             )),
         "{stdout}"
     );
@@ -764,7 +764,7 @@ fn test_prune_uses_configured_canonical_retention_days_by_default() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
     assert!(stdout.contains("Records\n-------"), "{stdout}");
-    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 7 days"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
 }
@@ -787,12 +787,12 @@ fn test_prune_retention_flag_overrides_project_config_for_canonical_records() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
     assert!(stdout.contains("Records\n-------"), "{stdout}");
-    assert!(stdout.contains("Retention: 30 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 30 days"), "{stdout}");
     assert!(stdout.contains("Candidates: none"), "{stdout}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "7"]);
     assert!(success, "prune override dry-run failed: {stderr}");
-    assert!(stdout.contains("Retention: 7 day(s)"), "{stdout}");
+    assert!(stdout.contains("Retention: 7 days"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
 }
@@ -980,7 +980,7 @@ fn test_prune_rechecks_late_recorded_owner_association() {
     );
     assert!(stdout.contains("has no upstream"), "{stdout}");
     assert!(
-        !stdout.contains("no terminal owner record association"),
+        !stdout.contains("no closed owner record association"),
         "{stdout}"
     );
 }
@@ -1211,7 +1211,7 @@ fn test_prune_protects_old_evidence_attached_to_retained_issue() {
 }
 
 #[test]
-fn test_top_level_help_only_shows_core_commands() {
+fn test_root_help_lists_every_command_and_lifecycle_common_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
@@ -1226,115 +1226,52 @@ fn test_top_level_help_only_shows_core_commands() {
     }
     assert!(!stdout.contains("Inspect canonical repo"));
 
-    for heading in [
-        "Setup:",
-        "Orientation:",
-        "Issues:",
-        "Planning:",
-        "Records:",
-        "Maintenance:",
-        "Common commands:",
-        "Options:",
-    ] {
-        assert!(stdout.contains(heading), "missing help heading {heading}");
-    }
-
-    for command in [
-        "init", "status", "work", "issue", "start", "bundle", "evidence", "check",
-    ] {
-        assert!(stdout.contains(command), "missing core command {command}");
-    }
-    assert!(!stdout.contains("Search issues, relationships, and activity"));
-    for command in ["status", "land", "setup"] {
-        assert!(
-            stdout
-                .lines()
-                .any(|line| line.trim_start().starts_with(&format!("{command} "))),
-            "missing session command {command}: {stdout}"
-        );
-    }
-    // The deprecated prime alias is not presented as a command.
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("prime ")),
-        "root help should not present prime:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("dep ")),
-        "root help should not expose dep:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("note ")),
-        "root help should not expose generic note:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("link ")),
-        "root help should not expose generic link:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("integrations ")),
-        "root help should not expose integrations:\n{stdout}"
-    );
-    assert!(
-        !stdout
-            .lines()
-            .any(|line| line.trim_start().starts_with("rebuild ")),
-        "root help should not present rebuild as a normal operator command:\n{stdout}"
-    );
-    for hidden in ["branch", "maintenance", "doctor"] {
-        assert!(
-            !stdout.lines().any(|line| {
-                let command = line.trim_start();
-                command == hidden || command.starts_with(&format!("{hidden} "))
-            }),
-            "root help should not expose hidden admin command {hidden}:\n{stdout}"
-        );
-    }
-
-    for common in [
-        "atelier work ready",
-        "atelier work blocked",
-        "atelier work missions",
-        "atelier issue list",
-        "atelier work mission <mission-id>",
-        "atelier issue show <id>",
-        "atelier issue create \"...\" --issue-type mission",
-        "atelier issue show <mission-id>",
-        "atelier bundle preview <file>",
-        "atelier bundle apply <file> --yes",
-        "atelier start <issue-id>",
-        "atelier issue transition <issue-id>",
-        "atelier check",
-        "atelier check <issue-id>",
-    ] {
-        assert!(
-            stdout.contains(common),
-            "missing common command example {common}"
-        );
-    }
-    let common_commands = stdout
-        .split("Common commands:")
+    let commands: Vec<&str> = stdout
+        .split("\nCommands:\n")
         .nth(1)
-        .and_then(|section| section.split("Options:").next())
-        .unwrap_or("");
-    assert!(
-        !common_commands.contains("atelier doctor"),
-        "common commands should not teach doctor as routine work:\n{stdout}"
+        .and_then(|section| section.split("\n\n").next())
+        .expect("root help lists its commands")
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    assert_eq!(
+        commands,
+        [
+            "init", "setup", "status", "work", "issue", "start", "evidence", "review", "land",
+            "merge", "bundle", "check", "doctor", "prune", "migrate", "help",
+        ],
+        "{stdout}"
     );
-    assert!(!stdout.contains("workflow validate"));
-
+    // Each description is the command's own about, not a second copy.
     assert!(
-        !stdout.contains("\nCommands:\n"),
-        "top-level help should use categorized commands, not a flat command dump:\n{stdout}"
+        stdout.contains("  init      Initialize atelier in the current directory\n"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("\n\n\n"), "{stdout}");
+
+    let common_commands: Vec<&str> = stdout
+        .split("Common commands:\n")
+        .nth(1)
+        .expect("root help has common commands")
+        .lines()
+        .map(str::trim)
+        .take_while(|line| !line.is_empty())
+        .collect();
+    assert_eq!(
+        common_commands,
+        [
+            "atelier status",
+            "atelier work ready",
+            "atelier work mission <id>",
+            "atelier issue show <id>",
+            "atelier start <id>",
+            "atelier evidence record --target issue/<id> --kind test -- <command>",
+            "atelier issue transition <id> close --reason \"...\"",
+            "atelier review approve <id> --identity <name> \"...\"",
+            "atelier land",
+            "atelier merge <id> --check",
+        ],
+        "{stdout}"
     );
 
     for removed in [
@@ -1388,13 +1325,22 @@ fn test_mission_overview_help_distinguishes_plural_and_scoped_views() {
     );
 
     init_atelier(dir.path());
-    let (success, dashboards, stderr) = run_atelier(dir.path(), &["work"]);
-    assert!(success, "bare work guidance failed: {stderr}");
-    assert!(
-        dashboards.contains("missions Flat mission summaries with complete scope counts")
-            && dashboards.contains("Compare missions: atelier work missions")
-            && dashboards.contains("mission  Live mission orchestration dashboard"),
-        "{dashboards}"
+    let (success, bare_work, stderr) = run_atelier(dir.path(), &["work"]);
+    assert!(success, "bare work failed: {stderr}");
+    assert_eq!(bare_work, work_help, "bare work prints work help");
+    for view in ["active ", "all ", "missions "] {
+        assert!(
+            bare_work
+                .lines()
+                .any(|line| line.trim_start().starts_with(view)),
+            "bare work omits {view}:\n{bare_work}"
+        );
+    }
+    let (success, names, stderr) = run_atelier(dir.path(), &["work", "--quiet"]);
+    assert!(success, "quiet bare work failed: {stderr}");
+    assert_eq!(
+        names,
+        "mission\nparent\nready\nhuman\nblocked\nactive\nall\nmissions\n"
     );
 }
 
@@ -1590,7 +1536,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Ready Work\n----------\n"), "{stdout}");
     assert!(stdout.contains("Ready item"), "{stdout}");
     assert!(stdout.contains("Current Work\n------------\n"));
-    assert!(stdout.contains("Current missions:"));
+    // No mission is open or closed, so no count line names them.
+    assert!(!stdout.contains("Current missions:"), "{stdout}");
     assert!(stdout.contains("\nNext\n----\n"));
     assert!(stdout.contains("Choose ready work"));
     let ready_id = issue_out
@@ -1685,13 +1632,9 @@ fn test_hints_name_real_ids_instead_of_placeholders() {
             "{status}"
         );
     }
-    assert!(
-        views[2]
-            .1
-            .contains(&format!("atelier work mission {mission}")),
-        "{}",
-        views[2].1
-    );
+    // Bare `work` is its generated subcommand help (atelier-od8b), so it
+    // carries no hint to fill in.
+    assert!(views[2].1.contains("Commands:"), "{}", views[2].1);
 
     let (success, list, stderr) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success, "{stderr}");
@@ -3058,7 +3001,8 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
         "issue show",
         "issue list",
         started.as_str(),
-        "work",
+        // Bare `work` prints its help; the work views end in a footer.
+        "work mission",
         "status",
         "evidence list",
         "prune",

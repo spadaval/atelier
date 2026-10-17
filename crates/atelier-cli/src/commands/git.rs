@@ -307,14 +307,20 @@ pub(crate) fn check_base_commits(
                 first.display(),
                 match other.len() {
                     1 => String::new(),
-                    count => format!(" and {} other path(s)", count - 1),
+                    count => format!(
+                        " and {}",
+                        crate::human_output::count_noun(count - 1, "other path")
+                    ),
                 },
             );
         }
     }
     Ok(match checked {
         0 => "Base commits: none unpushed outside recorded review.".to_owned(),
-        count => format!("Base commits: {count} unpushed record-only commit(s) outside review."),
+        count => format!(
+            "Base commits: {} outside review.",
+            crate::human_output::count_noun(count, "unpushed record-only commit")
+        ),
     })
 }
 
@@ -477,7 +483,8 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch> @ <commit>: <item line> | <merge state> | N active`.
+    /// `<branch> @ <commit>: <item line> | <merge state> | N active`, with
+    /// no active cue when nothing is active.
     fn line(&self, base: &str) -> String {
         let mut line =
             crate::human_output::ItemLine::new(&self.id, &self.status, &self.priority, &self.title)
@@ -487,11 +494,14 @@ impl BranchOwner {
             Some(false) => line = line.cue(format!("not merged into {base}")),
             None => {}
         }
+        if self.active > 0 {
+            line = line.cue(format!("{} active", self.active));
+        }
         format!(
             "{} @ {}: {}",
             self.branch,
             crate::human_output::short_commit(&self.commit),
-            line.cue(format!("{} active", self.active)).text()
+            line.text()
         )
     }
 }

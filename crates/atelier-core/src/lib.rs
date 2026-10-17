@@ -747,9 +747,36 @@ pub struct RecordLink {
     pub created_at: DateTime<Utc>,
 }
 
+/// A count as a plain phrase, count first, with a real plural: `1 blocker`,
+/// `2 blockers`. Every message that states a count phrases it this way, so
+/// none hedges the plural in parentheses. The CLI re-exports it from
+/// `human_output`.
+pub fn count_noun(count: usize, noun: &str) -> String {
+    format!("{count} {noun}{}", plural_suffix(count))
+}
+
+/// `s` unless `count` is 1, for a noun whose plural adds `s`.
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counts_read_count_first_with_a_real_plural() {
+        assert_eq!(count_noun(0, "blocker"), "0 blockers");
+        assert_eq!(count_noun(1, "blocker"), "1 blocker");
+        assert_eq!(
+            count_noun(2, "older evidence record"),
+            "2 older evidence records"
+        );
+    }
 
     #[test]
     fn every_evidence_result_is_listed_and_round_trips() {

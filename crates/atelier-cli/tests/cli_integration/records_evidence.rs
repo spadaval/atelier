@@ -908,7 +908,7 @@ fn test_mission_unlink_removes_added_work() {
         run_atelier(dir.path(), &["issue", "show", mission_id, "--full"]);
     assert!(success, "mission status after unlink failed: {stderr}");
     assert!(!show_out.contains("Accidental work"));
-    assert!(show_out.contains("Scope         : 0 scoped issues"));
+    assert!(show_out.contains("Scope : 0 issues\n"), "{show_out}");
 
     let mission_markdown = read_canonical_record(dir.path(), "issues", mission_id);
     assert!(!mission_markdown.contains(&format!(
@@ -1647,9 +1647,7 @@ fn test_evidence_list_bounds_default_output() {
         !evidence_list.contains(&oldest_by_timestamp),
         "oldest timestamp should be hidden by default limit:\n{evidence_list}"
     );
-    assert!(
-        evidence_list.contains("Omitted: 1 older evidence record(s) hidden by default limit 20")
-    );
+    assert!(evidence_list.contains("Omitted: 1 older evidence record hidden by default limit 20"));
     assert!(evidence_list.contains("Filter by result: atelier evidence list --result <result>"));
     assert!(evidence_list.contains("List matching IDs: atelier --quiet evidence list"));
 

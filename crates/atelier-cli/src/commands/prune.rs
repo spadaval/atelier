@@ -188,11 +188,11 @@ fn prune_git_artifacts(
                         Some(format!("owner {} has active workflow state", issue.id))
                     } else if let Some(candidate) = owner_candidates.get(&issue.id) {
                         candidate.protection.as_ref().map(|reason| {
-                            format!("terminal owner {} is protected: {reason}", issue.id)
+                            format!("closed owner {} is protected: {reason}", issue.id)
                         })
                     } else {
                         Some(format!(
-                            "terminal owner {} is within retention window",
+                            "closed owner {} is within retention window",
                             issue.id
                         ))
                     };
@@ -267,7 +267,7 @@ fn prune_git_artifacts(
         } else if let Some(owners) = branch_owners.get(branch) {
             git_owner_protection(&tracker.repo_root, branch, owners)?
         } else {
-            Some("no terminal owner record association".to_string())
+            Some("no closed owner record association".to_string())
         };
         summary.candidates.push(GitCandidate {
             class: "branch",
@@ -312,7 +312,7 @@ fn prune_git_artifacts(
                     }
                 })
             } else {
-                Some("no terminal owner record association".to_string())
+                Some("no closed owner record association".to_string())
             }
         } else {
             Some("detached worktree has no safely removable owner branch".to_string())
@@ -911,7 +911,7 @@ fn issue_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonica
         let latest_at = issue.closed_at.unwrap_or(issue.updated_at);
         let protection = active_descendants
             .get(&issue.id)
-            .map(|descendant| format!("terminal record has active descendant {descendant}"))
+            .map(|descendant| format!("closed record has active descendant {descendant}"))
             .or_else(|| kept_content(&tracker.index, &issue))
             .or_else(|| {
                 crossing_link_reason(
@@ -1279,7 +1279,10 @@ fn print_git(summary: &GitPruneSummary, apply: bool) {
 fn print_canonical(summary: &CanonicalPruneSummary) {
     println!("Records");
     println!("-------");
-    println!("Retention: {} day(s)", summary.retention_days);
+    println!(
+        "Retention: {}",
+        crate::human_output::count_noun(summary.retention_days as usize, "day")
+    );
     println!("Cutoff:    before {}", summary.cutoff);
 
     let total_candidates = summary.issues.len() + summary.evidence.len() + summary.reviews.len();

@@ -9,9 +9,9 @@ use atelier_core::Issue;
 
 use crate::commands::git::InFlight;
 use crate::human_output::{
-    last_closed_mission, print_page, render_footer_section, render_labeled_lines,
-    render_lines_section, render_metadata, render_unassigned_groups, FooterAction, IssueListPanel,
-    IssueListRow, ItemLine, RenderContext, TextStyle,
+    count_noun, last_closed_mission, print_page, render_footer_section, render_labeled_lines,
+    render_lines_section, render_metadata, render_unassigned_groups, scope_counts, FooterAction,
+    IssueListPanel, IssueListRow, ItemLine, RenderContext, TextStyle,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -50,55 +50,6 @@ impl MissionDashboardOptions {
             DashboardFilter::Summary
         }
     }
-}
-
-pub fn dashboards(index: &RecordIndex, quiet: bool) -> Result<()> {
-    if quiet {
-        println!("ready");
-        println!("human");
-        println!("blocked");
-        println!("active");
-        println!("all");
-        println!("missions");
-        println!("mission");
-        println!("parent");
-        return Ok(());
-    }
-
-    let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let overview = mission_overview(index, policy.as_ref(), false)?;
-    let mut next = vec![
-        FooterAction::new("Browse ready work", "atelier work ready"),
-        FooterAction::new("Triage blockers", "atelier work blocked"),
-        FooterAction::new("Compare missions", "atelier work missions"),
-    ];
-    // The mission `work missions` lists first; with none open there is no
-    // dashboard to point at.
-    if let Some(top) = overview.missions.first() {
-        next.push(FooterAction::new(
-            "Open the top mission's dashboard",
-            format!("atelier work mission {}", top.issue.id),
-        ));
-    }
-    print_page(
-        "Atelier Work",
-        [
-            render_lines_section(
-                "Dashboards",
-                [
-                    "ready    Small top-level executable work picker",
-                    "human    Ready work only the human can do (needs-human)",
-                    "blocked  Repo-wide blocker triage",
-                    "missions Flat mission summaries with complete scope counts",
-                    "mission  Live mission orchestration dashboard",
-                    "parent   A parent issue and its children",
-                ],
-            ),
-            render_footer_section(RenderContext::for_stdout(), next),
-        ],
-        RenderContext::for_stdout(),
-    );
-    Ok(())
 }
 
 pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
@@ -171,19 +122,6 @@ fn in_flight_marks(index: &RecordIndex) -> Result<InFlight> {
     )
 }
 
-/// The needs-human and context counts for summaries, shown only when there
-/// are any, so every summary still adds up to its scope.
-fn human_count(counts: &atelier_app::issue_read::ObjectiveBucketTotals) -> String {
-    let mut extra = String::new();
-    if counts.human > 0 {
-        extra.push_str(&format!(" {} need a human,", counts.human));
-    }
-    if counts.context > 0 {
-        extra.push_str(&format!(" {} context,", counts.context));
-    }
-    extra
-}
-
 fn bucket_needs_execution_gates(bucket: &str) -> bool {
     matches!(bucket, "ready" | "human" | "all")
 }
@@ -253,27 +191,24 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             .state(Some(&mission.status_category), None)
             .render_wrapped(context, ""),
         );
-        let counts = &mission.totals;
+        let open_blockers = mission.open_blockers.len();
         for (label, value) in [
             (
                 "Scope",
-                format!(
-                    "{} issues: {} active, {} ready,{} {} blocked, {} done, {} backlog",
-                    mission.scope_ids.len(),
-                    counts.active,
-                    counts.ready,
-                    human_count(counts),
-                    counts.blocked,
-                    counts.done,
-                    counts.backlog
-                ),
+                Some(scope_counts(mission.scope_ids.len(), &mission.totals)),
             ),
-            ("Open blockers", mission.open_blockers.len().to_string()),
+            (
+                "Open blockers",
+                (open_blockers > 0).then(|| open_blockers.to_string()),
+            ),
             (
                 "More info",
-                format!("atelier work mission {}", mission.issue.id),
+                Some(format!("atelier work mission {}", mission.issue.id)),
             ),
-        ] {
+        ]
+        .into_iter()
+        .filter_map(|(label, value)| Some((label, value?)))
+        {
             lines.extend(render_labeled_lines(
                 context,
                 "  ",
@@ -297,8 +232,8 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
     }
     if overview.missions.len() > 20 {
         lines.push(format!(
-            "{} more missions omitted",
-            overview.missions.len() - 20
+            "{} omitted",
+            count_noun(overview.missions.len() - 20, "more mission")
         ));
     }
     if overview.unassigned_nonterminal > 0 {
@@ -307,7 +242,7 @@ pub fn missions(index: &RecordIndex, include_done: bool, quiet: bool) -> Result<
             context,
             "",
             "Unassigned",
-            &format!("{} nonterminal issues", overview.unassigned_nonterminal),
+            &count_noun(overview.unassigned_nonterminal, "open issue"),
             TextStyle::Secondary,
         ));
         lines.extend(render_unassigned_groups(
@@ -452,33 +387,22 @@ fn scoped_dashboard(
         return Ok(());
     }
     let counts = &work.totals;
-    let mut metadata = vec![(
-        "Work",
-        format!(
-            "active {}, ready {},{} blocked {}, done {}, backlog {}",
-            counts.active,
-            counts.ready,
-            human_count(counts),
-            counts.blocked,
-            counts.done,
-            counts.backlog
-        ),
-    )];
+    let mut metadata = vec![("Work", scope_counts(work.size, counts))];
     // The title is the item line, so no metadata repeats its status.
     let category = policy_category(&issue.status)?;
     let title = if let Some(proof_gaps) = proof_gaps {
-        metadata.extend([
-            (
-                "Mission",
-                atelier_app::objective_graph::containing_mission(index, &id)?
-                    .unwrap_or_else(|| "(none)".to_string()),
-            ),
-            ("Proof gaps", proof_gaps.to_string()),
-            (
-                "Transition readiness",
-                transition_readiness(index, &id, "start")?,
-            ),
-        ]);
+        metadata.push((
+            "Mission",
+            atelier_app::objective_graph::containing_mission(index, &id)?
+                .unwrap_or_else(|| "(none)".to_string()),
+        ));
+        if proof_gaps > 0 {
+            metadata.push(("Proof gaps", proof_gaps.to_string()));
+        }
+        metadata.push((
+            "Transition readiness",
+            transition_readiness(index, &id, "start")?,
+        ));
         ItemLine::new(&id, &issue.status, &issue.priority, &issue.title)
             .issue_type(&issue.issue_type)
             .state(category.as_deref(), None)
@@ -521,8 +445,12 @@ impl DashboardFilter {
     }
 }
 
+/// An objective's work: its rows, which for a parent include the parent
+/// itself, and the counts of its scope, which never do, so `work parent` and
+/// `issue show` give one parent the same size.
 struct ScopedWork {
     rows: Vec<(Issue, ClassifiedWork)>,
+    size: usize,
     totals: ObjectiveBucketTotals,
 }
 
@@ -538,9 +466,15 @@ impl ScopedWork {
         let policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
         let mut rows = Vec::new();
         let mut totals = ObjectiveBucketTotals::default();
+        let mut size = 0;
         for issue in issues {
             let classified =
                 atelier_app::work_classification::classify_issue(index, policy.as_ref(), &issue)?;
+            if issue.id == objective.id {
+                rows.push((issue, classified));
+                continue;
+            }
+            size += 1;
             match classified.classification {
                 WorkClassification::Active => totals.active += 1,
                 WorkClassification::Ready => totals.ready += 1,
@@ -552,7 +486,7 @@ impl ScopedWork {
             }
             rows.push((issue, classified));
         }
-        Ok(Self { rows, totals })
+        Ok(Self { rows, size, totals })
     }
 
     fn panels(&self, filter: DashboardFilter) -> Vec<IssueListPanel> {
@@ -679,7 +613,7 @@ fn transition_readiness(
         Err(error) => {
             let message = error.to_string();
             if message.contains("has no configured transitions") {
-                return Ok("terminal".to_string());
+                return Ok("closed".to_string());
             }
             return Ok(format!("not available: {message}"));
         }

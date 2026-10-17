@@ -140,8 +140,8 @@ pub fn epics(to: &str, apply: bool) -> Result<()> {
         fs::write(&policy_path, new_policy)?;
     }
     println!(
-        "Migrated {} epic record(s). Run atelier check, review the Done when sections, and commit.",
-        plans.len()
+        "Migrated {}. Run atelier check, review the Done when sections, and commit.",
+        crate::human_output::count_noun(plans.len(), "epic record")
     );
     Ok(())
 }
