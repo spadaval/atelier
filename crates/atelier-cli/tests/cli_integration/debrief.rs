@@ -255,16 +255,57 @@ fn debrief_markdown_shows_criteria_reports_decisions_deviations_and_follow_ups()
     );
     assert!(page.contains("Started       : "), "{page}");
     assert!(
-        page.contains("pipe-safe ✓ proven Redirected output has no styling. | atelier-"),
+        page.contains("pipe-safe ✓ proven Redirected output has no styling. | by atelier-"),
         "{page}"
     );
     assert!(
         page.contains("quiet-tokens unproven Quiet output prints one token."),
         "{page}"
     );
-    let items = page.split("Items\n-----\n").nth(1).expect(&page);
-    assert!(items.contains(&format!("{} task ✓ done medium Shipped\n  Outcome: Shipped the parser.\n  Deviations: Used a manual parser.\n", m.shipped)), "{page}");
-    assert!(items.contains("  Open items: None."), "{page}");
+    let section = |title: &str| {
+        let heading = format!("{title}\n{}\n", "-".repeat(title.len()));
+        page.split(&heading)
+            .nth(1)
+            .unwrap_or_else(|| panic!("no {title} section: {page}"))
+            .split("\n\n")
+            .next()
+            .unwrap()
+            .to_string()
+    };
+    let asks = section("Needs Your Review");
+    assert!(
+        asks.contains("⚠ 1 criterion without passing proof: quiet-tokens"),
+        "{page}"
+    );
+    let work = section("Work");
+    assert!(
+        work.contains(&format!(
+            "{} task ✓ done Shipped | pipe-safe\n  Outcome: Shipped the parser.\n",
+            m.shipped
+        )),
+        "{page}"
+    );
+    assert!(work.contains("  Changed: Used a manual parser."), "{page}");
+    assert!(
+        work.contains("  Decided: one-way: Parse by hand | because No dependency"),
+        "{page}"
+    );
+    assert!(
+        work.contains("  Decided: Name it plainly | because Short"),
+        "{page}"
+    );
+    assert!(
+        work.contains("  Review: Not approved; 1 finding: 1 deferred."),
+        "{page}"
+    );
+    assert!(
+        work.contains(&format!("  Left open: {} task", m.follow_up)),
+        "{page}"
+    );
+    assert!(
+        !work.contains("Surprised by"),
+        "a part that says None is left out: {page}"
+    );
     let one_way = page
         .find("One-way Decisions\n-----------------\n")
         .expect(&page);
@@ -272,57 +313,32 @@ fn debrief_markdown_shows_criteria_reports_decisions_deviations_and_follow_ups()
         .find("Reversible Decisions\n--------------------\n")
         .expect(&page);
     assert!(one_way < reversible, "one-way first: {page}");
-    assert!(
-        page[one_way..reversible].contains("Parse by hand | because No dependency"),
-        "{page}"
-    );
-    assert!(
-        page[reversible..].contains("Name it plainly | because Short"),
-        "{page}"
-    );
-    let deviations = page.split("Deviations\n----------\n").nth(1).expect(&page);
+    let open = section("Open Work");
     for expected in [
-        format!("scope added {} after the start", m.late),
-        format!(
-            "scope dropped {} | Not needed after the parser change.",
-            m.dropped
-        ),
-        format!(
-            "on {} to {} | Edge case left for later",
-            m.shipped, m.follow_up
-        ),
-        format!("on {} fail | Open item's check fails", m.open),
-        format!("on {} | Typo fix only", m.dropped),
-        format!("reopened {}", m.reopened),
+        format!("{} task in_progress Reopened | Reopened on", m.reopened),
+        format!("{} task todo Still open | Newest proof atelier-", m.open),
+        "is fail: Open item's check fails".to_string(),
+        format!("{} task todo Added late | added after the start", m.late),
+        format!("{} task todo Follow up the edge case | from {}", m.follow_up, m.shipped),
+        format!("dropped {} task ✓ superseded Dropped | Not needed after the parser change. | Review waived as trivial: Typo fix only", m.dropped),
     ] {
-        assert!(
-            deviations.contains(&expected),
-            "missing `{expected}`: {page}"
-        );
+        assert!(open.contains(&expected), "missing `{expected}`: {page}");
     }
     assert!(
-        !deviations.contains(&format!("scope added {} ", m.shipped)),
-        "planned scope is not a deviation: {page}"
+        !page.contains(&format!("{} task todo Shipped", m.shipped)),
+        "{page}"
     );
-    let reviews = page
-        .split("Mission Reviews\n---------------\n")
-        .nth(1)
-        .expect(&page);
+    let reviews = section("Mission Reviews");
     assert!(
         reviews.starts_with("approval atelier-")
             && reviews.contains("by Human at")
             && reviews.contains("| Plan approved"),
         "{page}"
     );
-    let follow_ups = page.split("Follow-ups\n----------\n").nth(1).expect(&page);
-    for id in [&m.open, &m.reopened, &m.late, &m.follow_up] {
-        assert!(follow_ups.contains(id.as_str()), "follow-up {id}: {page}");
-    }
-    assert!(!follow_ups.contains(&format!("{} ", m.shipped)), "{page}");
     let quiet = ok(dir.path(), &["debrief", &m.id, "-q"]);
     assert_eq!(
         quiet.trim(),
-        "criteria=2 proven=1 failing=0 unproven=1 items=5 decisions=2 deviations=6 follow_ups=4"
+        "criteria=2 proven=1 failing=0 unproven=1 items=6 decisions=2 deviations=5 follow_ups=1"
     );
 }
 
@@ -358,15 +374,60 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     );
     assert!(!html.contains("<safe>"));
 
-    // Every item, criterion mark and decision in the Markdown is on the page.
-    let ids = markdown
-        .split(|c: char| c.is_whitespace() || c == '|' || c == ',')
-        .filter(|word| word.starts_with("atelier-") && word.len() == "atelier-xxxx".len())
+    // Every item in the Markdown's work, open work and asks is on the page,
+    // named by its title with its ID in the popover.
+    let items = ["Needs Your Review", "Work", "Open Work"]
+        .iter()
+        .filter_map(|title| {
+            markdown
+                .split(&format!("{title}\n{}\n", "-".repeat(title.len())))
+                .nth(1)
+        })
+        .flat_map(|rest| rest.split("\n\n").next().unwrap_or_default().lines())
+        .flat_map(|line| {
+            let words = line.split_whitespace().collect::<Vec<_>>();
+            words
+                .windows(2)
+                .filter(|pair| {
+                    pair[0].starts_with("atelier-")
+                        && ["task", "feature", "bug", "decision"].contains(&pair[1])
+                })
+                .map(|pair| pair[0].to_string())
+                .collect::<Vec<_>>()
+        })
         .collect::<std::collections::BTreeSet<_>>();
-    assert!(ids.len() >= 8, "{ids:?}");
-    for id in ids {
-        assert!(html.contains(id), "page lacks {id}");
+    assert!(items.len() >= 5, "{items:?}");
+    for id in &items {
+        assert!(
+            html.contains(&format!(" · {id}</span>")) || html.contains(&format!("id=\"{id}\"")),
+            "page lacks {id}"
+        );
     }
+    // Outside popover references, the page names no record by ID.
+    let mut chunks = html.split("<span class=\"ref\" tabindex=\"0\">");
+    let mut outside = chunks.next().unwrap_or_default().to_string();
+    for chunk in chunks {
+        let label_end = chunk.find("<span class=\"pop\">").unwrap_or(0);
+        let label = &chunk[..label_end];
+        let after = chunk
+            .split_once("</span></span></span>")
+            .map_or("", |(_, after)| after);
+        // A reference's label is a title or the start of a summary, never an ID.
+        outside.push_str(label);
+        outside.push_str(after);
+    }
+    let text = outside
+        .split('<')
+        .filter_map(|part| part.split_once('>').map(|(_, text)| text))
+        .collect::<String>();
+    assert!(
+        !text.contains("atelier-"),
+        "no bare IDs in the page text: {text}"
+    );
+    assert!(
+        !html.contains(&format!(">{}<", m.id)),
+        "the mission's ID is not shown as text"
+    );
     // Each criterion row's slug and mark, read from the Markdown.
     let criteria = markdown
         .split("Success Criteria\n----------------\n")
@@ -387,18 +448,19 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     assert_eq!(criteria.len(), 2, "{markdown}");
     for (slug, mark) in criteria {
         let row = html
-            .split(&format!("<td class=\"id\">{slug}</td>"))
+            .split(&format!("<span class=\"s\">{slug}</span>"))
             .nth(1)
             .expect(&slug);
-        let badge = row.split("</span>").next().unwrap();
+        let word = row.split("</span>").next().unwrap().to_lowercase();
         assert!(
-            badge.ends_with(&format!(">{mark}")),
+            word.ends_with(&mark),
             "{slug} is {mark} in the Markdown: {row}"
         );
     }
-    // Each decision note's choice and reason, read from the Markdown.
+    // Each decision in the Markdown's decision log, with its reason.
     let notes = markdown
         .lines()
+        .filter(|line| line.starts_with("atelier-"))
         .filter_map(|line| line.split_once(" | because "))
         .map(|(head, reason)| {
             let choice = head.splitn(3, ' ').nth(2).unwrap().to_string();
@@ -407,17 +469,21 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
         })
         .collect::<Vec<_>>();
     assert_eq!(notes.len(), 2, "{markdown}");
-    for (choice, reason) in notes {
-        assert!(html.contains(&choice) && html.contains(&reason), "{choice}");
+    let log = &html[html.find("id=\"decisions\"").expect(&html)..];
+    for (choice, reason) in &notes {
+        assert!(
+            log.contains(choice.as_str()) && log.contains(reason.as_str()),
+            "{choice}"
+        );
     }
-    let one_way = html.find(">One-way Decisions</th>").expect(&html);
-    let reversible = html.find(">Reversible Decisions</th>").expect(&html);
-    assert!(one_way < reversible && html[one_way..reversible].contains("Parse by hand"));
+    let one_way = log.find("one-way</span>Parse by hand").expect(log);
+    let reversible = log.find("Name it plainly").expect(log);
+    assert!(one_way < reversible, "one-way first: {log}");
     for part in [
         "Shipped the parser.",
         "Used a manual parser.",
         "Not needed after the parser change.",
-        "Edge case left for later",
+        "Follow up the edge case",
         "Typo fix only",
         "Plan approved",
     ] {
@@ -485,13 +551,14 @@ fn started(dir: &Path) -> (String, String) {
     (mission, planned)
 }
 
-fn deviations(page: &str) -> &str {
-    page.split("Deviations\n----------\n")
-        .nth(1)
-        .unwrap()
-        .split("\n\n")
-        .next()
-        .unwrap()
+/// The Work and Open Work sections, where departures from the plan show.
+fn deviations(page: &str) -> String {
+    ["Work\n----\n", "Open Work\n---------\n"]
+        .iter()
+        .filter_map(|heading| page.split(heading).nth(1))
+        .map(|rest| rest.split("\n\n").next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -517,11 +584,11 @@ fn a_child_added_to_planned_scope_after_the_start_is_new_scope() {
     let page = ok(dir.path(), &["debrief", &mission]);
     let found = deviations(&page);
     assert!(
-        found.contains(&format!("scope added {child} after the start")),
+        found.contains(&format!("{child} task todo Child | added after the start")),
         "{page}"
     );
     assert!(
-        !found.contains(&format!("scope added {planned} ")),
+        !found.contains(&format!("{planned} task todo Planned | added after")),
         "{page}"
     );
 }
@@ -569,7 +636,10 @@ fn a_link_stored_on_the_mission_dates_from_the_mission_record() {
     ok(dir.path(), &["issue", "link", "-q", &planned, &mission]);
     commit_all(dir.path(), "move the link to the item");
     let page = ok(dir.path(), &["debrief", &mission]);
-    assert!(!deviations(&page).contains("scope added"), "{page}");
+    assert!(
+        !deviations(&page).contains("added after the start"),
+        "{page}"
+    );
 }
 
 #[test]
@@ -622,7 +692,7 @@ fn work_merged_from_a_branch_is_not_reported_reopened() {
     );
     let page = ok(dir.path(), &["debrief", &mission]);
     assert!(page.contains(&format!("{planned} task ✓ done")), "{page}");
-    assert!(!deviations(&page).contains("reopened"), "{page}");
+    assert!(!deviations(&page).contains("Reopened on"), "{page}");
 }
 
 #[test]
@@ -650,10 +720,7 @@ fn proof_before_later_code_is_aged_up_to_the_close() {
     commit_all(dir.path(), "code after the proof");
     let open = ok(dir.path(), &["debrief", &mission]);
     assert!(open.contains("| 1 code commit since"), "{open}");
-    assert!(
-        deviations(&open).contains("aged proof fast by atelier-") && !open.contains("before close"),
-        "{open}"
-    );
+    assert!(!open.contains("before close"), "{open}");
     ok(dir.path(), &["issue", "transition", &planned, "start"]);
     ok(
         dir.path(),
@@ -677,8 +744,410 @@ fn proof_before_later_code_is_aged_up_to_the_close() {
         closed.contains("| 1 code commit before close"),
         "code after the close is not counted: {closed}"
     );
+    assert!(!closed.contains("code commits before close"), "{closed}");
+}
+
+#[test]
+fn needs_your_review_lists_human_work_and_criteria_no_ask_already_names() {
+    let dir = tempdir().unwrap();
+    let (mission, _) = started(dir.path());
+    let human = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--label",
+            "needs-human",
+            "--body",
+            "## Goal\n\nShow `fast` to the human.\n\n## Done when\n\nD",
+            "Human check",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "link", "-q", &human, &mission]);
+    let decision = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "decision",
+            "--body",
+            "## Question\n\nWhich store?",
+            "Choose the store",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "link", "-q", &decision, &mission]);
+    commit_all(dir.path(), "asks");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let asks = page
+        .split("Needs Your Review\n-----------------\n")
+        .nth(1)
+        .unwrap()
+        .split("\n\n")
+        .next()
+        .unwrap();
     assert!(
-        deviations(&closed).contains("| 1 code commit after it before close"),
-        "{closed}"
+        asks.contains(&format!("⚠ {decision} Decide: Choose the store")),
+        "{page}"
+    );
+    assert!(asks.contains(&format!("⚠ {human} Human check")), "{page}");
+    assert!(
+        !asks.contains("without passing proof"),
+        "the human check already names fast: {page}"
+    );
+}
+
+#[test]
+fn a_plain_word_does_not_name_a_one_word_criterion() {
+    let dir = tempdir().unwrap();
+    let (mission, _) = started(dir.path());
+    let human = item(dir.path(), "Human check");
+    edit_canonical_issue(dir.path(), &human, |markdown| {
+        markdown.replace("labels: []", "labels:\n- \"needs-human\"")
+    });
+    edit_canonical_issue(dir.path(), &human, |markdown| {
+        markdown.replace(
+            "## Goal\n\nG",
+            "## Goal\n\nMake startup fast for the human.",
+        )
+    });
+    ok(dir.path(), &["issue", "link", "-q", &human, &mission]);
+    commit_all(dir.path(), "a plain word");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    assert!(page.contains("without passing proof: fast"), "{page}");
+}
+
+#[test]
+fn children_of_open_or_dropped_parents_keep_their_place() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let child = |title: &str| {
+        ok(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "-q",
+                "--parent",
+                &planned,
+                "--body",
+                "## Goal\n\nG\n\n## Done when\n\nD",
+                title,
+            ],
+        )
+        .trim()
+        .to_string()
+    };
+    let (shipped, dropped, waiting) = (
+        child("Shipped child"),
+        child("Dropped child"),
+        child("Waiting child"),
+    );
+    ok(dir.path(), &["issue", "transition", &shipped, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &shipped,
+            "close",
+            "--reason",
+            "Child shipped.",
+        ],
+    );
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &dropped,
+            "supersede",
+            "--reason",
+            "Not needed.",
+        ],
+    );
+    commit_all(dir.path(), "children");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let work = page
+        .split("Work\n----\n")
+        .nth(1)
+        .unwrap()
+        .split("\n\n")
+        .next()
+        .unwrap();
+    assert!(
+        work.contains(&format!(
+            "{shipped} task ✓ done Shipped child | under {planned}"
+        )),
+        "{page}"
+    );
+    assert!(work.contains("  Outcome: Child shipped."), "{page}");
+    let open = page
+        .split("Open Work\n---------\n")
+        .nth(1)
+        .unwrap()
+        .split("\n\n")
+        .next()
+        .unwrap();
+    assert!(
+        open.contains(&format!("  {waiting} task todo Waiting child")),
+        "{page}"
+    );
+    assert!(
+        open.contains(&format!(
+            "dropped {dropped} task ✓ superseded Dropped child | Not needed."
+        )),
+        "{page}"
+    );
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains(&format!("id=\"{shipped}\"")) && html.contains("part of Planned"),
+        "{html}"
+    );
+}
+
+#[test]
+fn planned_work_counts_only_what_was_linked_by_the_start() {
+    let dir = tempdir().unwrap();
+    let (mission, _) = started(dir.path());
+    let late = item(dir.path(), "Late");
+    ok(dir.path(), &["issue", "link", "-q", &late, &mission]);
+    commit_all(dir.path(), "late scope");
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains("<span>Planned work done</span><span>0 of 1</span>"),
+        "{html}"
+    );
+}
+
+#[test]
+fn follow_ups_come_from_a_finding_latest_disposition_and_from_the_mission() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &planned,
+            "close",
+            "--reason",
+            "Done.",
+        ],
+    );
+    commit_all(dir.path(), "close");
+    let finding = ok(
+        dir.path(),
+        &[
+            "review",
+            "finding",
+            &planned,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Later",
+        ],
+    )
+    .trim()
+    .to_string();
+    let abandoned = item(dir.path(), "Abandoned follow-up");
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &abandoned,
+            "Deferred",
+        ],
+    );
+    commit_all(dir.path(), "defer");
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let head = String::from_utf8(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Author",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            head.trim(),
+            "Fixed after all",
+        ],
+    );
+    let mission_finding = ok(
+        dir.path(),
+        &[
+            "review",
+            "finding",
+            &mission,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Plan gap",
+        ],
+    )
+    .trim()
+    .to_string();
+    let from_mission = item(dir.path(), "Close the plan gap");
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "disposition",
+            &mission_finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &from_mission,
+            "Deferred",
+        ],
+    );
+    commit_all(dir.path(), "dispositions");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    assert!(
+        !page.contains(&abandoned),
+        "a finding later fixed leaves no follow-up: {page}"
+    );
+    assert!(
+        page.contains("Review: Not approved; 1 finding: 1 fixed."),
+        "{page}"
+    );
+    assert!(
+        page.contains(&format!(
+            "{from_mission} task todo Close the plan gap | from review of the mission"
+        )),
+        "{page}"
+    );
+}
+
+#[test]
+fn a_failing_receipt_credits_no_work_with_a_criterion() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &planned,
+            "close",
+            "--reason",
+            "Done.",
+        ],
+    );
+    ok(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{planned}"),
+            "--kind",
+            "test",
+            "--result",
+            "fail",
+            "--criterion",
+            "fast=fail",
+            "Too slow",
+        ],
+    );
+    commit_all(dir.path(), "failing proof");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let row = page.lines().find(|line| line.starts_with("fast ")).unwrap();
+    assert!(
+        row.starts_with("fast ⚠ failing") && !row.contains("| by "),
+        "{row}"
+    );
+}
+
+#[test]
+fn record_mentions_are_named_by_what_they_say() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let finding = ok(
+        dir.path(),
+        &[
+            "review",
+            "finding",
+            &planned,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Children of open parents drop out of the page entirely",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    fs::write(
+        dir.path().join("r.md"),
+        format!("Done.\n\n### Deviations\nReview {finding} changed the walk."),
+    )
+    .unwrap();
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &planned,
+            "close",
+            "--reason-file",
+            dir.path().join("r.md").to_str().unwrap(),
+        ],
+    );
+    fs::remove_file(dir.path().join("r.md")).unwrap();
+    commit_all(dir.path(), "close");
+    let markdown = ok(dir.path(), &["debrief", &mission]);
+    assert!(
+        markdown.contains(&format!("Review {finding} changed the walk.")),
+        "{markdown}"
+    );
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains(
+            "Review <span class=\"ref\" tabindex=\"0\">“Children of open parents drop out…”"
+        ),
+        "{html}"
+    );
+    assert!(
+        html.contains(&format!("<span class=\"m\">{finding}</span>")),
+        "{html}"
     );
 }
