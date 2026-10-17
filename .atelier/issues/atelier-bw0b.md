@@ -24,9 +24,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T02:02:03.660972703+00:00"
+status: "done"
 title: "Record ADR 0022: status is the orientation view, and output is dense Markdown"
-updated_at: "2026-10-16T23:05:22.980263134+00:00"
+updated_at: "2026-10-17T02:02:03.660972703+00:00"
 ---
 
 ## Goal
@@ -44,3 +45,7 @@ The ADR, plus the repository guidance it depends on: AGENTS.md, CLAUDE.md (impor
 ## Context
 
 Discussed with Sumeet on 2026-10-16. Inputs: `crates/atelier-cli/src/commands/session.rs` (`prime_text`), `docs/product/human-cli-output.md`, `docs/product/sessions-and-hooks.md`, ADR 0006 and ADR 0019 (which removed `atelier man`), and a count of piped atelier commands in this project's Claude Code transcripts.
+
+## Close Reason
+
+ADR 0022 is accepted by Sumeet (2026-10-17) and merged, and AGENTS.md no longer names the finished rebuild mission as current.

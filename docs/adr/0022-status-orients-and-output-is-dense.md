@@ -2,7 +2,8 @@
 
 ## Status
 
-Proposed (2026-10-16, from discussion with Sumeet; atelier-bw0b).
+Accepted (2026-10-17, by Sumeet after reading the ADR; proposed 2026-10-16 from
+discussion with Sumeet; atelier-bw0b).
 
 Amends [ADR 0020](0020-agent-factory-targets-atelier-only.md) Decision 3:
 Agent Factory takes session context from `status`, not `prime`.
