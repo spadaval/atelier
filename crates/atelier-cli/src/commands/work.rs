@@ -744,28 +744,6 @@ fn transition_readiness(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_views_rendering_ready_work_pay_execution_gate_cost() {
-        assert!(bucket_needs_execution_gates("ready"));
-        assert!(bucket_needs_execution_gates("all"));
-        for bucket in ["blocked", "active", "backlog"] {
-            assert!(!bucket_needs_execution_gates(bucket), "{bucket}");
-        }
-    }
-}
-
-/// The status's category under the working policy, when there is one.
-fn policy_category(status: &str) -> Result<Option<String>> {
-    Ok(
-        crate::commands::issue_workflow::load_issue_workflow_policy()?
-            .and_then(|policy| policy.status_category(status).map(str::to_owned)),
-    )
-}
-
 /// `work decisions <mission>`: the decisions made across a mission's scope,
 /// one-way decision notes first, then decision records, then reversible
 /// notes. Superseded decision records follow, and malformed notes last.
@@ -902,4 +880,26 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
         context,
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_views_rendering_ready_work_pay_execution_gate_cost() {
+        assert!(bucket_needs_execution_gates("ready"));
+        assert!(bucket_needs_execution_gates("all"));
+        for bucket in ["blocked", "active", "backlog"] {
+            assert!(!bucket_needs_execution_gates(bucket), "{bucket}");
+        }
+    }
+}
+
+/// The status's category under the working policy, when there is one.
+fn policy_category(status: &str) -> Result<Option<String>> {
+    Ok(
+        crate::commands::issue_workflow::load_issue_workflow_policy()?
+            .and_then(|policy| policy.status_category(status).map(str::to_owned)),
+    )
 }
