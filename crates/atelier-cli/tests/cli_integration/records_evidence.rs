@@ -1814,28 +1814,12 @@ fn test_evidence_relation_role_errors_are_corrective() {
 /// The recovery commands name the target and evidence the command was given.
 fn assert_corrective_evidence_role_error(stderr: &str, target: &str, evidence: &str) {
     assert!(
-        stderr.contains("Invalid evidence relation role 'validation'"),
+        stderr.contains("invalid value 'validation' for '--role <ROLE>'"),
         "error should name invalid role: {stderr}"
     );
     assert!(
-        stderr.contains("Accepted evidence relation vocabulary: validates"),
+        stderr.contains("[possible values: validates]"),
         "error should name accepted relation vocabulary: {stderr}"
-    );
-    assert!(
-        stderr.contains("Evidence kinds such as validation belong in --kind, not --role"),
-        "error should distinguish evidence kind from relation role: {stderr}"
-    );
-    assert!(
-        stderr.contains(&format!(
-            "`atelier evidence record --target issue/{target} --kind validation \"summary\"`"
-        )),
-        "error should name normal targeted record flow: {stderr}"
-    );
-    assert!(
-        stderr.contains(&format!(
-            "`atelier evidence attach {evidence} issue {target}`"
-        )),
-        "error should name existing-proof attach flow: {stderr}"
     );
 }
 

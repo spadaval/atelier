@@ -19,7 +19,6 @@ const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
 const EVIDENCE_LIST_LIMIT: usize = 20;
 const EVIDENCE_LIST_TEXT_LIMIT: usize = 96;
-const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
     pub evidence_kind: &'a str,
@@ -128,11 +127,6 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
     if options.command.is_empty() {
         bail!("evidence capture requires a command after --");
     }
-    validate_evidence_relation_role(
-        options.role,
-        None,
-        options.target_kind.zip(options.target_id),
-    )?;
     if matches!(
         (options.target_kind, options.target_id),
         (Some(_), None) | (None, Some(_))
@@ -482,7 +476,6 @@ fn attach_impl(
     role: &str,
     quiet: Option<bool>,
 ) -> Result<()> {
-    validate_evidence_relation_role(role, Some(id), Some((target_kind, target_id)))?;
     RecordStore::new(state_dir).load_evidence_by_id(id)?;
     let target = validate_record_ref(index, target_kind, target_id, role)?;
     let inserted = RecordStore::new(state_dir).add_attachment_relationship(
@@ -517,8 +510,6 @@ fn validate_record_ref<'a>(
     id: &'a str,
     role: &'a str,
 ) -> Result<TargetRef<'a>> {
-    validate_evidence_relation_role(role, None, Some((kind, id)))?;
-
     validate_record_kind(kind)?;
     if kind == "issue" {
         index.require_issue(id)?;
@@ -531,24 +522,6 @@ fn validate_record_ref<'a>(
         id,
         role,
     })
-}
-
-/// The recovery commands name the evidence and target the caller was given,
-/// keeping placeholders only for what it was not.
-pub fn validate_evidence_relation_role(
-    role: &str,
-    evidence: Option<&str>,
-    target: Option<(&str, &str)>,
-) -> Result<()> {
-    if ACCEPTED_EVIDENCE_RELATION_ROLES.contains(&role) {
-        return Ok(());
-    }
-    let evidence = evidence.unwrap_or("<evidence-id>");
-    let (kind, id) = target.unwrap_or(("issue", "<issue-id>"));
-    bail!(
-        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target {kind}/{id} --kind validation \"summary\"`; reuse existing proof with `atelier evidence attach {evidence} {kind} {id}`.",
-        ACCEPTED_EVIDENCE_RELATION_ROLES.join(", ")
-    )
 }
 
 pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) -> Result<()> {

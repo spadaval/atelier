@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Rebuild root help: generated list, lifecycle-ordered common commands"
-updated_at: "2026-10-17T01:10:57.992354805+00:00"
+updated_at: "2026-10-17T07:46:48.317951608+00:00"
 ---
 
 ## Goal
