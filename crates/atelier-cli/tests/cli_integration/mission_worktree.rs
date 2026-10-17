@@ -521,8 +521,16 @@ fn test_quiet_work_missions_is_complete_beyond_the_human_display_limit() {
     assert_eq!(quiet.lines().collect::<Vec<_>>(), expected);
     let (success, human, stderr) = run_atelier(dir.path(), &["work", "missions"]);
     assert!(success, "human mission listing failed: {stderr}");
-    assert!(human.contains("3 more missions omitted"), "{human}");
+    assert!(
+        human.contains("3 more missions omitted; see `atelier work missions --all`"),
+        "{human}"
+    );
     assert!(!human.contains(expected.last().unwrap()), "{human}");
+    // The flag the omitted line names shows every mission.
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "work missions --all failed: {stderr}");
+    assert!(expected.iter().all(|id| all.contains(id.as_str())), "{all}");
+    assert!(!all.contains("omitted"), "{all}");
 }
 
 #[test]
@@ -1136,6 +1144,92 @@ fn test_check_reports_every_invalid_record_file() {
             && stderr.matches(review_path).count() == 1,
         "issue list should name the review once: {stderr}"
     );
+}
+
+#[test]
+fn test_policy_invalid_issue_names_its_record_file() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Policy broken"]);
+    assert!(success, "issue create failed: {stderr}");
+    let id = issue_id_by_title(dir.path(), "Policy broken");
+    let path = format!(".atelier/issues/{id}.md");
+    let original = read_canonical_record(dir.path(), "issues", &id);
+
+    for (field, from, to, code) in [
+        (
+            "status",
+            "status: \"todo\"",
+            "status: \"bogus\"",
+            "workflow_issue_status_invalid",
+        ),
+        (
+            "issue_type",
+            "issue_type: \"task\"",
+            "issue_type: \"weird\"",
+            "workflow_issue_type_unknown",
+        ),
+    ] {
+        assert!(original.contains(from), "{original}");
+        write_canonical_record(dir.path(), "issues", &id, original.replace(from, to));
+
+        let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+        assert!(
+            !success,
+            "an invalid {field} should block issue list: {stdout}"
+        );
+        assert!(
+            stderr.contains(code) && stderr.matches(&path).count() == 1,
+            "an invalid {field} should name {path} once: {stderr}"
+        );
+        assert!(
+            !stderr.contains("workflow.yaml"),
+            "an invalid {field} is about the issue, not the workflow: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn test_missing_review_target_names_the_review_once() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let review_id = "atelier-rv01";
+    let review_path = format!(".atelier/reviews/{review_id}.md");
+    std::fs::create_dir_all(dir.path().join(".atelier/reviews")).unwrap();
+    write_canonical_record(
+        dir.path(),
+        "reviews",
+        review_id,
+        format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: {review_id}\ntitle: checked\ntarget: atelier-gone\nidentity: reviewer\ncommit: {}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: review\n---\n\nchecked\n",
+            "a".repeat(40)
+        ),
+    );
+    let failure =
+        format!("Review {review_id} in {review_path} has review target reference to missing issue atelier-gone");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(
+        !success,
+        "a missing review target should block issue list: {stdout}"
+    );
+    assert!(
+        stderr.contains(&failure) && stderr.matches(&review_path).count() == 1,
+        "issue list should name the review once: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "check must fail: {stdout}");
+    assert!(
+        stdout.contains("Check found 1 finding"),
+        "{stdout}\n{stderr}"
+    );
+    assert_eq!(
+        stdout.matches("atelier-gone").count(),
+        1,
+        "check should report the missing target once: {stdout}"
+    );
+    assert!(stdout.contains(&failure), "{stdout}");
 }
 
 #[test]
@@ -3236,7 +3330,10 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         lines[3..6].iter().all(|line| line.contains("Cli work")),
         "{unassigned}"
     );
-    assert_eq!(lines[6], "  ... 3 more", "{unassigned}");
+    assert_eq!(
+        lines[6], "  ... 3 more items omitted; see `atelier work missions --all`",
+        "{unassigned}"
+    );
     let headings = lines
         .iter()
         .filter(|line| !line.starts_with(' '))
@@ -3250,7 +3347,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
             "beta (1)",
             "delta (1)",
             "gamma (1)",
-            "... 2 more labels: atelier work missions"
+            "... 2 more labels omitted; see `atelier work missions`"
         ],
         "{unassigned}"
     );
@@ -3282,6 +3379,20 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
         overview.contains(&format!("    {scoped} todo medium Scoped later\n")),
         "{overview}"
     );
+    assert!(
+        overview.contains("    ... 3 more items omitted; see `atelier work missions --all`\n"),
+        "{overview}"
+    );
+    // `--all` shows every item in each group.
+    let (success, all, stderr) = run_atelier(dir.path(), &["work", "missions", "--all"]);
+    assert!(success, "work missions --all failed: {stderr}");
+    assert!(
+        cli_titles
+            .iter()
+            .all(|title| all.contains(&format!(" todo medium {title}\n"))),
+        "{all}"
+    );
+    assert!(!all.contains("omitted"), "{all}");
 
     // With an open mission, its scope leaves the unassigned groups, which
     // still follow it.

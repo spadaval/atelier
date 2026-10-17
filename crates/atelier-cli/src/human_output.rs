@@ -651,8 +651,9 @@ fn mark_line(indent: &str, mark: &str) -> String {
     format!("{indent}  ↳ {mark}")
 }
 
-/// Items shown in each label group of unassigned work.
-const UNASSIGNED_SHOWN: usize = 5;
+/// Items shown in each label group of unassigned work, unless `work missions
+/// --all` asks for every one.
+pub(crate) const UNASSIGNED_SHOWN: usize = 5;
 
 /// The most recently closed mission, named by `status` and `work missions`
 /// between missions: its item line, marked done, with a `| closed <date>`
@@ -673,17 +674,19 @@ pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
 }
 
 /// Unassigned open work by label, for both `status` and `work missions`: a
-/// `<label> (<count>)` line per group, then up to [`UNASSIGNED_SHOWN`] issue
-/// rows in the shared work order and a count of the rest. A row too wide for
+/// `<label> (<count>)` line per group, then up to `row_limit` issue rows in
+/// the shared work order and a count of the rest that names `work missions
+/// --all`, which shows them. A row too wide for
 /// the terminal continues on lines indented past the rows, so it never reads
 /// as a new item. A row with an entry in `marks` (another branch's state)
 /// gets the same `↳` line as issue lists. Groups past `group_limit` are
-/// counted, not shown.
+/// counted, naming `work missions`, which shows every group.
 pub(crate) fn render_unassigned_groups(
     groups: &[atelier_app::mission_overview::UnassignedGroup],
     marks: &BTreeMap<String, String>,
     indent: &str,
     group_limit: usize,
+    row_limit: usize,
     context: RenderContext,
 ) -> Vec<String> {
     let row_indent = format!("{indent}  ");
@@ -696,7 +699,7 @@ pub(crate) fn render_unassigned_groups(
         ));
         for index in crate::commands::work_order::ordered_work_indices(&group.work)
             .into_iter()
-            .take(UNASSIGNED_SHOWN)
+            .take(row_limit)
         {
             let (issue, work) = &group.work[index];
             lines.extend(
@@ -709,17 +712,17 @@ pub(crate) fn render_unassigned_groups(
                 lines.push(mark_line(&row_indent, mark));
             }
         }
-        if group.work.len() > UNASSIGNED_SHOWN {
+        if group.work.len() > row_limit {
             lines.push(format!(
-                "{row_indent}... {} more",
-                group.work.len() - UNASSIGNED_SHOWN
+                "{row_indent}... {} omitted; see `atelier work missions --all`",
+                count_noun(group.work.len() - row_limit, "more item")
             ));
         }
     }
     let hidden = groups.len().saturating_sub(group_limit);
     if hidden > 0 {
         lines.push(format!(
-            "{indent}... {}: atelier work missions",
+            "{indent}... {} omitted; see `atelier work missions`",
             count_noun(hidden, "more label")
         ));
     }

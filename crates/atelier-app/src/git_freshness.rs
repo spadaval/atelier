@@ -55,7 +55,38 @@ impl Requests {
     fn pair() -> Result<(Self, Stdio)> {
         let (requests, input) = std::os::unix::net::UnixStream::pair()
             .context("cannot create git cat-file --batch input")?;
+        #[cfg(target_vendor = "apple")]
+        no_sigpipe(&requests).context("cannot create git cat-file --batch input")?;
         Ok((Self(requests), std::os::fd::OwnedFd::from(input).into()))
+    }
+}
+
+/// Sets `SO_NOSIGPIPE` on atelier's end of the request socket.
+///
+/// libc defines `MSG_NOSIGNAL` for Apple targets, but whether XNU honours it
+/// on `send` has not been checked on macOS. `SO_NOSIGPIPE` is the documented
+/// Apple way to turn SIGPIPE into `EPIPE`, and Rust's standard library sets it
+/// on its own Apple sockets, so atelier sets it as well and keeps
+/// `MSG_NOSIGNAL` for the other Unix targets (atelier-2hh8).
+#[cfg(target_vendor = "apple")]
+fn no_sigpipe(socket: &std::os::unix::net::UnixStream) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    let on: libc::c_int = 1;
+    // SAFETY: the descriptor stays open while `socket` lives, and `on` is a
+    // valid `c_int` for the `size_of::<c_int>()` bytes passed as its length.
+    let result = unsafe {
+        libc::setsockopt(
+            socket.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_NOSIGPIPE,
+            std::ptr::from_ref(&on).cast(),
+            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
     }
 }
 

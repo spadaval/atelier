@@ -159,7 +159,6 @@ pub fn issue_findings<'a>(
     repo_root: &Path,
     scoped: bool,
 ) -> Vec<LintFinding> {
-    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
     let workflow_policy = crate::workflow_policy::load(repo_root).ok();
     let mut findings = Vec::new();
     for record in records {
@@ -189,9 +188,11 @@ pub fn issue_findings<'a>(
             )));
         }
         if let Some(policy) = &workflow_policy {
-            if let Err(error) =
-                crate::workflow_policy::validate_issue_against_policy(policy, issue, &policy_path)
-            {
+            if let Err(error) = crate::workflow_policy::validate_issue_against_policy(
+                policy,
+                issue,
+                &crate::record_index::record_file("issue", &issue.id),
+            ) {
                 findings.push(finding(error.to_string()));
             }
         }
