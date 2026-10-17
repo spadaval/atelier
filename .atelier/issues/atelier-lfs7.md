@@ -3,6 +3,7 @@ created_at: "2026-10-17T17:25:59.636065900+00:00"
 id: "atelier-lfs7"
 issue_type: "validation"
 labels:
+- "needs-human"
 - "review"
 priority: "P2"
 relationships:
@@ -20,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Validate a real mission's HTML debrief with the human"
-updated_at: "2026-10-17T17:25:59.636065900+00:00"
+updated_at: "2026-10-17T21:34:10.395261570+00:00"
 ---
 
 ## Goal
