@@ -800,6 +800,8 @@ mod quiet_tokens;
 mod record_refs;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
+#[path = "cli_integration/reports.rs"]
+mod reports;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]

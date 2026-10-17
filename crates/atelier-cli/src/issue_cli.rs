@@ -63,6 +63,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             id,
             transition,
             close_reason,
+            reason_file,
             verbose,
         } => {
             let (state_dir, index) = load_repository()?;
@@ -72,7 +73,10 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     &state_dir,
                     &id,
                     &transition,
-                    close_reason.as_deref(),
+                    commands::workflow::CloseReasonInput {
+                        reason: close_reason.as_deref(),
+                        reason_file: reason_file.as_deref(),
+                    },
                     quiet,
                 )
             } else {

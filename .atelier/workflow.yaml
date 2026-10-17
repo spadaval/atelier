@@ -121,8 +121,8 @@ workflows:
       close:
         from: [in_progress, review]
         to: done
-        required_fields: [close_reason]
-        description: Done claim; commit it on the work branch before review. A parent closes after its children.
+        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]
+        description: Done claim with the implementer report in Close Reason; commit it on the work branch before review. A parent closes after its children.
         validators:
         - blockers.none_open
         - work.terminal

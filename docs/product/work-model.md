@@ -21,6 +21,24 @@ result against Done when, or for `supersede` why the work will not happen.
 Test names, measurements, and review status belong in evidence and review
 records, not here.
 
+Close Reason can also carry the implementer report (atelier-sfsq). Its first
+paragraph stays the Outcome described above. The report's other parts are
+`### Deviations` (where the work departed from the plan), `### Decisions`
+(the choices that shaped it, usually pointing at its decision notes),
+`### Surprises` (what the implementer did not expect), and `### Open items`
+(what is left, with follow-up IDs). Policy chooses which parts a transition
+requires with the `report.deviations`, `report.decisions`,
+`report.surprises` and `report.open_items` required fields. A required part
+must be present and non-empty; write `None.` when there is nothing to report.
+The close transition reads Close Reason from the record body when it is
+already written there, or from `--reason-file <file>`; `--reason` replaces
+the Outcome and keeps the parts. `land` checks required parts on new done
+claims only, so done records from before a policy required a part stay
+valid. Like the rest of Close Reason, the report can be written after
+approval without making the approval stale. This repository's policy
+requires all four parts on the work `close` transition; `supersede` needs
+only the Outcome.
+
 Priority has two spellings for four values: records store `P0`, `P1`, `P2`
 and `P3`, which views print as `critical`, `high`, `medium` and `low`. The
 `-p`/`--priority` flags on `issue create`, `issue update` and `issue list`

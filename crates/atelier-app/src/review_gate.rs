@@ -926,15 +926,29 @@ fn completion_claims(
             .values()
             .filter(|transition| transition.to == issue.status)
         {
+            let report = atelier_core::CloseReport::parse(
+                index
+                    .issue_record(id)
+                    .context("closed issue record missing")?
+                    .sections
+                    .close_reason
+                    .as_deref()
+                    .unwrap_or_default(),
+            );
             for field in &transition.required_fields {
                 let present = match field.as_str() {
-                    "close_reason" => index
-                        .issue_record(id)
-                        .context("closed issue record missing")?
-                        .sections
-                        .close_reason
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty()),
+                    "close_reason" => !report.outcome.is_empty(),
+                    // A claim the base already holds was checked against the
+                    // policy of its day, so a report part the policy came to
+                    // require later does not unsettle it (atelier-sfsq).
+                    field if atelier_core::ReportPart::from_field(field).is_some() => {
+                        if historical {
+                            continue;
+                        }
+                        atelier_core::ReportPart::from_field(field)
+                            .and_then(|part| report.part(part))
+                            .is_some()
+                    }
                     other => bail!("unsupported required field '{other}'"),
                 };
                 nodes.push(gate(
@@ -943,6 +957,11 @@ fn completion_claims(
                     present,
                     if present {
                         format!("committed claim includes required field {field}")
+                    } else if let Some(part) = atelier_core::ReportPart::from_field(field) {
+                        format!(
+                            "committed claim is missing required field {field}; add a `### {}` subsection to {id}'s Close Reason on its work branch",
+                            part.title()
+                        )
                     } else {
                         format!("committed claim is missing required field {field}")
                     },

@@ -242,7 +242,12 @@ fn statuses_and_new_evidence_or_review_events_do_not_stale_approval() {
     fixture.write_issue(&record);
     commit(fixture.path(), "status change");
     record.issue.status = "done".into();
-    record.sections.close_reason = Some("done".into());
+    // The implementer report lives in Close Reason, so writing it after
+    // approval keeps the approval current (atelier-sfsq).
+    record.sections.close_reason = Some(
+        "done\n\n### Deviations\nNone.\n\n### Decisions\nKept X.\n\n### Surprises\nNone.\n\n### Open items\nNone."
+            .into(),
+    );
     record.issue.closed_at = Some(chrono::Utc::now());
     record.issue.updated_at = chrono::Utc::now();
     fixture.write_issue(&record);

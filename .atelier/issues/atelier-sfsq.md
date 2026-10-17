@@ -4,6 +4,9 @@ id: "atelier-sfsq"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-sfsq
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Close work items with an implementer report in Close Reason"
-updated_at: "2026-10-17T17:25:59.016985931+00:00"
+updated_at: "2026-10-17T17:42:19.320493222+00:00"
 ---
 
 ## Goal
