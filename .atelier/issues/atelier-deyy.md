@@ -4,6 +4,9 @@ id: "atelier-deyy"
 issue_type: "task"
 labels:
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-deyy
 priority: "P3"
 relationships:
   blocks:
@@ -26,9 +29,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Tighten work views to one dense line per item"
-updated_at: "2026-10-16T23:43:14.107499665+00:00"
+updated_at: "2026-10-17T03:34:16.449909278+00:00"
 ---
 
 ## Goal
