@@ -4,6 +4,9 @@ id: "atelier-1mk4"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-1mk4
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show the current decisions on an item in status and issue show"
-updated_at: "2026-10-17T18:17:06.615557096+00:00"
+updated_at: "2026-10-17T18:18:11.657503828+00:00"
 ---
 
 ## Goal

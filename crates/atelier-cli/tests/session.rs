@@ -1472,6 +1472,55 @@ fn review_regression_setup_preserves_foreign_wrappers_and_updates_owned_binary()
 }
 
 #[test]
+fn status_shows_the_owner_decisions_in_brief() {
+    let f = Fixture::new();
+    let (_, output) = cli(f.path(), &["status"]);
+    assert!(!output.contains("Decisions:"), "{output}");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "note",
+            &f.id,
+            "--kind",
+            "decision",
+            "Keep the format",
+            "--reason",
+            "Readers rely on it",
+            "--one-way",
+        ],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "note",
+            &f.id,
+            "--kind",
+            "decision",
+            "Name it plainly",
+            "--reason",
+            "Short",
+        ],
+    );
+    let (pass, output) = cli(f.path(), &["status"]);
+    assert!(pass, "{output}");
+    assert!(
+        output.contains(
+            "Decisions: 2 current, 1 one-way:
+"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains(&format!("  {} ", f.id))
+            && output.contains("Keep the format | because Readers rely on it"),
+        "{output}"
+    );
+    assert!(!output.contains("Name it plainly |"), "{output}");
+}
+
+#[test]
 fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
     for integration_base in [false, true] {
         let f = Fixture::new();

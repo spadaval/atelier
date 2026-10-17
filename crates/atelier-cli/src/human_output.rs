@@ -443,6 +443,101 @@ pub(crate) fn render_wrapped_lines(
         .collect()
 }
 
+/// A decision note's row, `<item-id> <date> <choice> | because <reason>[ |
+/// rejected <alternative>; ...]`, wrapped like an item line.
+pub(crate) fn decision_note_rows(
+    context: RenderContext,
+    note: &atelier_app::decisions::NoteDecision,
+) -> Vec<String> {
+    let decision = &note.decision;
+    let mut row = format!(
+        "{} {} {} | because {}",
+        note.issue_id, decision.date, decision.choice, decision.reason
+    );
+    if !decision.rejected.is_empty() {
+        row.push_str(&format!(" | rejected {}", decision.rejected.join("; ")));
+    }
+    render_row_wrapped(context, &row)
+}
+
+/// A decision record's item line with its `ADR`, `supersedes` and
+/// `superseded by` cues.
+pub(crate) fn decision_record_rows(
+    context: RenderContext,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    record: &atelier_app::decisions::RecordDecision,
+) -> Vec<String> {
+    let issue = &record.issue;
+    let category = policy.and_then(|policy| policy.status_category(&issue.status));
+    let mut line = ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+        .state(category, None);
+    if let Some(adr) = &issue.adr {
+        line = line.cue(format!("ADR {}", adr.path));
+    }
+    if !record.supersedes.is_empty() {
+        line = line.cue(format!("supersedes {}", record.supersedes.join(", ")));
+    }
+    if !record.superseded_by.is_empty() {
+        line = line.cue(format!("superseded by {}", record.superseded_by.join(", ")));
+    }
+    line.render_wrapped(context, "")
+}
+
+/// The brief form of an item's current decisions: a count, then the one-way
+/// decisions, the ones a reader must not reverse casually. Empty when there
+/// are none.
+pub(crate) fn decision_brief_lines(
+    context: RenderContext,
+    decisions: &atelier_app::decisions::Decisions,
+) -> Vec<String> {
+    let total = decisions.notes.len() + decisions.records.len();
+    if total == 0 {
+        return Vec::new();
+    }
+    let one_way = decisions
+        .notes
+        .iter()
+        .filter(|note| note.decision.one_way)
+        .collect::<Vec<_>>();
+    let mut lines = vec![if one_way.is_empty() {
+        format!("Decisions: {total} current")
+    } else {
+        format!("Decisions: {total} current, {} one-way:", one_way.len())
+    }];
+    lines.extend(
+        one_way
+            .into_iter()
+            .flat_map(|note| decision_note_rows(context, note))
+            .map(|row| format!("  {row}")),
+    );
+    lines
+}
+
+/// Every current decision, one-way notes first, then decision records, then
+/// reversible notes.
+pub(crate) fn decision_full_rows(
+    context: RenderContext,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    decisions: &atelier_app::decisions::Decisions,
+) -> Vec<String> {
+    let notes = |one_way: bool| {
+        decisions
+            .notes
+            .iter()
+            .filter(move |note| note.decision.one_way == one_way)
+            .flat_map(move |note| decision_note_rows(context, note))
+    };
+    notes(true)
+        .chain(
+            decisions
+                .records
+                .iter()
+                .flat_map(|record| decision_record_rows(context, policy, record)),
+        )
+        .chain(notes(false))
+        .collect()
+}
+
 /// A row that is not an item line, wrapped as an item line wraps: a row
 /// too wide for the terminal continues on lines indented past the rows.
 pub(crate) fn render_row_wrapped(context: RenderContext, text: &str) -> Vec<String> {

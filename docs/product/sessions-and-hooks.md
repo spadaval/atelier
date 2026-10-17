@@ -13,7 +13,8 @@ atelier setup claude --binary <path-to-atelier>
 branch, owner, and dirty paths, the ready, needs-a-human, and active counts,
 current missions, and the other local work branches. On an owner's branch it
 adds the owner's record body, integration base, mission and strategy path,
-scoped work, the 8 newest reviews, and the 8 newest evidence receipts with
+scoped work, the current decisions bearing on the owner in brief (see
+[decision rows](human-cli-output.md#decision-rows)), the 8 newest reviews, and the 8 newest evidence receipts with
 their freshness; without an owner it lists up to 5 ready items under the ready
 count, and an `Unassigned work:` count with that work grouped by label under
 an `Unassigned Work` heading, as `work missions` groups it (see

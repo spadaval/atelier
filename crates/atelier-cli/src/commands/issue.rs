@@ -125,6 +125,10 @@ fn render_issue_brief(
         ));
     }
     lines.extend(decision_record_lines(index, workflow_policy, issue)?);
+    lines.extend(crate::human_output::decision_brief_lines(
+        crate::human_output::RenderContext::for_stdout(),
+        &atelier_app::decisions::item_decisions(index, workflow_policy, id)?,
+    ));
     push_brief_rows(
         &mut lines,
         "Children",
@@ -426,6 +430,16 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         println!("{line}");
     }
     render_parent_context(index, canonical_id)?;
+    let decisions =
+        atelier_app::decisions::item_decisions(index, workflow_policy.as_ref(), canonical_id)?;
+    let rows = crate::human_output::decision_full_rows(
+        crate::human_output::RenderContext::for_stdout(),
+        workflow_policy.as_ref(),
+        &decisions,
+    );
+    if !rows.is_empty() {
+        print_panel(render_lines_section("Decisions", rows));
+    }
     let done = crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), issue);
     match closed_line(workflow_policy.as_ref(), record) {
         Some(closed) => print_panel(render_lines_section(
