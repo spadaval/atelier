@@ -117,6 +117,8 @@ struct Checkout {
     head: Result<String>,
     /// Includes files hidden by Git index flags, which make proof stale.
     dirty: Result<Vec<PathBuf>>,
+    /// How the branch differs from its upstream, when it has one and differs.
+    upstream: Option<String>,
 }
 
 impl Checkout {
@@ -126,8 +128,35 @@ impl Checkout {
                 .map(|branch| branch.unwrap_or_else(|| "detached HEAD".into())),
             head: atelier_app::git_freshness::head_commit(repo),
             dirty: atelier_app::git_freshness::working_paths(repo),
+            upstream: upstream_divergence(repo),
         }
     }
+}
+
+/// `ahead 1 of origin/feat`, `behind 2 of …`, or `ahead 1, behind 2 of …`.
+fn upstream_divergence(repo: &Path) -> Option<String> {
+    let upstream = git::text(
+        repo,
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{upstream}",
+        ],
+    )
+    .ok()?;
+    let counts = git::text(
+        repo,
+        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+    )
+    .ok()?;
+    let (ahead, behind) = counts.split_once('\t')?;
+    let parts = [("ahead", ahead), ("behind", behind)]
+        .into_iter()
+        .filter(|(_, count)| *count != "0")
+        .map(|(label, count)| format!("{label} {count}"))
+        .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| format!("{} of {upstream}", parts.join(", ")))
 }
 
 /// What a session on the owner's branch needs: its record, mission, scope
@@ -354,9 +383,13 @@ fn render_status_page(
 
     let mut local_state = Vec::new();
     match (&checkout.branch, &checkout.head) {
-        (Ok(branch), Ok(head)) => {
-            local_state.push(("Branch", format!("{branch} @ {}", &head[..8])))
-        }
+        (Ok(branch), Ok(head)) => local_state.push((
+            "Branch",
+            match &checkout.upstream {
+                Some(upstream) => format!("{branch} @ {} ({upstream})", &head[..8]),
+                None => format!("{branch} @ {}", &head[..8]),
+            },
+        )),
         (Ok(branch), Err(_)) => local_state.push(("Branch", branch.clone())),
         _ => {}
     }

@@ -980,6 +980,48 @@ fn start_child_installs_owner_metadata_and_child_transition_together() {
     assert_eq!(git(f.path(), &["status", "--porcelain"]).lines().count(), 2);
 }
 #[test]
+fn status_branch_row_shows_upstream_divergence_only_when_it_differs() {
+    let f = Fixture::new();
+    let branch_row = |f: &Fixture| {
+        field(&ok(f.path(), &["status"]), "Branch")
+            .unwrap()
+            .to_owned()
+    };
+    let short = |f: &Fixture| git(f.path(), &["rev-parse", "--short=8", "HEAD"]);
+    // No upstream: no marker.
+    assert_eq!(branch_row(&f), format!("{} @ {}", f.branch, short(&f)));
+    let remote = tempdir().unwrap();
+    git(remote.path(), &["init", "--bare", "-q"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", remote.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", &f.branch]);
+    // An upstream that matches: still no marker.
+    assert_eq!(branch_row(&f), format!("{} @ {}", f.branch, short(&f)));
+    fs::write(f.path().join("code"), "more code\n").unwrap();
+    commit(f.path(), "ahead of upstream");
+    assert_eq!(
+        branch_row(&f),
+        format!(
+            "{} @ {} (ahead 1 of origin/{})",
+            f.branch,
+            short(&f),
+            f.branch
+        )
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~2"]);
+    assert_eq!(
+        branch_row(&f),
+        format!(
+            "{} @ {} (behind 1 of origin/{})",
+            f.branch,
+            short(&f),
+            f.branch
+        )
+    );
+}
+#[test]
 fn literal_checkout_branch_is_not_confused_with_same_named_tags() {
     let f = Fixture::new();
     git(f.path(), &["tag", &f.branch, "main"]);
