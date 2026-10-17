@@ -1,16 +1,15 @@
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{DateTime, Local, Utc};
+use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_status_category, issue_status_label,
-    load_issue_workflow_policy,
+    format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
 use crate::human_output::{
-    plural_suffix, render_footer_section, render_issue_inventory, render_issue_inventory_quiet,
-    render_lines_section, render_metadata, render_text_section, FooterAction, IssueListPanel,
-    IssueListRow, RenderContext,
+    display_timestamp, heading, plural_suffix, render_footer_section, render_issue_inventory,
+    render_issue_inventory_quiet, render_lines_section, render_metadata, render_text_section,
+    FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
 use atelier_app::issue_inventory::{issue_inventory, IssueInventoryFilters};
 use atelier_app::issue_read::ObjectiveReadSummary;
@@ -111,13 +110,9 @@ fn render_issue_brief(
 ) -> Result<Vec<String>> {
     let issue = &record.issue;
     let id = &issue.id;
-    let mut lines = vec![format!(
-        "{} [{}] {} - {}",
-        id,
-        issue.issue_type,
-        status_cue(workflow_policy, &issue.status),
-        issue.title
-    )];
+    let mut lines = vec![issue_line(workflow_policy, issue, |line| {
+        line.issue_type(&issue.issue_type)
+    })];
     if issue.issue_type == "mission" {
         if let Some(strategy) = issue.strategy()? {
             lines.push(format!("Strategy: {}", strategy.path));
@@ -175,20 +170,17 @@ fn render_issue_brief(
     Ok(lines)
 }
 
-/// The status word, marked ✓ when its category is done and ⚠ when blocked.
-fn status_cue(workflow_policy: Option<&WorkflowPolicy>, status: &str) -> String {
-    let category = issue_status_category(workflow_policy, status);
-    let label = format_status_with_category(category.as_deref(), status);
-    marked(category.as_deref(), label)
-}
-
-fn marked(category: Option<&str>, label: String) -> String {
-    crate::human_output::status_cue(&label, category, None)
-}
-
-/// The work state, marked ✓ when done and ⚠ when blocked.
-fn work_cue(classification: WorkClassification) -> String {
-    crate::human_output::status_cue(classification.label(), None, Some(classification))
+/// The issue's item line, its status marked ✓ or ⚠ by its category under
+/// the working policy; `fields` adds what the view needs, such as the type.
+fn issue_line<'a>(
+    workflow_policy: Option<&'a WorkflowPolicy>,
+    issue: &'a Issue,
+    fields: impl FnOnce(ItemLine<'a>) -> ItemLine<'a>,
+) -> String {
+    let category = workflow_policy.and_then(|policy| policy.status_category(&issue.status));
+    let label = format_status_with_category(category, &issue.status);
+    fields(ItemLine::new(&issue.id, &label, &issue.priority, &issue.title).state(category, None))
+        .text()
 }
 
 fn brief_issue_row(
@@ -197,12 +189,7 @@ fn brief_issue_row(
     id: &str,
 ) -> Result<String> {
     let issue = index.require_issue(id)?;
-    Ok(format!(
-        "{} {} - {}",
-        issue.id,
-        status_cue(workflow_policy, &issue.status),
-        issue.title
-    ))
+    Ok(issue_line(workflow_policy, &issue, |line| line))
 }
 
 fn brief_issue_rows(
@@ -235,12 +222,10 @@ fn brief_child_rows(
         .into_iter()
         .map(|position| {
             let (child, classified) = &children[position];
-            format!(
-                "{} {} - {}",
-                child.id,
-                work_cue(classified.classification),
-                child.title
-            )
+            let state = classified.classification;
+            ItemLine::new(&child.id, state.label(), &child.priority, &child.title)
+                .state(None, Some(state))
+                .text()
         })
         .collect())
 }
@@ -369,26 +354,22 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         workflow_policy.as_ref(),
     )?;
     let status_category = issue_status_category(workflow_policy.as_ref(), &issue.status);
-    let identity = format!(
-        "{} [{}] {} - {}",
-        issue.id,
-        issue.issue_type,
-        format_status_with_category(status_category.as_deref(), &issue.status),
-        issue.title
+    // The title line states the type, status and priority, so no metadata
+    // line repeats them.
+    println!(
+        "{}",
+        heading(&issue_line(workflow_policy.as_ref(), issue, |line| {
+            line.issue_type(&issue.issue_type)
+        }))
     );
-    println!("{identity}");
-    println!("{}", "=".repeat(identity.len()));
-    println!("Status:   {}", issue.status);
     println!(
         "Category: {}",
         status_category.unwrap_or_else(|| "(unknown)".to_string())
     );
-    println!("Type:     {}", issue.issue_type);
-    println!("Priority: {}", issue.priority);
-    println!("Created:  {}", format_human_datetime(issue.created_at));
-    println!("Updated:  {}", format_human_datetime(issue.updated_at));
+    println!("Created:  {}", display_timestamp(issue.created_at));
+    println!("Updated:  {}", display_timestamp(issue.updated_at));
     if let Some(closed_at) = &issue.closed_at {
-        println!("Closed:   {}", format_human_datetime(*closed_at));
+        println!("Closed:   {}", display_timestamp(*closed_at));
     }
     if let Some(owner) = label_value(&record.labels, "owner:") {
         println!("Owner:    {owner}");
@@ -519,11 +500,10 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
                 .take(OBJECTIVE_ROLLUP_LIMIT)
                 .map(|issue| {
                     format!(
-                        "  updated {} [{}] {} - {}",
-                        issue.id,
-                        issue.classification.label(),
-                        issue.priority,
-                        issue.title
+                        "  {}",
+                        ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+                            .state(issue.status_category.as_deref(), Some(issue.classification))
+                            .text()
                     )
                 }),
         ));
@@ -535,6 +515,7 @@ fn render_issue_link_section(
     issue_id: &str,
     relationships: &Relationships,
 ) -> Result<()> {
+    let workflow_policy = load_issue_workflow_policy()?;
     let mut seen = BTreeSet::new();
     let mut rows = Vec::new();
     for relation in &relationships.relates {
@@ -546,10 +527,9 @@ fn render_issue_link_section(
             continue;
         }
         let other = index.require_issue(&relation.id)?;
-        rows.push(format!(
-            "{} {} [{}] {} - {}",
-            relation.relation_type, other.id, other.status, other.priority, other.title
-        ));
+        rows.push(issue_line(workflow_policy.as_ref(), &other, |line| {
+            line.lead(Lead::Role(&relation.relation_type))
+        }));
     }
     rows.sort();
     print_panel(render_lines_section(
@@ -607,9 +587,10 @@ fn render_parent_context(index: &RecordIndex, canonical_id: &str) -> Result<()> 
     let line = match issue.parent_id {
         Some(parent_id) => {
             let parent = index.require_issue(&parent_id)?;
+            let workflow_policy = load_issue_workflow_policy()?;
             format!(
-                "Parent: {} [{}] {} - {}",
-                parent.id, parent.status, parent.priority, parent.title
+                "Parent: {}",
+                issue_line(workflow_policy.as_ref(), &parent, |line| line)
             )
         }
         None => "Parent: (none)".to_string(),
@@ -645,19 +626,14 @@ fn dependency_rows_for_text(
     ids.into_iter()
         .map(|id| {
             let issue = index.require_issue(&id)?;
-            let marker = if blockers && issue_blocks_work(workflow_policy.as_ref(), &issue) {
-                " (open blocker)"
-            } else {
-                ""
-            };
-            Ok(format!(
-                "{} [{}] {} - {}{}",
-                issue.id,
-                issue_status_label(workflow_policy.as_ref(), &issue.status),
-                issue.priority,
-                issue.title,
-                marker
-            ))
+            let open = blockers && issue_blocks_work(workflow_policy.as_ref(), &issue);
+            Ok(issue_line(workflow_policy.as_ref(), &issue, |line| {
+                if open {
+                    line.cue("open blocker")
+                } else {
+                    line
+                }
+            }))
         })
         .collect()
 }
@@ -742,11 +718,8 @@ fn render_impact_section(index: &RecordIndex, canonical_id: &str) -> Result<()> 
             .take(8)
             .map(|issue| {
                 Ok(format!(
-                    "  {} [{}] {} - {}",
-                    issue.id,
-                    issue_status_label(workflow_policy.as_ref(), &issue.status),
-                    issue.priority,
-                    issue.title
+                    "  {}",
+                    issue_line(workflow_policy.as_ref(), issue, |line| line)
                 ))
             })
             .collect::<Result<Vec<_>>>()?,
@@ -859,13 +832,6 @@ pub fn list_inventory(
         println!("{output}");
     }
     Ok(())
-}
-
-fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
-    timestamp
-        .with_timezone(&Local)
-        .format("%Y-%m-%d %H:%M %Z")
-        .to_string()
 }
 
 pub struct LifecycleCreateInput<'a> {
@@ -1456,8 +1422,8 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert!(rows[0].contains(blocker));
-        assert!(rows[0].contains("[todo] high - Blocking issue"));
-        assert!(rows[0].contains("(open blocker)"));
+        assert!(rows[0].contains("todo high Blocking issue"));
+        assert!(rows[0].ends_with(" | open blocker"));
     }
 
     #[test]

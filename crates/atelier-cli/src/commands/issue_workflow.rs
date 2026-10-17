@@ -21,10 +21,6 @@ pub(crate) fn issue_status_category(
         .map(str::to_string)
 }
 
-pub(crate) fn issue_status_label(policy: Option<&WorkflowPolicy>, status: &str) -> String {
-    format_status_with_category(issue_status_category(policy, status).as_deref(), status)
-}
-
 pub(crate) fn format_status_with_category(category: Option<&str>, status: &str) -> String {
     match category {
         Some(_) => status.to_string(),

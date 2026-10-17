@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::commands::{self, git};
 use crate::human_output::{
     path_summary, render_lines_section, render_metadata, render_page, render_text_section,
-    status_cue, IssueListPanel, IssueListRow, RenderContext,
+    short_commit, IssueListPanel, IssueListRow, ItemLine, RenderContext,
 };
 use atelier_app::mission_overview::MissionOverview;
 use atelier_app::work_classification::StatusView;
@@ -125,12 +125,12 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         .map(|summaries| summaries.lines())
         .unwrap_or_else(|error| vec![format!("Branch orientation unavailable: {error}")]);
     if !branches.is_empty() {
+        // A section of the status page, not a second page title.
         page.push_str("\n\n");
-        page.push_str(&render_page(
-            "Other local work branches",
-            [render_lines_section("", branches)],
-            context,
-        ));
+        page.push_str(
+            &render_lines_section("Other Local Work Branches (committed records)", branches)
+                .join("\n"),
+        );
     }
     Ok(page)
 }
@@ -210,31 +210,38 @@ impl Owner {
         let record = index.issue_record(id).context("owner record missing")?;
         let scope = atelier_app::review_gate::scope(index, id)?;
         let category = policy.status_category(&record.issue.status);
-        let status = if category == Some("done") {
-            git::unmerged_done_label(
+        let mut heading = ItemLine::new(
+            id,
+            &record.issue.status,
+            &record.issue.priority,
+            &record.issue.title,
+        )
+        .state(category, None);
+        if category == Some("done") {
+            heading = heading.cue(git::done_merge_cue(
                 repo,
                 id,
                 &record.issue.status,
                 branch,
                 &policy.branch_policy.base_branch,
-            )
-        } else {
-            record.issue.status.clone()
-        };
-        let status = status_cue(&status, category, None);
+            ));
+        }
+        let heading = heading.text();
         let content = atelier_records::render_issue_record(record)?;
         let (_, body) =
             atelier_records::split_document(&content).context("owner has no record body")?;
         let mut missions = Vec::new();
         for mission in index.issues().filter(|issue| issue.issue_type == "mission") {
             if atelier_app::objective_graph::mission_issue_ids(index, &mission.id)?.contains(id) {
-                let status = status_cue(
-                    &mission.status,
-                    policy.status_category(&mission.status),
-                    None,
-                );
                 missions.push((
-                    format!("{} [{status}] {}", mission.id, mission.title),
+                    ItemLine::new(
+                        &mission.id,
+                        &mission.status,
+                        &mission.priority,
+                        &mission.title,
+                    )
+                    .state(policy.status_category(&mission.status), None)
+                    .text(),
                     mission
                         .strategy
                         .as_ref()
@@ -263,21 +270,17 @@ impl Owner {
                 .chain(&buckets.blocked)
                 .take(RECORDS_SHOWN)
                 .map(|row| {
-                    let cue = status_cue(
-                        &row.status,
-                        row.status_category.as_deref(),
-                        Some(row.classification),
-                    );
-                    let mut line = format!("{} [{cue}] {}", row.id, row.title);
+                    let mut line = ItemLine::new(&row.id, &row.status, &row.priority, &row.title)
+                        .state(row.status_category.as_deref(), Some(row.classification));
                     if !row.open_blockers.is_empty() {
-                        line.push_str(&format!(" — blockers: {}", row.open_blockers.join(", ")));
+                        line = line.cue(format!("blockers: {}", row.open_blockers.join(", ")));
                     }
-                    line
+                    line.text()
                 }),
         );
         Ok(Self {
             id: id.to_owned(),
-            heading: format!("{id} [{status}] {}", record.issue.title),
+            heading,
             base: record
                 .issue
                 .workflow_branch
@@ -382,15 +385,9 @@ fn render_status_page(
     in_flight: &BTreeMap<String, String>,
     context: RenderContext,
 ) -> String {
-    let current_work = if view.work.active.is_empty() {
-        "none".to_string()
-    } else {
-        format!("{} issue(s)", view.work.active.len())
-    };
     let summary_lines = vec![
         format!("Ready work:    {}", view.work.ready.len()),
         format!("Needs a human: {}", view.work.human.len()),
-        format!("Current work:  {current_work}"),
         current_missions(view, overview),
     ];
     let owned = matches!(owner, Ok(Some(_)));
@@ -426,8 +423,8 @@ fn render_status_page(
         (Ok(branch), Ok(head)) => local_state.push((
             "Branch",
             match &checkout.upstream {
-                Some(upstream) => format!("{branch} @ {} ({upstream})", &head[..8]),
-                None => format!("{branch} @ {}", &head[..8]),
+                Some(upstream) => format!("{branch} @ {} ({upstream})", short_commit(head)),
+                None => format!("{branch} @ {}", short_commit(head)),
             },
         )),
         (Ok(branch), Err(_)) => local_state.push(("Branch", branch.clone())),

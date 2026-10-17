@@ -803,7 +803,7 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
         success,
         "mission ID should resolve through issue show: {stderr}"
     );
-    assert!(mission_show.contains("Type:     mission"));
+    assert!(mission_show.starts_with(&format!("{mission_id} mission ")));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -969,7 +969,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "issue command record failed: {stderr}");
-    assert!(issue_capture.contains("[evidence] recorded - issue command proof"));
+    assert!(issue_capture.contains("evidence recorded issue command proof"));
     assert!(issue_capture.contains("Command:     sh -c"));
     assert!(issue_capture.contains("Exit Status: 0"));
     assert!(issue_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
@@ -1018,7 +1018,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified command record failed: {stderr}");
-    assert!(record_capture.contains("[evidence] recorded - unified command proof"));
+    assert!(record_capture.contains("evidence recorded unified command proof"));
     assert!(record_capture.contains("Command:     sh -c"));
     assert!(record_capture.contains("Exit Status: 0"));
     assert!(record_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
@@ -1040,7 +1040,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "positional manual record failed: {stderr}");
-    assert!(positional_record_out.contains("[evidence] recorded - unified positional manual proof"));
+    assert!(positional_record_out.contains("evidence recorded unified positional manual proof"));
     assert!(positional_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
     let positional_evidence_id = record_id_by_title(dir.path(), "evidence", positional_summary);
     let positional_evidence_front_matter =
@@ -1105,7 +1105,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &epic_evidence_id]);
     assert!(success, "epic evidence show failed: {stderr}");
-    assert!(epic_show.contains("Status:      recorded"));
+    assert!(epic_show.starts_with(&format!("{epic_evidence_id} evidence recorded ")));
     assert!(epic_show.contains("Exit Status: 7"));
     assert!(epic_show.contains(&format!("Target:      issue/{epic_id} (validates)")));
     assert!(epic_show.contains("failing stdout"));
@@ -1160,7 +1160,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified manual record failed: {stderr}");
-    assert!(manual_record_out.contains("[evidence] recorded - unified manual issue proof"));
+    assert!(manual_record_out.contains("evidence recorded unified manual issue proof"));
     assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
     let manual_issue_evidence_id = record_id_by_title(dir.path(), "evidence", manual_issue_summary);
     let manual_issue_front_matter =
@@ -1192,7 +1192,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, mission_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &mission_evidence_id]);
     assert!(success, "mission evidence show failed: {stderr}");
-    assert!(mission_show.contains("Status:      recorded"));
+    assert!(mission_show.starts_with(&format!("{mission_evidence_id} evidence recorded ")));
     assert!(mission_show.contains("Exit Status: 2"));
     assert!(mission_show.contains(&format!("Target:      issue/{mission_id} (validates)")));
     assert!(mission_show.contains("blocked-line-000"));
@@ -1872,7 +1872,7 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
         success,
         "nonzero command should still record evidence: {stderr}"
     );
-    assert!(stdout.contains("[evidence] recorded - invalid input is rejected"));
+    assert!(stdout.contains("evidence recorded invalid input is rejected"));
     assert!(stdout.contains("Exit Status: 3"));
     assert!(stdout.contains(&format!("Target:      issue/{issue_id} (validates)")));
 

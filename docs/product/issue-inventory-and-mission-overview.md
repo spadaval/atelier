@@ -24,8 +24,8 @@ grouped by label, one `<label> (<count>)` line per group. An issue with
 several labels is listed under each, so a group holds all unassigned work
 with that label; the unassigned total counts each issue once. Groups run
 largest first, then by label, with unlabelled work last under `no label`.
-Each group shows at most 5 items, one line each (`<id> [<status>] <priority> -
-<title>`, with a blocker count when blocked), in the
+Each group shows at most 5 items, one [item line](human-cli-output.md#item-line)
+each, with a blocker count when blocked, in the
 [work order](work-view-ordering.md), then `... N more`. A line too wide for
 the terminal continues indented past the item lines. `status` shows the same groups (see
 [sessions and hooks](sessions-and-hooks.md)).
