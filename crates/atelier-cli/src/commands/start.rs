@@ -10,6 +10,7 @@
 
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
+use atelier_app::record_ref::RecordKind;
 use chrono::Utc;
 use std::path::Path;
 
@@ -123,7 +124,7 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
     let mut owner = view_index
         .issue_record(&work_branch.owner_id)
         .cloned()
-        .with_context(|| format!("Issue {} not found", work_branch.owner_id))?;
+        .ok_or_else(|| view_index.not_found(RecordKind::Issue, &work_branch.owner_id))?;
     let record_branch = work_branch.recorded_base.is_none();
     if record_branch {
         owner.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
@@ -140,7 +141,7 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str) -> Result<()>
             view_index
                 .issue_record(&issue_id)
                 .cloned()
-                .with_context(|| format!("Issue {issue_id} not found"))?
+                .ok_or_else(|| view_index.not_found(RecordKind::Issue, &issue_id))?
         };
         workflow::apply_transition(&view_policy, &mut record, transition, None);
         if record.issue.id != owner.issue.id && record_branch {

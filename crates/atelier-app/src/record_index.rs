@@ -17,6 +17,7 @@ use atelier_records::{
     WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 
+use crate::record_ref::{self, RecordKind};
 use crate::workflow_policy::{WorkflowPolicy, WORKFLOW_POLICY_PATH};
 
 /// Record files read from one state directory, including the files that
@@ -405,7 +406,7 @@ impl RecordIndex {
     pub fn require_review(&self, id: &str) -> Result<&ReviewRecord> {
         self.reviews
             .get(id)
-            .ok_or_else(|| anyhow!("review {id} not found"))
+            .ok_or_else(|| self.not_found(RecordKind::Review, id))
     }
     pub fn latest_disposition(&self, finding: &str) -> Option<&ReviewRecord> {
         self.reviews.values().find(|record| matches!(&record.event, ReviewEvent::Disposition { finding: target, .. } if target == finding) && !self.reviews.values().any(|successor| matches!(&successor.event, ReviewEvent::Disposition { supersedes: Some(previous), .. } if previous == &record.header.id)))
@@ -953,41 +954,41 @@ impl RecordIndex {
 
     pub fn require_issue(&self, id: &str) -> Result<Issue> {
         self.get_issue(id)
-            .ok_or_else(|| anyhow!("Issue {id} not found"))
+            .ok_or_else(|| self.not_found(RecordKind::Issue, id))
     }
 
-    /// Resolves a full issue id or a unique id suffix (the part after the
-    /// project slug).
+    /// Resolves a full issue id or a unique short id (the part after the
+    /// project slug), ignoring case. Bundle files use this to tell existing
+    /// issues from their own references; commands use [`Self::resolve`].
     pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<String>> {
-        let normalized = issue_ref.trim();
-        if normalized.is_empty() {
-            return Ok(None);
+        record_ref::match_id(RecordKind::Issue, issue_ref, self.ids(RecordKind::Issue))
+    }
+
+    /// Resolves the record a command names by full or short id. A record of
+    /// another kind gets a hint naming its own show command; an unknown id
+    /// gets the shared not-found message.
+    pub fn resolve(&self, kind: RecordKind, reference: &str) -> Result<String> {
+        if let Some(id) = record_ref::match_id(kind, reference, self.ids(kind))? {
+            return Ok(id);
         }
-        if self.issues.contains_key(normalized) {
-            return Ok(Some(normalized.to_string()));
+        for other in RecordKind::ALL.into_iter().filter(|other| *other != kind) {
+            if let Ok(Some(id)) = record_ref::match_id(other, reference, self.ids(other)) {
+                return Err(record_ref::wrong_kind(kind, other, &id));
+            }
         }
-        let is_suffix = !normalized.contains('-')
-            && normalized
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
-        if !is_suffix {
-            return Ok(None);
-        }
-        let suffix = format!("-{normalized}");
-        let matches = self
-            .issues
-            .keys()
-            .filter(|id| id.ends_with(&suffix))
-            .take(2)
-            .cloned()
-            .collect::<Vec<_>>();
-        match matches.as_slice() {
-            [id] => Ok(Some(id.clone())),
-            [] => Ok(None),
-            _ => bail!(
-                "Issue key {normalized} is ambiguous: {}",
-                matches.join(", ")
-            ),
+        Err(self.not_found(kind, reference))
+    }
+
+    /// The shared not-found message, with near matches among this kind's ids.
+    pub fn not_found(&self, kind: RecordKind, reference: &str) -> anyhow::Error {
+        record_ref::not_found(kind, reference, self.ids(kind))
+    }
+
+    fn ids(&self, kind: RecordKind) -> Box<dyn Iterator<Item = &str> + '_> {
+        match kind {
+            RecordKind::Issue => Box::new(self.issues.keys().map(String::as_str)),
+            RecordKind::Evidence => Box::new(self.evidence.keys().map(String::as_str)),
+            RecordKind::Review => Box::new(self.reviews.keys().map(String::as_str)),
         }
     }
 
@@ -1080,18 +1081,6 @@ impl RecordIndex {
 
     // ----- Record queries ------------------------------------------------
 
-    pub fn record_kind_for_id(&self, id: &str) -> Option<&'static str> {
-        if self.issues.contains_key(id) {
-            Some("issue")
-        } else if self.reviews.contains_key(id) {
-            Some("review")
-        } else if self.evidence.contains_key(id) {
-            Some("evidence")
-        } else {
-            None
-        }
-    }
-
     fn record_exists(&self, kind: &str, id: &str) -> bool {
         match kind {
             "issue" => self.issues.contains_key(id),
@@ -1108,7 +1097,7 @@ impl RecordIndex {
     pub fn require_evidence(&self, id: &str) -> Result<&EvidenceRecord> {
         self.evidence
             .get(id)
-            .ok_or_else(|| anyhow!("evidence record {id} not found"))
+            .ok_or_else(|| self.not_found(RecordKind::Evidence, id))
     }
 
     /// Evidence records, most recently updated first.
@@ -1129,10 +1118,12 @@ impl RecordIndex {
         validate_record_kind(kind)?;
         validate_record_id(id)?;
         if !self.record_exists(kind, id) {
-            if kind == "issue" {
-                bail!("Issue {id} not found");
-            }
-            bail!("{kind} record {id} not found");
+            let kind = match kind {
+                "evidence" => RecordKind::Evidence,
+                "review" => RecordKind::Review,
+                _ => RecordKind::Issue,
+            };
+            return Err(self.not_found(kind, id));
         }
         Ok(self
             .links_by_record

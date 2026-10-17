@@ -10,9 +10,7 @@ use std::{io::Read, path::Path};
 
 fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<Option<String>> {
     if let Some(reference) = requested {
-        let id = index
-            .resolve_issue_ref(reference)?
-            .context("landing issue not found")?;
+        let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, reference)?;
         let issue = index.require_issue(&id)?;
         return Ok(Some(issue.parent_id.clone().unwrap_or(id)));
     }

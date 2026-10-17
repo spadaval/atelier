@@ -233,9 +233,7 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool) -> Result<()> {
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         snapshot.read_record_files(repo, true)?.0.into_index()?
     };
-    let id = index
-        .resolve_issue_ref(issue_ref)?
-        .ok_or_else(|| anyhow::anyhow!("issue {issue_ref} not found"))?;
+    let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, issue_ref)?;
     let issue = index.require_issue(&id)?;
     let owner = issue.parent_id.as_deref().unwrap_or(&id);
     let owner_record = index.require_issue(owner)?;

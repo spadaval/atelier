@@ -9,6 +9,17 @@ use std::path::{Component, Path};
 
 pub type IssueId = String;
 
+/// The one form of an invalid-value error: the field, the rejected value and
+/// every value the field accepts, as in `Invalid status 'open'. Valid values:
+/// backlog, done, todo`.
+pub fn invalid_value_message<S: AsRef<str>>(field: &str, value: &str, valid: &[S]) -> String {
+    let valid = valid.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+    format!(
+        "Invalid {field} '{value}'. Valid values: {}",
+        valid.join(", ")
+    )
+}
+
 pub const ISSUE_PRIORITY_LABELS: &[&str] = &["critical", "high", "medium", "low"];
 
 #[derive(

@@ -1108,10 +1108,7 @@ fn test_issue_show_takes_several_ids_and_resolves_all_before_printing() {
     );
     assert!(!success, "an unknown ID should fail the whole show");
     assert_eq!(stdout, "", "nothing prints before every ID resolves");
-    assert!(
-        stderr.contains("Issue atelier-zzzz was not found"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("issue atelier-zzzz not found"), "{stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show"]);
     assert!(!success, "show needs at least one ID");
@@ -2567,7 +2564,12 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
         &["issue", "list", "--category", "does-not-exist"],
     );
     assert!(!success, "unknown category unexpectedly succeeded");
-    assert!(stderr.contains("Invalid issue category"), "{stderr}");
+    assert!(
+        stderr.contains(
+            "Invalid category 'does-not-exist'. Valid values: active, blocked, done, todo"
+        ),
+        "{stderr}"
+    );
 
     let (success, quiet, stderr) = run_atelier(
         dir.path(),
