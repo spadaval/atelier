@@ -4,6 +4,9 @@ id: "atelier-ihss"
 issue_type: "feature"
 labels:
 - "schema"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ihss
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T06:59:11.541248183+00:00"
+status: "done"
 title: "Store each link only on the record that declares it"
-updated_at: "2026-10-17T05:22:38.461791576+00:00"
+updated_at: "2026-10-17T06:59:11.541248183+00:00"
 ---
 
 ## Goal
@@ -42,3 +46,7 @@ So every branch that adds work advancing one mission, or blocked by one shared b
 ## Context
 
 atelier-dmh5 changes the same storage, recording the direction of directional context links, so the two should be sequenced. From the 2026-10-16 transcript retrospective.
+
+## Close Reason
+
+New links are written only to the declaring record (issue link X Y writes X; --role blocks writes the blocker's own blocks). Reverse directions are derived in the index for issue show, work views, check, blocker gates, mission scope, approval scope and land's claim re-check; legacy two-sided and blocker-side storage read the same and are not migrated. Tests: record_store_links_only_the_declaring_record and links_leave_the_shared_mission_and_blocker_unchanged_and_read_from_either_side (shared records byte-for-byte unchanged), declared_legacy_and_two_sided_link_storage_read_the_same (9 storage combinations), links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_it. Full suite with test hooks passes at ee3e97f8 after merging master.

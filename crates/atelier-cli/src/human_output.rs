@@ -315,6 +315,19 @@ where
         .to_string()
 }
 
+/// The local day of a timestamp, the day [`display_timestamp`] shows. Notes
+/// and prune cutoffs are dated by it.
+pub(crate) fn local_date(timestamp: chrono::DateTime<chrono::Utc>) -> chrono::NaiveDate {
+    local_date_in(timestamp, &chrono::Local)
+}
+
+fn local_date_in<Zone: chrono::TimeZone>(
+    timestamp: chrono::DateTime<chrono::Utc>,
+    zone: &Zone,
+) -> chrono::NaiveDate {
+    timestamp.with_timezone(zone).date_naive()
+}
+
 pub(crate) fn render_labeled_lines(
     context: RenderContext,
     indent: &str,
@@ -571,11 +584,7 @@ pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
     .state(Some("done"), None)
     .cue(format!(
         "closed {}",
-        mission
-            .closed_at
-            .unwrap_or(mission.updated_at)
-            .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d")
+        local_date(mission.closed_at.unwrap_or(mission.updated_at))
     ))
     .text()
 }
@@ -1218,6 +1227,26 @@ mod tests {
         assert_eq!(
             display_timestamp_in(timestamp, &chrono::Utc),
             "2026-10-17 00:31 +00:00"
+        );
+    }
+
+    #[test]
+    fn notes_are_dated_by_the_local_day_just_after_utc_midnight() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-17T00:31:24Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let eastern = chrono::FixedOffset::west_opt(4 * 3600).unwrap();
+        let date = local_date_in(now, &eastern);
+        assert_eq!(date.to_string(), "2026-10-16");
+        assert_eq!(
+            display_timestamp_in(now, &eastern).get(..10),
+            Some("2026-10-16")
+        );
+        let mut sections = atelier_core::IssueSections::for_type("bug", None);
+        sections.append_note(date, "note", "written at 20:31 local");
+        assert_eq!(
+            sections.notes.as_deref(),
+            Some("- 2026-10-16 [note] written at 20:31 local")
         );
     }
 

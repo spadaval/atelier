@@ -82,7 +82,8 @@ their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
   `--resolution-commit`.
 - A timestamp is shown in one form, local time `YYYY-MM-DD HH:MM ±hh:mm`, as
   in `2026-10-16 20:31 -04:00`. Records keep RFC 3339; a date alone is
-  `YYYY-MM-DD`.
+  `YYYY-MM-DD` and is the local day that form shows, as in note bullets and
+  the `prune` cutoff.
 
 ### Headings
 
@@ -208,10 +209,10 @@ recovery step. The recovery step is an inline sentence in the error,
 details and command context.
 
 `--quiet` limits output to essential IDs, counts, and result tokens. It does not
-hide failures or change behavior. Diagnostic logging uses `--log-level` and
-`--log-format`; logging is not a second work-state store. Color and terminal
-width may improve scanning without changing meaning or breaking redirected
-output.
+hide failures or change behavior. Atelier has no diagnostic logging options;
+`--log-level`, `--log-format`, `ATELIER_LOG` and `ATELIER_LOG_FORMAT` were
+removed. Warnings go to stderr as plain text. Color and terminal width may
+improve scanning without changing meaning or breaking redirected output.
 
 See [inventory and mission views](issue-inventory-and-mission-overview.md) and
 [work ordering](work-view-ordering.md) for view semantics.

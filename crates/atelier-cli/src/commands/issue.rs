@@ -1,13 +1,13 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
     format_status_with_category, issue_status_category, load_issue_workflow_policy,
 };
 use crate::human_output::{
-    display_timestamp, heading, plural_suffix, print_footer, render_footer_section,
+    display_timestamp, heading, local_date, plural_suffix, print_footer, render_footer_section,
     render_issue_inventory, render_issue_inventory_quiet, render_lines_section, render_metadata,
     render_text_section, FooterAction, IssueListPanel, IssueListRow, ItemLine, Lead, RenderContext,
 };
@@ -407,7 +407,7 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
         )?;
     }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
-    render_issue_link_section(index, canonical_id, &record.relationships)?;
+    render_issue_link_section(index, canonical_id)?;
     render_objective_rollup_section(objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
@@ -510,23 +510,20 @@ fn render_objective_rollup_section(summary: Option<&ObjectiveReadSummary>) {
     }
 }
 
-fn render_issue_link_section(
-    index: &RecordIndex,
-    issue_id: &str,
-    relationships: &Relationships,
-) -> Result<()> {
+/// Typed links stored on either record; blockers have their own sections.
+fn render_issue_link_section(index: &RecordIndex, issue_id: &str) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
-    let mut seen = BTreeSet::new();
     let mut rows = Vec::new();
-    for relation in &relationships.relates {
-        if relation.kind != "issue" || relation.id == issue_id {
+    for relation in index.get_typed_relations(issue_id) {
+        if relation.issue_id_1 == relation.issue_id_2 {
             continue;
         }
-        let key = (relation.relation_type.clone(), relation.id.clone());
-        if !seen.insert(key) {
-            continue;
-        }
-        let other = index.require_issue(&relation.id)?;
+        let other_id = if relation.issue_id_1 == issue_id {
+            &relation.issue_id_2
+        } else {
+            &relation.issue_id_1
+        };
+        let other = index.require_issue(other_id)?;
         rows.push(issue_line(workflow_policy.as_ref(), &other, |line| {
             line.lead(Lead::Role(&relation.relation_type))
         }));
@@ -1259,7 +1256,7 @@ pub fn append_note(state_dir: &Path, issue_id: &str, kind: &str, text: &str) -> 
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(issue_id)?;
     let now = Utc::now();
-    record.sections.append_note(now.date_naive(), kind, text);
+    record.sections.append_note(local_date(now), kind, text);
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
     println!("Added note to issue {}", issue_id);

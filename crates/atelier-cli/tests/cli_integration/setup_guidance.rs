@@ -2957,3 +2957,31 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
         }
     }
 }
+
+#[test]
+fn test_removed_log_flags_are_rejected_and_absent_from_help() {
+    let dir = tempdir().unwrap();
+    for args in [
+        &["--log-level", "debug", "status"][..],
+        &["--log-level", "bogus", "status"][..],
+        &["--log-format", "xml", "status"][..],
+        &["status", "--log-format", "json"][..],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+            .current_dir(dir.path())
+            .args(args)
+            .output()
+            .expect("Failed to execute atelier");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(stderr.contains("unexpected argument"), "{args:?}: {stderr}");
+    }
+    for help in [&["--help"][..], &["init", "--help"][..]] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), help);
+        assert!(success, "{help:?} failed: {stderr}");
+        assert!(
+            !stdout.contains("--log-"),
+            "{help:?} lists log flags:\n{stdout}"
+        );
+    }
+}

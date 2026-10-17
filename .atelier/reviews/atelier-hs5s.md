@@ -1,0 +1,14 @@
+---
+schema: atelier.review
+schema_version: 1
+id: atelier-hs5s
+title: 'Reviewed git diff master...HEAD (83eb485e..e65c1fb0) against atelier-7iyw''s done-when, docs/product/human-cli-output.md (Commits and Timestamps) and standards.md. Contract pass: issue note and bundle apply date notes with human_output::local_date, the same chrono::Local conversion display_timestamp uses; prune''s cutoff, issue/review/evidence comparisons, retained-record filter and candidate dates all use local_date, so cutoff and record days share one zone and the strict < / >= comparisons keep their meaning; NaiveDate day subtraction is calendar-based so DST does not shift the cutoff; no date_naive() remains in crates/*/src. Doc states a bare date is the local day. Ran cargo build and nextest on notes_are_dated, prune, retire and last_closed tests (40 pass) at HEAD, and confirmed by hand that TZ=UTC-14 and TZ=UTC+12 move prune''s Cutoff line by one day. The fixed-clock unit test meets the done-when; the integration test brackets the clock so it is not flaky at midnight. Findings atelier-uign (no prune local-day test, defer) and atelier-pnt1 (DST flake in session.rs (1,true) case, defer). Not checked: full nextest/fmt/diff-check rerun (relied on atelier-wylr, f3vi, xq2r), bundle apply local dating by test (same helper), behavior on hosts with no TZ database.'
+target: atelier-7iyw
+identity: Independent reviewer (Claude subagent)
+commit: e65c1fb0c327d2e93144387b0e81d0e298acdd47
+created_at: 2026-10-17T07:03:45.757208047Z
+event:
+  event: review
+---
+
+Reviewed git diff master...HEAD (83eb485e..e65c1fb0) against atelier-7iyw's done-when, docs/product/human-cli-output.md (Commits and Timestamps) and standards.md. Contract pass: issue note and bundle apply date notes with human_output::local_date, the same chrono::Local conversion display_timestamp uses; prune's cutoff, issue/review/evidence comparisons, retained-record filter and candidate dates all use local_date, so cutoff and record days share one zone and the strict < / >= comparisons keep their meaning; NaiveDate day subtraction is calendar-based so DST does not shift the cutoff; no date_naive() remains in crates/*/src. Doc states a bare date is the local day. Ran cargo build and nextest on notes_are_dated, prune, retire and last_closed tests (40 pass) at HEAD, and confirmed by hand that TZ=UTC-14 and TZ=UTC+12 move prune's Cutoff line by one day. The fixed-clock unit test meets the done-when; the integration test brackets the clock so it is not flaky at midnight. Findings atelier-uign (no prune local-day test, defer) and atelier-pnt1 (DST flake in session.rs (1,true) case, defer). Not checked: full nextest/fmt/diff-check rerun (relied on atelier-wylr, f3vi, xq2r), bundle apply local dating by test (same helper), behavior on hosts with no TZ database.
