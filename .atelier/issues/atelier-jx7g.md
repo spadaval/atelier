@@ -4,6 +4,9 @@ id: "atelier-jx7g"
 issue_type: "bug"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-jx7g
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Use the right article for configured issue types in wrong-kind errors"
-updated_at: "2026-10-17T08:50:18.404272846+00:00"
+updated_at: "2026-10-17T08:50:18.770296237+00:00"
 ---
 
 ## Goal
