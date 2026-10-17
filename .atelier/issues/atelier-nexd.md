@@ -4,6 +4,9 @@ id: "atelier-nexd"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-nexd
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Restructure the debrief as a review page: needs-you, why, criteria, work timeline"
-updated_at: "2026-10-17T21:34:10.181899518+00:00"
+updated_at: "2026-10-17T21:34:49.520110506+00:00"
 ---
 
 ## Goal

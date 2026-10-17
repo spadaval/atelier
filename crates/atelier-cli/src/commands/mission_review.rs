@@ -1,12 +1,15 @@
-//! `atelier debrief` (atelier-rx22): a finished mission's review, rendered
-//! from one view model as dense Markdown for agents (ADR 0022) and, with
-//! `--html`, as a static page a human opens in T3 Code's file panel.
+//! `atelier debrief` (atelier-rx22, atelier-nexd): a mission's review,
+//! rendered from one view model as dense Markdown for agents (ADR 0022) and,
+//! with `--html`, as a static page a human opens in T3 Code's file panel.
+//! Both lead with what needs the human, then why the mission existed, its
+//! criteria, its work in closing order, the open work and the decisions.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use atelier_app::criteria::{CriterionMark, CriterionProof};
-use atelier_app::mission_review::{Debrief, Deviation, ItemReview};
+use atelier_app::decisions::DecisionRow;
+use atelier_app::mission_review::{Ask, Change, Debrief, ReviewSummary, WorkEntry};
 use atelier_app::record_index::RecordIndex;
 use atelier_core::{CloseReport, ReportPart};
 
@@ -30,12 +33,7 @@ pub fn debrief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) 
     let mut read = atelier_app::git_freshness::ReadContext::new(&repo_root);
     let view = atelier_app::mission_review::debrief(index, policy.as_ref(), &mut read, &id)?;
     if html {
-        let path = write_review_page(
-            &repo_root,
-            &id,
-            "debrief",
-            &render_html(&view, policy.as_ref()),
-        )?;
+        let path = write_review_page(&repo_root, &id, "debrief", &render_html(&view))?;
         if quiet {
             println!("{}", path.display());
         } else {
@@ -67,17 +65,42 @@ fn quiet_counts(view: &Debrief) -> String {
             .filter(|proof| proof.mark == mark)
             .count()
     };
+    let items = view
+        .work
+        .iter()
+        .map(|entry| 1 + entry.children.len())
+        .sum::<usize>()
+        + view.open.len()
+        + view.dropped.len();
     format!(
-        "criteria={} proven={} failing={} unproven={} items={} decisions={} deviations={} follow_ups={}",
+        "criteria={} proven={} failing={} unproven={} items={items} decisions={} deviations={} follow_ups={}",
         view.criteria.proofs.len(),
         marks(CriterionMark::Proven),
         marks(CriterionMark::Failing),
         marks(CriterionMark::Unproven),
-        view.items.len(),
         view.decisions.notes.len() + view.decisions.records.len(),
-        view.deviations.len(),
-        view.follow_ups.len()
+        deviation_count(view),
+        view.open.iter().filter(|entry| entry.from.is_some()).count()
     )
+}
+
+/// Departures from the plan: reported deviations, derived changes, scope
+/// added after the start, and dropped scope.
+fn deviation_count(view: &Debrief) -> usize {
+    view.work
+        .iter()
+        .map(|entry| {
+            entry.changes.len()
+                + usize::from(reported(entry, ReportPart::Deviations).is_some())
+                + usize::from(entry.added_after_start)
+        })
+        .sum::<usize>()
+        + view
+            .open
+            .iter()
+            .map(|entry| entry.changes.len() + usize::from(entry.added_after_start))
+            .sum::<usize>()
+        + view.dropped.len()
 }
 
 fn mission_line(view: &Debrief) -> String {
@@ -123,7 +146,28 @@ fn write_review_page(
     Ok(path)
 }
 
-fn criterion_mark(mark: CriterionMark) -> &'static str {
+/// A report part with something to say: present, and not just "None".
+fn reported(entry: &WorkEntry, part: ReportPart) -> Option<&str> {
+    entry.report.as_ref()?.part(part).filter(|text| {
+        !matches!(
+            text.trim()
+                .trim_end_matches('.')
+                .to_ascii_lowercase()
+                .as_str(),
+            "none" | "n/a"
+        )
+    })
+}
+
+fn outcome(entry: &WorkEntry) -> &str {
+    entry
+        .report
+        .as_ref()
+        .map(|report: &CloseReport| report.outcome.as_str())
+        .unwrap_or_default()
+}
+
+fn criterion_word(mark: CriterionMark) -> &'static str {
     match mark {
         CriterionMark::Proven => "✓ proven",
         CriterionMark::Failing => "⚠ failing",
@@ -133,7 +177,7 @@ fn criterion_mark(mark: CriterionMark) -> &'static str {
 
 /// The deciding receipt and its age: code commits up to the mission's close,
 /// or since the receipt while the mission is open.
-fn criterion_proof_cue(proof: &CriterionProof, closed: bool) -> Option<String> {
+fn proof_cue(proof: &CriterionProof, closed: bool) -> Option<String> {
     let receipt = proof.deciding()?;
     let mut cue = format!(
         "{} {} at {}",
@@ -141,66 +185,144 @@ fn criterion_proof_cue(proof: &CriterionProof, closed: bool) -> Option<String> {
         receipt.result.as_str(),
         short_commit(&receipt.commit)
     );
-    if let Some(count) = receipt.code_commits_since.filter(|count| *count > 0) {
-        cue.push_str(&format!(
-            " | {} {}",
-            atelier_core::count_noun(count, "code commit"),
-            if closed { "before close" } else { "since" }
-        ));
+    if let Some(age) = proof_age(proof, closed) {
+        cue.push_str(&format!(" | {age}"));
     }
     Some(cue)
 }
 
-/// Each deviation as one line of the Markdown form.
-pub(crate) fn deviation_line(deviation: &Deviation, closed: bool) -> String {
-    match deviation {
-        Deviation::ScopeAdded { id, time } => {
-            format!("scope added {id} after the start, {}", local_date(*time))
-        }
-        Deviation::ScopeDropped { id, reason } => format!("scope dropped {id} | {reason}"),
-        Deviation::DeferredFinding {
-            finding,
-            target,
-            follow_up,
-            summary,
-        } => format!("deferred finding {finding} on {target} to {follow_up} | {summary}"),
-        Deviation::NonPassEvidence {
+fn proof_age(proof: &CriterionProof, closed: bool) -> Option<String> {
+    let count = proof
+        .deciding()?
+        .code_commits_since
+        .filter(|count| *count > 0)?;
+    Some(format!(
+        "{} {}",
+        atelier_core::count_noun(count, "code commit"),
+        if closed { "before close" } else { "since" }
+    ))
+}
+
+fn change_line(change: &Change) -> String {
+    change_text(change, true)
+}
+
+/// A derived change in words; the HTML leaves out the receipt's ID.
+fn change_text(change: &Change, with_ids: bool) -> String {
+    match change {
+        Change::Reopened(time) => format!("Reopened on {} after a done claim.", local_date(*time)),
+        Change::NonPassEvidence {
             evidence,
-            target,
             result,
             summary,
-        } => format!(
-            "non-pass evidence {evidence} on {target} {} | {summary}",
-            result.as_str()
+        } if with_ids => format!("Newest proof {evidence} is {}: {summary}", result.as_str()),
+        Change::NonPassEvidence {
+            result, summary, ..
+        } => {
+            format!("Newest proof is {}: {summary}", result.as_str())
+        }
+        Change::TrivialExemption { summary } => format!("Review waived as trivial: {summary}"),
+    }
+}
+
+/// How review went; `None` for a decision record, which is decided rather
+/// than code-reviewed.
+fn review_line(view: &Debrief, entry: &WorkEntry) -> Option<String> {
+    let review = &entry.review;
+    if view
+        .refs
+        .get(&entry.id)
+        .is_some_and(|issue| issue.issue_type == "decision")
+    {
+        return None;
+    }
+    if !review.recorded {
+        return Some("No review recorded.".into());
+    }
+    Some(review_summary(review))
+}
+
+fn review_summary(review: &ReviewSummary) -> String {
+    let mut parts = Vec::new();
+    for (count, word) in [
+        (review.fixed, "fixed"),
+        (review.deferred, "deferred"),
+        (review.no_action, "left as is"),
+        (review.undisposed, "awaiting a decision"),
+    ] {
+        if count > 0 {
+            parts.push(format!("{count} {word}"));
+        }
+    }
+    let verdict = if review.approved {
+        "Approved"
+    } else if review.trivial {
+        "Waived as trivial"
+    } else {
+        "Not approved"
+    };
+    let findings = review.fixed + review.deferred + review.no_action + review.undisposed;
+    if findings == 0 {
+        format!("{verdict}; no findings.")
+    } else {
+        format!(
+            "{verdict}; {}: {}.",
+            atelier_core::count_noun(findings, "finding"),
+            parts.join(", ")
+        )
+    }
+}
+
+fn ask_line(view: &Debrief, ask: &Ask) -> (String, String) {
+    match ask {
+        Ask::Decision(id) => (
+            format!("Decide: {}", view.title_of(id)),
+            view.refs
+                .get(id)
+                .map(|issue| issue.summary.clone())
+                .unwrap_or_default(),
         ),
-        Deviation::TrivialExemption {
-            review,
-            target,
-            summary,
-        } => format!("trivial exemption {review} on {target} | {summary}"),
-        Deviation::Reopened { id, time } => format!("reopened {id}, {}", local_date(*time)),
-        Deviation::AgedProof {
-            slug,
-            evidence,
-            commits,
-        } => format!(
-            "aged proof {slug} by {evidence} | {} after it{}",
-            atelier_core::count_noun(*commits, "code commit"),
-            if closed { " before close" } else { "" }
+        Ask::NeedsHuman(id) => (
+            view.title_of(id).to_string(),
+            view.refs
+                .get(id)
+                .map(|issue| issue.summary.clone())
+                .unwrap_or_default(),
+        ),
+        Ask::Failing(slug) => (
+            format!("Criterion {slug} is failing"),
+            criterion_text(view, slug),
+        ),
+        Ask::Unproven(slugs) => (
+            format!(
+                "{} without passing proof: {}",
+                if slugs.len() == 1 {
+                    "1 criterion".to_string()
+                } else {
+                    format!("{} criteria", slugs.len())
+                },
+                slugs.join(", ")
+            ),
+            if slugs.len() == 1 {
+                criterion_text(view, &slugs[0])
+            } else {
+                String::new()
+            },
         ),
     }
 }
 
-/// The report's parts in order, each `(title, text)`; an older record's
-/// Close Reason is its Outcome alone.
-fn report_parts(report: &CloseReport) -> Vec<(&'static str, &str)> {
-    let mut parts = vec![("Outcome", report.outcome.as_str())];
-    for part in ReportPart::ALL {
-        if let Some(text) = report.part(part) {
-            parts.push((part.title(), text));
-        }
-    }
-    parts
+fn criterion_text(view: &Debrief, slug: &str) -> String {
+    view.criteria
+        .proofs
+        .iter()
+        .find(|proof| proof.criterion.slug == slug)
+        .map(|proof| atelier_app::mission_review::first_sentence(&proof.criterion.text))
+        .unwrap_or_default()
+}
+
+fn last_delivery(view: &Debrief) -> Option<chrono::DateTime<chrono::Utc>> {
+    view.work.iter().filter_map(|entry| entry.closed_at).max()
 }
 
 fn render_markdown(
@@ -208,89 +330,204 @@ fn render_markdown(
     policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
     context: RenderContext,
 ) -> Vec<Vec<String>> {
-    let mut metadata = vec![("Outcome", view.outcome.replace('\n', " "))];
-    if let Some(strategy) = &view.strategy {
-        metadata.push(("Strategy", strategy.clone()));
-    }
+    let closed = view.timeline.closed.is_some();
+    let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut metadata = vec![("Outcome", flat(&view.outcome))];
     if let Some(started) = &view.timeline.started {
         metadata.push((
             "Started",
-            format!(
-                "{} at {}",
-                local_date(started.time),
-                short_commit(&started.commit)
-            ),
+            started
+                .time
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string(),
         ));
     }
     if let Some(closed) = &view.timeline.closed {
         metadata.push((
             "Closed",
-            format!(
-                "{} at {}",
-                local_date(closed.time),
-                short_commit(&closed.commit)
-            ),
+            closed
+                .time
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string(),
         ));
+    } else if let Some(last) = last_delivery(view) {
+        metadata.push((
+            "Last delivery",
+            last.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string(),
+        ));
+    }
+    if let Some(strategy) = &view.strategy {
+        metadata.push(("Strategy", strategy.clone()));
     }
     if let Some(commit) = &view.generated_from {
         metadata.push(("Generated from", short_commit(commit).to_string()));
     }
+    let wrap = |line: String| render_row_wrapped(context, &line);
+    let item = |id: &str| {
+        view.refs
+            .get(id)
+            .map(|issue| {
+                ItemLine::new(&issue.id, &issue.status, "", &issue.title)
+                    .issue_type(&issue.issue_type)
+                    .state(issue.status_category.as_deref(), None)
+                    .text()
+                    .replace("  ", " ")
+            })
+            .unwrap_or_else(|| id.to_string())
+    };
+
+    let asks = view
+        .asks
+        .iter()
+        .flat_map(|ask| {
+            let tag = match ask {
+                Ask::Decision(id) | Ask::NeedsHuman(id) => format!("{id} "),
+                _ => String::new(),
+            };
+            let (title, detail) = ask_line(view, ask);
+            wrap(if detail.is_empty() {
+                format!("⚠ {tag}{title}")
+            } else {
+                format!("⚠ {tag}{title} | {detail}")
+            })
+        })
+        .collect::<Vec<_>>();
+    let why = view
+        .why
+        .as_deref()
+        .map(|text| {
+            text.split("\n\n")
+                .map(flat)
+                .filter(|paragraph| !paragraph.is_empty())
+                .flat_map(&wrap)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
     let mut criteria = Vec::new();
     for proof in &view.criteria.proofs {
+        let slug = &proof.criterion.slug;
         let mut row = format!(
-            "{} {} {}",
-            proof.criterion.slug,
-            criterion_mark(proof.mark),
-            proof.criterion.text
+            "{slug} {} {}",
+            criterion_word(proof.mark),
+            atelier_app::mission_review::first_sentence(&proof.criterion.text)
         );
-        if let Some(cue) = criterion_proof_cue(proof, view.timeline.closed.is_some()) {
+        let by = view.delivered_by.get(slug).cloned().unwrap_or_default();
+        if !by.is_empty() {
+            row.push_str(&format!(" | by {}", by.join(", ")));
+        }
+        if let Some(cue) = proof_cue(proof, closed) {
             row.push_str(&format!(" | {cue}"));
         }
-        criteria.extend(render_row_wrapped(context, &row));
+        criteria.extend(wrap(row));
     }
     for problem in &view.criteria.criteria.parse.problems {
-        criteria.extend(render_row_wrapped(context, &format!("⚠ {problem}")));
+        criteria.extend(wrap(format!("⚠ {problem}")));
     }
 
-    let mut items = Vec::new();
-    for item in &view.items {
-        let indent = if item.parent.is_some() { "  " } else { "" };
-        items.extend(item_line(item).render_wrapped(context, indent));
-        if let Some(report) = &item.report {
-            for (title, text) in report_parts(report) {
-                let body = text.lines().map(str::trim).collect::<Vec<_>>().join(" ");
-                for line in render_row_wrapped(context, &format!("{title}: {body}")) {
-                    items.push(format!("{indent}  {line}"));
-                }
+    let mut work = Vec::new();
+    for entry in &view.work {
+        let when = entry
+            .closed_at
+            .map(|time| {
+                time.with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d %H:%M")
+                    .to_string()
+            })
+            .unwrap_or_else(|| "undated".into());
+        let mut head = format!("{when} {}", item(&entry.id));
+        if !entry.criteria.is_empty() {
+            head.push_str(&format!(" | {}", entry.criteria.join(", ")));
+        }
+        if entry.added_after_start {
+            head.push_str(" | added after the start");
+        }
+        work.extend(wrap(head));
+        let mut fact = |label: &str, text: &str| {
+            let line = if label == "└" {
+                format!("└ {}", flat(text))
+            } else {
+                format!("{label}: {}", flat(text))
+            };
+            for line in wrap(line) {
+                work.push(format!("  {line}"));
+            }
+        };
+        fact("Outcome", outcome(entry));
+        for child in &entry.children {
+            fact("└", &item(child));
+        }
+        if let Some(text) = reported(entry, ReportPart::Deviations) {
+            fact("Changed", text);
+        }
+        for change in &entry.changes {
+            fact("Changed", &change_line(change));
+        }
+        if let Some(text) = reported(entry, ReportPart::Surprises) {
+            fact("Surprised by", text);
+        }
+        for note in &entry.decisions {
+            fact(
+                "Decided",
+                &format!(
+                    "{}{} | because {}",
+                    if note.decision.one_way {
+                        "one-way: "
+                    } else {
+                        ""
+                    },
+                    note.decision.choice,
+                    note.decision.reason
+                ),
+            );
+        }
+        if let Some(review) = review_line(view, entry) {
+            fact("Review", &review);
+        }
+        for follow_up in &entry.follow_ups {
+            fact("Left open", &item(follow_up));
+        }
+        if entry.follow_ups.is_empty() {
+            if let Some(text) = reported(entry, ReportPart::OpenItems) {
+                fact("Left open", text);
             }
         }
     }
 
-    let deviations = view
-        .deviations
-        .iter()
-        .flat_map(|deviation| {
-            render_row_wrapped(
-                context,
-                &deviation_line(deviation, view.timeline.closed.is_some()),
-            )
-        })
-        .collect::<Vec<_>>();
+    let mut open = Vec::new();
+    for entry in &view.open {
+        let indent = if entry.parent.is_some() { "  " } else { "" };
+        let mut row = format!("{indent}{}", item(&entry.id));
+        if let Some(from) = &entry.from {
+            row.push_str(&format!(" | from {from}"));
+        }
+        if entry.added_after_start {
+            row.push_str(" | added after the start");
+        }
+        for change in &entry.changes {
+            row.push_str(&format!(" | {}", change_line(change)));
+        }
+        open.extend(wrap(row));
+    }
+    for entry in &view.dropped {
+        let mut row = format!(
+            "dropped {} | {}",
+            item(&entry.id),
+            flat(entry.reason.as_deref().unwrap_or_default())
+        );
+        for change in &entry.changes {
+            row.push_str(&format!(" | {}", change_line(change)));
+        }
+        open.extend(wrap(row));
+    }
     let events = view
         .mission_events
         .iter()
-        .flat_map(|event| render_row_wrapped(context, &event_line(event)))
-        .collect::<Vec<_>>();
-    let follow_ups = view
-        .follow_ups
-        .iter()
-        .flat_map(|issue| {
-            let category = policy.and_then(|policy| policy.status_category(&issue.status));
-            ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
-                .state(category, None)
-                .render_wrapped(context, "")
-        })
+        .flat_map(|event| wrap(event_line(event)))
         .collect::<Vec<_>>();
     let optional = |title: &str, lines: Vec<String>| {
         if lines.is_empty() {
@@ -301,39 +538,31 @@ fn render_markdown(
     };
     let mut panels = vec![
         render_metadata(None, &metadata),
+        optional("Needs Your Review", asks),
+        optional("Why", why),
         optional("Success Criteria", criteria),
-        render_lines_section("Items", items),
+        optional("Work", work),
+        optional("Open Work", open),
+        optional("Mission Reviews", events),
     ];
     panels.extend(decision_sections(context, policy, &view.decisions));
-    panels.extend([
-        render_lines_section("Deviations", deviations),
-        optional("Mission Reviews", events),
-        render_lines_section("Follow-ups", follow_ups),
-        render_footer_section(
-            context,
-            [
-                FooterAction::new(
-                    "Write the HTML page",
-                    format!("atelier debrief {} --html", view.mission.id),
+    panels.push(render_footer_section(
+        context,
+        [
+            FooterAction::new(
+                "Write the HTML page",
+                format!("atelier debrief {} --html", view.mission.id),
+            ),
+            FooterAction::new(
+                "Record the human's review",
+                format!(
+                    "atelier review record {} --identity \"<human>\" \"<summary>\"",
+                    view.mission.id
                 ),
-                FooterAction::new(
-                    "Record the human's review",
-                    format!(
-                        "atelier review record {} --identity \"<human>\" \"<summary>\"",
-                        view.mission.id
-                    ),
-                ),
-            ],
-        ),
-    ]);
+            ),
+        ],
+    ));
     panels
-}
-
-fn item_line(item: &ItemReview) -> ItemLine<'_> {
-    let issue = &item.issue;
-    ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
-        .issue_type(&issue.issue_type)
-        .state(item.status_category.as_deref(), None)
 }
 
 fn status_tone(category: Option<&str>, status: &str) -> Tone {
@@ -346,316 +575,613 @@ fn status_tone(category: Option<&str>, status: &str) -> Tone {
     }
 }
 
-fn mark_badge(mark: CriterionMark) -> String {
-    match mark {
-        CriterionMark::Proven => badge("proven", Tone::Good),
-        CriterionMark::Failing => badge("failing", Tone::Bad),
-        CriterionMark::Unproven => badge("unproven", Tone::Warn),
-    }
-}
-
-fn decision_html_row(
-    row: atelier_app::decisions::DecisionRow<'_>,
-    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-) -> String {
-    use atelier_app::decisions::DecisionRow;
-    match row {
-        DecisionRow::Note(note) => format!(
-            "<tr><td class=\"id\">{} <span class=\"muted\">{}</span></td><td>{}{}</td><td>{}</td><td>{}</td></tr>",
-            escape(&note.issue_id),
-            escape(&note.decision.date),
-            if note.decision.one_way {
-                format!("{} ", badge("one-way", Tone::Warn))
-            } else {
-                String::new()
-            },
-            escape(&note.decision.choice),
-            escape(&note.decision.reason),
-            escape(&note.decision.rejected.join("; "))
-        ),
-        DecisionRow::Record(record) => {
-            let issue = &record.issue;
-            let mut cues = Vec::new();
-            if let Some(adr) = &issue.adr {
-                cues.push(format!("ADR <code>{}</code>", escape(&adr.path)));
-            }
-            if !record.supersedes.is_empty() {
-                cues.push(format!("supersedes {}", escape(&record.supersedes.join(", "))));
-            }
-            if !record.superseded_by.is_empty() {
-                cues.push(format!(
-                    "superseded by {}",
-                    escape(&record.superseded_by.join(", "))
-                ));
-            }
-            let category = policy.and_then(|policy| policy.status_category(&issue.status));
-            format!(
-                "<tr><td class=\"id\">{}</td><td>{} {}</td><td colspan=\"2\">{}</td></tr>",
-                escape(&issue.id),
-                badge(&issue.status, status_tone(category, &issue.status)),
-                escape(&issue.title),
-                cues.join(" · ")
-            )
-        }
-        DecisionRow::Malformed(note) => format!(
-            "<tr><td class=\"id\">{} <span class=\"muted\">{}</span></td><td colspan=\"3\">{} decision note {} {}</td></tr>",
-            escape(&note.issue_id),
-            escape(&note.date),
-            badge("malformed", Tone::Bad),
-            note.number,
-            escape(&note.defect)
-        ),
-    }
-}
-
-fn render_html(
-    view: &Debrief,
-    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
-) -> String {
-    let mission = &view.mission;
-    let marks = |mark: CriterionMark| {
-        view.criteria
-            .proofs
-            .iter()
-            .filter(|proof| proof.mark == mark)
-            .count()
+/// An issue named by its title; hovering or focusing it shows its full
+/// title, summary, type, status and ID.
+fn issue_ref(view: &Debrief, id: &str, label: Option<&str>) -> String {
+    let Some(issue) = view.refs.get(id) else {
+        return escape(label.unwrap_or(id));
     };
-    let done = view
-        .items
-        .iter()
-        .filter(|item| item.status_category.as_deref() == Some("done"))
-        .count();
-    let one_way = view
-        .decisions
-        .notes
-        .iter()
-        .filter(|note| note.decision.one_way)
-        .count();
-    let mut body = String::new();
-    body.push_str(&format!(
-        "<header><p class=\"meta\">Debrief · <span class=\"id\">{}</span> · {}</p><h1>{}</h1>",
-        escape(&mission.id),
-        badge(
-            &mission.status,
-            status_tone(view.status_category.as_deref(), &mission.status)
-        ),
-        escape(&mission.title)
-    ));
-    let mut facts = Vec::new();
-    if let Some(strategy) = &view.strategy {
-        facts.push(format!("Strategy <code>{}</code>", escape(strategy)));
-    }
-    if let Some(started) = &view.timeline.started {
-        facts.push(format!("started {}", local_date(started.time)));
-    }
-    if let Some(closed) = &view.timeline.closed {
-        facts.push(format!("closed {}", local_date(closed.time)));
-    }
-    if let Some(commit) = &view.generated_from {
-        facts.push(format!(
-            "generated from <code>{}</code>",
-            escape(short_commit(commit))
-        ));
-    }
-    body.push_str(&format!("<p class=\"meta\">{}</p>", facts.join(" · ")));
-    body.push_str(&format!(
-        "<div class=\"outcome\">{}</div>",
-        prose(&view.outcome)
-    ));
-    body.push_str("<div class=\"tiles\">");
-    let total = view.criteria.proofs.len();
-    body.push_str(&tile(
-        marks(CriterionMark::Proven),
-        &format!("of {total} criteria proven"),
-        &format!(
-            "{} failing, {} unproven",
-            marks(CriterionMark::Failing),
-            marks(CriterionMark::Unproven)
-        ),
-        if total > 0 && marks(CriterionMark::Proven) == total {
-            Tone::Good
-        } else if marks(CriterionMark::Failing) > 0 {
-            Tone::Bad
-        } else {
-            Tone::Warn
-        },
-    ));
-    body.push_str(&tile(
-        done,
-        &format!("of {} items done", view.items.len()),
-        &format!("{} open or retired", view.items.len() - done),
-        if done == view.items.len() {
-            Tone::Good
-        } else {
-            Tone::Warn
-        },
-    ));
-    body.push_str(&tile(
-        view.decisions.notes.len() + view.decisions.records.len(),
-        "decisions",
-        &format!("{one_way} one-way"),
-        if one_way > 0 {
-            Tone::Warn
-        } else {
-            Tone::Neutral
-        },
-    ));
-    body.push_str(&tile(
-        view.deviations.len(),
-        "deviations",
-        "derived from records and Git",
-        if view.deviations.is_empty() {
-            Tone::Good
-        } else {
-            Tone::Warn
-        },
-    ));
-    body.push_str(&tile(
-        view.follow_ups.len(),
-        "follow-ups",
-        "open items and deferred follow-ups",
-        if view.follow_ups.is_empty() {
-            Tone::Good
-        } else {
-            Tone::Neutral
-        },
-    ));
-    body.push_str("</div><nav class=\"toc\"><a href=\"#criteria\">Criteria</a><a href=\"#items\">Items</a><a href=\"#decisions\">Decisions</a><a href=\"#deviations\">Deviations</a><a href=\"#reviews\">Reviews</a><a href=\"#follow-ups\">Follow-ups</a></nav></header>");
-
-    // Criteria
-    let mut criteria = String::from(
-        "<table><thead><tr><th>Criterion</th><th>Mark</th><th>Claim</th><th>Proof</th></tr></thead><tbody>",
-    );
-    for proof in &view.criteria.proofs {
-        criteria.push_str(&format!(
-            "<tr><td class=\"id\">{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-            escape(&proof.criterion.slug),
-            mark_badge(proof.mark),
-            inline(&proof.criterion.text),
-            criterion_proof_cue(proof, view.timeline.closed.is_some())
-                .map(|cue| escape(&cue))
-                .unwrap_or_else(|| "<span class=\"muted\">none</span>".into())
-        ));
-    }
-    criteria.push_str("</tbody></table>");
-    for problem in &view.criteria.criteria.parse.problems {
-        criteria.push_str(&format!(
-            "<p>{} {}</p>",
-            badge("problem", Tone::Bad),
-            escape(problem)
-        ));
-    }
-    body.push_str(&section("criteria", "Success Criteria", &criteria));
-
-    // Items
-    let mut items = String::new();
-    for item in &view.items {
-        let issue = &item.issue;
-        items.push_str(&format!(
-            "<details{}><summary><span class=\"id\">{}</span> {} {} <span class=\"muted\">{}</span></summary><div>",
-            if item.parent.is_some() { " class=\"child\"" } else { "" },
-            escape(&issue.id),
-            badge(&issue.status, status_tone(item.status_category.as_deref(), &issue.status)),
-            escape(&issue.title),
-            escape(&issue.issue_type)
-        ));
-        match &item.report {
-            Some(report) => {
-                items.push_str("<dl>");
-                for (title, text) in report_parts(report) {
-                    items.push_str(&format!(
-                        "<dt>{}</dt><dd>{}</dd>",
-                        escape(title),
-                        prose(text)
-                    ));
-                }
-                items.push_str("</dl>");
-            }
-            None => items.push_str("<p class=\"muted\">Not closed; no report yet.</p>"),
-        }
-        items.push_str("</div></details>");
-    }
-    body.push_str(&section("items", "Items", &items));
-
-    // Decisions, in the same groups and order as the Markdown.
-    let mut decisions = String::from(
-        "<table><thead><tr><th>Where</th><th>Decision</th><th>Why</th><th>Rejected</th></tr></thead><tbody>",
-    );
-    for (title, rows) in view.decisions.groups() {
-        decisions.push_str(&format!(
-            "<tr><th colspan=\"4\">{}</th></tr>",
-            escape(title)
-        ));
-        for row in rows {
-            decisions.push_str(&decision_html_row(row, policy));
-        }
-    }
-    decisions.push_str("</tbody></table>");
-    if view.decisions.groups().is_empty() {
-        decisions = "<p class=\"muted\">None recorded.</p>".to_string();
-    }
-    body.push_str(&section("decisions", "Decisions", &decisions));
-
-    // Deviations, reviews, follow-ups
-    let list = |lines: Vec<String>| {
-        if lines.is_empty() {
-            "<p class=\"muted\">None.</p>".to_string()
-        } else {
-            format!(
-                "<ul class=\"facts\">{}</ul>",
-                lines
-                    .iter()
-                    .map(|line| format!("<li>{}</li>", escape(line)))
-                    .collect::<String>()
-            )
-        }
-    };
-    body.push_str(&section(
-        "deviations",
-        "Deviations",
-        &list(
-            view.deviations
-                .iter()
-                .map(|deviation| deviation_line(deviation, view.timeline.closed.is_some()))
-                .collect(),
-        ),
-    ));
-    body.push_str(&section(
-        "reviews",
-        "Mission Reviews",
-        &list(
-            view.mission_events
-                .iter()
-                .map(|event| event_line(event))
-                .collect(),
-        ),
-    ));
-    body.push_str(&section(
-        "follow-ups",
-        "Follow-ups",
-        &list(
-            view.follow_ups
-                .iter()
-                .map(|issue| format!("{} {} {}", issue.id, issue.status, issue.title))
-                .collect(),
-        ),
-    ));
-    review_page::page(
-        &format!("Debrief: {} {}", mission.id, mission.title),
-        &body,
-        &format!(
-            "Generated by atelier debrief {} from {}. A read-only document; record decisions with atelier commands.",
-            mission.id,
-            view.generated_from
-                .as_deref()
-                .map(short_commit)
-                .unwrap_or("an uncommitted checkout")
-        ),
+    format!(
+        "<span class=\"ref\" tabindex=\"0\">{}<span class=\"pop\"><b>{}</b>{}<span class=\"m\">{} · {} · {}</span></span></span>",
+        escape(label.unwrap_or(&issue.title)),
+        escape(&issue.title),
+        inline(&issue.summary),
+        escape(&issue.issue_type),
+        escape(&issue.status),
+        escape(&issue.id)
     )
 }
 
-/// `atelier brief` (atelier-acrt): a mission's plan before work starts, in
-/// the same two forms as `debrief`.
+/// Record text as HTML with each mention of a known record turned into a
+/// popover reference: an issue by its title, a review or receipt by its ID.
+fn rich(view: &Debrief, text: &str) -> String {
+    link_mentions(view, &prose(text))
+}
+
+fn rich_inline(view: &Debrief, text: &str) -> String {
+    link_mentions(view, &inline(text))
+}
+
+fn link_mentions(view: &Debrief, html: &str) -> String {
+    let Some((slug, _)) = view.mission.id.rsplit_once('-') else {
+        return html.to_string();
+    };
+    let prefix = format!("{slug}-");
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(at) = rest.find(&prefix) {
+        let before = rest[..at].chars().next_back();
+        let tail = &rest[at + prefix.len()..];
+        let key_len = tail
+            .char_indices()
+            .find(|(_, c)| !(c.is_ascii_lowercase() || c.is_ascii_digit()))
+            .map_or(tail.len(), |(index, _)| index);
+        let id = &rest[at..at + prefix.len() + key_len];
+        let bounded = before.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '-'))
+            && tail[key_len..].chars().next().is_none_or(|c| c != '-');
+        out.push_str(&rest[..at]);
+        if bounded && view.refs.contains_key(id) {
+            let title = view.title_of(id);
+            let label = if title.chars().count() > 60 {
+                format!("{}…", title.chars().take(59).collect::<String>())
+            } else {
+                title.to_string()
+            };
+            out.push_str(&issue_ref(view, id, Some(&label)));
+        } else if let Some(record) = view.record_refs.get(id).filter(|_| bounded) {
+            out.push_str(&format!(
+                "<span class=\"ref\" tabindex=\"0\">{}<span class=\"pop\"><b>{}</b>{}<span class=\"m\">{}</span></span></span>",
+                escape(id),
+                escape(&capitalise(&record.kind)),
+                inline(&record.summary),
+                escape(id)
+            ));
+        } else {
+            out.push_str(id);
+        }
+        rest = &rest[at + id.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The status dot's class for an issue.
+fn dot(view: &Debrief, id: &str) -> &'static str {
+    match view.refs.get(id) {
+        Some(issue) if issue.status == "superseded" => "back",
+        Some(issue) => match issue.status_category.as_deref() {
+            Some("done") => "done",
+            Some("active") => "active",
+            Some("blocked") => "warn",
+            _ if issue.status == "backlog" || issue.status == "draft" => "back",
+            _ => "todo",
+        },
+        None => "back",
+    }
+}
+
+fn time_rail(time: Option<chrono::DateTime<chrono::Utc>>) -> String {
+    match time {
+        Some(time) => {
+            let local = time.with_timezone(&chrono::Local);
+            format!("<b>{}</b>{}", local.format("%H:%M"), local.format("%-d %b"))
+        }
+        None => String::new(),
+    }
+}
+
+fn render_html(view: &Debrief) -> String {
+    let mission = &view.mission;
+    let closed = view.timeline.closed.is_some();
+    let total = view.criteria.proofs.len();
+    let proven = view
+        .criteria
+        .proofs
+        .iter()
+        .filter(|proof| proof.mark == CriterionMark::Proven)
+        .count();
+    let percent = |part: usize, whole: usize| if whole == 0 { 0 } else { part * 100 / whole };
+
+    // Sidebar.
+    let mut side = format!("<h1>{}</h1>", escape(&mission.title));
+    let status_word = match (view.status_category.as_deref(), mission.status.as_str()) {
+        (Some("done"), _) => "Done".to_string(),
+        (_, "draft") => "Draft".to_string(),
+        _ => "In progress".to_string(),
+    };
+    side.push_str(&format!(
+        "<span class=\"status {}\">{}{}</span>",
+        if view.asks.is_empty() { "done" } else { "warn" },
+        escape(&status_word),
+        match view.asks.len() {
+            0 => String::new(),
+            1 => " · 1 needs you".to_string(),
+            n => format!(" · {n} need you"),
+        }
+    ));
+    if total > 0 {
+        side.push_str(&format!(
+            "<div class=\"meter\"><span>Criteria proven</span><span>{proven} of {total}</span></div><div class=\"bar\"><span style=\"width:{}%\"></span></div>",
+            percent(proven, total)
+        ));
+    }
+    if view.planned_total > 0 {
+        side.push_str(&format!(
+            "<div class=\"meter\"><span>Planned work done</span><span>{} of {}</span></div><div class=\"bar\"><span style=\"width:{}%\"></span></div>",
+            view.planned_done,
+            view.planned_total,
+            percent(view.planned_done, view.planned_total)
+        ));
+    }
+    side.push_str("<nav>");
+    if !view.asks.is_empty() {
+        side.push_str(&format!(
+            "<a href=\"#review\"><span class=\"dot warn\"></span>Needs your review <span class=\"n\">{}</span></a>",
+            view.asks.len()
+        ));
+    }
+    if view.why.is_some() {
+        side.push_str("<a href=\"#why\">Why</a>");
+    }
+    if total > 0 {
+        side.push_str(&format!(
+            "<a href=\"#criteria\">Success criteria <span class=\"n\">{proven}/{total}</span></a>"
+        ));
+    }
+    if !view.work.is_empty() {
+        side.push_str("<div class=\"g\">Work</div>");
+        for entry in &view.work {
+            side.push_str(&format!(
+                "<a href=\"#{}\"><span class=\"dot done\"></span><span class=\"label\">{}</span></a>",
+                escape(&entry.id),
+                escape(view.title_of(&entry.id))
+            ));
+            for child in &entry.children {
+                side.push_str(&format!(
+                    "<a class=\"sub\" href=\"#{}\"><span class=\"dot {}\"></span><span class=\"label\">{}</span></a>",
+                    escape(&entry.id),
+                    dot(view, child),
+                    escape(view.title_of(child))
+                ));
+            }
+        }
+    }
+    side.push_str("<div class=\"g\">After</div>");
+    if !view.open.is_empty() || !view.dropped.is_empty() {
+        side.push_str(&format!(
+            "<a href=\"#open\"><span class=\"dot back\"></span>Open work <span class=\"n\">{}</span></a>",
+            view.open.len()
+        ));
+    }
+    let decision_count = view.decisions.notes.len() + view.decisions.records.len();
+    if decision_count > 0 {
+        side.push_str(&format!(
+            "<a href=\"#decisions\">Decisions <span class=\"n\">{decision_count}</span></a>"
+        ));
+    }
+    if !view.mission_events.is_empty() {
+        side.push_str("<a href=\"#reviews\">Mission reviews</a>");
+    }
+    side.push_str("</nav>");
+
+    // Header.
+    let mut main = format!("<h2>{}</h2><div class=\"props\">", escape(&mission.title));
+    main.push_str(&format!("<span>{}</span>", escape(&status_word)));
+    let window_start = view.timeline.started.as_ref().map(|moment| moment.time);
+    let window_end = view
+        .timeline
+        .closed
+        .as_ref()
+        .map(|moment| moment.time)
+        .or_else(|| last_delivery(view));
+    if let Some(start) = window_start {
+        let start = start.with_timezone(&chrono::Local);
+        let end = window_end.map(|end| end.with_timezone(&chrono::Local));
+        let window = match end {
+            Some(end) if end.date_naive() == start.date_naive() => format!(
+                "{} {} – {}",
+                start.format("%-d %b"),
+                start.format("%H:%M"),
+                end.format("%H:%M")
+            ),
+            Some(end) => format!("{} – {}", start.format("%-d %b"), end.format("%-d %b")),
+            None => format!("since {}", start.format("%-d %b")),
+        };
+        main.push_str(&format!("<span>{}</span>", escape(&window)));
+    }
+    if let Some(strategy) = &view.strategy {
+        let name = strategy.rsplit('/').next().unwrap_or(strategy);
+        main.push_str(&format!("<span><code>{}</code></span>", escape(name)));
+    }
+    if let Some(commit) = &view.generated_from {
+        main.push_str(&format!(
+            "<span>at <code>{}</code></span>",
+            escape(short_commit(commit))
+        ));
+    }
+    main.push_str("</div>");
+    if !view.outcome.trim().is_empty() {
+        main.push_str(&format!(
+            "<div class=\"lede\">{}</div>",
+            rich(view, &view.outcome)
+        ));
+    }
+
+    // Needs your review.
+    if !view.asks.is_empty() {
+        let mut asks = String::new();
+        for (number, ask) in view.asks.iter().enumerate() {
+            let (title, detail) = ask_line(view, ask);
+            let title = match ask {
+                Ask::Decision(id) => format!("Decide: {}", issue_ref(view, id, None)),
+                Ask::NeedsHuman(id) => issue_ref(view, id, None),
+                _ => escape(&title),
+            };
+            asks.push_str(&format!(
+                "<div class=\"ask\"><span class=\"k\">{}</span><span class=\"t\">{title}</span>{}</div>",
+                number + 1,
+                if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!("<span class=\"d\">{}</span>", rich_inline(view, &detail))
+                }
+            ));
+        }
+        main.push_str(&format!(
+            "<section id=\"review\"><h3>Needs your review</h3>{asks}</section>"
+        ));
+    }
+
+    // Why.
+    if let Some(why) = &view.why {
+        main.push_str(&format!(
+            "<section id=\"why\" class=\"why\"><h3>Why</h3>{}</section>",
+            rich(view, why)
+        ));
+    }
+
+    // Criteria.
+    if total > 0 || !view.criteria.criteria.parse.problems.is_empty() {
+        let mut rows = String::new();
+        for proof in &view.criteria.proofs {
+            let slug = &proof.criterion.slug;
+            let (class, word) = match proof.mark {
+                CriterionMark::Proven => ("done", "✓ Proven"),
+                CriterionMark::Failing => ("warn", "⚠ Failing"),
+                CriterionMark::Unproven => ("todo", "Unproven"),
+            };
+            let by = view
+                .delivered_by
+                .get(slug)
+                .into_iter()
+                .flatten()
+                .map(|id| {
+                    let anchor = view
+                        .work
+                        .iter()
+                        .find(|entry| &entry.id == id || entry.children.contains(id))
+                        .map(|entry| entry.id.as_str())
+                        .unwrap_or(id);
+                    format!(
+                        "<a href=\"#{}\">{}</a>",
+                        escape(anchor),
+                        escape(view.title_of(id))
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut by = by.join(", ");
+            if let Some(age) = proof_age(proof, closed) {
+                by.push_str(&format!(
+                    " <span class=\"age\">· proof {}</span>",
+                    escape(&age)
+                ));
+            }
+            let proof_title = proof_cue(proof, closed)
+                .map(|cue| format!(" title=\"{}\"", escape(&cue)))
+                .unwrap_or_default();
+            rows.push_str(&format!(
+                "<div class=\"crit\"><span class=\"s\">{}</span><span class=\"status {class}\"{proof_title}>{word}</span><span>{}</span><span class=\"by\">{by}</span></div>",
+                escape(slug),
+                rich_inline(view, &atelier_app::mission_review::first_sentence(&proof.criterion.text))
+            ));
+        }
+        for problem in &view.criteria.criteria.parse.problems {
+            rows.push_str(&format!(
+                "<div class=\"crit\"><span class=\"s\"></span><span class=\"status warn\">⚠</span><span>{}</span><span></span></div>",
+                escape(problem)
+            ));
+        }
+        main.push_str(&format!(
+            "<section id=\"criteria\"><h3>Success criteria</h3>{rows}</section>"
+        ));
+    }
+
+    // Work.
+    if !view.work.is_empty() {
+        let mut entries = String::new();
+        for entry in &view.work {
+            entries.push_str(&work_entry_html(view, entry));
+        }
+        main.push_str(&format!("<section><h3>Work</h3>{entries}</section>"));
+    }
+
+    // Open work.
+    if !view.open.is_empty() || !view.dropped.is_empty() {
+        let mut rows = String::new();
+        let planned = view.open.iter().filter(|entry| entry.from.is_none());
+        let from_review = view.open.iter().filter(|entry| entry.from.is_some());
+        for entry in planned {
+            let status = view
+                .refs
+                .get(&entry.id)
+                .map(|issue| issue.status.as_str())
+                .unwrap_or("");
+            rows.push_str(&format!(
+                "<div class=\"row{}\"><span class=\"dot {}\"></span><span>{}{}{}</span><span class=\"from\">{}</span></div>",
+                if entry.parent.is_some() { " kid" } else { "" },
+                dot(view, &entry.id),
+                issue_ref(view, &entry.id, None),
+                if entry.added_after_start { " <span class=\"note\">added after the start</span>" } else { "" },
+                changes_html(view, &entry.changes),
+                escape(status)
+            ));
+        }
+        let from_review = from_review.collect::<Vec<_>>();
+        if !from_review.is_empty() {
+            rows.push_str("<div class=\"sub\">From review</div>");
+            for entry in from_review {
+                let from = entry.from.as_deref().unwrap_or_default();
+                rows.push_str(&format!(
+                    "<div class=\"row\"><span class=\"dot {}\"></span><span>{}</span><span class=\"from\"><a href=\"#{}\">{}</a></span></div>",
+                    dot(view, &entry.id),
+                    issue_ref(view, &entry.id, None),
+                    escape(from),
+                    escape(view.title_of(from))
+                ));
+            }
+        }
+        if !view.dropped.is_empty() {
+            rows.push_str("<div class=\"sub\">Dropped</div>");
+            for entry in &view.dropped {
+                rows.push_str(&format!(
+                    "<div class=\"row\"><span class=\"dot back\"></span><span>{} <span class=\"note\">{}</span>{}</span><span></span></div>",
+                    issue_ref(view, &entry.id, None),
+                    rich_inline(view, entry.reason.as_deref().unwrap_or_default()),
+                    changes_html(view, &entry.changes)
+                ));
+            }
+        }
+        main.push_str(&format!(
+            "<section id=\"open\"><h3>Open work</h3>{rows}</section>"
+        ));
+    }
+
+    // Decisions.
+    if decision_count > 0 {
+        let mut rows = String::new();
+        for (title, group) in view.decisions.groups() {
+            if !matches!(title, "One-way Decisions" | "Reversible Decisions") {
+                rows.push_str(&format!("<div class=\"sub\">{}</div>", escape(title)));
+            }
+            for row in group {
+                rows.push_str(&decision_row_html(view, row));
+            }
+        }
+        main.push_str(&format!(
+            "<section id=\"decisions\"><h3>Decisions</h3>{rows}</section>"
+        ));
+    }
+
+    // Mission reviews.
+    if !view.mission_events.is_empty() {
+        let rows = view
+            .mission_events
+            .iter()
+            .map(|event| {
+                format!(
+                    "<div class=\"row\"><span></span><span>{}</span><span></span></div>",
+                    rich_inline(view, &event_line(event))
+                )
+            })
+            .collect::<String>();
+        main.push_str(&format!(
+            "<section id=\"reviews\"><h3>Mission reviews</h3>{rows}</section>"
+        ));
+    }
+
+    review_page::review_document(&format!("Debrief: {}", mission.title), &side, &main)
+}
+
+fn decision_row_html(view: &Debrief, row: DecisionRow<'_>) -> String {
+    let anchor = |id: &str| {
+        view.work
+            .iter()
+            .find(|entry| entry.id == id || entry.children.iter().any(|child| child == id))
+            .map(|entry| {
+                format!(
+                    "<a href=\"#{}\">{}</a>",
+                    escape(&entry.id),
+                    escape(view.title_of(&entry.id))
+                )
+            })
+            .unwrap_or_else(|| issue_ref(view, id, None))
+    };
+    match row {
+        DecisionRow::Note(note) => format!(
+            "<div class=\"dec\"><span>{}{}</span><span class=\"r\">{}{}</span><span class=\"w\">{}</span></div>",
+            if note.decision.one_way { "<span class=\"oneway\">one-way</span>" } else { "" },
+            rich_inline(view, &note.decision.choice),
+            rich_inline(view, &note.decision.reason),
+            if note.decision.rejected.is_empty() {
+                String::new()
+            } else {
+                format!(" Rejected: {}.", rich_inline(view, &note.decision.rejected.join("; ")))
+            },
+            anchor(&note.issue_id)
+        ),
+        DecisionRow::Record(record) => {
+            let mut cues = Vec::new();
+            if let Some(adr) = &record.issue.adr {
+                cues.push(format!("ADR <code>{}</code>", escape(&adr.path)));
+            }
+            for id in &record.supersedes {
+                cues.push(format!("replaces {}", issue_ref(view, id, None)));
+            }
+            for id in &record.superseded_by {
+                cues.push(format!("replaced by {}", issue_ref(view, id, None)));
+            }
+            let summary = view
+                .refs
+                .get(&record.issue.id)
+                .map(|issue| issue.summary.clone())
+                .unwrap_or_default();
+            format!(
+                "<div class=\"dec\"><span>{}</span><span class=\"r\">{}{}</span><span class=\"w\">{}</span></div>",
+                issue_ref(view, &record.issue.id, None),
+                rich_inline(view, &summary),
+                if cues.is_empty() { String::new() } else { format!(" {}", cues.join(" · ")) },
+                escape(&record.issue.status)
+            )
+        }
+        DecisionRow::Malformed(note) => format!(
+            "<div class=\"dec\"><span class=\"status warn\">⚠ Malformed decision note</span><span class=\"r\">{}</span><span class=\"w\">{}</span></div>",
+            rich_inline(view, &note.defect),
+            anchor(&note.issue_id)
+        ),
+    }
+}
+
+fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
+    let issue = view.refs.get(&entry.id);
+    let mut meta = vec![issue
+        .map(|issue| capitalise(&issue.issue_type))
+        .unwrap_or_default()];
+    if !entry.criteria.is_empty() {
+        meta.push(entry.criteria.join(", "));
+    }
+    if entry.added_after_start {
+        meta.push("added after the start".into());
+    }
+    let mut facts = String::new();
+    let mut fact = |label: &str, body: String| {
+        facts.push_str(&format!(
+            "<div class=\"fact\"><span>{}</span><div>{body}</div></div>",
+            escape(label)
+        ));
+    };
+    let mut changed = Vec::new();
+    if let Some(text) = reported(entry, ReportPart::Deviations) {
+        changed.push(rich(view, text));
+    }
+    changed.extend(
+        entry
+            .changes
+            .iter()
+            .map(|change| format!("<p>{}</p>", rich_inline(view, &change_text(change, false)))),
+    );
+    let notable = !changed.is_empty() || entry.decisions.iter().any(|note| note.decision.one_way);
+    if !changed.is_empty() {
+        fact(
+            "Changed",
+            format!("<div class=\"changed\">{}</div>", changed.join("")),
+        );
+    }
+    if let Some(text) = reported(entry, ReportPart::Surprises) {
+        fact("Surprised by", rich(view, text));
+    }
+    if !entry.decisions.is_empty() {
+        let items = entry
+            .decisions
+            .iter()
+            .map(|note| {
+                format!(
+                    "<li>{}{} <span class=\"r\">{}</span></li>",
+                    if note.decision.one_way {
+                        "<span class=\"oneway\">one-way</span>"
+                    } else {
+                        ""
+                    },
+                    rich_inline(view, &note.decision.choice),
+                    rich_inline(view, &note.decision.reason)
+                )
+            })
+            .collect::<String>();
+        fact("Decided", format!("<ul>{items}</ul>"));
+    }
+    if let Some(review) = review_line(view, entry) {
+        fact("Review", format!("<p>{}</p>", escape(&review)));
+    }
+    let mut left = entry
+        .follow_ups
+        .iter()
+        .map(|id| format!("<li>{}</li>", issue_ref(view, id, None)))
+        .collect::<String>();
+    if let Some(text) = reported(entry, ReportPart::OpenItems) {
+        if left.is_empty() {
+            left = rich(view, text);
+        }
+    }
+    if !left.is_empty() {
+        let body = if left.starts_with("<li>") {
+            format!("<ul>{left}</ul>")
+        } else {
+            left
+        };
+        fact("Left open", body);
+    }
+    let children = if entry.children.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<ul class=\"kids\">{}</ul>",
+            entry
+                .children
+                .iter()
+                .map(|child| format!(
+                    "<li><span class=\"dot {}\"></span>{}</li>",
+                    dot(view, child),
+                    issue_ref(view, child, None)
+                ))
+                .collect::<String>()
+        )
+    };
+    let details = if notable {
+        facts
+    } else {
+        format!("<details class=\"more\"><summary>Review, decisions and follow-ups</summary>{facts}</details>")
+    };
+    format!(
+        "<div class=\"entry{}\" id=\"{}\"><div class=\"time\">{}</div><div class=\"rail\"><span class=\"dot done\"></span></div><div class=\"body\"><div class=\"title\">{}</div><div class=\"meta\">{}</div><div class=\"outcome\">{}</div>{children}{details}</div></div>",
+        if notable { "" } else { " quiet" },
+        escape(&entry.id),
+        time_rail(entry.closed_at),
+        escape(view.title_of(&entry.id)),
+        escape(&meta.join(" · ")),
+        rich(view, outcome(entry))
+    )
+}
+
+/// Derived changes on an open or dropped row, as notes under its title.
+fn changes_html(view: &Debrief, changes: &[Change]) -> String {
+    changes
+        .iter()
+        .map(|change| {
+            format!(
+                "<span class=\"changed note-line\">{}</span>",
+                rich_inline(view, &change_text(change, false))
+            )
+        })
+        .collect()
+}
+
+fn capitalise(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
+}
+
 pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) -> Result<()> {
     let id = crate::commands::issue::resolve_id(index, mission_ref)?;
     let issue = index.require_issue(&id)?;
