@@ -558,7 +558,8 @@ another target.")]
         producer: Option<String>,
         /// A mission success criterion this receipt judges, as <slug>=<result>
         /// for manual proof, or a bare <slug> that takes a captured command's
-        /// result; repeat for several. Needs --target in the mission's scope
+        /// result; repeat for several. Needs --target on the mission, or on an
+        /// item that only that mission holds
         #[arg(long = "criterion", value_name = "CRITERION")]
         criteria: Vec<String>,
         /// Manual evidence summary; command-backed evidence passes its command after `--`

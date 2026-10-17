@@ -290,24 +290,17 @@ fn criteria_findings(
     };
     let mut findings = Vec::new();
     for record in index.evidence_records() {
-        let Some(target) = record
+        let Some(mission) = record.data.criteria_mission.as_deref() else {
+            continue;
+        };
+        let target = record
             .data
             .target
             .as_ref()
             .filter(|target| target.kind == "issue")
-        else {
-            if !record.data.criteria.is_empty() {
-                findings.push(LintFinding {
-                    id: record.header.id.clone(),
-                    message: "Evidence names criteria but has no issue target".to_string(),
-                });
-            }
-            continue;
-        };
-        if scope
-            .as_ref()
-            .is_some_and(|scope| !scope.contains(&target.id))
-        {
+            .map(|target| target.id.as_str());
+        let in_scope = |id: &str| scope.as_ref().is_none_or(|scope| scope.contains(id));
+        if !in_scope(mission) && !target.is_some_and(in_scope) {
             continue;
         }
         let slugs = record
@@ -316,9 +309,7 @@ fn criteria_findings(
             .iter()
             .map(|criterion| criterion.slug.as_str())
             .collect::<Vec<_>>();
-        for problem in
-            crate::criteria::receipt_criteria_problems(&index, repo_root, &target.id, &slugs)?
-        {
+        for problem in crate::criteria::undefined_criteria(&index, repo_root, mission, &slugs)? {
             findings.push(LintFinding {
                 id: record.header.id.clone(),
                 message: format!("Evidence {problem}"),

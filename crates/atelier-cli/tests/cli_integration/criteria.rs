@@ -82,7 +82,7 @@ fn receipts_record_and_show_a_result_per_criterion() {
     );
     let text = read_canonical_record(dir.path(), "evidence", &id);
     assert!(
-        text.contains("criteria:\n- slug: \"pipe-safe\"\n  result: \"pass\"\n- slug: \"quiet-tokens\"\n  result: \"fail\"\n"),
+        text.contains("criteria:\n- slug: \"pipe-safe\"\n  result: \"pass\"\n- slug: \"quiet-tokens\"\n  result: \"fail\"\ncriteria_mission: \""),
         "{text}"
     );
     let show = ok(dir.path(), &["evidence", "show", &id]);
@@ -435,7 +435,7 @@ fn work_mission_reads_criteria_from_the_linked_strategy() {
 }
 
 #[test]
-fn proof_for_an_item_in_several_missions_counts_toward_none() {
+fn proof_stays_with_the_mission_it_was_recorded_against() {
     let dir = tempdir().unwrap();
     let (mission, work, _) = fixture(dir.path());
     let early = record(
@@ -445,6 +445,8 @@ fn proof_for_an_item_in_several_missions_counts_toward_none() {
         &["S3=pass"],
         "Before the second mission",
     );
+    assert!(read_canonical_record(dir.path(), "evidence", &early)
+        .contains(&format!("criteria_mission: \"{mission}\"\n")));
     let other = ok(
         dir.path(),
         &[
@@ -460,6 +462,7 @@ fn proof_for_an_item_in_several_missions_counts_toward_none() {
     )
     .trim()
     .to_string();
+    // While the item is in both missions, new proof on it is ambiguous.
     ok(dir.path(), &["issue", "link", "-q", &work, &other]);
     let output = refused(
         dir.path(),
@@ -481,19 +484,22 @@ fn proof_for_an_item_in_several_missions_counts_toward_none() {
         output.contains("target the mission whose criteria it judges"),
         "{output}"
     );
-    for id in [&mission, &other] {
-        let view = ok(dir.path(), &["work", "mission", id]);
-        assert!(view.contains("S3 unproven"), "{id}: {view}");
-        assert!(!view.contains(&early), "{id}: {view}");
-    }
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    // Moved to the other mission, the item takes none of its old proof along.
+    ok(dir.path(), &["issue", "unlink", "-q", &work, &mission]);
+    let first = ok(dir.path(), &["work", "mission", &mission]);
     assert!(
-        !success
-            && format!("{stdout}{stderr}").contains(&format!(
-                "{early}: Evidence names criteria S3, but its target {work} is in missions"
-            )),
-        "{stdout}{stderr}"
+        first.contains(&format!(
+            "S3 ✓ proven Legacy positional criterion. | {early} pass at "
+        )),
+        "{first}"
     );
+    let second = ok(dir.path(), &["work", "mission", &other]);
+    assert!(
+        second.contains("S3 unproven Another mission's S3."),
+        "{second}"
+    );
+    assert!(!second.contains(&early), "{second}");
+    ok(dir.path(), &["check"]);
     // Proof recorded on the mission itself is unambiguous.
     record(
         dir.path(),

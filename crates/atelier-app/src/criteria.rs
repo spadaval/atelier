@@ -105,39 +105,60 @@ pub fn criteria_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<St
     })
 }
 
-/// What is wrong with the criteria a receipt names: each slug its mission
-/// does not define, or criteria named where no single mission owns them.
-pub fn receipt_criteria_problems(
+/// The mission a new receipt's criteria belong to, or what is wrong with
+/// them: each slug the target's single mission does not define, or criteria
+/// named where no single mission owns them.
+pub fn receipt_criteria_mission(
     index: &RecordIndex,
     repo_root: &Path,
     target_id: &str,
     slugs: &[&str],
-) -> Result<Vec<String>> {
-    if slugs.is_empty() {
-        return Ok(Vec::new());
-    }
+) -> Result<std::result::Result<String, Vec<String>>> {
     let missions = missions_for(index, target_id)?;
     let mission = match missions.as_slice() {
         [] => {
-            return Ok(vec![format!(
+            return Ok(Err(vec![format!(
                 "names criteria {}, but its target {target_id} is in no mission, so no criteria are defined for it",
                 slugs.join(", ")
-            )])
+            )]))
         }
-        [mission] => mission,
+        [mission] => mission.clone(),
         several => {
-            return Ok(vec![format!(
+            return Ok(Err(vec![format!(
                 "names criteria {}, but its target {target_id} is in missions {}; target the mission whose criteria it judges",
                 slugs.join(", "),
                 several.join(", ")
-            )])
+            )]))
         }
     };
-    let criteria = mission_criteria(index, repo_root, mission)?;
+    let problems = undefined_criteria(index, repo_root, &mission, slugs)?;
+    Ok(if problems.is_empty() {
+        Ok(mission)
+    } else {
+        Err(problems)
+    })
+}
+
+/// Each slug `mission_id` does not define, or that it is not a mission.
+pub fn undefined_criteria(
+    index: &RecordIndex,
+    repo_root: &Path,
+    mission_id: &str,
+    slugs: &[&str],
+) -> Result<Vec<String>> {
+    if !index
+        .issue_record(mission_id)
+        .is_some_and(|record| record.issue.issue_type == "mission")
+    {
+        return Ok(vec![format!(
+            "names criteria of {mission_id}, which is not a mission"
+        )]);
+    }
+    let criteria = mission_criteria(index, repo_root, mission_id)?;
     Ok(slugs
         .iter()
         .filter(|slug| criteria.parse.get(slug).is_none())
-        .map(|slug| format!("names criterion {slug}, which mission {mission} does not define"))
+        .map(|slug| format!("names criterion {slug}, which mission {mission_id} does not define"))
         .collect())
 }
 
@@ -202,9 +223,7 @@ pub struct MissionProof {
     pub orphaned: Vec<(String, String)>,
 }
 
-/// Every criterion of the mission with the receipts that name it: those
-/// whose own target is the mission, or an item in its scope and in no other
-/// mission. The newest receipt whose pin is in HEAD's history decides the
+/// Every criterion of the mission with the receipts recorded against it. The newest receipt whose pin is in HEAD's history decides the
 /// mark. Item-level freshness, which any later code commit breaks, is
 /// reported for the deciding receipt as a count of code commits since its
 /// pin rather than applied.
@@ -215,24 +234,13 @@ pub fn mission_proof(
 ) -> Result<MissionProof> {
     let repo_root = read.repo;
     let criteria = mission_criteria(index, repo_root, mission_id)?;
-    let mut scope = mission_issue_ids(index, mission_id)?;
-    scope.insert(mission_id.to_string());
-    let mut receipts = Vec::new();
-    for record in index.evidence_records() {
-        let Some(target) = record
-            .data
-            .target
-            .as_ref()
-            .filter(|target| target.kind == "issue" && scope.contains(&target.id))
-        else {
-            continue;
-        };
-        if !record.data.criteria.is_empty()
-            && criteria_mission(index, &target.id)?.as_deref() == Some(mission_id)
-        {
-            receipts.push(record);
-        }
-    }
+    // A receipt belongs to the mission it was recorded against, wherever its
+    // target has moved since.
+    let mut receipts = index
+        .evidence_records()
+        .into_iter()
+        .filter(|record| record.data.criteria_mission.as_deref() == Some(mission_id))
+        .collect::<Vec<_>>();
     receipts.sort_by(|a, b| {
         (b.data.captured_at, &b.header.id).cmp(&(a.data.captured_at, &a.header.id))
     });

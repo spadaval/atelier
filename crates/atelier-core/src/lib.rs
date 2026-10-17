@@ -1251,6 +1251,10 @@ pub struct EvidenceRecordData {
     /// (atelier-et6q).
     #[serde(default)]
     pub criteria: Vec<EvidenceCriterion>,
+    /// The mission whose criteria `criteria` names, fixed when the receipt
+    /// is recorded so the proof stays with that mission if its target moves.
+    #[serde(default)]
+    pub criteria_mission: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

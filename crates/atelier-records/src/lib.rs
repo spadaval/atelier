@@ -957,6 +957,11 @@ pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
     )?;
     write_evidence_target(&mut output, data.target.as_ref())?;
     write_evidence_criteria(&mut output, &data.criteria)?;
+    write_yaml_scalar_if_some(
+        &mut output,
+        "criteria_mission",
+        data.criteria_mission.as_deref(),
+    )?;
     write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
     write_yaml_relationships(&mut output, &relationships)?;
@@ -1018,6 +1023,7 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
             relative,
         )?
         .unwrap_or_default(),
+        criteria_mission: optional_scalar(&front_matter, "criteria_mission")?,
     };
     apply_evidence_body_sections(&mut data, body);
 
@@ -1041,6 +1047,12 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
 
 fn validate_evidence_record(record: &EvidenceRecord, relative: &Path) -> Result<()> {
     let data = &record.data;
+    if data.criteria.is_empty() != data.criteria_mission.is_none() {
+        bail!(
+            "evidence names criteria without the mission they belong to, or a mission without criteria, in {}",
+            display_state_path(relative)
+        );
+    }
     let mut slugs = BTreeSet::new();
     for criterion in &data.criteria {
         if !atelier_core::is_criterion_slug(&criterion.slug) {
@@ -2373,6 +2385,7 @@ mod tests {
             output: None,
             target: None,
             criteria: Vec::new(),
+            criteria_mission: None,
         };
         EvidenceRecord {
             header: record_header(

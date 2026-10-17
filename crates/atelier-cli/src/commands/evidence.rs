@@ -91,7 +91,7 @@ pub fn add_returning_id(
     if let Some(target) = target.as_ref() {
         validate_record_ref(index, target.kind, target.id, target.role)?;
     }
-    check_criteria(
+    let criteria_mission = check_criteria(
         index,
         state_dir,
         target.as_ref().map(|target| (target.kind, target.id)),
@@ -129,6 +129,7 @@ pub fn add_returning_id(
             role: target.role.to_string(),
         }),
         criteria: criteria.to_vec(),
+        criteria_mission,
     };
     let created = atelier_app::project_config::record_store(state_dir)?
         .create_evidence(summary, "recorded", summary, data)?;
@@ -165,15 +166,16 @@ pub fn captured_criteria(values: &[String]) -> Result<Vec<String>> {
         .collect()
 }
 
-/// A receipt names only criteria its target's mission defines, and each once.
+/// A receipt names only criteria its target's single mission defines, and
+/// each once; the answer is that mission, stored on the receipt.
 fn check_criteria(
     index: &RecordIndex,
     state_dir: &Path,
     target: Option<(&str, &str)>,
     slugs: &[&str],
-) -> Result<()> {
+) -> Result<Option<String>> {
     if slugs.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     if let Some(slug) = slugs
         .iter()
@@ -183,20 +185,18 @@ fn check_criteria(
         bail!("--criterion names {slug} more than once");
     }
     let Some(("issue", target_id)) = target else {
-        bail!("--criterion needs an issue --target in the mission whose criteria it names");
+        bail!("--criterion needs an issue --target: the mission whose criteria it names, or an item only that mission holds");
     };
     let repo_root = state_dir
         .parent()
         .context("state directory has no repository parent")?;
-    let problems =
-        atelier_app::criteria::receipt_criteria_problems(index, repo_root, target_id, slugs)?;
-    if !problems.is_empty() {
-        bail!(
+    match atelier_app::criteria::receipt_criteria_mission(index, repo_root, target_id, slugs)? {
+        Ok(mission) => Ok(Some(mission)),
+        Err(problems) => bail!(
             "This receipt {}. Name the criteria as the mission's Success Criteria bullets spell them (`atelier work mission <id>` lists them)",
             problems.join("; ")
-        );
+        ),
     }
-    Ok(())
 }
 
 pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
@@ -338,6 +338,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             role: target.role.to_string(),
         }),
         criteria: Vec::new(),
+        criteria_mission: None,
     };
     let mut data = data;
     data.criteria = options
@@ -348,6 +349,17 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             result: data.result,
         })
         .collect();
+    data.criteria_mission = check_criteria(
+        &index,
+        &state_dir,
+        options.target_kind.zip(resolved_target_id.as_deref()),
+        &options
+            .criteria
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    )
+    .context("evidence capture postflight criteria check failed; no evidence was written")?;
     let body = atelier_records::render_evidence_transcript(&summary, &data);
 
     let created = RecordStore::for_project(&state_dir, &association.project_slug)

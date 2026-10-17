@@ -101,6 +101,7 @@ mod tests {
                     output: None,
                     target: None,
                     criteria: Vec::new(),
+                    criteria_mission: None,
                 },
             )
             .unwrap();
