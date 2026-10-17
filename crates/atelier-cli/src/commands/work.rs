@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use atelier_app::record_index::RecordIndex;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::mission_overview::mission_overview;
@@ -134,15 +134,43 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
         ],
         other => bail!("unknown work bucket '{other}'"),
     };
+    // Ready work another local branch already started is marked with its
+    // state there; the summaries are read once for the whole page.
+    let (in_flight, unavailable) = if matches!(bucket, "ready" | "all") {
+        match in_flight_marks(index) {
+            Ok(marks) => (marks, None),
+            Err(error) => (
+                BTreeMap::new(),
+                Some(format!("In-flight marks unavailable: {error:#}")),
+            ),
+        }
+    } else {
+        (BTreeMap::new(), None)
+    };
     let context = RenderContext::for_stdout();
-    print_page(
-        "Atelier Work",
-        groups
-            .into_iter()
-            .map(|(title, rows)| IssueListPanel::from_work_rows(title, rows).render(context)),
-        context,
-    );
+    let mut panels = groups
+        .into_iter()
+        .map(|(title, rows)| {
+            let panel = IssueListPanel::from_work_rows(title, rows);
+            if title == "Ready Work" {
+                panel.marks(&in_flight)
+            } else {
+                panel
+            }
+            .render(context)
+        })
+        .collect::<Vec<_>>();
+    panels.extend(unavailable.map(|line| render_lines_section("", [line])));
+    print_page("Atelier Work", panels, context);
     Ok(())
+}
+
+fn in_flight_marks(index: &RecordIndex) -> Result<BTreeMap<String, String>> {
+    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
+    Ok(
+        crate::commands::git::branch_summaries(layout.repo_root(), &layout.canonical_dir(), index)?
+            .in_flight(),
+    )
 }
 
 /// The needs-human and context counts for summaries, shown only when there

@@ -4013,6 +4013,53 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     );
 }
 #[test]
+fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let finished = ok(f.path(), &["-q", "issue", "create", "Finished elsewhere"]);
+    let idle = ok(f.path(), &["-q", "issue", "create", "Nobody's work"]);
+    commit(f.path(), "plan more work");
+    ok(f.path(), &["start", &finished]);
+    f.terminal(&finished);
+    git(f.path(), &["switch", "-q", "main"]);
+    let marks = [
+        (&f.id, format!("    ↳ in_progress on {}", f.branch)),
+        (
+            &finished,
+            format!("    ↳ done on task/{finished}, not merged"),
+        ),
+    ];
+    for args in [&["work", "ready"][..], &["work", "all"], &["status"]] {
+        let output = ok(f.path(), args);
+        let ready = section(&output, "Ready Work");
+        for (id, mark) in &marks {
+            let row = ready
+                .iter()
+                .position(|line| line.contains(&format!(" {id} [todo]")))
+                .unwrap_or_else(|| panic!("{args:?} lists {id} as ready: {output}"));
+            assert_eq!(
+                ready.get(row + 1),
+                Some(&mark.as_str()),
+                "{args:?}: {output}"
+            );
+        }
+        let row = ready
+            .iter()
+            .position(|line| line.contains(&format!(" {idle} [todo]")))
+            .unwrap();
+        assert!(
+            ready.get(row + 1).is_none_or(|next| !next.contains('↳')),
+            "{args:?}: {output}"
+        );
+    }
+    // The checkout's own records are not overlaid.
+    assert_eq!(
+        f.store().load_issue_by_id(&f.id).unwrap().issue.status,
+        "todo"
+    );
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+}
+#[test]
 fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates() {
     let dir = tempdir().unwrap();
     git(dir.path(), &["init", "-qb", "main"]);

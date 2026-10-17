@@ -2,7 +2,7 @@
 use anyhow::{bail, Context, Result};
 use atelier_app::{git_freshness, record_index::RecordIndex, workflow_policy};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::Path,
     process::{Command, Stdio},
 };
@@ -421,6 +421,14 @@ pub(crate) fn unmerged_done_label(
     branch: &str,
     base_branch: &str,
 ) -> String {
+    if done_merged(repo, id, status, branch, base_branch) {
+        format!("{status}, merged into {base_branch}")
+    } else {
+        format!("{status} on branch {branch}, not merged into {base_branch}")
+    }
+}
+
+fn done_merged(repo: &Path, id: &str, status: &str, branch: &str, base_branch: &str) -> bool {
     let path = format!(".atelier/issues/{id}.md");
     let status_at = |commit: &str| {
         git_freshness::blob(repo, commit, Path::new(&path))
@@ -435,25 +443,108 @@ pub(crate) fn unmerged_done_label(
             })
     };
     let base = resolve(repo, &format!("refs/heads/{base_branch}")).ok();
-    let merged = base.as_deref().is_some_and(|base| match status_at(base) {
+    base.as_deref().is_some_and(|base| match status_at(base) {
         Some(on_base) => on_base.as_deref() == Some(status),
         None => resolve(repo, &format!("refs/heads/{branch}")).is_ok_and(|tip| {
             status_at(&tip).flatten().as_deref() == Some(status)
                 && git_freshness::git_output(repo, &["merge-base", "--is-ancestor", &tip, base])
                     .is_ok()
         }),
-    });
-    if merged {
-        format!("{status}, merged into {base_branch}")
-    } else {
-        format!("{status} on branch {branch}, not merged into {base_branch}")
+    })
+}
+
+/// An owner as its branch's committed records describe it.
+struct BranchOwner {
+    branch: String,
+    commit: String,
+    id: String,
+    title: String,
+    status: String,
+    /// Set for a done owner: whether its claim is merged into the base.
+    merged: Option<bool>,
+    active: usize,
+}
+
+/// The committed state of the other local work branches, read once per
+/// command and shared by the status branch section and the in-flight marks on
+/// ready work. The current checkout's records are never overlaid.
+pub(crate) struct BranchSummaries {
+    base_branch: String,
+    /// In branch order; an unreadable branch is its report line.
+    entries: Vec<Result<BranchOwner, String>>,
+    unstarted: Vec<String>,
+    untracked: Vec<String>,
+}
+
+impl BranchSummaries {
+    /// The status section's lines.
+    pub(crate) fn lines(&self) -> Vec<String> {
+        let base = &self.base_branch;
+        let mut lines = self
+            .entries
+            .iter()
+            .map(|owner| match owner {
+                Ok(owner) => {
+                    let status = match owner.merged {
+                        Some(true) => format!("{}, merged into {base}", owner.status),
+                        Some(false) => format!(
+                            "{} on branch {}, not merged into {base}",
+                            owner.status, owner.branch
+                        ),
+                        None => owner.status.clone(),
+                    };
+                    format!(
+                        "{} @ {}: {} [{status}] {} — {} active (committed branch records)",
+                        owner.branch,
+                        &owner.commit[..8],
+                        owner.id,
+                        owner.title,
+                        owner.active
+                    )
+                }
+                Err(line) => line.clone(),
+            })
+            .collect::<Vec<_>>();
+        if !self.unstarted.is_empty() {
+            lines.push(format!("No started work on: {}", self.unstarted.join(", ")));
+        }
+        if !self.untracked.is_empty() {
+            lines.push(format!("No tracker on: {}", self.untracked.join(", ")));
+        }
+        lines
+    }
+
+    /// Each owner's state on its branches, such as `in_progress on
+    /// bug/atelier-j48s` or `done on bug/atelier-fj1t, not merged`, keyed by ID.
+    pub(crate) fn in_flight(&self) -> BTreeMap<String, String> {
+        let mut marks = BTreeMap::<String, String>::new();
+        for owner in self.entries.iter().flatten() {
+            let mut mark = format!("{} on {}", owner.status, owner.branch);
+            match owner.merged {
+                Some(true) => mark.push_str(&format!(", merged into {}", self.base_branch)),
+                Some(false) => mark.push_str(", not merged"),
+                None => {}
+            }
+            marks
+                .entry(owner.id.clone())
+                .and_modify(|marks| {
+                    marks.push_str("; ");
+                    marks.push_str(&mark);
+                })
+                .or_insert(mark);
+        }
+        marks
     }
 }
 
-pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Result<Vec<String>> {
+pub(crate) fn branch_summaries(
+    repo: &Path,
+    state: &Path,
+    live: &RecordIndex,
+) -> Result<BranchSummaries> {
     let current = current_branch(repo)?.unwrap_or_default();
     let policy = workflow_policy::load(repo)?;
-    branch_lines_for(
+    branch_summaries_for(
         repo,
         state,
         live,
@@ -462,13 +553,13 @@ pub(crate) fn branch_lines(repo: &Path, state: &Path, live: &RecordIndex) -> Res
     )
 }
 
-pub(crate) fn branch_lines_for(
+fn branch_summaries_for(
     repo: &Path,
     state: &Path,
     live: &RecordIndex,
     current: &str,
     base_branch: &str,
-) -> Result<Vec<String>> {
+) -> Result<BranchSummaries> {
     let heads = text(
         repo,
         &[
@@ -477,7 +568,7 @@ pub(crate) fn branch_lines_for(
             "refs/heads/",
         ],
     )?;
-    let mut lines = Vec::new();
+    let mut entries = Vec::new();
     let mut untracked = Vec::new();
     let mut unstarted = Vec::new();
     for head in heads.lines() {
@@ -504,7 +595,7 @@ pub(crate) fn branch_lines_for(
             untracked.push(branch.to_string());
             continue;
         }
-        let view = (|| -> Result<Option<Vec<String>>> {
+        let view = (|| -> Result<Option<Vec<BranchOwner>>> {
             // Legacy branches can contain thousands of obsolete records. Inspect
             // the small compatibility/owner blobs before materializing any tree.
             let yaml = git_freshness::blob(
@@ -596,33 +687,32 @@ pub(crate) fn branch_lines_for(
                         })
                     })
                     .count();
-                let status = if branch_policy.status_category(&owner.status) == Some("done") {
-                    unmerged_done_label(repo, &id, &owner.status, branch, base_branch)
-                } else {
-                    owner.status.clone()
-                };
-                rows.push(format!(
-                    "{branch} @ {}: {} [{status}] {} — {active} active (committed branch records)",
-                    &commit[..8],
+                let merged = (branch_policy.status_category(&owner.status) == Some("done"))
+                    .then(|| done_merged(repo, &id, &owner.status, branch, base_branch));
+                rows.push(BranchOwner {
+                    branch: branch.to_owned(),
+                    commit: commit.to_owned(),
+                    title: owner.title.clone(),
+                    status: owner.status.clone(),
                     id,
-                    owner.title
-                ));
+                    merged,
+                    active,
+                });
             }
             Ok(Some(rows))
         })();
         match view {
-            Ok(Some(rows)) => lines.extend(rows),
+            Ok(Some(rows)) => entries.extend(rows.into_iter().map(Ok)),
             Ok(None) => unstarted.push(branch.to_string()),
-            Err(error) => lines.push(format!("{branch}: unavailable — {error:#}")),
+            Err(error) => entries.push(Err(format!("{branch}: unavailable — {error:#}"))),
         }
     }
-    if !unstarted.is_empty() {
-        lines.push(format!("No started work on: {}", unstarted.join(", ")));
-    }
-    if !untracked.is_empty() {
-        lines.push(format!("No tracker on: {}", untracked.join(", ")));
-    }
-    Ok(lines)
+    Ok(BranchSummaries {
+        base_branch: base_branch.to_owned(),
+        entries,
+        unstarted,
+        untracked,
+    })
 }
 
 #[cfg(test)]

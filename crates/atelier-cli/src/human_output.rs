@@ -1,6 +1,6 @@
 // This module is the shared formatter boundary for the output refresh.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::IsTerminal;
 
 use atelier_app::issue_inventory::IssueInventoryView;
@@ -308,6 +308,8 @@ pub(crate) struct IssueListPanel {
     title: String,
     rows: Vec<IssueListRow>,
     limit: usize,
+    /// A `↳` continuation under a row, keyed by issue ID.
+    marks: BTreeMap<String, String>,
 }
 
 impl IssueListPanel {
@@ -335,11 +337,22 @@ impl IssueListPanel {
             title: title.into(),
             rows,
             limit: 20,
+            marks: BTreeMap::new(),
         }
     }
 
     pub(crate) fn limit(mut self, limit: usize) -> Self {
         self.limit = limit;
+        self
+    }
+
+    /// Notes such as another branch's state, each shown under its row.
+    pub(crate) fn marks(mut self, marks: &BTreeMap<String, String>) -> Self {
+        self.marks = self
+            .rows
+            .iter()
+            .filter_map(|row| Some((row.id.clone(), marks.get(&row.id)?.clone())))
+            .collect();
         self
     }
 }
@@ -369,6 +382,9 @@ impl IssueListPanel {
                 "{indent}{role} {}{} {} - {}{}",
                 row.id, status, row.priority, row.title, blockers
             ));
+            if let Some(mark) = self.marks.get(&row.id) {
+                lines.push(format!("{indent}  ↳ {mark}"));
+            }
         }
         let omitted = self.rows.len().saturating_sub(limit);
         if omitted > 0 {
