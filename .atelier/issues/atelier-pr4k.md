@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make --quiet print one documented token on every command"
-updated_at: "2026-10-17T01:10:57.992053843+00:00"
+updated_at: "2026-10-17T06:27:40.279114098+00:00"
 ---
 
 ## Goal
