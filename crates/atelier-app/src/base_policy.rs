@@ -62,7 +62,9 @@ fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Resul
             .and_then(|text| atelier_workflow::parse_policy_text(&text, WORKFLOW_POLICY_PATH));
         match loaded {
             Ok(policy) => {
-                diagnostics.push(format!("Using last valid policy from {commit}; fix .atelier/workflow.yaml before merging."));
+                diagnostics.push(format!(
+                    "Using last valid policy from {commit}; fix .atelier/workflow.yaml."
+                ));
                 return Ok(PolicySource {
                     policy,
                     commit: commit.to_owned(),

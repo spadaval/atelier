@@ -325,7 +325,7 @@ pub fn mission_objective_kind(index: &RecordIndex, mission_id: &str) -> Result<&
     {
         Ok("issue")
     } else {
-        bail!("{mission_id} is not a mission objective issue")
+        bail!("{mission_id} is not a mission")
     }
 }
 

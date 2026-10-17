@@ -44,6 +44,8 @@ pub struct LintRequest<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LintView {
+    /// The checked issue's full ID, when the check was scoped to one.
+    pub scoped_id: Option<String>,
     pub findings: Vec<LintFinding>,
 }
 
@@ -76,7 +78,7 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     let mut findings = Vec::new();
     if let Some(error) = policy_error {
         findings.push(LintFinding {
-            id: "(policy)".into(),
+            id: "policy".into(),
             message: format!("Invalid workflow policy: {error:#}"),
         });
     }
@@ -127,7 +129,7 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
             .collect(),
         };
         findings.extend(integrity_errors.into_iter().map(|message| LintFinding {
-            id: "(canonical)".to_string(),
+            id: "records".to_string(),
             message,
         }));
     }
@@ -143,7 +145,10 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
 
-    Ok(LintView { findings })
+    Ok(LintView {
+        scoped_id,
+        findings,
+    })
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and
@@ -278,12 +283,12 @@ fn strategy_findings<'a>(
                 let missions = linking(path);
                 if missions.len() > 1 {
                     Some(format!(
-                        "Strategy {path} front matter names mission {named}, but missions {} all link it; remove the `mission:` key, since each mission's strategy path is the canonical link",
+                        "Strategy {path} front matter names mission {named}, but missions {} all link it; remove the `mission:` key, since each mission's strategy path is the link that counts",
                         missions.join(", ")
                     ))
                 } else {
                     (named != issue.id).then(|| format!(
-                        "Strategy {path} front matter names mission {named}, but {} links it; the mission's strategy path is canonical, so set `mission: {}` in the strategy or remove the key",
+                        "Strategy {path} front matter names mission {named}, but {} links it; the mission's strategy path is the link that counts, so set `mission: {}` in the strategy or remove the key",
                         issue.id, issue.id
                     ))
                 }

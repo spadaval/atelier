@@ -1,4 +1,4 @@
-//! Verify canonical inputs, hidden file bytes and tracked executable modes.
+//! Verify committed records, hidden file bytes and tracked executable modes.
 use crate::git_freshness::git_output;
 use anyhow::{bail, Context, Result};
 use atelier_records::is_local_atelier_path;
@@ -11,6 +11,31 @@ use std::{
 };
 
 type Entries = BTreeMap<PathBuf, (String, String)>;
+
+/// A record whose working bytes, index entry or file mode differs from the
+/// pinned commit. A command that names its own check for this, as `land`
+/// does with `land_records_uncommitted`, replaces the code and recovery step
+/// with its own and keeps `detail`.
+#[derive(Debug)]
+pub struct RecordsUncommitted {
+    pub detail: String,
+}
+
+impl std::fmt::Display for RecordsUncommitted {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "canonical_snapshot_uncommitted: {}. Next: commit or restore the records, then retry",
+            self.detail
+        )
+    }
+}
+
+impl std::error::Error for RecordsUncommitted {}
+
+fn records_uncommitted<T>(detail: String) -> Result<T> {
+    Err(RecordsUncommitted { detail }.into())
+}
 
 fn entries(repo: &Path, commit: &str) -> Result<Entries> {
     let tree = git_output(repo, &["ls-tree", "-rz", commit])?;
@@ -205,17 +230,20 @@ fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
     collect(&root, &root, &mut paths)?;
     for (path, (mode, _)) in entries.iter().filter(|(path, _)| canonical(path)) {
         if !matches!(mode.as_str(), "100644" | "100755") {
-            bail!(
-                "canonical_snapshot_uncommitted: {} is not a regular committed file",
+            return records_uncommitted(format!(
+                "{} is not a regular committed file",
                 path.display()
-            );
+            ));
         }
     }
     Ok(paths)
 }
 fn require_records_match(paths: &[PathBuf]) -> Result<()> {
     if let Some(path) = paths.first() {
-        bail!("canonical_snapshot_uncommitted: {} path, bytes or mode differs from pinned HEAD; commit canonical records before continuing", path.display());
+        return records_uncommitted(format!(
+            "{} path, bytes or mode differs from pinned HEAD",
+            path.display()
+        ));
     }
     Ok(())
 }
@@ -256,7 +284,10 @@ fn flagged_paths(
                     .split_whitespace()
                     .eq([mode.as_str(), hash.as_str(), "0"])
             }) {
-                bail!("canonical_snapshot_uncommitted: {} index path, bytes or mode differs from pinned HEAD", path.display());
+                return records_uncommitted(format!(
+                    "{} index path, bytes or mode differs from pinned HEAD",
+                    path.display()
+                ));
             }
             indexed.insert(path);
         }
@@ -269,10 +300,7 @@ fn flagged_paths(
             .keys()
             .find(|path| canonical(path) && !indexed.contains(path.as_path()))
         {
-            bail!(
-                "canonical_snapshot_uncommitted: {} is absent from the Git index",
-                path.display()
-            );
+            return records_uncommitted(format!("{} is absent from the Git index", path.display()));
         }
     }
     // Unflagged paths follow Git's own status, including core.filemode.

@@ -133,7 +133,7 @@ fn evidence_attached(
 fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {
     let findings = crate::lint::issue_findings(index.issue_records(), repo_root, false);
     if findings.is_empty() {
-        (true, "lint passed".to_string())
+        (true, "check passed".to_string())
     } else {
         (
             false,

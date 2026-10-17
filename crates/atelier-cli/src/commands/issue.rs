@@ -422,9 +422,15 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     Ok(())
 }
 
+/// A mission's scope or a parent's children, summarized by work state.
 fn render_objective_rollup_section(issue: &Issue, summary: Option<&ObjectiveReadSummary>) {
     let Some(summary) = summary else {
         return;
+    };
+    let title = if issue.issue_type == "mission" {
+        "Mission Rollup"
+    } else {
+        "Parent Rollup"
     };
     let health = summary
         .scope
@@ -464,7 +470,7 @@ fn render_objective_rollup_section(issue: &Issue, summary: Option<&ObjectiveRead
             rollup.push((label, value));
         }
     }
-    print_panel(render_metadata(Some("Objective Rollup"), &rollup));
+    print_panel(render_metadata(Some(title), &rollup));
 
     let work = &summary.scope.work;
     for (title, state, rows) in [
@@ -493,7 +499,7 @@ fn render_objective_rollup_section(issue: &Issue, summary: Option<&ObjectiveRead
 
     if !summary.recently_updated.is_empty() {
         print_panel(render_lines_section(
-            "Recent Activity Facts",
+            "Recently Updated",
             summary
                 .recently_updated
                 .iter()
@@ -934,7 +940,7 @@ pub fn create_lifecycle(
         println!("Created subissue {} under {}", record.issue.id, parent_id);
     } else {
         let kind = if record.issue.issue_type == "mission" {
-            "mission objective"
+            "mission"
         } else {
             "issue"
         };
@@ -1325,26 +1331,28 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()
         issue_ref,
     })?;
     if view.findings.is_empty() {
-        println!("{}", if quiet { "passed" } else { "Lint passed." });
-    } else {
-        let mut report = format!("Lint found {}:", count_noun(view.findings.len(), "finding"));
-        for finding in &view.findings {
-            report.push_str(&format!("\n  {}: {}", finding.id, finding.message));
-        }
-        if quiet {
-            eprintln!("{report}");
-        } else {
-            println!("{report}");
-        }
+        println!("{}", if quiet { "passed" } else { "Check passed." });
+        return Ok(());
     }
-    if view.findings.is_empty() {
-        Ok(())
-    } else {
-        bail!(
-            "Lint failed with {}",
-            count_noun(view.findings.len(), "finding")
-        )
+    let mut report = format!(
+        "Check found {}:",
+        count_noun(view.findings.len(), "finding")
+    );
+    for finding in &view.findings {
+        report.push_str(&format!("\n  {}: {}", finding.id, finding.message));
     }
+    if quiet {
+        eprintln!("{report}");
+    } else {
+        println!("{report}");
+    }
+    let rerun = view.scoped_id.map_or("atelier check".to_string(), |id| {
+        format!("atelier check {id}")
+    });
+    bail!(
+        "check_findings: check failed with {}. Next: fix each finding above, then run `{rerun}`",
+        count_noun(view.findings.len(), "finding")
+    )
 }
 
 #[cfg(test)]

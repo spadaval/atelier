@@ -771,7 +771,7 @@ fn apply_bundle_file(
         let summary = apply_bundle_to_state(&stage, project_slug, bundle, plan)?;
         RecordIndex::load(&stage).map_err(|error| {
             anyhow::anyhow!(
-                "Bundle apply rejected the staged canonical state: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
+                "Bundle apply rejected the staged records: {error}\nNext: fix the reported workflow or graph violation in the bundle, then run bundle apply again with --yes"
             )
         })?;
         crate::commands::bulk_canonical::ensure_unchanged(state_dir, &source_fingerprint)?;
@@ -1086,7 +1086,7 @@ fn copy_tree(source: &Path, dest: &Path, exclude_runtime: bool) -> Result<()> {
             .with_context(|| format!("Failed to inspect {}", source_path.display()))?;
         if file_type.is_symlink() {
             bail!(
-                "Canonical bulk mutation refuses symbolic link {}",
+                "Bulk record update refuses symbolic link {}",
                 source_path.display()
             );
         } else if file_type.is_dir() {
@@ -1101,7 +1101,7 @@ fn copy_tree(source: &Path, dest: &Path, exclude_runtime: bool) -> Result<()> {
             })?;
         } else {
             bail!(
-                "Canonical bulk mutation refuses special filesystem entry {}",
+                "Bulk record update refuses special filesystem entry {}",
                 source_path.display()
             );
         }
@@ -1721,7 +1721,7 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 format!(
-                    "Canonical bulk mutation refuses symbolic link {}",
+                    "Bulk record update refuses symbolic link {}",
                     unsafe_path.display()
                 )
             );
@@ -1737,7 +1737,7 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 format!(
-                    "Canonical bulk mutation refuses special filesystem entry {}",
+                    "Bulk record update refuses special filesystem entry {}",
                     unsafe_path.display()
                 )
             );

@@ -214,7 +214,7 @@ enum Commands {
         /// Apply eligible cleanup; without this flag the command only reports candidates
         #[arg(long)]
         apply: bool,
-        /// Override canonical record retention for this prune pass
+        /// Override record retention, in days, for this prune pass
         #[arg(long)]
         retention_days: Option<u64>,
     },
@@ -323,12 +323,12 @@ enum IssueCommands {
         /// Parent issue ID
         #[arg(long)]
         parent: Option<String>,
-        /// Initial todo-category status, such as backlog for someday work;
-        /// defaults to the workflow's initial status
+        /// Initial status for work not yet started, such as backlog for
+        /// someday work; defaults to the workflow's initial status
         #[arg(long)]
         status: Option<String>,
-        /// Repository-relative strategy file a mission links; the mission's
-        /// path is the canonical link
+        /// Repository-relative strategy file a mission links; this path,
+        /// not the strategy's front matter, is the link
         #[arg(long)]
         strategy: Option<String>,
     },
@@ -1065,6 +1065,26 @@ mod help_tests {
             }
         }
         assert!(missing.is_empty(), "arguments without help: {missing:?}");
+    }
+
+    /// Help uses CONTEXT.md terms (docs/product/human-cli-output.md, Errors):
+    /// "lint" and "canonical" appear only joined into a code or key by `_`
+    /// or `.`; a hyphen does not join, so "non-canonical" is caught.
+    #[test]
+    fn no_help_page_uses_internal_words() {
+        let mut found = Vec::new();
+        for (path, mut command) in commands() {
+            let help = command.render_long_help().to_string();
+            for word in help
+                .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+                .map(|word| word.trim_matches('.').to_lowercase())
+            {
+                if matches!(word.as_str(), "lint" | "canonical") {
+                    found.push(format!("{path}: {word}"));
+                }
+            }
+        }
+        assert!(found.is_empty(), "internal words in help: {found:?}");
     }
 
     #[test]

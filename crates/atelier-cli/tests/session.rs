@@ -1883,8 +1883,12 @@ fn staged_canonical_changes_cannot_hide_behind_restored_worktree_bytes() {
         fs::write(&path, &original).unwrap();
         assert!(git(f.path(), &["status", "--porcelain"]).contains(&format!("MM {relative}")));
         let (pass, output) = cli(f.path(), &["land"]);
+        // Land names its own check once, with one recovery step.
         assert!(
-            !pass && output.contains("canonical_snapshot_uncommitted"),
+            !pass
+                && output.contains("land_records_uncommitted: .atelier/issues/")
+                && !output.contains("canonical_snapshot_uncommitted")
+                && output.matches("Next:").count() == 1,
             "{output}"
         );
         git(f.path(), &["reset", "-q", "HEAD", "--", &relative]);

@@ -235,7 +235,7 @@ fn test_prune_help_describes_both_retention_classes() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["prune", "--help"]);
     assert!(success, "prune help failed: {stderr}");
     assert!(
-        stdout.contains("Override canonical record retention for this prune pass"),
+        stdout.contains("Override record retention, in days, for this prune pass"),
         "{stdout}"
     );
 }
@@ -736,7 +736,7 @@ fn test_prune_dry_run_reports_terminal_canonical_issue_without_removing_it() {
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
     assert!(success, "prune dry-run failed: {stderr}");
-    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("Records\n-------"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
     assert!(
@@ -763,7 +763,7 @@ fn test_prune_uses_configured_canonical_retention_days_by_default() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
-    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("Records\n-------"), "{stdout}");
     assert!(stdout.contains("Retention: 7 days"), "{stdout}");
     assert!(stdout.contains("eligible issue"), "{stdout}");
     assert!(stdout.contains(&issue_id), "{stdout}");
@@ -786,7 +786,7 @@ fn test_prune_retention_flag_overrides_project_config_for_canonical_records() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune"]);
     assert!(success, "prune dry-run failed: {stderr}");
-    assert!(stdout.contains("Canonical Records"), "{stdout}");
+    assert!(stdout.contains("Records\n-------"), "{stdout}");
     assert!(stdout.contains("Retention: 30 days"), "{stdout}");
     assert!(stdout.contains("Candidates: none"), "{stdout}");
 
@@ -1073,7 +1073,7 @@ fn test_prune_apply_restores_every_record_on_staging_failure() {
     assert!(
         stderr.contains(&format!("failed to remove .atelier/issues/{}.md", ids[1]))
             && stderr.contains("every staged record was restored")
-            && stderr.contains("no canonical records removed")
+            && stderr.contains("no records removed")
             && stderr.contains(&format!("Git cleanup already removed branch {branch}"))
             && stderr.contains("`git restore` does not restore branches or worktrees"),
         "{stderr}"
@@ -1154,7 +1154,7 @@ fn test_prune_apply_refuses_canonical_cleanup_when_tracked_state_is_dirty() {
         run_atelier(dir.path(), &["prune", "--apply", "--retention-days", "30"]);
     assert!(!success, "dirty canonical prune unexpectedly succeeded");
     assert!(
-        stderr.contains("canonical prune requires a clean tracked checkout")
+        stderr.contains("prune --apply requires a clean tracked checkout")
             && stderr.contains("git status --short --branch"),
         "{stderr}"
     );
@@ -2631,7 +2631,7 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
     let (success, status_out, stderr) =
         run_atelier(dir.path(), &["issue", "show", objective_id, "--full"]);
     assert!(success, "issue status failed: {stderr}");
-    assert!(status_out.contains("Objective Rollup"));
+    assert!(status_out.contains("Mission Rollup"));
     assert!(status_out.contains("Relationship Objective"));
     assert!(status_out.contains("Relationship Objective"));
 }

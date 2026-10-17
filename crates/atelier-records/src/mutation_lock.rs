@@ -59,7 +59,7 @@ impl CanonicalMutationLock {
             };
             if exclusive && !current.exclusive {
                 bail!(
-                    "Cannot upgrade a shared canonical mutation transaction to exclusive in the same thread"
+                    "Cannot upgrade a shared record mutation transaction to exclusive in the same thread"
                 );
             }
             current.depth += 1;

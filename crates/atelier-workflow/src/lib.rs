@@ -382,7 +382,7 @@ impl WorkflowPolicy {
             &branch,
             WORKFLOW_POLICY_PATH,
             "branch_policy",
-            "canonical branch name",
+            "work branch name",
         )?;
         Ok(branch)
     }

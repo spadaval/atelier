@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-91w1
 priority: "P3"
 relationships:
   blocks: []
@@ -16,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T08:11:46.540060866+00:00"
+status: "done"
 title: "Replace internal jargon in output with CONTEXT.md terms"
-updated_at: "2026-10-17T07:56:15.929940051+00:00"
+updated_at: "2026-10-17T08:11:46.540060866+00:00"
 ---
 
 ## Goal
@@ -38,3 +42,7 @@ Output uses terms that CONTEXT.md doesn't define:
 - Each error states its failure once, then one recovery step.
 - One rule, written into human-cli-output.md, says whether errors carry a code prefix, and it is applied everywhere.
 - A grep test over rendered fixtures enforces this.
+
+## Close Reason
+
+Output uses CONTEXT.md terms (check, finding, records, mission, parent). lint and canonical appear only in codes and config keys. land reports one code and one Next step instead of stacking canonical_snapshot_uncommitted. The code rule is in human-cli-output.md Errors, and output_terms.rs greps rendered output to enforce it.
