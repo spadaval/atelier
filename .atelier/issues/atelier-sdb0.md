@@ -26,9 +26,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-10-17T02:54:24.193746171+00:00"
+status: "done"
 title: "Make status the session-start view and retire prime"
-updated_at: "2026-10-17T02:35:36.819123298+00:00"
+updated_at: "2026-10-17T02:54:24.193746171+00:00"
 ---
 
 ## Goal
@@ -52,3 +53,7 @@ Session and status commands, `setup claude`, their tests, and the docs named abo
 ## Context
 
 `prime_text` in `crates/atelier-cli/src/commands/session.rs`; `crates/atelier-cli/src/commands/setup.rs`. Adopters' installed hooks call `prime --hook claude`, so `prime` remains as an alias; its removal is a separate issue.
+
+## Close Reason
+
+status is the session-start view and SessionStart hook; prime is a deprecated alias. Independently reviewed (three rounds) and approved; suites pass after merging master.
