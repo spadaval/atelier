@@ -964,7 +964,7 @@ fn test_issue_show_is_brief_by_default() {
         show_ok(dir.path(), &["issue", "show", &mission]),
         format!(
             "{mission} mission draft medium Brief mission\n\
-             Work: 3 issues: 1 ready, 1 context, 1 blocked\n\
+             Scope: 3 issues: 1 ready, 1 context, 1 blocked\n\
              Transitions: ready, supersede --reason\n\
              Outcome: Agents read one view.\n\
              Success criteria:\n  \
@@ -1094,7 +1094,7 @@ fn test_issue_show_brief_decision_leads_with_question_and_decision() {
     );
     let mission_view = show_ok(dir.path(), &["issue", "show", &mission]);
     assert!(
-        mission_view.contains("\nWork: 2 issues: 1 needs a human, 1 context\n"),
+        mission_view.contains("\nScope: 2 issues: 1 needs a human, 1 context\n"),
         "{mission_view}"
     );
 }
@@ -2948,7 +2948,7 @@ fn test_work_ready_still_shows_ready_children_when_another_issue_is_active() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(
-        status_out.contains("Ready work:    1"),
+        status_out.contains("Ready work:       1"),
         "status should keep ready work visible while active work is present:\n{status_out}"
     );
 
@@ -4048,7 +4048,7 @@ fn test_status_footer_uses_complete_work_buckets() {
     run_atelier(dir.path(), &["issue", "create", "Status guidance"]);
     let id = issue_id_by_title(dir.path(), "Status guidance");
     for (status, expected) in [
-        ("todo", "Choose ready work (1 ready issue available)"),
+        ("todo", "Choose ready work"),
         (
             "blocked",
             "Inspect blocked work (no ready work is available)",
@@ -4973,7 +4973,7 @@ fn test_needs_human_work_is_kept_out_of_the_agent_ready_list() {
     assert!(success, "{stderr}");
     // The human's item is counted apart and not offered as ready work.
     assert!(
-        status.contains("Needs a human: 1") && status.contains("Ready work:    1"),
+        status.contains("Needs a human:    1") && status.contains("Ready work:       1"),
         "{status}"
     );
     let ready = status
@@ -6176,7 +6176,7 @@ fn test_work_parent_proof_gaps_count_its_scope_not_the_parent() {
     };
     let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
     assert!(success, "{stderr}");
-    assert!(view.contains("Work                : 2 issues"), "{view}");
+    assert!(view.contains("Scope               : 2 issues"), "{view}");
     assert_eq!(proof_gaps(&view).as_deref(), Some("2"), "{view}");
     let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
     assert!(success, "{stderr}");
