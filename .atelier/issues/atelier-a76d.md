@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Remove or implement --log-level and --log-format"
-updated_at: "2026-10-17T01:10:57.990834507+00:00"
+updated_at: "2026-10-17T06:27:39.526464797+00:00"
 ---
 
 ## Goal

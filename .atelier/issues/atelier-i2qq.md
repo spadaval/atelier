@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "cli-output"
 - "cross-cutting"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-i2qq
 priority: "P2"
 relationships:
   blocks:
@@ -18,9 +21,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T06:23:57.506425634+00:00"
+status: "done"
 title: "Write one item-line, verdict, confirmation and quiet contract for all views"
-updated_at: "2026-10-17T05:23:01.403764581+00:00"
+updated_at: "2026-10-17T06:23:57.506425634+00:00"
 ---
 
 ## Goal
@@ -65,3 +69,7 @@ Extends atelier-deyy, which writes the first dense-output rule and the `work` vi
 ## Notes
 
 - 2026-10-17 [note] 2026-10-16: From review of atelier-deyy: issue show --full Recent Activity Facts rows lack the ✓ mark, and work-view-ordering.md's Row State Vocabulary omits the backlog and needs human prefixes that work mission --all prints. Fold both into this contract.
+
+## Close Reason
+
+human-cli-output.md states the item-line, hash, timestamp, heading, verdict, confirmation and quiet rules. The shared ItemLine, short_commit, display_timestamp and display-width heading helpers implement them, and every listed view now uses them. Unit and CLI tests pin the shapes, including Current Work matching Owner. Each command's verdict, confirmation and quiet adoption is left to the item the doc names.

@@ -604,8 +604,8 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
     let output = ok(f.path(), &["status"]);
     assert!(
         output.contains(&format!("{} @", f.branch))
-            && output.contains("[in_progress]")
-            && output.contains("committed branch records"),
+            && output.contains(&format!("{} in_progress ", f.id))
+            && output.contains("Other Local Work Branches (committed records)"),
         "{output}"
     );
     assert_eq!(
@@ -1046,7 +1046,7 @@ fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
     assert_eq!(field(&status, "Integration base"), Some("main"), "{status}");
     assert!(
         field(&status, "Mission")
-            .is_some_and(|row| row == format!("{mission} [draft] Ship sessions")),
+            .is_some_and(|row| row == format!("{mission} draft medium Ship sessions")),
         "{status}"
     );
     assert_eq!(
@@ -1057,7 +1057,7 @@ fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
     // A row without blockers names none.
     assert_eq!(
         section(&status, "Owner Work"),
-        [format!("{} [in_progress] Session owner", f.id)],
+        [format!("{} in_progress medium Session owner", f.id)],
         "{status}"
     );
     let reviews = section(&status, "Reviews");
@@ -3313,7 +3313,7 @@ fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
     for command in ["prime", "status"] {
         let output = ok(f.path(), &[command]);
         assert!(
-            output.contains(&format!("{} [✓ done, merged into main]", f.id)),
+            output.contains(&format!("{} ✓ done ", f.id)) && output.contains("| merged into main"),
             "{command}: {output}"
         );
     }
@@ -3417,7 +3417,7 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     // The kept branch's row on the base reads its committed records.
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} [✓ done, merged into main]", f.id)),
+        output.contains(&format!("{} ✓ done ", f.id)) && output.contains("| merged into main"),
         "{output}"
     );
 
@@ -3429,10 +3429,9 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     f.store().write_issue_atomic(&record).unwrap();
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!(
-            "{} [✓ superseded on branch {}, not merged into main]",
-            f.id, f.branch
-        )),
+        field(&output, "Owner").is_some_and(|owner| owner
+            .starts_with(&format!("{} ✓ superseded ", f.id))
+            && owner.ends_with(" | not merged into main")),
         "{output}"
     );
 }
@@ -3997,24 +3996,46 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
 }
 #[test]
+fn status_current_work_row_reads_like_its_owner_row() {
+    let f = Fixture::new();
+    let status = ok(f.path(), &["status"]);
+    let owner = field(&status, "Owner").unwrap_or_else(|| panic!("no owner: {status}"));
+    assert!(
+        owner.starts_with(&format!("{} in_progress ", f.id)),
+        "{status}"
+    );
+    assert_eq!(
+        section(&status, "Current Work")
+            .iter()
+            .map(|row| row.trim())
+            .collect::<Vec<_>>(),
+        [owner],
+        "{status}"
+    );
+}
+#[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
     f.terminal(&f.id);
-    let unmerged = format!("[✓ done on branch {}, not merged into main]", f.branch);
     let status = ok(f.path(), &["status"]);
     assert!(
         field(&status, "Owner")
-            .is_some_and(|owner| owner.starts_with(&format!("{} {unmerged}", f.id))),
+            .is_some_and(|owner| owner.starts_with(&format!("{} ✓ done ", f.id))
+                && owner.ends_with(" | not merged into main")),
         "{status}"
     );
 
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains(&format!("{} {unmerged}", f.id)), "{status}");
+    assert!(
+        status.contains(&format!(": {} ✓ done ", f.id))
+            && status.contains(" | not merged into main | "),
+        "{status}"
+    );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    assert!(status.contains("[✓ done, merged into main]"), "{status}");
+    assert!(status.contains(" | merged into main | "), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4034,9 +4055,8 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     );
     let status = ok(f.path(), &["status"]);
     assert!(
-        field(&status, "Owner").is_some_and(|owner| owner.starts_with(&format!(
-            "{fresh} [✓ done on branch task/{fresh}, not merged into main]"
-        ))),
+        field(&status, "Owner").is_some_and(|owner| owner.starts_with(&format!("{fresh} ✓ done "))
+            && owner.ends_with(" | not merged into main")),
         "{status}"
     );
 }
@@ -4069,7 +4089,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
         for (id, mark) in &marks {
             let row = ready
                 .iter()
-                .position(|line| line.contains(&format!(" {id} [todo]")))
+                .position(|line| line.contains(&format!(" {id} todo")))
                 .unwrap_or_else(|| panic!("{args:?} lists {id} as ready: {output}"));
             assert_eq!(
                 ready.get(row + 1),
@@ -4079,7 +4099,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
         }
         let row = ready
             .iter()
-            .position(|line| line.contains(&format!(" {idle} [todo]")))
+            .position(|line| line.contains(&format!(" {idle} todo")))
             .unwrap();
         assert!(
             ready.get(row + 1).is_none_or(|next| !next.contains('↳')),
@@ -4089,8 +4109,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("{finished} [✓ done on branch task/{finished}, not merged into main] Finished elsewhere"),
-        format!("{stuck} [⚠ blocked] Stuck elsewhere"),
+        format!("{finished} ✓ done medium Finished elsewhere | not merged into main"),
+        format!("{stuck} ⚠ blocked medium Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }
@@ -4134,7 +4154,7 @@ fn unassigned_work_in_flight_on_another_branch_is_marked_past_the_ready_list() {
     let unassigned = section(&status, "Unassigned Work (6)");
     let row = unassigned
         .iter()
-        .position(|line| line.starts_with(&format!("  {} [todo]", f.id)))
+        .position(|line| line.starts_with(&format!("  {} todo", f.id)))
         .unwrap_or_else(|| panic!("owner is listed as unassigned: {status}"));
     assert_eq!(
         unassigned.get(row + 1),
@@ -4156,7 +4176,7 @@ fn ready_mark<'a>(output: &'a str, id: &str) -> Option<&'a str> {
     let ready = section(output, "Ready Work");
     let row = ready
         .iter()
-        .position(|line| line.contains(&format!(" {id} [todo]")))
+        .position(|line| line.contains(&format!(" {id} todo")))
         .unwrap_or_else(|| panic!("{id} is listed as ready: {output}"));
     ready
         .get(row + 1)

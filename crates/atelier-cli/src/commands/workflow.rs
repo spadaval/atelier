@@ -375,7 +375,7 @@ fn render_issue_transition_options(
         };
         lines.push(String::new());
         lines.push(format!(
-            "{} [{}]",
+            "{}: {}",
             option.name,
             decision.render(style_policy)
         ));
@@ -669,7 +669,7 @@ mod tests {
         );
 
         assert!(!output.contains("\u{1b}["));
-        assert!(output.contains("start [blocked]"));
+        assert!(output.contains("start: blocked"));
         assert!(output.contains("Decision: blocked"));
         assert!(output.contains("fail  issue.sections_parseable"));
     }
@@ -683,7 +683,7 @@ mod tests {
             render_issue_transition_options(&issue, &[transition_option(true, true)], policy, true);
 
         assert!(!output.contains("\u{1b}["));
-        assert!(output.contains("start [allowed]"));
+        assert!(output.contains("start: allowed"));
         assert!(output.contains("Decision: allowed"));
         assert!(output.contains("pass  issue.sections_parseable"));
     }

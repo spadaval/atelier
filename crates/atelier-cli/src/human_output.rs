@@ -73,7 +73,7 @@ pub(crate) fn render_page(
 ) -> String {
     let mut lines = vec![
         context.paint(TextStyle::Heading, title),
-        "=".repeat(title.len()),
+        "=".repeat(display_width(title)),
     ];
     for panel in panels {
         if !panel.is_empty() {
@@ -138,67 +138,181 @@ pub(crate) struct IssueListRow {
     pub depth: usize,
 }
 
-pub(crate) struct IssueHeadingRow<'a> {
-    pub indent: &'a str,
-    pub id: &'a str,
-    pub issue_type: Option<&'a str>,
-    /// The exact stored status; its category selects the colour.
-    pub status: &'a str,
-    pub status_category: &'a str,
-    pub priority: &'a str,
-    pub title: &'a str,
+/// What leads an item line in a list that mixes kinds of rows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Lead<'a> {
+    /// The row's work state, in a list that mixes states.
+    State(WorkClassification),
+    /// The row's relationship to the record shown, such as `advances`.
+    Role(&'a str),
 }
 
-impl IssueHeadingRow<'_> {
-    pub(crate) fn render(&self, context: RenderContext) -> Vec<String> {
-        let kind = self
-            .issue_type
-            .map(|issue_type| format!("  {issue_type}"))
-            .unwrap_or_default();
-        let wide_text = format!(
-            "{}{}{kind}  {}  {}  {}",
-            self.indent, self.id, self.status, self.priority, self.title
-        );
-        if visible_width(&wide_text) <= context.width() {
-            return vec![format!(
-                "{}{}{kind}  {}  {}  {}",
-                self.indent,
-                context.paint(TextStyle::Heading, self.id),
-                context.paint(status_style(self.status_category), self.status),
-                context.paint(priority_style(self.priority), self.priority),
-                self.title
-            )];
-        }
+/// One item as every view writes it:
+/// `[<lead> ]<id>[ <type>] <status> <priority> <title>[ | <cue>]...`.
+///
+/// Each field comes from one fixed vocabulary, rendered in one fixed order,
+/// so a view chooses which fields to fill rather than writing its own
+/// format. The status is the exact configured status (or, where a view
+/// shows it instead, the work state), marked ✓ or ⚠ as [`status_cue`] says.
+/// The type is set only in views that mix types. Nothing is bracketed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ItemLine<'a> {
+    lead: Option<Lead<'a>>,
+    id: &'a str,
+    issue_type: Option<&'a str>,
+    /// Owned, so a view may pass a label it builds, such as one naming an
+    /// unknown category.
+    status: String,
+    category: Option<&'a str>,
+    classification: Option<WorkClassification>,
+    priority: &'a str,
+    title: &'a str,
+    cues: Vec<String>,
+}
 
-        let detail_indent = format!("{}  ", self.indent);
-        let mut lines = vec![format!(
-            "{}{}{kind}",
-            self.indent,
-            context.paint(TextStyle::Heading, self.id)
-        )];
-        lines.extend(render_labeled_lines(
-            context,
-            &detail_indent,
-            "Status",
-            self.status,
-            status_style(self.status_category),
-        ));
-        lines.extend(render_labeled_lines(
-            context,
-            &detail_indent,
-            "Priority",
-            self.priority,
-            priority_style(self.priority),
-        ));
-        lines.extend(render_labeled_lines(
-            context,
-            &detail_indent,
-            "Title",
-            self.title,
-            TextStyle::Secondary,
-        ));
-        lines
+impl<'a> ItemLine<'a> {
+    pub(crate) fn new(id: &'a str, status: &str, priority: &'a str, title: &'a str) -> Self {
+        Self {
+            lead: None,
+            id,
+            issue_type: None,
+            status: status.to_owned(),
+            category: None,
+            classification: None,
+            priority,
+            title,
+            cues: Vec::new(),
+        }
     }
+
+    /// The status's category and the row's work state, which choose the
+    /// status mark and colour.
+    pub(crate) fn state(
+        mut self,
+        category: Option<&'a str>,
+        classification: Option<WorkClassification>,
+    ) -> Self {
+        self.category = category;
+        self.classification = classification;
+        self
+    }
+
+    pub(crate) fn lead(mut self, lead: Lead<'a>) -> Self {
+        self.lead = Some(lead);
+        self
+    }
+
+    /// The type, for views that mix types.
+    pub(crate) fn issue_type(mut self, issue_type: &'a str) -> Self {
+        self.issue_type = Some(issue_type);
+        self
+    }
+
+    /// A trailing `| <cue>`, such as a blocker count.
+    pub(crate) fn cue(mut self, cue: impl Into<String>) -> Self {
+        self.cues.push(cue.into());
+        self
+    }
+
+    /// `| N blocker(s)` when there are any.
+    pub(crate) fn blockers(self, count: usize) -> Self {
+        if count == 0 {
+            self
+        } else {
+            self.cue(format!("{count} blocker{}", plural_suffix(count)))
+        }
+    }
+
+    /// The line without decoration, as redirected output and page titles
+    /// receive it.
+    pub(crate) fn text(&self) -> String {
+        self.render(RenderContext::plain())
+    }
+
+    pub(crate) fn render(&self, context: RenderContext) -> String {
+        let mut line = String::new();
+        match self.lead {
+            Some(Lead::State(state)) => {
+                line.push_str(&context.paint(classification_style(state), state.label()));
+                line.push(' ');
+            }
+            Some(Lead::Role(role)) => {
+                line.push_str(role);
+                line.push(' ');
+            }
+            None => {}
+        }
+        line.push_str(self.id);
+        if let Some(issue_type) = self.issue_type {
+            line.push(' ');
+            line.push_str(issue_type);
+        }
+        let status = status_cue(&self.status, self.category, self.classification);
+        let style = match (self.category, self.classification) {
+            (Some(category), _) => status_style(category),
+            (None, Some(state)) => classification_style(state),
+            (None, None) => TextStyle::Secondary,
+        };
+        line.push(' ');
+        line.push_str(&context.paint(style, status));
+        line.push(' ');
+        line.push_str(&context.paint(priority_style(self.priority), self.priority));
+        line.push(' ');
+        line.push_str(self.title);
+        for cue in &self.cues {
+            line.push_str(" | ");
+            line.push_str(cue);
+        }
+        line
+    }
+
+    /// The line at `indent`. A line too wide for the terminal continues on
+    /// lines indented past the rows, so it never reads as a new item.
+    pub(crate) fn render_wrapped(&self, context: RenderContext, indent: &str) -> Vec<String> {
+        let text = self.text();
+        if display_width(indent) + display_width(&text) <= context.width() {
+            return vec![format!("{indent}{}", self.render(context))];
+        }
+        let continuation = format!("{indent}    ");
+        let width = context
+            .width()
+            .saturating_sub(display_width(&continuation))
+            .max(1);
+        wrap_words(&text, width)
+            .into_iter()
+            .enumerate()
+            .map(|(number, line)| {
+                let indent = if number == 0 { indent } else { &continuation };
+                format!("{indent}{line}")
+            })
+            .collect()
+    }
+}
+
+/// A commit as views show it: its first 8 characters. Output that must be
+/// passed back to a command, such as `--resolution-commit`, keeps the full
+/// hash.
+pub(crate) fn short_commit(commit: &str) -> &str {
+    commit.get(..8).unwrap_or(commit)
+}
+
+/// A timestamp as views show it: local time, `YYYY-MM-DD HH:MM ±hh:mm`.
+/// Records keep RFC 3339.
+pub(crate) fn display_timestamp(timestamp: chrono::DateTime<chrono::Utc>) -> String {
+    display_timestamp_in(timestamp, &chrono::Local)
+}
+
+fn display_timestamp_in<Zone: chrono::TimeZone>(
+    timestamp: chrono::DateTime<chrono::Utc>,
+    zone: &Zone,
+) -> String
+where
+    Zone::Offset: std::fmt::Display,
+{
+    timestamp
+        .with_timezone(zone)
+        .format("%Y-%m-%d %H:%M %:z")
+        .to_string()
 }
 
 pub(crate) fn render_labeled_lines(
@@ -209,7 +323,7 @@ pub(crate) fn render_labeled_lines(
     value_style: TextStyle,
 ) -> Vec<String> {
     let wide_text = format!("{indent}{label}: {value}");
-    if visible_width(&wide_text) <= context.width() {
+    if display_width(&wide_text) <= context.width() {
         return vec![format!(
             "{indent}{label}: {}",
             context.paint(value_style, value)
@@ -233,7 +347,7 @@ pub(crate) fn render_wrapped_lines(
     text: &str,
     style: TextStyle,
 ) -> Vec<String> {
-    let available = context.width().saturating_sub(visible_width(indent)).max(1);
+    let available = context.width().saturating_sub(display_width(indent)).max(1);
     wrap_words(text, available)
         .into_iter()
         .map(|line| format!("{indent}{}", context.paint(style, line)))
@@ -244,7 +358,7 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
-        if visible_width(word) > width {
+        if display_width(word) > width {
             if !current.is_empty() {
                 lines.push(current);
                 current = String::new();
@@ -260,7 +374,7 @@ fn wrap_words(text: &str, width: usize) -> Vec<String> {
             continue;
         }
         let separator = usize::from(!current.is_empty());
-        if !current.is_empty() && visible_width(&current) + separator + visible_width(word) > width
+        if !current.is_empty() && display_width(&current) + separator + display_width(word) > width
         {
             lines.push(current);
             current = String::new();
@@ -298,7 +412,9 @@ fn hard_wrap_token(token: &str, width: usize) -> Vec<String> {
     chunks
 }
 
-fn visible_width(text: &str) -> usize {
+/// The columns `text` takes: one per character. Headings size their
+/// underlines by it, not by bytes, so `é`, `✓` and `—` count once.
+pub(crate) fn display_width(text: &str) -> usize {
     text.chars().count()
 }
 
@@ -377,27 +493,13 @@ impl IssueListPanel {
         let limit = self.limit.min(self.rows.len());
         for row in self.rows.iter().take(limit) {
             let indent = "  ".repeat(row.depth.max(1));
-            let label = row.classification.label();
-            let state = if self.row_states && label != row.status {
-                format!(
-                    "{} ",
-                    context.paint(classification_style(row.classification), label)
-                )
-            } else {
-                String::new()
-            };
-            let cue = context.paint(
-                status_style(row.status_category.as_deref().unwrap_or_default()),
-                status_cue(
-                    &row.status,
-                    row.status_category.as_deref(),
-                    Some(row.classification),
-                ),
-            );
-            lines.push(format!(
-                "{indent}{state}{}",
-                issue_row_text(&row.id, &cue, &row.priority, &row.title, row.blockers)
-            ));
+            let mut line = ItemLine::new(&row.id, &row.status, &row.priority, &row.title)
+                .state(row.status_category.as_deref(), Some(row.classification))
+                .blockers(row.blockers);
+            if self.row_states && row.classification.label() != row.status {
+                line = line.lead(Lead::State(row.classification));
+            }
+            lines.extend(line.render_wrapped(context, &indent));
             if let Some(mark) = self.marks.get(&row.id) {
                 lines.push(mark_line(&indent, mark));
             }
@@ -453,34 +555,29 @@ fn mark_line(indent: &str, mark: &str) -> String {
     format!("{indent}  ↳ {mark}")
 }
 
-/// `<id> [<status cue>] <priority> - <title>`, with a blocker count when
-/// there are blockers: the issue row of issue lists and unassigned work.
-fn issue_row_text(id: &str, cue: &str, priority: &str, title: &str, blockers: usize) -> String {
-    let blockers = if blockers == 0 {
-        String::new()
-    } else {
-        format!(" | {blockers} blocker{}", plural_suffix(blockers))
-    };
-    format!("{id} [{cue}] {priority} - {title}{blockers}")
-}
-
 /// Items shown in each label group of unassigned work.
 const UNASSIGNED_SHOWN: usize = 5;
 
-/// `<id> [<status>] <close date> - <title>` for the most recently closed
-/// mission, named by `status` and `work missions` between missions.
+/// The most recently closed mission, named by `status` and `work missions`
+/// between missions: its item line, marked done, with a `| closed <date>`
+/// cue.
 pub(crate) fn last_closed_mission(mission: &atelier_core::Issue) -> String {
-    format!(
-        "{} [{}] {} - {}",
-        mission.id,
-        mission.status,
+    ItemLine::new(
+        &mission.id,
+        &mission.status,
+        &mission.priority,
+        &mission.title,
+    )
+    .state(Some("done"), None)
+    .cue(format!(
+        "closed {}",
         mission
             .closed_at
             .unwrap_or(mission.updated_at)
             .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d"),
-        mission.title
-    )
+            .format("%Y-%m-%d")
+    ))
+    .text()
 }
 
 /// Unassigned open work by label, for both `status` and `work missions`: a
@@ -498,7 +595,6 @@ pub(crate) fn render_unassigned_groups(
     context: RenderContext,
 ) -> Vec<String> {
     let row_indent = format!("{indent}  ");
-    let continuation_indent = format!("{row_indent}    ");
     let mut lines = Vec::new();
     for group in groups.iter().take(group_limit) {
         lines.push(format!(
@@ -511,29 +607,12 @@ pub(crate) fn render_unassigned_groups(
             .take(UNASSIGNED_SHOWN)
         {
             let (issue, work) = &group.work[index];
-            let row = issue_row_text(
-                &issue.id,
-                &status_cue(
-                    &issue.status,
-                    work.status_category.as_deref(),
-                    Some(work.classification),
-                ),
-                &issue.priority,
-                &issue.title,
-                work.open_blockers.len(),
+            lines.extend(
+                ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+                    .state(work.status_category.as_deref(), Some(work.classification))
+                    .blockers(work.open_blockers.len())
+                    .render_wrapped(context, &row_indent),
             );
-            let width = context
-                .width()
-                .saturating_sub(visible_width(&continuation_indent))
-                .max(1);
-            for (number, line) in wrap_words(&row, width).into_iter().enumerate() {
-                let indent = if number == 0 {
-                    &row_indent
-                } else {
-                    &continuation_indent
-                };
-                lines.push(format!("{indent}{line}"));
-            }
             if let Some(mark) = marks.get(&issue.id) {
                 lines.push(mark_line(&row_indent, mark));
             }
@@ -559,45 +638,22 @@ pub(crate) fn render_issue_inventory(
     view: &IssueInventoryView<'_>,
     context: RenderContext,
 ) -> String {
-    let headings = ["ID", "Type", "Status", "Priority"];
-    fn fields(record: &atelier_records::CanonicalIssueRecord) -> [&str; 4] {
-        [
-            record.issue.id.as_str(),
-            record.issue.issue_type.as_str(),
-            record.issue.status.as_str(),
-            record.issue.priority.as_str(),
-        ]
-    }
-    let mut widths = headings.map(str::len);
-    for record in &view.rows {
-        for (width, value) in widths.iter_mut().zip(fields(record)) {
-            *width = (*width).max(value.len());
-        }
-    }
-    let columns = |values: [&str; 4]| {
-        values
-            .into_iter()
-            .zip(widths)
-            .map(|(value, width)| format!("{value:<width$}"))
-            .collect::<Vec<_>>()
-    };
     let mut lines = if view.matching_count == 0 {
         vec!["No issues match the selected filters.".to_string()]
     } else {
-        vec![context.paint(
-            TextStyle::Heading,
-            format!("{}  Title", columns(headings).join("  ")),
-        )]
+        Vec::new()
     };
     for record in &view.rows {
         let issue = &record.issue;
-        let mut row = columns(fields(record));
         let category = view
             .policy
             .and_then(|policy| policy.status_category(&issue.status));
-        row[2] = context.paint(status_style(category.unwrap_or_default()), &row[2]);
-        row[3] = context.paint(priority_style(&issue.priority), &row[3]);
-        lines.push(format!("{}  {}", row.join("  "), issue.title));
+        lines.push(
+            ItemLine::new(&issue.id, &issue.status, &issue.priority, &issue.title)
+                .issue_type(&issue.issue_type)
+                .state(category, None)
+                .render(context),
+        );
     }
     if view.matching_count > 0 {
         lines.push(String::new());
@@ -770,12 +826,13 @@ impl FooterAction {
     }
 }
 
+/// A page title: one per command output.
 pub(crate) fn heading(title: &str) -> String {
-    format!("{title}\n{}", "=".repeat(title.len()))
+    format!("{title}\n{}", "=".repeat(display_width(title)))
 }
 
 pub(crate) fn section_heading(title: &str) -> String {
-    format!("{title}\n{}", "-".repeat(title.len()))
+    format!("{title}\n{}", "-".repeat(display_width(title)))
 }
 
 pub(crate) fn print_section_heading(title: &str) {
@@ -1051,45 +1108,97 @@ mod tests {
                 [render_text_section("Text", None)],
                 RenderContext::from_parts(ColorChoice::Always, true, false)
             ),
-            "\x1b[1mÉ\x1b[0m\n=="
+            "\x1b[1mÉ\x1b[0m\n="
         );
     }
 
     #[test]
-    fn issue_heading_row_keeps_wide_shape_and_decomposes_at_narrow_width() {
-        let row = IssueHeadingRow {
-            indent: "  ",
-            id: "atelier-4fip",
-            issue_type: Some("epic"),
-            status: "in_progress",
-            status_category: "active",
-            priority: "high",
-            title: "Build the formatted Mission Overview",
-        };
-
+    fn item_lines_share_one_field_order_without_brackets() {
+        let plain = ItemLine::new("atelier-a", "todo", "high", "Write the contract");
+        assert_eq!(plain.text(), "atelier-a todo high Write the contract");
         assert_eq!(
-            row.render(RenderContext::plain()),
-            vec!["  atelier-4fip  epic  in_progress  high  Build the formatted Mission Overview"]
+            ItemLine::new("atelier-a", "todo", "high", "Write the contract")
+                .issue_type("task")
+                .lead(Lead::Role("advances"))
+                .state(Some("todo"), Some(WorkClassification::Blocked))
+                .blockers(2)
+                .cue("not merged into master")
+                .text(),
+            "advances atelier-a task ⚠ todo high Write the contract | 2 blockers | not merged into master"
         );
+        assert_eq!(
+            ItemLine::new("atelier-a", "in_progress", "low", "Title")
+                .lead(Lead::State(WorkClassification::Active))
+                .state(Some("active"), Some(WorkClassification::Active))
+                .text(),
+            "active atelier-a in_progress low Title"
+        );
+        assert_eq!(
+            ItemLine::new("atelier-a", "done", "low", "Title")
+                .state(Some("done"), None)
+                .blockers(0)
+                .text(),
+            "atelier-a ✓ done low Title"
+        );
+        let line =
+            ItemLine::new("atelier-a", "blocked", "critical", "Title").state(Some("blocked"), None);
+        let colored = line.render(RenderContext::from_parts(ColorChoice::Always, true, false));
+        assert!(colored.contains("\u{1b}[31m⚠ blocked\u{1b}[0m"));
+        assert_eq!(strip_test_ansi(&colored), line.text());
+    }
 
-        let narrow = row.render(RenderContext::from_parts_with_width(
-            ColorChoice::Never,
-            false,
-            false,
-            40,
-        ));
+    #[test]
+    fn item_lines_too_wide_continue_past_the_row_indent() {
+        let line = ItemLine::new(
+            "atelier-4fip",
+            "in_progress",
+            "high",
+            "Build the formatted Mission Overview",
+        );
+        assert_eq!(
+            line.render_wrapped(RenderContext::plain(), "  "),
+            ["  atelier-4fip in_progress high Build the formatted Mission Overview"]
+        );
+        let narrow = line.render_wrapped(
+            RenderContext::from_parts_with_width(ColorChoice::Never, false, false, 40),
+            "  ",
+        );
         assert_eq!(
             narrow,
-            vec![
-                "  atelier-4fip  epic",
-                "    Status: in_progress",
-                "    Priority: high",
-                "    Title:",
+            [
+                "  atelier-4fip in_progress high",
                 "      Build the formatted Mission",
                 "      Overview",
             ]
         );
         assert!(narrow.iter().all(|line| line.chars().count() <= 40));
+    }
+
+    #[test]
+    fn commits_and_timestamps_have_one_display_form() {
+        assert_eq!(
+            short_commit("5ec6c235d4b1a0e9f8c7b6a5d4c3b2a1f0e9d8c7"),
+            "5ec6c235"
+        );
+        assert_eq!(short_commit("abc"), "abc");
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2026-10-17T00:31:24.389518170Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let eastern = chrono::FixedOffset::west_opt(4 * 3600).unwrap();
+        assert_eq!(
+            display_timestamp_in(timestamp, &eastern),
+            "2026-10-16 20:31 -04:00"
+        );
+        assert_eq!(
+            display_timestamp_in(timestamp, &chrono::Utc),
+            "2026-10-17 00:31 +00:00"
+        );
+    }
+
+    #[test]
+    fn headings_are_underlined_to_their_display_width() {
+        assert_eq!(heading("é ✓ — x"), "é ✓ — x\n=======");
+        assert_eq!(section_heading("Café"), "Café\n----");
     }
 
     #[test]
@@ -1147,7 +1256,7 @@ mod tests {
         let panel = IssueListPanel::new("Ready Work", rows).limit(1);
         assert_eq!(
             panel.render(RenderContext::plain()).join("\n"),
-            "Ready Work\n----------\n  atelier-a [todo] medium - ATELIER-A\n  ... 2 more ready work items omitted"
+            "Ready Work\n----------\n  atelier-a todo medium ATELIER-A\n  ... 2 more ready work items omitted"
         );
     }
 
@@ -1168,9 +1277,9 @@ mod tests {
             IssueListPanel::new("Work", rows).render(RenderContext::plain()),
             [
                 "Work\n----",
-                "  atelier-a [✓ done] medium - ATELIER-A",
-                "  atelier-b [⚠ todo] medium - ATELIER-B | 2 blockers",
-                "  atelier-c [⚠ blocked] medium - ATELIER-C | 1 blocker",
+                "  atelier-a ✓ done medium ATELIER-A",
+                "  atelier-b ⚠ todo medium ATELIER-B | 2 blockers",
+                "  atelier-c ⚠ blocked medium ATELIER-C | 1 blocker",
             ]
         );
     }
@@ -1214,17 +1323,17 @@ mod tests {
             panel.render(RenderContext::plain()),
             [
                 "Scoped Work\n-----------",
-                "  active atelier-a [in_progress] medium - ATELIER-A",
-                "  ready atelier-b [todo] medium - ATELIER-B",
-                "  needs human atelier-c [todo] medium - ATELIER-C",
-                "  atelier-d [backlog] medium - ATELIER-D",
-                "  atelier-e [✓ done] medium - ATELIER-E",
-                "  atelier-f [⚠ blocked] medium - ATELIER-F | 1 blocker",
+                "  active atelier-a in_progress medium ATELIER-A",
+                "  ready atelier-b todo medium ATELIER-B",
+                "  needs human atelier-c todo medium ATELIER-C",
+                "  atelier-d backlog medium ATELIER-D",
+                "  atelier-e ✓ done medium ATELIER-E",
+                "  atelier-f ⚠ blocked medium ATELIER-F | 1 blocker",
             ]
         );
         let colored = panel.render(RenderContext::from_parts(ColorChoice::Always, true, false));
         assert!(colored[1].contains("\u{1b}[36mactive\u{1b}[0m"));
-        assert!(colored[5].contains("[\u{1b}[32m✓ done\u{1b}[0m]"));
+        assert!(colored[5].contains(" \u{1b}[32m✓ done\u{1b}[0m "));
         assert_eq!(
             colored
                 .iter()
@@ -1272,11 +1381,12 @@ mod tests {
 
         let output = render_issue_inventory(&view.view(), RenderContext::plain());
 
-        assert!(output.starts_with("Issue Inventory\n===============\n\nID"));
-        assert!(output.contains("atelier-a  mission  in_progress  high"));
-        assert!(output.contains("atelier-b  epic     todo         critical"));
-        assert!(output.contains("atelier-c  task     blocked      medium"));
-        assert!(output.contains("atelier-d  bug      done         low"));
+        assert!(output.starts_with(
+            "Issue Inventory\n===============\n\natelier-a mission in_progress high Coordinate the mission\n"
+        ));
+        assert!(output.contains("\natelier-b epic todo critical Own a parent slice\n"));
+        assert!(output.contains("\natelier-c task ⚠ blocked medium A linked child record\n"));
+        assert!(output.contains("\natelier-d bug ✓ done low A completed standalone record\n"));
         assert!(output.contains("Showing 4 of 4 issues"));
         assert!(output
             .contains("Drill Down\n----------\n  Inspect a record: atelier issue show <issue-id>"));
@@ -1360,7 +1470,7 @@ mod tests {
             RenderContext::from_parts(ColorChoice::Always, true, true),
         );
 
-        assert!(colored.contains("\u{1b}[31mblocked"));
+        assert!(colored.contains("\u{1b}[31m⚠ blocked"));
         assert_eq!(strip_test_ansi(&colored), plain);
         assert_eq!(no_color, plain);
     }

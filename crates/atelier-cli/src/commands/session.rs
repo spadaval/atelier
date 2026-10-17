@@ -320,7 +320,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
             &id,
             base,
         )?);
-        lines.push(format!("Owner: {id} [{}]. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
+        lines.push(format!("Owner: {id} {}. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
         if !initial_paths.is_empty() {
             lines.push(format!("Unfinished checkout: {} uncommitted path(s); hand off these changes honestly. Run atelier status for current findings and proof.", initial_paths.len()));
         }

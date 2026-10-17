@@ -58,6 +58,9 @@ relationships:
   - kind: "issue"
     id: "atelier-qrwr"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-teld"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

@@ -123,9 +123,9 @@ the current checkout uses live records. It does not fetch remote branches or
 overlay another branch's records onto the current graph. Incompatible or
 unavailable snapshots are reported separately. Every compatible owner branch
 remains visible, including branches sharing a tracker tree. A branch's done
-claim is not base completion: a done owner shows as `✓ done on branch <branch>,
-not merged into <base>` until the base branch's own copy of the record is
-done.
+claim is not base completion: a done owner's item line ends `| not merged
+into <base>` until the base branch's own copy of the record is done, and
+`| merged into <base>` after.
 
 The same summaries, read once per command, mark ready work that is in flight
 elsewhere: in `status`'s ready items and unassigned work, and in `work ready`

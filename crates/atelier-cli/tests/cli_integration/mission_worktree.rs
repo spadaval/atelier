@@ -175,7 +175,7 @@ fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
     );
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
-        direct_options.contains("start [blocked]"),
+        direct_options.contains("start: blocked"),
         "{direct_options}"
     );
     assert!(
@@ -204,7 +204,7 @@ fn test_mission_start_requires_cycle_safe_transitive_dependency_closure() {
     );
     assert!(success, "mission transition options failed: {stderr}");
     assert!(
-        transitive_options.contains("start [blocked]"),
+        transitive_options.contains("start: blocked"),
         "{transitive_options}"
     );
     assert!(
@@ -422,7 +422,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     );
     assert!(
         overview.contains(&format!(
-            "{mission_id}  draft  high  Overview mission\n  Scope:"
+            "{mission_id} draft high Overview mission\n  Scope:"
         )),
         "{overview}"
     );
@@ -460,9 +460,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         "40-column output contains an over-width line:\n{narrow}"
     );
     assert!(
-        narrow.contains(&format!(
-            "{mission_id}\n  Status: draft\n  Priority: high\n  Title: Overview mission"
-        )),
+        narrow.contains(&format!("\n{mission_id} draft high Overview mission\n")),
         "{narrow}"
     );
     assert!(
@@ -471,7 +469,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
         )),
         "{narrow}"
     );
-    assert!(narrow.contains("  Status: draft"), "{narrow}");
+    assert!(!narrow.contains("Status:"), "{narrow}");
     assert!(
         narrow.contains("Unassigned: 2 nonterminal issues"),
         "{narrow}"
@@ -481,7 +479,7 @@ fn test_work_missions_renders_flat_complete_scope_and_plain_quiet_output() {
     let unassigned_id = issue_id_by_title(dir.path(), "Unassigned work");
     let row = narrow
         .lines()
-        .position(|line| line.starts_with(&format!("    {unassigned_id} [todo]")))
+        .position(|line| line.starts_with(&format!("    {unassigned_id} todo")))
         .unwrap_or_else(|| panic!("no unassigned row:\n{narrow}"));
     let continuation = narrow.lines().nth(row + 1).unwrap();
     assert!(
@@ -571,7 +569,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     // The done mission is named only as the last one closed, not summarized.
     assert!(
         default.contains(&format!(
-            "No open missions; last closed: {mission_id} [done] "
+            "No open missions; last closed: {mission_id} ✓ done "
         )),
         "{default}"
     );
@@ -580,7 +578,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     // The mission closed with its scope open, so that work is unassigned
     // and named, not just counted.
     let leftover = format!(
-        "Unassigned: 1 nonterminal issues\n  no label (1)\n    {work_id} [todo] medium - Work linked only to done mission\n"
+        "Unassigned: 1 nonterminal issues\n  no label (1)\n    {work_id} todo medium Work linked only to done mission\n"
     );
     assert!(default.contains(&leftover), "{default}");
     assert!(
@@ -597,7 +595,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
     assert!(success, "--all Mission Overview failed: {stderr}");
     assert!(
         all.contains(&format!(
-            "{mission_id}  done  medium  Published overview mission"
+            "{mission_id} ✓ done medium Published overview mission"
         )),
         "{all}"
     );
@@ -654,7 +652,7 @@ fn test_ready_work_remains_visible_when_proof_blocks_start_transition() {
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &ready_id]);
     assert!(success, "transition options failed: {stderr}");
-    assert!(options_out.contains("start [blocked]"), "{options_out}");
+    assert!(options_out.contains("start: blocked"), "{options_out}");
     assert!(options_out.contains("evidence.attached"), "{options_out}");
 }
 
@@ -951,10 +949,10 @@ fn test_mission_close_options_report_configured_work_terminal_validator() {
         &["issue", "transition", &mission_id, "--verbose"],
     );
     assert!(success, "mission transition options failed: {stderr}");
-    assert!(options_out.contains("close [blocked]"), "{options_out}");
+    assert!(options_out.contains("close: blocked"), "{options_out}");
     assert!(options_out.contains("fail  work.terminal"), "{options_out}");
     assert!(
-        options_out.contains(&format!("open work: {work_id} [todo]")),
+        options_out.contains(&format!("open work: {work_id} todo")),
         "{options_out}"
     );
 }
@@ -1211,8 +1209,12 @@ fn test_status_works_without_runtime_directory() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status should not need the runtime dir: {stderr}");
-    assert!(stdout.contains("Current work:  1 issue(s)"), "{stdout}");
-    assert!(stdout.contains(&issue_id));
+    assert!(
+        stdout.contains(&format!(
+            "\nCurrent Work\n------------\n  {issue_id} in_progress "
+        )),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -1622,7 +1624,7 @@ fn test_bundle_apply_records_links() {
     let (success, view_out, stderr) =
         run_atelier(dir.path(), &["issue", "show", &mission_id, "--full"]);
     assert!(success, "mission show after bundle apply failed: {stderr}");
-    assert!(view_out.contains("Type:     mission"));
+    assert!(view_out.starts_with(&format!("{mission_id} mission ")));
     let mission_markdown = std::fs::read_to_string(
         dir.path()
             .join(".atelier/issues")
@@ -3164,7 +3166,7 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     let loose = issue_id_by_title(dir.path(), "Loose work");
     let scoped = issue_id_by_title(dir.path(), "Scoped later");
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let last_closed = format!("{finished} [done] {today} - Finished objective");
+    let last_closed = format!("{finished} ✓ done medium Finished objective | closed {today}");
 
     // Between missions: both views name the finished mission, and status
     // shows the largest five label groups, unlabelled last.
@@ -3185,8 +3187,8 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     let mut high = lines[1..3].to_vec();
     high.sort();
     let mut expected = vec![
-        format!("  {shared} [todo] high - Shared work"),
-        format!("  {leftover} [todo] high - Leftover work"),
+        format!("  {shared} todo high Shared work"),
+        format!("  {leftover} todo high Leftover work"),
     ];
     expected.sort();
     assert_eq!(high, expected, "{unassigned}");
@@ -3222,22 +3224,22 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     assert!(!overview.contains("No missions match"), "{overview}");
     assert!(
         overview.contains(&format!("Unassigned: 14 nonterminal issues\n  cli (8)\n"))
-            && overview.contains(&format!("    {leftover} [todo] high - Leftover work\n")),
+            && overview.contains(&format!("    {leftover} todo high Leftover work\n")),
         "{overview}"
     );
     assert!(
         overview.contains(&format!("  gamma (1)\n"))
             && overview.contains(&format!(
-                "  review (1)\n    {shared} [todo] high - Shared work\n  no label (2)\n"
+                "  review (1)\n    {shared} todo high Shared work\n  no label (2)\n"
             )),
         "{overview}"
     );
     assert!(
-        overview.contains(&format!("    {loose} [todo] medium - Loose work\n")),
+        overview.contains(&format!("    {loose} todo medium Loose work\n")),
         "{overview}"
     );
     assert!(
-        overview.contains(&format!("    {scoped} [todo] medium - Scoped later\n")),
+        overview.contains(&format!("    {scoped} todo medium Scoped later\n")),
         "{overview}"
     );
 
@@ -3255,10 +3257,10 @@ fn test_between_missions_views_name_the_last_closed_mission_and_group_unassigned
     let (missions, unassigned) = overview
         .split_once("Unassigned: 13 nonterminal issues\n")
         .unwrap_or_else(|| panic!("no unassigned groups:\n{overview}"));
-    assert!(missions.contains(&format!("{open}  todo")), "{overview}");
+    assert!(missions.contains(&format!("{open} todo ")), "{overview}");
     assert!(
         unassigned.contains(&format!(
-            "  no label (1)\n    {loose} [todo] medium - Loose work\n"
+            "  no label (1)\n    {loose} todo medium Loose work\n"
         )),
         "{overview}"
     );
