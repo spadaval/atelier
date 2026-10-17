@@ -819,7 +819,12 @@ fn evaluate_scope(
         dispositions,
     ));
     nodes.extend(completion_claims(
-        index, read, policy, &claimed, historical,
+        index,
+        read,
+        policy,
+        base_commit,
+        &claimed,
+        historical,
     )?);
     let checks = if let EvaluationKind::Merge(checks_root) = kind {
         crate::workflow_validation::evaluate_policy_transition(
@@ -861,12 +866,16 @@ fn evaluate_scope(
     Ok(unique.into_values().collect())
 }
 
-/// Whether the issue's current done claim was committed beside a policy
-/// that did not require `field` on any transition into its status. An
-/// uncommitted claim answers to the current policy.
+/// Whether the issue's current done claim was made while the base's policy
+/// did not require `field` on any transition into its status. The policy is
+/// the base's at the point where the claim's commit and the base last met,
+/// never the branch's own, so a branch cannot weaken the policy around a
+/// claim. An uncommitted claim, or one whose earlier policy cannot be read,
+/// answers to the current policy.
 fn claimed_before_required(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
+    base_commit: &str,
     id: &str,
     field: &str,
 ) -> Result<bool> {
@@ -890,12 +899,14 @@ fn claimed_before_required(
     let Some(commit) = introduced else {
         return Ok(false);
     };
-    let Ok(text) = read.blob(&commit, std::path::Path::new(".atelier/workflow.yaml")) else {
+    let Ok(base) = git::git_output(read.repo, &["merge-base", &commit, base_commit]) else {
         return Ok(false);
     };
-    let Ok(then) = atelier_workflow::parse_policy_text(&text, ".atelier/workflow.yaml") else {
+    let base = String::from_utf8(base)?.trim().to_string();
+    let Ok(then) = crate::base_policy::from_captured(read, &base) else {
         return Ok(false);
     };
+    let then = then.policy;
     let issue = &current.issue;
     let Ok(workflow) = then.workflow_for_issue_type(&issue.issue_type) else {
         return Ok(false);
@@ -912,6 +923,7 @@ fn completion_claims(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
+    base_commit: &str,
     ids: &BTreeSet<String>,
     historical: bool,
 ) -> Result<Vec<GateNode>> {
@@ -997,7 +1009,8 @@ fn completion_claims(
                         let present = atelier_core::ReportPart::from_field(field)
                             .and_then(|part| report.part(part))
                             .is_some();
-                        if !present && claimed_before_required(index, read, id, field)? {
+                        if !present && claimed_before_required(index, read, base_commit, id, field)?
+                        {
                             continue;
                         }
                         present

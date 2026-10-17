@@ -1597,6 +1597,43 @@ fn report_parts_leave_scoped_claims_made_before_the_policy_valid() {
 }
 
 #[test]
+fn a_branch_cannot_weaken_the_policy_around_a_claim_to_skip_the_report() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let original = fs::read_to_string(&path).unwrap();
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    let required = fs::read_to_string(&path).unwrap();
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &f.id],
+    );
+    ok(f.path(), &["issue", "transition", &child, "start"]);
+    commit(f.path(), "start a child");
+    // Weaken the policy in the commit that makes the claim, then restore it,
+    // so the branch diff shows no policy change.
+    fs::write(&path, &original).unwrap();
+    let mut record = f.store().load_issue_by_id(&child).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("Closed without the report.".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "close beside a weakened policy");
+    fs::write(&path, &required).unwrap();
+    commit(f.path(), "restore the policy");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    assert!(
+        output.contains("required_field.report.deviations"),
+        "{output}"
+    );
+}
+
+#[test]
 fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
     for integration_base in [false, true] {
         let f = Fixture::new();
