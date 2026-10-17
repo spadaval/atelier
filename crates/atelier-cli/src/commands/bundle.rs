@@ -734,7 +734,7 @@ fn apply_bundle_file(
     })();
     if let Err(error) = cleanup_bundle_stage(&stage) {
         if result.is_ok() {
-            tracing::warn!(
+            eprintln!(
                 "Bundle apply committed successfully, but staging cleanup failed for {}: {}. Do not retry this bundle; verify with `atelier check`, then remove the leftover staging directory.",
                 stage.display(),
                 error
@@ -1138,7 +1138,7 @@ pub(crate) fn install_directories(
     })();
     if result.is_ok() {
         if let Err(error) = cleanup_bundle_backup(&backup) {
-            tracing::warn!(
+            eprintln!(
                 "Bundle apply committed successfully, but backup cleanup failed for {}: {}. Do not retry this bundle. Verify with `atelier check`, then remove the named backup; future bundle applies will refuse while it remains.",
                 backup.display(),
                 error
