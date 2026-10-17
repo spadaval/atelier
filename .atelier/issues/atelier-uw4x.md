@@ -14,7 +14,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make merge refuse a done claim that land will refuse"
-updated_at: "2026-10-17T02:56:36.227115148+00:00"
+updated_at: "2026-10-17T19:00:36.343866065+00:00"
 ---
 
 ## Goal
@@ -28,3 +28,7 @@ updated_at: "2026-10-17T02:56:36.227115148+00:00"
 ## Context
 
 `crates/atelier-cli/src/commands/git.rs` (land coverage), the merge gate `review.current`. Seen 2026-10-16 merging atelier-sdb0 (mission atelier-1w8c).
+
+## Notes
+
+- 2026-10-17 [note] Retro 2026-10-17: sdb0's merge passed a done claim that land on master then refused, costing a fifth review subagent; still the top cause of the 'approve after close' rule. See also the new approval-carry item.

@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Give merge errors a recovery command that names the item and branch"
-updated_at: "2026-10-17T06:03:27.033290981+00:00"
+updated_at: "2026-10-17T19:00:36.345971355+00:00"
 ---
 
 ## Goal
@@ -43,3 +43,4 @@ Whether `--check` should evaluate a named work branch from another checkout (for
 ## Notes
 
 - 2026-10-17 [note] 2026-10-17 (mission atelier-k8h8, merging atelier-w56o): `atelier merge atelier-w56o` run from the base checkout (master, in the main worktree) failed with `merge requires committed branch ownership; run atelier start and commit its metadata`, though w56o was started and its ownership committed on task/atelier-w56o. Merge reads ownership from the current checkout's records, so on the base the owner has no workflow_branch yet. The same command from the work branch's worktree merged fine. The refusal should say to run merge from the work branch (naming it), not to run start.
+- 2026-10-17 [note] Retro 2026-10-17: k8h8 05:31Z, merge run from the base checkout said 'merge requires committed branch ownership; run atelier start' though the branch owned the item. The fix is naming the owner checkout path.
