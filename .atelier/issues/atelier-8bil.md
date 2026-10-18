@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rework the debrief as an after-action report"
-updated_at: "2026-10-18T06:34:08.569987575+00:00"
+updated_at: "2026-10-18T06:53:35.680645285+00:00"
 ---
 
 ## Goal
@@ -42,3 +42,19 @@ Postmortem shapes compared on 2026-10-18: the After Action Review's four questio
 ## Unknowns
 
 S4's wording names a decision log with one-way decisions first and derived deviations as lists; the new page shows decisions per item with a one-way index and deviations as plan against actual. Whether that still reads as S4 is the human's call.
+
+## Notes
+
+- 2026-10-18 [decision] Count open work added after the start as found only while it is parked in backlog or draft; added work someone has taken on is left to do
+  Reason: Until atelier-tq1j records where work was found, parking is the only record-level sign that added work was filed for later rather than taken into scope; this run's own rework item would otherwise read as found
+  Rejected: treat all work added after the start as found
+  Rejected: treat all of it as scope
+- 2026-10-18 [decision] Group receipts that judge mission criteria into validation runs by producer and pinned commit
+  Reason: A validator records one receipt per criterion against one commit; grouping shows one validation with who ran it, where, and what changed since, instead of a receipt list
+  Rejected: one entry per receipt
+  Rejected: group by a time window
+- 2026-10-18 [decision] Show decisions only in the timeline entry where they were made, with a sidebar index of the one-way ones; drop the debrief's decision log sections
+  Reason: The human found the separate log confusing beside the timeline; atelier work decisions still lists the whole log one-way first
+  Rejected: keep a decision log section after the timeline
+- 2026-10-18 [decision] Show every issue the page names as a chip with its ID, title and status that opens a card, and review events and receipts as chips with their ID and kind
+  Reason: The human directed on 2026-10-18 that IDs are stable terms people use, reversing atelier-nexd's choice to hide them behind titles
