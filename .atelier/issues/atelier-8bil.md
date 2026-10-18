@@ -4,6 +4,9 @@ id: "atelier-8bil"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-8bil
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rework the debrief as an after-action report"
-updated_at: "2026-10-18T06:33:47.022557698+00:00"
+updated_at: "2026-10-18T06:34:08.569987575+00:00"
 ---
 
 ## Goal
