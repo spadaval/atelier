@@ -199,7 +199,7 @@ pub struct Validation {
     pub trivial: usize,
     pub not_approved: Vec<String>,
     pub unreviewed: Vec<String>,
-    /// Findings across the items, by their latest disposition.
+    /// Findings on the delivered items, by their latest disposition.
     pub findings: ReviewSummary,
     pub runs: Vec<ValidationRun>,
     /// Criteria not proven, each with the open item that will prove it.
@@ -215,7 +215,8 @@ pub enum Event {
     Delivered(String),
     /// Work joined the mission's scope after the start.
     Added(String),
-    /// Work found along the way was filed, other than by an item's review.
+    /// Work found along the way was filed, other than by a delivered item's
+    /// review.
     Filed(String),
     /// Work was dropped.
     Dropped(String),
@@ -711,9 +712,13 @@ pub fn debrief(
     // Work added after the start counts as found only while it is parked:
     // added work someone has taken on is scope.
     let parked = |id: &str| {
-        index
-            .issue_record(id)
-            .is_some_and(|record| matches!(record.issue.status.as_str(), "backlog" | "draft"))
+        index.issue_record(id).is_some_and(|record| {
+            crate::work_classification::classify_issue(index, policy, &record.issue).is_ok_and(
+                |work| {
+                    work.classification == crate::work_classification::WorkClassification::Backlog
+                },
+            )
+        })
     };
     let mut left = Vec::new();
     let mut found = Vec::new();
@@ -740,7 +745,7 @@ pub fn debrief(
         .collect::<Vec<_>>();
 
     let mission_events = mission_events(index, mission_id);
-    let validation = validation(index, &criteria, &reviews, &work, mission_id, &asker_of);
+    let validation = validation(index, &criteria, &work, &asker_of);
     let events = events(
         &timeline,
         &work,
@@ -751,7 +756,6 @@ pub fn debrief(
         &validation,
         &mission_events,
         index,
-        mission_id,
     );
 
     // Record text can mention any issue, so every issue can be named.
@@ -773,7 +777,11 @@ pub fn debrief(
             review.header.id.clone(),
             RecordRef {
                 kind: event_name(&review.event).to_string(),
-                summary: first_sentence(&review.summary),
+                summary: review
+                    .summary
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" "),
             },
         );
     }
@@ -851,14 +859,17 @@ pub fn debrief(
 fn validation(
     index: &RecordIndex,
     criteria: &MissionProof,
-    reviews: &BTreeMap<String, ReviewSummary>,
     work: &[WorkEntry],
-    mission_id: &str,
     asker_of: &dyn Fn(&str) -> Option<String>,
 ) -> Validation {
     let mut validation = Validation::default();
+    let mission_id = criteria.criteria.mission_id.as_str();
     for entry in work {
         let review = &entry.review;
+        validation.findings.fixed += review.fixed;
+        validation.findings.deferred += review.deferred;
+        validation.findings.no_action += review.no_action;
+        validation.findings.undisposed += review.undisposed;
         if review.approved {
             validation.approved += 1;
         } else if review.trivial {
@@ -872,14 +883,6 @@ fn validation(
             validation.not_approved.push(entry.id.clone());
         } else {
             validation.unreviewed.push(entry.id.clone());
-        }
-    }
-    for (target, review) in reviews {
-        if target != mission_id {
-            validation.findings.fixed += review.fixed;
-            validation.findings.deferred += review.deferred;
-            validation.findings.no_action += review.no_action;
-            validation.findings.undisposed += review.undisposed;
         }
     }
 
@@ -987,7 +990,6 @@ fn events(
     validation: &Validation,
     mission_events: &[MissionEvent],
     index: &RecordIndex,
-    mission_id: &str,
 ) -> Vec<TimedEvent> {
     let mut events = Vec::new();
     if let Some(started) = &timeline.started {
@@ -1008,9 +1010,17 @@ fn events(
             event: Event::Added(id.clone()),
         });
     }
-    // Follow-ups an item's review filed are told in that item's entry.
+    // Follow-ups a delivered item's review filed are told in its entry.
+    let delivered = work
+        .iter()
+        .flat_map(|entry| std::iter::once(&entry.id).chain(&entry.children))
+        .collect::<BTreeSet<_>>();
     for entry in found {
-        if entry.from.as_deref().is_none_or(|from| from == mission_id) {
+        if entry
+            .from
+            .as_ref()
+            .is_none_or(|from| !delivered.contains(from))
+        {
             events.push(TimedEvent {
                 at: entry.filed_at,
                 event: Event::Filed(entry.id.clone()),

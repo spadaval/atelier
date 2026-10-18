@@ -232,7 +232,8 @@ ul.chips{list-style:none;padding:0;margin:4px 0}ul.chips li{margin:4px 0}ul.chip
 .fact{display:grid;grid-template-columns:92px minmax(0,1fr);gap:2px 12px;font-size:13.5px;padding:3px 0}
 .fact>span:first-child{color:var(--muted);font-size:12.5px;padding-top:2px}
 .fact p{margin:0 0 4px}
-.fact .r{display:block;color:var(--muted);font-size:13px}
+.fact .r,.decs .r{display:block;color:var(--muted);font-size:13px}
+ul.decs{margin:4px 0 2px;font-size:13.5px}
 section>.fact{padding:8px 0;border-bottom:1px solid var(--line)}section>.fact:last-child{border-bottom:0}
 .changed{color:var(--warn)}
 .note-line{display:block;font-size:12.5px}

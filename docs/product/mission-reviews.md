@@ -27,8 +27,8 @@ it stands. Both forms follow the same order:
   cues (its ADR, the records it replaces), how review went and who approved
   it, and the follow-ups its review filed. Beside them, at their times: the
   mission's start and close, work added to the scope, work filed other than
-  by an item's review, dropped work with why, each validation run, and review
-  events on the mission, such as plan approval.
+  by a delivered item's review, dropped work with why, each validation run,
+  and review events on the mission, such as plan approval.
 - **Results:** each criterion's mark, the done work that delivers it, and its
   deciding receipt with its age (code commits up to the mission's close, or
   since the receipt while the mission is open), or the open item that will
@@ -37,12 +37,13 @@ it stands. Both forms follow the same order:
   it holds the deciding receipt and that receipt passes. A one-word slug such
   as `fast` counts as named only when written as code.
 - **Validation:** how the mission was checked. Item review: how many
-  delivered items an independent reviewer approved, how many were waived as
-  trivial, the findings by their latest disposition, and the items reviewed
-  without approval or not reviewed at all. Each validation run: the receipts
-  one producer recorded against one commit, with each receipt's criteria,
-  results and summary, the code commits since, and the work delivered after
-  it. Then the criteria still awaiting proof.
+  delivered items were approved, how many were waived as trivial, the
+  findings on delivered items by their latest disposition, and the items
+  reviewed without approval or not reviewed at all. Each validation run: the
+  receipts one producer recorded against one commit, with each receipt's
+  criteria, results and summary, and, while one of its receipts still decides
+  a criterion, the code commits since and the work delivered after it. Then
+  the criteria still awaiting proof.
 - **Plan vs actual:** planned work done, the items that changed course, work
   added after the start, dropped work with why, and how much was found.
 - **Needs your review:** open decision records and open `needs-human` work
@@ -57,7 +58,9 @@ it stands. Both forms follow the same order:
   source (atelier-tq1j), parked added work is the only sign of discovered
   work outside review.
 
-Decisions appear only where they were made. The page's sidebar indexes the
+Decisions appear where they were made: in a delivered item's timeline
+entry, beside an open, dropped or asked item, and, for decisions on the
+mission itself, under what it set out to do. The page's sidebar indexes the
 one-way decisions; `atelier work decisions <mission>` lists the whole log.
 
 The Markdown form keeps record IDs, for agents. `--html` writes the same

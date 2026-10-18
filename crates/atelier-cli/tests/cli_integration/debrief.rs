@@ -352,7 +352,7 @@ fn debrief_markdown_reads_as_an_after_action_report() {
 
     let validation = section(&page, "Validation");
     for line in [
-        "Item review: 0 of 1 approved | 1 finding: 1 deferred",
+        "Item review: 0 of 1 delivered items approved | 1 finding: 1 deferred",
         &format!("Not approved: {}", m.shipped),
         "| 1 receipt",
         "  pipe-safe pass atelier-",
@@ -1329,4 +1329,119 @@ fn added_work_parked_in_backlog_is_found_and_taken_on_work_is_left() {
         section(&page, "Plan vs Actual").contains(&format!("Added: {taken} task todo Taken on")),
         "{page}"
     );
+}
+
+#[test]
+fn decisions_off_the_timeline_results_and_record_text_keep_their_place() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let note = |id: &str, choice: &str, one_way: bool| {
+        let mut args = vec![
+            "issue", "note", id, "--kind", "decision", choice, "--reason", "Because",
+        ];
+        if one_way {
+            args.push("--one-way");
+        }
+        ok(dir.path(), &args);
+    };
+    note(&mission, "Keep one format for the mission", true);
+    note(&planned, "Start <b>small</b>", false);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &planned,
+            "--title",
+            "Planned <script>x</script> & more",
+        ],
+    );
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "approve",
+            &mission,
+            "--identity",
+            "Human",
+            "Plan approved. The second sentence matters too.",
+        ],
+    );
+    commit_all(dir.path(), "decide and approve");
+    let (success, _, stderr) = run_atelier_raw(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{mission}"),
+            "--kind",
+            "validation",
+            "--result",
+            "blocked",
+            "--producer",
+            "Val <i>idator</i>",
+            "--criterion",
+            "fast=blocked",
+            "Could not measure",
+        ],
+    );
+    assert!(success, "{stderr}");
+    commit_all(dir.path(), "blocked proof");
+
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let intent = page
+        .split("What We Set Out To Do\n---------------------\n")
+        .nth(1)
+        .unwrap()
+        .split("\n\nPlanned Work")
+        .next()
+        .unwrap();
+    assert!(
+        intent.contains("  Decided: one-way: Keep one format for the mission | because Because"),
+        "{page}"
+    );
+    let left = page
+        .split("Left To Do\n----------\n")
+        .nth(1)
+        .unwrap()
+        .split("\n\n")
+        .next()
+        .unwrap();
+    assert!(
+        left.contains("\n  Decided: Start <b>small</b> | because Because"),
+        "{page}"
+    );
+    assert!(
+        section(&page, "What We Did").contains("| fast blocked"),
+        "{page}"
+    );
+
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    let intent = &html[html.find("id=\"intent\"").unwrap()..html.find("id=\"did\"").unwrap()];
+    assert!(
+        intent.contains("<h4>Decided for the mission</h4>")
+            && intent.contains("one-way</span>Keep one format for the mission"),
+        "{intent}"
+    );
+    assert!(html.contains(
+        "<a class=\"dec-link\" href=\"#intent\" title=\"Keep one format for the mission\">"
+    ));
+    let row = &html[html.find(&format!("id=\"{planned}\"")).expect(&html)..];
+    assert!(row.contains("Start &lt;b&gt;small&lt;/b&gt;"), "{row}");
+    assert!(
+        html.contains("<span class=\"status todo\">fast blocked</span>")
+            && !html.contains("✗ fast"),
+        "a blocked result is not shown as a failure"
+    );
+    assert!(
+        html.contains("Plan approved. The second sentence matters too."),
+        "a mission review shows its whole summary"
+    );
+    for raw in ["<script>x", "<b>small", "<i>idator"] {
+        assert!(!html.contains(raw), "{raw} is escaped");
+    }
+    assert!(html.contains("Planned &lt;script&gt;x&lt;/script&gt; &amp; more"));
+    assert!(html.contains("Val &lt;i&gt;idator&lt;/i&gt;"));
 }
