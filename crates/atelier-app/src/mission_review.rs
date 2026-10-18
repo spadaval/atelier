@@ -1,23 +1,30 @@
 //! Mission reviews (atelier-rx22, atelier-acrt): one view model per review,
 //! built from records and Git history and rendered by the CLI as dense
 //! Markdown and as a static HTML page, so the two forms cannot disagree.
+//!
+//! The debrief reads as an after-action report (atelier-8bil): the problem,
+//! what the mission set out to do, what happened in time order, then where
+//! it stands: results, how it was validated, plan against actual, what needs
+//! the human, what is left and what was found along the way.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use atelier_core::{
-    CloseReport, EvidenceResult, FindingDecision, Issue, IssueSectionName, ReviewEvent,
+    CloseReport, EvidenceCriterion, EvidenceResult, FindingDecision, Issue, IssueSectionName,
+    ReviewEvent,
 };
+use chrono::{DateTime, Utc};
 
 use crate::criteria::{mission_proof_until, CriterionMark, MissionProof};
-use crate::decisions::{mission_decisions, Decisions, NoteDecision};
+use crate::decisions::{mission_decisions, Decisions, MalformedDecision, NoteDecision};
 use crate::git_freshness::ReadContext;
 use crate::objective_graph::{mission_issue_ids, mission_objective_kind};
 use crate::record_history::{mission_timeline, MissionTimeline};
 use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
-/// What the page needs to name an issue without its ID: the popover facts.
+/// What a reference to an issue shows: its chip and the card behind it.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IssueRef {
     pub id: String,
@@ -27,6 +34,9 @@ pub struct IssueRef {
     pub status_category: Option<String>,
     /// The first sentence of its Goal, Question or Outcome.
     pub summary: String,
+    /// The first sentence of its Close Reason, once closed.
+    pub outcome: Option<String>,
+    pub parent: Option<String>,
 }
 
 /// A review event or evidence receipt that record text mentions by ID.
@@ -55,7 +65,7 @@ pub enum Ask {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Change {
     /// A done claim later withdrawn.
-    Reopened(chrono::DateTime<chrono::Utc>),
+    Reopened(DateTime<Utc>),
     /// The item's newest receipt does not pass.
     NonPassEvidence {
         evidence: String,
@@ -72,6 +82,8 @@ pub struct ReviewSummary {
     /// Any review event targets the item.
     pub recorded: bool,
     pub approved: bool,
+    /// Who approved it, oldest approval first.
+    pub approvers: Vec<String>,
     pub trivial: bool,
     pub fixed: usize,
     pub deferred: usize,
@@ -80,13 +92,34 @@ pub struct ReviewSummary {
     pub undisposed: usize,
 }
 
+impl ReviewSummary {
+    pub fn findings(&self) -> usize {
+        self.fixed + self.deferred + self.no_action + self.undisposed
+    }
+
+    fn absorb(&mut self, other: &ReviewSummary) {
+        self.recorded |= other.recorded;
+        self.approved |= other.approved;
+        self.trivial |= other.trivial;
+        for approver in &other.approvers {
+            if !self.approvers.contains(approver) {
+                self.approvers.push(approver.clone());
+            }
+        }
+        self.fixed += other.fixed;
+        self.deferred += other.deferred;
+        self.no_action += other.no_action;
+        self.undisposed += other.undisposed;
+    }
+}
+
 /// One piece of delivered work, with its children.
 #[derive(Debug, Clone)]
 pub struct WorkEntry {
     pub id: String,
     /// The parent, when the parent itself is not done.
     pub parent: Option<String>,
-    pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub closed_at: Option<DateTime<Utc>>,
     /// The Close Reason read as the implementer report.
     pub report: Option<CloseReport>,
     /// The criteria it delivers.
@@ -96,6 +129,8 @@ pub struct WorkEntry {
     pub changes: Vec<Change>,
     /// Decision notes on the item and its children, one-way first.
     pub decisions: Vec<NoteDecision>,
+    /// Decision notes on the item and its children that `check` refuses.
+    pub malformed: Vec<MalformedDecision>,
     pub review: ReviewSummary,
     /// Follow-ups its review deferred findings to.
     pub follow_ups: Vec<String>,
@@ -106,8 +141,11 @@ pub struct WorkEntry {
 pub struct OpenEntry {
     pub id: String,
     pub parent: Option<String>,
-    /// The item whose review filed it, for follow-ups.
+    /// The item (or the mission) whose review filed it.
     pub from: Option<String>,
+    /// When it joined the mission: its link after the start, or its record's
+    /// creation for a follow-up outside the scope.
+    pub filed_at: Option<DateTime<Utc>>,
     pub added_after_start: bool,
     pub changes: Vec<Change>,
     /// Why a dropped item was dropped.
@@ -121,8 +159,79 @@ pub struct MissionEvent {
     pub event: &'static str,
     pub identity: String,
     pub commit: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
     pub summary: String,
+}
+
+/// A receipt that judged mission criteria.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ValidationReceipt {
+    pub id: String,
+    /// The mission, or the item it was recorded on.
+    pub target: String,
+    pub result: EvidenceResult,
+    pub criteria: Vec<EvidenceCriterion>,
+    pub summary: String,
+}
+
+/// The receipts one producer recorded against one commit: one validation
+/// of the mission.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ValidationRun {
+    pub identity: String,
+    pub at: DateTime<Utc>,
+    pub commit: String,
+    /// Code commits since the run's commit, where one of its receipts still
+    /// decides a mark.
+    pub code_commits_since: Option<usize>,
+    pub receipts: Vec<ValidationReceipt>,
+    /// Work delivered after the run, when code has changed since.
+    pub later_work: Vec<String>,
+}
+
+/// How the mission was checked: review of each item, the runs that judged
+/// its criteria, and the criteria still waiting for proof.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct Validation {
+    /// Delivered items with an approval, items waived as trivial, items
+    /// reviewed without an approval, and items with no review at all.
+    pub approved: usize,
+    pub trivial: usize,
+    pub not_approved: Vec<String>,
+    pub unreviewed: Vec<String>,
+    /// Findings on the delivered items, by their latest disposition.
+    pub findings: ReviewSummary,
+    pub runs: Vec<ValidationRun>,
+    /// Criteria not proven, each with the open item that will prove it.
+    pub awaiting: Vec<(String, CriterionMark, Option<String>)>,
+}
+
+/// One moment in what the mission did.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Event {
+    /// The mission left `draft`.
+    Started,
+    /// A work entry closed.
+    Delivered(String),
+    /// Work joined the mission's scope after the start.
+    Added(String),
+    /// Work found along the way was filed, other than by a delivered item's
+    /// review.
+    Filed(String),
+    /// Work was dropped.
+    Dropped(String),
+    /// A validation run, by index into `Validation::runs`.
+    Validated(usize),
+    /// A review event on the mission, by index into `mission_events`.
+    MissionReview(usize),
+    /// The mission made its done claim.
+    Closed,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct TimedEvent {
+    pub at: Option<DateTime<Utc>>,
+    pub event: Event,
 }
 
 #[derive(Debug, Clone)]
@@ -140,18 +249,31 @@ pub struct Debrief {
     /// For each criterion, the done items that deliver it.
     pub delivered_by: BTreeMap<String, Vec<String>>,
     pub asks: Vec<Ask>,
+    /// Items linked to the mission by its start and not filed by review,
+    /// each followed by its children.
+    pub planned: Vec<(String, Option<String>)>,
     /// Done items linked to the mission, in closing order.
     pub work: Vec<WorkEntry>,
-    pub open: Vec<OpenEntry>,
+    /// Planned work, and added work someone has taken on, not done and not
+    /// asked of the human.
+    pub left: Vec<OpenEntry>,
+    /// Open work filed by review, or added after the start and parked in
+    /// backlog, not asked of the human. Without a recorded source
+    /// (atelier-tq1j), parked work added after the start counts as found.
+    pub found: Vec<OpenEntry>,
     /// Superseded items, with their reason.
     pub dropped: Vec<OpenEntry>,
+    /// Items that joined the scope after the start and were not found
+    /// along the way, in joining order.
+    pub added: Vec<String>,
+    pub events: Vec<TimedEvent>,
+    pub validation: Validation,
     pub decisions: Decisions,
     pub mission_events: Vec<MissionEvent>,
     pub refs: BTreeMap<String, IssueRef>,
     /// Reviews and receipts on the mission and its scope, for mentions.
     pub record_refs: BTreeMap<String, RecordRef>,
-    /// Planned items (linked to the mission by its start, not filed by
-    /// review), done and in total, superseded ones left out.
+    /// Planned items done and in total, superseded ones left out.
     pub planned_done: usize,
     pub planned_total: usize,
 }
@@ -159,6 +281,25 @@ pub struct Debrief {
 impl Debrief {
     pub fn title_of<'a>(&'a self, id: &'a str) -> &'a str {
         self.refs.get(id).map_or(id, |issue| issue.title.as_str())
+    }
+
+    pub fn entry(&self, id: &str) -> Option<&WorkEntry> {
+        self.work.iter().find(|entry| entry.id == id)
+    }
+
+    /// The work entry an item is shown in: its own, or its parent's.
+    pub fn entry_holding(&self, id: &str) -> Option<&WorkEntry> {
+        self.work
+            .iter()
+            .find(|entry| entry.id == id || entry.children.iter().any(|child| child == id))
+    }
+
+    pub fn proven(&self) -> usize {
+        self.criteria
+            .proofs
+            .iter()
+            .filter(|proof| proof.mark == CriterionMark::Proven)
+            .count()
     }
 }
 
@@ -202,11 +343,11 @@ pub fn debrief(
             .as_ref()
             .map(|moment| moment.commit.as_str()),
     )?;
-    let added = timeline
+    let added_at = timeline
         .added_after_start
         .iter()
-        .map(|(id, _)| id.clone())
-        .collect::<BTreeSet<_>>();
+        .map(|(id, moment)| (id.clone(), moment.time))
+        .collect::<BTreeMap<_, _>>();
 
     // Reviews of each scoped item: findings, their latest dispositions, and
     // where deferred findings went.
@@ -219,21 +360,25 @@ pub fn debrief(
     #[allow(clippy::type_complexity)]
     let mut dispositions: BTreeMap<
         String,
-        (
-            chrono::DateTime<chrono::Utc>,
-            FindingDecision,
-            Option<String>,
-            String,
-        ),
+        (DateTime<Utc>, FindingDecision, Option<String>, String),
     > = BTreeMap::new();
-    for review in index.reviews() {
-        if !scope.contains(&review.target) && review.target != mission_id {
-            continue;
-        }
+    let mut ordered_reviews = index
+        .reviews()
+        .filter(|review| scope.contains(&review.target) || review.target == mission_id)
+        .collect::<Vec<_>>();
+    ordered_reviews.sort_by(|a, b| {
+        (a.header.created_at, &a.header.id).cmp(&(b.header.created_at, &b.header.id))
+    });
+    for review in ordered_reviews {
         let summary = reviews.entry(review.target.clone()).or_default();
         summary.recorded = true;
         match &review.event {
-            ReviewEvent::Approval => summary.approved = true,
+            ReviewEvent::Approval => {
+                summary.approved = true;
+                if !summary.approvers.contains(&review.identity) {
+                    summary.approvers.push(review.identity.clone());
+                }
+            }
             ReviewEvent::TrivialExemption => {
                 summary.trivial = true;
                 trivial.insert(review.target.clone(), review.summary.clone());
@@ -323,6 +468,7 @@ pub fn debrief(
         delivered_by.insert(slug.clone(), by);
     }
 
+    let decisions = mission_decisions(index, policy, mission_id)?;
     let changes_of = |id: &str| -> Result<Vec<Change>> {
         let mut changes = Vec::new();
         if let Some((_, moment)) = timeline
@@ -353,7 +499,8 @@ pub fn debrief(
             id: id.to_string(),
             parent,
             from: follow_up_source.get(id).cloned(),
-            added_after_start: added.contains(id),
+            filed_at: added_at.get(id).copied(),
+            added_after_start: added_at.contains_key(id),
             changes: changes_of(id)?,
             reason: None,
         })
@@ -366,13 +513,16 @@ pub fn debrief(
             .issue_record(id)
             .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, id))?;
         let mut changes = Vec::new();
-        let mut decisions = Vec::new();
+        let mut notes = Vec::new();
         let mut review = ReviewSummary::default();
         let mut follow_ups = Vec::new();
-        for member in std::iter::once(&id.to_string()).chain(kids.iter()) {
+        let members = std::iter::once(id.to_string())
+            .chain(kids.iter().cloned())
+            .collect::<Vec<_>>();
+        for member in &members {
             changes.extend(changes_of(member)?);
             if let Some(record) = index.issue_record(member) {
-                decisions.extend(record.sections.decision_notes().into_iter().flatten().map(
+                notes.extend(record.sections.decision_notes().into_iter().flatten().map(
                     |decision| NoteDecision {
                         issue_id: member.clone(),
                         decision,
@@ -380,13 +530,7 @@ pub fn debrief(
                 ));
             }
             if let Some(summary) = reviews.get(member) {
-                review.recorded |= summary.recorded;
-                review.approved |= summary.approved;
-                review.trivial |= summary.trivial;
-                review.fixed += summary.fixed;
-                review.deferred += summary.deferred;
-                review.no_action += summary.no_action;
-                review.undisposed += summary.undisposed;
+                review.absorb(summary);
             }
             for follow_up in follow_ups_of.get(member).into_iter().flatten() {
                 if !follow_ups.contains(follow_up) {
@@ -394,10 +538,10 @@ pub fn debrief(
                 }
             }
         }
-        decisions.sort_by_key(|note| !note.decision.one_way);
+        notes.sort_by_key(|note| !note.decision.one_way);
         let criteria_delivered = delivered_by
             .iter()
-            .filter(|(_, by)| by.iter().any(|by| by == id || kids.contains(by)))
+            .filter(|(_, by)| by.iter().any(|by| members.contains(by)))
             .map(|(slug, _)| slug.clone())
             .collect::<Vec<_>>();
         Ok(WorkEntry {
@@ -411,9 +555,15 @@ pub fn debrief(
                 .map(CloseReport::parse),
             criteria: criteria_delivered,
             children: kids,
-            added_after_start: added.contains(id),
+            added_after_start: added_at.contains_key(id),
             changes,
-            decisions,
+            decisions: notes,
+            malformed: decisions
+                .malformed
+                .iter()
+                .filter(|note| members.contains(&note.issue_id))
+                .cloned()
+                .collect(),
             review,
             follow_ups,
         })
@@ -465,24 +615,47 @@ pub fn debrief(
     });
     // Follow-ups review filed outside the mission's scope still belong here.
     for (follow_up, source) in &follow_up_source {
-        if !scope.contains(follow_up)
-            && index
-                .issue_record(follow_up)
-                .is_some_and(|record| !done(&record.issue) && record.issue.status != "superseded")
+        let Some(record) = index.issue_record(follow_up) else {
+            continue;
+        };
+        if !scope.contains(follow_up) && !done(&record.issue) && record.issue.status != "superseded"
         {
             let mut entry = open_entry(follow_up, None)?;
             entry.from = Some(source.clone());
+            entry.filed_at = Some(record.issue.created_at);
             open.push(entry);
         }
     }
     // Planned work: linked by the start and not filed by review.
-    let planned = linked
+    let is_planned = |id: &str| !follow_up_source.contains_key(id) && !added_at.contains_key(id);
+    // In filing order, which is closer to the plan's than ID order; children
+    // follow their parent.
+    let created = |id: &str| index.issue_record(id).map(|record| record.issue.created_at);
+    let mut planned_tops = linked
         .iter()
-        .filter(|id| !follow_up_source.contains_key(*id) && !added.contains(*id))
+        .filter(|id| is_planned(id))
+        .cloned()
+        .collect::<Vec<_>>();
+    planned_tops.sort_by_key(|id| (created(id), id.clone()));
+    let planned = planned_tops
+        .iter()
+        .flat_map(|top| {
+            tree.iter()
+                .filter(move |(id, parent)| id == top || parent.as_ref() == Some(top))
+                .filter(|(id, _)| is_planned(id))
+                .cloned()
+        })
+        .collect::<Vec<_>>();
+    let planned_records = linked
+        .iter()
+        .filter(|id| is_planned(id))
         .filter_map(|id| index.issue_record(id))
         .filter(|record| record.issue.status != "superseded")
         .collect::<Vec<_>>();
-    let planned_done = planned.iter().filter(|record| done(&record.issue)).count();
+    let planned_done = planned_records
+        .iter()
+        .filter(|record| done(&record.issue))
+        .count();
 
     let mut asks = Vec::new();
     for (id, _) in &tree {
@@ -504,27 +677,87 @@ pub fn debrief(
         }
     }
     // A criterion an asked-for item already names needs no second ask.
-    let asked_goals = asks
+    let asked = asks
         .iter()
         .filter_map(|ask| match ask {
-            Ask::Decision(id) | Ask::NeedsHuman(id) => index.issue_record(id),
+            Ask::Decision(id) | Ask::NeedsHuman(id) => Some(id.clone()),
             _ => None,
         })
-        .filter_map(|record| record.sections.section(IssueSectionName::Goal))
-        .map(|goal| outside_parentheses(&first_sentence(goal)))
         .collect::<Vec<_>>();
+    let goal_of = |id: &str| {
+        index
+            .issue_record(id)
+            .and_then(|record| record.sections.section(IssueSectionName::Goal))
+            .map(|goal| outside_parentheses(&first_sentence(goal)))
+    };
+    let asker_of = |slug: &str| {
+        asked
+            .iter()
+            .find(|id| goal_of(id).is_some_and(|goal| names_criterion(&goal, slug)))
+            .cloned()
+    };
     let unproven = criteria
         .proofs
         .iter()
         .filter(|proof| proof.mark == CriterionMark::Unproven)
         .map(|proof| proof.criterion.slug.clone())
-        .filter(|slug| !asked_goals.iter().any(|goal| names_criterion(goal, slug)))
+        .filter(|slug| asker_of(slug).is_none())
         .collect::<Vec<_>>();
     if !unproven.is_empty() {
         asks.push(Ask::Unproven(unproven));
     }
 
-    let decisions = mission_decisions(index, policy, mission_id)?;
+    // Open work splits into what is left of the plan and what was found along
+    // the way; work asked of the human is listed only as an ask.
+    // Work added after the start counts as found only while it is parked:
+    // added work someone has taken on is scope.
+    let parked = |id: &str| {
+        index.issue_record(id).is_some_and(|record| {
+            crate::work_classification::classify_issue(index, policy, &record.issue).is_ok_and(
+                |work| {
+                    work.classification == crate::work_classification::WorkClassification::Backlog
+                },
+            )
+        })
+    };
+    let mut left = Vec::new();
+    let mut found = Vec::new();
+    for entry in open {
+        if asked.contains(&entry.id) {
+            continue;
+        }
+        if entry.from.is_some() || (entry.added_after_start && parked(&entry.id)) {
+            found.push(entry);
+        } else {
+            left.push(entry);
+        }
+    }
+    found.sort_by(|a, b| (a.filed_at, &a.id).cmp(&(b.filed_at, &b.id)));
+    let found_ids = found
+        .iter()
+        .map(|entry| entry.id.clone())
+        .collect::<BTreeSet<_>>();
+    let added = timeline
+        .added_after_start
+        .iter()
+        .map(|(id, _)| id.clone())
+        .filter(|id| !found_ids.contains(id) && !follow_up_source.contains_key(id))
+        .collect::<Vec<_>>();
+
+    let mission_events = mission_events(index, mission_id);
+    let validation = validation(index, &criteria, &work, &asker_of);
+    let events = events(
+        &timeline,
+        &work,
+        &added,
+        &added_at,
+        &found,
+        &dropped,
+        &validation,
+        &mission_events,
+        index,
+    );
+
     // Record text can mention any issue, so every issue can be named.
     let refs = index
         .issue_records()
@@ -544,7 +777,11 @@ pub fn debrief(
             review.header.id.clone(),
             RecordRef {
                 kind: event_name(&review.event).to_string(),
-                summary: first_sentence(&review.summary),
+                summary: review
+                    .summary
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" "),
             },
         );
     }
@@ -559,7 +796,11 @@ pub fn debrief(
                 record.header.id.clone(),
                 RecordRef {
                     kind: "receipt".into(),
-                    summary: format!("{}: {}", record.data.result.as_str(), record.header.title),
+                    summary: format!(
+                        "{}: {}",
+                        record.data.result.as_str(),
+                        first_sentence(&record.header.title)
+                    ),
                 },
             );
         }
@@ -595,17 +836,228 @@ pub fn debrief(
         criteria,
         delivered_by,
         asks,
+        planned,
         work,
-        open,
+        left,
+        found,
         dropped,
+        added,
+        events,
+        validation,
         decisions,
-        mission_events: mission_events(index, mission_id),
+        mission_events,
         refs,
         record_refs,
         planned_done,
-        planned_total: planned.len(),
+        planned_total: planned_records.len(),
         mission,
     })
+}
+
+/// How the mission was checked, from its items' reviews and the receipts
+/// that judge its criteria.
+fn validation(
+    index: &RecordIndex,
+    criteria: &MissionProof,
+    work: &[WorkEntry],
+    asker_of: &dyn Fn(&str) -> Option<String>,
+) -> Validation {
+    let mut validation = Validation::default();
+    let mission_id = criteria.criteria.mission_id.as_str();
+    for entry in work {
+        let review = &entry.review;
+        validation.findings.fixed += review.fixed;
+        validation.findings.deferred += review.deferred;
+        validation.findings.no_action += review.no_action;
+        validation.findings.undisposed += review.undisposed;
+        if review.approved {
+            validation.approved += 1;
+        } else if review.trivial {
+            validation.trivial += 1;
+        } else if index
+            .issue_record(&entry.id)
+            .is_none_or(|record| record.issue.issue_type == "decision")
+        {
+            // A decision record is decided, not code-reviewed.
+        } else if review.recorded {
+            validation.not_approved.push(entry.id.clone());
+        } else {
+            validation.unreviewed.push(entry.id.clone());
+        }
+    }
+
+    // Receipts naming this mission's criteria, grouped by who recorded them
+    // against which commit.
+    let mut runs: BTreeMap<(String, String), ValidationRun> = BTreeMap::new();
+    for record in index.evidence_records() {
+        if record.data.criteria.is_empty()
+            || record.data.criteria_mission.as_deref() != Some(mission_id)
+        {
+            continue;
+        }
+        let identity = record
+            .data
+            .agent_identity
+            .clone()
+            .or_else(|| record.data.producer.clone())
+            .unwrap_or_else(|| "unnamed producer".into());
+        let run = runs
+            .entry((identity.clone(), record.data.commit.clone()))
+            .or_insert_with(|| ValidationRun {
+                identity,
+                at: record.data.captured_at,
+                commit: record.data.commit.clone(),
+                code_commits_since: None,
+                receipts: Vec::new(),
+                later_work: Vec::new(),
+            });
+        run.at = run.at.min(record.data.captured_at);
+        let since = criteria
+            .proofs
+            .iter()
+            .filter_map(|proof| proof.deciding())
+            .find(|receipt| receipt.evidence_id == record.header.id)
+            .and_then(|receipt| receipt.code_commits_since);
+        if since.is_some() {
+            run.code_commits_since = since;
+        }
+        run.receipts.push(ValidationReceipt {
+            id: record.header.id.clone(),
+            target: record
+                .data
+                .target
+                .as_ref()
+                .map(|target| target.id.clone())
+                .unwrap_or_else(|| mission_id.to_string()),
+            result: record.data.result,
+            criteria: record.data.criteria.clone(),
+            summary: record.header.title.clone(),
+        });
+    }
+    let order = |slug: &str| {
+        criteria
+            .proofs
+            .iter()
+            .position(|proof| proof.criterion.slug == slug)
+            .unwrap_or(usize::MAX)
+    };
+    let mut runs = runs.into_values().collect::<Vec<_>>();
+    for run in &mut runs {
+        run.receipts.sort_by_key(|receipt| {
+            (
+                receipt
+                    .criteria
+                    .iter()
+                    .map(|criterion| order(&criterion.slug))
+                    .min(),
+                receipt.id.clone(),
+            )
+        });
+        if run.code_commits_since.is_some_and(|count| count > 0) {
+            run.later_work = work
+                .iter()
+                .filter(|entry| entry.closed_at.is_some_and(|closed| closed > run.at))
+                .map(|entry| entry.id.clone())
+                .collect();
+        }
+    }
+    runs.sort_by(|a, b| (a.at, &a.identity).cmp(&(b.at, &b.identity)));
+    validation.runs = runs;
+    validation.awaiting = criteria
+        .proofs
+        .iter()
+        .filter(|proof| proof.mark != CriterionMark::Proven)
+        .map(|proof| {
+            (
+                proof.criterion.slug.clone(),
+                proof.mark,
+                asker_of(&proof.criterion.slug),
+            )
+        })
+        .collect();
+    validation
+}
+
+/// What the mission did, oldest first. Undated moments come last.
+#[allow(clippy::too_many_arguments)]
+fn events(
+    timeline: &MissionTimeline,
+    work: &[WorkEntry],
+    added: &[String],
+    added_at: &BTreeMap<String, DateTime<Utc>>,
+    found: &[OpenEntry],
+    dropped: &[OpenEntry],
+    validation: &Validation,
+    mission_events: &[MissionEvent],
+    index: &RecordIndex,
+) -> Vec<TimedEvent> {
+    let mut events = Vec::new();
+    if let Some(started) = &timeline.started {
+        events.push(TimedEvent {
+            at: Some(started.time),
+            event: Event::Started,
+        });
+    }
+    for entry in work {
+        events.push(TimedEvent {
+            at: entry.closed_at,
+            event: Event::Delivered(entry.id.clone()),
+        });
+    }
+    for id in added {
+        events.push(TimedEvent {
+            at: added_at.get(id).copied(),
+            event: Event::Added(id.clone()),
+        });
+    }
+    // Follow-ups a delivered item's review filed are told in its entry.
+    let delivered = work
+        .iter()
+        .flat_map(|entry| std::iter::once(&entry.id).chain(&entry.children))
+        .collect::<BTreeSet<_>>();
+    for entry in found {
+        if entry
+            .from
+            .as_ref()
+            .is_none_or(|from| !delivered.contains(from))
+        {
+            events.push(TimedEvent {
+                at: entry.filed_at,
+                event: Event::Filed(entry.id.clone()),
+            });
+        }
+    }
+    for entry in dropped {
+        let at = index
+            .issue_record(&entry.id)
+            .map(|record| record.issue.closed_at.unwrap_or(record.issue.updated_at));
+        events.push(TimedEvent {
+            at,
+            event: Event::Dropped(entry.id.clone()),
+        });
+    }
+    for (number, run) in validation.runs.iter().enumerate() {
+        events.push(TimedEvent {
+            at: Some(run.at),
+            event: Event::Validated(number),
+        });
+    }
+    for (number, event) in mission_events.iter().enumerate() {
+        events.push(TimedEvent {
+            at: Some(event.created_at),
+            event: Event::MissionReview(number),
+        });
+    }
+    if let Some(closed) = &timeline.closed {
+        events.push(TimedEvent {
+            at: Some(closed.time),
+            event: Event::Closed,
+        });
+    }
+    // A stable sort keeps the push order for equal times: the start before
+    // what follows it, the close after what precedes it.
+    events.sort_by_key(|event| (event.at.is_none(), event.at));
+    events
 }
 
 /// Whether `text` names `word` as a whole word: not inside a longer
@@ -677,6 +1129,8 @@ fn issue_ref(index: &RecordIndex, policy: Option<&WorkflowPolicy>, id: &str) -> 
             .and_then(|policy| policy.status_category(&issue.status))
             .map(str::to_string),
         summary: first_sentence(lead),
+        outcome: Some(first_sentence(&close_outcome(index, id))).filter(|text| !text.is_empty()),
+        parent: issue.parent_id.clone(),
     })
 }
 
