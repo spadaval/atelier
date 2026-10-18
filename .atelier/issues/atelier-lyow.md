@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-10-18T07:10:47.830952937+00:00"
+status: "superseded"
 title: "Tidy labels for findings and receipts mentioned on the debrief page"
-updated_at: "2026-10-17T22:13:22.538334817+00:00"
+updated_at: "2026-10-18T07:10:47.830952937+00:00"
 ---
 
 ## Goal
@@ -27,3 +28,7 @@ Tidy how the debrief page labels mentioned findings and receipts (review of atel
 ## Done when
 
 Labels replace or drop IDs, are capped at 60 characters, and the comment is current, shown by a fixture whose summary starts with an ID.
+
+## Close Reason
+
+Overtaken by atelier-8bil: mentioned findings and receipts are now chips with their ID and kind, so the label tidy-ups (IDs in labels, the six-word cap, the rich() comment) no longer apply.
