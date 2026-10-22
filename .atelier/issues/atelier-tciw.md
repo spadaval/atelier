@@ -31,9 +31,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T22:25:27.155524184+00:00"
+status: "done"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-22T22:24:17.488160179+00:00"
+updated_at: "2026-10-22T22:25:27.155524184+00:00"
 ---
 
 ## Goal
@@ -73,3 +74,19 @@ Blocked by atelier-ftqn, which rebuilds the same branches section. It uses the s
   Rejected: Excluding .atelier paths
 - 2026-10-22 [decision] Measured status cost and added no cache: with five waiting branches in a clone of this repository, release status went from 0.85 s to 1.15 s (about 60 ms per waiting branch); debug 2.25 s to 3.4 s
   Reason: The item asks to report cost rather than add caches; readiness is computed only for done owners that are not merged
+
+## Close Reason
+
+`atelier status` now shows, on each Branches row for a done owner that is not merged, its approval state (`✓ approved`, `⚠ approval stale`, `⚠ not approved`, judged by `merge`'s review.current rule), `behind <n>`, `proof at head` or `no proof at head`, and `merges cleanly` or `conflicts: <paths>` from `git merge-tree --write-tree` against the current base. A trailing `Shared files: <a> and <b> both touch <paths>` line names waiting branches that change the same files, and a not-done owner with children shows `, <d> of <n> children done, <a> active`. The view changes no refs, index or checkout. Documented in docs/product/human-cli-output.md#branches.
+
+### Deviations
+The Done when's example rows use two-space-separated fields and "proof at branch head only"; the rows use the comma-separated status part (finding atelier-465o) and "proof at head" / "no proof at head". "approval stale" has no cause yet (atelier-cisa is not built).
+
+### Decisions
+See the decision notes on atelier-tciw: row format, approval_state reusing review.current's rule, proof over the owner's scope, shared-file comparison, and the measured cost with no cache.
+
+### Surprises
+Most real branches read "no proof at head": any code commit after the evidence, including a merge of the base, makes the proof stale by the freshness rule, which is what the row reports. Cost: about 60 ms per waiting branch in release (0.85 s to 1.15 s with five waiting branches in a clone of this repository; the "before" is the installed master build).
+
+### Open items
+The stale-approval cause waits on atelier-cisa.
