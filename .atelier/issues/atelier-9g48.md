@@ -14,8 +14,6 @@ relationships:
   children:
   - kind: "issue"
     id: "atelier-ftqn"
-  - kind: "issue"
-    id: "atelier-tciw"
   attachments: []
   relates:
   - kind: "issue"
@@ -23,9 +21,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T20:57:56.608917335+00:00"
+status: "done"
 title: "Show which waiting branches are ready to land"
-updated_at: "2026-10-22T20:45:46.064222430+00:00"
+updated_at: "2026-10-22T20:57:56.608917335+00:00"
 ---
 
 ## Goal
@@ -51,3 +50,20 @@ Both children change `crates/atelier-cli/src/commands/status.rs`; atelier-ftqn's
 - 2026-10-22 [decision] Branches rows mark the status word with ✓ or ⚠ and say 'merged into <base>' / 'not merged', matching the ↳ in-flight mark
   Reason: The general output rule marks status words; the ftqn example without ✓ was incidental (review finding atelier-qjin)
   Rejected: Plain status word as in the Done when example
+
+## Close Reason
+
+### Outcome
+`atelier status` lists other local work branches in a `Branches` section before Next, one dense line per owned branch (`<branch>  <id> <status>[, <merge>]  <title>`, with the ✓/⚠ status mark and the in-flight mark's merge wording), and collects unowned branches on one `Unowned:` line (atelier-ftqn). The format is documented in docs/product/human-cli-output.md#branches. This is the row atelier-k8h8 S1's readiness facts will extend.
+
+### Deviations
+atelier-tciw (merge readiness per branch) was taken out of this increment on 2026-10-22. Its approval state needs the approval-currency rule atelier-n642 settles on another branch, and keeping it here would have held this reviewed work off the base. It runs on its own branch once n642 lands, and it also owns the approval mark on done-owner rows, moved out of atelier-ftqn (decision note on atelier-ftqn). So this increment delivers S1's row format, not S1.
+
+### Decisions
+Rows follow the general output rule: ✓/⚠ beside the status word, wording shared with the ↳ in-flight mark (decision note on atelier-9g48, finding atelier-qjin).
+
+### Surprises
+None.
+
+### Open items
+atelier-tciw: readiness facts, the approval mark, and activity under parent-owned branches (finding atelier-p3dv), all noted on it.

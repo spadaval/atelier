@@ -30,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-22T20:43:35.596276138+00:00"
+updated_at: "2026-10-22T20:57:56.439475971+00:00"
 ---
 
 ## Goal
