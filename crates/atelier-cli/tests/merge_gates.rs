@@ -3129,6 +3129,43 @@ fn sync_refuses_a_dirty_checkout_and_conflicts_with_check() {
     assert!(!passed);
 }
 
+/// The sync report and `merge --check` agree when the branch has already been
+/// merged into the base after the approval (atelier-ns03).
+#[test]
+fn sync_agrees_with_check_when_the_base_already_holds_work_after_the_approval() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let fixture = synced_fixture(strategy, "test -f src.rs", ("other.rs", "landed\n"));
+        // Catch up first, then add code the approval never saw.
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(passed, "{strategy}: {out}\n{err}");
+        fs::write(fixture.path().join("c.rs"), "code after the approval\n").unwrap();
+        commit(fixture.path(), "code after the approval");
+        // The base takes the branch: a merge commit, or a fast-forward when
+        // that is the only strategy.
+        let how = if strategy == "merge_commit" {
+            "--no-ff"
+        } else {
+            "--ff-only"
+        };
+        git(fixture.path(), &["switch", "-q", "main"]);
+        git(
+            fixture.path(),
+            &["merge", "-q", how, "--no-edit", &fixture.branch],
+        );
+        git(fixture.path(), &["switch", "-q", &fixture.branch]);
+        let (accepted, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(!accepted, "{strategy}: {checked}");
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(passed, "{strategy}: {out}\n{err}");
+        assert!(!out.contains("Approval kept"), "{strategy}: {out}");
+        assert!(
+            out.contains("Approval needs fresh review") && out.contains("  c.rs"),
+            "{strategy}: {out}"
+        );
+        assert_eq!(verdict(&out), "merge: synced — approval needs fresh review");
+    }
+}
+
 #[test]
 fn sync_names_the_commit_that_staled_the_approval_before_the_sync_and_every_path() {
     let fixture = synced_fixture(

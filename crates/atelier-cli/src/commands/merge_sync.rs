@@ -378,6 +378,11 @@ fn report_approval(
     };
     let ids = review_gate::scope(&index, owner)?;
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    // `merge`'s `review.current` also requires that the approval not predate
+    // where the branch left the base (atelier-ns03); ask it the same way.
+    let fork = text(repo, &["merge-base", base_head, &head])?;
+    let current_on_branch = review_gate::approval_state(&index, &mut read, owner, &fork)?
+        == review_gate::ApprovalState::Current;
     let mut approvals = index
         .reviews()
         .filter(|review| {
@@ -391,14 +396,17 @@ fn report_approval(
     approvals.sort_by_key(|review| (review.header.created_at, review.header.id.clone()));
     let mut stale = Vec::new();
     let mut kept = Vec::new();
+    let mut predates_fork = None;
     for review in approvals {
         if !review_gate::approval_accepted(&index, &mut read, review)? {
             continue;
         }
         let edges =
             review_gate::approval_stale_edges(&mut read, &review.commit, &ids, "HEAD", base_head)?;
-        if edges.is_empty() {
+        if edges.is_empty() && current_on_branch {
             kept.push(review.header.id.clone());
+        } else if edges.is_empty() {
+            predates_fork = Some(review);
         } else {
             stale.push((review, edges));
         }
@@ -409,6 +417,29 @@ fn report_approval(
             kept.join(", ")
         ));
         return Ok(false);
+    }
+    if let (Some(review), true) = (predates_fork, stale.is_empty()) {
+        // The base already holds the work after this approval (the branch was
+        // merged there), so no commit on the branch is the one that made it
+        // stale: the approval predates the point the branch left the base.
+        let mut paths = git::changed_paths(repo, &review.commit, &head)?
+            .into_iter()
+            .filter(|path| !git::is_record_path(path))
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.dedup();
+        say(format!(
+            "Approval needs fresh review: {} predates the point where this branch left the base, which already holds the work since. Review {}, then record a fresh approval:",
+            review.header.id,
+            count_noun(paths.len(), "path"),
+        ));
+        for path in paths.iter().take(LISTED_PATHS) {
+            say(format!("  {}", path.display()));
+        }
+        if paths.len() > LISTED_PATHS {
+            say(format!("  and {} more", paths.len() - LISTED_PATHS));
+        }
+        return Ok(true);
     }
     let Some((review, edges)) = stale.pop() else {
         say(format!(
